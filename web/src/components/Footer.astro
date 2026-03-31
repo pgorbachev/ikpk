@@ -5,49 +5,54 @@
   <div class="footer-inner container">
     <div class="footer-grid">
       <div class="footer-col">
-        <span class="footer-logo">ИКПК</span>
+        <a href="/" class="footer-logo-link">
+          <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
+        </a>
         <p class="footer-tagline">
           Институт клинической<br />прикладной кинезиологии
         </p>
+        <div class="footer-contacts">
+          <a href="tel:+78126465450">+7 (812) 646-54-50</a>
+          <a href="mailto:info@ikpk.su">info@ikpk.su</a>
+        </div>
       </div>
 
       <div class="footer-col">
-        <h4 class="footer-heading">Контакты</h4>
+        <h4 class="footer-heading">Обучение</h4>
         <ul class="footer-links">
-          <li>
-            <a href="tel:+78126465450">+7 (812) 646-54-50</a>
-          </li>
-          <li>
-            <a href="mailto:info@ikpk.su">info@ikpk.su</a>
-          </li>
-          <li>Санкт-Петербург</li>
-        </ul>
-      </div>
-
-      <div class="footer-col">
-        <h4 class="footer-heading">Навигация</h4>
-        <ul class="footer-links">
+          <li><a href="/institut-klinicheskoy-prikladnoy-kineziologii">Институт клинической прикладной кинезиологии</a></li>
+          <li><a href="/institut-apledzhera">Институт Апледжера</a></li>
+          <li><a href="/institut-barralya">Институт Барраля</a></li>
           <li><a href="/raspisanie-i-tseny">Расписание и цены</a></li>
-          <li><a href="/statyi">Статьи</a></li>
-          <li><a href="/video">Видео</a></li>
-          <li><a href="/aktsii-i-skidki">Акции и скидки</a></li>
+          <li><a href="/oplata">Оплата</a></li>
         </ul>
       </div>
 
       <div class="footer-col">
-        <h4 class="footer-heading">Информация</h4>
+        <h4 class="footer-heading">Компания</h4>
         <ul class="footer-links">
-          <li><a href="/oplata">Оплата</a></li>
-          <li><a href="/sotrudnichestvo-s-nami">Сотрудничество</a></li>
           <li><a href="/svedeniya-ob-obrazovatelnoy-organizatsii">Сведения об организации</a></li>
+          <li><a href="/sotrudnichestvo-s-nami">Сотрудничество с нами</a></li>
           <li><a href="/kontakty">Контакты</a></li>
+          <li><a href="https://mudriydoctor.ru/" target="_blank" rel="noopener noreferrer">Медицинский центр</a></li>
+          <li><a href="https://kinezio.shop/" target="_blank" rel="noopener noreferrer">Магазин</a></li>
           <li><a href="/sitemap">Карта сайта</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">Подписывайтесь</h4>
+        <ul class="footer-links footer-social">
+          <li><a href="https://vk.com/ikpksu" target="_blank" rel="noopener noreferrer">ВКонтакте</a></li>
+          <li><a href="https://www.youtube.com/@ikpk_su" target="_blank" rel="noopener noreferrer">Youtube</a></li>
+          <li><a href="https://rutube.ru/channel/24887208/" target="_blank" rel="noopener noreferrer">Rutube</a></li>
+          <li><a href="https://t.me/ikpk_su" target="_blank" rel="noopener noreferrer">Telegram</a></li>
         </ul>
       </div>
     </div>
 
     <div class="footer-bottom">
-      <p>© {new Date().getFullYear()} ИКПК. Все права защищены.</p>
+      <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
     </div>
   </div>
 </footer>
@@ -68,16 +73,41 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .footer-logo {
-    font-size: var(--font-xl);
-    font-weight: 700;
-    color: var(--color-accent-400);
+  .footer-logo-link {
+    display: inline-block;
+    text-decoration: none;
+  }
+
+  .footer-logo-link:hover { text-decoration: none; }
+
+  .footer-logo-icon {
+    width: 33px;
+    height: 34px;
+    filter: brightness(0) invert(0.6) sepia(1) saturate(3) hue-rotate(80deg);
   }
 
   .footer-tagline {
     margin-top: 0.5rem;
     font-size: var(--font-s);
     line-height: 1.5;
+  }
+
+  .footer-contacts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 1rem;
+    font-size: var(--font-s);
+  }
+
+  .footer-contacts a {
+    color: var(--color-gray-300);
+    text-decoration: none;
+  }
+
+  .footer-contacts a:hover {
+    color: var(--color-light-100);
+    text-decoration: none;
   }
 
   .footer-heading {

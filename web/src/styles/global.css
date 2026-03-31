@@ -117,7 +117,19 @@ table {
   --radius-m: 4px;
 
   --header-height: 60px;
+  --sidebar-width: 260px;
   --max-width: 1200px;
+}
+
+/* === Sidebar Layout === */
+body {
+  padding-top: var(--header-height);
+}
+
+@media (min-width: 1025px) {
+  body {
+    padding-left: var(--sidebar-width);
+  }
 }
 
 /* === Utility Classes === */

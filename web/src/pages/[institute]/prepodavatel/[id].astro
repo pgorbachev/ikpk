@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
-import { getInstitutes, getTeachers, excerpt } from '../../../lib/data';
+import { getInstitutes, getTeachers, excerpt, stripH1 } from '../../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -50,7 +50,7 @@ const { teacher, institute } = Astro.props;
       </div>
 
       {teacher.bio_html ? (
-        <div class="teacher-bio rich-content" set:html={teacher.bio_html} />
+        <div class="teacher-bio rich-content" set:html={stripH1(teacher.bio_html)} />
       ) : teacher.bio_text && (
         <div class="teacher-bio rich-content">
           <h2>О преподавателе</h2>

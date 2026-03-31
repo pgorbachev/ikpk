@@ -268,6 +268,11 @@ export function formatDate(dateStr: string): string {
   });
 }
 
+// Helper: strip h1 tags from body_html to avoid duplicate h1 with page template
+export function stripH1(html: string): string {
+  return html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
+}
+
 // Helper: strip HTML for excerpts
 export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();

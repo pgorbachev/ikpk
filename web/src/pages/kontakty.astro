@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPage } from '../lib/data';
+import { getPage, stripH1 } from '../lib/data';
 
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
@@ -52,7 +52,7 @@ const schema = {
       </div>
 
       {page?.body_html ? (
-        <div class="contacts-extra rich-content" set:html={page.body_html} />
+        <div class="contacts-extra rich-content" set:html={stripH1(page.body_html)} />
       ) : page?.body_text && (
         <div class="contacts-extra rich-content">
           <p>{page.body_text}</p>

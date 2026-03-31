@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPage } from '../lib/data';
+import { getPage, stripH1 } from '../lib/data';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
@@ -16,7 +16,7 @@ const description = page?.seo_description || 'Информация об опла
       <h1 class="page-title">Оплата</h1>
 
       {page?.body_html ? (
-        <div class="page-content rich-content" set:html={page.body_html} />
+        <div class="page-content rich-content" set:html={stripH1(page.body_html)} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

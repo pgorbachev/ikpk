@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import { getArticles, formatDate } from '../../lib/data';
+import { getArticles, formatDate, stripH1 } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -60,7 +60,7 @@ const articleSchema = {
         </div>
       )}
 
-      <div class="article-body rich-content" set:html={article.body_html} />
+      <div class="article-body rich-content" set:html={stripH1(article.body_html)} />
 
       <footer class="article-footer">
         <a href="/statyi" class="btn btn-outline">← Все статьи</a>

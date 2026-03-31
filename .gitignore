@@ -39,3 +39,4 @@ discovery/media_inventory_proxy_urls_DEPRECATED.json
 # Large audit data (keep in repo for reference)
 # lh_*.json — Lighthouse reports
 # *.html — saved page snapshots
+web/test-results/
