@@ -49,7 +49,9 @@ const { teacher, institute } = Astro.props;
         </div>
       </div>
 
-      {teacher.bio_text && (
+      {teacher.bio_html ? (
+        <div class="teacher-bio rich-content" set:html={teacher.bio_html} />
+      ) : teacher.bio_text && (
         <div class="teacher-bio rich-content">
           <h2>О преподавателе</h2>
           <p>{teacher.bio_text}</p>

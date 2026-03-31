@@ -12,7 +12,7 @@ const schema = {
   '@type': 'Organization',
   name: 'Институт клинической прикладной кинезиологии',
   url: 'https://ikpk.su',
-  telephone: '+78127482126',
+  telephone: '+78126465450',
   email: 'info@ikpk.su',
   address: {
     '@type': 'PostalAddress',
@@ -21,7 +21,7 @@ const schema = {
   },
   contactPoint: {
     '@type': 'ContactPoint',
-    telephone: '+78127482126',
+    telephone: '+78126465450',
     email: 'info@ikpk.su',
     contactType: 'customer service',
     availableLanguage: 'Russian',
@@ -39,7 +39,7 @@ const schema = {
       <div class="contacts-grid">
         <div class="contact-block">
           <h2>Телефон</h2>
-          <a href="tel:+78127482126" class="contact-value">+7 (812) 748-21-26</a>
+          <a href="tel:+78126465450" class="contact-value">+7 (812) 646-54-50</a>
         </div>
         <div class="contact-block">
           <h2>Email</h2>
@@ -51,7 +51,9 @@ const schema = {
         </div>
       </div>
 
-      {page?.body_text && (
+      {page?.body_html ? (
+        <div class="contacts-extra rich-content" set:html={page.body_html} />
+      ) : page?.body_text && (
         <div class="contacts-extra rich-content">
           <p>{page.body_text}</p>
         </div>

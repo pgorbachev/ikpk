@@ -60,9 +60,7 @@ const articleSchema = {
         </div>
       )}
 
-      <div class="article-body rich-content">
-        <p>{article.body_text}</p>
-      </div>
+      <div class="article-body rich-content" set:html={article.body_html} />
 
       <footer class="article-footer">
         <a href="/statyi" class="btn btn-outline">← Все статьи</a>

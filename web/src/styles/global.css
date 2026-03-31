@@ -300,3 +300,78 @@ table {
   font-weight: 600;
   color: var(--color-dark-700);
 }
+
+/* Newsletter */
+.newsletter {
+  background: var(--color-accent-900);
+  color: var(--color-light-100);
+  padding: 3rem 0;
+  margin-top: 3rem;
+}
+
+.newsletter-inner {
+  text-align: center;
+  max-width: 600px;
+}
+
+.newsletter-title {
+  font-size: var(--font-xxl);
+  margin-bottom: 0.5rem;
+  color: var(--color-light-100);
+}
+
+.newsletter-subtitle {
+  color: var(--color-gray-300);
+  margin-bottom: 1.5rem;
+}
+
+.newsletter-form {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.newsletter-input {
+  flex: 1;
+  max-width: 360px;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-m);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-light-100);
+  font-size: var(--font-m);
+}
+
+.newsletter-input::placeholder {
+  color: var(--color-gray-400);
+}
+
+.newsletter-btn {
+  white-space: nowrap;
+}
+
+.btn-accent {
+  background: var(--color-accent-500);
+  color: var(--color-light-100);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-m);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-accent:hover {
+  background: var(--color-accent-600);
+}
+
+@media (max-width: 480px) {
+  .newsletter-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .newsletter-input {
+    max-width: none;
+  }
+}

@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "import": "tsx import.ts",
-    "import:dry": "tsx import.ts --dry-run"
+    "import:dry": "tsx import.ts --dry-run",
+    "validate-urls": "tsx validate-urls.ts",
+    "validate-urls:staging": "tsx validate-urls.ts --base-url https://staging.ikpk.su",
+    "validate-urls:prod": "tsx validate-urls.ts --base-url https://ikpk.su"
   },
   "dependencies": {
     "tsx": "^4.0.0",

@@ -15,10 +15,8 @@ const description = page?.seo_description || 'Информация об опла
     <section class="section">
       <h1 class="page-title">Оплата</h1>
 
-      {page?.body_text ? (
-        <div class="page-content rich-content">
-          <p>{page.body_text}</p>
-        </div>
+      {page?.body_html ? (
+        <div class="page-content rich-content" set:html={page.body_html} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

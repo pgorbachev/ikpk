@@ -1,6 +1,7 @@
-# Path-based 301 redirects (legacy English aliases)
-/contacts   /kontakty   301
-/promotions /aktsii-i-skidki 301
+# Path-based 301 redirects (legacy aliases)
+/contacts       /kontakty               301
+/promotions     /aktsii-i-skidki        301
+/sotrudnichestvo /sotrudnichestvo-s-nami 301
 
 # Trailing slash normalization (Netlify adds trailing slashes by default;
 # Astro generates /page/index.html so Netlify handles this automatically)

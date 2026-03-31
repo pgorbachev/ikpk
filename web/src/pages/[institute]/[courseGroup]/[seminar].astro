@@ -99,7 +99,9 @@ const eventSchema = {
         )}
       </div>
 
-      {seminar.description_text && (
+      {seminar.description_html ? (
+        <div class="seminar-content rich-content" set:html={seminar.description_html} />
+      ) : seminar.description_text && (
         <div class="seminar-content rich-content">
           <p>{seminar.description_text}</p>
         </div>
