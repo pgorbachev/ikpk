@@ -1,0 +1,81 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getPage } from '../lib/data';
+
+const page = getPage('kontakty');
+const title = page?.seo_title || 'Контакты — ИКПК';
+const description = page?.seo_description || 'Контактная информация ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Контакты' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Контакты</h1>
+
+      <div class="contacts-grid">
+        <div class="contact-block">
+          <h2>Телефон</h2>
+          <a href="tel:+78127482126" class="contact-value">+7 (812) 748-21-26</a>
+        </div>
+        <div class="contact-block">
+          <h2>Email</h2>
+          <a href="mailto:info@ikpk.su" class="contact-value">info@ikpk.su</a>
+        </div>
+        <div class="contact-block">
+          <h2>Адрес</h2>
+          <p class="contact-value">Санкт-Петербург</p>
+        </div>
+      </div>
+
+      {page?.body_text && (
+        <div class="contacts-extra rich-content">
+          <p>{page.body_text}</p>
+        </div>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 2rem;
+  }
+
+  .contacts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .contact-block h2 {
+    font-size: var(--font-s);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-gray-500);
+    margin-bottom: 0.5rem;
+  }
+
+  .contact-value {
+    font-size: var(--font-xl);
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+
+  a.contact-value {
+    color: var(--color-accent-500);
+  }
+
+  .contacts-extra {
+    max-width: 800px;
+  }
+
+  @media (max-width: 768px) {
+    .contacts-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

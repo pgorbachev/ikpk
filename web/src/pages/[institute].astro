@@ -1,0 +1,129 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getInstitutes, getCourseGroups, getTeachers, excerpt } from '../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  const institutes = getInstitutes();
+  return institutes.map((inst) => ({
+    params: { institute: inst.slug },
+    props: { institute: inst },
+  }));
+};
+
+const { institute } = Astro.props;
+const courseGroups = getCourseGroups(institute.slug);
+const teachers = getTeachers(institute.slug);
+---
+
+<BaseLayout title={institute.seo_title} description={institute.seo_description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: institute.name }]} />
+
+    <section class="section">
+      <h1 class="page-title">{institute.name}</h1>
+
+      {institute.description_text && (
+        <div class="institute-intro">
+          <p>{excerpt(institute.description_text, 500)}</p>
+        </div>
+      )}
+    </section>
+
+    <!-- Course Groups -->
+    {courseGroups.length > 0 && (
+      <section class="section">
+        <h2 class="section-title">Направления обучения</h2>
+        <div class="grid grid-3">
+          {courseGroups.map((cg) => (
+            <a href={`/${institute.slug}/${cg.slug}`} class="card cg-card">
+              <div class="card-body">
+                <h3 class="cg-card-title">{cg.name}</h3>
+                {cg.description_text && (
+                  <p class="text-small">{excerpt(cg.description_text, 120)}</p>
+                )}
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <!-- Teachers -->
+    {teachers.length > 0 && (
+      <section class="section">
+        <h2 class="section-title">Преподаватели</h2>
+        <div class="grid grid-4">
+          {teachers.map((t) => (
+            <a href={`/${institute.slug}/prepodavatel/${t.slug}`} class="card teacher-card">
+              {t.photo && (
+                <div class="teacher-photo">
+                  <img src={t.photo} alt={t.name} loading="lazy" width="164" height="168" />
+                </div>
+              )}
+              <div class="card-body">
+                <h3 class="teacher-name">{t.name}</h3>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .institute-intro {
+    max-width: 800px;
+    font-size: var(--font-l);
+    line-height: 1.7;
+    margin-bottom: 2rem;
+  }
+
+  .cg-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .cg-card:hover { text-decoration: none; }
+
+  .cg-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-dark-700);
+  }
+
+  .teacher-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    text-align: center;
+  }
+
+  .teacher-card:hover { text-decoration: none; }
+
+  .teacher-photo {
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: var(--color-light-300);
+  }
+
+  .teacher-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .teacher-name {
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+</style>

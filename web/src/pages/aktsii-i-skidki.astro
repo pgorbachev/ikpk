@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getPromotions } from '../lib/data';
+
+const promotions = getPromotions();
+const title = 'Акции и скидки — ИКПК';
+const description = 'Актуальные акции и скидки на обучение в ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Акции и скидки' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Акции и скидки</h1>
+
+      {promotions.length > 0 ? (
+        <div class="grid grid-3">
+          {promotions.map((promo) => (
+            <div class="card promo-card">
+              {promo.image?.url && (
+                <div class="promo-image">
+                  <img src={promo.image.url} alt={promo.name} loading="lazy" width="400" height="225" />
+                </div>
+              )}
+              <div class="card-body">
+                <span class="badge">{promo.type === 'SHOP' ? 'Магазин' : 'Институт'}</span>
+                <h3 class="promo-title">{promo.name}</h3>
+                <div class="text-small" set:html={promo.description} />
+                {promo.link && (
+                  <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
+                    Подробнее
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Акций пока нет.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title { margin-bottom: 1.5rem; }
+
+  .promo-image {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--color-light-300);
+  }
+
+  .promo-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .promo-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin: 0.5rem 0;
+    color: var(--color-dark-700);
+  }
+
+  .promo-link {
+    margin-top: 0.75rem;
+    font-size: var(--font-s);
+  }
+</style>

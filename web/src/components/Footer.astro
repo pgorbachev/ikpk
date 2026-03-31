@@ -1,0 +1,125 @@
+---
+---
+
+<footer class="footer">
+  <div class="footer-inner container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <span class="footer-logo">ИКПК</span>
+        <p class="footer-tagline">
+          Институт клинической<br />прикладной кинезиологии
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">Контакты</h4>
+        <ul class="footer-links">
+          <li>
+            <a href="tel:+78127482126">+7 (812) 748-21-26</a>
+          </li>
+          <li>
+            <a href="mailto:info@ikpk.su">info@ikpk.su</a>
+          </li>
+          <li>Санкт-Петербург</li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">Навигация</h4>
+        <ul class="footer-links">
+          <li><a href="/raspisanie-i-tseny">Расписание и цены</a></li>
+          <li><a href="/statyi">Статьи</a></li>
+          <li><a href="/video">Видео</a></li>
+          <li><a href="/aktsii-i-skidki">Акции и скидки</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 class="footer-heading">Информация</h4>
+        <ul class="footer-links">
+          <li><a href="/oplata">Оплата</a></li>
+          <li><a href="/sotrudnichestvo">Сотрудничество</a></li>
+          <li><a href="/svedeniya-ob-obrazovatelnoy-organizatsii">Сведения об организации</a></li>
+          <li><a href="/kontakty">Контакты</a></li>
+          <li><a href="/sitemap">Карта сайта</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© {new Date().getFullYear()} ИКПК. Все права защищены.</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    background: var(--color-dark-700);
+    color: var(--color-gray-300);
+    padding: 3rem 0 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .footer-logo {
+    font-size: var(--font-xl);
+    font-weight: 700;
+    color: var(--color-accent-400);
+  }
+
+  .footer-tagline {
+    margin-top: 0.5rem;
+    font-size: var(--font-s);
+    line-height: 1.5;
+  }
+
+  .footer-heading {
+    color: var(--color-light-100);
+    font-size: var(--font-s);
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .footer-links li {
+    margin-bottom: 0.5rem;
+    font-size: var(--font-s);
+  }
+
+  .footer-links a {
+    color: var(--color-gray-300);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .footer-links a:hover {
+    color: var(--color-light-100);
+    text-decoration: none;
+  }
+
+  .footer-bottom {
+    padding-top: 1.5rem;
+    text-align: center;
+    font-size: var(--font-xs);
+  }
+
+  @media (max-width: 768px) {
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

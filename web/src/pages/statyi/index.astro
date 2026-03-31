@@ -1,0 +1,38 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import ArticleCard from '../../components/ArticleCard.astro';
+import { getArticles, getPage } from '../../lib/data';
+
+const page = getPage('statyi');
+const articles = getArticles();
+
+const title = page?.seo_title || 'Статьи — ИКПК';
+const description = page?.seo_description || 'Статьи и публикации экспертов ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Статьи' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Статьи</h1>
+
+      {articles.length > 0 ? (
+        <div class="grid grid-3">
+          {articles.map((article) => (
+            <ArticleCard article={article} />
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Статьи пока не опубликованы.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1.5rem;
+  }
+</style>

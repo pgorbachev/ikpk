@@ -1,0 +1,59 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getVideoPlaylists } from '../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  const playlists = getVideoPlaylists();
+  return playlists.map((pl) => ({
+    params: { slug: pl.slug },
+    props: { playlist: pl },
+  }));
+};
+
+const { playlist } = Astro.props;
+---
+
+<BaseLayout
+  title={playlist.seo_title || `${playlist.title} — Видео ИКПК`}
+  description={playlist.seo_description || `Видео: ${playlist.title}`}
+>
+  <div class="container">
+    <Breadcrumbs
+      items={[
+        { label: 'Видео', href: '/video' },
+        { label: playlist.title },
+      ]}
+    />
+
+    <article class="section">
+      <h1 class="page-title">{playlist.title}</h1>
+
+      {playlist.description_text && (
+        <div class="playlist-desc rich-content">
+          <p>{playlist.description_text}</p>
+        </div>
+      )}
+
+      <div class="back-link">
+        <a href="/video" class="btn btn-outline">← Все плейлисты</a>
+      </div>
+    </article>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1.5rem;
+  }
+
+  .playlist-desc {
+    max-width: 800px;
+    margin-bottom: 2rem;
+  }
+
+  .back-link {
+    margin-top: 2rem;
+  }
+</style>

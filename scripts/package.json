@@ -1,0 +1,14 @@
+{
+  "name": "ikpk-import",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import": "tsx import.ts",
+    "import:dry": "tsx import.ts --dry-run"
+  },
+  "dependencies": {
+    "tsx": "^4.0.0",
+    "node-fetch": "^3.3.0",
+    "form-data": "^4.0.0"
+  }
+}

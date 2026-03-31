@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getVideoPlaylists, getPage } from '../../lib/data';
+
+const page = getPage('video');
+const playlists = getVideoPlaylists();
+
+const title = page?.seo_title || 'Видео — ИКПК';
+const description = page?.seo_description || 'Видеоматериалы ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Видео' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Видео</h1>
+
+      <div class="video-notice">
+        <p>
+          В связи с тем, что видеохостинг YouTube в РФ работает нестабильно,
+          мы дублируем все видео на платформы
+          <a href="https://rutube.ru/channel/30422569/videos/" target="_blank" rel="noopener">RUTUBE</a> и
+          <a href="https://vk.com/video/@clubikpk" target="_blank" rel="noopener">VK</a>.
+        </p>
+      </div>
+
+      {playlists.length > 0 ? (
+        <div class="grid grid-3">
+          {playlists.map((pl) => (
+            <a href={`/video/${pl.slug}`} class="card playlist-card">
+              <div class="card-body">
+                <h3 class="playlist-title">{pl.title}</h3>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Видео пока не добавлены.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .video-notice {
+    background: #e8f4fd;
+    border-left: 4px solid var(--color-info-500);
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-m);
+    margin-bottom: 2rem;
+    font-size: var(--font-s);
+  }
+
+  .playlist-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .playlist-card:hover { text-decoration: none; }
+
+  .playlist-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+</style>

@@ -1,0 +1,80 @@
+---
+interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+interface Props {
+  items: BreadcrumbItem[];
+}
+
+const { items } = Astro.props;
+const fullItems: BreadcrumbItem[] = [{ label: 'Главная', href: '/' }, ...items];
+
+const schemaItems = fullItems.map((item, i) => ({
+  '@type': 'ListItem',
+  position: i + 1,
+  name: item.label,
+  ...(item.href ? { item: new URL(item.href, Astro.site).href } : {}),
+}));
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: schemaItems,
+};
+---
+
+<nav class="breadcrumbs" aria-label="Хлебные крошки">
+  <ol class="breadcrumbs-list">
+    {fullItems.map((item, i) => (
+      <li class="breadcrumbs-item">
+        {i > 0 && <span class="breadcrumbs-sep" aria-hidden="true">/</span>}
+        {item.href && i < fullItems.length - 1 ? (
+          <a href={item.href} class="breadcrumbs-link">{item.label}</a>
+        ) : (
+          <span class="breadcrumbs-current" aria-current="page">{item.label}</span>
+        )}
+      </li>
+    ))}
+  </ol>
+</nav>
+
+<script type="application/ld+json" set:html={JSON.stringify(schema)} />
+
+<style>
+  .breadcrumbs {
+    padding: 0.75rem 0;
+    font-size: var(--font-s);
+  }
+
+  .breadcrumbs-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+  }
+
+  .breadcrumbs-item {
+    display: flex;
+    align-items: center;
+  }
+
+  .breadcrumbs-sep {
+    margin: 0 0.5rem;
+    color: var(--color-gray-500);
+  }
+
+  .breadcrumbs-link {
+    color: var(--color-info-500);
+    text-decoration: none;
+  }
+
+  .breadcrumbs-link:hover {
+    text-decoration: underline;
+  }
+
+  .breadcrumbs-current {
+    color: var(--color-gray-500);
+  }
+</style>

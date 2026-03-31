@@ -1,0 +1,32 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getPage } from '../lib/data';
+
+const page = getPage('svedeniya-ob-obrazovatelnoy-organizatsii');
+const title = page?.seo_title || 'Сведения об образовательной организации — ИКПК';
+const description = page?.seo_description || 'Сведения об образовательной организации ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Сведения об организации' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Сведения об образовательной организации</h1>
+
+      {page?.body_text ? (
+        <div class="page-content rich-content">
+          <p>{page.body_text}</p>
+        </div>
+      ) : (
+        <p class="text-muted">Информация будет добавлена позже.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title { margin-bottom: 1.5rem; }
+  .page-content { max-width: 800px; }
+</style>

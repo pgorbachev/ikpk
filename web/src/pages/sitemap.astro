@@ -1,0 +1,145 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getInstitutes, getCourseGroups, getSeminars, getArticles, getVideoPlaylists, getTeachers } from '../lib/data';
+
+const institutes = getInstitutes();
+const courseGroups = getCourseGroups();
+const seminars = getSeminars();
+const articles = getArticles();
+const playlists = getVideoPlaylists();
+const teachers = getTeachers();
+
+const title = 'Карта сайта — ИКПК';
+---
+
+<BaseLayout title={title} noindex>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Карта сайта' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Карта сайта</h1>
+
+      <div class="sitemap-columns">
+        <div class="sitemap-col">
+          <h2>Основные страницы</h2>
+          <ul class="sitemap-list">
+            <li><a href="/">Главная</a></li>
+            <li><a href="/raspisanie-i-tseny">Расписание и цены</a></li>
+            <li><a href="/statyi">Статьи</a></li>
+            <li><a href="/video">Видео</a></li>
+            <li><a href="/kontakty">Контакты</a></li>
+            <li><a href="/oplata">Оплата</a></li>
+            <li><a href="/aktsii-i-skidki">Акции и скидки</a></li>
+            <li><a href="/sotrudnichestvo">Сотрудничество</a></li>
+            <li><a href="/svedeniya-ob-obrazovatelnoy-organizatsii">Сведения об организации</a></li>
+          </ul>
+        </div>
+
+        <div class="sitemap-col">
+          <h2>Институты</h2>
+          {institutes.map((inst) => (
+            <div class="sitemap-group">
+              <h3><a href={`/${inst.slug}`}>{inst.name}</a></h3>
+              <ul class="sitemap-list">
+                {courseGroups
+                  .filter((cg) => cg.institute_legacy_id === inst.slug)
+                  .map((cg) => (
+                    <li>
+                      <a href={`/${inst.slug}/${cg.slug}`}>{cg.name}</a>
+                    </li>
+                  ))}
+              </ul>
+              {teachers.filter((t) => t.institute_legacy_id === inst.slug).length > 0 && (
+                <div>
+                  <h4>Преподаватели</h4>
+                  <ul class="sitemap-list">
+                    {teachers
+                      .filter((t) => t.institute_legacy_id === inst.slug)
+                      .map((t) => (
+                        <li>
+                          <a href={`/${inst.slug}/prepodavatel/${t.slug}`}>{t.name}</a>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div class="sitemap-col">
+          <h2>Статьи ({articles.length})</h2>
+          <ul class="sitemap-list">
+            {articles.map((a) => (
+              <li><a href={`/statyi/${a.slug}`}>{a.title}</a></li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sitemap-col">
+          <h2>Видео ({playlists.length})</h2>
+          <ul class="sitemap-list">
+            {playlists.map((v) => (
+              <li><a href={`/video/${v.slug}`}>{v.title}</a></li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 2rem;
+  }
+
+  .sitemap-columns {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+  }
+
+  .sitemap-col h2 {
+    font-size: var(--font-l);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-accent-500);
+  }
+
+  .sitemap-col h3 {
+    font-size: var(--font-m);
+    margin: 1rem 0 0.5rem;
+  }
+
+  .sitemap-col h4 {
+    font-size: var(--font-s);
+    margin: 0.75rem 0 0.25rem;
+    color: var(--color-gray-600);
+  }
+
+  .sitemap-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .sitemap-list li {
+    margin-bottom: 0.25rem;
+  }
+
+  .sitemap-list a {
+    font-size: var(--font-s);
+    color: var(--color-info-500);
+  }
+
+  .sitemap-group {
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .sitemap-columns {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,76 @@
+---
+import type { Seminar } from '../lib/data';
+import { excerpt } from '../lib/data';
+
+interface Props {
+  seminar: Seminar;
+  href: string;
+}
+
+const { seminar, href } = Astro.props;
+const statusLabel: Record<string, string> = {
+  active: 'Набор открыт',
+  not_planned: 'Не запланирован',
+  completed: 'Завершён',
+};
+---
+
+<a href={href} class="seminar-card card">
+  <div class="card-body">
+    <h3 class="seminar-card-title">{seminar.name}</h3>
+    {seminar.status && (
+      <span class:list={['badge', `badge-${seminar.status}`]}>
+        {statusLabel[seminar.status] || seminar.status}
+      </span>
+    )}
+    {seminar.description_text && (
+      <p class="seminar-card-excerpt">{excerpt(seminar.description_text, 150)}</p>
+    )}
+  </div>
+</a>
+
+<style>
+  .seminar-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .seminar-card:hover {
+    text-decoration: none;
+  }
+
+  .seminar-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+    color: var(--color-dark-700);
+  }
+
+  .seminar-card-excerpt {
+    font-size: var(--font-s);
+    color: var(--color-gray-600);
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .badge {
+    font-size: var(--font-xs);
+  }
+
+  .badge-active {
+    background-color: var(--color-accent-50);
+    color: var(--color-accent-700);
+  }
+
+  .badge-not_planned {
+    background-color: #fef3cd;
+    color: #856404;
+  }
+
+  .badge-completed {
+    background-color: var(--color-gray-200);
+    color: var(--color-gray-600);
+  }
+</style>

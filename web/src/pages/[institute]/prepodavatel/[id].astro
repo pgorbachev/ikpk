@@ -1,0 +1,104 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { getInstitutes, getTeachers, excerpt } from '../../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  const institutes = getInstitutes();
+  const allTeachers = getTeachers();
+  const paths: { params: Record<string, string>; props: Record<string, unknown> }[] = [];
+
+  for (const t of allTeachers) {
+    const inst = institutes.find((i) => i.slug === t.institute_legacy_id);
+    if (!inst) continue;
+    paths.push({
+      params: { institute: inst.slug, id: t.slug },
+      props: { teacher: t, institute: inst },
+    });
+  }
+  return paths;
+};
+
+const { teacher, institute } = Astro.props;
+---
+
+<BaseLayout
+  title={`${teacher.name} — преподаватель ${institute.name}`}
+  description={excerpt(teacher.bio_text, 160)}
+>
+  <div class="container">
+    <Breadcrumbs
+      items={[
+        { label: institute.name, href: `/${institute.slug}` },
+        { label: 'Преподаватели' },
+        { label: teacher.name },
+      ]}
+    />
+
+    <article class="section teacher-detail">
+      <div class="teacher-header">
+        {teacher.photo && (
+          <div class="teacher-avatar">
+            <img src={teacher.photo} alt={teacher.name} width="200" height="200" />
+          </div>
+        )}
+        <div class="teacher-info">
+          <h1 class="page-title">{teacher.name}</h1>
+          <p class="text-muted">{institute.name}</p>
+        </div>
+      </div>
+
+      {teacher.bio_text && (
+        <div class="teacher-bio rich-content">
+          <h2>О преподавателе</h2>
+          <p>{teacher.bio_text}</p>
+        </div>
+      )}
+    </article>
+  </div>
+</BaseLayout>
+
+<style>
+  .teacher-header {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+
+  .teacher-avatar {
+    flex-shrink: 0;
+    width: 200px;
+    height: 200px;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    background: var(--color-light-300);
+  }
+
+  .teacher-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .teacher-info {
+    flex: 1;
+  }
+
+  .page-title {
+    margin-bottom: 0.5rem;
+  }
+
+  .teacher-bio {
+    max-width: 800px;
+  }
+
+  @media (max-width: 640px) {
+    .teacher-header {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+  }
+</style>
