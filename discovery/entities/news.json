@@ -1,0 +1,50 @@
+[
+  {
+    "id": 50,
+    "priority": 1,
+    "name": "Наш магазин на WB",
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727030039467.webp",
+      "id": "017f5c58-9767-4a20-a586-6133e01086e6"
+    },
+    "description": "<p>Теперь, книги которые мы издаем, продаются на Wildberries</p>",
+    "createdAt": "2024-09-22T21:33:59.693Z",
+    "link": "https://www.wildberries.ru/seller/4139519"
+  },
+  {
+    "id": 53,
+    "priority": 2,
+    "name": "Новая книга",
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1736721585878.webp",
+      "id": "686017d1-ac36-4b65-ae36-513bbba180e1"
+    },
+    "description": "<p>Ручные лимфатические техники для мануальных терапевтов в области ортопедии.</p><p>Автор: Дэвид Даблштейн</p>",
+    "createdAt": "2025-01-13T01:39:46.152Z",
+    "link": "https://medshop.ikpk.su/product/ruchnye-limfaticheskie-tehniki-dlya-manualnyh-terapevtov-v-oblasti-ortopedii/"
+  },
+  {
+    "id": 52,
+    "priority": 3,
+    "name": "Наш новый магазин на Ozon",
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1728560080947.webp",
+      "id": "563e7521-0cee-494e-815a-bd413421071e"
+    },
+    "description": "<p>Книги нашего издательства еще и на Ozon</p>",
+    "createdAt": "2024-10-10T14:34:41.184Z",
+    "link": "https://www.ozon.ru/seller/izdatelskiy-dom-ikpk-2323716/knigi-16500/?miniapp=seller_2323716"
+  },
+  {
+    "id": 49,
+    "priority": 4,
+    "name": "Следите за нашими Акциями",
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727029713049.webp",
+      "id": "bfca85a5-aeff-417e-936a-fd6f4a7337d8"
+    },
+    "description": "<p>В этом разделе, вы можете узнать об актуальных акциях нашего института и магазина.</p>",
+    "createdAt": "2024-09-22T21:28:33.245Z",
+    "link": "https://staging.ikpk.su/promotions"
+  }
+]

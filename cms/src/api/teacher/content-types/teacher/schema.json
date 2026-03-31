@@ -1,0 +1,45 @@
+{
+  "kind": "collectionType",
+  "collectionName": "teachers",
+  "info": {
+    "singularName": "teacher",
+    "pluralName": "teachers",
+    "displayName": "Teacher",
+    "description": "Instructor/teacher"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "photo": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
+    "bio": {
+      "type": "richtext"
+    },
+    "legacy_id": {
+      "type": "string",
+      "unique": true
+    },
+    "seminars": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::seminar.seminar",
+      "mappedBy": "teachers"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "kind": "collectionType",
+  "collectionName": "course_groups",
+  "info": {
+    "singularName": "course-group",
+    "pluralName": "course-groups",
+    "displayName": "Course Group",
+    "description": "Group of courses/seminars within an institute"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "description": {
+      "type": "richtext"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
+    "legacy_id": {
+      "type": "string",
+      "unique": true
+    },
+    "institute": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::institute.institute",
+      "inversedBy": "course_groups"
+    },
+    "seminars": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::seminar.seminar",
+      "mappedBy": "course_group"
+    },
+    "seo": {
+      "type": "component",
+      "component": "shared.seo",
+      "repeatable": false
+    }
+  }
+}

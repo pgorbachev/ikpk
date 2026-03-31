@@ -1,0 +1,57 @@
+{
+  "kind": "collectionType",
+  "collectionName": "institutes",
+  "info": {
+    "singularName": "institute",
+    "pluralName": "institutes",
+    "displayName": "Institute",
+    "description": "Educational institute"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "shortName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "richtext"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
+    "order": {
+      "type": "integer",
+      "default": 0
+    },
+    "legacy_id": {
+      "type": "string",
+      "unique": true
+    },
+    "course_groups": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::course-group.course-group",
+      "mappedBy": "institute"
+    },
+    "seo": {
+      "type": "component",
+      "component": "shared.seo",
+      "repeatable": false
+    }
+  }
+}

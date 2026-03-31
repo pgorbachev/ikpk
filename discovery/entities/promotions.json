@@ -1,0 +1,54 @@
+[
+  {
+    "id": 40,
+    "name": "Акции и скидки на OZONE",
+    "priority": 4,
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1732538413910.webp",
+      "id": "241c2e8c-b5db-469e-8847-7179da975556"
+    },
+    "description": "<p>Не пропустите постоянные скидки на нашу книжную продукцию в OZONE.</p>",
+    "link": "https://www.ozon.ru/seller/izdatelskiy-dom-ikpk-2323716/products/?miniapp=seller_2323716",
+    "createdAt": "2024-11-25T15:40:14.130Z",
+    "type": "SHOP"
+  },
+  {
+    "id": 39,
+    "name": "Акции и скидки на Wildberries",
+    "priority": 5,
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1732537957896.webp",
+      "id": "97225d8e-f4dc-4b62-9c1d-e5909e526671"
+    },
+    "description": "<p><span style=\"font-size:14px\">Не пропустите постоянные скидки на нашу книжную продукцию в</span> Wildberries.</p>",
+    "link": "https://www.wildberries.ru/seller/4139519",
+    "createdAt": "2024-11-25T15:32:38.126Z",
+    "type": "SHOP"
+  },
+  {
+    "id": 38,
+    "name": "Приведи друга и получи скидку",
+    "priority": 6,
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1732538232696.webp",
+      "id": "7de68cfb-3fcd-4fd6-8479-90672899da9f"
+    },
+    "description": "<p>Если вы приведете друга к нам на обучение, ранее не обучавшегося у нас, то мы сделаем для вас скидку <strong>2000 руб</strong></p>",
+    "link": "",
+    "createdAt": "2024-09-22T21:22:15.491Z",
+    "type": "INSTITUTE"
+  },
+  {
+    "id": 44,
+    "name": "Акции и скидки на Я.Маркет",
+    "priority": 7,
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1774626737658.webp",
+      "id": "a6c8b208-6908-4b1a-95fb-db09b071f52b"
+    },
+    "description": "<p>Не пропустите постоянные скидки на нашу книжную продукцию в Я.Маркет</p>",
+    "link": "https://market.yandex.ru/search?suggest_text=%D0%98%D0%BD%D1%81%D1%82%D0%B8%D1%82%D1%83%D1%82%20%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%BE%D0%B9%20%D0%BF%D1%80%D0%B8%D0%BA%D0%BB%D0%B0%D0%B4%D0%BD%D0%BE%D0%B9%20%D0%BA%D0%B8%D0%BD%D0%B5%D0%B7%D0%B8%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8&vendorId=50304886&rs=eJwzEv3EKMTBKLDwEKsEg8a_C685NLadf80BAFI6CG8%2C&glfilter=7893318%3A50304886",
+    "createdAt": "2026-03-27T18:50:32.752Z",
+    "type": "SHOP"
+  }
+]

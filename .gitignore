@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Build output
+cms/dist/
+cms/build/
+cms/.cache/
+cms/.tmp/
+web/dist/
+web/.astro/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Strapi uploads (local dev)
+cms/public/uploads/
+
+# Strapi SQLite DB (local dev)
+cms/*.db
+cms/*.db-journal
+
+# Deprecated files
+discovery/media_inventory_proxy_urls_DEPRECATED.json
+
+# Large audit data (keep in repo for reference)
+# lh_*.json — Lighthouse reports
+# *.html — saved page snapshots

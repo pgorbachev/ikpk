@@ -1,0 +1,73 @@
+{
+  "kind": "collectionType",
+  "collectionName": "schedule_entries",
+  "info": {
+    "singularName": "schedule-entry",
+    "pluralName": "schedule-entries",
+    "displayName": "Schedule Entry",
+    "description": "Scheduled seminar event"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "startAt": {
+      "type": "datetime"
+    },
+    "endAt": {
+      "type": "datetime"
+    },
+    "city": {
+      "type": "string"
+    },
+    "price": {
+      "type": "decimal"
+    },
+    "oldPrice": {
+      "type": "decimal"
+    },
+    "isFree": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "active",
+        "cancelled",
+        "completed"
+      ],
+      "default": "active"
+    },
+    "registrationFormLink": {
+      "type": "string"
+    },
+    "description": {
+      "type": "richtext"
+    },
+    "additionalText": {
+      "type": "richtext"
+    },
+    "duration": {
+      "type": "string"
+    },
+    "legacy_id": {
+      "type": "string",
+      "unique": true
+    },
+    "seminar": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::seminar.seminar",
+      "inversedBy": "schedule_entries"
+    },
+    "teachers": {
+      "type": "json"
+    }
+  }
+}

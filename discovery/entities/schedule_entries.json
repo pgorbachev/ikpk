@@ -1,0 +1,2202 @@
+[
+  {
+    "id": 409,
+    "status": "active",
+    "name": "Тендинопатия: здоровье рук массажиста и не только",
+    "seminar": {
+      "id": 343,
+      "name": "Тендинопатия: здоровье рук массажиста и не только",
+      "slug": "tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-04-02T00:00:00.000Z",
+    "endAt": "2026-04-02T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 56,
+        "fullName": "Федорова Татьяна Васильевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773138507013.webp",
+      "id": "a250eaa0-2f2b-41b2-8423-5dae38c89fb9"
+    },
+    "isFree": true,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 0,
+    "city": {
+      "id": 1,
+      "name": "Онлайн"
+    },
+    "program": {
+      "id": 176,
+      "slug": "vebinary-i-mezhseminarskie-vstrechi-ikpk",
+      "name": "Вебинары и межсеминарские встречи"
+    },
+    "additionalText": "Вебинар",
+    "duration": "2",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_imf2p/"
+  },
+  {
+    "id": 359,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-04-02T00:00:00.000Z",
+    "endAt": "2026-04-05T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1756328795776.webp",
+      "id": "3daa932c-1fc3-40ac-97a6-412f26e9036e"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 396,
+    "status": "active",
+    "name": "Миофасциальный массаж тела + Армопластика",
+    "seminar": {
+      "id": 284,
+      "name": "Миофасциальный массаж тела + Армопластика",
+      "slug": "miofascialnyj-massazh-tela-armoplastika"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-04-06T00:00:00.000Z",
+    "endAt": "2026-04-08T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 56,
+        "fullName": "Федорова Татьяна Васильевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1765206263321.webp",
+      "id": "3d02a1a1-43b2-48e2-9fa2-b27bc26f307f"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 154,
+      "slug": "massazh",
+      "name": "Массаж"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_ptxz3/"
+  },
+  {
+    "id": 405,
+    "status": "active",
+    "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+    "seminar": {
+      "id": 303,
+      "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+      "slug": "seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-04-11T00:00:00.000Z",
+    "endAt": "2026-04-12T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 54,
+        "fullName": "Пилявский Сергей Орестович"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1771946534436.webp",
+      "id": "b2d182b6-5977-4945-8d66-ac5a5597841e"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 10000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 157,
+      "slug": "specializirovannye",
+      "name": "Специализированные"
+    },
+    "additionalText": "",
+    "duration": "16",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_odo5i/"
+  },
+  {
+    "id": 342,
+    "status": "active",
+    "name": "UMAC-5: Использование меридианов в кранио-сакральной терапии. Уровень 5",
+    "seminar": {
+      "id": 324,
+      "name": "UMAC-5: Использование меридианов в кранио-сакральной терапии. Уровень 5",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-04-16T00:00:00.000Z",
+    "endAt": "2026-04-19T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 68,
+        "fullName": "Kenneth Koles Richard"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1753806051878.webp",
+      "id": "b36574eb-6d10-47f6-8ed0-cd3980d120f7"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 60000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 159,
+      "slug": "primenenie-principov-akupunktury",
+      "name": "Применение принципов акупунктуры"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_t5qil/"
+  },
+  {
+    "id": 382,
+    "status": "active",
+    "name": "Коррекция патологической активности примитивных рефлексов с позиции прикладной кинезиологии, психотерапевтической кинезиологии, теории глубокого сухожильного рефлекса. Авторский семинар. Часть № 2",
+    "seminar": {
+      "id": 332,
+      "name": "Коррекция патологической активности примитивных рефлексов с позиции прикладной кинезиологии, психотерапевтической кинезиологии, теории глубокого сухожильного рефлекса. Авторский семинар. Часть № 2",
+      "slug": "korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-04-17T00:00:00.000Z",
+    "endAt": "2026-04-18T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 53,
+        "fullName": "Жарова Людмила Семеновна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1762865594985.webp",
+      "id": "1291c690-fb77-4311-be78-8ac601d67a23"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 24000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 173,
+      "slug": "avtorskie-seminary-zharovoj-ls",
+      "name": "Авторские семинары Жаровой Л.С."
+    },
+    "additionalText": "",
+    "duration": "16",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_hp4fh/"
+  },
+  {
+    "id": 395,
+    "status": "active",
+    "name": "Миофасциальный и буккальный массаж лица",
+    "seminar": {
+      "id": 227,
+      "name": "Миофасциальный и буккальный массаж лица",
+      "slug": "miofascialnyj-i-bukkalnyj-massazh-lica"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-04-20T00:00:00.000Z",
+    "endAt": "2026-04-22T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 56,
+        "fullName": "Федорова Татьяна Васильевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1765206168042.webp",
+      "id": "dc7c5f65-4a79-401a-aa34-767a836cee38"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 154,
+      "slug": "massazh",
+      "name": "Массаж"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_bj0ns/"
+  },
+  {
+    "id": 362,
+    "status": "active",
+    "name": "VM-2: Брюшная полость. Уровень 2",
+    "seminar": {
+      "id": 260,
+      "name": "VM-2: Брюшная полость. Уровень 2",
+      "slug": "bryushnaya-polost-2"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2026-04-23T00:00:00.000Z",
+    "endAt": "2026-04-26T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 71,
+        "fullName": "Paolo Ricci"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761229915973.webp",
+      "id": "52c24871-e083-4ef0-81b1-efcb8b611eaf"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 163,
+      "slug": "visceralnye-tehniki",
+      "name": "Висцеральные техники"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 410,
+    "status": "active",
+    "name": "CSSTR: Краниосакральная терапия и реакция на стрессовую травму",
+    "seminar": {
+      "id": 319,
+      "name": "CSSTR: Краниосакральная терапия и реакция на стрессовую травму",
+      "slug": "csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-04-25T00:00:00.000Z",
+    "endAt": "2026-04-28T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 66,
+        "fullName": "Thomas Rasmussen"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773147259343.webp",
+      "id": "3b39145d-e455-4c1c-94f7-6931d264c754"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Даты проведения семинара будут определены по мере комплектования группы.",
+    "oldPrice": 0,
+    "newPrice": 60000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 162,
+      "slug": "kraniosakralnaya-terapiya-specializirovannye",
+      "name": "Специализированные"
+    },
+    "additionalText": "Семинар на согласовании",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_pw4rv/"
+  },
+  {
+    "id": 324,
+    "status": "active",
+    "name": "ПК-4. Висцеральная терапия с основами прикладной кинезиологии органов грудной и брюшной полостей и малого таза. Уровень 4",
+    "seminar": {
+      "id": 204,
+      "name": "ПК-4. Висцеральная терапия с основами прикладной кинезиологии органов грудной и брюшной полостей и малого таза. Уровень 4",
+      "slug": "visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-05-13T00:00:00.000Z",
+    "endAt": "2026-05-17T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 60,
+        "fullName": "Хачатурова Кристина Георгиевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1747748908457.webp",
+      "id": "04a2a447-c160-46c0-9407-88d38d682889"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 325,
+    "status": "active",
+    "name": "ПК-8. Функциональные нарушения электромагнитных процессов. Меридианный дисбаланс и его роль в формировании болевых мышечных синдромов. Уровень 8",
+    "seminar": {
+      "id": 208,
+      "name": "ПК-8. Функциональные нарушения электромагнитных процессов. Меридианный дисбаланс и его роль в формировании болевых мышечных синдромов. Уровень 8",
+      "slug": "funkcionalnye-narusheniya-elektromagnitnyh-processov"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-05-20T00:00:00.000Z",
+    "endAt": "2026-05-24T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 82,
+        "fullName": "Виноградова Елена Владимировна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1747748960562.webp",
+      "id": "1a96b3c0-0ba6-4fee-b3d8-ae938a1dbcd7"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 313,
+    "status": "active",
+    "name": "CSP-1: Краниосакральная терапия в педиатрии. Уровень 1",
+    "seminar": {
+      "id": 309,
+      "name": "CSP-1: Краниосакральная терапия в педиатрии. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-v-pediatrii-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-05-21T00:00:00.000Z",
+    "endAt": "2026-05-24T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 79,
+        "fullName": "Carol J. McLellan"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1746419985174.webp",
+      "id": "63aeab00-9928-4696-adf1-cb4a81ea1541"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Стоимость семинара — 55 000 руб. при условии внесения 50% предоплаты до 21.02.2026.",
+    "oldPrice": 65000,
+    "newPrice": 60000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 171,
+      "slug": "pediatriya-akusherstvo-i-novorozhdennye",
+      "name": "Педиатрия, акушерство и новорожденные"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_fcfl2/"
+  },
+  {
+    "id": 341,
+    "status": "active",
+    "name": "UMAC-1: Использование меридианов в кранио-сакральной терапии. Уровень 1",
+    "seminar": {
+      "id": 250,
+      "name": "UMAC-1: Использование меридианов в кранио-сакральной терапии. Уровень 1",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-05-21T00:00:00.000Z",
+    "endAt": "2026-05-24T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 68,
+        "fullName": "Kenneth Koles Richard"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1753804802382.webp",
+      "id": "42cb05c4-8546-4fb9-b97e-cb78c6cbb72b"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 159,
+      "slug": "primenenie-principov-akupunktury",
+      "name": "Применение принципов акупунктуры"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 375,
+    "status": "active",
+    "name": "VM-3: Таз. Уровень 3",
+    "seminar": {
+      "id": 261,
+      "name": "VM-3: Таз. Уровень 3",
+      "slug": "taz"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2026-05-28T00:00:00.000Z",
+    "endAt": "2026-05-31T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 71,
+        "fullName": "Paolo Ricci"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761230389022.webp",
+      "id": "2c1b63b2-855a-4882-8dd2-be8ad7f7d0d8"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 163,
+      "slug": "visceralnye-tehniki",
+      "name": "Висцеральные техники"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 350,
+    "status": "active",
+    "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2",
+    "seminar": {
+      "id": 237,
+      "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2",
+      "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-05-29T00:00:00.000Z",
+    "endAt": "2026-05-31T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 58,
+        "fullName": "Колесник Марк Алексеевич"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1755010016518.webp",
+      "id": "3146bcb7-db2a-4ade-a894-28265d06af69"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 156,
+      "slug": "kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+      "name": "Курс по китайской медицине с позиций прикладной кинезиологии"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_sy2hg/"
+  },
+  {
+    "id": 406,
+    "status": "active",
+    "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+    "seminar": {
+      "id": 303,
+      "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+      "slug": "seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-05-30T00:00:00.000Z",
+    "endAt": "2026-05-31T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 54,
+        "fullName": "Пилявский Сергей Орестович"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1771946676103.webp",
+      "id": "025b6397-6739-4afa-b6c3-760d6bf0c02c"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 10000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 157,
+      "slug": "specializirovannye",
+      "name": "Специализированные"
+    },
+    "additionalText": "",
+    "duration": "16",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_odo5i/"
+  },
+  {
+    "id": 243,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-05-31T00:00:00.000Z",
+    "endAt": "2026-06-03T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 63,
+        "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065466856.webp",
+      "id": "734a9acb-0c66-4272-9470-1b108a5775ed"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 55000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_xtxhi/"
+  },
+  {
+    "id": 345,
+    "status": "active",
+    "name": "Основы энергетической кинезиологии. Уровень 1",
+    "seminar": {
+      "id": 326,
+      "name": "Основы энергетической кинезиологии. Уровень 1",
+      "slug": "osnovy-energeticheskoj-kineziologii-1"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-06-04T00:00:00.000Z",
+    "endAt": "2026-06-06T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 81,
+        "fullName": "Аульченкова Оксана Александровна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1754490205164.webp",
+      "id": "93b869ed-b024-4e5d-953d-f7edbe156b76"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 27000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 157,
+      "slug": "specializirovannye",
+      "name": "Специализированные"
+    },
+    "additionalText": "Семинар практикум",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_a1zgy/"
+  },
+  {
+    "id": 420,
+    "status": "active",
+    "name": "CST-2: Краниосакральная терапия. Уровень 2",
+    "seminar": {
+      "id": 245,
+      "name": "CST-2: Краниосакральная терапия. Уровень 2",
+      "slug": "kraniosakralnaya-terapiya-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-06-04T00:00:00.000Z",
+    "endAt": "2026-06-07T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 63,
+        "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1774252880722.webp",
+      "id": "83f2dd6a-7d83-446a-8450-d34b145da5df"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 55000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_mpy8w/"
+  },
+  {
+    "id": 360,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-06-04T00:00:00.000Z",
+    "endAt": "2026-06-07T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1756328888822.webp",
+      "id": "82e6643a-800e-4848-8701-59065689cf7f"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 242,
+    "status": "active",
+    "name": "SER-2: Сомато-эмоциональное освобождение. Уровень 2",
+    "seminar": {
+      "id": 247,
+      "name": "SER-2: Сомато-эмоциональное освобождение. Уровень 2",
+      "slug": "somato-emocionalnoe-osvobozhdenie-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-06-11T00:00:00.000Z",
+    "endAt": "2026-06-14T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 65,
+        "fullName": "Diego Maggio"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065406681.webp",
+      "id": "49449066-69f7-4e8d-a38f-7c270233ad64"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 0,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 340,
+    "status": "active",
+    "name": "CSIR: Краниосакральная терапия и иммунный ответ",
+    "seminar": {
+      "id": 254,
+      "name": "CSIR: Краниосакральная терапия и иммунный ответ",
+      "slug": "kraniosakralnaya-terapiya-i-immunnyj-otvet"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-06-11T00:00:00.000Z",
+    "endAt": "2026-06-14T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 74,
+        "fullName": "Patricia Quirini"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1753804655294.webp",
+      "id": "701b5144-1500-49be-b963-d2ef9590a095"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Стоимость 55000 руб - при оплате 50% до 10 марта 2026",
+    "oldPrice": 0,
+    "newPrice": 60000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 160,
+      "slug": "imunnyj-otvet",
+      "name": "Иммунный ответ"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_xcuui/"
+  },
+  {
+    "id": 394,
+    "status": "active",
+    "name": "Карта патологий",
+    "seminar": {
+      "id": 229,
+      "name": "Карта патологий",
+      "slug": "karta-patologij"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-06-15T00:00:00.000Z",
+    "endAt": "2026-06-18T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 56,
+        "fullName": "Федорова Татьяна Васильевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1765194324331.webp",
+      "id": "66d4a5c9-4873-4ab2-b8a6-14052a783e4a"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 35000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 154,
+      "slug": "massazh",
+      "name": "Массаж"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_l2gsz/"
+  },
+  {
+    "id": 412,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-07-09T00:00:00.000Z",
+    "endAt": "2026-07-12T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299176731.webp",
+      "id": "d71b88e5-ff7a-42d9-a138-9e8f9fda4f19"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 66,
+      "name": "Новосибирск"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 388,
+    "status": "active",
+    "name": "ПК-4. Висцеральная терапия с основами прикладной кинезиологии органов грудной и брюшной полостей и малого таза. Уровень 4",
+    "seminar": {
+      "id": 204,
+      "name": "ПК-4. Висцеральная терапия с основами прикладной кинезиологии органов грудной и брюшной полостей и малого таза. Уровень 4",
+      "slug": "visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-09-09T00:00:00.000Z",
+    "endAt": "2026-09-13T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 60,
+        "fullName": "Хачатурова Кристина Георгиевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1763730309432.webp",
+      "id": "26760daf-25b6-4ef6-9b89-073332fb6532"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 376,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-09-12T00:00:00.000Z",
+    "endAt": "2026-09-15T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761230598574.webp",
+      "id": "b7ecec66-a099-476c-a51d-64181ae03463"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 377,
+    "status": "active",
+    "name": "CST-2: Краниосакральная терапия. Уровень 2",
+    "seminar": {
+      "id": 245,
+      "name": "CST-2: Краниосакральная терапия. Уровень 2",
+      "slug": "kraniosakralnaya-terapiya-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-09-17T00:00:00.000Z",
+    "endAt": "2026-09-20T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761230661330.webp",
+      "id": "45cc6f09-762b-425c-8f06-d4c3054f5d96"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 397,
+    "status": "active",
+    "name": "Миофасциальный массаж тела + Женский массаж",
+    "seminar": {
+      "id": 228,
+      "name": "Миофасциальный массаж тела + Женский массаж",
+      "slug": "miofascialnyj-massazh-tela-zhenskij-massazh"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-09-21T00:00:00.000Z",
+    "endAt": "2026-09-23T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 56,
+        "fullName": "Федорова Татьяна Васильевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1765206437537.webp",
+      "id": "a099770a-8176-4a39-8968-c00f65b67e10"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 154,
+      "slug": "massazh",
+      "name": "Массаж"
+    },
+    "additionalText": "Маммологические техники",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_v8ay3/"
+  },
+  {
+    "id": 378,
+    "status": "active",
+    "name": "VM-4: Грудная клетка. Уровень 4",
+    "seminar": {
+      "id": 262,
+      "name": "VM-4: Грудная клетка. Уровень 4",
+      "slug": "grudnaya-kletka"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2026-09-23T00:00:00.000Z",
+    "endAt": "2026-09-26T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 70,
+        "fullName": "Matteo Ghiretti"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761230722805.webp",
+      "id": "5d9d2eff-c89a-4a76-baa4-7a1dd7e02fda"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 163,
+      "slug": "visceralnye-tehniki",
+      "name": "Висцеральные техники"
+    },
+    "additionalText": "",
+    "duration": "",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 408,
+    "status": "active",
+    "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
+    "seminar": {
+      "id": 238,
+      "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
+      "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-09-25T00:00:00.000Z",
+    "endAt": "2026-09-27T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 58,
+        "fullName": "Колесник Марк Алексеевич"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1772755593858.webp",
+      "id": "106c9ad0-70ef-46b5-923f-4ad386190e51"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 156,
+      "slug": "kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+      "name": "Курс по китайской медицине с позиций прикладной кинезиологии"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_osbru/"
+  },
+  {
+    "id": 379,
+    "status": "active",
+    "name": "LT-1: Интегративный подход к оценке. Уровень 1",
+    "seminar": {
+      "id": 272,
+      "name": "LT-1: Интегративный подход к оценке. Уровень 1",
+      "slug": "integrativnyj-podhod-k-ocenke-1"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2026-09-28T00:00:00.000Z",
+    "endAt": "2026-09-30T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 70,
+        "fullName": "Matteo Ghiretti"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1761231363783.webp",
+      "id": "137a6542-93a4-441b-9d54-8fcb82fa002e"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 60000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 166,
+      "slug": "tehniki-vyslushivaniya",
+      "name": "Техники выслушивания"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 352,
+    "status": "active",
+    "name": "НПК-1: Нейропсихокинезиология. Уровень №1",
+    "seminar": {
+      "id": 299,
+      "name": "НПК-1: Нейропсихокинезиология. Уровень №1",
+      "slug": "nejropsihokineziologiya-1"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-10-02T00:00:00.000Z",
+    "endAt": "2026-10-04T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 58,
+        "fullName": "Колесник Марк Алексеевич"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1755010380110.webp",
+      "id": "a3bf98b9-b6d8-4c17-90ab-15c11aa5e3cd"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 151,
+      "slug": "postdiplomnye-programmy-po-prikladnoj-kineziologii",
+      "name": "Постдипломные программы по прикладной кинезиологии"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_uhvg3/"
+  },
+  {
+    "id": 245,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-10-03T00:00:00.000Z",
+    "endAt": "2026-10-06T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 63,
+        "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065586220.webp",
+      "id": "b0e9e37a-15f5-4edb-ab48-750dc91a6886"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 55000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_xtxhi/"
+  },
+  {
+    "id": 389,
+    "status": "active",
+    "name": "ПК-1. Основы мануального мышечного тестирования. Миология. Нейрофизиологические основы мышечного сокращения. Уровень 1",
+    "seminar": {
+      "id": 201,
+      "name": "ПК-1. Основы мануального мышечного тестирования. Миология. Нейрофизиологические основы мышечного сокращения. Уровень 1",
+      "slug": "osnovy-manualnogo-myshechnogo-testirovaniya"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-10-07T00:00:00.000Z",
+    "endAt": "2026-10-11T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 54,
+        "fullName": "Пилявский Сергей Орестович"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1763730383264.webp",
+      "id": "95dd9c14-dc98-4d48-ad32-03c1f94bfa29"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 246,
+    "status": "active",
+    "name": "CST-2: Краниосакральная терапия. Уровень 2",
+    "seminar": {
+      "id": 245,
+      "name": "CST-2: Краниосакральная терапия. Уровень 2",
+      "slug": "kraniosakralnaya-terapiya-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-10-08T00:00:00.000Z",
+    "endAt": "2026-10-11T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 63,
+        "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065637334.webp",
+      "id": "1118bf43-d4c3-439a-b1b6-8878a91496dd"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 55000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_mpy8w/"
+  },
+  {
+    "id": 390,
+    "status": "active",
+    "name": "ПК-5. Краниосакральная система. Диагностика и терапия кранио-сакральных нарушений с использованием прикладной кинезиологии. Представление о стоматогностической системе. Уровень 5",
+    "seminar": {
+      "id": 205,
+      "name": "ПК-5. Краниосакральная система. Диагностика и терапия кранио-сакральных нарушений с использованием прикладной кинезиологии. Представление о стоматогностической системе. Уровень 5",
+      "slug": "kraniosakralnaya-sistema"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-10-14T00:00:00.000Z",
+    "endAt": "2026-10-18T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 60,
+        "fullName": "Хачатурова Кристина Георгиевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1763730473854.webp",
+      "id": "94210425-ad8b-47c1-8c98-925f7c07f8ce"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 413,
+    "status": "active",
+    "name": "CST-2: Краниосакральная терапия. Уровень 2",
+    "seminar": {
+      "id": 245,
+      "name": "CST-2: Краниосакральная терапия. Уровень 2",
+      "slug": "kraniosakralnaya-terapiya-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-10-15T00:00:00.000Z",
+    "endAt": "2026-10-18T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299280236.webp",
+      "id": "7ca687c7-3af9-44aa-be77-48e70afaf6a2"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 60000,
+    "city": {
+      "id": 66,
+      "name": "Новосибирск"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "",
+    "registrationFormLink": null
+  },
+  {
+    "id": 414,
+    "status": "active",
+    "name": "VM-2: Брюшная полость. Уровень 2",
+    "seminar": {
+      "id": 260,
+      "name": "VM-2: Брюшная полость. Уровень 2",
+      "slug": "bryushnaya-polost-2"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2026-10-29T00:00:00.000Z",
+    "endAt": "2026-11-01T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 71,
+        "fullName": "Paolo Ricci"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299477719.webp",
+      "id": "ac5ff35e-b1e7-4237-a728-2e5954c61e9e"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 163,
+      "slug": "visceralnye-tehniki",
+      "name": "Висцеральные техники"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 347,
+    "status": "active",
+    "name": "TBS-2: Мозг говорит. Уровень 2",
+    "seminar": {
+      "id": 306,
+      "name": "TBS-2: Мозг говорит. Уровень 2",
+      "slug": "mozg-govorit-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-11-07T00:00:00.000Z",
+    "endAt": "2026-11-10T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 66,
+        "fullName": "Thomas Rasmussen"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1754904892699.webp",
+      "id": "67e6dfae-ea09-4d4f-9204-9b50af7dbf9c"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 170,
+      "slug": "mozg",
+      "name": "Мозг"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 415,
+    "status": "active",
+    "name": "CST-2: Краниосакральная терапия. Уровень 2",
+    "seminar": {
+      "id": 245,
+      "name": "CST-2: Краниосакральная терапия. Уровень 2",
+      "slug": "kraniosakralnaya-terapiya-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-11-12T00:00:00.000Z",
+    "endAt": "2026-11-15T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299705564.webp",
+      "id": "4c4f524a-26c2-4821-9bf1-74c9bfd1c67b"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 247,
+    "status": "active",
+    "name": "SER-2: Сомато-эмоциональное освобождение. Уровень 2",
+    "seminar": {
+      "id": 247,
+      "name": "SER-2: Сомато-эмоциональное освобождение. Уровень 2",
+      "slug": "somato-emocionalnoe-osvobozhdenie-2"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-11-20T00:00:00.000Z",
+    "endAt": "2026-11-23T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 65,
+        "fullName": "Diego Maggio"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065708886.webp",
+      "id": "6093cde5-2e56-4b46-ad38-2d0eea5ed931"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 0,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_x8cwr/"
+  },
+  {
+    "id": 416,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-12-02T00:00:00.000Z",
+    "endAt": "2026-12-05T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 64,
+        "fullName": "Радзинская Елена Викторовна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299781006.webp",
+      "id": "84410a9f-3292-47cc-a80b-f49e1175dfc8"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 353,
+    "status": "active",
+    "name": "НПК-2: Нейропсихокинезиология. Уровень №2",
+    "seminar": {
+      "id": 300,
+      "name": "НПК-2: Нейропсихокинезиология. Уровень №2",
+      "slug": "nejropsihokineziologiya-2"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-12-04T00:00:00.000Z",
+    "endAt": "2026-12-06T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 58,
+        "fullName": "Колесник Марк Алексеевич"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1755010423258.webp",
+      "id": "17330f61-fe1e-4724-b0d6-390118ed68ef"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 151,
+      "slug": "postdiplomnye-programmy-po-prikladnoj-kineziologii",
+      "name": "Постдипломные программы по прикладной кинезиологии"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_shsj6/"
+  },
+  {
+    "id": 391,
+    "status": "active",
+    "name": "ПК-2. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 2",
+    "seminar": {
+      "id": 202,
+      "name": "ПК-2. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 2",
+      "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-12-09T00:00:00.000Z",
+    "endAt": "2026-12-13T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 55,
+        "fullName": "Пилявская Екатерина Сергеевна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1763730541793.webp",
+      "id": "4dc76180-cbcc-4737-af37-96b83f8e76b9"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 417,
+    "status": "active",
+    "name": "TEB: Травма и энергетическое тело. Авторский семинар",
+    "seminar": {
+      "id": 307,
+      "name": "TEB: Травма и энергетическое тело. Авторский семинар",
+      "slug": "travma-i-energeticheskoe-telo"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-12-10T00:00:00.000Z",
+    "endAt": "2026-12-13T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 68,
+        "fullName": "Kenneth Koles Richard"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773299836453.webp",
+      "id": "e7c5fb2e-0e95-4db9-bc21-6bb81e058d15"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 159,
+      "slug": "primenenie-principov-akupunktury",
+      "name": "Применение принципов акупунктуры"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 249,
+    "status": "active",
+    "name": "SER-1: Сомато-эмоциональное освобождение. Уровень 1",
+    "seminar": {
+      "id": 246,
+      "name": "SER-1: Сомато-эмоциональное освобождение. Уровень 1",
+      "slug": "somato-emocionalnoe-osvobozhdenie-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-12-16T00:00:00.000Z",
+    "endAt": "2026-12-19T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 65,
+        "fullName": "Diego Maggio"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1727065886283.webp",
+      "id": "57958f99-30ea-470a-869a-775899bb7814"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  },
+  {
+    "id": 392,
+    "status": "active",
+    "name": "ПК-6. Функциональные нарушения эмоциональной сферы. Введение в психокинезиологию. Уровень 6",
+    "seminar": {
+      "id": 206,
+      "name": "ПК-6. Функциональные нарушения эмоциональной сферы. Введение в психокинезиологию. Уровень 6",
+      "slug": "funkcionalnye-narusheniya-emocionalnoj-sfery"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2026-12-16T00:00:00.000Z",
+    "endAt": "2026-12-20T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 53,
+        "fullName": "Жарова Людмила Семеновна"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1763730588292.webp",
+      "id": "24ff6508-2c91-4a33-aee0-a29242124c2a"
+    },
+    "isFree": false,
+    "isEventCollection": true,
+    "description": "Теперь вы можете выбрать удобный формат:\nПолный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+    "oldPrice": 0,
+    "newPrice": 37500,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 150,
+      "slug": "prikladnaya-kineziologiya",
+      "name": "Прикладная кинезиология"
+    },
+    "additionalText": "",
+    "duration": "40",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+  },
+  {
+    "id": 419,
+    "status": "active",
+    "name": "CST-1: Краниосакральная терапия. Уровень 1",
+    "seminar": {
+      "id": 244,
+      "name": "CST-1: Краниосакральная терапия. Уровень 1",
+      "slug": "kraniosakralnaya-terapiya-1"
+    },
+    "institute": {
+      "id": 2,
+      "name": "Институт Апледжера",
+      "shortname": "Апледжера"
+    },
+    "startAt": "2026-12-17T00:00:00.000Z",
+    "endAt": "2026-12-20T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 63,
+        "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1774252801748.webp",
+      "id": "61ff849c-48ed-4590-b91d-3dbbb54b5e8e"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 55000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 158,
+      "slug": "kraniosakralnaya-terapiya",
+      "name": "Краниосакральная терапия"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_xtxhi/"
+  },
+  {
+    "id": 401,
+    "status": "active",
+    "name": "НПК-3: Нейропсихокинезиология. Уровень №3",
+    "seminar": {
+      "id": 301,
+      "name": "НПК-3: Нейропсихокинезиология. Уровень №3",
+      "slug": "nejropsihokineziologiya-3"
+    },
+    "institute": {
+      "id": 1,
+      "name": "Институт клинической прикладной кинезиологии",
+      "shortname": "ИКПК"
+    },
+    "startAt": "2027-02-26T00:00:00.000Z",
+    "endAt": "2027-02-28T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 58,
+        "fullName": "Колесник Марк Алексеевич"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1769084704221.webp",
+      "id": "39723aeb-23b3-468f-9874-fb5c5239c500"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 30000,
+    "city": {
+      "id": 2,
+      "name": "Санкт-Петербург"
+    },
+    "program": {
+      "id": 151,
+      "slug": "postdiplomnye-programmy-po-prikladnoj-kineziologii",
+      "name": "Постдипломные программы по прикладной кинезиологии"
+    },
+    "additionalText": "",
+    "duration": "24",
+    "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_pf9k8/"
+  },
+  {
+    "id": 418,
+    "status": "active",
+    "name": "VM-5:  Мануальная термооценка и введение в висцеро-эмоциональную сферу. Уровень 5",
+    "seminar": {
+      "id": 263,
+      "name": "VM-5:  Мануальная термооценка и введение в висцеро-эмоциональную сферу. Уровень 5",
+      "slug": "manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu"
+    },
+    "institute": {
+      "id": 3,
+      "name": "Институт Барраля",
+      "shortname": "Барраля"
+    },
+    "startAt": "2027-09-14T00:00:00.000Z",
+    "endAt": "2027-09-17T00:00:00.000Z",
+    "teachers": [
+      {
+        "id": 69,
+        "fullName": "Roberto Bonanzinga"
+      }
+    ],
+    "image": {
+      "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1773300185341.webp",
+      "id": "1486e070-e6ec-46d9-a822-e5542cc6e6e4"
+    },
+    "isFree": false,
+    "isEventCollection": false,
+    "description": null,
+    "oldPrice": 0,
+    "newPrice": 65000,
+    "city": {
+      "id": 3,
+      "name": "Москва"
+    },
+    "program": {
+      "id": 163,
+      "slug": "visceralnye-tehniki",
+      "name": "Висцеральные техники"
+    },
+    "additionalText": "",
+    "duration": "36",
+    "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+  }
+]

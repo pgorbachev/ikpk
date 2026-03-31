@@ -1,0 +1,1113 @@
+{
+  "institutes": [
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii",
+      "title": "Об Институте клинической прикладной кинезиологии (Санкт-Петербург)",
+      "courses": [
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls",
+          "title": "Авторские семинары Жаровой Л.С.: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
+              "title": "Коррекция ложных убеждений по Джону Даймонду с позиции психокинезиолгии: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
+              "title": "Коррекция патологической активности примитивных рефлексов с позиции прикладной кинезиологии, психотерапевтической кинезиологии, теории глубокого сухожильного рефлекса. Авторский семинар. Часть № 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
+              "title": "Коррекция патологической активности примитивных рефлексов с позиции прикладной кинезиологии, психотерапевтической кинезиологии, теории глубокого сухожильного рефлекса. Авторский семинар. Часть № 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
+              "title": "Определение типов Доши по Кристоферу Смиту: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
+              "title": "Саботаж - это чаще, чем вы думаете...: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
+          "title": "Выявление и коррекция структурных нарушений остеопрактическими и мышечно-энергетическими техниками: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
+              "title": "Выявление и коррекция структурных нарушений поясничного, грудного отделов позвоночника и грудной клетки. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
+              "title": "Выявление и коррекция структурных нарушений шейного отдела позвоночника, плече-лопаточного региона и верхних конечностей. Уровень 3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
+              "title": "Выявление и коррекция структурных нарушений тазового региона и нижних конечностей. Уровень 1: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+          "title": "Курсы китайской медицины в Санкт-Петербурге: запись на семинары, курсы",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
+              "title": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
+              "title": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
+              "title": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh",
+          "title": "Курсы массажа в Институте клинической прикладной кинезиологии (Санкт-Петербург): цены, сертификат об окончании",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
+              "title": "Карта патологий: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
+              "title": "Курсы по кинезиотейпированию в Санкт-Петербурге | Обучение очно в ИКПК"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
+              "title": "Обучение буккальному массажу в Санкт-Петербурге | Курсы ИКПК"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
+              "title": "Обучение армопластики в Санкт-Петербурге | Курсы ИКПК"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
+              "title": "Миофасциальный массаж тела + Женский массаж: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
+              "title": "Системное применение кинезиологического тейпирования лица и тела. Теория и практика: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
+          "title": "Методика перепрограммирования нейрорецепторных зон в ПК: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
+              "title": "Семинар №1. Базовый: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
+              "title": "Семинар №3. Продвинутый уровень: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
+              "title": "Семинар №2. Средний уровень: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
+              "title": "Семинар №4. Нейропатии с позиции нейрорецепторных полей: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii",
+          "title": "Постдипломные программы по прикладной кинезиологии: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
+              "title": "Дисфункция височно-нижнечелюстного сустава. Стоматогнатическая система. Диагностика и коррекция с позиции прикладной кинезиологии.: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
+              "title": "Основные виды нарушений углеводного обмена. Тестирование и коррекция нарушений с помощью Прикладной кинезиологии. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa",
+              "title": "Курс миофасциальные цепи в Санкт-Петербурге | Онлайн и очное обучение в ИКПК"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
+              "title": "Мышечное тестирование. Визуальное выявление нарушений опорно-двигательной системы. Работа с мышечно-фасциальными  цепями: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
+              "title": "НПК-1: Нейропсихокинезиология. Уровень №1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
+              "title": "НПК-2: Нейропсихокинезиология. Уровень №2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
+              "title": "НПК-3: Нейропсихокинезиология. Уровень №3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
+              "title": "Структурная составляющая треугольника здоровья. Эдванс: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya",
+          "title": "Прикладная кинезиолога в Санкт-Петербурге: цены на обучение, записаться на курс ИКПК",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+              "title": "ПК-7. Функциональные нарушения биохимических процессов. Диагностика и подбор терапии с использованием прикладной кинезиологии. Уровень 7: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+              "title": "ПК-8. Функциональные нарушения электромагнитных процессов. Меридианный дисбаланс и его роль в формировании болевых мышечных синдромов. Уровень 8: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+              "title": "ПК-6. Функциональные нарушения эмоциональной сферы. Введение в психокинезиологию. Уровень 6: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+              "title": "ПК-5. Краниосакральная система. Диагностика и терапия кранио-сакральных нарушений с использованием прикладной кинезиологии. Представление о стоматогностической системе. Уровень 5: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+              "title": "ПК-1. Основы мануального мышечного тестирования. Миология. Нейрофизиологические основы мышечного сокращения. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+              "title": "ПК-3. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+              "title": "ПК-2. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+              "title": "ПК-4. Висцеральная терапия с основами прикладной кинезиологии органов грудной и брюшной полостей и малого таза. Уровень 4: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa",
+          "title": "Прикладная кинезиология для фитнеса: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
+              "title": "ФПК-3. Болевые синдромы и работа с ними. Уровень 3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
+              "title": "ФПК-2. Диагностика причин ослабления мышц и алгоритм работы со слабыми мышцами. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
+              "title": "ФПК-1. Мышечное тестирование (ММТ). Подходы к диагностике и алгоритмы работы с мышцами. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
+              "title": "ФПК-4. Внутренние органы и их влияние на мышцы. Комплексы упражнений восстанавливающих работу внутренних органов и ассоциированных с ними мышц. Уровень 4: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya",
+          "title": "Курсы психокинезиолога в Санкт-Петербурге: цены, записаться в ИКПК",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
+              "title": "Антистрессовая кинезиология. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
+              "title": "Антистрессовая кинезиология. Введение. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
+              "title": "Энергетическая система человека: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
+              "title": "Формирование мужского и женского поведения. Авторский семинар: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+              "title": "Индивидуальные особенности человека. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+              "title": "Индивидуальные особенности человека. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
+              "title": "Как достичь изобилия: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+              "title": "Кинезиология здоровья. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+              "title": "Кинезиология здоровья. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
+              "title": "Ревность, зависть. Отрицание себя: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
+              "title": "Семейные отношения: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
+              "title": "Сложные формы поведения: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/strahi-i-fobii-fap",
+              "title": "Страхи и фобии (FAP). Авторский семинар: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye",
+          "title": "Специализированные курсы прикладной кинезиологии: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
+              "title": "Дисфункции ядер мозга (ядра Черепно-Мозговых Нервов и  ядра лимбической системы): запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
+              "title": "Курс по гелминтозам в Санкт-Петербурге | Обучение онлайн и очно в ИКПК"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
+              "title": "Открытый диалог в Телеграмм на тему \"Инфекции и псевдоинфекции\": запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
+              "title": "Инфекции и псевдоинфекции. Введение в гельминтологию. Нематоды: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
+              "title": "Интенсив для Прикладных кинезиологов: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
+              "title": "Основы энергетической кинезиологии. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
+              "title": "Работа с чакрами в терапевтической телесной практике: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
+              "title": "Семинар-практикум «Знакомство с прикладной кинезиологией»: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
+              "title": "Тело в тревоге. Путь к восстановлению: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii",
+              "title": "Избранные вопросы функциональной биохимии  в прикладной кинезиологии. Эндокринотоксичность окружающей среды: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk",
+          "title": "Вебинары и межсеминарские встречи: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
+              "title": "Открытый вебинар «Перепрограммирование нейрорецепторных полей (P-DTR): новый уровень клинического мышления»: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
+              "title": "Тендинопатия: здоровье рук массажиста и не только: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
+              "title": "Ядра мозга: неврологический подход к диагностике и функциональной коррекции: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina",
+          "title": "Вибрационная медицина: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
+              "title": "Стимуляция жизненной силы клетки. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
+              "title": "Стимуляция жизненной силы клетки. Продвинутый уровень: запись на обучение онлайн"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/institut-apledzhera",
+      "title": "Международный институт Апледжера: запись обучение и семинары",
+      "courses": [
+        {
+          "path": "/institut-apledzhera/dolgoletie",
+          "title": "Долголетие: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
+              "title": "CSLRAP: Краниосакральная терапия для омоложения и долголетия: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/imunnyj-otvet",
+          "title": "Иммунный ответ: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
+              "title": "CSIR: Краниосакральная терапия и иммунный ответ: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/kraniosakralnaya-terapiya",
+          "title": "Краниосакральная терапия: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
+              "title": "CST-1: Краниосакральная терапия. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
+              "title": "CST-2: Краниосакральная терапия. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
+              "title": "ADV-1: Краниосакральная терапия. Продвинутый уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
+              "title": "ADV-2: Краниосакральная терапия. Продвинутый уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
+              "title": "SER-1: Сомато-эмоциональное освобождение. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
+              "title": "SER-2: Сомато-эмоциональное освобождение. Уровень 2: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye",
+          "title": "Специализированные курсы институт Апледжера: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
+              "title": "CSSTR: Краниосакральная терапия и реакция на стрессовую травму: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+              "title": "CS+SER: Краниосакральная терапия и Сомато-эмоциональное освобождение. Экспресс-курс для остеопатов: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
+              "title": "CSCV: Краниосакральная терапия и жизненный цикл: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
+              "title": "BCB: Краниосакральная терапия за пределами основания черепа: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/mozg",
+          "title": "Мозг: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/mozg/mozg-govorit-1",
+              "title": "TBS-1: Мозг говорит. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/mozg/mozg-govorit-2",
+              "title": "TBS-2: Мозг говорит. Уровень 2: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye",
+          "title": "Педиатрия, акушерство и новорожденные: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
+              "title": "CSP-2: Краниосакральная терапия в педиатрии. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
+              "title": "CSP-1: Краниосакральная терапия в педиатрии. Уровень 1: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/primenenie-principov-akupunktury",
+          "title": "Применение принципов акупунктуры: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
+              "title": "UMAC-1: Использование меридианов в кранио-сакральной терапии. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
+              "title": "UMAC-2: Использование меридианов в кранио-сакральной терапии. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
+              "title": "UMAC-3: Использование меридианов в кранио-сакральной терапии. Уровень 3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
+              "title": "UMAC-4: Использование меридианов в кранио-сакральной терапии. Уровень 4: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
+              "title": "UMAC-5: Использование меридианов в кранио-сакральной терапии. Уровень 5: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
+              "title": "Раскручивание меридианов: применение принципов акупунктуры в краниосакральной терапии. Практикум (UMAC-PRAX): запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
+              "title": "TEB: Травма и энергетическое тело. Авторский семинар: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi",
+          "title": "Вебинары и межсеминарские встречи: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
+              "title": "Интеграция протоколов КСТ-1 и КСТ-2. Энергетическая киста. Глобальная диагностика тела.: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
+              "title": "Возможности КСТ при различных заболеваниях. Случаи из практики.: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
+              "title": "Семинар-практикум для специалистов Краниосакральной терапии(уровень CST-1 и CST-2): запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
+              "title": "Семинар-практикум для специалистов Краниосакральной терапии(уровень CST-2 и SER-1): запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
+              "title": "Вебинар: КСТ - техники лёгкого прикосновения: запись на обучение онлайн"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/institut-barralya",
+      "title": "Институт Барраля — обучение остеопатии и мануальной терапии",
+      "courses": [
+        {
+          "path": "/institut-barralya/nevralnye-tehniki",
+          "title": "Невральные техники: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
+              "title": "NM-5: Центральные и периферические связи. Уровень 5: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
+              "title": "NM-1: Интегративный подход к травме. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
+              "title": "NM-4: Манипуляции на краниальных нервах. Уровень 4: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
+              "title": "NM-3: Техники работы на периферических нервах. Нижняя часть тела. Уровень 3: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
+              "title": "NM-2: Техники работы на периферических нервах. Верхняя часть тела. Уровень 2: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam",
+          "title": "Обучение мануальной терапии суставов | Институт Барраля",
+          "seminars": [
+            {
+              "path": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
+              "title": "MALE: Нижние конечности: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
+              "title": "MASP: Позвоночник и таз: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
+              "title": "MAUE: Верхние конечности: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-barralya/prodvinutye-visceralnye-tehniki",
+          "title": "Продвинутые висцеральные техники: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
+              "title": "VMAT: Висцеральные компоненты Шеи и Грудной клетки. Продвинутый уровень.: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
+              "title": "VVML: Висцеро-сосудистые техники. Нижняя часть тела.: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-barralya/specializirovannye-programmy",
+          "title": "Специализированные курсы институт Барраля: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
+              "title": "CAP: Клинический разбор пациентов: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-barralya/tehniki-vyslushivaniya",
+          "title": "Техники выслушивания: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
+              "title": "LT-1: Интегративный подход к оценке. Уровень 1: запись на обучение онлайн"
+            }
+          ]
+        },
+        {
+          "path": "/institut-barralya/visceralnye-tehniki",
+          "title": "Висцеральные техники: запись на обучение онлайн",
+          "seminars": [
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
+              "title": "VNANS: Блуждающий нерв и Вегетативная нервная система: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
+              "title": "VM-1: Брюшная полость. Уровень 1: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
+              "title": "VM-2: Брюшная полость. Уровень 2: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
+              "title": "VM-4: Грудная клетка. Уровень 4: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
+              "title": "VM-5:  Мануальная термооценка и введение в висцеро-эмоциональную сферу. Уровень 5: запись на обучение онлайн"
+            },
+            {
+              "path": "/institut-barralya/visceralnye-tehniki/taz",
+              "title": "VM-3: Таз. Уровень 3: запись на обучение онлайн"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "static_pages": [
+    {
+      "path": "/",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/aktsii-i-skidki",
+      "title": "Акции и скидки Института клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/kontakty",
+      "title": "Контактная информация Института клинической прикладной кинезиологии"
+    },
+    {
+      "path": "/oplata",
+      "title": "Оплата: способы и реквизиты"
+    },
+    {
+      "path": "/raspisanie-i-tseny",
+      "title": "Расписание семинаров и цены на программы обучения ИКПК"
+    },
+    {
+      "path": "/sotrudnichestvo-s-nami",
+      "title": "Программы и форматы сотрудничества с ИКПК"
+    },
+    {
+      "path": "/statyi",
+      "title": "Статьи и публикации Института клинической прикладной кинезиологии"
+    },
+    {
+      "path": "/svedeniya-ob-obrazovatelnoy-organizatsii",
+      "title": "Сведения об образовательной деятельности ИКПК"
+    },
+    {
+      "path": "/video",
+      "title": "Видео Института клинической прикладной кинезиологии"
+    }
+  ],
+  "teachers": [
+    {
+      "path": "/institut-apledzhera/prepodavatel/63",
+      "title": "Шрайнер Валерий Эдуардович, MD, CST-D: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/64",
+      "title": "Радзинская Елена Викторовна: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/65",
+      "title": "Diego Maggio: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/66",
+      "title": "Thomas Rasmussen: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/67",
+      "title": "George Michael Morgan: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/68",
+      "title": "Kenneth Koles Richard: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/74",
+      "title": "Patricia Quirini: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/77",
+      "title": "Chas Perry: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-apledzhera/prepodavatel/79",
+      "title": "Carol J. McLellan: преподаватель института Апледжера — семинары, расписание",
+      "institute": "/institut-apledzhera"
+    },
+    {
+      "path": "/institut-barralya/prepodavatel/69",
+      "title": "Roberto Bonanzinga: преподаватель института Барраля — семинары, расписание",
+      "institute": "/institut-barralya"
+    },
+    {
+      "path": "/institut-barralya/prepodavatel/70",
+      "title": "Matteo Ghiretti: преподаватель института Барраля — семинары, расписание",
+      "institute": "/institut-barralya"
+    },
+    {
+      "path": "/institut-barralya/prepodavatel/71",
+      "title": "Paolo Ricci: преподаватель института Барраля — семинары, расписание",
+      "institute": "/institut-barralya"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/53",
+      "title": "Жарова Людмила Семеновна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/54",
+      "title": "Пилявский Сергей Орестович: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/55",
+      "title": "Пилявская Екатерина Сергеевна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/56",
+      "title": "Федорова Татьяна Васильевна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/57",
+      "title": "Гриценко Сергей Викторович: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/58",
+      "title": "Колесник Марк Алексеевич: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/60",
+      "title": "Хачатурова Кристина Георгиевна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/61",
+      "title": "Попова Елена Михайловна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/73",
+      "title": "Бондаренко Игорь Георгиевич: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/76",
+      "title": "Булатова Татьяна Николаевна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/78",
+      "title": "Шадрин Виталий Владимирович: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/80",
+      "title": "Fabio Burigana: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/81",
+      "title": "Аульченкова Оксана Александровна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/82",
+      "title": "Виноградова Елена Владимировна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    },
+    {
+      "path": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83",
+      "title": "Кривинкова Анна Анатольевна: преподаватель ИКПК — семинары, расписание",
+      "institute": "/institut-klinicheskoy-prikladnoy-kineziologii"
+    }
+  ],
+  "video_playlists": [
+    {
+      "path": "/video/pleylist/31",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/video/pleylist/32",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/video/pleylist/33",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/video/pleylist/34",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/video/pleylist/36",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    },
+    {
+      "path": "/video/pleylist/37",
+      "title": "Институт клинической прикладной кинезиологии (Санкт-Петербург)"
+    }
+  ],
+  "articles": [
+    {
+      "path": "/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme",
+      "title": "90% нарушений в скелетно-мышечной системе: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/beremennost-rody-i-vozmozhnosti-osteopatii",
+      "title": "Беременность, роды и возможности остеопатии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
+      "title": "Диагностика хеликобактериоза методом прикладной кинезиологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
+      "title": "Диагностика и лечение трематодных инвазий у взрослых: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/gipertenziya",
+      "title": "Гипертензия: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm",
+      "title": "Гипервентиляция и краниосакральный механизм: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/gryzha-pishevodnogo-otverstiya-diafragmy",
+      "title": "Грыжа пищеводного отверстия диафрагмы. Великий пародист: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
+      "title": "Институт Барраля: чем уникальны его программы обучения для специалистов в области здоровья?: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
+      "title": "Институт Барраля: как обучение висцеральным техникам помогает стать профессионалом: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
+      "title": "Ипользование краниосакральной терапии для снятия ограничений и баланса тела пациента при использовании массажных техник: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
+      "title": "Использование меридианов при краниосакральной терапии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
+      "title": "История института Барраля: как всё началось и что делает программу уникальной?: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii",
+      "title": "Изменения в хиропрактике в свете протоморфологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
+      "title": "Изучение ритмических движений головы, позволяющих определить третий ритм: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta",
+      "title": "Кислотно-щелочной баланс и лечение пациента: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
+      "title": "Практика: Клинический случай висцеральных манипуляций при подростковом идиопатическом сколиозе: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet",
+      "title": "Краниосакральная терапия: что это такое простыми словами, систематический обзор"
+    },
+    {
+      "path": "/statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
+      "title": "Краниосакральная терапия и висцеральные манипуляции: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
+      "title": "Крестцово-подвздошные и подвздошно-крестцовые нарушения (часть 1): публикация ИКПК"
+    },
+    {
+      "path": "/statyi/lechenie-allergij-v-hiropraktike",
+      "title": "Лечение аллергий в хиропрактике: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/lechenie-bronhialnoj-astmy",
+      "title": "Лечение бронхиальной астмы: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/metody-issledovaniya-mochi",
+      "title": "Быстро. Просто. Действенно. Методы исследования мочи.: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
+      "title": "Микробиота. Часть 2. Хроническая обструктивная болезнь легких . Респираторные инфекции: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
+      "title": "Микробиота. Часть 1. Взаимодействие между микробиотой кишечника и легкими при распространенных заболеваниях легких: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
+      "title": "Нарушения половой функции у мужчин — представление об андропаузе. Часть 1: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
+      "title": "Нарушения половой функции у мужчин — представление об андропаузе. Часть 2: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
+      "title": "Нарушения половой функции у мужчин — представление об андропаузе. Часть 3: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
+      "title": "Новый подход к мозгу. Структурный дисбаланс и усвоение питательных веществ: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/osnovnye-principy-osteopatii",
+      "title": "Основные принципы остеопатии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
+      "title": "Отношение меридиональной РНК к прикладной кинезиологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
+      "title": "Паттерн перекрестного ползания и мышечный спазм: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/pishevoj-faktor-v-hiropraktike",
+      "title": "Пищевой фактор в хиропрактике: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
+      "title": "Повреждение периферических нервов и синдром запястного туннеля: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/predmet-prikladnoj-kineziologii",
+      "title": "Предмет прикладной кинезиологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
+      "title": "Презентация нового подхода к лечению повреждения дисков: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami",
+      "title": "Прикладная кинезиология — что это такое простыми словами"
+    },
+    {
+      "path": "/statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
+      "title": "Прикладная кинезиология и мышечное тестирование: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/principy-balansirovaniya-myshc",
+      "title": "Принципы балансирования мышц: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/problemy-kolennogo-sustava",
+      "title": "Проблемы коленного сустава: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/provokaciya-shejnyh-pozvonkov",
+      "title": "Провокация шейных позвонков: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
+      "title": "Раскручивание меридианов для инвертирования течения анемии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
+      "title": "Раскручивание меридианов при контрактуре Депюитрена: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/respiratornye-funkcii-cherepa",
+      "title": "Респираторные функции черепа: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/sakroiliokalnye-i-iliosakralnye-narusheniya",
+      "title": "Сакроилиокальные и илиосакральные нарушения (часть 2): публикация ИКПК"
+    },
+    {
+      "path": "/statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv",
+      "title": "Семинар по краниосакральной терапии (КСТ-1). Отзыв: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv",
+      "title": "Семинар по краниосакральной терапии - 2 (КСТ-2). Отзыв: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/shizofreniya",
+      "title": "Шизофрения: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/sindrom-tarzalnogo-tunnelya",
+      "title": "Синдром тарзального туннеля: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/sluchaj-lecheniya-enureza",
+      "title": "Случай лечения… энуреза: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii",
+      "title": "Терапевтическое значение висцеральной манипуляции: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
+      "title": "Управлять воспалением в организме с помощью краниосакральной терапии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
+      "title": "Уроки китайского для современной хиропрактики: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/ustalost-i-borba-s-neyu",
+      "title": "Усталость и борьба с нею: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/visceralnaya-manipulyaciya",
+      "title": "Висцеральная манипуляция: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
+      "title": "Висцеральная манипуляция при хронических болях: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
+      "title": "Висцеральные манипуляции и техники на тканях в педиатрической практике: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
+      "title": "Висцеральные техники: что это такое и как они могут улучшить здоровье?: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
+      "title": "Встреча православной общественности с врачом-остеопатом Пилявским Сергеем Орестовичем: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
+      "title": "Вступление к Краниосакральной парадигме Апледжера: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
+      "title": "Выход из драматического треугольника с позиции психотерапевтической кинезиологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
+      "title": "Взгляд на хиропрактику с точки зрения протоморфологии: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1",
+      "title": "Заболевания желудочно-кишечного тракта. Результаты последних исследований и комментарии [часть 1]: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2",
+      "title": "Заболевания желудочно-кишечного тракта. Результаты последних исследований и комментарии [часть 2]: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3",
+      "title": "Заболевания желудочно-кишечного тракта. Результаты последних исследований и комментарии [часть 3]: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4",
+      "title": "Заболевания желудочно-кишечного тракта. Результаты последних исследований и комментарии [часть 4]: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks",
+      "title": "Задний илиум и нейролимфатический рефлекс: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
+      "title": "Жир и его утилизация под контролем холестерина: публикация ИКПК"
+    },
+    {
+      "path": "/statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
+      "title": "Значение тяжелых металлов в развитии синдрома хронической усталости: публикация ИКПК"
+    }
+  ]
+}
