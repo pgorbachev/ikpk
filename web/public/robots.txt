@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ikpk.su/sitemap-index.xml
+
+# Block internal resources
+Disallow: /api/
+Disallow: /_astro/

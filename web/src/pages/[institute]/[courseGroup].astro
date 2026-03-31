@@ -23,9 +23,22 @@ export const getStaticPaths: GetStaticPaths = () => {
 
 const { courseGroup, institute } = Astro.props;
 const seminars = getSeminars(courseGroup.legacy_id);
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'Course',
+  name: courseGroup.name,
+  description: courseGroup.seo_description || courseGroup.description_text?.slice(0, 200),
+  provider: {
+    '@type': 'EducationalOrganization',
+    name: 'ИКПК',
+    url: 'https://ikpk.su',
+  },
+  url: `https://ikpk.su/${institute.slug}/${courseGroup.slug}`,
+};
 ---
 
-<BaseLayout title={courseGroup.seo_title} description={courseGroup.seo_description}>
+<BaseLayout title={courseGroup.seo_title} description={courseGroup.seo_description} schema={schema}>
   <div class="container">
     <Breadcrumbs
       items={[

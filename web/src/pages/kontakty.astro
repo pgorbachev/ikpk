@@ -6,9 +6,30 @@ import { getPage } from '../lib/data';
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
 const description = page?.seo_description || 'Контактная информация ИКПК.';
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Институт клинической прикладной кинезиологии',
+  url: 'https://ikpk.su',
+  telephone: '+78127482126',
+  email: 'info@ikpk.su',
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Санкт-Петербург',
+    addressCountry: 'RU',
+  },
+  contactPoint: {
+    '@type': 'ContactPoint',
+    telephone: '+78127482126',
+    email: 'info@ikpk.su',
+    contactType: 'customer service',
+    availableLanguage: 'Russian',
+  },
+};
 ---
 
-<BaseLayout title={title} description={description}>
+<BaseLayout title={title} description={description} schema={schema}>
   <div class="container">
     <Breadcrumbs items={[{ label: 'Контакты' }]} />
 

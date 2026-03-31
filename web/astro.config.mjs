@@ -5,6 +5,11 @@ import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
   site: 'https://ikpk.su',
-  integrations: [react(), sitemap()],
+  integrations: [
+    react(),
+    sitemap({
+      filter: (page) => !page.includes('/sitemap'),
+    }),
+  ],
   output: 'static',
 });

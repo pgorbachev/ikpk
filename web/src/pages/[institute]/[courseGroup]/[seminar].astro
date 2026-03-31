@@ -41,9 +41,44 @@ const statusLabel: Record<string, string> = {
   not_planned: 'Не запланирован',
   completed: 'Завершён',
 };
+
+const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`;
+
+const eventSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Event',
+  name: seminar.name,
+  description: seminar.seo_description || seminar.description_text?.slice(0, 200),
+  url: seminarUrl,
+  organizer: {
+    '@type': 'EducationalOrganization',
+    name: 'ИКПК',
+    url: 'https://ikpk.su',
+  },
+  location: {
+    '@type': 'Place',
+    name: 'ИКПК',
+    address: { '@type': 'PostalAddress', addressLocality: 'Санкт-Петербург', addressCountry: 'RU' },
+  },
+  ...(schedule.length > 0
+    ? {
+        startDate: schedule[0].startAt,
+        endDate: schedule[0].endAt,
+        eventStatus: 'https://schema.org/EventScheduled',
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        offers: {
+          '@type': 'Offer',
+          url: seminarUrl,
+          price: schedule[0].isFree ? '0' : String(schedule[0].newPrice),
+          priceCurrency: 'RUB',
+          availability: 'https://schema.org/InStock',
+        },
+      }
+    : {}),
+};
 ---
 
-<BaseLayout title={seminar.seo_title} description={seminar.seo_description}>
+<BaseLayout title={seminar.seo_title} description={seminar.seo_description} schema={eventSchema}>
   <div class="container">
     <Breadcrumbs
       items={[

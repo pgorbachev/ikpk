@@ -13,9 +13,29 @@ export const getStaticPaths: GetStaticPaths = () => {
 };
 
 const { article } = Astro.props;
+
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: article.seo_title || article.title,
+  description: article.seo_description || article.body_text?.slice(0, 200),
+  url: `https://ikpk.su/statyi/${article.slug}`,
+  ...(article.published_at ? { datePublished: article.published_at } : {}),
+  ...(article.image ? { image: article.image } : {}),
+  author: {
+    '@type': 'Organization',
+    name: 'ИКПК',
+    url: 'https://ikpk.su',
+  },
+  publisher: {
+    '@type': 'Organization',
+    name: 'ИКПК',
+    url: 'https://ikpk.su',
+  },
+};
 ---
 
-<BaseLayout title={article.seo_title} description={article.seo_description}>
+<BaseLayout title={article.seo_title} description={article.seo_description} schema={articleSchema}>
   <div class="container">
     <Breadcrumbs
       items={[
