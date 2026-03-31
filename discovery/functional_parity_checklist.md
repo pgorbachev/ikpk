@@ -124,8 +124,8 @@
   - Title (headline)
   - Date (formatted, e.g., "23 сент., 2024")
   - Description text (HTML allowed)
-- [ ] **News items link to** `/news/{id}` (currently returns 404 — confirm if intentional or broken)
-- [ ] **News items sourced from CMS** (dynamic content)
+- [ ] **News items link to external URLs** (WB, Ozon, medshop, promotions page — not internal `/news/{id}` pages)
+- [ ] **News items sourced from CMS** (dynamic content, 4 items with priority ordering)
 
 ---
 
@@ -417,7 +417,7 @@ Example: `/institut-apledzhera/prepodavatel/63`
   - `/institut-{slug}/{course-group-slug}/{seminar-slug}` — seminar
   - `/institut-{slug}/prepodavatel/{id}` — teacher profile
   - `/statyi/{slug}` — article
-  - `/news/{id}` — news (currently 404 — verify behavior)
+  - News items — link to external URLs (no internal `/news/{id}` pages exist)
 
 ### 22.5 JSON-LD Structured Data
 - [ ] **All existing schemas preserved** (see Section 6)
@@ -522,7 +522,7 @@ Example: `/institut-apledzhera/prepodavatel/63`
 
 ## 29. Edge Cases & Known Issues
 
-- [ ] **`/news/{id}` URLs** — currently return 404 (news items in homepage schema have these URLs but pages don't exist). Decision: implement news detail pages or keep as-is?
+- [x] **`/news/{id}` URLs** — RESOLVED: news items link to external URLs (WB, Ozon, medshop, promotions), not internal pages. No `/news/{id}` routes needed.
 - [ ] **Video page empty without JS** — video content is entirely client-side rendered. Ensure SSR/SSG renders at minimum the notice text and fallback links.
 - [ ] **Payment page minimal content** — most content is client-side. Verify what the actual payment flow is (Telegram bot? Modal? Bank transfer instructions?)
 - [ ] **Promotions page minimal content** — promotions are client-side loaded. Ensure SSG pre-renders active promotions.
