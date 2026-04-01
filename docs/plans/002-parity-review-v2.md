@@ -32,7 +32,8 @@
 
 | Что | → Что | Пример |
 |-----|-------|--------|
-| Элементы с `class*=subscribe-news-form_\|checkbox_\|button_\|PhoneInput\|text-field_`  | → удалить целиком (UI-формы) | `<div class="subscribe-news-form_wrapper___xXSq">...</div>` → ∅ |
+| Целые блоки с `class*=subscribe-news-form_\|PhoneInput`  | → удалить целиком (UI-формы подписки/телефона) | `<div class="subscribe-news-form_wrapper___xXSq">...</div>` → ∅ |
+| `<button class*=button_>`, `<input class*=text-field_>`, `<label class*=checkbox_>` **только внутри** контейнеров форм (subscribe-news-form, seminar-form, contacts-form) | → удалить (UI-элементы форм в контексте) | |
 | Элементы с `class*=articles-form_articleContainer\|seminar-form_\|teachers-form_\|cooperation_` | → unwrap (оставить children) | `<div class="articles-form_articleContainer__13oDC"><p>text</p></div>` → `<p>text</p>` |
 | `<div class="collapsible_*">` с вложенным заголовком + контентом | → `<details><summary>{заголовок}</summary>{контент}</details>` | |
 | `<h1-h6 class="typography_*">` | → тот же тег без class | `<h2 class="typography_h2__Dgg2h">Title</h2>` → `<h2>Title</h2>` |
@@ -110,7 +111,7 @@ homepage-blocks         → (нет зависимостей)
 article-components      → static-page-cleanup
 seminar-components      → static-page-cleanup
 static-pages-layout     → static-page-cleanup
-visual-parity-tests     → homepage-blocks, article-components, static-pages-layout
+visual-parity-tests     → homepage-blocks, article-components, seminar-components, static-pages-layout
 deploy-prototype        → visual-parity-tests
 ```
 
