@@ -6,6 +6,38 @@ const institutes = getInstitutes();
 const news = getNews().slice(0, 4);
 const promotions = getPromotions();
 const homepage = getPage('homepage');
+const advantages = [
+  {
+    icon: '/adv-icon-1.svg',
+    title: 'Наш многолетний опыт в образовании',
+    text: 'Подготовка квалифицированных специалистов в медицине — сложная и ответственная задача. У нас получается делать это лучше других, потому что наработали годами проверенные методики и продолжаем оттачивать их.',
+  },
+  {
+    icon: '/adv-icon-2.svg',
+    title: 'Сотрудничество с зарубежными институтами',
+    text: 'ИКПК — единственный официальный представитель институтов Апледжера и Барраля в России, предлагающий уникальные методики ведущих специалистов. Это даёт вам возможность обучаться по мировым стандартам.',
+  },
+  {
+    icon: '/adv-icon-3.svg',
+    title: 'Настоящие преподаватели – ключ к успеху',
+    text: 'Чтобы стать хорошим преподавателем, недостаточно быть просто отличным врачом. Поэтому в педагогическом штате ИКПК — лучшие из лучших, создавшие авторские программы и щедро делящиеся своими знаниями и опытом.',
+  },
+  {
+    icon: '/adv-icon-4.svg',
+    title: 'Документы об образовании для наших студентов',
+    text: 'Студенты с базовым медицинским образованием получают удостоверения о повышении квалификации с внесением сведений в ФИС ФРДО. Они также имеют возможность получить единицы трудоёмкости (ЗЕТ, баллы НМО).',
+  },
+  {
+    icon: '/adv-icon-5.svg',
+    title: 'Издательство медицинской литературы',
+    text: 'Издательский дом ИКПК занимается лицензированным переводом и изданием на русском языке научной и учебной литературы по остеопатии и прикладной кинезиологии. Большинство книг изданы в России впервые.',
+  },
+  {
+    icon: '/adv-icon-6.svg',
+    title: 'Практика в нашем медицинском центре',
+    text: 'В нашем медицинском центре студенты могут под руководством опытных преподавателей совершенствовать знания, полученные в процессе обучения. Такой аналог интернатуры в области холистической медицины доступен только здесь.',
+  },
+];
 
 const title = homepage?.seo_title || 'ИКПК — Институт клинической прикладной кинезиологии';
 const description = homepage?.seo_description || 'Ведущий институт клинической прикладной кинезиологии в РФ и СНГ.';
@@ -42,7 +74,14 @@ const schema = {
         </a>
       </div>
       <div class="hero-visual" aria-hidden="true">
-        <img src="/logo-icon.svg" alt="" class="hero-logo" width="120" height="124" />
+        <img
+          src="/hero-main.svg"
+          alt=""
+          class="hero-illustration"
+          loading="eager"
+          width="516"
+          height="504"
+        />
       </div>
     </div>
   </section>
@@ -52,42 +91,17 @@ const schema = {
     <div class="container">
       <h2 class="section-title">Наши преимущества</h2>
       <div class="grid grid-3 advantages-grid">
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Наш многолетний опыт в образовании</h3>
-            <p class="text-small">Подготовка квалифицированных специалистов в медицине — сложная и ответственная задача. У нас получается делать это лучше других, потому что наработали годами проверенные методики и продолжаем оттачивать их.</p>
+        {advantages.map((item) => (
+          <div class="card adv-card">
+            <div class="card-body">
+              <div class="adv-card-head">
+                <img src={item.icon} alt="" class="adv-card-icon" width="36" height="36" loading="lazy" />
+                <h3 class="adv-card-title">{item.title}</h3>
+              </div>
+              <p class="text-small">{item.text}</p>
+            </div>
           </div>
-        </div>
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Сотрудничество с зарубежными институтами</h3>
-            <p class="text-small">ИКПК — единственный официальный представитель институтов Апледжера и Барраля в России, предлагающий уникальные методики ведущих специалистов. Это даёт вам возможность обучаться по мировым стандартам.</p>
-          </div>
-        </div>
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Настоящие преподаватели – ключ к успеху</h3>
-            <p class="text-small">Чтобы стать хорошим преподавателем, недостаточно быть просто отличным врачом. Поэтому в педагогическом штате ИКПК — лучшие из лучших, создавшие авторские программы и щедро делящиеся своими знаниями и опытом.</p>
-          </div>
-        </div>
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Документы об образовании для наших студентов</h3>
-            <p class="text-small">Студенты с базовым медицинским образованием получают удостоверения о повышении квалификации с внесением сведений в ФИС ФРДО. Они также имеют возможность получить единицы трудоёмкости (ЗЕТ, баллы НМО).</p>
-          </div>
-        </div>
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Издательство медицинской литературы</h3>
-            <p class="text-small">Издательский дом ИКПК занимается лицензированным переводом и изданием на русском языке научной и учебной литературы по остеопатии и прикладной кинезиологии. Большинство книг изданы в России впервые.</p>
-          </div>
-        </div>
-        <div class="card adv-card">
-          <div class="card-body">
-            <h3 class="adv-card-title">Практика в нашем медицинском центре</h3>
-            <p class="text-small">В нашем медицинском центре студенты могут под руководством опытных преподавателей совершенствовать знания, полученные в процессе обучения. Такой аналог интернатуры в области холистической медицины доступен только здесь.</p>
-          </div>
-        </div>
+        ))}
       </div>
       <div class="adv-cta">
         <p class="adv-cta-lead">Готовы к нам присоединиться?</p>
@@ -106,7 +120,14 @@ const schema = {
         <a href="/raspisanie-i-tseny" class="btn btn-primary approach-cta">Записаться на обучение</a>
       </div>
       <div class="approach-visual" aria-hidden="true">
-        <img src="/logo-icon.svg" alt="" class="approach-logo" width="80" height="82" />
+        <img
+          src="/approach-learning.svg"
+          alt=""
+          class="approach-illustration"
+          loading="lazy"
+          width="450"
+          height="370"
+        />
       </div>
       <div class="grid grid-3 stats-grid">
         <div class="stat-card">
@@ -247,20 +268,16 @@ const schema = {
   }
 
   .hero-visual {
-    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.7);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    width: min(100%, 420px);
   }
 
-  .hero-logo {
-    opacity: 0.9;
-    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.08));
+  .hero-illustration {
+    width: 100%;
+    height: auto;
+    display: block;
   }
 
   .hero-title {
@@ -286,13 +303,8 @@ const schema = {
       text-align: center;
     }
     .hero-visual {
-      width: 120px;
-      height: 120px;
+      width: min(100%, 300px);
       order: -1;
-    }
-    .hero-logo {
-      width: 80px;
-      height: 82px;
     }
   }
 
@@ -344,10 +356,23 @@ const schema = {
   }
 
   /* Преимущества */
+  .adv-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+  }
+
+  .adv-card-icon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+
   .adv-card-title {
     font-size: var(--font-m);
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0;
     color: var(--color-accent-600);
   }
 
@@ -394,19 +419,17 @@ const schema = {
   }
 
   .approach-visual {
-    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    background: var(--color-light-100);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    width: min(100%, 450px);
+    margin: 0 auto;
   }
 
-  .approach-logo {
-    opacity: 0.7;
+  .approach-illustration {
+    width: 100%;
+    height: auto;
+    display: block;
   }
 
   .approach-cta {

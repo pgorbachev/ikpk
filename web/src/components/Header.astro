@@ -10,7 +10,6 @@
 
     <!-- Logo -->
     <a href="/" class="logo" aria-label="ИКПК — Главная">
-      <img src="/logo-icon.svg" alt="" class="logo-icon" width="33" height="34" />
       <img src="/logo-wordmark.svg" alt="ИКПК" class="logo-wordmark" width="131" height="36" />
     </a>
 
@@ -47,17 +46,11 @@
   .logo {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
     text-decoration: none;
     flex-shrink: 0;
   }
 
   .logo:hover { text-decoration: none; }
-
-  .logo-icon {
-    width: 33px;
-    height: 34px;
-  }
 
   .logo-wordmark {
     height: 28px;
@@ -132,7 +125,9 @@
   }
 
   @media (max-width: 480px) {
-    .logo-wordmark { display: none; }
+    .logo-wordmark {
+      height: 24px;
+    }
   }
 </style>
 

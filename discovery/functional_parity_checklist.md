@@ -541,8 +541,8 @@ Example: `/institut-apledzhera/prepodavatel/63`
 - [ ] All sections above pass ✅
 - [ ] **Full URL map validated** — every URL in sitemap.xml returns 200
 - [ ] **301 redirects tested** — any changed URLs redirect correctly
-- [ ] **Mobile responsive** — all pages tested on iPhone SE, iPhone 14, iPad, Galaxy S21
-- [ ] **Cross-browser** — Chrome, Firefox, Safari, Yandex Browser
+- [ ] **Mobile responsive** — all pages tested on iPhone SE (3rd gen), iPhone 14, iPad (gen 7), Galaxy A55 (Android Chrome proxy for Galaxy S21 class)
+- [ ] **Cross-browser** — Playwright compat smoke: Chrome/Firefox/Safari (desktop) + iOS Safari (iPhone SE/iPhone 14/iPad) + Android Chrome; manual smoke: Yandex Browser (desktop + Android)
 - [ ] **Load testing** — site handles expected traffic without degradation
 - [ ] **DNS TTL lowered** 48h before switch
 - [ ] **Old site backup** — snapshot preserved

@@ -1,8 +1,8 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  baseURL: 'http://localhost:4322',
+  baseURL: 'http://127.0.0.1:4322',
   use: {
     headless: true,
     screenshot: 'only-on-failure',
@@ -10,11 +10,54 @@ export default defineConfig({
   },
   timeout: 10000,
   projects: [
-    { name: 'desktop', use: { viewport: { width: 1280, height: 720 } } },
-    { name: 'mobile', use: { viewport: { width: 375, height: 812 } } },
+    {
+      name: 'desktop',
+      use: { viewport: { width: 1280, height: 720 } },
+      testIgnore: '**/compat.spec.ts',
+    },
+    {
+      name: 'mobile',
+      use: { viewport: { width: 375, height: 812 } },
+      testIgnore: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-chrome-desktop',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-firefox-desktop',
+      use: { ...devices['Desktop Firefox'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-safari-desktop',
+      use: { ...devices['Desktop Safari'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-ios-iphone-se',
+      use: { ...devices['iPhone SE (3rd gen)'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-ios-iphone-14',
+      use: { ...devices['iPhone 14'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-ios-ipad',
+      use: { ...devices['iPad (gen 7)'] },
+      testMatch: '**/compat.spec.ts',
+    },
+    {
+      name: 'compat-android-chrome',
+      use: { ...devices['Galaxy A55'] },
+      testMatch: '**/compat.spec.ts',
+    },
   ],
   webServer: {
-    command: 'npm run preview -- --port 4322',
+    command: 'npm run preview -- --host 127.0.0.1 --port 4322',
     port: 4322,
     reuseExistingServer: true,
   },

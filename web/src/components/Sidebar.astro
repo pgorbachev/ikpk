@@ -36,11 +36,11 @@ function isActive(path: string): boolean {
 
     <!-- Образование -->
     <div class="menu-section">
-      <button class="section-toggle" aria-expanded="true">
+      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="section-education" data-section="education">
         <span class="section-title">Образование</span>
         <svg class="section-arrow" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
       </button>
-      <ul class="menu-list section-items">
+      <ul class="menu-list section-items" id="section-education">
         {institutes.map((inst) => (
           <li class="menu-item">
             <a href={`/${inst.slug}`} class:list={['menu-link', { active: isActive(`/${inst.slug}`) }]}>
@@ -70,11 +70,11 @@ function isActive(path: string): boolean {
 
     <!-- Публикации -->
     <div class="menu-section">
-      <button class="section-toggle" aria-expanded="true">
+      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="section-publications" data-section="publications">
         <span class="section-title">Публикации</span>
         <svg class="section-arrow" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
       </button>
-      <ul class="menu-list section-items">
+      <ul class="menu-list section-items" id="section-publications">
         <li class="menu-item">
           <a href="/statyi" class:list={['menu-link', { active: isActive('/statyi') }]}>
             <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" /></svg>
@@ -99,11 +99,11 @@ function isActive(path: string): boolean {
 
     <!-- Информация -->
     <div class="menu-section">
-      <button class="section-toggle" aria-expanded="true">
+      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="section-information" data-section="information">
         <span class="section-title">Информация</span>
         <svg class="section-arrow" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
       </button>
-      <ul class="menu-list section-items">
+      <ul class="menu-list section-items" id="section-information">
         <li class="menu-item">
           <a href="/svedeniya-ob-obrazovatelnoy-organizatsii" class:list={['menu-link', { active: isActive('/svedeniya-ob-obrazovatelnoy-organizatsii') }]}>
             <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -170,34 +170,49 @@ function isActive(path: string): boolean {
 
   .menu-list {
     padding: 0 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 
   .menu-item {
-    margin-bottom: 1px;
+    margin-bottom: 0;
   }
 
   .menu-link {
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.55rem 0.75rem;
     font-size: var(--font-s);
     color: var(--color-dark-700);
     text-decoration: none;
     border-radius: var(--radius-m);
-    transition: background-color 0.15s;
+    border: 1px solid #dbe7db;
+    background: #f7fbf7;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.75), 0 1px 0 rgba(16, 24, 16, 0.03);
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
     line-height: 1.35;
   }
 
   .menu-link:hover {
-    background: var(--color-accent-50);
+    background: #eef7ee;
+    border-color: #bedabc;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.85), 0 2px 6px rgba(22, 50, 22, 0.08);
     text-decoration: none;
   }
 
+  .menu-link:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 2px rgba(22, 50, 22, 0.14);
+  }
+
   .menu-link.active {
-    background: var(--color-accent-50);
+    background: #e6f2e6;
+    border-color: #9ec99e;
     color: var(--color-accent-700);
     font-weight: 500;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 2px rgba(24, 58, 24, 0.08);
   }
 
   .menu-icon {
@@ -224,8 +239,9 @@ function isActive(path: string): boolean {
   }
 
   .menu-section {
-    margin-top: 0.5rem;
-    padding: 0 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.5rem 0;
+    border-top: 1px solid #e8efe8;
   }
 
   .section-toggle {
@@ -233,24 +249,32 @@ function isActive(path: string): boolean {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 0.375rem 0.75rem;
-    background: none;
+    padding: 0.35rem 0.25rem 0.4rem;
+    background: transparent;
     border: none;
+    border-radius: var(--radius-m);
     cursor: pointer;
-    color: var(--color-gray-500);
-    font-size: var(--font-xs);
+    color: #1f2a1f;
+    font-size: var(--font-s);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    text-transform: none;
+    letter-spacing: 0;
   }
 
   .section-toggle:hover {
-    color: var(--color-dark-700);
+    color: #142014;
+    background: #f2f6f2;
+  }
+
+  .section-title {
+    line-height: 1.25;
   }
 
   .section-arrow {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
+    color: #1f2a1f;
+    opacity: 0.75;
     transition: transform 0.2s;
   }
 
@@ -263,7 +287,7 @@ function isActive(path: string): boolean {
   }
 
   .section-items {
-    padding: 0;
+    padding: 0.1rem 0 0 0;
   }
 
   @media (max-width: 1024px) {
@@ -286,11 +310,27 @@ function isActive(path: string): boolean {
 </style>
 
 <script>
-  // Section toggle
+  // Section toggle with persisted state
   document.querySelectorAll('.section-toggle').forEach((btn) => {
+    const section = btn.getAttribute('data-section');
+    const key = section ? `ikpk.sidebar.${section}` : null;
+    if (key) {
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved === 'collapsed') {
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      } catch {}
+    }
     btn.addEventListener('click', () => {
       const expanded = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', String(!expanded));
+      const next = String(!expanded);
+      btn.setAttribute('aria-expanded', next);
+      if (key) {
+        try {
+          localStorage.setItem(key, next === 'true' ? 'expanded' : 'collapsed');
+        } catch {}
+      }
     });
   });
 
