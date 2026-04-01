@@ -175,11 +175,11 @@ deploy-prototype        → visual-parity-tests
 | teachers-form_ | 534 | → компонент преподавателя |
 | seminar-data-collapse-section_ | 476 | → `<details><summary>` |
 | card_ | 470 | → `.card` из global.css |
-| seminar-form_ | 460 | → strip |
-| checkbox_ | 456 | → strip (UI form) |
-| subscribe-news-form_ | 456 | → strip (UI form) |
-| button_ | 394 | → strip (UI) |
+| seminar-form_ | 460 | → strip wrapper |
+| checkbox_ | 456 | → strip **только внутри form-контейнеров** |
+| subscribe-news-form_ | 456 | → strip целиком (весь контейнер) |
+| button_ | 394 | → strip **только внутри form-контейнеров** |
 | se-root | 213 | → оставить содержимое |
-| text-field_ | 164 | → strip (UI form) |
+| text-field_ | 164 | → strip **только внутри form-контейнеров** |
 | se-component | 161 | → оставить содержимое |
-| PhoneInput* | 152 | → strip (UI form) |
+| PhoneInput* | 152 | → strip целиком (UI телефонного ввода) |
