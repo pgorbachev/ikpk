@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPage, stripH1 } from '../lib/data';
+import { getPage, cleanBodyHtml } from '../lib/data';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
@@ -15,8 +15,23 @@ const description = page?.seo_description || 'Информация об опла
     <section class="section">
       <h1 class="page-title">Оплата</h1>
 
+      <div class="payment-highlight">
+        <div class="payment-highlight-icon" aria-hidden="true">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        </div>
+        <div class="payment-highlight-body">
+          <p class="payment-highlight-title">Вопросы по оплате?</p>
+          <p class="payment-highlight-text">
+            Свяжитесь с нами:
+            <a href="tel:+78126465450">+7 (812) 646-54-50</a> или
+            <a href="mailto:info@ikpk.su">info@ikpk.su</a>
+          </p>
+          <p class="payment-highlight-hours">Пн–Пт, 10:00–18:00</p>
+        </div>
+      </div>
+
       {page?.body_html ? (
-        <div class="page-content rich-content" set:html={stripH1(page.body_html)} />
+        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html)} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}
@@ -25,6 +40,143 @@ const description = page?.seo_description || 'Информация об опла
 </BaseLayout>
 
 <style>
-  .page-title { margin-bottom: 1.5rem; }
-  .page-content { max-width: 800px; }
+  .page-title {
+    margin-bottom: 1.5rem;
+  }
+
+  .payment-highlight {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    background: var(--color-accent-50);
+    border: 1px solid var(--color-accent-200);
+    border-left: 4px solid var(--color-accent-500);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2.5rem;
+    max-width: 700px;
+  }
+
+  .payment-highlight-icon {
+    color: var(--color-accent-600);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .payment-highlight-title {
+    font-weight: 700;
+    color: var(--color-dark-700);
+    margin-bottom: 0.25rem;
+    font-size: var(--font-l);
+  }
+
+  .payment-highlight-text {
+    color: var(--color-dark-700);
+    margin-bottom: 0.25rem;
+  }
+
+  .payment-highlight-text a {
+    color: var(--color-accent-600);
+    font-weight: 600;
+  }
+
+  .payment-highlight-hours {
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
+  }
+
+  .payment-content {
+    max-width: 800px;
+  }
+
+  /* FAQ-style details for payment page */
+  .payment-content :global(details) {
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    padding: 0;
+    margin-bottom: 1rem;
+    background: var(--color-light-100);
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+
+  .payment-content :global(details:hover) {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .payment-content :global(details summary) {
+    padding: 1rem 1.25rem;
+    font-weight: 600;
+    font-size: var(--font-l);
+    color: var(--color-dark-700);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .payment-content :global(details summary:hover) {
+    background-color: var(--color-light-300);
+  }
+
+  .payment-content :global(details summary::-webkit-details-marker) {
+    display: none;
+  }
+
+  .payment-content :global(details summary::after) {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid var(--color-gray-500);
+    border-bottom: 2px solid var(--color-gray-500);
+    transform: rotate(-45deg);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .payment-content :global(details[open] summary::after) {
+    transform: rotate(45deg);
+  }
+
+  .payment-content :global(details[open] summary) {
+    border-bottom: 1px solid var(--color-gray-200);
+    margin-bottom: 0;
+  }
+
+  .payment-content :global(details > :not(summary)) {
+    padding: 0 1.25rem;
+  }
+
+  .payment-content :global(details > :nth-child(2)) {
+    padding-top: 1rem;
+  }
+
+  .payment-content :global(details > :last-child) {
+    padding-bottom: 1rem;
+  }
+
+  /* Responsive tables */
+  .payment-content :global(table) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+
+  .payment-content :global(th),
+  .payment-content :global(td) {
+    padding: 0.625rem 1rem;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    .payment-highlight {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
 </style>

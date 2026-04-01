@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPage, stripH1 } from '../lib/data';
+import { getPage, cleanBodyHtml } from '../lib/data';
 
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
@@ -16,7 +16,9 @@ const schema = {
   email: 'info@ikpk.su',
   address: {
     '@type': 'PostalAddress',
+    streetAddress: 'Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н',
     addressLocality: 'Санкт-Петербург',
+    postalCode: '195112',
     addressCountry: 'RU',
   },
   contactPoint: {
@@ -36,28 +38,81 @@ const schema = {
     <section class="section">
       <h1 class="page-title">Контакты</h1>
 
-      <div class="contacts-grid">
-        <div class="contact-block">
-          <h2>Телефон</h2>
-          <a href="tel:+78126465450" class="contact-value">+7 (812) 646-54-50</a>
-        </div>
-        <div class="contact-block">
-          <h2>Email</h2>
-          <a href="mailto:info@ikpk.su" class="contact-value">info@ikpk.su</a>
-        </div>
-        <div class="contact-block">
-          <h2>Адрес</h2>
-          <p class="contact-value">Санкт-Петербург</p>
-        </div>
-      </div>
+      <div class="contacts-layout">
+        <div class="contacts-main">
+          <div class="contacts-grid">
+            <div class="contact-block">
+              <div class="contact-icon" aria-hidden="true">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              </div>
+              <h2>Институт</h2>
+              <a href="tel:+78126465450" class="contact-value">+7 (812) 646-54-50</a>
+            </div>
+            <div class="contact-block">
+              <div class="contact-icon" aria-hidden="true">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              </div>
+              <h2>Email</h2>
+              <a href="mailto:info@ikpk.su" class="contact-value">info@ikpk.su</a>
+            </div>
+            <div class="contact-block">
+              <div class="contact-icon" aria-hidden="true">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              </div>
+              <h2>Адрес</h2>
+              <p class="contact-value contact-value--address">Санкт-Петербург, Новочеркасский&nbsp;пр&#8209;т, д.&nbsp;22/15, Лит&nbsp;А, пом.&nbsp;4Н</p>
+            </div>
+            <div class="contact-block">
+              <div class="contact-icon" aria-hidden="true">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <h2>Часы работы</h2>
+              <p class="contact-value contact-value--hours">Пн–Пт: 10:00–18:00</p>
+              <p class="contact-hours-note">Сб, Вс — выходной</p>
+            </div>
+            <div class="contact-block">
+              <div class="contact-icon" aria-hidden="true">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              </div>
+              <h2>Медицинский центр</h2>
+              <a href="tel:+78126465460" class="contact-value">+7 (812) 646-54-60</a>
+              <a href="https://mudriydoctor.ru" class="contact-link" target="_blank" rel="noopener">mudriydoctor.ru</a>
+            </div>
+          </div>
 
-      {page?.body_html ? (
-        <div class="contacts-extra rich-content" set:html={stripH1(page.body_html)} />
-      ) : page?.body_text && (
-        <div class="contacts-extra rich-content">
-          <p>{page.body_text}</p>
+          {page?.body_html ? (
+            <div class="contacts-extra rich-content" set:html={cleanBodyHtml(page.body_html)} />
+          ) : page?.body_text && (
+            <div class="contacts-extra rich-content">
+              <p>{page.body_text}</p>
+            </div>
+          )}
         </div>
-      )}
+
+        <aside class="contacts-sidebar">
+          <div class="map-placeholder">
+            <div class="map-placeholder-icon" aria-hidden="true">
+              <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            </div>
+            <p class="map-placeholder-text">Новочеркасский пр-т, д.&nbsp;22/15</p>
+            <p class="map-placeholder-sub">Санкт-Петербург, 195112</p>
+            <a
+              href="https://yandex.ru/maps/?text=Санкт-Петербург,+Новочеркасский+пр-т,+д.+22/15"
+              class="btn btn-outline map-btn"
+              target="_blank"
+              rel="noopener"
+            >Открыть на карте</a>
+          </div>
+
+          <div class="quick-links-card">
+            <h3>Полезные ссылки</h3>
+            <ul>
+              <li><a href="https://medshop.ikpk.su" target="_blank" rel="noopener">Медицинская литература</a></li>
+              <li><a href="https://mudriydoctor.ru" target="_blank" rel="noopener">Медицинский центр</a></li>
+            </ul>
+          </div>
+        </aside>
+      </div>
     </section>
   </div>
 </BaseLayout>
@@ -67,11 +122,35 @@ const schema = {
     margin-bottom: 2rem;
   }
 
+  .contacts-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
   .contacts-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .contact-block {
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: box-shadow 0.2s;
+  }
+
+  .contact-block:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .contact-icon {
+    color: var(--color-accent-500);
+    margin-bottom: 0.75rem;
   }
 
   .contact-block h2 {
@@ -83,17 +162,118 @@ const schema = {
   }
 
   .contact-value {
-    font-size: var(--font-xl);
+    font-size: var(--font-l);
     font-weight: 600;
     color: var(--color-dark-700);
+    display: block;
+  }
+
+  .contact-value--address,
+  .contact-value--hours {
+    font-size: var(--font-m);
   }
 
   a.contact-value {
     color: var(--color-accent-500);
   }
 
+  a.contact-value:hover {
+    color: var(--color-accent-600);
+  }
+
+  .contact-hours-note {
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
+    margin-top: 0.25rem;
+  }
+
+  .contact-link {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: var(--font-s);
+    color: var(--color-info-500);
+  }
+
   .contacts-extra {
-    max-width: 800px;
+    max-width: none;
+  }
+
+  /* Sidebar */
+  .contacts-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .map-placeholder {
+    background: var(--color-light-300);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+
+  .map-placeholder-icon {
+    color: var(--color-accent-500);
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .map-placeholder-text {
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin-bottom: 0.25rem;
+  }
+
+  .map-placeholder-sub {
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
+    margin-bottom: 1.25rem;
+  }
+
+  .map-btn {
+    width: 100%;
+  }
+
+  .quick-links-card {
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+
+  .quick-links-card h3 {
+    font-size: var(--font-m);
+    margin-bottom: 0.75rem;
+  }
+
+  .quick-links-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .quick-links-card li {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-gray-200);
+  }
+
+  .quick-links-card li:last-child {
+    border-bottom: none;
+  }
+
+  .quick-links-card a {
+    font-size: var(--font-s);
+    color: var(--color-info-500);
+  }
+
+  @media (max-width: 1024px) {
+    .contacts-layout {
+      grid-template-columns: 1fr;
+    }
+    .contacts-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
 
   @media (max-width: 768px) {
