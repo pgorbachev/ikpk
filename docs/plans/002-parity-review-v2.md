@@ -1,8 +1,9 @@
-# План доработки: ревью паритета v2
+# План доработки: ревью паритета v2.1
 
 **Дата:** 2026-04-01  
 **Статус:** В работе  
-**Приоритет:** P1
+**Приоритет:** P1  
+**Ревью:** Скорректирован по замечаниям (scope cleanup, порядок задач, static pages layout)
 
 ## Проблема
 
@@ -21,97 +22,104 @@
 - Структурированные данные уже в entities JSON, можно рендерить компонентами
 - Поддерживаемость: свои компоненты с Astro scoped styles >> raw HTML с мёртвыми классами
 
-## Задачи
+## Задачи (скорректированный порядок)
 
-### 1. homepage-blocks — Восстановить блоки главной [P1]
+### 1. static-page-cleanup — Очистка body_html с unit-тестами [P1] ← ПЕРВЫЙ
 
-Добавить в index.astro между Hero и News:
+**Scope:** создать `cleanBodyHtml()` с **явными, тестируемыми правилами трансформации**.
 
-**«Наши преимущества»** — 6 карточек (2×3 grid):
-- Наш многолетний опыт в образовании
-- Сотрудничество с зарубежными институтами
-- Настоящие преподаватели – ключ к успеху
-- Документы об образовании для наших студентов
-- Издательство медицинской литературы
-- Практика в нашем медицинском центре
-- + CTA «Записаться на обучение»
+**Правила трансформации:**
 
-**«Наш подход к обучению»** — описание + статистика:
-- Текст про практическую отработку навыков
-- 3 счётчика: 14000+ специалистов, >20 лет, 1500+ аккредитаций
-- + CTA «Записаться на обучение»
+| Что | → Что | Пример |
+|-----|-------|--------|
+| Элементы с `class*=subscribe-news-form_\|checkbox_\|button_\|PhoneInput\|text-field_`  | → удалить целиком (UI-формы) | `<div class="subscribe-news-form_wrapper___xXSq">...</div>` → ∅ |
+| Элементы с `class*=articles-form_articleContainer\|seminar-form_\|teachers-form_\|cooperation_` | → unwrap (оставить children) | `<div class="articles-form_articleContainer__13oDC"><p>text</p></div>` → `<p>text</p>` |
+| `<div class="collapsible_*">` с вложенным заголовком + контентом | → `<details><summary>{заголовок}</summary>{контент}</details>` | |
+| `<h1-h6 class="typography_*">` | → тот же тег без class | `<h2 class="typography_h2__Dgg2h">Title</h2>` → `<h2>Title</h2>` |
+| `<p/span class="typography_*">` | → тот же тег без class | |
+| `<div class="se-root">` | → unwrap (оставить содержимое) | |
+| Все остальные CSS-module классы (содержат `__`) | → strip class attribute | `<div class="foo__bar">` → `<div>` |
 
-**«Наши программы»** — 3 карточки институтов с описаниями:
-- Программы обучения ИКПК (лицензия №3471)
-- Программы обучения Института Апледжера (краниосакральная терапия)
-- Программы обучения Института Барраля (висцеральные манипуляции)
+**Unit-тесты:** 5–6 HTML-фикстур (article, seminar, kontakty, oplata, svedeniya) — вход/выход cleanBodyHtml().
 
-**Порядок секций** (как на оригинале):
+Файлы: `web/src/lib/html-cleaner.ts`, `web/tests/html-cleaner.test.ts`
+
+### 2. homepage-blocks — Восстановить блоки главной [P1] ← ПАРАЛЛЕЛЬНО с cleanup
+
+Добавить в index.astro. Данные захардкожены (не из body_html — нет legacy зависимости).
+
+**«Наши преимущества»** — 6 карточек (2×3 grid) + CTA  
+**«Наш подход к обучению»** — описание + 3 счётчика + CTA  
+**«Наши программы»** — 3 карточки институтов с описаниями
+
+**Порядок секций:**
 Hero → Преимущества → Подход + Статистика → Программы → Новости → Акции → Newsletter
 
 Файлы: `web/src/pages/index.astro`
 
-### 2. static-page-cleanup — Очистка static pages HTML [P1]
+### 3. article-components — Компонентный рендер статей [P1] ← ПОСЛЕ cleanup
 
-Для kontakty, oplata, sotrudnichestvo, svedeniya и всех контентных страниц:
-- Создать `cleanBodyHtml()` в data.ts: strip layout wrappers (articles-form_*, main_*, cooperation_*), keep semantic content
-- Обработать collapsible_* → `<details><summary>` нативный HTML
-- Обработать typography_* → стандартные h2/h3/p теги
-- Удалить subscribe-news-form_*, checkbox_*, button_*, PhoneInput* (UI-мусор из форм)
-
-Файлы: `web/src/lib/data.ts`, все static page astro files
-
-### 3. article-components — Компонентный рендер статей [P1]
-
-Заменить raw body_html на компонент ArticleDetail:
-- Заголовок (h1 уже в шаблоне)
+Заменить raw body_html на структурированный вывод:
 - Изображение статьи (из `image` поля)
-- Контент: очистить body_html от layout-обёрток (articles-form_articleContainer и т.д.), оставить только semantic HTML внутри `.se-root`
-- Секция «Другие статьи» (ссылки на связанные)
+- Контент: `cleanBodyHtml(body_html)` вместо raw
+- Секция «Другие статьи» (ссылки на 3–4 связанные)
+- Мета: дата публикации
 
-Файлы: `web/src/pages/statyi/[slug].astro`, `web/src/lib/data.ts`
+Файлы: `web/src/pages/statyi/[slug].astro`
 
-### 4. seminar-components — Компонентный рендер семинаров [P1]
+### 4. seminar-components — Компонентный рендер семинаров [P1] ← ПОСЛЕ cleanup
 
 Заменить raw description_html на структурированный вывод:
-- Описание семинара (чистый HTML без layout-обёрток)
-- Расписание (уже есть как таблица из schedule_entries)
-- Преподаватели (уже выводятся)
-- Collapsible секции → `<details>` / собственный аккордеон
+- Очищенное описание: `cleanBodyHtml(description_html)`
+- Расписание из schedule_entries (уже есть)
+- Преподаватели (уже есть)
+- `<details>` вместо collapsible
 
 Файлы: `web/src/pages/[institute]/[courseGroup]/[seminar].astro`
 
-### 5. visual-parity-tests — Расширить comparison тесты [P2]
+### 5. static-pages-layout — Layout parity для статических страниц [P1] ← ПОСЛЕ cleanup
+
+**Отдельная задача** на kontakty, oplata, svedeniya, sotrudnichestvo:
+- Применить `cleanBodyHtml()` к body_html
+- Восстановить 2-колоночный layout где нужно (kontakty: инфо + карта; svedeniya: секции документов)
+- Контактные блоки: телефон, email, адрес — собственными компонентами (уже частично сделано на kontakty)
+- Collapsible-секции (svedeniya) → `<details><summary>`
+
+Файлы: `web/src/pages/kontakty.astro`, `web/src/pages/oplata.astro`, `web/src/pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro`, `web/src/pages/sotrudnichestvo-s-nami.astro`
+
+### 6. visual-parity-tests — Расширить comparison тесты [P2] ← ПОСЛЕ всех компонентов
 
 Добавить в compare.spec.ts:
-- Проверка наличия всех секций главной (преимущества, подход, программы)
-- Проверка что статья/семинар содержат структурированный контент (не пустой)
-- Проверка что legacy CSS классы НЕ присутствуют в output (articles-form_*, typography_*)
-- Screenshot comparison для 8 ключевых URL (visual regression baseline)
+- **Обязательные секции главной:** преимущества, подход, статистика, программы
+- **Обязательные элементы контентных страниц:** очищенный HTML содержит текст (не пустой)
+- **Нет legacy hash-классов** в рендере (articles-form_*, typography_*)
+- **Smoke по ключевым URL:** 8–10 страниц возвращают 200 и имеют ожидаемую структуру
+- Build + ручной чек-лист (8 URL side-by-side)
 
 Файлы: `web/tests/compare.spec.ts`
 
-### 6. deploy-prototype — Задеплоить прототип [blocked]
+### 7. deploy-prototype — Задеплоить прототип [blocked]
 
 Требуется авторизация пользователя на хостинг-платформе.
 
 ## Зависимости
 
 ```
-homepage-blocks         → (нет зависимостей)
 static-page-cleanup     → (нет зависимостей)
-article-components      → static-page-cleanup (общий cleanHtml)
-seminar-components      → static-page-cleanup (общий cleanHtml)
-visual-parity-tests     → homepage-blocks, article-components
+homepage-blocks         → (нет зависимостей)
+article-components      → static-page-cleanup
+seminar-components      → static-page-cleanup
+static-pages-layout     → static-page-cleanup
+visual-parity-tests     → homepage-blocks, article-components, static-pages-layout
 deploy-prototype        → visual-parity-tests
 ```
 
-## Порядок выполнения
+## Строгий порядок выполнения
 
-1. `static-page-cleanup` + `homepage-blocks` — параллельно
-2. `article-components` + `seminar-components` — параллельно (после cleanup)
-3. `visual-parity-tests` — после всех компонентов
-4. Build + test → commit → push
+1. **Волна 1** (параллельно): `static-page-cleanup` + `homepage-blocks`
+2. **Волна 2** (строго после cleanup): `article-components` + `seminar-components` + `static-pages-layout`
+3. **Волна 3** (после всех): `visual-parity-tests`
+4. Build + все тесты → commit → push
 
 ## Данные с оригинального сайта (извлечены для реализации)
 
