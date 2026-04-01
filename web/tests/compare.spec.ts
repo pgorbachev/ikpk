@@ -419,8 +419,20 @@ test.describe('Homepage mandatory sections', () => {
 
   test('has newsletter section', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
-    const section = page.locator('.newsletter-section');
+    const section = page.locator('.newsletter');
     await expect(section).toBeVisible();
+  });
+
+  test('hero contains full text about exclusive representation', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    const heroText = await page.locator('.hero').textContent() ?? '';
+    expect(heroText).toContain('Эксклюзивное представительство');
+    expect(heroText).toContain('международным стандартам');
+  });
+
+  test('hero has visual illustration', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    await expect(page.locator('.hero-visual')).toBeVisible();
   });
 });
 

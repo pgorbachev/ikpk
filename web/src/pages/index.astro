@@ -29,14 +29,21 @@ const schema = {
   <!-- Hero -->
   <section class="hero">
     <div class="container hero-inner">
-      <h1 class="hero-title">Институт клинической прикладной кинезиологии</h1>
-      <p class="hero-subtitle">
-        За 20 лет наш институт стал ведущим центром постдипломного образования
-        России и СНГ в области холистической медицины.
-      </p>
-      <a href="/raspisanie-i-tseny" class="btn btn-primary hero-cta">
-        Записаться на обучение
-      </a>
+      <div class="hero-content">
+        <h1 class="hero-title">Институт клинической прикладной кинезиологии</h1>
+        <p class="hero-subtitle">
+          За 20 лет наш институт стал ведущим центром постдипломного образования
+          России и СНГ в области холистической медицины. Эксклюзивное представительство
+          мировых лидеров в этой области — Институтов Апледжера и Барраля — предоставляет
+          нашим уважаемым студентам ИКПК возможность учиться по международным стандартам.
+        </p>
+        <a href="/raspisanie-i-tseny" class="btn btn-primary hero-cta">
+          Записаться на обучение
+        </a>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <img src="/logo-icon.svg" alt="" class="hero-logo" width="120" height="124" />
+      </div>
     </div>
   </section>
 
@@ -97,6 +104,9 @@ const schema = {
         <h2 class="section-title">Наш подход к обучению</h2>
         <p>В течение каждого курса, большую часть времени, мы уделяем практической отработке приобретенных навыков и знаний. Это ключевой подход, который позволяет нашим студентам успешно применять полученные знания в реальных ситуациях и готовиться к профессиональной деятельности на самом высоком уровне.</p>
         <a href="/raspisanie-i-tseny" class="btn btn-primary approach-cta">Записаться на обучение</a>
+      </div>
+      <div class="approach-visual" aria-hidden="true">
+        <img src="/logo-icon.svg" alt="" class="approach-logo" width="80" height="82" />
       </div>
       <div class="grid grid-3 stats-grid">
         <div class="stat-card">
@@ -217,14 +227,6 @@ const schema = {
     </section>
   )}
 
-  <!-- Newsletter -->
-  <section class="section newsletter-section">
-    <div class="container newsletter-inner">
-      <h2 class="newsletter-title">Будьте в курсе новостей ИКПК</h2>
-      <p class="newsletter-sub">Подпишитесь на рассылку и получайте информацию о новых программах, акциях и событиях института.</p>
-      <a href="mailto:info@ikpk.su" class="btn btn-primary">Написать нам</a>
-    </div>
-  </section>
 </BaseLayout>
 
 <style>
@@ -234,8 +236,31 @@ const schema = {
   }
 
   .hero-inner {
-    max-width: 700px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+    max-width: 960px;
+  }
+
+  .hero-content {
+    flex: 1;
+  }
+
+  .hero-visual {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  }
+
+  .hero-logo {
+    opacity: 0.9;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.08));
   }
 
   .hero-title {
@@ -253,6 +278,22 @@ const schema = {
   .hero-cta {
     font-size: var(--font-l);
     padding: 0.75rem 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .hero-inner {
+      flex-direction: column;
+      text-align: center;
+    }
+    .hero-visual {
+      width: 120px;
+      height: 120px;
+      order: -1;
+    }
+    .hero-logo {
+      width: 80px;
+      height: 82px;
+    }
   }
 
   .section-alt {
@@ -334,14 +375,43 @@ const schema = {
     gap: 2.5rem;
   }
 
+  .approach-text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 2rem;
+  }
+
+  .approach-text .section-title {
+    width: 100%;
+  }
+
   .approach-text p {
     color: var(--color-gray-600);
     margin-bottom: 1.5rem;
-    max-width: 720px;
+    max-width: 620px;
+    flex: 1;
+  }
+
+  .approach-visual {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: var(--color-light-100);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .approach-logo {
+    opacity: 0.7;
   }
 
   .approach-cta {
     display: inline-block;
+    width: 100%;
   }
 
   .stats-grid {
@@ -389,28 +459,5 @@ const schema = {
     font-weight: 600;
     margin-bottom: 0.5rem;
     color: var(--color-accent-600);
-  }
-
-  /* Newsletter */
-  .newsletter-section {
-    background: var(--color-accent-700);
-  }
-
-  .newsletter-inner {
-    text-align: center;
-  }
-
-  .newsletter-title {
-    font-size: var(--font-xxl);
-    color: var(--color-light-100);
-    margin-bottom: 0.75rem;
-  }
-
-  .newsletter-sub {
-    color: var(--color-accent-100);
-    margin-bottom: 1.5rem;
-    max-width: 540px;
-    margin-left: auto;
-    margin-right: auto;
   }
 </style>

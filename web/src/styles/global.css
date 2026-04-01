@@ -113,8 +113,8 @@ table {
   --font-xxl: 1.5rem;
   --font-xxxl: 2.25rem;
 
-  --radius-s: 2px;
-  --radius-m: 4px;
+  --radius-s: 8px;
+  --radius-m: 12px;
 
   --header-height: 60px;
   --sidebar-width: 260px;
