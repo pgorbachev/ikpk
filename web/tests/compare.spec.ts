@@ -387,3 +387,230 @@ test.describe('No broken internal links', () => {
     expect(broken, `Broken links: ${broken.join(', ')}`).toHaveLength(0);
   });
 });
+
+// ─── Homepage mandatory sections ───────────────────────────
+
+test.describe('Homepage mandatory sections', () => {
+  test('has "Наши преимущества" section with 6 advantage cards', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    const heading = page.locator('h2:has-text("Наши преимущества")');
+    await expect(heading).toBeVisible();
+    const cards = page.locator('.adv-card');
+    expect(await cards.count(), 'Should have 6 advantage cards').toBe(6);
+  });
+
+  test('has "Наш подход к обучению" section with statistics', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    const heading = page.locator('h2:has-text("Наш подход к обучению")');
+    await expect(heading).toBeVisible();
+    const text = await page.locator('body').textContent() ?? '';
+    expect(text).toContain('14000');
+    expect(text).toContain('20 лет');
+    expect(text).toContain('1500');
+  });
+
+  test('has "Наши программы" section with 3 institute program cards', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    const heading = page.locator('h2:has-text("Наши программы")');
+    await expect(heading).toBeVisible();
+    const cards = page.locator('.prog-card');
+    expect(await cards.count(), 'Should have 3 program cards').toBe(3);
+  });
+
+  test('has newsletter section', async ({ page }) => {
+    await page.goto(NEW_SITE + '/');
+    const section = page.locator('.newsletter-section');
+    await expect(section).toBeVisible();
+  });
+});
+
+// ─── No legacy CSS hash classes ────────────────────────────
+
+test.describe('No legacy CSS hash classes in rendered output', () => {
+  const LEGACY_PATTERNS = [
+    'typography_',
+    'articles-form_',
+    'collapsible_',
+    'schedule-prices_',
+    'teachers-form_',
+  ];
+  const CSS_HASH_RE = /_\w+__[A-Za-z0-9]{5}/;
+
+  const PAGES_TO_CHECK = [
+    ['/', 'homepage'],
+    ['/statyi', 'articles list'],
+    ['/kontakty', 'contacts'],
+    ['/oplata', 'payment'],
+    ['/svedeniya-ob-obrazovatelnoy-organizatsii', 'svedeniya'],
+    ['/sotrudnichestvo-s-nami', 'cooperation'],
+  ];
+
+  for (const [path, label] of PAGES_TO_CHECK) {
+    test(`${label} (${path}) has no legacy CSS module classes`, async ({ page }) => {
+      await page.goto(NEW_SITE + path);
+      const allClasses = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('[class]'))
+          .map(el => el.className)
+          .join(' ');
+      });
+      for (const pat of LEGACY_PATTERNS) {
+        expect(allClasses, `Should not contain legacy class prefix "${pat}"`).not.toContain(pat);
+      }
+      expect(
+        CSS_HASH_RE.test(allClasses),
+        `Should not contain CSS module hash classes on ${path}`
+      ).toBe(false);
+    });
+  }
+
+  test('article detail page has no legacy CSS module classes', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    expect(firstLink).toBeTruthy();
+    await page.goto(NEW_SITE + firstLink!);
+    const allClasses = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[class]')).map(el => el.className).join(' ')
+    );
+    for (const pat of LEGACY_PATTERNS) {
+      expect(allClasses).not.toContain(pat);
+    }
+    expect(CSS_HASH_RE.test(allClasses)).toBe(false);
+  });
+
+  test('seminar detail page has no legacy CSS module classes', async ({ page }) => {
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
+    await page.goto(url);
+    const allClasses = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[class]')).map(el => el.className).join(' ')
+    );
+    for (const pat of LEGACY_PATTERNS) {
+      expect(allClasses).not.toContain(pat);
+    }
+    expect(CSS_HASH_RE.test(allClasses)).toBe(false);
+  });
+});
+
+// ─── Content pages: clean structured HTML ──────────────────
+
+test.describe('Content pages have clean structured HTML', () => {
+  test('article detail has non-empty body content', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    expect(firstLink).toBeTruthy();
+    await page.goto(NEW_SITE + firstLink!);
+    const richContent = page.locator('.rich-content');
+    const html = await richContent.innerHTML();
+    expect(html.trim().length, 'Article body should not be empty').toBeGreaterThan(50);
+  });
+
+  test('article detail has no legacy articles-form_ wrappers', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    await page.goto(NEW_SITE + firstLink!);
+    const legacyWrappers = page.locator('[class*="articles-form_"]');
+    expect(await legacyWrappers.count(), 'No articles-form_ wrappers should remain').toBe(0);
+  });
+
+  test('seminar detail has non-empty body content', async ({ page }) => {
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
+    await page.goto(url);
+    const body = await page.locator('main, article, .seminar-content, .content').first().textContent() ?? '';
+    expect(body.trim().length, 'Seminar body should not be empty').toBeGreaterThan(50);
+  });
+
+  test('seminar detail has <details> collapsible elements', async ({ page }) => {
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
+    await page.goto(url);
+    const details = page.locator('details');
+    expect(await details.count(), 'Seminar should have collapsible <details> elements').toBeGreaterThan(0);
+  });
+});
+
+// ─── Article page structure ────────────────────────────────
+
+test.describe('Article page structure', () => {
+  test('has 2-column layout with sidebar', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    await page.goto(NEW_SITE + firstLink!);
+    const sidebar = page.locator('aside.article-sidebar');
+    await expect(sidebar).toBeVisible();
+  });
+
+  test('has "Другие статьи" related articles in sidebar', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    await page.goto(NEW_SITE + firstLink!);
+    const sidebarTitle = page.locator('aside.article-sidebar h3:has-text("Другие статьи")');
+    await expect(sidebarTitle).toBeVisible();
+  });
+
+  test('related articles in sidebar contain links', async ({ page }) => {
+    await page.goto(NEW_SITE + '/statyi');
+    const firstLink = await page.locator('a[href^="/statyi/"]').first().getAttribute('href');
+    await page.goto(NEW_SITE + firstLink!);
+    const relatedLinks = page.locator('aside.article-sidebar .sidebar-articles a');
+    expect(await relatedLinks.count(), 'Sidebar should have related article links').toBeGreaterThan(0);
+  });
+});
+
+// ─── Seminar page structure ────────────────────────────────
+
+test.describe('Seminar page structure', () => {
+  const SEMINAR_URL = '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
+
+  test('has 2-column layout with sidebar', async ({ page }) => {
+    await page.goto(NEW_SITE + SEMINAR_URL);
+    const sidebar = page.locator('aside.seminar-sidebar');
+    await expect(sidebar).toBeVisible();
+  });
+
+  test('has "Записаться" CTA button', async ({ page }) => {
+    await page.goto(NEW_SITE + SEMINAR_URL);
+    const cta = page.locator('.sidebar-cta:has-text("Записаться")');
+    await expect(cta).toBeVisible();
+  });
+
+  test('has teacher section', async ({ page }) => {
+    await page.goto(NEW_SITE + SEMINAR_URL);
+    const teacherLabel = page.locator('.sidebar-card-label:has-text("Преподаватель")');
+    await expect(teacherLabel).toBeVisible();
+  });
+
+  test('has schedule/price info in sidebar', async ({ page }) => {
+    await page.goto(NEW_SITE + SEMINAR_URL);
+    const price = page.locator('.sidebar-price');
+    await expect(price).toBeVisible();
+    const nextDate = page.locator('.sidebar-next-date');
+    await expect(nextDate).toBeVisible();
+  });
+});
+
+// ─── Static pages structure ────────────────────────────────
+
+test.describe('Static pages structure', () => {
+  test('kontakty has phone contact block', async ({ page }) => {
+    await page.goto(NEW_SITE + '/kontakty');
+    const text = await page.locator('body').textContent() ?? '';
+    expect(text).toMatch(/\+7|8\s*\(495\)/);
+  });
+
+  test('kontakty has email contact block', async ({ page }) => {
+    await page.goto(NEW_SITE + '/kontakty');
+    const emailLink = page.locator('a[href*="mailto:"]');
+    expect(await emailLink.count(), 'Should have email link').toBeGreaterThan(0);
+  });
+
+  test('svedeniya has collapsible <details> sections', async ({ page }) => {
+    await page.goto(NEW_SITE + '/svedeniya-ob-obrazovatelnoy-organizatsii');
+    const details = page.locator('details');
+    const count = await details.count();
+    expect(count, 'Svedeniya page should have multiple collapsible sections').toBeGreaterThan(3);
+  });
+
+  test('sotrudnichestvo has CTA section', async ({ page }) => {
+    await page.goto(NEW_SITE + '/sotrudnichestvo-s-nami');
+    const ctaBtn = page.locator('.cta-btn, a.btn:has-text("Связаться"), a.btn:has-text("Написать")');
+    expect(await ctaBtn.count(), 'Should have a CTA button').toBeGreaterThan(0);
+  });
+});

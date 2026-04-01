@@ -6,9 +6,10 @@ import {
   getCourseGroups,
   getSeminars,
   getScheduleEntries,
+  getTeachers,
   formatPrice,
   formatDate,
-  stripH1,
+  cleanBodyHtml,
 } from '../../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -43,7 +44,34 @@ const statusLabel: Record<string, string> = {
   completed: 'Завершён',
 };
 
+/* Sort schedule by date; find the next upcoming entry */
+const now = new Date();
+const sortedSchedule = [...schedule].sort(
+  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+);
+const nextEntry = sortedSchedule.find((e) => new Date(e.startAt) >= now) || sortedSchedule[0];
+
+/* Collect unique teachers with full profile info */
+const allTeachers = getTeachers();
+const teacherMap = new Map<string, { fullName: string; slug: string; photo: string; instituteSlug: string }>();
+for (const entry of schedule) {
+  for (const t of entry.teachers || []) {
+    if (!teacherMap.has(String(t.id))) {
+      const full = allTeachers.find((ft) => ft.slug === String(t.id));
+      teacherMap.set(String(t.id), {
+        fullName: t.fullName,
+        slug: full?.slug || String(t.id),
+        photo: full?.photo || '',
+        instituteSlug: full?.institute_legacy_id || institute.slug,
+      });
+    }
+  }
+}
+const uniqueTeachers = Array.from(teacherMap.values());
+
 const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`;
+const mailtoSubject = encodeURIComponent(`Запись: ${seminar.name}`);
+const ctaHref = `mailto:info@ikpk.su?subject=${mailtoSubject}`;
 
 const eventSchema = {
   '@context': 'https://schema.org',
@@ -92,85 +120,394 @@ const eventSchema = {
     <article class="section seminar-detail">
       <h1 class="page-title">{seminar.name}</h1>
 
-      <div class="seminar-meta">
-        {seminar.status && (
-          <span class:list={['badge', `badge-${seminar.status}`]}>
-            {statusLabel[seminar.status] || seminar.status}
-          </span>
-        )}
-      </div>
+      <div class="seminar-layout">
+        {/* ── LEFT: main content ── */}
+        <div class="seminar-main">
+          {seminar.description_html ? (
+            <div class="seminar-content rich-content" set:html={cleanBodyHtml(seminar.description_html)} />
+          ) : seminar.description_text && (
+            <div class="seminar-content rich-content">
+              <p>{seminar.description_text}</p>
+            </div>
+          )}
 
-      {seminar.description_html ? (
-        <div class="seminar-content rich-content" set:html={stripH1(seminar.description_html)} />
-      ) : seminar.description_text && (
-        <div class="seminar-content rich-content">
-          <p>{seminar.description_text}</p>
+          {/* Details meta shown below description on desktop */}
+          <div class="seminar-details-row">
+            {seminar.hours && (
+              <div class="detail-chip">
+                <span class="detail-label">Объём</span>
+                <span class="detail-value">{seminar.hours} ак. ч.</span>
+              </div>
+            )}
+            {seminar.certificate_type && (
+              <div class="detail-chip">
+                <span class="detail-label">Документ</span>
+                <span class="detail-value">{seminar.certificate_type}</span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      {schedule.length > 0 && (
-        <section class="schedule-section">
-          <h2 class="section-title">Расписание</h2>
-          <div class="schedule-list">
-            {schedule.map((entry) => (
-              <div class="schedule-entry card">
-                <div class="card-body">
-                  <div class="schedule-row">
-                    <div>
-                      <strong>{formatDate(entry.startAt)}</strong>
+        {/* ── RIGHT: sidebar ── */}
+        <aside class="seminar-sidebar">
+          {/* Status badge */}
+          {seminar.status && (
+            <div class="sidebar-badge">
+              <span class:list={['badge', `badge-${seminar.status}`]}>
+                {statusLabel[seminar.status] || seminar.status}
+              </span>
+            </div>
+          )}
+
+          {/* Next upcoming date + price */}
+          {nextEntry && (
+            <div class="sidebar-card">
+              <div class="sidebar-card-label">Ближайшая дата</div>
+              <div class="sidebar-next-date">
+                <strong>{formatDate(nextEntry.startAt)}</strong>
+                {nextEntry.startAt !== nextEntry.endAt && (
+                  <span class="date-range"> — {formatDate(nextEntry.endAt)}</span>
+                )}
+              </div>
+              {nextEntry.city?.name && (
+                <div class="sidebar-city text-small">{nextEntry.city.name}</div>
+              )}
+              <div class="sidebar-price">
+                {nextEntry.isFree ? (
+                  <span class="price-free">Бесплатно</span>
+                ) : (
+                  <div class="price-block">
+                    {nextEntry.oldPrice > 0 && nextEntry.oldPrice !== nextEntry.newPrice && (
+                      <span class="price-old">{formatPrice(nextEntry.oldPrice)}</span>
+                    )}
+                    <span class="price-new">{formatPrice(nextEntry.newPrice)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CTA button */}
+          <a href={ctaHref} class="btn btn-primary sidebar-cta">
+            Записаться
+          </a>
+
+          {/* Teacher cards */}
+          {uniqueTeachers.length > 0 && (
+            <div class="sidebar-section">
+              <div class="sidebar-card-label">
+                {uniqueTeachers.length === 1 ? 'Преподаватель' : 'Преподаватели'}
+              </div>
+              <div class="teacher-list">
+                {uniqueTeachers.map((t) => (
+                  <a
+                    href={`/${t.instituteSlug}/prepodavatel/${t.slug}`}
+                    class="teacher-card-compact"
+                  >
+                    {t.photo ? (
+                      <img
+                        src={t.photo}
+                        alt={t.fullName}
+                        class="teacher-thumb"
+                        loading="lazy"
+                        width="48"
+                        height="48"
+                      />
+                    ) : (
+                      <div class="teacher-thumb teacher-thumb-placeholder" aria-hidden="true">
+                        {t.fullName.charAt(0)}
+                      </div>
+                    )}
+                    <span class="teacher-name">{t.fullName}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Full schedule list in sidebar */}
+          {sortedSchedule.length > 1 && (
+            <div class="sidebar-section">
+              <div class="sidebar-card-label">Все даты</div>
+              <div class="sidebar-schedule-list">
+                {sortedSchedule.map((entry) => (
+                  <div class="sidebar-schedule-item">
+                    <div class="sidebar-sched-date">
+                      {formatDate(entry.startAt)}
                       {entry.startAt !== entry.endAt && (
                         <span> — {formatDate(entry.endAt)}</span>
                       )}
                     </div>
-                    <div class="schedule-city">{entry.city?.name}</div>
-                    <div class="schedule-price">
+                    <div class="sidebar-sched-price text-small">
                       {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
                     </div>
                   </div>
-                  {entry.teachers?.length > 0 && (
-                    <div class="schedule-teachers text-small text-muted">
-                      {entry.teachers.map((t) => t.fullName).join(', ')}
-                    </div>
-                  )}
-                  {entry.duration && (
-                    <div class="text-small text-muted">Длительность: {entry.duration} ч.</div>
-                  )}
-                  {entry.registrationFormLink && (
-                    <a href={entry.registrationFormLink} class="btn btn-primary schedule-btn" target="_blank" rel="noopener">
-                      Записаться
-                    </a>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            </div>
+          )}
 
-      {schedule.length === 0 && (
-        <div class="no-schedule">
-          <p class="text-muted">В настоящий момент данный курс ещё не запланирован.</p>
-          <a href="/raspisanie-i-tseny" class="btn btn-outline">Смотреть всё расписание</a>
-        </div>
-      )}
+          {/* No schedule fallback */}
+          {schedule.length === 0 && (
+            <div class="sidebar-card sidebar-no-schedule">
+              <p class="text-muted">Курс ещё не запланирован.</p>
+              <a href="/raspisanie-i-tseny" class="btn btn-outline sidebar-cta-outline">
+                Всё расписание
+              </a>
+            </div>
+          )}
+        </aside>
+      </div>
     </article>
   </div>
 </BaseLayout>
 
 <style>
+  /* ── Page title ── */
   .page-title {
-    margin-bottom: 0.75rem;
+    margin-bottom: 1.25rem;
   }
 
-  .seminar-meta {
-    margin-bottom: 1.5rem;
+  /* ── 2-column layout ── */
+  .seminar-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  @media (min-width: 900px) {
+    .seminar-layout {
+      grid-template-columns: 1fr 340px;
+      gap: 2.5rem;
+      align-items: start;
+    }
+  }
+
+  /* ── Main content column ── */
+  .seminar-main {
+    min-width: 0; /* prevent overflow */
   }
 
   .seminar-content {
-    max-width: 800px;
     margin-bottom: 2rem;
+    line-height: 1.75;
   }
 
+  .seminar-details-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .detail-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-light-300);
+    border-radius: var(--radius-m);
+    border: 1px solid var(--color-gray-200);
+  }
+
+  .detail-label {
+    font-size: var(--font-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .detail-value {
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+
+  /* ── Sidebar ── */
+  .seminar-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  @media (min-width: 900px) {
+    .seminar-sidebar {
+      position: sticky;
+      top: calc(var(--header-height, 60px) + 1.5rem);
+    }
+  }
+
+  .sidebar-badge {
+    display: flex;
+  }
+
+  .sidebar-card {
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-m);
+    padding: 1.25rem;
+  }
+
+  .sidebar-card-label {
+    font-size: var(--font-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+  }
+
+  .sidebar-next-date {
+    font-size: var(--font-l);
+    color: var(--color-dark-700);
+    margin-bottom: 0.25rem;
+  }
+
+  .date-range {
+    white-space: nowrap;
+  }
+
+  .sidebar-city {
+    color: var(--color-gray-600);
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Price ── */
+  .sidebar-price {
+    margin-top: 0.5rem;
+  }
+
+  .price-block {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  .price-old {
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
+    text-decoration: line-through;
+  }
+
+  .price-new {
+    font-size: var(--font-xxl);
+    font-weight: 700;
+    color: var(--color-dark-700);
+  }
+
+  .price-free {
+    font-size: var(--font-xxl);
+    font-weight: 700;
+    color: var(--color-accent-700);
+  }
+
+  /* ── CTA button ── */
+  .sidebar-cta {
+    display: block;
+    text-align: center;
+    width: 100%;
+    padding: 0.85rem 1.5rem;
+    font-size: var(--font-l);
+    font-weight: 600;
+  }
+
+  .sidebar-cta-outline {
+    display: block;
+    text-align: center;
+    width: 100%;
+    margin-top: 0.75rem;
+    font-size: var(--font-s);
+  }
+
+  /* ── Teacher cards ── */
+  .sidebar-section {
+    padding-top: 0.25rem;
+  }
+
+  .teacher-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .teacher-card-compact {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-m);
+    text-decoration: none;
+    color: var(--color-dark-700);
+    background: var(--color-light-100);
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+
+  .teacher-card-compact:hover {
+    border-color: var(--color-accent-300, var(--color-gray-300));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .teacher-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .teacher-thumb-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-accent-50);
+    color: var(--color-accent-700);
+    font-weight: 600;
+    font-size: var(--font-l);
+  }
+
+  .teacher-name {
+    font-size: var(--font-s);
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  /* ── Sidebar schedule list ── */
+  .sidebar-schedule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .sidebar-schedule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-gray-200);
+  }
+
+  .sidebar-schedule-item:last-child {
+    border-bottom: none;
+  }
+
+  .sidebar-sched-date {
+    font-size: var(--font-s);
+    color: var(--color-dark-700);
+  }
+
+  .sidebar-sched-price {
+    font-weight: 600;
+    color: var(--color-dark-700);
+    white-space: nowrap;
+  }
+
+  /* ── No-schedule fallback ── */
+  .sidebar-no-schedule {
+    text-align: center;
+    padding: 1.5rem;
+  }
+
+  /* ── Badge styles ── */
   .badge-active {
     background-color: var(--color-accent-50);
     color: var(--color-accent-700);
@@ -184,49 +521,5 @@ const eventSchema = {
   .badge-completed {
     background-color: var(--color-gray-200);
     color: var(--color-gray-600);
-  }
-
-  .schedule-section {
-    margin-top: 2rem;
-  }
-
-  .schedule-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .schedule-row {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-bottom: 0.5rem;
-  }
-
-  .schedule-city {
-    color: var(--color-gray-600);
-  }
-
-  .schedule-price {
-    font-weight: 600;
-    color: var(--color-dark-700);
-  }
-
-  .schedule-btn {
-    margin-top: 0.75rem;
-    font-size: var(--font-s);
-  }
-
-  .no-schedule {
-    margin-top: 2rem;
-    padding: 2rem;
-    background: var(--color-light-300);
-    border-radius: var(--radius-m);
-    text-align: center;
-  }
-
-  .no-schedule .btn {
-    margin-top: 1rem;
   }
 </style>

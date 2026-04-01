@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import { getArticles, formatDate, stripH1 } from '../../lib/data';
+import { getArticles, formatDate, cleanBodyHtml, excerpt } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -13,6 +13,11 @@ export const getStaticPaths: GetStaticPaths = () => {
 };
 
 const { article } = Astro.props;
+
+// Pick up to 4 other articles for "related" section
+const allArticles = getArticles().filter((a) => a.slug !== article.slug);
+const shuffled = allArticles.sort(() => Math.random() - 0.5);
+const relatedArticles = shuffled.slice(0, 4);
 
 const articleSchema = {
   '@context': 'https://schema.org',
@@ -44,32 +49,127 @@ const articleSchema = {
       ]}
     />
 
-    <article class="section article-detail">
-      <header class="article-header">
-        <h1 class="page-title">{article.title}</h1>
-        {article.published_at && (
-          <time class="article-date text-muted text-small" datetime={article.published_at}>
-            {formatDate(article.published_at)}
-          </time>
-        )}
-      </header>
+    {/* Hero image — full width above the 2-column layout */}
+    {article.image && (
+      <div class="article-hero">
+        <img src={article.image} alt={article.title} loading="eager" width="1200" height="500" />
+      </div>
+    )}
 
-      {article.image && (
-        <div class="article-hero-image">
-          <img src={article.image} alt={article.title} loading="lazy" width="800" height="450" />
+    <div class="article-layout">
+      {/* Main content column */}
+      <article class="article-main">
+        <header class="article-header">
+          <h1 class="page-title">{article.title}</h1>
+          {article.published_at && (
+            <time class="article-date text-muted text-small" datetime={article.published_at}>
+              {formatDate(article.published_at)}
+            </time>
+          )}
+        </header>
+
+        <div class="article-body rich-content" set:html={cleanBodyHtml(article.body_html)} />
+      </article>
+
+      {/* Sidebar column */}
+      <aside class="article-sidebar">
+        <div class="sidebar-block">
+          {article.published_at && (
+            <div class="sidebar-meta">
+              <span class="sidebar-label">Дата публикации</span>
+              <time datetime={article.published_at}>{formatDate(article.published_at)}</time>
+            </div>
+          )}
+          <a href="/statyi" class="btn btn-outline sidebar-back-link">← Все статьи</a>
         </div>
-      )}
 
-      <div class="article-body rich-content" set:html={stripH1(article.body_html)} />
+        {relatedArticles.length > 0 && (
+          <div class="sidebar-block">
+            <h3 class="sidebar-title">Другие статьи</h3>
+            <ul class="sidebar-articles">
+              {relatedArticles.slice(0, 4).map((rel) => (
+                <li>
+                  <a href={`/statyi/${rel.slug}`} class="sidebar-article-link">
+                    <span class="sidebar-article-title">{rel.title}</span>
+                    {rel.published_at && (
+                      <time class="sidebar-article-date text-muted" datetime={rel.published_at}>
+                        {formatDate(rel.published_at)}
+                      </time>
+                    )}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </aside>
+    </div>
 
-      <footer class="article-footer">
-        <a href="/statyi" class="btn btn-outline">← Все статьи</a>
-      </footer>
-    </article>
+    {/* Full-width related articles cards */}
+    {relatedArticles.length > 0 && (
+      <section class="related-section section">
+        <h2 class="section-title">Другие статьи</h2>
+        <div class="grid grid-4">
+          {relatedArticles.map((rel) => (
+            <a href={`/statyi/${rel.slug}`} class="related-card card">
+              {rel.image && (
+                <div class="related-card-image">
+                  <img src={rel.image} alt={rel.title} loading="lazy" width="400" height="225" />
+                </div>
+              )}
+              <div class="card-body">
+                <h3 class="related-card-title">{rel.title}</h3>
+                {rel.published_at && (
+                  <time class="related-card-date text-muted text-small" datetime={rel.published_at}>
+                    {formatDate(rel.published_at)}
+                  </time>
+                )}
+                {rel.body_text && (
+                  <p class="related-card-excerpt">{excerpt(rel.body_text, 150)}</p>
+                )}
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
   </div>
 </BaseLayout>
 
 <style>
+  /* Hero image — full bleed within container */
+  .article-hero {
+    margin-bottom: 2rem;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    aspect-ratio: 21 / 9;
+    background: var(--color-light-300);
+  }
+
+  .article-hero img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* 2-column layout: content + sidebar */
+  .article-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  @media (min-width: 900px) {
+    .article-layout {
+      grid-template-columns: 1fr 280px;
+    }
+  }
+
+  /* Main content */
+  .article-main {
+    min-width: 0;
+  }
+
   .page-title {
     margin-bottom: 0.5rem;
   }
@@ -78,26 +178,148 @@ const articleSchema = {
     margin-bottom: 1.5rem;
   }
 
-  .article-hero-image {
-    margin-bottom: 2rem;
-    border-radius: var(--radius-m);
-    overflow: hidden;
-    max-width: 800px;
-  }
-
-  .article-hero-image img {
-    width: 100%;
-    height: auto;
-  }
-
   .article-body {
-    max-width: 800px;
     line-height: 1.8;
   }
 
-  .article-footer {
-    margin-top: 3rem;
-    padding-top: 2rem;
+  /* Sidebar */
+  .article-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 900px) {
+    .article-sidebar {
+      position: sticky;
+      top: calc(var(--header-height) + 1.5rem);
+      align-self: start;
+    }
+  }
+
+  .sidebar-block {
+    padding: 1.25rem;
+    background: var(--color-light-300);
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-m);
+  }
+
+  .sidebar-meta {
+    margin-bottom: 1rem;
+  }
+
+  .sidebar-label {
+    display: block;
+    font-size: var(--font-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+
+  .sidebar-meta time {
+    font-size: var(--font-s);
+    color: var(--color-dark-700);
+    font-weight: 500;
+  }
+
+  .sidebar-back-link {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+
+  .sidebar-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--color-dark-700);
+  }
+
+  .sidebar-articles {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .sidebar-articles li {
+    border-bottom: 1px solid var(--color-gray-200);
+    padding-bottom: 0.75rem;
+  }
+
+  .sidebar-articles li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .sidebar-article-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .sidebar-article-link:hover .sidebar-article-title {
+    color: var(--color-accent-500);
+  }
+
+  .sidebar-article-title {
+    display: block;
+    font-size: var(--font-s);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--color-dark-700);
+    transition: color 0.15s;
+  }
+
+  .sidebar-article-date {
+    display: block;
+    font-size: var(--font-xs);
+    margin-top: 0.125rem;
+  }
+
+  /* Full-width related articles section */
+  .related-section {
     border-top: 1px solid var(--color-gray-200);
+    margin-top: 3rem;
+  }
+
+  .related-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .related-card-image {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--color-light-300);
+  }
+
+  .related-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .related-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+    color: var(--color-dark-700);
+  }
+
+  .related-card-date {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .related-card-excerpt {
+    font-size: var(--font-s);
+    color: var(--color-gray-600);
+    line-height: 1.5;
   }
 </style>

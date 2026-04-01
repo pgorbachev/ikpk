@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+export { cleanBodyHtml } from './html-cleaner.js';
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 
@@ -272,8 +273,6 @@ export function formatDate(dateStr: string): string {
 export function stripH1(html: string): string {
   return html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
 }
-
-// Helper: strip HTML for excerpts
 export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
