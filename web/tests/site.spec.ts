@@ -71,20 +71,20 @@ test.describe('SEO', () => {
 // ─── Key Pages ───────────────────────────────────────────
 test.describe('Key pages load', () => {
   const pages = [
-    ['/', 'ИКПК'],
-    ['/institut-klinicheskoy-prikladnoy-kineziologii', 'Институт'],
-    ['/raspisanie-i-tseny', 'Расписание'],
-    ['/statyi', 'Статьи'],
-    ['/kontakty', 'Контакты'],
-    ['/aktsii-i-skidki', 'Акции'],
-    ['/oplata', 'Оплата'],
-    ['/sotrudnichestvo-s-nami', 'Сотрудничество'],
-    ['/svedeniya-ob-obrazovatelnoy-organizatsii', 'Сведения'],
-    ['/video', 'Видео'],
-    ['/sitemap', 'Карта сайта'],
+    '/',
+    '/institut-klinicheskoy-prikladnoy-kineziologii',
+    '/raspisanie-i-tseny',
+    '/statyi',
+    '/kontakty',
+    '/aktsii-i-skidki',
+    '/oplata',
+    '/sotrudnichestvo-s-nami',
+    '/svedeniya-ob-obrazovatelnoy-organizatsii',
+    '/video',
+    '/sitemap',
   ];
 
-  for (const [path, expectedText] of pages) {
+  for (const path of pages) {
     test(`${path} returns 200 and has content`, async ({ page }) => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);

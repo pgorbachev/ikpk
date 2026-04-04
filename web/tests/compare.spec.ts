@@ -10,7 +10,8 @@
  * - Key content blocks presence
  * - SEO elements (canonical, OG, JSON-LD)
  */
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 const ORIGINAL = 'https://ikpk.su';
 const NEW_SITE = 'http://localhost:4322';

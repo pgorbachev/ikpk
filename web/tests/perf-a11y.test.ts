@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 const dist = join(import.meta.dirname, '..', 'dist');
@@ -45,7 +45,6 @@ describe('Self-hosted Inter font', () => {
     // Find the built CSS file
     const cssDir = join(dist, '_astro');
     if (existsSync(cssDir)) {
-      const { readdirSync } = require('fs');
       const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
       const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
       expect(allCss).toContain('font-display:swap');
@@ -68,7 +67,7 @@ describe('Hero image', () => {
 
   it('hero SVG is under 100KB', () => {
     const heroPath = join(dist, 'hero-main.svg');
-    const stat = require('fs').statSync(heroPath);
+    const stat = statSync(heroPath);
     expect(stat.size).toBeLessThan(100 * 1024);
   });
 });
@@ -112,7 +111,6 @@ describe('Button contrast', () => {
   it('accent-500 is the darkened value for AA compliance', () => {
     const cssDir = join(dist, '_astro');
     if (existsSync(cssDir)) {
-      const { readdirSync } = require('fs');
       const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
       const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
       expect(allCss).toMatch(/--color-accent-500:\s*#357a38/);

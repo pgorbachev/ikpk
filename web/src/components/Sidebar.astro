@@ -320,7 +320,9 @@ function isActive(path: string): boolean {
         if (saved === 'collapsed') {
           btn.setAttribute('aria-expanded', 'false');
         }
-      } catch {}
+      } catch {
+        // Ignore storage access failures in private browsing and locked-down clients.
+      }
     }
     btn.addEventListener('click', () => {
       const expanded = btn.getAttribute('aria-expanded') === 'true';
@@ -329,7 +331,9 @@ function isActive(path: string): boolean {
       if (key) {
         try {
           localStorage.setItem(key, next === 'true' ? 'expanded' : 'collapsed');
-        } catch {}
+        } catch {
+          // Ignore storage access failures in private browsing and locked-down clients.
+        }
       }
     });
   });

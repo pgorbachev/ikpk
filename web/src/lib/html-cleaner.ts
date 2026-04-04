@@ -46,7 +46,7 @@ function elementEnd(html: string, start: number, tagName: string): number {
     if (nextOpen !== -1 && nextOpen < nextClose) {
       // Check it is a real open tag (not just a matching prefix in an attribute)
       const charAfter = html[nextOpen + openStr.length];
-      if (/[\s>\/]/.test(charAfter)) {
+      if (/[\s>/]/.test(charAfter)) {
         depth++;
         // Skip to end of this open tag so we don't re-match it
         const tagClose = lower.indexOf('>', nextOpen);
