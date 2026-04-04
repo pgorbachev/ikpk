@@ -1,0 +1,117 @@
+---
+interface Props {
+  href?: string;
+  title: string;
+  image?: string;
+  imageAlt?: string;
+  imageRatio?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  target?: string;
+  rel?: string;
+  accentTitle?: boolean;
+  className?: string;
+  titleClassName?: string;
+  bodyClassName?: string;
+  mediaClassName?: string;
+}
+
+const {
+  href,
+  title,
+  image,
+  imageAlt = '',
+  imageRatio = '16 / 9',
+  imageWidth,
+  imageHeight,
+  target,
+  rel,
+  accentTitle = false,
+  className,
+  titleClassName,
+  bodyClassName,
+  mediaClassName,
+} = Astro.props;
+
+const Tag = href ? 'a' : 'div';
+const resolvedTarget = href ? target : undefined;
+const resolvedRel = href ? rel : undefined;
+
+const [ratioWidth, ratioHeight] = imageRatio
+  .split('/')
+  .map((part) => Number.parseFloat(part.trim()));
+
+const resolvedImageWidth = imageWidth ?? (
+  Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) && ratioWidth > 0 && ratioHeight > 0
+    ? Math.round(ratioWidth * 100)
+    : 400
+);
+
+const resolvedImageHeight = imageHeight ?? (
+  Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) && ratioWidth > 0 && ratioHeight > 0
+    ? Math.round(ratioHeight * 100)
+    : 225
+);
+---
+
+<Tag
+  href={href}
+  target={resolvedTarget}
+  rel={resolvedRel}
+  class:list={['media-card', 'card', href && 'media-card--link', className]}
+>
+  {image && (
+    <div class:list={['media-card-media', mediaClassName]} style={`--media-ratio: ${imageRatio};`}>
+      <img
+        src={image}
+        alt={imageAlt}
+        loading="lazy"
+        width={resolvedImageWidth}
+        height={resolvedImageHeight}
+      />
+    </div>
+  )}
+  <div class:list={['card-body', bodyClassName]}>
+    <slot name="eyebrow" />
+    <h3 class:list={['media-card-title', accentTitle && 'media-card-title--accent', titleClassName]}>
+      {title}
+    </h3>
+    <slot />
+  </div>
+</Tag>
+
+<style>
+  .media-card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .media-card:hover {
+    text-decoration: none;
+  }
+
+  .media-card-media {
+    aspect-ratio: var(--media-ratio, 16 / 9);
+    overflow: hidden;
+    background: var(--color-light-300);
+  }
+
+  .media-card-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .media-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+    color: var(--color-dark-700);
+  }
+
+  .media-card-title--accent {
+    color: var(--color-accent-600);
+  }
+</style>

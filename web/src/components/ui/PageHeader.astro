@@ -1,0 +1,42 @@
+---
+interface Props {
+  title: string;
+  intro?: string;
+  compact?: boolean;
+  className?: string;
+}
+
+const { title, intro, compact = false, className } = Astro.props;
+---
+
+<header class:list={['page-header', compact && 'page-header--compact', className]}>
+  <h1 class="page-header-title">{title}</h1>
+  {intro && <p class="page-header-intro">{intro}</p>}
+  <slot />
+</header>
+
+<style>
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-header--compact {
+    margin-bottom: 1.5rem;
+  }
+
+  .page-header-title {
+    margin-bottom: 0.5rem;
+  }
+
+  .page-header-intro {
+    max-width: 720px;
+    font-size: var(--font-l);
+    color: var(--color-gray-600);
+  }
+
+  .page-header :global(time),
+  .page-header :global(.page-header-meta) {
+    display: block;
+    font-size: var(--font-s);
+  }
+</style>

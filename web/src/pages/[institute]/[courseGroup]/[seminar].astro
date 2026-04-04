@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import AsideCard from '../../../components/ui/AsideCard.astro';
+import DetailChip from '../../../components/ui/DetailChip.astro';
+import PageHeader from '../../../components/ui/PageHeader.astro';
 import {
   getInstitutes,
   getCourseGroups,
@@ -123,11 +126,11 @@ const eventSchema = {
     />
 
     <article class="section seminar-detail">
-      <h1 class="page-title">{seminar.name}</h1>
+      <PageHeader title={seminar.name} compact={true} />
 
-      <div class="seminar-layout">
+      <div class="content-sidebar-layout seminar-layout" style="--layout-aside-width: 340px;">
         {/* ── LEFT: main content ── */}
-        <div class="seminar-main">
+        <div class="content-sidebar-main seminar-main">
           {seminar.description_html ? (
             <div class="seminar-content rich-content" set:html={cleanBodyHtml(seminar.description_html)} />
           ) : seminar.description_text && (
@@ -139,22 +142,16 @@ const eventSchema = {
           {/* Details meta shown below description on desktop */}
           <div class="seminar-details-row">
             {seminar.hours && (
-              <div class="detail-chip">
-                <span class="detail-label">Объём</span>
-                <span class="detail-value">{seminar.hours} ак. ч.</span>
-              </div>
+              <DetailChip label="Объём" value={`${seminar.hours} ак. ч.`} />
             )}
             {seminar.certificate_type && (
-              <div class="detail-chip">
-                <span class="detail-label">Документ</span>
-                <span class="detail-value">{seminar.certificate_type}</span>
-              </div>
+              <DetailChip label="Документ" value={seminar.certificate_type} />
             )}
           </div>
         </div>
 
         {/* ── RIGHT: sidebar ── */}
-        <aside class="seminar-sidebar">
+        <aside class="content-sidebar-aside content-sidebar-aside--sticky seminar-sidebar">
           {/* Status badge */}
           {seminar.status && (
             <div class="sidebar-badge">
@@ -166,8 +163,7 @@ const eventSchema = {
 
           {/* Next upcoming date + price */}
           {nextEntry && (
-            <div class="sidebar-card">
-              <div class="sidebar-card-label">Ближайшая дата</div>
+            <AsideCard label="Ближайшая дата">
               <div class="sidebar-next-date">
                 <strong>{formatDate(nextEntry.startAt)}</strong>
                 {nextEntry.startAt !== nextEntry.endAt && (
@@ -189,7 +185,7 @@ const eventSchema = {
                   </div>
                 )}
               </div>
-            </div>
+            </AsideCard>
           )}
 
           {/* CTA button */}
@@ -199,10 +195,7 @@ const eventSchema = {
 
           {/* Teacher cards */}
           {uniqueTeachers.length > 0 && (
-            <div class="sidebar-section">
-              <div class="sidebar-card-label">
-                {uniqueTeachers.length === 1 ? 'Преподаватель' : 'Преподаватели'}
-              </div>
+            <AsideCard label={uniqueTeachers.length === 1 ? 'Преподаватель' : 'Преподаватели'}>
               <div class="teacher-list">
                 {uniqueTeachers.map((t) => (
                   <a
@@ -227,13 +220,12 @@ const eventSchema = {
                   </a>
                 ))}
               </div>
-            </div>
+            </AsideCard>
           )}
 
           {/* Full schedule list in sidebar */}
           {sortedSchedule.length > 1 && (
-            <div class="sidebar-section">
-              <div class="sidebar-card-label">Все даты</div>
+            <AsideCard label="Все даты">
               <div class="sidebar-schedule-list">
                 {sortedSchedule.map((entry) => (
                   <div class="sidebar-schedule-item">
@@ -249,17 +241,17 @@ const eventSchema = {
                   </div>
                 ))}
               </div>
-            </div>
+            </AsideCard>
           )}
 
           {/* No schedule fallback */}
           {schedule.length === 0 && (
-            <div class="sidebar-card sidebar-no-schedule">
+            <AsideCard centered={true} className="sidebar-no-schedule">
               <p class="text-muted">Курс ещё не запланирован.</p>
               <a href="/raspisanie-i-tseny" class="btn btn-outline sidebar-cta-outline">
                 Всё расписание
               </a>
-            </div>
+            </AsideCard>
           )}
         </aside>
       </div>
@@ -268,31 +260,6 @@ const eventSchema = {
 </BaseLayout>
 
 <style>
-  /* ── Page title ── */
-  .page-title {
-    margin-bottom: 1.25rem;
-  }
-
-  /* ── 2-column layout ── */
-  .seminar-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 2rem;
-  }
-
-  @media (min-width: 900px) {
-    .seminar-layout {
-      grid-template-columns: 1fr 340px;
-      gap: 2.5rem;
-      align-items: start;
-    }
-  }
-
-  /* ── Main content column ── */
-  .seminar-main {
-    min-width: 0; /* prevent overflow */
-  }
-
   .seminar-content {
     margin-bottom: 2rem;
     line-height: 1.75;
@@ -305,59 +272,8 @@ const eventSchema = {
     margin-top: 1rem;
   }
 
-  .detail-chip {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.75rem 1rem;
-    background: var(--color-light-300);
-    border-radius: var(--radius-m);
-    border: 1px solid var(--color-gray-200);
-  }
-
-  .detail-label {
-    font-size: var(--font-xs);
-    color: var(--color-gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .detail-value {
-    font-weight: 600;
-    color: var(--color-dark-700);
-  }
-
-  /* ── Sidebar ── */
-  .seminar-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  @media (min-width: 900px) {
-    .seminar-sidebar {
-      position: sticky;
-      top: calc(var(--header-height, 60px) + 1.5rem);
-    }
-  }
-
   .sidebar-badge {
     display: flex;
-  }
-
-  .sidebar-card {
-    background: var(--color-light-100);
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-m);
-    padding: 1.25rem;
-  }
-
-  .sidebar-card-label {
-    font-size: var(--font-xs);
-    color: var(--color-gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.5rem;
   }
 
   .sidebar-next-date {
@@ -420,11 +336,6 @@ const eventSchema = {
     width: 100%;
     margin-top: 0.75rem;
     font-size: var(--font-s);
-  }
-
-  /* ── Teacher cards ── */
-  .sidebar-section {
-    padding-top: 0.25rem;
   }
 
   .teacher-list {
@@ -509,22 +420,5 @@ const eventSchema = {
   /* ── No-schedule fallback ── */
   .sidebar-no-schedule {
     text-align: center;
-    padding: 1.5rem;
-  }
-
-  /* ── Badge styles ── */
-  .badge-active {
-    background-color: var(--color-accent-50);
-    color: var(--color-accent-700);
-  }
-
-  .badge-not_planned {
-    background-color: #fef3cd;
-    color: #856404;
-  }
-
-  .badge-completed {
-    background-color: var(--color-gray-200);
-    color: var(--color-gray-600);
   }
 </style>

@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import MediaCard from '../components/ui/MediaCard.astro';
 import { getInstitutes, getNews, getPromotions, getPage } from '../lib/data';
 
 const institutes = getInstitutes();
@@ -152,24 +153,30 @@ const schema = {
     <div class="container">
       <h2 class="section-title">Наши программы</h2>
       <div class="grid grid-3">
-        <a href="/institut-klinicheskoy-prikladnoy-kineziologii" class="card prog-card">
-          <div class="card-body">
-            <h3 class="prog-card-title">Программы обучения Института клинической прикладной кинезиологии</h3>
-            <p class="text-small">Востребованные программы в области остеопатии и прикладной кинезиологии в соответствии с международными стандартами. Институт имеет лицензию на образовательную деятельность №3471 от 13.06.2018.</p>
-          </div>
-        </a>
-        <a href="/institut-apledzhera" class="card prog-card">
-          <div class="card-body">
-            <h3 class="prog-card-title">Программы обучения Института Апледжера</h3>
-            <p class="text-small">Программы были разработаны доктором остеопатической медицины Джоном Апледжером как метод коррекции состояния кранио-сакральной системы, отвечающей за выработку, циркуляцию и реабсорбцию спинномозговой жидкости.</p>
-          </div>
-        </a>
-        <a href="/institut-barralya" class="card prog-card">
-          <div class="card-body">
-            <h3 class="prog-card-title">Программы обучения Института Барраля</h3>
-            <p class="text-small">Французский физиотерапевт и остеопат Жан-Пьер Барраль разработал инновационные способы диагностики и лечения патологий внутренних органов и систем человеческого организма методом висцеральных, невральных манипуляций.</p>
-          </div>
-        </a>
+        <MediaCard
+          href="/institut-klinicheskoy-prikladnoy-kineziologii"
+          title="Программы обучения Института клинической прикладной кинезиологии"
+          accentTitle={true}
+          className="prog-card"
+        >
+          <p class="text-small">Востребованные программы в области остеопатии и прикладной кинезиологии в соответствии с международными стандартами. Институт имеет лицензию на образовательную деятельность №3471 от 13.06.2018.</p>
+        </MediaCard>
+        <MediaCard
+          href="/institut-apledzhera"
+          title="Программы обучения Института Апледжера"
+          accentTitle={true}
+          className="prog-card"
+        >
+          <p class="text-small">Программы были разработаны доктором остеопатической медицины Джоном Апледжером как метод коррекции состояния кранио-сакральной системы, отвечающей за выработку, циркуляцию и реабсорбцию спинномозговой жидкости.</p>
+        </MediaCard>
+        <MediaCard
+          href="/institut-barralya"
+          title="Программы обучения Института Барраля"
+          accentTitle={true}
+          className="prog-card"
+        >
+          <p class="text-small">Французский физиотерапевт и остеопат Жан-Пьер Барраль разработал инновационные способы диагностики и лечения патологий внутренних органов и систем человеческого организма методом висцеральных, невральных манипуляций.</p>
+        </MediaCard>
       </div>
     </div>
   </section>
@@ -181,17 +188,18 @@ const schema = {
         <h2 class="section-title">Новости</h2>
         <div class="grid grid-4 news-grid">
           {news.map((item) => (
-            <a href={item.link} class="card news-card" target="_blank" rel="noopener">
-              {item.image?.url && (
-                <div class="news-card-image">
-                  <img src={item.image.url} alt={item.name} loading="lazy" width="300" height="200" />
-                </div>
-              )}
-              <div class="card-body">
-                <h3 class="news-card-title">{item.name}</h3>
-                <div class="news-card-desc text-small" set:html={item.description} />
-              </div>
-            </a>
+            <MediaCard
+              href={item.link}
+              title={item.name}
+              image={item.image?.url}
+              imageAlt={item.name}
+              imageRatio="3 / 2"
+              target="_blank"
+              rel="noopener"
+              className="news-card"
+            >
+              <div class="news-card-desc text-small" set:html={item.description} />
+            </MediaCard>
           ))}
         </div>
       </div>
@@ -204,17 +212,16 @@ const schema = {
       <h2 class="section-title">Наши институты</h2>
       <div class="grid grid-3">
         {institutes.map((inst) => (
-          <a href={`/${inst.slug}`} class="card institute-card">
-            {inst.images?.[0] && (
-              <div class="institute-card-image">
-                <img src={inst.images[0]} alt={inst.name} loading="lazy" width="400" height="200" />
-              </div>
-            )}
-            <div class="card-body">
-              <h3 class="institute-card-title">{inst.name}</h3>
-              <p class="text-small">{inst.description_text?.slice(0, 120)}…</p>
-            </div>
-          </a>
+          <MediaCard
+            href={`/${inst.slug}`}
+            title={inst.name}
+            image={inst.images?.[0]}
+            imageAlt={inst.name}
+            imageRatio="3 / 2"
+            className="institute-card"
+          >
+            <p class="text-small">{inst.description_text?.slice(0, 120)}…</p>
+          </MediaCard>
         ))}
       </div>
     </div>
@@ -227,22 +234,20 @@ const schema = {
         <h2 class="section-title">Акции и скидки</h2>
         <div class="grid grid-3">
           {promotions.map((promo) => (
-            <div class="card promo-card">
-              {promo.image?.url && (
-                <div class="promo-card-image">
-                  <img src={promo.image.url} alt={promo.name} loading="lazy" width="400" height="225" />
-                </div>
+            <MediaCard
+              title={promo.name}
+              image={promo.image?.url}
+              imageAlt={promo.name}
+              imageRatio="3 / 2"
+              className="promo-card"
+            >
+              <div class="text-small" set:html={promo.description} />
+              {promo.link && (
+                <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
+                  Подробнее
+                </a>
               )}
-              <div class="card-body">
-                <h3 class="promo-card-title">{promo.name}</h3>
-                <div class="text-small" set:html={promo.description} />
-                {promo.link && (
-                  <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
-                    Подробнее
-                  </a>
-                )}
-              </div>
-            </div>
+            </MediaCard>
           ))}
         </div>
       </div>
@@ -311,44 +316,6 @@ const schema = {
 
   .section-alt {
     background-color: var(--color-light-300);
-  }
-
-  .news-card,
-  .institute-card,
-  .promo-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .news-card:hover,
-  .institute-card:hover {
-    text-decoration: none;
-  }
-
-  .news-card-image,
-  .institute-card-image,
-  .promo-card-image {
-    aspect-ratio: 3 / 2;
-    overflow: hidden;
-    background: var(--color-light-300);
-  }
-
-  .news-card-image img,
-  .institute-card-image img,
-  .promo-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .news-card-title,
-  .institute-card-title,
-  .promo-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: var(--color-dark-700);
   }
 
   .promo-link {
@@ -467,21 +434,4 @@ const schema = {
     line-height: 1.4;
   }
 
-  /* Программы */
-  .prog-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .prog-card:hover {
-    text-decoration: none;
-  }
-
-  .prog-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: var(--color-accent-600);
-  }
 </style>
