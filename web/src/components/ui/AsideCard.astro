@@ -21,7 +21,7 @@ const {
   as,
 } = Astro.props as Props;
 
-const Tag = as ?? (label || title ? 'section' : 'div');
+const Tag = as ?? (title ? 'section' : 'div');
 ---
 
 <Tag
