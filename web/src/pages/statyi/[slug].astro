@@ -1,7 +1,11 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import { getArticles, formatDate, cleanBodyHtml, excerpt } from '../../lib/data';
+import ArticleCard from '../../components/ArticleCard.astro';
+import AsideCard from '../../components/ui/AsideCard.astro';
+import MetaLabel from '../../components/ui/MetaLabel.astro';
+import PageHeader from '../../components/ui/PageHeader.astro';
+import { getArticles, formatDate, cleanBodyHtml } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -56,36 +60,34 @@ const articleSchema = {
       </div>
     )}
 
-    <div class="article-layout">
+    <div class="content-sidebar-layout article-layout" style="--layout-aside-width: 280px;">
       {/* Main content column */}
-      <article class="article-main">
-        <header class="article-header">
-          <h1 class="page-title">{article.title}</h1>
+      <article class="content-sidebar-main article-main">
+        <PageHeader title={article.title} compact={true} className="article-header">
           {article.published_at && (
-            <time class="article-date text-muted text-small" datetime={article.published_at}>
+            <time class="article-date page-header-meta text-muted" datetime={article.published_at}>
               {formatDate(article.published_at)}
             </time>
           )}
-        </header>
+        </PageHeader>
 
         <div class="article-body rich-content" set:html={cleanBodyHtml(article.body_html)} />
       </article>
 
       {/* Sidebar column */}
-      <aside class="article-sidebar">
-        <div class="sidebar-block">
+      <aside class="content-sidebar-aside content-sidebar-aside--sticky article-sidebar">
+        <AsideCard tone="muted">
           {article.published_at && (
             <div class="sidebar-meta">
-              <span class="sidebar-label">Дата публикации</span>
+              <MetaLabel>Дата публикации</MetaLabel>
               <time datetime={article.published_at}>{formatDate(article.published_at)}</time>
             </div>
           )}
           <a href="/statyi" class="btn btn-outline sidebar-back-link">← Все статьи</a>
-        </div>
+        </AsideCard>
 
         {relatedArticles.length > 0 && (
-          <div class="sidebar-block">
-            <h3 class="sidebar-title">Другие статьи</h3>
+          <AsideCard tone="muted" title="Другие статьи">
             <ul class="sidebar-articles">
               {relatedArticles.slice(0, 4).map((rel) => (
                 <li>
@@ -100,7 +102,7 @@ const articleSchema = {
                 </li>
               ))}
             </ul>
-          </div>
+          </AsideCard>
         )}
       </aside>
     </div>
@@ -111,24 +113,7 @@ const articleSchema = {
         <h2 class="section-title">Другие статьи</h2>
         <div class="grid grid-4">
           {relatedArticles.map((rel) => (
-            <a href={`/statyi/${rel.slug}`} class="related-card card">
-              {rel.image && (
-                <div class="related-card-image">
-                  <img src={rel.image} alt={rel.title} loading="lazy" width="400" height="225" />
-                </div>
-              )}
-              <div class="card-body">
-                <h3 class="related-card-title">{rel.title}</h3>
-                {rel.published_at && (
-                  <time class="related-card-date text-muted text-small" datetime={rel.published_at}>
-                    {formatDate(rel.published_at)}
-                  </time>
-                )}
-                {rel.body_text && (
-                  <p class="related-card-excerpt">{excerpt(rel.body_text, 150)}</p>
-                )}
-              </div>
-            </a>
+            <ArticleCard article={rel} />
           ))}
         </div>
       </section>
@@ -152,69 +137,16 @@ const articleSchema = {
     object-fit: cover;
   }
 
-  /* 2-column layout: content + sidebar */
-  .article-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 2.5rem;
-  }
-
-  @media (min-width: 900px) {
-    .article-layout {
-      grid-template-columns: 1fr 280px;
-    }
-  }
-
-  /* Main content */
-  .article-main {
-    min-width: 0;
-  }
-
-  .page-title {
-    margin-bottom: 0.5rem;
-  }
-
   .article-header {
-    margin-bottom: 1.5rem;
+    margin-bottom: 0;
   }
 
   .article-body {
     line-height: 1.8;
   }
 
-  /* Sidebar */
-  .article-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  @media (min-width: 900px) {
-    .article-sidebar {
-      position: sticky;
-      top: calc(var(--header-height) + 1.5rem);
-      align-self: start;
-    }
-  }
-
-  .sidebar-block {
-    padding: 1.25rem;
-    background: var(--color-light-300);
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-m);
-  }
-
   .sidebar-meta {
     margin-bottom: 1rem;
-  }
-
-  .sidebar-label {
-    display: block;
-    font-size: var(--font-xs);
-    color: var(--color-gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.25rem;
   }
 
   .sidebar-meta time {
@@ -227,13 +159,6 @@ const articleSchema = {
     display: block;
     text-align: center;
     width: 100%;
-  }
-
-  .sidebar-title {
-    font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    color: var(--color-dark-700);
   }
 
   .sidebar-articles {
@@ -284,42 +209,5 @@ const articleSchema = {
   .related-section {
     border-top: 1px solid var(--color-gray-200);
     margin-top: 3rem;
-  }
-
-  .related-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .related-card-image {
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-    background: var(--color-light-300);
-  }
-
-  .related-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .related-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    line-height: 1.4;
-    color: var(--color-dark-700);
-  }
-
-  .related-card-date {
-    display: block;
-    margin-bottom: 0.5rem;
-  }
-
-  .related-card-excerpt {
-    font-size: var(--font-s);
-    color: var(--color-gray-600);
-    line-height: 1.5;
   }
 </style>

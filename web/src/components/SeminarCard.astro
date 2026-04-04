@@ -1,6 +1,7 @@
 ---
 import type { Seminar } from '../lib/data';
 import { excerpt } from '../lib/data';
+import MediaCard from './ui/MediaCard.astro';
 
 interface Props {
   seminar: Seminar;
@@ -15,37 +16,25 @@ const statusLabel: Record<string, string> = {
 };
 ---
 
-<a href={href} class="seminar-card card">
-  <div class="card-body">
-    <h3 class="seminar-card-title">{seminar.name}</h3>
-    {seminar.status && (
-      <span class:list={['badge', `badge-${seminar.status}`]}>
-        {statusLabel[seminar.status] || seminar.status}
-      </span>
-    )}
-    {seminar.description_text && (
-      <p class="seminar-card-excerpt">{excerpt(seminar.description_text, 150)}</p>
-    )}
-  </div>
-</a>
+<MediaCard
+  href={href}
+  title={seminar.name}
+  className="seminar-card"
+  titleClassName="seminar-card-title"
+>
+  {seminar.status && (
+    <span slot="eyebrow" class:list={['badge', `badge-${seminar.status}`]}>
+      {statusLabel[seminar.status] || seminar.status}
+    </span>
+  )}
+  {seminar.description_text && (
+    <p class="seminar-card-excerpt">{excerpt(seminar.description_text, 150)}</p>
+  )}
+</MediaCard>
 
 <style>
-  .seminar-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .seminar-card:hover {
-    text-decoration: none;
-  }
-
   .seminar-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
     margin-bottom: 0.5rem;
-    line-height: 1.4;
-    color: var(--color-dark-700);
   }
 
   .seminar-card-excerpt {
@@ -55,22 +44,8 @@ const statusLabel: Record<string, string> = {
     line-height: 1.5;
   }
 
-  .badge {
+  .seminar-card :global(.badge) {
     font-size: var(--font-xs);
-  }
-
-  .badge-active {
-    background-color: var(--color-accent-50);
-    color: var(--color-accent-700);
-  }
-
-  .badge-not_planned {
-    background-color: #fef3cd;
-    color: #856404;
-  }
-
-  .badge-completed {
-    background-color: var(--color-gray-200);
-    color: var(--color-gray-600);
+    margin-bottom: 0.5rem;
   }
 </style>

@@ -1,0 +1,37 @@
+---
+import MetaLabel from './MetaLabel.astro';
+
+interface Props {
+  label: string;
+  value: string;
+  className?: string;
+}
+
+const { label, value, className } = Astro.props;
+---
+
+<div class:list={['detail-chip', className]}>
+  <MetaLabel className="detail-chip-label">{label}</MetaLabel>
+  <span class="detail-chip-value">{value}</span>
+</div>
+
+<style>
+  .detail-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-light-300);
+    border-radius: var(--radius-m);
+    border: 1px solid var(--color-gray-200);
+  }
+
+  .detail-chip-label {
+    letter-spacing: 0.04em;
+  }
+
+  .detail-chip-value {
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+</style>
