@@ -15,6 +15,11 @@ let homepage: string;
 let subpage: string;
 
 beforeAll(() => {
+  if (!existsSync(dist)) {
+    throw new Error(
+      'dist/ not found — run "npm run build" first, or use "npm run test:build" which builds automatically.'
+    );
+  }
   homepage = readPage('/');
   subpage = readPage('/kontakty');
 });
