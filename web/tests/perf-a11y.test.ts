@@ -76,7 +76,9 @@ describe('Hero image', () => {
 describe('Analytics', () => {
   it('initializes Yandex.Metrika stub synchronously (before deferred block)', () => {
     // The sync stub must appear before the deferred loader
-    const ymStubIndex = homepage.indexOf('window.ym=window.ym||function');
+    const ymStubIndex = homepage.search(
+      /window\.ym\s*=\s*window\.ym\s*\|\|\s*function\b/,
+    );
     const deferIndex = homepage.indexOf('_loadAnalyticsScripts');
     expect(ymStubIndex).toBeGreaterThan(-1);
     expect(deferIndex).toBeGreaterThan(-1);
@@ -84,7 +86,9 @@ describe('Analytics', () => {
   });
 
   it('queues Mail.ru pageview synchronously', () => {
-    const tmrIndex = homepage.indexOf('_tmr.push({id:"3752684"');
+    const tmrIndex = homepage.search(
+      /_tmr\.push\(\{\s*id:\s*['"]3752684['"]/,
+    );
     const deferIndex = homepage.indexOf('_loadAnalyticsScripts');
     expect(tmrIndex).toBeGreaterThan(-1);
     expect(tmrIndex).toBeLessThan(deferIndex);
