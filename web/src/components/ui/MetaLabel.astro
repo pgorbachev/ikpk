@@ -1,0 +1,25 @@
+---
+type MetaLabelTag = 'span' | 'div' | 'p' | 'h2' | 'h3';
+
+interface Props {
+  as?: MetaLabelTag;
+  className?: string;
+}
+
+const { as = 'span', className } = Astro.props as Props;
+const Tag = as;
+---
+
+<Tag class:list={['meta-label', className]}>
+  <slot />
+</Tag>
+
+<style>
+  .meta-label {
+    display: block;
+    font-size: var(--font-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+</style>

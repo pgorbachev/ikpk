@@ -115,7 +115,7 @@ async function api<T = unknown>(
     headers["Authorization"] = `Bearer ${STRAPI_API_TOKEN}`;
   }
 
-  let fetchBody: BodyInit | undefined;
+  let fetchBody: Buffer | string | undefined;
   if (rawBody) {
     headers["Content-Type"] = rawBody.contentType;
     fetchBody = rawBody.body;

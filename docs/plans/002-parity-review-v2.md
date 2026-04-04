@@ -1,9 +1,9 @@
-# План доработки: ревью паритета v2.1
+# План доработки: ревью паритета v2.2
 
-**Дата:** 2026-04-01  
+**Дата:** 2026-04-04  
 **Статус:** В работе  
 **Приоритет:** P1  
-**Ревью:** Скорректирован по замечаниям (scope cleanup, порядок задач, static pages layout)
+**Ревью:** Скорректирован по замечаниям (scope cleanup, порядок задач, static pages layout, CSS/UI hardening)
 
 ## Проблема
 
@@ -21,6 +21,11 @@
 - Legacy классы — CSS Modules с хешами, нет смысла воспроизводить
 - Структурированные данные уже в entities JSON, можно рендерить компонентами
 - Поддерживаемость: свои компоненты с Astro scoped styles >> raw HTML с мёртвыми классами
+
+**Для CSS/UI не меняем стек в текущей фазе**:
+- Не мигрируем на Next.js, Tailwind или shadcn/ui в рамках parity hardening
+- Усиливаем текущий Astro-подход: UI-примитивы, общие layout/media/sidebar паттерны, разбиение CSS по слоям
+- Цель: убрать дублирование page-level стилей и подготовить кодовую базу к дальнейшим визуальным итерациям без регрессий
 
 ## Задачи (скорректированный порядок)
 
@@ -99,7 +104,54 @@ Hero → Преимущества → Подход + Статистика → П
 
 Файлы: `web/tests/compare.spec.ts`
 
-### 7. deploy-prototype — Задеплоить прототип [blocked]
+### 7. css-ui-foundation — Нормализовать CSS/UI-архитектуру без смены стека [P2] ← ПОСЛЕ P1 parity-задач, ПЕРЕД финальным visual gate
+
+**Цель:** сократить дублирование стилей, зафиксировать переиспользуемые UI-паттерны и уменьшить риск визуального дрейфа между шаблонами без перехода на новый framework/styling stack.
+
+**Что делаем:**
+- Выделить базовые UI-компоненты в `web/src/components/ui/`:
+  - `PageHeader` / `PageIntro`
+  - `MediaCard` для news / promotions / institutes / related content
+  - `AsideCard` / `InfoPanel` для sidebar-блоков
+  - `MetaLabel` / `DetailChip` для повторяющихся small-caps label/meta паттернов
+- Разрезать `web/src/styles/global.css` на слои:
+  - `tokens.css`
+  - `base.css`
+  - `utilities.css`
+  - `rich-content.css`
+  - `layout.css`
+- Вынести повторяющиеся page-level CSS-паттерны из страниц в UI-компоненты или общие стили:
+  - `.page-title`
+  - медиа-обёртки с `aspect-ratio + overflow + object-fit`
+  - card-link/card-title/card-body паттерны
+  - sidebar/meta-label блоки
+  - 2-колоночные content/sidebar layout-паттерны
+- Исправить рассинхроны в design tokens / naming:
+  - убрать неявные дубли (`sidebar-block`, `sidebar-card`, `contact-block`, `stat-card` — где уместно свести к общим примитивам)
+  - устранить использование отсутствующих CSS custom properties
+
+**Что не делаем в этой задаче:**
+- Не внедряем Tailwind
+- Не тянем shadcn/ui
+- Не переводим страницы на React islands без прямой интерактивной необходимости
+- Не проводим тотальный restyle, если он не даёт пользы для parity/supportability
+
+**Definition of Done:**
+- Главная и минимум 3 сложных шаблона (`article`, `seminar`, `kontakty` или аналогичный static page) используют общие UI-примитивы вместо локального копипаста
+- `global.css` больше не является единым монолитом; стили разложены по понятным слоям
+- Повторяющиеся паттерны карточек / sidebar / meta-label сведены к 1 реализации на паттерн
+- Визуальный результат не ломает parity-check на ключевых страницах
+
+**Файлы-кандидаты:**
+- `web/src/styles/global.css` → разбиение на несколько файлов
+- `web/src/components/ui/*`
+- `web/src/pages/index.astro`
+- `web/src/pages/statyi/[slug].astro`
+- `web/src/pages/[institute]/[courseGroup]/[seminar].astro`
+- `web/src/pages/kontakty.astro`
+- при необходимости: `web/src/components/ArticleCard.astro`, `web/src/components/SeminarCard.astro`
+
+### 8. deploy-prototype — Задеплоить прототип [blocked]
 
 Требуется авторизация пользователя на хостинг-платформе.
 
@@ -111,7 +163,8 @@ homepage-blocks         → (нет зависимостей)
 article-components      → static-page-cleanup
 seminar-components      → static-page-cleanup
 static-pages-layout     → static-page-cleanup
-visual-parity-tests     → homepage-blocks, article-components, seminar-components, static-pages-layout
+css-ui-foundation       → homepage-blocks, article-components, seminar-components, static-pages-layout
+visual-parity-tests     → homepage-blocks, article-components, seminar-components, static-pages-layout, css-ui-foundation
 deploy-prototype        → visual-parity-tests
 ```
 
@@ -119,8 +172,9 @@ deploy-prototype        → visual-parity-tests
 
 1. **Волна 1** (параллельно): `static-page-cleanup` + `homepage-blocks`
 2. **Волна 2** (строго после cleanup): `article-components` + `seminar-components` + `static-pages-layout`
-3. **Волна 3** (после всех): `visual-parity-tests`
-4. Build + все тесты → commit → push
+3. **Волна 3**: `css-ui-foundation` (после стабилизации P1 parity-шаблонов)
+4. **Волна 4** (после всех): `visual-parity-tests`
+5. Build + все тесты → commit → push
 
 ## Данные с оригинального сайта (извлечены для реализации)
 

@@ -1,0 +1,65 @@
+---
+import MetaLabel from './MetaLabel.astro';
+
+type AsideCardTag = 'div' | 'section';
+
+interface Props {
+  label?: string;
+  title?: string;
+  tone?: 'default' | 'muted';
+  centered?: boolean;
+  className?: string;
+  as?: AsideCardTag;
+}
+
+const {
+  label,
+  title,
+  tone = 'default',
+  centered = false,
+  className,
+  as,
+} = Astro.props as Props;
+
+const Tag = as ?? (title ? 'section' : 'div');
+---
+
+<Tag
+  class:list={[
+    'aside-card',
+    tone === 'muted' && 'aside-card--muted',
+    centered && 'aside-card--centered',
+    className,
+  ]}
+>
+  {label && <MetaLabel className="aside-card-label">{label}</MetaLabel>}
+  {title && <h3 class="aside-card-title">{title}</h3>}
+  <slot />
+</Tag>
+
+<style>
+  .aside-card {
+    padding: 1.25rem;
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-m);
+  }
+
+  .aside-card--muted {
+    background: var(--color-light-300);
+  }
+
+  .aside-card--centered {
+    text-align: center;
+  }
+
+  .aside-card-label {
+    margin-bottom: 0.5rem;
+  }
+
+  .aside-card-title {
+    font-size: var(--font-m);
+    margin-bottom: 0.75rem;
+    color: var(--color-dark-700);
+  }
+</style>
