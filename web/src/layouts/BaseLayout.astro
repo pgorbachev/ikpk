@@ -86,30 +86,35 @@ const siteName = 'ИКПК';
 
     <Footer />
 
-    <!-- Deferred analytics — loaded after main content -->
+    <!-- Analytics: sync stubs queue pageview immediately, heavy scripts load after idle -->
     <script is:inline>
-      function _loadAnalytics() {
-        // Yandex.Metrika 39506315
-        (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-        m[i].l=1*new Date();
-        for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
-        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
-        (window,document,"script","https://mc.yandex.ru/metrika/tag.js","ym");
-        ym(39506315,"init",{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});
+      // Yandex.Metrika — queue pageview synchronously so it's never lost
+      window.ym=window.ym||function(){(window.ym.a=window.ym.a||[]).push(arguments)};
+      window.ym.l=+new Date();
+      ym(39506315,"init",{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});
 
-        // Top.Mail.Ru 3752684
-        var _tmr=window._tmr||(window._tmr=[]);
-        _tmr.push({id:"3752684",type:"pageView",start:(new Date()).getTime()});
-        (function(d,w,id){
-          if(d.getElementById(id))return;
-          var ts=d.createElement("script");ts.type="text/javascript";ts.async=true;ts.id=id;
+      // Mail.ru — queue pageview synchronously
+      var _tmr=window._tmr||(window._tmr=[]);
+      _tmr.push({id:"3752684",type:"pageView",start:(new Date()).getTime()});
+
+      // Defer heavy script downloads
+      function _loadAnalyticsScripts(){
+        var d=document;
+        // Yandex tag.js
+        (function(){
+          for(var j=0;j<d.scripts.length;j++){if(d.scripts[j].src==="https://mc.yandex.ru/metrika/tag.js")return;}
+          var k=d.createElement("script");k.async=1;k.src="https://mc.yandex.ru/metrika/tag.js";
+          d.head.appendChild(k);
+        })();
+        // Mail.ru code.js
+        if(!d.getElementById("tmr-code")){
+          var ts=d.createElement("script");ts.async=true;ts.id="tmr-code";
           ts.src="https://top-fwz1.mail.ru/js/code.js";
-          var f=function(){var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(ts,s);};
-          if(w.opera=="[object Opera]"){d.addEventListener("DOMContentLoaded",f,false);}else{f();}
-        })(document,window,"tmr-code");
+          d.head.appendChild(ts);
+        }
       }
-      if('requestIdleCallback' in window){requestIdleCallback(_loadAnalytics,{timeout:3000});}
-      else{setTimeout(_loadAnalytics,2000);}
+      if('requestIdleCallback' in window){requestIdleCallback(_loadAnalyticsScripts,{timeout:3000});}
+      else{setTimeout(_loadAnalyticsScripts,2000);}
     </script>
     <noscript><div><img src="https://mc.yandex.ru/watch/39506315" style="position:absolute;left:-9999px;" alt="" /></div></noscript>
     <noscript><div><img src="https://top-fwz1.mail.ru/counter?id=3752684;js=na" style="position:absolute;left:-9999px;" alt="" /></div></noscript>
