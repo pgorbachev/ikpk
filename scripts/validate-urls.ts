@@ -46,7 +46,7 @@ interface UrlEntry {
 
 function parseCsv(filePath: string): UrlEntry[] {
   const raw = readFileSync(filePath, "utf-8");
-  const lines = raw.split("\n").filter((l) => l.trim());
+  const lines = raw.split("\n").filter((line: string) => line.trim());
   const header = lines[0].split(",");
 
   const idx = {
@@ -59,7 +59,7 @@ function parseCsv(filePath: string): UrlEntry[] {
     title: header.indexOf("title"),
   };
 
-  return lines.slice(1).map((line) => {
+  return lines.slice(1).map((line: string) => {
     const cols = line.split(",");
     return {
       old_url: cols[idx.old_url]?.trim() ?? "",

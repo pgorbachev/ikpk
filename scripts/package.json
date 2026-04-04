@@ -5,6 +5,9 @@
   "scripts": {
     "import": "tsx import.ts",
     "import:dry": "tsx import.ts --dry-run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "validate-urls": "tsx validate-urls.ts",
     "validate-urls:staging": "tsx validate-urls.ts --base-url https://staging.ikpk.su",
     "validate-urls:prod": "tsx validate-urls.ts --base-url https://ikpk.su"
@@ -13,5 +16,13 @@
     "tsx": "^4.0.0",
     "node-fetch": "^3.3.0",
     "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^24.5.2",
+    "eslint": "^9.37.0",
+    "globals": "^16.4.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
   }
 }
