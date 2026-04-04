@@ -1,0 +1,119 @@
+/* Rich HTML content styling */
+.rich-content h1,
+.rich-content h2,
+.rich-content h3,
+.rich-content h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.rich-content p {
+  margin-bottom: 1rem;
+}
+
+.rich-content ul,
+.rich-content ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.rich-content ol {
+  list-style: decimal;
+}
+
+.rich-content li {
+  margin-bottom: 0.25rem;
+}
+
+.rich-content img {
+  border-radius: var(--radius-m);
+  margin: 1rem 0;
+}
+
+.rich-content a {
+  color: var(--color-info-500);
+}
+
+/* Details / Collapsible sections */
+.rich-content details {
+  border: 1px solid var(--color-gray-200);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--color-light-100);
+  transition: box-shadow 0.2s;
+}
+
+.rich-content details:hover {
+  box-shadow: var(--shadow-s);
+}
+
+.rich-content details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-dark-700);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rich-content details summary::-webkit-details-marker {
+  display: none;
+}
+
+.rich-content details summary::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--color-gray-500);
+  border-bottom: 2px solid var(--color-gray-500);
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.rich-content details[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.rich-content details[open] summary {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+/* Responsive tables inside rich content */
+.rich-content .table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1rem 0;
+}
+
+@media (max-width: 768px) {
+  .rich-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+.rich-content table {
+  margin: 1rem 0;
+  border: 1px solid var(--color-gray-200);
+}
+
+.rich-content th,
+.rich-content td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-gray-200);
+  text-align: left;
+}
+
+.rich-content th {
+  background: var(--color-light-300);
+  font-weight: 600;
+  color: var(--color-dark-700);
+}

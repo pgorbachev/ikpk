@@ -10,8 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "vitest run --exclude tests/site.spec.ts --exclude tests/compare.spec.ts --exclude tests/compat.spec.ts --exclude tests/perf-a11y.test.ts",
-    "test:build": "astro build && vitest run tests/perf-a11y.test.ts",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:compat": "playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome"
   },

@@ -1,6 +1,7 @@
 ---
 import type { Article } from '../lib/data';
 import { excerpt, formatDate } from '../lib/data';
+import MediaCard from './ui/MediaCard.astro';
 
 interface Props {
   article: Article;
@@ -9,54 +10,27 @@ interface Props {
 const { article } = Astro.props;
 ---
 
-<a href={`/statyi/${article.slug}`} class="article-card card">
-  {article.image && (
-    <div class="article-card-image">
-      <img src={article.image} alt={article.title} loading="lazy" width="400" height="225" />
-    </div>
+<MediaCard
+  href={`/statyi/${article.slug}`}
+  title={article.title}
+  image={article.image}
+  imageAlt={article.title}
+  className="article-card"
+  titleClassName="article-card-title"
+>
+  {article.published_at && (
+    <time class="article-card-date text-muted text-small" datetime={article.published_at}>
+      {formatDate(article.published_at)}
+    </time>
   )}
-  <div class="card-body">
-    <h3 class="article-card-title">{article.title}</h3>
-    {article.published_at && (
-      <time class="article-card-date text-muted text-small" datetime={article.published_at}>
-        {formatDate(article.published_at)}
-      </time>
-    )}
-    {article.body_text && (
-      <p class="article-card-excerpt">{excerpt(article.body_text, 150)}</p>
-    )}
-  </div>
-</a>
+  {article.body_text && (
+    <p class="article-card-excerpt">{excerpt(article.body_text, 150)}</p>
+  )}
+</MediaCard>
 
 <style>
-  .article-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .article-card:hover {
-    text-decoration: none;
-  }
-
-  .article-card-image {
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-    background: var(--color-light-300);
-  }
-
-  .article-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
   .article-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
     margin-bottom: 0.25rem;
-    line-height: 1.4;
-    color: var(--color-dark-700);
   }
 
   .article-card-date {
