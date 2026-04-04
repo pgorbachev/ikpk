@@ -11,6 +11,16 @@ function readPage(path: string): string {
   return readFileSync(file, 'utf-8');
 }
 
+function readBuiltCss(): string {
+  const cssDir = join(dist, '_astro');
+  expect(existsSync(cssDir)).toBe(true);
+
+  const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
+  expect(cssFiles.length).toBeGreaterThan(0);
+
+  return cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
+}
+
 let homepage: string;
 let subpage: string;
 
@@ -42,15 +52,10 @@ describe('Self-hosted Inter font', () => {
   });
 
   it('declares @font-face with font-display: swap in CSS', () => {
-    // Find the built CSS file
-    const cssDir = join(dist, '_astro');
-    if (existsSync(cssDir)) {
-      const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
-      const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
-      expect(allCss).toContain('font-display:swap');
-      expect(allCss).toContain('inter-latin.woff2');
-      expect(allCss).toContain('inter-cyrillic.woff2');
-    }
+    const allCss = readBuiltCss();
+    expect(allCss).toContain('font-display:swap');
+    expect(allCss).toContain('inter-latin.woff2');
+    expect(allCss).toContain('inter-cyrillic.woff2');
   });
 });
 
@@ -113,13 +118,9 @@ describe('Analytics', () => {
 // ─── Button contrast (WCAG AA) ─────────────────────────────────────────────
 describe('Button contrast', () => {
   it('accent-500 is the darkened value for AA compliance', () => {
-    const cssDir = join(dist, '_astro');
-    if (existsSync(cssDir)) {
-      const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
-      const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
-      expect(allCss).toMatch(/--color-accent-500:\s*#357a38/);
-      expect(allCss).not.toMatch(/--color-accent-500:\s*#41a143/);
-    }
+    const allCss = readBuiltCss();
+    expect(allCss).toMatch(/--color-accent-500:\s*#357a38/);
+    expect(allCss).not.toMatch(/--color-accent-500:\s*#41a143/);
   });
 });
 
