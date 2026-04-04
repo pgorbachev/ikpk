@@ -4,6 +4,7 @@ import { join } from 'path';
 
 const ORIGINAL = 'https://ikpk.su';
 const DIST = join(import.meta.dirname, '..', 'dist');
+const REMOTE_PARITY_ENABLED = process.env.PARITY_REMOTE === '1' || process.env.PARITY_REMOTE_STRICT === '1';
 const STRICT_REMOTE_PARITY = process.env.PARITY_REMOTE_STRICT === '1';
 
 const KEY_PAGES = [
@@ -122,6 +123,10 @@ beforeAll(() => {
 });
 
 beforeAll(async () => {
+  if (!REMOTE_PARITY_ENABLED) {
+    return;
+  }
+
   try {
     const remote = await fetchRemote('/');
     remoteOriginReachable = remote.status < 400;
@@ -141,7 +146,7 @@ describe('Parity audit against original site', () => {
   });
 
   it('all key pages exist on original when remote parity is available', async () => {
-    if (!remoteOriginReachable) {
+    if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {
       return;
     }
 
@@ -233,7 +238,7 @@ describe('Parity audit against original site', () => {
   });
 
   it('original and local homepage keep same main institute heading', async () => {
-    if (!remoteOriginReachable) {
+    if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {
       return;
     }
 
@@ -243,7 +248,7 @@ describe('Parity audit against original site', () => {
   });
 
   it('original and local contacts page keep the same primary heading', async () => {
-    if (!remoteOriginReachable) {
+    if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {
       return;
     }
 

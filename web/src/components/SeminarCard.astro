@@ -33,7 +33,7 @@ const statusLabel: Record<string, string> = {
 </MediaCard>
 
 <style>
-  .seminar-card-title {
+  :global(.seminar-card .seminar-card-title) {
     margin-bottom: 0.5rem;
   }
 
@@ -44,7 +44,7 @@ const statusLabel: Record<string, string> = {
     line-height: 1.5;
   }
 
-  .seminar-card :global(.badge) {
+  :global(.seminar-card .badge) {
     font-size: var(--font-xs);
     margin-bottom: 0.5rem;
   }
