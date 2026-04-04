@@ -9,8 +9,11 @@
     "deploy": "strapi deploy",
     "dev": "strapi develop",
     "develop": "strapi develop",
+    "lint": "eslint .",
     "start": "strapi start",
     "strapi": "strapi",
+    "typecheck": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev --audit-level=critical",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
@@ -25,9 +28,13 @@
     "styled-components": "^6.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.37.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "^9.37.0",
+    "globals": "^16.4.0",
+    "typescript-eslint": "^8.46.1",
     "typescript": "^5"
   },
   "engines": {

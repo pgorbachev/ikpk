@@ -3,6 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import SeminarCard from '../../components/SeminarCard.astro';
 import { getInstitutes, getCourseGroups, getSeminars, excerpt } from '../../lib/data';
+import type { CourseGroup, Institute } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -21,7 +22,10 @@ export const getStaticPaths: GetStaticPaths = () => {
   return paths;
 };
 
-const { courseGroup, institute } = Astro.props;
+const { courseGroup, institute } = Astro.props as {
+  courseGroup: CourseGroup;
+  institute: Institute;
+};
 const seminars = getSeminars(courseGroup.legacy_id);
 
 const schema = {

@@ -1,11 +1,10 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getInstitutes, getCourseGroups, getSeminars, getArticles, getVideoPlaylists, getTeachers } from '../lib/data';
+import { getInstitutes, getCourseGroups, getArticles, getVideoPlaylists, getTeachers } from '../lib/data';
 
 const institutes = getInstitutes();
 const courseGroups = getCourseGroups();
-const seminars = getSeminars();
 const articles = getArticles();
 const playlists = getVideoPlaylists();
 const teachers = getTeachers();

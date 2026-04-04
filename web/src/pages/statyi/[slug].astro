@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { getArticles, formatDate, cleanBodyHtml, excerpt } from '../../lib/data';
+import type { Article } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -12,7 +13,7 @@ export const getStaticPaths: GetStaticPaths = () => {
   }));
 };
 
-const { article } = Astro.props;
+const { article } = Astro.props as { article: Article };
 
 // Pick up to 4 other articles for "related" section
 const allArticles = getArticles().filter((a) => a.slug !== article.slug);

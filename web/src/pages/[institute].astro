@@ -2,6 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { getInstitutes, getCourseGroups, getTeachers, excerpt } from '../lib/data';
+import type { Institute } from '../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -12,7 +13,7 @@ export const getStaticPaths: GetStaticPaths = () => {
   }));
 };
 
-const { institute } = Astro.props;
+const { institute } = Astro.props as { institute: Institute };
 const courseGroups = getCourseGroups(institute.slug);
 const teachers = getTeachers(institute.slug);
 ---
