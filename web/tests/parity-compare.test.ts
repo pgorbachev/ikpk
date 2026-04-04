@@ -6,6 +6,7 @@ const ORIGINAL = 'https://ikpk.su';
 const DIST = join(import.meta.dirname, '..', 'dist');
 const REMOTE_PARITY_ENABLED = process.env.PARITY_REMOTE === '1' || process.env.PARITY_REMOTE_STRICT === '1';
 const STRICT_REMOTE_PARITY = process.env.PARITY_REMOTE_STRICT === '1';
+const REMOTE_FETCH_TIMEOUT_MS = 10000;
 
 const KEY_PAGES = [
   '/',
@@ -94,10 +95,31 @@ function hasLegacyHashClass(html: string): boolean {
 async function fetchRemote(path: string): Promise<PageSnapshot> {
   let snapshot = remoteCache.get(path);
   if (!snapshot) {
-    snapshot = fetch(ORIGINAL + path).then(async (response) => ({
-      status: response.status,
-      html: response.ok ? await response.text() : '',
-    }));
+    snapshot = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(ORIGINAL + path, { signal: controller.signal });
+        return {
+          status: response.status,
+          html: response.ok ? await response.text() : '',
+        };
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Timed out fetching ${ORIGINAL}${path} after ${REMOTE_FETCH_TIMEOUT_MS}ms.`);
+        }
+
+        if (error instanceof Error) {
+          throw new Error(`Failed to fetch ${ORIGINAL}${path}: ${error.message}`);
+        }
+
+        throw new Error(`Failed to fetch ${ORIGINAL}${path}.`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
     remoteCache.set(path, snapshot);
   }
   return snapshot;

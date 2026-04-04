@@ -34,6 +34,8 @@ const {
 } = Astro.props;
 
 const Tag = href ? 'a' : 'div';
+const resolvedTarget = href ? target : undefined;
+const resolvedRel = href ? rel : undefined;
 
 const [ratioWidth, ratioHeight] = imageRatio
   .split('/')
@@ -54,8 +56,8 @@ const resolvedImageHeight = imageHeight ?? (
 
 <Tag
   href={href}
-  target={target}
-  rel={rel}
+  target={resolvedTarget}
+  rel={resolvedRel}
   class:list={['media-card', 'card', href && 'media-card--link', className]}
 >
   {image && (

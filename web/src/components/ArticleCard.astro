@@ -7,13 +7,13 @@ interface Props {
   article: Article;
 }
 
-const { article } = Astro.props;
+const { article } = Astro.props as Props;
 ---
 
 <MediaCard
   href={`/statyi/${article.slug}`}
   title={article.title}
-  image={article.image}
+  image={article.image ?? undefined}
   imageAlt={article.title}
   className="article-card"
   titleClassName="article-card-title"
