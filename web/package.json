@@ -11,8 +11,16 @@
     "preview": "astro preview",
     "astro": "astro",
     "test": "vitest run",
+    "test:build": "astro build && vitest run --config vitest.build.config.ts",
+    "test:build:remote": "astro build && PARITY_REMOTE_STRICT=1 vitest run --config vitest.build.config.ts",
     "test:e2e": "playwright test",
-    "test:e2e:compat": "playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome"
+    "test:e2e:smoke": "playwright test tests/site.spec.ts --project=desktop --project=mobile",
+    "test:e2e:compat": "playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
+    "test:e2e:smoke:attached": "playwright test tests/site.spec.ts --config=playwright.attached.config.ts --project=desktop --project=mobile",
+    "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
+    "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
+    "verify": "npm test && npm run test:build && npm run test:e2e:smoke && npm run test:e2e:compat",
+    "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.2",
