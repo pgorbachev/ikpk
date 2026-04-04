@@ -1,3 +1,7 @@
+# NOTE: These headers use Netlify/Cloudflare Pages format.
+# GitHub Pages ignores this file entirely — it has no custom header support.
+# Kept for reference / future migration to Netlify or Cloudflare Pages.
+
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
 

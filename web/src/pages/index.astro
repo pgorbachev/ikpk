@@ -57,7 +57,7 @@ const schema = {
 };
 ---
 
-<BaseLayout title={title} description={description} schema={schema}>
+<BaseLayout title={title} description={description} schema={schema} preloadHero={true}>
   <!-- Hero -->
   <section class="hero">
     <div class="container hero-inner">
@@ -79,6 +79,7 @@ const schema = {
           alt=""
           class="hero-illustration"
           loading="eager"
+          fetchpriority="high"
           width="516"
           height="504"
         />
