@@ -1,12 +1,15 @@
 ---
 import MetaLabel from './MetaLabel.astro';
 
+type AsideCardTag = 'div' | 'section';
+
 interface Props {
   label?: string;
   title?: string;
   tone?: 'default' | 'muted';
   centered?: boolean;
   className?: string;
+  as?: AsideCardTag;
 }
 
 const {
@@ -15,10 +18,13 @@ const {
   tone = 'default',
   centered = false,
   className,
-} = Astro.props;
+  as,
+} = Astro.props as Props;
+
+const Tag = as ?? (label || title ? 'section' : 'div');
 ---
 
-<section
+<Tag
   class:list={[
     'aside-card',
     tone === 'muted' && 'aside-card--muted',
@@ -29,7 +35,7 @@ const {
   {label && <MetaLabel className="aside-card-label">{label}</MetaLabel>}
   {title && <h3 class="aside-card-title">{title}</h3>}
   <slot />
-</section>
+</Tag>
 
 <style>
   .aside-card {

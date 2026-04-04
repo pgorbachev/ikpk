@@ -5,6 +5,8 @@ interface Props {
   image?: string;
   imageAlt?: string;
   imageRatio?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   target?: string;
   rel?: string;
   accentTitle?: boolean;
@@ -20,6 +22,8 @@ const {
   image,
   imageAlt = '',
   imageRatio = '16 / 9',
+  imageWidth,
+  imageHeight,
   target,
   rel,
   accentTitle = false,
@@ -30,6 +34,22 @@ const {
 } = Astro.props;
 
 const Tag = href ? 'a' : 'div';
+
+const [ratioWidth, ratioHeight] = imageRatio
+  .split('/')
+  .map((part) => Number.parseFloat(part.trim()));
+
+const resolvedImageWidth = imageWidth ?? (
+  Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) && ratioWidth > 0 && ratioHeight > 0
+    ? Math.round(ratioWidth * 100)
+    : 400
+);
+
+const resolvedImageHeight = imageHeight ?? (
+  Number.isFinite(ratioWidth) && Number.isFinite(ratioHeight) && ratioWidth > 0 && ratioHeight > 0
+    ? Math.round(ratioHeight * 100)
+    : 225
+);
 ---
 
 <Tag
@@ -40,7 +60,13 @@ const Tag = href ? 'a' : 'div';
 >
   {image && (
     <div class:list={['media-card-media', mediaClassName]} style={`--media-ratio: ${imageRatio};`}>
-      <img src={image} alt={imageAlt} loading="lazy" width="400" height="225" />
+      <img
+        src={image}
+        alt={imageAlt}
+        loading="lazy"
+        width={resolvedImageWidth}
+        height={resolvedImageHeight}
+      />
     </div>
   )}
   <div class:list={['card-body', bodyClassName]}>
