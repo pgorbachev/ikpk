@@ -6,6 +6,7 @@ import AsideCard from '../../components/ui/AsideCard.astro';
 import MetaLabel from '../../components/ui/MetaLabel.astro';
 import PageHeader from '../../components/ui/PageHeader.astro';
 import { getArticles, formatDate, cleanBodyHtml } from '../../lib/data';
+import type { Article } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -16,7 +17,7 @@ export const getStaticPaths: GetStaticPaths = () => {
   }));
 };
 
-const { article } = Astro.props;
+const { article } = Astro.props as { article: Article };
 
 // Pick up to 4 other articles for "related" section
 const allArticles = getArticles().filter((a) => a.slug !== article.slug);

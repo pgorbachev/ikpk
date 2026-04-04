@@ -49,6 +49,8 @@ export interface Seminar {
   description_text: string;
   images: string[];
   status: string;
+  hours?: number | string | null;
+  certificate_type?: string | null;
 }
 
 export interface Teacher {

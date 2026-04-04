@@ -14,6 +14,7 @@ import {
   formatDate,
   cleanBodyHtml,
 } from '../../../lib/data';
+import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -35,7 +36,11 @@ export const getStaticPaths: GetStaticPaths = () => {
   return paths;
 };
 
-const { seminar, courseGroup, institute } = Astro.props;
+const { seminar, courseGroup, institute } = Astro.props as {
+  seminar: Seminar;
+  courseGroup: CourseGroup;
+  institute: Institute;
+};
 
 const schedule = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active'

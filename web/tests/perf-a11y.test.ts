@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 const dist = join(import.meta.dirname, '..', 'dist');
@@ -9,6 +9,16 @@ function readPage(path: string): string {
     ? join(dist, 'index.html')
     : join(dist, path.replace(/^\//, ''), 'index.html');
   return readFileSync(file, 'utf-8');
+}
+
+function readBuiltCss(): string {
+  const cssDir = join(dist, '_astro');
+  expect(existsSync(cssDir)).toBe(true);
+
+  const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
+  expect(cssFiles.length).toBeGreaterThan(0);
+
+  return cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
 }
 
 let homepage: string;
@@ -42,16 +52,10 @@ describe('Self-hosted Inter font', () => {
   });
 
   it('declares @font-face with font-display: swap in CSS', () => {
-    // Find the built CSS file
-    const cssDir = join(dist, '_astro');
-    if (existsSync(cssDir)) {
-      const { readdirSync } = require('fs');
-      const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
-      const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
-      expect(allCss).toContain('font-display:swap');
-      expect(allCss).toContain('inter-latin.woff2');
-      expect(allCss).toContain('inter-cyrillic.woff2');
-    }
+    const allCss = readBuiltCss();
+    expect(allCss).toContain('font-display:swap');
+    expect(allCss).toContain('inter-latin.woff2');
+    expect(allCss).toContain('inter-cyrillic.woff2');
   });
 });
 
@@ -68,7 +72,7 @@ describe('Hero image', () => {
 
   it('hero SVG is under 100KB', () => {
     const heroPath = join(dist, 'hero-main.svg');
-    const stat = require('fs').statSync(heroPath);
+    const stat = statSync(heroPath);
     expect(stat.size).toBeLessThan(100 * 1024);
   });
 });
@@ -77,7 +81,9 @@ describe('Hero image', () => {
 describe('Analytics', () => {
   it('initializes Yandex.Metrika stub synchronously (before deferred block)', () => {
     // The sync stub must appear before the deferred loader
-    const ymStubIndex = homepage.indexOf('window.ym=window.ym||function');
+    const ymStubIndex = homepage.search(
+      /window\.ym\s*=\s*window\.ym\s*\|\|\s*function\b/,
+    );
     const deferIndex = homepage.indexOf('_loadAnalyticsScripts');
     expect(ymStubIndex).toBeGreaterThan(-1);
     expect(deferIndex).toBeGreaterThan(-1);
@@ -85,7 +91,9 @@ describe('Analytics', () => {
   });
 
   it('queues Mail.ru pageview synchronously', () => {
-    const tmrIndex = homepage.indexOf('_tmr.push({id:"3752684"');
+    const tmrIndex = homepage.search(
+      /_tmr\.push\(\{\s*id:\s*['"]3752684['"]/,
+    );
     const deferIndex = homepage.indexOf('_loadAnalyticsScripts');
     expect(tmrIndex).toBeGreaterThan(-1);
     expect(tmrIndex).toBeLessThan(deferIndex);
@@ -110,14 +118,9 @@ describe('Analytics', () => {
 // ─── Button contrast (WCAG AA) ─────────────────────────────────────────────
 describe('Button contrast', () => {
   it('accent-500 is the darkened value for AA compliance', () => {
-    const cssDir = join(dist, '_astro');
-    if (existsSync(cssDir)) {
-      const { readdirSync } = require('fs');
-      const cssFiles = readdirSync(cssDir).filter((f: string) => f.endsWith('.css'));
-      const allCss = cssFiles.map((f: string) => readFileSync(join(cssDir, f), 'utf-8')).join('');
-      expect(allCss).toMatch(/--color-accent-500:\s*#357a38/);
-      expect(allCss).not.toMatch(/--color-accent-500:\s*#41a143/);
-    }
+    const allCss = readBuiltCss();
+    expect(allCss).toMatch(/--color-accent-500:\s*#357a38/);
+    expect(allCss).not.toMatch(/--color-accent-500:\s*#41a143/);
   });
 });
 
