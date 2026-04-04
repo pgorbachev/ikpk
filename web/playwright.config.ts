@@ -2,8 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  baseURL: 'http://127.0.0.1:4322',
   use: {
+    baseURL: 'http://127.0.0.1:4322',
     headless: true,
     screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 720 },
