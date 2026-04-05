@@ -1,11 +1,11 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import MediaCard from '../components/ui/MediaCard.astro';
-import { getInstitutes, getNews, getPromotions, getPage } from '../lib/data';
+import FeatureCard from '../components/home/FeatureCard.astro';
+import { getInstitutes, getNews, getPage } from '../lib/data';
 
+const news = getNews();
 const institutes = getInstitutes();
-const news = getNews().slice(0, 4);
-const promotions = getPromotions();
 const homepage = getPage('homepage');
 const advantages = [
   {
@@ -56,6 +56,10 @@ const schema = {
     addressCountry: 'RU',
   },
 };
+
+const ikpkInstitute = institutes.find((inst) => inst.slug === 'institut-klinicheskoy-prikladnoy-kineziologii');
+const upledgerInstitute = institutes.find((inst) => inst.slug === 'institut-apledzhera');
+const barralInstitute = institutes.find((inst) => inst.slug === 'institut-barralya');
 ---
 
 <BaseLayout title={title} description={description} schema={schema} preloadHero={true}>
@@ -94,21 +98,17 @@ const schema = {
       <h2 class="section-title">Наши преимущества</h2>
       <div class="grid grid-3 advantages-grid">
         {advantages.map((item) => (
-          <div class="card adv-card">
-            <div class="card-body">
-              <div class="adv-card-head">
-                <img src={item.icon} alt="" class="adv-card-icon" width="36" height="36" loading="lazy" />
-                <h3 class="adv-card-title">{item.title}</h3>
-              </div>
-              <p class="text-small">{item.text}</p>
-            </div>
-          </div>
+          <FeatureCard icon={item.icon} title={item.title} text={item.text} />
         ))}
       </div>
       <div class="adv-cta">
-        <p class="adv-cta-lead">Готовы к нам присоединиться?</p>
-        <p class="adv-cta-sub">Кликайте на кнопку, выбирайте направление и записывайтесь к нам на обучение!</p>
-        <a href="/raspisanie-i-tseny" class="btn btn-primary">Записаться на обучение</a>
+        <div class="adv-cta-shell">
+          <div class="adv-cta-copy">
+            <p class="adv-cta-lead">Готовы к нам присоединиться?</p>
+            <p class="adv-cta-sub">Выбирайте направление обучения и записывайтесь на ближайший поток ИКПК.</p>
+          </div>
+          <a href="/raspisanie-i-tseny" class="btn btn-primary adv-cta-btn">Записаться на обучение</a>
+        </div>
       </div>
     </div>
   </section>
@@ -156,24 +156,39 @@ const schema = {
         <MediaCard
           href="/institut-klinicheskoy-prikladnoy-kineziologii"
           title="Программы обучения Института клинической прикладной кинезиологии"
+          image={ikpkInstitute?.images?.[0]}
+          imageAlt="Эмблема Института клинической прикладной кинезиологии"
+          imageRatio="5 / 2"
+          imageFit="contain"
+          mediaClassName="program-logo-media"
           accentTitle={true}
-          className="prog-card"
+          className="prog-card institute-card"
         >
           <p class="text-small">Востребованные программы в области остеопатии и прикладной кинезиологии в соответствии с международными стандартами. Институт имеет лицензию на образовательную деятельность №3471 от 13.06.2018.</p>
         </MediaCard>
         <MediaCard
           href="/institut-apledzhera"
           title="Программы обучения Института Апледжера"
+          image={upledgerInstitute?.images?.[0]}
+          imageAlt="Эмблема Института Апледжера"
+          imageRatio="5 / 2"
+          imageFit="contain"
+          mediaClassName="program-logo-media"
           accentTitle={true}
-          className="prog-card"
+          className="prog-card institute-card"
         >
           <p class="text-small">Программы были разработаны доктором остеопатической медицины Джоном Апледжером как метод коррекции состояния кранио-сакральной системы, отвечающей за выработку, циркуляцию и реабсорбцию спинномозговой жидкости.</p>
         </MediaCard>
         <MediaCard
           href="/institut-barralya"
           title="Программы обучения Института Барраля"
+          image={barralInstitute?.images?.[0]}
+          imageAlt="Эмблема Института Барраля"
+          imageRatio="5 / 2"
+          imageFit="contain"
+          mediaClassName="program-logo-media"
           accentTitle={true}
-          className="prog-card"
+          className="prog-card institute-card"
         >
           <p class="text-small">Французский физиотерапевт и остеопат Жан-Пьер Барраль разработал инновационные способы диагностики и лечения патологий внутренних органов и систем человеческого организма методом висцеральных, невральных манипуляций.</p>
         </MediaCard>
@@ -186,69 +201,35 @@ const schema = {
     <section class="section section-alt">
       <div class="container">
         <h2 class="section-title">Новости</h2>
-        <div class="grid grid-4 news-grid">
-          {news.map((item) => (
-            <MediaCard
-              href={item.link}
-              title={item.name}
-              image={item.image?.url}
-              imageAlt={item.name}
-              imageRatio="3 / 2"
-              target="_blank"
-              rel="noopener"
-              className="news-card"
-            >
-              <div class="news-card-desc text-small" set:html={item.description} />
-            </MediaCard>
-          ))}
-        </div>
-      </div>
-    </section>
-  )}
-
-  <!-- Institutes -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Наши институты</h2>
-      <div class="grid grid-3">
-        {institutes.map((inst) => (
-          <MediaCard
-            href={`/${inst.slug}`}
-            title={inst.name}
-            image={inst.images?.[0]}
-            imageAlt={inst.name}
-            imageRatio="3 / 2"
-            className="institute-card"
-          >
-            <p class="text-small">{inst.description_text?.slice(0, 120)}…</p>
-          </MediaCard>
-        ))}
-      </div>
-    </div>
-  </section>
-
-  <!-- Promotions -->
-  {promotions.length > 0 && (
-    <section class="section">
-      <div class="container">
-        <h2 class="section-title">Акции и скидки</h2>
-        <div class="grid grid-3">
-          {promotions.map((promo) => (
-            <MediaCard
-              title={promo.name}
-              image={promo.image?.url}
-              imageAlt={promo.name}
-              imageRatio="3 / 2"
-              className="promo-card"
-            >
-              <div class="text-small" set:html={promo.description} />
-              {promo.link && (
-                <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
-                  Подробнее
-                </a>
-              )}
-            </MediaCard>
-          ))}
+        <div class="news-slider" data-news-slider>
+          <button type="button" class="news-nav-btn" aria-label="Previous slide" data-news-prev>
+            <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M12.5 4.5L7 10l5.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="news-viewport" data-news-viewport>
+            <div class="news-track" data-news-track>
+              {news.map((item) => (
+                <MediaCard
+                  href={item.link}
+                  title={item.name}
+                  image={item.image?.url}
+                  imageAlt={item.name}
+                  imageRatio="3 / 2"
+                  target="_blank"
+                  rel="noopener"
+                  className="news-card"
+                >
+                  <div class="news-card-desc text-small" set:html={item.description} />
+                </MediaCard>
+              ))}
+            </div>
+          </div>
+          <button type="button" class="news-nav-btn" aria-label="Next slide" data-news-next>
+            <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
     </section>
@@ -318,47 +299,183 @@ const schema = {
     background-color: var(--color-light-300);
   }
 
-  .promo-link {
-    margin-top: 0.75rem;
-    font-size: var(--font-s);
+  .news-slider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .news-viewport {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .news-track {
+    --news-visible: 4;
+    display: grid;
+    grid-template-columns: repeat(var(--news-visible), minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  :global(.news-card) {
+    display: none;
+    min-width: 0;
+  }
+
+  :global(.news-card.is-visible) {
+    display: block;
+  }
+
+  .news-nav-btn {
+    width: 40px;
+    border: 1px solid var(--color-gray-250);
+    border-radius: var(--radius-s);
+    background: var(--color-light-100);
+    color: var(--color-dark-700);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .news-nav-btn:hover {
+    background: #f5f5f5;
+    border-color: #cdcdcd;
+  }
+
+  .news-nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  :global(.news-card .card-body) {
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  :global(.news-card .media-card-title) {
+    font-size: 0.94rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .news-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  :global(.prog-card) {
+    border-color: var(--color-gray-250);
+    box-shadow: none;
+  }
+
+  :global(.prog-card:hover) {
+    border-color: #cfcfcf;
+    box-shadow: var(--shadow-s);
+  }
+
+  :global(.prog-card .card-body) {
+    padding: 1rem 1rem 1.1rem;
+  }
+
+  :global(.prog-card .media-card-title) {
+    font-size: 0.95rem;
+    line-height: 1.35;
+    min-height: 3.1em;
+  }
+
+  :global(.program-logo-media) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid var(--color-gray-150);
+    background: #fcfcfc;
+  }
+
+  :global(.program-logo-media img) {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  @media (max-width: 1024px) {
+    .news-track {
+      --news-visible: 2;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .news-slider {
+      gap: 0.5rem;
+    }
+
+    .news-nav-btn {
+      width: 34px;
+    }
+
+    .news-track {
+      --news-visible: 1;
+    }
   }
 
   /* Преимущества */
-  .adv-card-head {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    margin-bottom: 0.625rem;
-  }
-
-  .adv-card-icon {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-  }
-
-  .adv-card-title {
-    font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0;
-    color: var(--color-accent-600);
+  .advantages-grid {
+    gap: 1.2rem;
   }
 
   .adv-cta {
-    margin-top: 2.5rem;
-    text-align: center;
+    margin-top: 2.25rem;
+  }
+
+  .adv-cta-shell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.35rem;
+    padding: 1.25rem 1.4rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #46554f 0%, #3d4b46 100%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+  }
+
+  .adv-cta-copy {
+    max-width: 640px;
   }
 
   .adv-cta-lead {
-    font-size: var(--font-xl);
-    font-weight: 700;
-    color: var(--color-dark-700);
-    margin-bottom: 0.25rem;
+    font-size: 1.45rem;
+    font-weight: 600;
+    color: #f7fbf9;
+    margin-bottom: 0.35rem;
+    line-height: 1.25;
   }
 
   .adv-cta-sub {
-    color: var(--color-gray-600);
-    margin-bottom: 1.25rem;
+    color: rgba(245, 250, 248, 0.88);
+    margin: 0;
+    line-height: 1.5;
+    font-size: var(--font-m);
+  }
+
+  .adv-cta-btn {
+    flex-shrink: 0;
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow: none;
+  }
+
+  @media (max-width: 860px) {
+    .adv-cta-shell {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .adv-cta-btn {
+      width: 100%;
+      text-align: center;
+    }
   }
 
   /* Подход + Статистика */
@@ -435,3 +552,50 @@ const schema = {
   }
 
 </style>
+
+<script>
+  const slider = document.querySelector<HTMLElement>('[data-news-slider]');
+  const track = slider?.querySelector<HTMLElement>('[data-news-track]');
+  const prevBtn = slider?.querySelector<HTMLButtonElement>('[data-news-prev]');
+  const nextBtn = slider?.querySelector<HTMLButtonElement>('[data-news-next]');
+
+  if (slider && track && prevBtn && nextBtn) {
+    const cards = Array.from(track.children) as HTMLElement[];
+    let startIndex = 0;
+
+    const getVisibleCount = () => {
+      const width = window.innerWidth;
+      if (width <= 680) return 1;
+      if (width <= 1024) return 2;
+      return 4;
+    };
+
+    const render = () => {
+      if (cards.length === 0) return;
+      const visibleCount = Math.min(getVisibleCount(), cards.length);
+      track.style.setProperty('--news-visible', String(visibleCount));
+      track.setAttribute('data-start-index', String(startIndex));
+      track.setAttribute('data-visible-count', String(visibleCount));
+      cards.forEach((card, idx) => {
+        const relative = (idx - startIndex + cards.length) % cards.length;
+        card.style.order = String(relative);
+        card.classList.toggle('is-visible', relative < visibleCount);
+      });
+    };
+
+    prevBtn.addEventListener('click', () => {
+      if (cards.length === 0) return;
+      startIndex = (startIndex - 1 + cards.length) % cards.length;
+      render();
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (cards.length === 0) return;
+      startIndex = (startIndex + 1) % cards.length;
+      render();
+    });
+
+    window.addEventListener('resize', render);
+    render();
+  }
+</script>

@@ -2,7 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import SeminarCard from '../../components/SeminarCard.astro';
-import { getInstitutes, getCourseGroups, getSeminars, excerpt } from '../../lib/data';
+import { cleanBodyHtml, getInstitutes, getCourseGroups, getSeminars } from '../../lib/data';
 import type { CourseGroup, Institute } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -28,11 +28,120 @@ const { courseGroup, institute } = Astro.props as {
 };
 const seminars = getSeminars(courseGroup.legacy_id);
 
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function cleanSeminarLead(value: string, title: string): string {
+  return value
+    .replace(new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '')
+    .replace(/Записаться/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLeadCandidate(value: string): string {
+  return value
+    .replace(/\b(Учебный план|Для кого подойдет|Как проходит обучение|Выдаваемые документы|Рекомендации|Расписание|Показать все)\b[\s\S]*$/i, '')
+    .replace(/\bК сожалению, данный курс[\s\S]*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripLeadingTitle(value: string, title: string): string {
+  return value.replace(new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:.-]*`, 'i'), '').trim();
+}
+
+function clipLead(value: string, maxLength = 280): string {
+  if (value.length <= maxLength) return value;
+  const sentences = value.match(/[^.!?]+[.!?]+/g) || [];
+  let clipped = '';
+  for (const sentence of sentences) {
+    const next = `${clipped} ${sentence}`.trim();
+    if (next.length > maxLength) break;
+    clipped = next;
+    if (next.length >= 110) break;
+  }
+
+  if (clipped) return clipped.trim();
+  return `${value.slice(0, maxLength).trimEnd()}…`;
+}
+
+function extractSeminarLead(seminarDescription: string, seminarName: string, groupName: string): string {
+  const normalized = normalizeLeadCandidate(
+    stripLeadingTitle(cleanSeminarLead(seminarDescription, groupName), seminarName),
+  );
+
+  if (!normalized) return '';
+  if (/^(описание смотрите|записаться|к сожалению)/i.test(normalized)) return '';
+  if (/cst-\d|ser-\d|часть\s*№|записаться/i.test(normalized)) return '';
+  if (normalized.length < 80) return '';
+
+  return clipLead(normalized);
+}
+
+function extractLeadText(cg: CourseGroup, seminarsForGroup: typeof seminars): string {
+  const paragraphs = [...(cg.description_html || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => normalizeLeadCandidate(stripHtml(match[1])))
+    .filter(Boolean);
+  const noisyPattern = /(записаться|cst-\d|ser-\d|уровень|часть\s*№|подробнее|семинар\.?\s*часть|показать все)/i;
+  const lead = paragraphs.find((paragraph) => (
+    paragraph.length >= 80
+      && paragraph.length <= 360
+      && !noisyPattern.test(paragraph)
+  ));
+
+  if (lead) return lead;
+  const seminarLead = seminarsForGroup
+    .map((seminar) => extractSeminarLead(stripHtml(seminar.description_text || ''), seminar.name, cg.name))
+    .find((paragraph) => (
+      paragraph.length >= 90
+      && paragraph.length <= 320
+      && !noisyPattern.test(paragraph)
+      && !paragraph.includes(cg.name)
+    ));
+  if (seminarLead) return seminarLead;
+  if (cg.seo_description && !/^Пройдите обучение в ИКПК по программе/i.test(cg.seo_description)) {
+    return cg.seo_description.replace(/\s*Запись онлайн!?/i, '').trim();
+  }
+  return `Программа обучения «${cg.name}» в ${institute.name}.`;
+}
+
+function extractAdditionalHtml(rawHtml: string): string {
+  if (!rawHtml) return '';
+
+  const additionalIndex = rawHtml.search(/<h[2-4][^>]*>\s*Дополнительная информация\s*<\/h[2-4]>/i);
+  if (additionalIndex >= 0) {
+    return rawHtml.slice(additionalIndex);
+  }
+
+  const headingPattern = /<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = headingPattern.exec(rawHtml)) !== null) {
+    const headingText = stripHtml(match[1]);
+    if (/(профессиональная переподготовка|почему|как проходит обучение|что вы получите|для кого)/i.test(headingText)) {
+      return rawHtml.slice(match.index);
+    }
+  }
+
+  return '';
+}
+
+const leadText = extractLeadText(courseGroup, seminars);
+const heroImage =
+  courseGroup.images?.[0]
+  || seminars.find((seminar) => seminar.images?.[0])?.images?.[0]
+  || institute.images?.[1]
+  || institute.images?.[0]
+  || '';
+const additionalHtml = extractAdditionalHtml(courseGroup.description_html || '');
+const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml) : '';
+
 const schema = {
   '@context': 'https://schema.org',
   '@type': 'Course',
   name: courseGroup.name,
-  description: courseGroup.seo_description || courseGroup.description_text?.slice(0, 200),
+  description: courseGroup.seo_description || leadText,
   provider: {
     '@type': 'EducationalOrganization',
     name: 'ИКПК',
@@ -51,41 +160,187 @@ const schema = {
       ]}
     />
 
-    <section class="section">
-      <h1 class="page-title">{courseGroup.name}</h1>
-
-      {courseGroup.description_text && (
-        <div class="cg-intro">
-          <p>{excerpt(courseGroup.description_text, 500)}</p>
+    <section class="section course-group-hero" data-testid="course-group-hero">
+      <div class="course-group-hero-copy">
+        <p class="course-group-kicker">{institute.name}</p>
+        <h1 class="page-title">{courseGroup.name}</h1>
+        <p class="course-group-lead">{leadText}</p>
+        <div class="course-group-actions">
+          <a href="/raspisanie-i-tseny" class="btn btn-primary">Записаться на обучение</a>
+          <a href="#seminars" class="btn btn-outline">Смотреть семинары</a>
         </div>
-      )}
+      </div>
+
+      <div class="course-group-hero-media">
+        {heroImage ? (
+          <img src={heroImage} alt={courseGroup.name} width="520" height="360" loading="lazy" />
+        ) : (
+          <div class="course-group-hero-fallback" data-testid="course-group-hero-fallback">
+            <p class="fallback-label">Программа ИКПК</p>
+            <p class="fallback-title">{courseGroup.name}</p>
+          </div>
+        )}
+      </div>
     </section>
 
     {seminars.length > 0 && (
-      <section class="section">
-        <h2 class="section-title">Семинары и курсы</h2>
-        <div class="grid grid-2">
-          {seminars.map((s) => (
+      <section class="section course-group-seminars" id="seminars" data-testid="course-group-seminars">
+        <header class="course-group-seminars-header">
+          <h2 class="section-title">Семинары и курсы</h2>
+          <p class="course-group-seminars-meta">{seminars.length} программ в разделе</p>
+        </header>
+        <div class="course-group-seminars-grid">
+          {seminars.map((seminar) => (
             <SeminarCard
-              seminar={s}
-              href={`/${institute.slug}/${courseGroup.slug}/${s.slug}`}
+              seminar={seminar}
+              href={`/${institute.slug}/${courseGroup.slug}/${seminar.slug}`}
             />
           ))}
         </div>
+      </section>
+    )}
+
+    {cleanedAdditionalHtml && (
+      <section class="section">
+        <div class="course-group-extra rich-content" data-testid="course-group-extra-content" set:html={cleanedAdditionalHtml} />
       </section>
     )}
   </div>
 </BaseLayout>
 
 <style>
-  .page-title {
-    margin-bottom: 1rem;
+  .course-group-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+    gap: 1.8rem;
+    align-items: stretch;
+    padding-top: 2.2rem;
+    padding-bottom: 2.2rem;
   }
 
-  .cg-intro {
-    max-width: 800px;
-    font-size: var(--font-l);
-    line-height: 1.7;
-    margin-bottom: 2rem;
+  .course-group-kicker {
+    margin: 0 0 0.45rem;
+    color: var(--color-gray-500);
+    font-size: var(--font-s);
+  }
+
+  .page-title {
+    margin: 0 0 0.8rem;
+    line-height: 1.15;
+  }
+
+  .course-group-lead {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--color-gray-600);
+    font-size: var(--font-m);
+    line-height: 1.62;
+  }
+
+  .course-group-actions {
+    margin-top: 1.15rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+
+  .course-group-hero-media {
+    display: flex;
+    min-height: 260px;
+    border-radius: 20px;
+    border: 1px solid #d9d9d4;
+    background: #f4f4f1;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+    overflow: hidden;
+  }
+
+  .course-group-hero-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .course-group-hero-fallback {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1.35rem;
+    color: var(--color-dark-700);
+  }
+
+  .fallback-label {
+    margin: 0 0 0.5rem;
+    color: var(--color-gray-500);
+    font-size: var(--font-s);
+  }
+
+  .fallback-title {
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.35;
+    font-weight: 600;
+  }
+
+  .course-group-seminars {
+    padding-top: 0.4rem;
+  }
+
+  .course-group-seminars-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .course-group-seminars-header .section-title {
+    margin: 0;
+  }
+
+  .course-group-seminars-meta {
+    margin: 0;
+    color: var(--color-gray-500);
+    font-size: var(--font-s);
+  }
+
+  .course-group-seminars-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem 1.5rem;
+  }
+
+  .course-group-extra {
+    background: #fff;
+    border: 1px solid #d8d8d2;
+    border-radius: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+    padding: 1.3rem 1.4rem;
+  }
+
+  @media (max-width: 1024px) {
+    .course-group-hero {
+      grid-template-columns: 1fr;
+      gap: 1.1rem;
+      padding-top: 1.5rem;
+      padding-bottom: 1.8rem;
+    }
+
+    .course-group-hero-media {
+      min-height: 220px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .course-group-seminars-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .course-group-seminars-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.4rem;
+    }
   }
 </style>

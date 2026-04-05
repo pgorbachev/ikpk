@@ -32,6 +32,8 @@ const KEY_PAGES = [
   '/aktsii-i-skidki',
 ];
 
+test.setTimeout(20000);
+
 // Helper: extract page data from a URL
 async function extractPageData(page: Page, url: string) {
   const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -323,14 +325,14 @@ test.describe('Content volume parity', () => {
 
   test('schedule page has events', async ({ page }) => {
     await page.goto(NEW_SITE + '/raspisanie-i-tseny');
-    const rows = page.locator('table tbody tr, .schedule-entry, .card');
+    const rows = page.locator('[data-testid="schedule-card"]');
     const count = await rows.count();
     expect(count, 'Schedule page should have events').toBeGreaterThan(3);
   });
 
   test('institute page has course groups', async ({ page }) => {
     await page.goto(NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii');
-    const cards = page.locator('.card');
+    const cards = page.locator('[data-testid="institute-program-card"]');
     const count = await cards.count();
     expect(count, 'Institute page should have course group cards').toBeGreaterThan(0);
   });
@@ -396,7 +398,7 @@ test.describe('Homepage mandatory sections', () => {
     await page.goto(NEW_SITE + '/');
     const heading = page.locator('h2:has-text("Наши преимущества")');
     await expect(heading).toBeVisible();
-    const cards = page.locator('.adv-card');
+    const cards = page.locator('.feature-card');
     expect(await cards.count(), 'Should have 6 advantage cards').toBe(6);
   });
 
@@ -420,7 +422,7 @@ test.describe('Homepage mandatory sections', () => {
 
   test('has newsletter section', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
-    const section = page.locator('.newsletter');
+    const section = page.locator('[data-newsletter-variant="band"]');
     await expect(section).toBeVisible();
   });
 
@@ -586,7 +588,10 @@ test.describe('Seminar page structure', () => {
 
   test('has teacher section', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);
-    const teacherLabel = page.locator('.sidebar-card-label:has-text("Преподаватель")');
+    const teacherLabel = page.locator(
+      'aside.seminar-sidebar .aside-card-label',
+      { hasText: /Преподавател(ь|и)/ }
+    );
     await expect(teacherLabel).toBeVisible();
   });
 

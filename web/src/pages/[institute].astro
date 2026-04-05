@@ -1,7 +1,8 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getInstitutes, getCourseGroups, getTeachers, excerpt } from '../lib/data';
+import InstituteProgramCard from '../components/institutes/InstituteProgramCard.astro';
+import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
+import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers } from '../lib/data';
 import type { Institute } from '../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -16,115 +17,370 @@ export const getStaticPaths: GetStaticPaths = () => {
 const { institute } = Astro.props as { institute: Institute };
 const courseGroups = getCourseGroups(institute.slug);
 const teachers = getTeachers(institute.slug);
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractLeadText(inst: Institute): string {
+  const paragraphs = [...(inst.description_html || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => stripHtml(match[1]))
+    .filter(Boolean);
+  const noisyPattern = /(записаться|показать|программа|преподаватели|faq|вопрос)/i;
+  const lead = paragraphs.find((paragraph) => (
+    paragraph.length >= 100
+      && paragraph.length <= 360
+      && !noisyPattern.test(paragraph)
+  ));
+
+  if (lead) return lead;
+  if (inst.seo_description) return inst.seo_description;
+  return excerpt(inst.description_text, 220);
+}
+
+function extractCardLead(rawHtml: string, title: string): string {
+  const paragraphs = [...(rawHtml || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => stripHtml(match[1]))
+    .filter(Boolean);
+  const noisyPattern = /(записаться|семинар\s*№|часть\s*№|подробнее|показать|преподаватели|программа обучения)/i;
+  const lead = paragraphs.find((paragraph) => (
+    paragraph.length >= 70
+      && paragraph.length <= 170
+      && !noisyPattern.test(paragraph)
+      && !paragraph.includes(title)
+  ));
+  return lead || '';
+}
+
+function sanitizeBioText(value: string, name: string): string {
+  return value
+    .replace(new RegExp(name, 'gi'), '')
+    .replace(/Институт[^.]+\.?/gi, '')
+    .replace(/Преподаваемые направления[^.]*\.?/gi, '')
+    .replace(/О преподавателе/gi, '')
+    .replace(/^[\s.:-]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractTeacherLead(rawHtml: string, rawText: string, name: string): string {
+  const paragraphs = [...(rawHtml || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => stripHtml(match[1]))
+    .filter(Boolean);
+  const noisyPattern = /(институт|преподаваемые направления|о преподавателе)/i;
+  const lead = paragraphs.find((paragraph) => (
+    paragraph.length >= 80
+      && paragraph.length <= 220
+      && !noisyPattern.test(paragraph)
+  ));
+
+  if (lead) return lead;
+
+  const cleanedText = sanitizeBioText(rawText, name);
+  if (!cleanedText) return '';
+
+  return excerpt(cleanedText, 165);
+}
+
+function extractAdditionalHtml(rawHtml: string): string {
+  if (!rawHtml) return '';
+
+  const additionalIndex = rawHtml.search(
+    /<h[2-4][^>]*>\s*(?:Дополнительная информация|Часто задаваемые вопросы|Почему выбирают)[\s\S]*?<\/h[2-4]>/i,
+  );
+  if (additionalIndex >= 0) {
+    return rawHtml.slice(additionalIndex);
+  }
+
+  return '';
+}
+
+const leadText = extractLeadText(institute);
+const logoImage = institute.images?.[0] || '';
+const cleanedAdditionalHtml = cleanBodyHtml(extractAdditionalHtml(institute.description_html || ''));
+
+const allSeminars = getSeminars();
+const programCards = courseGroups.map((courseGroup) => {
+  const seminars = allSeminars.filter((seminar) => seminar.course_group_legacy_id === courseGroup.legacy_id);
+  const image = courseGroup.images?.[0] || seminars.find((seminar) => seminar.images?.[0])?.images?.[0] || '';
+  const description = extractCardLead(
+    courseGroup.description_html || '',
+    courseGroup.name,
+  );
+
+  return {
+    href: `/${institute.slug}/${courseGroup.slug}`,
+    title: courseGroup.name,
+    description,
+    image,
+  };
+});
+
+const visiblePrograms = programCards.slice(0, 8);
+const hiddenPrograms = programCards.slice(8);
+
+const teacherCards = teachers.map((teacher) => ({
+  href: `/${institute.slug}/prepodavatel/${teacher.slug}`,
+  name: teacher.name,
+  photo: teacher.photo,
+  excerpt: extractTeacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
+}));
+
+const visibleTeachers = teacherCards.slice(0, 3);
+const hiddenTeachers = teacherCards.slice(3);
 ---
 
 <BaseLayout title={institute.seo_title} description={institute.seo_description}>
-  <div class="container">
-    <Breadcrumbs items={[{ label: institute.name }]} />
-
-    <section class="section">
-      <h1 class="page-title">{institute.name}</h1>
-
-      {institute.description_text && (
-        <div class="institute-intro">
-          <p>{excerpt(institute.description_text, 500)}</p>
+  <div class="container institute-page">
+    <section class="section institute-hero" data-testid="institute-hero">
+      <div class="institute-hero-copy">
+        <h1 class="page-title">{institute.name}</h1>
+        <p class="institute-lead">{leadText}</p>
+        <div class="institute-actions">
+          <a href="/raspisanie-i-tseny" class="btn btn-primary">Записаться на обучение</a>
         </div>
-      )}
+      </div>
+
+      <div class="institute-hero-logo">
+        {logoImage ? (
+          <img src={logoImage} alt={`Логотип ${institute.name}`} width="420" height="240" loading="lazy" />
+        ) : (
+          <div class="institute-logo-fallback">{institute.name}</div>
+        )}
+      </div>
     </section>
 
-    <!-- Course Groups -->
-    {courseGroups.length > 0 && (
-      <section class="section">
-        <h2 class="section-title">Направления обучения</h2>
-        <div class="grid grid-3">
-          {courseGroups.map((cg) => (
-            <a href={`/${institute.slug}/${cg.slug}`} class="card cg-card">
-              <div class="card-body">
-                <h3 class="cg-card-title">{cg.name}</h3>
-                {cg.description_text && (
-                  <p class="text-small">{excerpt(cg.description_text, 120)}</p>
-                )}
-              </div>
-            </a>
+    {programCards.length > 0 && (
+      <section class="section institute-programs" id="programs" data-testid="institute-programs">
+        <header class="institute-section-header">
+          <h2 class="section-title">Программы обучения</h2>
+        </header>
+
+        <div class="institute-program-grid">
+          {visiblePrograms.map((program) => (
+            <InstituteProgramCard {...program} fallbackLogo={logoImage} />
           ))}
         </div>
+
+        {hiddenPrograms.length > 0 && (
+          <details class="institute-more">
+            <summary>Показать ещё</summary>
+            <div class="institute-program-grid institute-more-grid">
+              {hiddenPrograms.map((program) => (
+                <InstituteProgramCard {...program} fallbackLogo={logoImage} />
+              ))}
+            </div>
+          </details>
+        )}
       </section>
     )}
 
-    <!-- Teachers -->
-    {teachers.length > 0 && (
-      <section class="section">
-        <h2 class="section-title">Преподаватели</h2>
-        <div class="grid grid-4">
-          {teachers.map((t) => (
-            <a href={`/${institute.slug}/prepodavatel/${t.slug}`} class="card teacher-card">
-              {t.photo && (
-                <div class="teacher-photo">
-                  <img src={t.photo} alt={t.name} loading="lazy" width="164" height="168" />
-                </div>
-              )}
-              <div class="card-body">
-                <h3 class="teacher-name">{t.name}</h3>
-              </div>
-            </a>
+    {teacherCards.length > 0 && (
+      <section class="section institute-teachers" data-testid="institute-teachers">
+        <header class="institute-section-header">
+          <h2 class="section-title">Преподаватели</h2>
+        </header>
+
+        <div class="institute-teacher-grid">
+          {visibleTeachers.map((teacher) => (
+            <InstituteTeacherCard {...teacher} />
           ))}
         </div>
+
+        {hiddenTeachers.length > 0 && (
+          <details class="institute-more">
+            <summary>Показать всех</summary>
+            <div class="institute-teacher-grid institute-more-grid">
+              {hiddenTeachers.map((teacher) => (
+                <InstituteTeacherCard {...teacher} />
+              ))}
+            </div>
+          </details>
+        )}
+      </section>
+    )}
+
+    {cleanedAdditionalHtml && (
+      <section class="section institute-extra-shell" data-testid="institute-extra-content">
+        <div class="institute-extra rich-content" set:html={cleanedAdditionalHtml} />
       </section>
     )}
   </div>
 </BaseLayout>
 
 <style>
+  .institute-page {
+    padding-top: 0.5rem;
+  }
+
+  .institute-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+    align-items: center;
+    gap: 2rem;
+    padding-top: 2.2rem;
+    padding-bottom: 2.2rem;
+  }
+
   .page-title {
-    margin-bottom: 1rem;
+    margin: 0 0 0.85rem;
+    line-height: 1.12;
   }
 
-  .institute-intro {
-    max-width: 800px;
-    font-size: var(--font-l);
-    line-height: 1.7;
-    margin-bottom: 2rem;
-  }
-
-  .cg-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .cg-card:hover { text-decoration: none; }
-
-  .cg-card-title {
+  .institute-lead {
+    margin: 0;
+    max-width: 60ch;
     font-size: var(--font-m);
-    font-weight: 600;
-    margin-bottom: 0.5rem;
+    line-height: 1.65;
+    color: var(--color-gray-600);
+  }
+
+  .institute-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.2rem;
+  }
+
+  .institute-hero-logo {
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.3rem;
+    border: 1px solid #d8d8d2;
+    border-radius: 24px;
+    background: #fafaf8;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+  }
+
+  .institute-hero-logo img {
+    display: block;
+    max-width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+  }
+
+  .institute-logo-fallback {
+    font-size: var(--font-xl);
+    line-height: 1.35;
+    text-align: center;
     color: var(--color-dark-700);
   }
 
-  .teacher-card {
-    display: block;
-    text-decoration: none;
-    color: inherit;
-    text-align: center;
+  .institute-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
   }
 
-  .teacher-card:hover { text-decoration: none; }
-
-  .teacher-photo {
-    aspect-ratio: 1;
-    overflow: hidden;
-    background: var(--color-light-300);
+  .institute-section-header .section-title {
+    margin: 0;
   }
 
-  .teacher-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  .institute-program-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.15rem;
   }
 
-  .teacher-name {
+  .institute-teacher-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.15rem;
+  }
+
+  .institute-more {
+    margin-top: 1rem;
+  }
+
+  .institute-more summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0 1rem;
+    border: 1px solid #cfd3cf;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--color-dark-700);
+    cursor: pointer;
+    list-style: none;
     font-size: var(--font-s);
     font-weight: 600;
-    color: var(--color-dark-700);
+  }
+
+  .institute-more summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .institute-more-grid {
+    margin-top: 1rem;
+  }
+
+  .institute-extra-shell {
+    padding-top: 1rem;
+  }
+
+  .institute-extra {
+    border: 1px solid #d8d8d2;
+    border-radius: 24px;
+    background: #fafaf8;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    padding: 1.4rem 1.5rem;
+  }
+
+  .institute-extra :global(h2:first-child),
+  .institute-extra :global(h3:first-child) {
+    margin-top: 0;
+  }
+
+  @media (max-width: 1100px) {
+    .institute-program-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .institute-hero {
+      grid-template-columns: 1fr;
+      gap: 1.2rem;
+      padding-top: 1.6rem;
+      padding-bottom: 1.8rem;
+    }
+
+    .institute-hero-logo {
+      min-height: 180px;
+    }
+
+    .institute-program-grid,
+    .institute-teacher-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .institute-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .institute-program-grid,
+    .institute-teacher-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .institute-extra {
+      padding: 1.1rem;
+    }
+  }
+
+  :root[data-theme='dark'] .institute-hero-logo,
+  :root[data-theme='dark'] .institute-extra,
+  :root[data-theme='dark'] .institute-more summary {
+    border-color: #434a43;
+    background: #232723;
   }
 </style>

@@ -2,28 +2,124 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import ArticleCard from '../../components/ArticleCard.astro';
+import ArticleFilterBar from '../../components/articles/ArticleFilterBar.astro';
 import { getArticles, getPage } from '../../lib/data';
 
 const page = getPage('statyi');
-const articles = getArticles();
+const articles = [...getArticles()].sort((a, b) => {
+  const left = a.published_at ? Date.parse(a.published_at) : 0;
+  const right = b.published_at ? Date.parse(b.published_at) : 0;
+  return right - left;
+});
+const ARTICLES_PER_PAGE = 6;
+const totalPages = Math.max(1, Math.ceil(articles.length / ARTICLES_PER_PAGE));
+const firstPageArticles = articles.slice(0, ARTICLES_PER_PAGE);
+
+type PaginationToken =
+  | { type: 'page'; value: number }
+  | { type: 'ellipsis'; key: string };
+
+function buildPaginationTokens(total: number, current: number): PaginationToken[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => ({ type: 'page', value: index + 1 }));
+  }
+
+  const pageSet = new Set<number>([1, total, current - 1, current, current + 1]);
+  if (current <= 3) {
+    pageSet.add(2);
+    pageSet.add(3);
+    pageSet.add(4);
+  }
+  if (current >= total - 2) {
+    pageSet.add(total - 1);
+    pageSet.add(total - 2);
+    pageSet.add(total - 3);
+  }
+
+  const pages = [...pageSet].filter((value) => value >= 1 && value <= total).sort((left, right) => left - right);
+  const tokens: PaginationToken[] = [];
+  for (let i = 0; i < pages.length; i += 1) {
+    if (i > 0 && pages[i] - pages[i - 1] > 1) {
+      tokens.push({ type: 'ellipsis', key: `ellipsis-${pages[i - 1]}-${pages[i]}` });
+    }
+    tokens.push({ type: 'page', value: pages[i] });
+  }
+  return tokens;
+}
+
+const initialPaginationTokens = buildPaginationTokens(totalPages, 1);
 
 const title = page?.seo_title || 'Статьи — ИКПК';
 const description = page?.seo_description || 'Статьи и публикации экспертов ИКПК.';
 ---
 
-<BaseLayout title={title} description={description}>
+<BaseLayout title={title} description={description} newsletterVariant="card">
   <div class="container">
     <Breadcrumbs items={[{ label: 'Статьи' }]} />
 
     <section class="section">
-      <h1 class="page-title">Статьи</h1>
+      <header class="articles-header">
+        <h1 class="articles-title">Статьи</h1>
+      </header>
 
-      {articles.length > 0 ? (
-        <div class="grid grid-3">
-          {articles.map((article) => (
-            <ArticleCard article={article} />
-          ))}
-        </div>
+      <div class="articles-controls">
+        <ArticleFilterBar />
+      </div>
+
+      {firstPageArticles.length > 0 ? (
+        <>
+          <div class="articles-grid" data-articles-grid>
+            {firstPageArticles.map((article) => (
+              <ArticleCard article={article} variant="listing" />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <nav
+              class="articles-pagination"
+              aria-label="Пагинация статей"
+              data-testid="articles-pagination"
+              data-total-pages={totalPages}
+            >
+              <button type="button" class="pagination-link pagination-link--arrow" data-page-prev aria-label="Предыдущая страница" disabled>
+                ‹
+              </button>
+              {initialPaginationTokens.map((token) =>
+                token.type === 'page' ? (
+                  <button
+                    type="button"
+                    class:list={['pagination-link', token.value === 1 && 'is-active']}
+                    data-page-button={token.value}
+                    aria-current={token.value === 1 ? 'page' : undefined}
+                  >
+                    {token.value}
+                  </button>
+                ) : (
+                  <span class="pagination-ellipsis" data-page-ellipsis aria-hidden="true">…</span>
+                ),
+              )}
+              <button type="button" class="pagination-link pagination-link--arrow" data-page-next aria-label="Следующая страница">
+                ›
+              </button>
+            </nav>
+          )}
+
+          <div hidden aria-hidden="true">
+            {articles.map((article, index) => {
+              const pageNo = Math.floor(index / ARTICLES_PER_PAGE) + 1;
+              return (
+                <template
+                  data-article-card
+                  data-page={pageNo}
+                  data-title={article.title.toLowerCase()}
+                  data-body={(article.body_text || '').toLowerCase()}
+                  data-published-at={article.published_at || ''}
+                >
+                  <ArticleCard article={article} variant="listing" />
+                </template>
+              );
+            })}
+          </div>
+        </>
       ) : (
         <p class="text-muted">Статьи пока не опубликованы.</p>
       )}
@@ -32,7 +128,250 @@ const description = page?.seo_description || 'Статьи и публикаци
 </BaseLayout>
 
 <style>
-  .page-title {
+  .articles-header {
+    margin-bottom: 0.65rem;
+  }
+
+  .articles-title {
+    font-size: 3rem;
+    font-weight: 500;
+    line-height: 1.15;
+    margin: 0;
+  }
+
+  .articles-controls {
+    margin-bottom: 1.35rem;
+  }
+
+  .articles-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.7rem 2rem;
     margin-bottom: 1.5rem;
   }
+
+  .articles-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    margin: 0.15rem 0 0;
+  }
+
+  .pagination-link {
+    min-width: 2rem;
+    height: 2rem;
+    border: 1px solid #d5d5cf;
+    background: #fff;
+    color: #5f625e;
+    border-radius: 4px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .pagination-link:hover {
+    background: #f3f3f0;
+    border-color: #bdbdb7;
+  }
+
+  .pagination-link.is-active {
+    color: #fff;
+    background: #4e6b5f;
+    border-color: #4e6b5f;
+  }
+
+  .pagination-link--arrow {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #6b6d68;
+  }
+
+  .pagination-link[disabled] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .pagination-ellipsis {
+    color: var(--color-gray-500);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.16rem;
+    user-select: none;
+  }
+
+  @media (max-width: 768px) {
+    .articles-title {
+      font-size: 2.25rem;
+    }
+
+    .articles-grid {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+  }
 </style>
+
+<script>
+  const ARTICLES_PER_PAGE = 6;
+  const grid = document.querySelector<HTMLElement>('[data-articles-grid]');
+  const pagination = document.querySelector<HTMLElement>('.articles-pagination');
+  const templates = Array.from(document.querySelectorAll<HTMLTemplateElement>('template[data-article-card]'));
+  const searchInput = document.querySelector<HTMLInputElement>('[data-articles-search]');
+  const sortSelect = document.querySelector<HTMLSelectElement>('[data-articles-sort]');
+
+  const getPublishedAtValue = (template: HTMLTemplateElement) => {
+    const value = template.dataset.publishedAt;
+    const time = value ? Date.parse(value) : 0;
+    return Number.isFinite(time) ? time : 0;
+  };
+
+  if (grid && templates.length > 0) {
+    type PaginationToken = { type: 'page'; value: number } | { type: 'ellipsis' };
+    let activeQuery = '';
+    let activeSort = 'date_desc';
+    let activePage = 1;
+
+    const getFilteredTemplates = () => {
+      const query = activeQuery.trim().toLowerCase();
+      const filtered = templates.filter((template) => {
+        if (!query) return true;
+        return (template.dataset.title || '').includes(query) || (template.dataset.body || '').includes(query);
+      });
+
+      filtered.sort((left, right) => {
+        const leftDate = getPublishedAtValue(left);
+        const rightDate = getPublishedAtValue(right);
+        const leftTitle = left.dataset.title || '';
+        const rightTitle = right.dataset.title || '';
+
+        if (activeSort === 'date_asc') return leftDate - rightDate;
+        if (activeSort === 'title_asc') return leftTitle.localeCompare(rightTitle, 'ru');
+        if (activeSort === 'title_desc') return rightTitle.localeCompare(leftTitle, 'ru');
+        return rightDate - leftDate;
+      });
+
+      return filtered;
+    };
+
+    const getPaginationTokens = (totalPagesValue: number, currentPage: number): PaginationToken[] => {
+      if (totalPagesValue <= 7) {
+        return Array.from({ length: totalPagesValue }, (_, index): PaginationToken => ({ type: 'page', value: index + 1 }));
+      }
+
+      const pageSet = new Set([1, totalPagesValue, currentPage - 1, currentPage, currentPage + 1]);
+      if (currentPage <= 3) {
+        pageSet.add(2);
+        pageSet.add(3);
+        pageSet.add(4);
+      }
+      if (currentPage >= totalPagesValue - 2) {
+        pageSet.add(totalPagesValue - 1);
+        pageSet.add(totalPagesValue - 2);
+        pageSet.add(totalPagesValue - 3);
+      }
+
+      const pages = Array.from(pageSet)
+        .filter((value) => value >= 1 && value <= totalPagesValue)
+        .sort((left, right) => left - right);
+      const tokens: PaginationToken[] = [];
+      for (let i = 0; i < pages.length; i += 1) {
+        if (i > 0 && pages[i] - pages[i - 1] > 1) {
+          tokens.push({ type: 'ellipsis' });
+        }
+        tokens.push({ type: 'page', value: pages[i] });
+      }
+      return tokens;
+    };
+
+    const renderPagination = (totalPagesValue: number, currentPage: number) => {
+      if (!pagination) return;
+      pagination.innerHTML = '';
+      if (totalPagesValue <= 1) {
+        pagination.hidden = true;
+        return;
+      }
+      pagination.hidden = false;
+      pagination.dataset.totalPages = String(totalPagesValue);
+
+      const prevButton = document.createElement('button');
+      prevButton.type = 'button';
+      prevButton.className = 'pagination-link pagination-link--arrow';
+      prevButton.dataset.pagePrev = '';
+      prevButton.setAttribute('aria-label', 'Предыдущая страница');
+      prevButton.textContent = '‹';
+      prevButton.disabled = currentPage <= 1;
+      prevButton.addEventListener('click', () => {
+        if (activePage > 1) renderPage(activePage - 1);
+      });
+      pagination.append(prevButton);
+
+      getPaginationTokens(totalPagesValue, currentPage).forEach((token) => {
+        if (token.type === 'ellipsis') {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'pagination-ellipsis';
+          ellipsis.dataset.pageEllipsis = '';
+          ellipsis.setAttribute('aria-hidden', 'true');
+          ellipsis.textContent = '…';
+          pagination.append(ellipsis);
+          return;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `pagination-link${token.value === currentPage ? ' is-active' : ''}`;
+        button.dataset.pageButton = String(token.value);
+        button.textContent = String(token.value);
+        if (token.value === currentPage) {
+          button.setAttribute('aria-current', 'page');
+        }
+        button.addEventListener('click', () => renderPage(token.value));
+        pagination.append(button);
+      });
+
+      const nextButton = document.createElement('button');
+      nextButton.type = 'button';
+      nextButton.className = 'pagination-link pagination-link--arrow';
+      nextButton.dataset.pageNext = '';
+      nextButton.setAttribute('aria-label', 'Следующая страница');
+      nextButton.textContent = '›';
+      nextButton.disabled = currentPage >= totalPagesValue;
+      nextButton.addEventListener('click', () => {
+        if (activePage < totalPagesValue) renderPage(activePage + 1);
+      });
+      pagination.append(nextButton);
+    };
+
+    const renderPage = (pageNumber: number) => {
+      const filtered = getFilteredTemplates();
+      const totalPagesValue = Math.max(1, Math.ceil(filtered.length / ARTICLES_PER_PAGE));
+      const safePage = Math.min(pageNumber, totalPagesValue);
+      activePage = safePage;
+
+      grid.innerHTML = '';
+      filtered
+        .slice((safePage - 1) * ARTICLES_PER_PAGE, safePage * ARTICLES_PER_PAGE)
+        .forEach((template) => {
+          grid.append(template.content.cloneNode(true));
+        });
+
+      renderPagination(totalPagesValue, safePage);
+
+    };
+
+    searchInput?.addEventListener('input', () => {
+      activeQuery = searchInput.value || '';
+      renderPage(1);
+    });
+
+    sortSelect?.addEventListener('change', () => {
+      activeSort = sortSelect.value || 'date_desc';
+      renderPage(1);
+    });
+
+    renderPage(1);
+  }
+</script>

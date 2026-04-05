@@ -1,0 +1,84 @@
+---
+interface Props {
+  icon: string;
+  title: string;
+  text: string;
+}
+
+const { icon, title, text } = Astro.props;
+---
+
+<article class="feature-card">
+  <div class="feature-card-head">
+    <span class="feature-card-icon-wrap" aria-hidden="true">
+      <img src={icon} alt="" class="feature-card-icon" width="20" height="20" loading="lazy" />
+    </span>
+    <h3 class="feature-card-title">{title}</h3>
+  </div>
+  <p class="feature-card-text">{text}</p>
+</article>
+
+<style>
+  .feature-card {
+    --feature-card-border: rgba(217, 220, 214, 0.5);
+    --feature-card-bg: #f8f8f6;
+    --feature-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    --feature-card-icon-bg: #4cab50;
+    --feature-card-title-color: #2f3331;
+    --feature-card-text-color: #666b67;
+    height: 100%;
+    padding: 1rem 1rem 1.1rem;
+    border-radius: 20px;
+    border: 1px solid var(--feature-card-border);
+    background: var(--feature-card-bg);
+    box-shadow: var(--feature-card-shadow);
+  }
+
+  .feature-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .feature-card-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--feature-card-icon-bg);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .feature-card-icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  .feature-card-title {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--feature-card-title-color);
+  }
+
+  .feature-card-text {
+    margin: 0;
+    font-size: var(--font-s);
+    line-height: 1.52;
+    color: var(--feature-card-text-color);
+  }
+
+  :global(:root[data-theme='dark']) .feature-card {
+    --feature-card-border: rgba(93, 104, 93, 0.55);
+    --feature-card-bg: #222821;
+    --feature-card-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+    --feature-card-icon-bg: #5f8d60;
+    --feature-card-title-color: #eceeec;
+    --feature-card-text-color: #c1c6c0;
+  }
+</style>

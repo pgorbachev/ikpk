@@ -1,0 +1,49 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props as Props;
+---
+
+<>
+  <h1 class="page-title">{title}</h1>
+  <div class="schedule-lead">
+    <p>Уважаемые студенты, обратите внимание на то, что в расписании возможны изменения.</p>
+    <p>Убедительно просим вас уточнять расписание и цены перед покупкой билетов и бронированием отеля.</p>
+  </div>
+</>
+
+<style>
+  .page-title {
+    margin-bottom: 0.9rem;
+  }
+
+  .schedule-lead {
+    margin-bottom: 1.35rem;
+    max-width: 78ch;
+    padding: 0.7rem 0.85rem;
+    border-radius: 4px;
+    background: #f5f5f2;
+    border: 1px solid #deded7;
+  }
+
+  .schedule-lead p {
+    margin: 0;
+    color: var(--color-dark-700);
+    line-height: 1.55;
+  }
+
+  .schedule-lead p + p {
+    margin-top: 0.4rem;
+  }
+
+  :root[data-theme='dark'] .schedule-lead {
+    background: #252a25;
+    border-color: #404840;
+  }
+
+  :root[data-theme='dark'] .schedule-lead p {
+    color: #e3e7e2;
+  }
+</style>

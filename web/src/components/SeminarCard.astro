@@ -1,51 +1,157 @@
 ---
 import type { Seminar } from '../lib/data';
 import { excerpt } from '../lib/data';
-import MediaCard from './ui/MediaCard.astro';
 
 interface Props {
   seminar: Seminar;
   href: string;
 }
 
-const { seminar, href } = Astro.props;
+const { seminar, href } = Astro.props as Props;
 const statusLabel: Record<string, string> = {
   active: 'Набор открыт',
   not_planned: 'Не запланирован',
   completed: 'Завершён',
 };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const seminarImage = seminar.images?.[0] || '';
+const cleanedExcerpt = seminar.description_text
+  ? excerpt(seminar.description_text, 190)
+      .replace(new RegExp(`^${escapeRegExp(seminar.name)}\\s*`, 'i'), '')
+      .replace(/Записаться/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  : '';
 ---
 
-<MediaCard
-  href={href}
-  title={seminar.name}
-  className="seminar-card"
-  titleClassName="seminar-card-title"
->
-  {seminar.status && (
-    <span slot="eyebrow" class:list={['badge', `badge-${seminar.status}`]}>
-      {statusLabel[seminar.status] || seminar.status}
-    </span>
+<a href={href} class="seminar-card" data-testid="course-group-seminar-card">
+  <div class="seminar-card-media">
+    {seminarImage ? (
+      <img src={seminarImage} alt={seminar.name} loading="lazy" width="420" height="220" />
+    ) : (
+      <div class="seminar-card-fallback">
+        <span>Семинар ИКПК</span>
+      </div>
+    )}
+  </div>
+  <div class="seminar-card-head">
+    {seminar.status && (
+      <span class:list={['badge', `badge-${seminar.status}`]}>
+        {statusLabel[seminar.status] || seminar.status}
+      </span>
+    )}
+    <span class="seminar-card-kind">Семинар</span>
+  </div>
+  <h3 class="seminar-card-title">{seminar.name}</h3>
+  {cleanedExcerpt && (
+    <p class="seminar-card-excerpt">{cleanedExcerpt}</p>
   )}
-  {seminar.description_text && (
-    <p class="seminar-card-excerpt">{excerpt(seminar.description_text, 150)}</p>
-  )}
-</MediaCard>
+  <span class="seminar-card-link">Подробнее</span>
+</a>
 
 <style>
-  :global(.seminar-card .seminar-card-title) {
-    margin-bottom: 0.5rem;
+  .seminar-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding: 1.2rem 1.25rem 1.3rem;
+    border-radius: 18px;
+    border: 1px solid #d8d8d2;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+
+  .seminar-card-media {
+    min-height: 170px;
+    margin: -1.2rem -1.25rem 0.95rem;
+    background: #ecece8;
+    overflow: hidden;
+    border-bottom: 1px solid #ddddda;
+  }
+
+  .seminar-card-media img {
+    display: block;
+    width: 100%;
+    height: 170px;
+    object-fit: cover;
+  }
+
+  .seminar-card-fallback {
+    display: flex;
+    align-items: flex-end;
+    min-height: 170px;
+    padding: 1rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(16, 19, 16, 0.1) 100%),
+      linear-gradient(135deg, #f4f4f1 0%, #e6e7e1 100%);
+    color: var(--color-gray-600);
+    font-size: var(--font-xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .seminar-card:hover {
+    text-decoration: none;
+    border-color: #bfc0ba;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .seminar-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.68rem;
+  }
+
+  .seminar-card-kind {
+    font-size: var(--font-xs);
+    color: var(--color-gray-500);
+    white-space: nowrap;
+  }
+
+  .seminar-card-title {
+    margin: 0 0 0.6rem;
+    font-size: 1.05rem;
+    line-height: 1.38;
+    color: var(--color-dark-700);
   }
 
   .seminar-card-excerpt {
+    margin: 0;
     font-size: var(--font-s);
     color: var(--color-gray-600);
-    margin-top: 0.5rem;
-    line-height: 1.5;
+    line-height: 1.55;
   }
 
-  :global(.seminar-card .badge) {
-    font-size: var(--font-xs);
-    margin-bottom: 0.5rem;
+  .seminar-card-link {
+    margin-top: auto;
+    padding-top: 0.8rem;
+    font-size: var(--font-s);
+    color: #4e6b5f;
+    font-weight: 600;
+  }
+
+  .seminar-card :global(.badge) {
+    margin: 0;
+  }
+
+  :root[data-theme='dark'] .seminar-card-media {
+    background: #2b302b;
+    border-color: #434a43;
+  }
+
+  :root[data-theme='dark'] .seminar-card-fallback {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(7, 10, 7, 0.24) 100%),
+      linear-gradient(135deg, #2d322d 0%, #1f241f 100%);
   }
 </style>

@@ -1,46 +1,120 @@
 ---
 import type { Article } from '../lib/data';
 import { excerpt, formatDate } from '../lib/data';
-import MediaCard from './ui/MediaCard.astro';
 
 interface Props {
   article: Article;
+  variant?: 'listing' | 'compact';
 }
 
-const { article } = Astro.props as Props;
+const { article, variant = 'compact' } = Astro.props as Props;
 ---
 
-<MediaCard
+<a
   href={`/statyi/${article.slug}`}
-  title={article.title}
-  image={article.image ?? undefined}
-  imageAlt={article.title}
-  className="article-card"
-  titleClassName="article-card-title"
+  class:list={['article-card', variant === 'listing' && 'article-card--listing']}
 >
-  {article.published_at && (
-    <time class="article-card-date text-muted text-small" datetime={article.published_at}>
-      {formatDate(article.published_at)}
-    </time>
+  {article.image && (
+    <div class="article-card-media">
+      <img src={article.image} alt={article.title} loading="lazy" width="640" height="400" />
+    </div>
   )}
-  {article.body_text && (
-    <p class="article-card-excerpt">{excerpt(article.body_text, 150)}</p>
-  )}
-</MediaCard>
+  <div class="article-card-body">
+    <h3 class="article-card-title">{article.title}</h3>
+    {article.published_at && (
+      <time class="article-card-date" datetime={article.published_at}>
+        {formatDate(article.published_at)}
+      </time>
+    )}
+    {article.body_text && (
+      <p class="article-card-excerpt">{excerpt(article.body_text, 150)}</p>
+    )}
+  </div>
+</a>
 
 <style>
-  :global(.article-card .article-card-title) {
-    margin-bottom: 0.25rem;
+  .article-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: var(--color-light-100);
+    border: 1px solid transparent;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .article-card:hover {
+    text-decoration: none;
+  }
+
+  .article-card-media {
+    aspect-ratio: 16 / 10;
+    background: var(--color-light-300);
+  }
+
+  .article-card-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .article-card-body {
+    padding: 0.95rem 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .article-card-title {
+    margin: 0 0 0.45rem;
+    font-size: 1rem;
+    line-height: 1.35;
+    color: var(--color-dark-700);
   }
 
   .article-card-date {
     display: block;
     margin-bottom: 0.5rem;
+    color: var(--color-gray-500);
+    font-size: var(--font-s);
   }
 
   .article-card-excerpt {
+    margin: 0;
     font-size: var(--font-s);
     color: var(--color-gray-600);
     line-height: 1.5;
+  }
+
+  .article-card--listing {
+    border-radius: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    min-height: 25.9rem;
+  }
+
+  .article-card--listing .article-card-media {
+    aspect-ratio: 3 / 2;
+  }
+
+  .article-card--listing .article-card-body {
+    padding: 1.05rem 1.05rem 1.2rem;
+  }
+
+  .article-card--listing .article-card-title {
+    font-size: 1.08rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .article-card--listing .article-card-date {
+    margin-bottom: 0.6rem;
+  }
+
+  .article-card--listing .article-card-excerpt {
+    margin-top: 0.2rem;
+    line-height: 1.53;
   }
 </style>

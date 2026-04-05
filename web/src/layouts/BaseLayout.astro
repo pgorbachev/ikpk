@@ -6,11 +6,13 @@ interface Props {
   noindex?: boolean;
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
+  newsletterVariant?: 'band' | 'card' | 'none';
 }
 
 import Header from '../components/Header.astro';
 import Sidebar from '../components/Sidebar.astro';
 import Footer from '../components/Footer.astro';
+import NewsletterSignup from '../components/NewsletterSignup.astro';
 import '../styles/global.css';
 
 const {
@@ -20,6 +22,7 @@ const {
   noindex = false,
   schema,
   preloadHero = false,
+  newsletterVariant = 'band',
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
@@ -66,23 +69,7 @@ const siteName = 'ИКПК';
       <slot />
     </main>
 
-    <!-- Newsletter subscription -->
-    <section class="newsletter">
-      <div class="container newsletter-inner">
-        <h2 class="newsletter-title">Подпишитесь на наши новости</h2>
-        <p class="newsletter-subtitle">Чтобы не пропускать наши активности и акции</p>
-        <form class="newsletter-form" action="#" method="post">
-          <input
-            type="email"
-            name="email"
-            placeholder="Ваш email"
-            required
-            class="newsletter-input"
-          />
-          <button type="submit" class="btn btn-accent newsletter-btn">Подписаться</button>
-        </form>
-      </div>
-    </section>
+    {newsletterVariant !== 'none' && <NewsletterSignup variant={newsletterVariant} />}
 
     <Footer />
 

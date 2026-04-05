@@ -1,10 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import AsideCard from '../components/ui/AsideCard.astro';
-import MetaLabel from '../components/ui/MetaLabel.astro';
+import ContactShell from '../components/contacts/ContactShell.astro';
 import PageHeader from '../components/ui/PageHeader.astro';
-import { getPage, cleanBodyHtml } from '../lib/data';
+import { getPage } from '../lib/data';
 
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
@@ -32,221 +31,41 @@ const schema = {
     availableLanguage: 'Russian',
   },
 };
+
+const mapSrc = `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent('Санкт-Петербург, Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н')}&z=16`;
 ---
 
-<BaseLayout title={title} description={description} schema={schema}>
+<BaseLayout title={title} description={description} schema={schema} newsletterVariant="card">
   <div class="container">
     <Breadcrumbs items={[{ label: 'Контакты' }]} />
 
     <section class="section">
-      <PageHeader title="Контакты" />
+      <PageHeader title="Контакты" compact={true} />
 
-      <div class="content-sidebar-layout contacts-layout" style="--layout-aside-width: 320px;">
-        <div class="content-sidebar-main contacts-main">
-          <div class="contacts-grid">
-            <div class="contact-block">
-              <div class="contact-icon" aria-hidden="true">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-              </div>
-              <MetaLabel as="h2">Институт</MetaLabel>
-              <a href="tel:+78126465450" class="contact-value">+7 (812) 646-54-50</a>
-            </div>
-            <div class="contact-block">
-              <div class="contact-icon" aria-hidden="true">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              </div>
-              <MetaLabel as="h2">Email</MetaLabel>
-              <a href="mailto:info@ikpk.su" class="contact-value">info@ikpk.su</a>
-            </div>
-            <div class="contact-block">
-              <div class="contact-icon" aria-hidden="true">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              </div>
-              <MetaLabel as="h2">Адрес</MetaLabel>
-              <p class="contact-value contact-value--address">Санкт-Петербург, Новочеркасский&nbsp;пр&#8209;т, д.&nbsp;22/15, Лит&nbsp;А, пом.&nbsp;4Н</p>
-            </div>
-            <div class="contact-block">
-              <div class="contact-icon" aria-hidden="true">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              </div>
-              <MetaLabel as="h2">Часы работы</MetaLabel>
-              <p class="contact-value contact-value--hours">Пн–Пт: 10:00–18:00</p>
-              <p class="contact-hours-note">Сб, Вс — выходной</p>
-            </div>
-            <div class="contact-block">
-              <div class="contact-icon" aria-hidden="true">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-              </div>
-              <MetaLabel as="h2">Медицинский центр</MetaLabel>
-              <a href="tel:+78126465460" class="contact-value">+7 (812) 646-54-60</a>
-              <a href="https://mudriydoctor.ru" class="contact-link" target="_blank" rel="noopener">mudriydoctor.ru</a>
-            </div>
-          </div>
-
-          {page?.body_html ? (
-            <div class="contacts-extra rich-content" set:html={cleanBodyHtml(page.body_html)} />
-          ) : page?.body_text && (
-            <div class="contacts-extra rich-content">
-              <p>{page.body_text}</p>
-            </div>
-          )}
-        </div>
-
-        <aside class="content-sidebar-aside contacts-sidebar">
-          <AsideCard tone="muted" centered={true} className="map-placeholder">
-            <div class="map-placeholder-icon" aria-hidden="true">
-              <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            </div>
-            <p class="map-placeholder-text">Новочеркасский пр-т, д.&nbsp;22/15</p>
-            <p class="map-placeholder-sub">Санкт-Петербург, 195112</p>
-            <a
-              href="https://yandex.ru/maps/?text=Санкт-Петербург,+Новочеркасский+пр-т,+д.+22/15"
-              class="btn btn-outline map-btn"
-              target="_blank"
-              rel="noopener"
-            >Открыть на карте</a>
-          </AsideCard>
-
-          <AsideCard title="Полезные ссылки" className="quick-links-card">
-            <ul>
-              <li><a href="https://medshop.ikpk.su" target="_blank" rel="noopener">Медицинская литература</a></li>
-              <li><a href="https://mudriydoctor.ru" target="_blank" rel="noopener">Медицинский центр</a></li>
-            </ul>
-          </AsideCard>
-        </aside>
-      </div>
+      <ContactShell
+        address="Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н"
+        addressLabel="Санкт-Петербург"
+        hours={'понедельник - пятница: <strong>10:00 - 18:00</strong>, суббота, воскресенье - <strong>выходной</strong>'}
+        institutePhone="+7 (812) 646-54-50"
+        email="info@ikpk.su"
+        storeUrl="https://medshop.ikpk.su"
+        clinicPhone="+7 (812) 646-54-60"
+        clinicUrl="https://mudriydoctor.ru"
+        requisites={[
+          'ООО «Институт клинической прикладной кинезиологии»',
+          'ИНН/КПП 7811351115 / 780601001, ОГРН 5067847182651.',
+          'Юридический адрес: 195112, Санкт-Петербург, Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н.',
+          'Телефон: +7 (812) 646-54-50',
+        ]}
+        mapSrc={mapSrc}
+        mapOpenUrl="https://yandex.ru/maps/?text=Санкт-Петербург,+Новочеркасский+пр-т,+д.+22/15"
+      />
     </section>
   </div>
 </BaseLayout>
 
 <style>
-  .contacts-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2.5rem;
-  }
-
-  .contact-block {
-    background: var(--color-light-100);
-    border: 1px solid var(--color-gray-200);
-    border-radius: 8px;
-    padding: 1.25rem;
-    transition: box-shadow 0.2s;
-  }
-
-  .contact-block:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-
-  .contact-icon {
-    color: var(--color-accent-500);
-    margin-bottom: 0.75rem;
-  }
-
-  .contact-block :global(.meta-label) {
-    margin-bottom: 0.5rem;
-  }
-
-  .contact-value {
-    font-size: var(--font-l);
-    font-weight: 600;
-    color: var(--color-dark-700);
-    display: block;
-  }
-
-  .contact-value--address,
-  .contact-value--hours {
-    font-size: var(--font-m);
-  }
-
-  a.contact-value {
-    color: var(--color-accent-500);
-  }
-
-  a.contact-value:hover {
-    color: var(--color-accent-600);
-  }
-
-  .contact-hours-note {
-    font-size: var(--font-s);
-    color: var(--color-gray-500);
-    margin-top: 0.25rem;
-  }
-
-  .contact-link {
-    display: inline-block;
-    margin-top: 0.25rem;
-    font-size: var(--font-s);
-    color: var(--color-info-500);
-  }
-
-  .contacts-extra {
-    max-width: none;
-  }
-
-  :global(.map-placeholder) {
-    padding: 2rem 1.5rem;
-  }
-
-  .map-placeholder-icon {
-    color: var(--color-accent-500);
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: center;
-  }
-
-  .map-placeholder-text {
-    font-weight: 600;
-    color: var(--color-dark-700);
-    margin-bottom: 0.25rem;
-  }
-
-  .map-placeholder-sub {
-    font-size: var(--font-s);
-    color: var(--color-gray-500);
-    margin-bottom: 1.25rem;
-  }
-
-  .map-btn {
-    width: 100%;
-  }
-
-  :global(.quick-links-card) {
-    padding: 1.25rem;
-  }
-
-  :global(.quick-links-card) ul {
-    list-style: none;
-    padding: 0;
-  }
-
-  :global(.quick-links-card) li {
-    padding: 0.4rem 0;
-    border-bottom: 1px solid var(--color-gray-200);
-  }
-
-  :global(.quick-links-card) li:last-child {
-    border-bottom: none;
-  }
-
-  :global(.quick-links-card) a {
-    font-size: var(--font-s);
-    color: var(--color-info-500);
-  }
-
-  @media (max-width: 1024px) {
-    .contacts-layout {
-      grid-template-columns: 1fr;
-    }
-    .contacts-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  @media (max-width: 768px) {
-    .contacts-grid {
-      grid-template-columns: 1fr;
-    }
+  .section :global(.page-header) {
+    margin-bottom: 1.35rem;
   }
 </style>
