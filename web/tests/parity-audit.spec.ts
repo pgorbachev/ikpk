@@ -1,28 +1,8 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { gotoAttachedPath } from './helpers/navigation';
 
 function normalizeTextList(values: string[]): string[] {
   return values.map((value) => value.replace(/\s+/g, ' ').trim()).filter(Boolean);
-}
-
-async function gotoAttachedPath(page: Page, path: string): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
-    const header = page.locator('header').first();
-    if (await header.isVisible().catch(() => false)) {
-      return;
-    }
-
-    const notFoundHeading = page.getByRole('heading', { name: '404: Not Found' });
-    if (!(await notFoundHeading.isVisible().catch(() => false))) {
-      await page.waitForLoadState('networkidle').catch(() => undefined);
-      if (await header.isVisible().catch(() => false)) {
-        return;
-      }
-    }
-
-    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
-    await page.waitForTimeout(250);
-  }
 }
 
 test.describe('Parity Audit Acceptance', () => {

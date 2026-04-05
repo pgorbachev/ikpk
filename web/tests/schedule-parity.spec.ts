@@ -1,16 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-async function gotoAttachedPath(page: Page, path: string): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
-    const header = page.locator('header').first();
-    if (await header.isVisible().catch(() => false)) {
-      return;
-    }
-    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
-    await page.waitForTimeout(250);
-  }
-}
+import { expect, test } from '@playwright/test';
+import { gotoAttachedPath } from './helpers/navigation';
 
 test.describe('Schedule Listing Parity', () => {
   test('/raspisanie-i-tseny renders production-like filters, cards and pagination', async ({ page }) => {

@@ -39,12 +39,13 @@ const { seminar, courseGroup, institute } = Astro.props as {
   institute: Institute;
 };
 
-const now = new Date();
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 const schedule = getScheduleEntries().filter(
   (e) =>
     e.seminar?.slug === seminar.slug &&
     e.status === 'active' &&
-    new Date(e.startAt).getTime() > now.getTime()
+    new Date(e.startAt).getTime() >= today.getTime()
 );
 const sortedSchedule = [...schedule].sort(
   (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
