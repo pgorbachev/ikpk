@@ -16,8 +16,8 @@ test.describe('Homepage', () => {
 
   test('has newsletter subscription form', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.newsletter')).toBeVisible();
-    await expect(page.locator('.newsletter input[type="email"]')).toBeVisible();
+    await expect(page.locator('.newsletter-signup')).toBeVisible();
+    await expect(page.locator('.newsletter-signup input[type="email"]')).toBeVisible();
   });
 
   test('has footer with correct phone', async ({ page }) => {
@@ -97,7 +97,7 @@ test.describe('Key pages load', () => {
 test.describe('Navigation', () => {
   test('institute page has course groups', async ({ page }) => {
     await page.goto('/institut-klinicheskoy-prikladnoy-kineziologii');
-    const cards = page.locator('.card');
+    const cards = page.locator('.program-card');
     expect(await cards.count()).toBeGreaterThan(0);
   });
 
@@ -128,12 +128,12 @@ test.describe('Content quality', () => {
 
   test('kontakty page shows correct phone', async ({ page }) => {
     await page.goto('/kontakty');
-    await expect(page.locator('.contact-value').first()).toContainText('646-54-50');
+    await expect(page.locator('.contact-shell-link').first()).toContainText('646-54-50');
   });
 
   test('schedule page has events table', async ({ page }) => {
     await page.goto('/raspisanie-i-tseny');
-    const rows = page.locator('table tbody tr, .schedule-entry, .card');
+    const rows = page.locator('.schedule-card');
     expect(await rows.count()).toBeGreaterThan(0);
   });
 });
