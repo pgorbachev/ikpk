@@ -111,7 +111,7 @@ const description = page?.seo_description || 'Статьи и публикаци
                   data-article-card
                   data-page={pageNo}
                   data-title={article.title.toLowerCase()}
-                  data-body={(article.body_text || '').toLowerCase()}
+                  data-body={(article.body_text || '').slice(0, 300).toLowerCase()}
                   data-published-at={article.published_at || ''}
                 >
                   <ArticleCard article={article} variant="listing" />
@@ -361,6 +361,12 @@ const description = page?.seo_description || 'Статьи и публикаци
       renderPagination(totalPagesValue, safePage);
 
     };
+
+    const initialQuery = new URLSearchParams(window.location.search).get('q') || '';
+    if (initialQuery && searchInput) {
+      searchInput.value = initialQuery;
+      activeQuery = initialQuery.toLowerCase();
+    }
 
     searchInput?.addEventListener('input', () => {
       activeQuery = searchInput.value || '';

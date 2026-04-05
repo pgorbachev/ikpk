@@ -427,6 +427,7 @@
     if (!searchPanel || !searchToggle) return;
     searchPanel.hidden = true;
     searchToggle.setAttribute('aria-expanded', 'false');
+    searchToggle.focus();
   };
 
   const openSearch = () => {

@@ -51,10 +51,11 @@ const entries = [...baseEntries, ...scheduleSupplements.filter((entry) => !sched
   .filter((entry) => entry.status === 'active' && new Date(entry.startAt).getTime() >= today.getTime())
   .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
+const instituteByName = new Map(institutes.map((institute) => [institute.name, institute]));
 const instituteOptionOrder = new Map(institutes.map((institute, index) => [institute.slug, index]));
 const visibleInstitutes = entries
   .map((entry) => {
-    const institute = institutes.find((candidate) => candidate.name === entry.institute.name);
+    const institute = instituteByName.get(entry.institute.name);
     return institute ? { label: institute.name, value: institute.slug } : null;
   })
   .filter((value): value is { label: string; value: string } => Boolean(value))
@@ -69,7 +70,7 @@ const visibleCities = entries
 
 const visiblePrograms = entries
   .map((entry) => {
-    const institute = institutes.find((candidate) => candidate.name === entry.institute.name);
+    const institute = instituteByName.get(entry.institute.name);
     return {
       instituteSlug: institute?.slug || '',
       name: entry.program.name,
@@ -80,7 +81,7 @@ const visiblePrograms = entries
   .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
 const cards = entries.map((entry) => {
-  const institute = institutes.find((candidate) => candidate.name === entry.institute.name);
+  const institute = instituteByName.get(entry.institute.name);
   const teacher = entry.teachers?.[0]
     ? teachers.find(
         (candidate) =>

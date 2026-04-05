@@ -6,7 +6,7 @@ import type { ScheduleEntry } from './data';
 function buildRelativeDate(offsetDays: number): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  d.setUTCHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
   return d.toISOString();
 }
 

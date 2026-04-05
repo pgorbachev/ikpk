@@ -91,7 +91,7 @@ function formatDurationLabel(entry: ScheduleEntry): string {
               href={entry.registrationFormLink || '/raspisanie-i-tseny'}
               class="seminar-register-link"
               target={entry.registrationFormLink ? '_blank' : undefined}
-              rel={entry.registrationFormLink ? 'noreferrer' : undefined}
+              rel={entry.registrationFormLink ? 'noopener noreferrer' : undefined}
             >
               Зарегистрироваться
             </a>
