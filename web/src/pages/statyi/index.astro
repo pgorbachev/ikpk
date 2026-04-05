@@ -163,9 +163,9 @@ const description = page?.seo_description || 'Статьи и публикаци
   .pagination-link {
     min-width: 2rem;
     height: 2rem;
-    border: 1px solid #d5d5cf;
-    background: #fff;
-    color: #5f625e;
+    border: 1px solid var(--color-gray-300);
+    background: var(--color-light-100);
+    color: var(--color-gray-600);
     border-radius: 4px;
     font-size: 0.84rem;
     font-weight: 600;
@@ -175,20 +175,20 @@ const description = page?.seo_description || 'Статьи и публикаци
   }
 
   .pagination-link:hover {
-    background: #f3f3f0;
-    border-color: #bdbdb7;
+    background: var(--color-light-300);
+    border-color: var(--color-gray-400);
   }
 
   .pagination-link.is-active {
-    color: #fff;
-    background: #4e6b5f;
-    border-color: #4e6b5f;
+    color: var(--color-light-100);
+    background: var(--color-accent-500);
+    border-color: var(--color-accent-500);
   }
 
   .pagination-link--arrow {
     font-size: 1.02rem;
     font-weight: 700;
-    color: #6b6d68;
+    color: var(--color-gray-600);
   }
 
   .pagination-link[disabled] {

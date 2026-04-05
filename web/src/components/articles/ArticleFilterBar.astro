@@ -51,9 +51,9 @@ const { query = '' } = Astro.props as Props;
   .article-filter-bar select {
     width: 100%;
     height: 2.62rem;
-    border: 1px solid #d7d7d1;
+    border: 1px solid var(--color-gray-300);
     border-radius: 10px;
-    background: #fff;
+    background: var(--color-light-100);
     color: var(--color-dark-700);
     font-size: var(--font-s);
     font-weight: 400;
@@ -63,7 +63,7 @@ const { query = '' } = Astro.props as Props;
   .article-filter-search input:focus,
   .article-filter-bar select:focus {
     outline: none;
-    border-color: #bbbcb6;
+    border-color: var(--color-gray-400);
     box-shadow: 0 0 0 2px rgba(18, 18, 18, 0.08);
   }
 
@@ -76,8 +76,8 @@ const { query = '' } = Astro.props as Props;
     padding: 0 1.9rem 0 0.84rem;
     appearance: none;
     background-image:
-      linear-gradient(45deg, transparent 50%, #656565 50%),
-      linear-gradient(135deg, #656565 50%, transparent 50%);
+      linear-gradient(45deg, transparent 50%, var(--color-gray-600) 50%),
+      linear-gradient(135deg, var(--color-gray-600) 50%, transparent 50%);
     background-position:
       calc(100% - 16px) calc(50% - 2px),
       calc(100% - 11px) calc(50% - 2px);

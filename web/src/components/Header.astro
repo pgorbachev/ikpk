@@ -218,9 +218,9 @@
   .header-theme-toggle {
     width: 52px;
     height: 32px;
-    border: 1px solid #c9ced2;
+    border: 1px solid var(--color-gray-300);
     border-radius: 999px;
-    background: #e7ebef;
+    background: var(--color-gray-200);
     padding: 2px;
     justify-content: flex-start;
   }
@@ -239,7 +239,7 @@
     width: 24px;
     height: 24px;
     border-radius: 999px;
-    background: #fff;
+    background: var(--color-light-100);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
     transition: transform 0.18s ease;
   }
@@ -254,8 +254,8 @@
   }
 
   .header-theme-toggle:hover {
-    border-color: #b7bec3;
-    background: #dfe4e8;
+    border-color: var(--color-gray-400);
+    background: var(--color-gray-150);
   }
 
   .header-theme-toggle[aria-checked='true']:hover {
@@ -263,9 +263,9 @@
   }
 
   .header-control[data-header-tool='search'][aria-expanded='true'] {
-    background: #dde7de;
-    border-color: #bbcfbe;
-    color: #2f5d34;
+    background: var(--color-accent-50);
+    border-color: var(--color-accent-500);
+    color: var(--color-accent-500);
   }
 
   .header-search {
@@ -275,9 +275,9 @@
     top: calc(100% - 1px);
     width: min(560px, calc(100% - 2.25rem));
     z-index: 101;
-    border: 1px solid #d1d4d0;
+    border: 1px solid var(--color-gray-300);
     border-radius: 8px;
-    background: #f5f6f3;
+    background: var(--color-light-300);
     padding: 0.55rem;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
   }
@@ -293,7 +293,7 @@
   .header-search-input {
     width: 100%;
     height: 38px;
-    border: 1px solid #c9cdca;
+    border: 1px solid var(--color-gray-300);
     border-radius: 6px;
     background: var(--color-light-100);
     color: var(--color-dark-700);
@@ -310,9 +310,9 @@
   .header-search-submit {
     height: 38px;
     padding: 0 0.95rem;
-    border: 1px solid #c4c9c5;
+    border: 1px solid var(--color-gray-300);
     border-radius: 6px;
-    background: #ecefea;
+    background: var(--color-gray-150);
     color: var(--color-dark-700);
     font-size: var(--font-s);
     font-weight: 600;
@@ -321,7 +321,7 @@
   }
 
   .header-search-submit:hover {
-    background: #e5e9e4;
+    background: var(--color-gray-200);
   }
 
   .header-search-close {
