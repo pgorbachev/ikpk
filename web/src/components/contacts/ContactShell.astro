@@ -2,7 +2,8 @@
 interface Props {
   address: string;
   addressLabel: string;
-  hours: string;
+  hoursWeekdays: string;
+  hoursWeekend: string;
   institutePhone: string;
   email: string;
   storeUrl: string;
@@ -16,7 +17,8 @@ interface Props {
 const {
   address,
   addressLabel,
-  hours,
+  hoursWeekdays,
+  hoursWeekend,
   institutePhone,
   email,
   storeUrl,
@@ -43,7 +45,9 @@ const {
         <span class="contact-shell-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M11.99 2C6.47 2 2 6.48 2 12C2 17.52 6.47 22 11.99 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 11.99 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20ZM12.5 7.75C12.5 7.33579 12.1642 7 11.75 7C11.3358 7 11 7.33579 11 7.75V12.4338C11 12.7851 11.1843 13.1106 11.4855 13.2913L15.6383 15.783C15.9768 15.9861 16.4159 15.878 16.6214 15.5409C16.8298 15.1992 16.7188 14.7531 16.3746 14.5489L12.5 12.25V7.75Z" fill="currentColor"></path></svg>
         </span>
-        <div class="contact-shell-text" set:html={hours} />
+        <div class="contact-shell-text">
+            понедельник — пятница: <strong>{hoursWeekdays}</strong>, суббота, воскресенье — <strong>{hoursWeekend}</strong>
+          </div>
       </div>
       <div class="contact-shell-item">
         <span class="contact-shell-icon contact-shell-icon--accent" aria-hidden="true">
