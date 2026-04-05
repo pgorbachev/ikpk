@@ -133,7 +133,7 @@ test.describe('Parity Audit Acceptance', () => {
     }
 
     const initialStartIndex = await track.getAttribute('data-start-index');
-    await newsSection.getByRole('button', { name: /Next slide/i }).click();
+    await newsSection.getByRole('button', { name: /Следующий слайд/i }).click();
     await expect(newsSection.locator('.news-card.is-visible')).toHaveCount(4);
     await expect(track).toHaveAttribute('data-visible-count', '4');
     const afterOneStepIndex = await track.getAttribute('data-start-index');
@@ -141,7 +141,7 @@ test.describe('Parity Audit Acceptance', () => {
 
     const totalCards = await newsCards.count();
     for (let i = 0; i < totalCards - 1; i += 1) {
-      await newsSection.getByRole('button', { name: /Next slide/i }).click();
+      await newsSection.getByRole('button', { name: /Следующий слайд/i }).click();
     }
     const afterFullLoopIndex = await track.getAttribute('data-start-index');
     expect(afterFullLoopIndex).toBe(initialStartIndex);

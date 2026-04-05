@@ -30,13 +30,21 @@ function formatCalendarDate(dateStr: string): string {
   });
 }
 
+function pluralizeRu(value: number, one: string, few: string, many: string): string {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 function formatDurationLabel(startAt: string, endAt: string, duration: string | number): string {
   const start = new Date(startAt);
   const end = new Date(endAt);
   const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-  const dayLabel = `${diffDays} ${diffDays === 1 ? 'день' : diffDays < 5 ? 'дня' : 'дней'}`;
+  const dayLabel = `${diffDays} ${pluralizeRu(diffDays, 'день', 'дня', 'дней')}`;
   const hoursValue = Number(duration) || 0;
-  const hoursLabel = hoursValue > 0 ? `${hoursValue} ${hoursValue === 1 ? 'час' : hoursValue < 5 ? 'часа' : 'часов'}` : '-';
+  const hoursLabel = hoursValue > 0 ? `${hoursValue} ${pluralizeRu(hoursValue, 'час', 'часа', 'часов')}` : '-';
 
   if (startAt === endAt) {
     return `${formatCalendarDate(startAt)} - ${dayLabel} (${hoursLabel})`;

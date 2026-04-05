@@ -6,11 +6,11 @@ import ArticleFilterBar from '../../components/articles/ArticleFilterBar.astro';
 import { getArticles, getPage } from '../../lib/data';
 
 const page = getPage('statyi');
-const articles = [...getArticles()].sort((a, b) => {
-  const left = a.published_at ? Date.parse(a.published_at) : 0;
-  const right = b.published_at ? Date.parse(b.published_at) : 0;
-  return right - left;
-});
+const parseDate = (value: string | null | undefined): number => {
+  const ts = value ? Date.parse(value) : NaN;
+  return Number.isFinite(ts) ? ts : 0;
+};
+const articles = [...getArticles()].sort((a, b) => parseDate(b.published_at) - parseDate(a.published_at));
 const ARTICLES_PER_PAGE = 6;
 const totalPages = Math.max(1, Math.ceil(articles.length / ARTICLES_PER_PAGE));
 const firstPageArticles = articles.slice(0, ARTICLES_PER_PAGE);
