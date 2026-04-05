@@ -82,7 +82,12 @@ const visiblePrograms = entries
 const cards = entries.map((entry) => {
   const institute = institutes.find((candidate) => candidate.name === entry.institute.name);
   const teacher = entry.teachers?.[0]
-    ? teachers.find((candidate) => candidate.slug === String(entry.teachers[0].id))
+    ? teachers.find(
+        (candidate) =>
+          candidate.slug === String(entry.teachers[0].id) ||
+          candidate.legacy_id === String(entry.teachers[0].id) ||
+          candidate.name === entry.teachers[0].fullName
+      )
     : undefined;
   const teacherName = entry.teachers?.[0]?.fullName || 'Преподаватель уточняется';
   const instituteSlug = institute?.slug || slugify(entry.institute.shortname || entry.institute.name);

@@ -92,7 +92,11 @@
         button.className = 'schedule-page-button';
         button.textContent = String(page);
         button.disabled = page === currentPage;
-        button.setAttribute('aria-current', page === currentPage ? 'page' : 'false');
+        if (page === currentPage) {
+          button.setAttribute('aria-current', 'page');
+        } else {
+          button.removeAttribute('aria-current');
+        }
         button.addEventListener('click', () => {
           currentPage = page;
           applyFilters();

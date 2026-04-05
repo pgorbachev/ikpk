@@ -80,7 +80,7 @@
 }
 
 .btn-outline:hover {
-  background-color: #f4fbf4;
+  background-color: var(--color-accent-50);
 }
 
 .btn-accent {

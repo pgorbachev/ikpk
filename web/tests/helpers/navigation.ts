@@ -19,4 +19,5 @@ export async function gotoAttachedPath(page: Page, path: string): Promise<void> 
     await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
     await page.waitForTimeout(250);
   }
+  throw new Error(`Navigation failed after 3 attempts: ${path} (url: ${page.url()})`);
 }

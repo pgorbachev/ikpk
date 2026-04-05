@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
-
-const NEW_SITE = process.env.NEW_SITE ?? 'http://127.0.0.1:4322';
+import { gotoAttachedPath } from './helpers/navigation';
 
 const pages = [
   '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
@@ -10,7 +9,7 @@ const pages = [
 for (const path of pages) {
   test.describe(`Seminar parity ${path}`, () => {
     test('uses production-like content flow', async ({ page }) => {
-      await page.goto(NEW_SITE + path);
+      await gotoAttachedPath(page, path);
 
       await expect(page.locator('h1')).toBeVisible();
       await expect(page.locator('aside.seminar-sidebar')).toHaveCount(0);
@@ -20,7 +19,7 @@ for (const path of pages) {
     });
 
     test('shows inline schedule section with registration links', async ({ page }) => {
-      await page.goto(NEW_SITE + path);
+      await gotoAttachedPath(page, path);
 
       const schedule = page.locator('[data-testid="seminar-schedule"]');
       await expect(schedule).toBeVisible();
