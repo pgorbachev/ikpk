@@ -19,6 +19,7 @@ type PaginationToken =
   | { type: 'page'; value: number }
   | { type: 'ellipsis'; key: string };
 
+// TODO(#6): logic duplicated in client <script> as getPaginationTokens — extract to lib/pagination.ts
 function buildPaginationTokens(total: number, current: number): PaginationToken[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, index) => ({ type: 'page', value: index + 1 }));
@@ -257,6 +258,7 @@ const description = page?.seo_description || 'Статьи и публикаци
       return filtered;
     };
 
+    // TODO(#6): duplicates server-side buildPaginationTokens — extract to lib/pagination.ts
     const getPaginationTokens = (totalPagesValue: number, currentPage: number): PaginationToken[] => {
       if (totalPagesValue <= 7) {
         return Array.from({ length: totalPagesValue }, (_, index): PaginationToken => ({ type: 'page', value: index + 1 }));
