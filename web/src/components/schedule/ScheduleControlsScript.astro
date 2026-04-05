@@ -91,13 +91,15 @@
         button.type = 'button';
         button.className = 'schedule-page-button';
         button.textContent = String(page);
-        button.disabled = page === currentPage;
         if (page === currentPage) {
           button.setAttribute('aria-current', 'page');
+          button.setAttribute('aria-disabled', 'true');
         } else {
           button.removeAttribute('aria-current');
+          button.removeAttribute('aria-disabled');
         }
         button.addEventListener('click', () => {
+          if (page === currentPage) return;
           currentPage = page;
           applyFilters();
         });

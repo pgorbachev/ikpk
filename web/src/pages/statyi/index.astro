@@ -10,7 +10,14 @@ const parseDate = (value: string | null | undefined): number => {
   const ts = value ? Date.parse(value) : NaN;
   return Number.isFinite(ts) ? ts : 0;
 };
-const articles = [...getArticles()].sort((a, b) => parseDate(b.published_at) - parseDate(a.published_at));
+const initialQuery = Astro.url.searchParams.get('q')?.trim().toLowerCase() || '';
+const allArticles = [...getArticles()].sort((a, b) => parseDate(b.published_at) - parseDate(a.published_at));
+const articles = initialQuery
+  ? allArticles.filter((a) =>
+      (a.title || '').toLowerCase().includes(initialQuery) ||
+      (a.body_text || '').slice(0, 300).toLowerCase().includes(initialQuery)
+    )
+  : allArticles;
 const ARTICLES_PER_PAGE = 6;
 const totalPages = Math.max(1, Math.ceil(articles.length / ARTICLES_PER_PAGE));
 const firstPageArticles = articles.slice(0, ARTICLES_PER_PAGE);
@@ -19,7 +26,7 @@ type PaginationToken =
   | { type: 'page'; value: number }
   | { type: 'ellipsis'; key: string };
 
-// TODO(#6): logic duplicated in client <script> as getPaginationTokens — extract to lib/pagination.ts
+// TODO(TD-1): logic duplicated in client <script> as getPaginationTokens — extract to lib/pagination.ts (see docs/tech-debt.md)
 function buildPaginationTokens(total: number, current: number): PaginationToken[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, index) => ({ type: 'page', value: index + 1 }));
@@ -64,7 +71,7 @@ const description = page?.seo_description || 'Статьи и публикаци
       </header>
 
       <div class="articles-controls">
-        <ArticleFilterBar />
+        <ArticleFilterBar query={initialQuery} />
       </div>
 
       {firstPageArticles.length > 0 ? (
@@ -104,6 +111,7 @@ const description = page?.seo_description || 'Статьи и публикаци
             </nav>
           )}
 
+          {/* TODO(TD-2): all articles embedded as <template> — replace with JSON index when catalog grows (see docs/tech-debt.md) */}
           <div hidden aria-hidden="true">
             {articles.map((article, index) => {
               const pageNo = Math.floor(index / ARTICLES_PER_PAGE) + 1;
@@ -258,7 +266,7 @@ const description = page?.seo_description || 'Статьи и публикаци
       return filtered;
     };
 
-    // TODO(#6): duplicates server-side buildPaginationTokens — extract to lib/pagination.ts
+    // TODO(TD-1): duplicates server-side buildPaginationTokens — extract to lib/pagination.ts (see docs/tech-debt.md)
     const getPaginationTokens = (totalPagesValue: number, currentPage: number): PaginationToken[] => {
       if (totalPagesValue <= 7) {
         return Array.from({ length: totalPagesValue }, (_, index): PaginationToken => ({ type: 'page', value: index + 1 }));
