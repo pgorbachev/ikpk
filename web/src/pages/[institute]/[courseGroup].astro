@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import SeminarCard from '../../components/SeminarCard.astro';
+import CourseGroupSeminarItem from '../../components/course-groups/CourseGroupSeminarItem.astro';
 import { cleanBodyHtml, getInstitutes, getCourseGroups, getSeminars } from '../../lib/data';
 import type { CourseGroup, Institute } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
@@ -128,12 +128,6 @@ function extractAdditionalHtml(rawHtml: string): string {
 }
 
 const leadText = extractLeadText(courseGroup, seminars);
-const heroImage =
-  courseGroup.images?.[0]
-  || seminars.find((seminar) => seminar.images?.[0])?.images?.[0]
-  || institute.images?.[1]
-  || institute.images?.[0]
-  || '';
 const additionalHtml = extractAdditionalHtml(courseGroup.description_html || '');
 const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml) : '';
 
@@ -160,38 +154,16 @@ const schema = {
       ]}
     />
 
-    <section class="section course-group-hero" data-testid="course-group-hero">
-      <div class="course-group-hero-copy">
-        <p class="course-group-kicker">{institute.name}</p>
-        <h1 class="page-title">{courseGroup.name}</h1>
-        <p class="course-group-lead">{leadText}</p>
-        <div class="course-group-actions">
-          <a href="/raspisanie-i-tseny" class="btn btn-primary">Записаться на обучение</a>
-          <a href="#seminars" class="btn btn-outline">Смотреть семинары</a>
-        </div>
-      </div>
-
-      <div class="course-group-hero-media">
-        {heroImage ? (
-          <img src={heroImage} alt={courseGroup.name} width="520" height="360" loading="lazy" />
-        ) : (
-          <div class="course-group-hero-fallback" data-testid="course-group-hero-fallback">
-            <p class="fallback-label">Программа ИКПК</p>
-            <p class="fallback-title">{courseGroup.name}</p>
-          </div>
-        )}
-      </div>
+    <section class="section course-group-head" data-testid="course-group-head">
+      <h1 class="page-title">{courseGroup.name}</h1>
+      {leadText && <p class="course-group-lead">{leadText}</p>}
     </section>
 
     {seminars.length > 0 && (
       <section class="section course-group-seminars" id="seminars" data-testid="course-group-seminars">
-        <header class="course-group-seminars-header">
-          <h2 class="section-title">Семинары и курсы</h2>
-          <p class="course-group-seminars-meta">{seminars.length} программ в разделе</p>
-        </header>
         <div class="course-group-seminars-grid">
           {seminars.map((seminar) => (
-            <SeminarCard
+            <CourseGroupSeminarItem
               seminar={seminar}
               href={`/${institute.slug}/${courseGroup.slug}/${seminar.slug}`}
             />
@@ -209,138 +181,45 @@ const schema = {
 </BaseLayout>
 
 <style>
-  .course-group-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-    gap: 1.8rem;
-    align-items: stretch;
-    padding-top: 2.2rem;
-    padding-bottom: 2.2rem;
-  }
-
-  .course-group-kicker {
-    margin: 0 0 0.45rem;
-    color: var(--color-gray-500);
-    font-size: var(--font-s);
+  .course-group-head {
+    padding-top: 1.35rem;
+    padding-bottom: 1rem;
   }
 
   .page-title {
-    margin: 0 0 0.8rem;
+    margin: 0;
     line-height: 1.15;
   }
 
   .course-group-lead {
-    margin: 0;
-    max-width: 62ch;
+    margin: 0.9rem 0 0;
+    max-width: 100%;
     color: var(--color-gray-600);
     font-size: var(--font-m);
     line-height: 1.62;
   }
 
-  .course-group-actions {
-    margin-top: 1.15rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.7rem;
-  }
-
-  .course-group-hero-media {
-    display: flex;
-    min-height: 260px;
-    border-radius: 20px;
-    border: 1px solid #d9d9d4;
-    background: #f4f4f1;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
-    overflow: hidden;
-  }
-
-  .course-group-hero-media img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .course-group-hero-fallback {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 1.35rem;
-    color: var(--color-dark-700);
-  }
-
-  .fallback-label {
-    margin: 0 0 0.5rem;
-    color: var(--color-gray-500);
-    font-size: var(--font-s);
-  }
-
-  .fallback-title {
-    margin: 0;
-    font-size: 1.2rem;
-    line-height: 1.35;
-    font-weight: 600;
-  }
-
   .course-group-seminars {
-    padding-top: 0.4rem;
-  }
-
-  .course-group-seminars-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.1rem;
-  }
-
-  .course-group-seminars-header .section-title {
-    margin: 0;
-  }
-
-  .course-group-seminars-meta {
-    margin: 0;
-    color: var(--color-gray-500);
-    font-size: var(--font-s);
+    padding-top: 0.2rem;
   }
 
   .course-group-seminars-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
   .course-group-extra {
     background: #fff;
     border: 1px solid #d8d8d2;
-    border-radius: 20px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
-    padding: 1.3rem 1.4rem;
-  }
-
-  @media (max-width: 1024px) {
-    .course-group-hero {
-      grid-template-columns: 1fr;
-      gap: 1.1rem;
-      padding-top: 1.5rem;
-      padding-bottom: 1.8rem;
-    }
-
-    .course-group-hero-media {
-      min-height: 220px;
-    }
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    padding: 1.2rem 1.25rem;
   }
 
   @media (max-width: 768px) {
-    .course-group-seminars-grid {
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
-
-    .course-group-seminars-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.4rem;
+    .course-group-head {
+      padding-top: 0.95rem;
     }
   }
 </style>

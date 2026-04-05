@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cleanBodyHtml, stripH1 } from '../src/lib/html-cleaner.js';
+import { cleanBodyHtml, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture 1 – Article page
@@ -140,6 +140,22 @@ describe('Fixture 2: Seminar HTML', () => {
   it('removes h1 tag', () => {
     const result = cleanBodyHtml(input);
     expect(result).not.toContain('<h1');
+  });
+
+  it('can strip legacy seminar schedule tail before cleaning', () => {
+    const result = cleanBodyHtml(stripLegacySeminarTail(input));
+    expect(result).not.toContain('<h3>Расписание</h3>');
+    expect(result).not.toContain('Показать все');
+    expect(result).not.toContain('К сожалению, данный курс');
+    expect(result).toContain('Seminar description text.');
+    expect(result).toContain('<details>');
+  });
+
+  it('removes residual broken closing-tag text nodes', () => {
+    const broken = '<ul><li><div><details><summary>Рекомендации</summary></details></div>/li</li></ul>';
+    const result = cleanBodyHtml(broken);
+    expect(result).not.toContain('</div>/li<');
+    expect(result).toContain('<summary>Рекомендации</summary>');
   });
 });
 
@@ -371,6 +387,35 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
     // A regular <a> not in a subscribe form must be kept
     const result = cleanBodyHtml(input);
     expect(result).toContain('href="/page"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixture 7 – Residual UI and spacer wrappers inside extra content
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Fixture 7: Residual UI cleanup for extra content', () => {
+  const input = `<div class="content-shell">
+  <h2>Дополнительная информация</h2>
+  <div style="height:140px">
+    <h2>Институт Барраля</h2>
+    <p>Содержательный абзац без наложения.</p>
+  </div>
+  <button type="button">Показать еще</button>
+  <h3>Часто задаваемые вопросы</h3>
+  <p>Ответ.</p>
+</div>`;
+
+  it('unwraps inline spacer wrappers that would otherwise clip content', () => {
+    const result = cleanBodyHtml(input);
+    expect(result).not.toContain('style="height:140px"');
+    expect(result).toContain('<h2>Институт Барраля</h2>');
+    expect(result).toContain('Содержательный абзац без наложения.');
+  });
+
+  it('removes residual show-more controls from scraped content', () => {
+    const result = cleanBodyHtml(input);
+    expect(result).not.toContain('Показать еще');
+    expect(result).toContain('<h3>Часто задаваемые вопросы</h3>');
   });
 });
 

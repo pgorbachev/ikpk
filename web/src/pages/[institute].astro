@@ -1,8 +1,10 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import InstituteProgramCard from '../components/institutes/InstituteProgramCard.astro';
+import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro';
+import InstituteProgramsSection from '../components/institutes/InstituteProgramsSection.astro';
 import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
 import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers } from '../lib/data';
+import { getCourseGroupPreviewImage } from '../lib/course-group-previews.js';
 import type { Institute } from '../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -102,7 +104,7 @@ const cleanedAdditionalHtml = cleanBodyHtml(extractAdditionalHtml(institute.desc
 const allSeminars = getSeminars();
 const programCards = courseGroups.map((courseGroup) => {
   const seminars = allSeminars.filter((seminar) => seminar.course_group_legacy_id === courseGroup.legacy_id);
-  const image = courseGroup.images?.[0] || seminars.find((seminar) => seminar.images?.[0])?.images?.[0] || '';
+  const image = getCourseGroupPreviewImage(courseGroup, seminars);
   const description = extractCardLead(
     courseGroup.description_html || '',
     courseGroup.name,
@@ -115,9 +117,6 @@ const programCards = courseGroups.map((courseGroup) => {
     image,
   };
 });
-
-const visiblePrograms = programCards.slice(0, 8);
-const hiddenPrograms = programCards.slice(8);
 
 const teacherCards = teachers.map((teacher) => ({
   href: `/${institute.slug}/prepodavatel/${teacher.slug}`,
@@ -141,39 +140,10 @@ const hiddenTeachers = teacherCards.slice(3);
         </div>
       </div>
 
-      <div class="institute-hero-logo">
-        {logoImage ? (
-          <img src={logoImage} alt={`Логотип ${institute.name}`} width="420" height="240" loading="lazy" />
-        ) : (
-          <div class="institute-logo-fallback">{institute.name}</div>
-        )}
-      </div>
+      <InstituteHeroLogo instituteSlug={institute.slug} instituteName={institute.name} image={logoImage} />
     </section>
 
-    {programCards.length > 0 && (
-      <section class="section institute-programs" id="programs" data-testid="institute-programs">
-        <header class="institute-section-header">
-          <h2 class="section-title">Программы обучения</h2>
-        </header>
-
-        <div class="institute-program-grid">
-          {visiblePrograms.map((program) => (
-            <InstituteProgramCard {...program} fallbackLogo={logoImage} />
-          ))}
-        </div>
-
-        {hiddenPrograms.length > 0 && (
-          <details class="institute-more">
-            <summary>Показать ещё</summary>
-            <div class="institute-program-grid institute-more-grid">
-              {hiddenPrograms.map((program) => (
-                <InstituteProgramCard {...program} fallbackLogo={logoImage} />
-              ))}
-            </div>
-          </details>
-        )}
-      </section>
-    )}
+    <InstituteProgramsSection programs={programCards} />
 
     {teacherCards.length > 0 && (
       <section class="section institute-teachers" data-testid="institute-teachers">
@@ -242,82 +212,10 @@ const hiddenTeachers = teacherCards.slice(3);
     margin-top: 1.2rem;
   }
 
-  .institute-hero-logo {
-    min-height: 220px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.3rem;
-    border: 1px solid #d8d8d2;
-    border-radius: 24px;
-    background: #fafaf8;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
-  }
-
-  .institute-hero-logo img {
-    display: block;
-    max-width: 100%;
-    max-height: 190px;
-    object-fit: contain;
-  }
-
-  .institute-logo-fallback {
-    font-size: var(--font-xl);
-    line-height: 1.35;
-    text-align: center;
-    color: var(--color-dark-700);
-  }
-
-  .institute-section-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.1rem;
-  }
-
-  .institute-section-header .section-title {
-    margin: 0;
-  }
-
-  .institute-program-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.15rem;
-  }
-
   .institute-teacher-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.15rem;
-  }
-
-  .institute-more {
-    margin-top: 1rem;
-  }
-
-  .institute-more summary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.75rem;
-    padding: 0 1rem;
-    border: 1px solid #cfd3cf;
-    border-radius: 999px;
-    background: #fff;
-    color: var(--color-dark-700);
-    cursor: pointer;
-    list-style: none;
-    font-size: var(--font-s);
-    font-weight: 600;
-  }
-
-  .institute-more summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .institute-more-grid {
-    margin-top: 1rem;
   }
 
   .institute-extra-shell {
@@ -338,9 +236,6 @@ const hiddenTeachers = teacherCards.slice(3);
   }
 
   @media (max-width: 1100px) {
-    .institute-program-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
   }
 
   @media (max-width: 1024px) {
@@ -351,11 +246,6 @@ const hiddenTeachers = teacherCards.slice(3);
       padding-bottom: 1.8rem;
     }
 
-    .institute-hero-logo {
-      min-height: 180px;
-    }
-
-    .institute-program-grid,
     .institute-teacher-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -367,7 +257,6 @@ const hiddenTeachers = teacherCards.slice(3);
       align-items: stretch;
     }
 
-    .institute-program-grid,
     .institute-teacher-grid {
       grid-template-columns: 1fr;
     }
@@ -377,9 +266,7 @@ const hiddenTeachers = teacherCards.slice(3);
     }
   }
 
-  :root[data-theme='dark'] .institute-hero-logo,
-  :root[data-theme='dark'] .institute-extra,
-  :root[data-theme='dark'] .institute-more summary {
+  :root[data-theme='dark'] .institute-extra {
     border-color: #434a43;
     background: #232723;
   }

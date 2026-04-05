@@ -4,10 +4,9 @@ interface Props {
   title: string;
   description?: string;
   image?: string;
-  fallbackLogo?: string;
 }
 
-const { href, title, description = '', image = '', fallbackLogo = '' } = Astro.props as Props;
+const { href, title, description = '', image = '' } = Astro.props as Props;
 ---
 
 <a href={href} class="program-card" data-testid="institute-program-card" aria-label={description ? `${title}. ${description}` : title}>
@@ -16,18 +15,7 @@ const { href, title, description = '', image = '', fallbackLogo = '' } = Astro.p
       <img src={image} alt={title} loading="lazy" width="320" height="220" />
     ) : (
       <div class="program-card-fallback">
-        {fallbackLogo ? (
-          <img
-            class="program-card-fallback-logo"
-            src={fallbackLogo}
-            alt=""
-            loading="lazy"
-            width="180"
-            height="96"
-          />
-        ) : (
-          <span class="program-card-fallback-title">{title}</span>
-        )}
+        <span class="program-card-fallback-title">{title}</span>
         <span class="program-card-label">Программа обучения</span>
       </div>
     )}
@@ -76,21 +64,12 @@ const { href, title, description = '', image = '', fallbackLogo = '' } = Astro.p
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 0.75rem;
     padding: 1rem;
     background:
       radial-gradient(circle at top right, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0) 36%),
       linear-gradient(135deg, #f4f4f1 0%, #e4e5df 100%);
-  }
-
-  .program-card-fallback-logo {
-    max-width: min(76%, 180px);
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    mix-blend-mode: multiply;
-    opacity: 0.88;
   }
 
   .program-card-label {
@@ -101,10 +80,11 @@ const { href, title, description = '', image = '', fallbackLogo = '' } = Astro.p
   }
 
   .program-card-fallback-title {
-    font-size: var(--font-l);
-    line-height: 1.35;
+    font-size: 1.05rem;
+    line-height: 1.45;
     font-weight: 600;
     color: var(--color-dark-700);
+    max-width: 18ch;
   }
 
   .program-card-body {
@@ -131,10 +111,5 @@ const { href, title, description = '', image = '', fallbackLogo = '' } = Astro.p
     background:
       radial-gradient(circle at top right, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 32%),
       linear-gradient(135deg, #2c312c 0%, #1f241f 100%);
-  }
-
-  :root[data-theme='dark'] .program-card-fallback-logo {
-    opacity: 0.78;
-    filter: brightness(1.05) contrast(0.92);
   }
 </style>

@@ -1,18 +1,15 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
-import AsideCard from '../../../components/ui/AsideCard.astro';
-import DetailChip from '../../../components/ui/DetailChip.astro';
-import PageHeader from '../../../components/ui/PageHeader.astro';
+import SeminarScheduleSection from '../../../components/seminars/SeminarScheduleSection.astro';
 import {
   getInstitutes,
   getCourseGroups,
   getSeminars,
   getScheduleEntries,
   getTeachers,
-  formatPrice,
-  formatDate,
   cleanBodyHtml,
+  stripLegacySeminarTail,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import type { GetStaticPaths } from 'astro';
@@ -42,44 +39,37 @@ const { seminar, courseGroup, institute } = Astro.props as {
   institute: Institute;
 };
 
-const schedule = getScheduleEntries().filter(
-  (e) => e.seminar?.slug === seminar.slug && e.status === 'active'
-);
-
-const statusLabel: Record<string, string> = {
-  active: 'Набор открыт',
-  not_planned: 'Не запланирован',
-  completed: 'Завершён',
-};
-
-/* Sort schedule by date; find the next upcoming entry */
 const now = new Date();
+const schedule = getScheduleEntries().filter(
+  (e) =>
+    e.seminar?.slug === seminar.slug &&
+    e.status === 'active' &&
+    new Date(e.startAt).getTime() > now.getTime()
+);
 const sortedSchedule = [...schedule].sort(
   (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
 );
-const nextEntry = sortedSchedule.find((e) => new Date(e.startAt) >= now) || sortedSchedule[0];
-
-/* Collect unique teachers with full profile info */
 const allTeachers = getTeachers();
-const teacherMap = new Map<string, { fullName: string; slug: string; photo: string; instituteSlug: string }>();
-for (const entry of schedule) {
-  for (const t of entry.teachers || []) {
-    if (!teacherMap.has(String(t.id))) {
-      const full = allTeachers.find((ft) => ft.slug === String(t.id));
-      teacherMap.set(String(t.id), {
-        fullName: t.fullName,
-        slug: full?.slug || String(t.id),
-        photo: full?.photo || '',
-        instituteSlug: full?.institute_legacy_id || institute.slug,
-      });
-    }
-  }
-}
-const uniqueTeachers = Array.from(teacherMap.values());
-
 const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`;
-const mailtoSubject = encodeURIComponent(`Запись: ${seminar.name}`);
-const ctaHref = `mailto:info@ikpk.su?subject=${mailtoSubject}`;
+const scheduleRows = sortedSchedule.map((entry) => ({
+  entry,
+  teachers: (entry.teachers || []).map((teacher) => {
+    const full = allTeachers.find(
+      (candidate) =>
+        candidate.slug === String(teacher.id) ||
+        candidate.legacy_id === String(teacher.id) ||
+        candidate.name === teacher.fullName
+    );
+
+    return {
+      fullName: teacher.fullName,
+      href: `/${full?.institute_legacy_id || institute.slug}/prepodavatel/${full?.slug || teacher.id}`,
+    };
+  }),
+}));
+const seminarBodyHtml = seminar.description_html
+  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html))
+  : '';
 
 const eventSchema = {
   '@context': 'https://schema.org',
@@ -126,299 +116,30 @@ const eventSchema = {
     />
 
     <article class="section seminar-detail">
-      <PageHeader title={seminar.name} compact={true} />
+      <h1 class="page-title">{seminar.name}</h1>
 
-      <div class="content-sidebar-layout seminar-layout" style="--layout-aside-width: 340px;">
-        {/* ── LEFT: main content ── */}
-        <div class="content-sidebar-main seminar-main">
-          {seminar.description_html ? (
-            <div class="seminar-content rich-content" set:html={cleanBodyHtml(seminar.description_html)} />
-          ) : seminar.description_text && (
-            <div class="seminar-content rich-content">
-              <p>{seminar.description_text}</p>
-            </div>
-          )}
-
-          {/* Details meta shown below description on desktop */}
-          <div class="seminar-details-row">
-            {seminar.hours && (
-              <DetailChip label="Объём" value={`${seminar.hours} ак. ч.`} />
-            )}
-            {seminar.certificate_type && (
-              <DetailChip label="Документ" value={seminar.certificate_type} />
-            )}
-          </div>
+      {seminarBodyHtml ? (
+        <div class="seminar-content rich-content" set:html={seminarBodyHtml} />
+      ) : seminar.description_text && (
+        <div class="seminar-content rich-content">
+          <p>{seminar.description_text}</p>
         </div>
+      )}
 
-        {/* ── RIGHT: sidebar ── */}
-        <aside class="content-sidebar-aside content-sidebar-aside--sticky seminar-sidebar">
-          {/* Status badge */}
-          {seminar.status && (
-            <div class="sidebar-badge">
-              <span class:list={['badge', `badge-${seminar.status}`]}>
-                {statusLabel[seminar.status] || seminar.status}
-              </span>
-            </div>
-          )}
-
-          {/* Next upcoming date + price */}
-          {nextEntry && (
-            <AsideCard label="Ближайшая дата">
-              <div class="sidebar-next-date">
-                <strong>{formatDate(nextEntry.startAt)}</strong>
-                {nextEntry.startAt !== nextEntry.endAt && (
-                  <span class="date-range"> — {formatDate(nextEntry.endAt)}</span>
-                )}
-              </div>
-              {nextEntry.city?.name && (
-                <div class="sidebar-city text-small">{nextEntry.city.name}</div>
-              )}
-              <div class="sidebar-price">
-                {nextEntry.isFree ? (
-                  <span class="price-free">Бесплатно</span>
-                ) : (
-                  <div class="price-block">
-                    {nextEntry.oldPrice > 0 && nextEntry.oldPrice !== nextEntry.newPrice && (
-                      <span class="price-old">{formatPrice(nextEntry.oldPrice)}</span>
-                    )}
-                    <span class="price-new">{formatPrice(nextEntry.newPrice)}</span>
-                  </div>
-                )}
-              </div>
-            </AsideCard>
-          )}
-
-          {/* CTA button */}
-          <a href={ctaHref} class="btn btn-primary sidebar-cta">
-            Записаться
-          </a>
-
-          {/* Teacher cards */}
-          {uniqueTeachers.length > 0 && (
-            <AsideCard label={uniqueTeachers.length === 1 ? 'Преподаватель' : 'Преподаватели'}>
-              <div class="teacher-list">
-                {uniqueTeachers.map((t) => (
-                  <a
-                    href={`/${t.instituteSlug}/prepodavatel/${t.slug}`}
-                    class="teacher-card-compact"
-                  >
-                    {t.photo ? (
-                      <img
-                        src={t.photo}
-                        alt={t.fullName}
-                        class="teacher-thumb"
-                        loading="lazy"
-                        width="48"
-                        height="48"
-                      />
-                    ) : (
-                      <div class="teacher-thumb teacher-thumb-placeholder" aria-hidden="true">
-                        {t.fullName.charAt(0)}
-                      </div>
-                    )}
-                    <span class="teacher-name">{t.fullName}</span>
-                  </a>
-                ))}
-              </div>
-            </AsideCard>
-          )}
-
-          {/* Full schedule list in sidebar */}
-          {sortedSchedule.length > 1 && (
-            <AsideCard label="Все даты">
-              <div class="sidebar-schedule-list">
-                {sortedSchedule.map((entry) => (
-                  <div class="sidebar-schedule-item">
-                    <div class="sidebar-sched-date">
-                      {formatDate(entry.startAt)}
-                      {entry.startAt !== entry.endAt && (
-                        <span> — {formatDate(entry.endAt)}</span>
-                      )}
-                    </div>
-                    <div class="sidebar-sched-price text-small">
-                      {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </AsideCard>
-          )}
-
-          {/* No schedule fallback */}
-          {schedule.length === 0 && (
-            <AsideCard centered={true} className="sidebar-no-schedule">
-              <p class="text-muted">Курс ещё не запланирован.</p>
-              <a href="/raspisanie-i-tseny" class="btn btn-outline sidebar-cta-outline">
-                Всё расписание
-              </a>
-            </AsideCard>
-          )}
-        </aside>
-      </div>
+      <SeminarScheduleSection rows={scheduleRows} />
     </article>
   </div>
 </BaseLayout>
 
 <style>
+  .page-title {
+    margin: 0 0 1.75rem;
+    font-size: clamp(2rem, 1.65rem + 1.2vw, 3rem);
+    line-height: 1.12;
+  }
+
   .seminar-content {
-    margin-bottom: 2rem;
+    margin-bottom: 0;
     line-height: 1.75;
-  }
-
-  .seminar-details-row {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-top: 1rem;
-  }
-
-  .sidebar-badge {
-    display: flex;
-  }
-
-  .sidebar-next-date {
-    font-size: var(--font-l);
-    color: var(--color-dark-700);
-    margin-bottom: 0.25rem;
-  }
-
-  .date-range {
-    white-space: nowrap;
-  }
-
-  .sidebar-city {
-    color: var(--color-gray-600);
-    margin-bottom: 0.75rem;
-  }
-
-  /* ── Price ── */
-  .sidebar-price {
-    margin-top: 0.5rem;
-  }
-
-  .price-block {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-  }
-
-  .price-old {
-    font-size: var(--font-s);
-    color: var(--color-gray-500);
-    text-decoration: line-through;
-  }
-
-  .price-new {
-    font-size: var(--font-xxl);
-    font-weight: 700;
-    color: var(--color-dark-700);
-  }
-
-  .price-free {
-    font-size: var(--font-xxl);
-    font-weight: 700;
-    color: var(--color-accent-700);
-  }
-
-  /* ── CTA button ── */
-  .sidebar-cta {
-    display: block;
-    text-align: center;
-    width: 100%;
-    padding: 0.85rem 1.5rem;
-    font-size: var(--font-l);
-    font-weight: 600;
-  }
-
-  .sidebar-cta-outline {
-    display: block;
-    text-align: center;
-    width: 100%;
-    margin-top: 0.75rem;
-    font-size: var(--font-s);
-  }
-
-  .teacher-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .teacher-card-compact {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-m);
-    text-decoration: none;
-    color: var(--color-dark-700);
-    background: var(--color-light-100);
-    transition: box-shadow 0.15s, border-color 0.15s;
-  }
-
-  .teacher-card-compact:hover {
-    border-color: var(--color-accent-300, var(--color-gray-300));
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-
-  .teacher-thumb {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
-
-  .teacher-thumb-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-accent-50);
-    color: var(--color-accent-700);
-    font-weight: 600;
-    font-size: var(--font-l);
-  }
-
-  .teacher-name {
-    font-size: var(--font-s);
-    font-weight: 500;
-    line-height: 1.3;
-  }
-
-  /* ── Sidebar schedule list ── */
-  .sidebar-schedule-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .sidebar-schedule-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--color-gray-200);
-  }
-
-  .sidebar-schedule-item:last-child {
-    border-bottom: none;
-  }
-
-  .sidebar-sched-date {
-    font-size: var(--font-s);
-    color: var(--color-dark-700);
-  }
-
-  .sidebar-sched-price {
-    font-weight: 600;
-    color: var(--color-dark-700);
-    white-space: nowrap;
-  }
-
-  /* ── No-schedule fallback ── */
-  .sidebar-no-schedule {
-    text-align: center;
   }
 </style>

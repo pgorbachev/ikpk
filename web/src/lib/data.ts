@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-export { cleanBodyHtml } from './html-cleaner.js';
+export { cleanBodyHtml, stripLegacySeminarTail } from './html-cleaner.js';
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 

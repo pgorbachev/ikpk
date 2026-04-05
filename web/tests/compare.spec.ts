@@ -574,33 +574,31 @@ test.describe('Article page structure', () => {
 test.describe('Seminar page structure', () => {
   const SEMINAR_URL = '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
 
-  test('has 2-column layout with sidebar', async ({ page }) => {
+  test('does not use rebuild sidebar layout', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);
     const sidebar = page.locator('aside.seminar-sidebar');
-    await expect(sidebar).toBeVisible();
+    await expect(sidebar).toHaveCount(0);
+    await expect(page.locator('.page-header')).toHaveCount(0);
   });
 
-  test('has "Записаться" CTA button', async ({ page }) => {
+  test('has inline schedule section', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);
-    const cta = page.locator('.sidebar-cta:has-text("Записаться")');
-    await expect(cta).toBeVisible();
+    const schedule = page.locator('[data-testid="seminar-schedule"]');
+    await expect(schedule).toBeVisible();
+    await expect(schedule.getByRole('heading', { name: 'Расписание' })).toBeVisible();
+    await expect(schedule.getByRole('link', { name: 'Показать все' })).toBeVisible();
   });
 
-  test('has teacher section', async ({ page }) => {
+  test('keeps rich content with collapsible sections', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);
-    const teacherLabel = page.locator(
-      'aside.seminar-sidebar .aside-card-label',
-      { hasText: /Преподавател(ь|и)/ }
-    );
-    await expect(teacherLabel).toBeVisible();
+    await expect(page.locator('.seminar-content')).toBeVisible();
+    expect(await page.locator('details').count()).toBeGreaterThan(0);
   });
 
-  test('has schedule/price info in sidebar', async ({ page }) => {
+  test('has seminar registration links in schedule rows', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);
-    const price = page.locator('.sidebar-price');
-    await expect(price).toBeVisible();
-    const nextDate = page.locator('.sidebar-next-date');
-    await expect(nextDate).toBeVisible();
+    const registerLinks = page.locator('.seminar-register-link');
+    expect(await registerLinks.count()).toBeGreaterThan(0);
   });
 });
 
