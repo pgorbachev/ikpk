@@ -1,0 +1,83 @@
+---
+import { getInstituteHeroBranding } from '../../lib/institute-branding.js';
+
+interface Props {
+  instituteSlug: string;
+  instituteName: string;
+  image?: string;
+}
+
+const { instituteSlug, instituteName, image = '' } = Astro.props as Props;
+
+const branding = getInstituteHeroBranding(instituteSlug);
+const resolvedImage = branding?.logoSrc || image;
+const isHorizontalLogo = branding?.horizontal ?? instituteSlug === 'institut-klinicheskoy-prikladnoy-kineziologii';
+const width = branding?.width ?? (isHorizontalLogo ? 406 : 390);
+const height = branding?.height ?? (isHorizontalLogo ? 112 : 234);
+---
+
+<div
+  class:list={[
+    'institute-hero-logo',
+    isHorizontalLogo ? 'institute-hero-logo--horizontal' : 'institute-hero-logo--stacked',
+  ]}
+  data-testid="institute-hero-logo"
+>
+  {resolvedImage ? (
+    <img src={resolvedImage} alt={`Логотип ${instituteName}`} width={width} height={height} loading="lazy" />
+  ) : (
+    <div class="institute-logo-fallback">{instituteName}</div>
+  )}
+</div>
+
+<style>
+  .institute-hero-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+    background: transparent;
+  }
+
+  .institute-hero-logo img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .institute-hero-logo--horizontal img {
+    max-width: 406px;
+    max-height: 112px;
+  }
+
+  .institute-hero-logo--stacked img {
+    max-width: 390px;
+    max-height: 234px;
+  }
+
+  .institute-logo-fallback {
+    font-size: var(--font-xl);
+    line-height: 1.35;
+    text-align: center;
+    color: var(--color-dark-700);
+  }
+
+  @media (max-width: 1024px) {
+    .institute-hero-logo {
+      min-height: 160px;
+      justify-content: flex-start;
+    }
+
+    .institute-hero-logo--horizontal img {
+      max-width: min(100%, 320px);
+      max-height: 88px;
+    }
+
+    .institute-hero-logo--stacked img {
+      max-width: min(100%, 320px);
+      max-height: 192px;
+    }
+  }
+</style>
