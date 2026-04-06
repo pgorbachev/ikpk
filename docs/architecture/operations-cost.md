@@ -124,8 +124,7 @@ ikpk.su — already owned, renewal ~300–500 RUB/year
 ### SSL Certificate
 
 ```
-Let's Encrypt — free, auto-renewal
-CDN (Cloudflare/Netlify) — SSL included for free
+Nginx + Certbot on the VPS — free, auto-renewal
 ```
 
 ### Analytics

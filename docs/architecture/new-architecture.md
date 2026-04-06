@@ -5,8 +5,10 @@
 The new website is built on **Astro (static site generator) + Strapi CMS**.
 Frontend and backend are fully decoupled. Each component can be replaced independently.
 
-**Constraint:** all services are hosted within the Russian Federation.
-Foreign platforms (Cloudflare, Netlify, Vercel, etc.) are not used.
+**Constraint:** all production and runtime services are hosted within the Russian Federation.
+Foreign CDN/hosting platforms (Cloudflare, Netlify, Vercel, etc.) are not used.
+CI/CD builds run via GitHub Actions but deploy exclusively to RF-hosted infrastructure
+(alternatively, a self-hosted runner on the VPS can be used to keep the entire pipeline in RF).
 
 ## Technology Stack
 

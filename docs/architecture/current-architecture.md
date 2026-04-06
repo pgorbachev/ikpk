@@ -12,12 +12,12 @@ Both the frontend and backend are written from scratch, without using any off-th
 | Frontend | Next.js (React) | SSG/SSR — static site generation and server-side rendering |
 | Backend | Node.js + Express | REST API for data and admin panel |
 | Database | PostgreSQL (presumed) | Content storage |
+| Media storage | Yandex Cloud Storage | Images, PDF documents |
+| Hosting | VPS/Cloud | Single server for both frontend and backend |
 
 > **Assumption:** the database type was inferred indirectly — from Express API
 > patterns and the typical stack of Next.js projects. There is no direct confirmation
 > (the API is behind authentication). Requires verification once server access is obtained.
-| Media storage | Yandex Cloud Storage | Images, PDF documents |
-| Hosting | VPS/Cloud | Single server for both frontend and backend |
 
 ## Architecture
 

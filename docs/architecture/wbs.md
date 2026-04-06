@@ -60,8 +60,8 @@ Statuses: ✅ done | 🔧 partial | ⬜ not started
 
 Existing artifacts:
 - `discovery/entities/*.json` — 10 entities, 6.5 MB (already scraped)
-- `scripts/import.ts` — 879 lines, idempotent 4-phase import (scaffold ready)
-- `scripts/validate-urls.ts` — 266 lines, URL validation after import
+- `scripts/import.ts` — idempotent 4-phase import (scaffold ready)
+- `scripts/validate-urls.ts` — URL validation after import
 
 **Phase 3 total: ~7–12 h**
 
