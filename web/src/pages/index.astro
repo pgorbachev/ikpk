@@ -2,7 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import MediaCard from '../components/ui/MediaCard.astro';
 import FeatureCard from '../components/home/FeatureCard.astro';
-import { getInstitutes, getNews, getPage } from '../lib/data';
+import { getInstitutes, getNews, getPage, cleanBodyHtml } from '../lib/data';
 
 const news = getNews();
 const institutes = getInstitutes();
@@ -220,7 +220,7 @@ const barralInstitute = institutes.find((inst) => inst.slug === 'institut-barral
                   rel="noopener"
                   className="news-card"
                 >
-                  <div class="news-card-desc text-small" set:html={item.description} />
+                  <div class="news-card-desc text-small" set:html={cleanBodyHtml(item.description)} />
                 </MediaCard>
               ))}
             </div>

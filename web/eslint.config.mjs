@@ -18,6 +18,12 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...eslintPluginAstro.configs.recommended,
   {
+    files: ['**/*.astro'],
+    rules: {
+      'astro/no-set-html-directive': 'warn',
+    },
+  },
+  {
     files: ['**/*.{js,mjs,cjs,ts,mts,cts}'],
     languageOptions: {
       globals: {

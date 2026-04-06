@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPromotions } from '../lib/data';
+import { getPromotions, cleanBodyHtml } from '../lib/data';
 
 const promotions = getPromotions();
 const title = 'Акции и скидки — ИКПК';
@@ -27,7 +27,7 @@ const description = 'Актуальные акции и скидки на обу
               <div class="card-body">
                 <span class="badge">{promo.type === 'SHOP' ? 'Магазин' : 'Институт'}</span>
                 <h3 class="promo-title">{promo.name}</h3>
-                <div class="text-small" set:html={promo.description} />
+                <div class="text-small" set:html={cleanBodyHtml(promo.description)} />
                 {promo.link && (
                   <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
                     Подробнее
