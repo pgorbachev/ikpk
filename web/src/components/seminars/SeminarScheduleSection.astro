@@ -1,0 +1,250 @@
+---
+import { formatDate, formatPrice } from '../../lib/data';
+import type { ScheduleEntry } from '../../lib/data';
+
+interface Row {
+  entry: ScheduleEntry;
+  teachers: { fullName: string; href: string }[];
+}
+
+const { rows = [] } = Astro.props as { rows?: Row[] };
+
+function pluralizeRu(value: number, one: string, few: string, many: string): string {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+function formatDurationLabel(entry: ScheduleEntry): string {
+  const raw = String(entry.duration || '').trim();
+  if (!raw) return '—';
+  if (!/^\d+$/.test(raw)) return raw;
+
+  const hours = Number(raw);
+  const hoursLabel = `${hours} ${pluralizeRu(hours, 'час', 'часа', 'часов')}`;
+  const start = new Date(entry.startAt);
+  const end = new Date(entry.endAt);
+  const daySpan = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+
+  if (daySpan > 1) {
+    return `${daySpan} ${pluralizeRu(daySpan, 'день', 'дня', 'дней')} (${hoursLabel})`;
+  }
+
+  return hoursLabel;
+}
+---
+
+<section class="seminar-schedule" data-testid="seminar-schedule">
+  <div class="seminar-schedule-head">
+    <h3>Расписание</h3>
+    <a href="/raspisanie-i-tseny" class="seminar-schedule-all">Показать все</a>
+  </div>
+
+  {rows.length > 0 ? (
+    <div class="seminar-schedule-list">
+      <div class="seminar-schedule-columns" aria-hidden="true">
+        <span>Дата</span>
+        <span>Продолжительность</span>
+        <span>Место проведения</span>
+        <span>Автор / Преподаватель</span>
+        <span>Стоимость</span>
+        <span></span>
+      </div>
+      {rows.map(({ entry, teachers }) => (
+        <article class="seminar-schedule-item">
+          <div class="schedule-date-cell">
+            <div class="schedule-date">
+              {formatDate(entry.startAt)}
+              {entry.startAt !== entry.endAt && (
+                <span class="schedule-date-range"> — {formatDate(entry.endAt)}</span>
+              )}
+            </div>
+            {entry.additionalText && (
+              <div class:list={[
+                'schedule-additional',
+                entry.additionalText.startsWith('Начало в ') && 'schedule-additional-highlight',
+              ]}>
+                {entry.additionalText}
+              </div>
+            )}
+          </div>
+          <div class="schedule-cell">{formatDurationLabel(entry)}</div>
+          <div class="schedule-cell">{entry.city?.name || '—'}</div>
+          <div class="schedule-cell schedule-teachers">
+            {teachers.length > 0 ? (
+              teachers.map((teacher, index) => (
+                <>
+                  {index > 0 && <span class="teacher-separator">, </span>}
+                  <a href={teacher.href} class="schedule-teacher-link">{teacher.fullName}</a>
+                </>
+              ))
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+          <div class:list={['schedule-price', entry.isFree && 'schedule-price-free']}>
+            {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
+          </div>
+          <div class="schedule-action">
+            <a
+              href={entry.registrationFormLink || '/raspisanie-i-tseny'}
+              class="seminar-register-link"
+              target={entry.registrationFormLink ? '_blank' : undefined}
+              rel={entry.registrationFormLink ? 'noopener noreferrer' : undefined}
+            >
+              Зарегистрироваться
+            </a>
+          </div>
+        </article>
+      ))}
+    </div>
+  ) : (
+    <div class="seminar-schedule-empty">
+      К сожалению, данный курс, в настоящий момент еще не запланирован.
+    </div>
+  )}
+</section>
+
+<style>
+  .seminar-schedule {
+    margin-top: 3rem;
+  }
+
+  .seminar-schedule-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .seminar-schedule-head h3 {
+    margin: 0;
+    font-size: 1.375rem;
+    line-height: 1.25;
+  }
+
+  .seminar-schedule-all {
+    color: var(--color-accent-700);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .seminar-schedule-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .seminar-schedule-columns,
+  .seminar-schedule-item {
+    display: grid;
+    grid-template-columns: minmax(11rem, 1.5fr) minmax(8rem, 1fr) minmax(7rem, 0.8fr) minmax(13rem, 1.4fr) minmax(7rem, 0.9fr) auto;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .seminar-schedule-columns {
+    padding: 0 0 0.75rem;
+    border-bottom: 1px solid var(--color-gray-200);
+    color: var(--color-gray-600);
+    font-size: var(--font-s);
+  }
+
+  .seminar-schedule-item {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--color-gray-200);
+  }
+
+  .schedule-date-cell,
+  .schedule-cell,
+  .schedule-price,
+  .schedule-action {
+    font-size: var(--font-m);
+    line-height: 1.5;
+    color: var(--color-dark-700);
+  }
+
+  .schedule-date {
+    font-weight: 500;
+  }
+
+  .schedule-date-range {
+    white-space: nowrap;
+  }
+
+  .schedule-additional {
+    margin-top: 0.5rem;
+    color: var(--color-gray-700);
+    font-size: var(--font-s);
+  }
+
+  .schedule-additional-highlight {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.25rem 1rem;
+    border-radius: 999px;
+    background: rgb(237, 198, 119);
+    color: var(--color-dark-700);
+    font-size: var(--font-m);
+  }
+
+  .schedule-teachers {
+    line-height: 1.45;
+  }
+
+  .schedule-teacher-link {
+    color: var(--color-accent-700);
+    text-decoration: none;
+  }
+
+  .schedule-price {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .schedule-price-free {
+    color: var(--color-dark-700);
+  }
+
+  .seminar-register-link {
+    color: var(--color-accent-700);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .seminar-schedule-empty {
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-gray-200);
+    border-bottom: 1px solid var(--color-gray-200);
+    color: var(--color-gray-700);
+  }
+
+  .schedule-teacher-link:hover,
+  .schedule-teacher-link:focus-visible,
+  .seminar-register-link:hover,
+  .seminar-register-link:focus-visible,
+  .seminar-schedule-all:hover,
+  .seminar-schedule-all:focus-visible {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 960px) {
+    .seminar-schedule-columns {
+      display: none;
+    }
+
+    .seminar-schedule-item {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+      padding: 1rem 0;
+    }
+
+    .schedule-action {
+      padding-top: 0.25rem;
+    }
+  }
+</style>

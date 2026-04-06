@@ -1,0 +1,115 @@
+---
+import InstituteProgramCard from './InstituteProgramCard.astro';
+
+interface ProgramCard {
+  href: string;
+  title: string;
+  description?: string;
+  image?: string;
+}
+
+interface Props {
+  programs: ProgramCard[];
+}
+
+const { programs } = Astro.props as Props;
+const visiblePrograms = programs.slice(0, 8);
+const hiddenPrograms = programs.slice(8);
+---
+
+{programs.length > 0 && (
+  <section class="section institute-programs" id="programs" data-testid="institute-programs">
+    <header class="institute-section-header">
+      <h2 class="section-title">Программы обучения</h2>
+    </header>
+
+    <div class="institute-program-grid">
+      {visiblePrograms.map((program) => (
+        <InstituteProgramCard {...program} />
+      ))}
+    </div>
+
+    {hiddenPrograms.length > 0 && (
+      <details class="institute-more">
+        <summary>Показать ещё</summary>
+        <div class="institute-program-grid institute-more-grid">
+          {hiddenPrograms.map((program) => (
+            <InstituteProgramCard {...program} />
+          ))}
+        </div>
+      </details>
+    )}
+  </section>
+)}
+
+<style>
+  .institute-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .institute-section-header .section-title {
+    margin: 0;
+  }
+
+  .institute-program-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.15rem;
+  }
+
+  .institute-more {
+    margin-top: 1rem;
+  }
+
+  .institute-more summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0 1rem;
+    border: 1px solid #cfd3cf;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--color-dark-700);
+    cursor: pointer;
+    list-style: none;
+    font-size: var(--font-s);
+    font-weight: 600;
+  }
+
+  .institute-more summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .institute-more-grid {
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 1100px) {
+    .institute-program-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .institute-program-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .institute-program-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  :root[data-theme='dark'] .institute-more summary {
+    border-color: #434a43;
+    background: #232723;
+  }
+</style>
+

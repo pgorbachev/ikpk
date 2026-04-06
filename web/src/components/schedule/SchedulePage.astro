@@ -1,0 +1,62 @@
+---
+import ScheduleControlsScript from './ScheduleControlsScript.astro';
+import ScheduleFilters from './ScheduleFilters.astro';
+import ScheduleListing from './ScheduleListing.astro';
+import SchedulePageHeader from './SchedulePageHeader.astro';
+
+interface Option {
+  label: string;
+  value: string;
+}
+
+interface ProgramOption {
+  instituteSlug: string;
+  name: string;
+  slug: string;
+}
+
+interface Card {
+  additionalText: string;
+  cityName: string;
+  citySlug: string;
+  dateLabel: string;
+  id: number;
+  imageAlt: string;
+  imageUrl: string;
+  instituteName: string;
+  instituteSlug: string;
+  priceLabel: string;
+  programName: string;
+  programSlug: string;
+  registrationHref: string;
+  searchIndex: string;
+  teacherHref: string;
+  teacherLabel: string;
+  teacherName: string;
+  title: string;
+  titleHref: string;
+}
+
+interface Props {
+  cards: Card[];
+  cities: string[];
+  institutes: Option[];
+  programs: ProgramOption[];
+  title: string;
+}
+
+const { cards, cities, institutes, programs, title } = Astro.props as Props;
+---
+
+<section class="section schedule-section">
+  <SchedulePageHeader title={title} />
+  <ScheduleFilters institutes={institutes} programs={programs} cities={cities} />
+  <ScheduleListing cards={cards} />
+  <ScheduleControlsScript />
+</section>
+
+<style>
+  .schedule-section {
+    max-width: 957px;
+  }
+</style>

@@ -1,8 +1,8 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import SeminarCard from '../../components/SeminarCard.astro';
-import { getInstitutes, getCourseGroups, getSeminars, excerpt } from '../../lib/data';
+import CourseGroupSeminarItem from '../../components/course-groups/CourseGroupSeminarItem.astro';
+import { cleanBodyHtml, getInstitutes, getCourseGroups, getSeminars } from '../../lib/data';
 import type { CourseGroup, Institute } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -28,11 +28,114 @@ const { courseGroup, institute } = Astro.props as {
 };
 const seminars = getSeminars(courseGroup.legacy_id);
 
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function cleanSeminarLead(value: string, title: string): string {
+  return value
+    .replace(new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '')
+    .replace(/Записаться/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLeadCandidate(value: string): string {
+  return value
+    .replace(/\b(Учебный план|Для кого подойдет|Как проходит обучение|Выдаваемые документы|Рекомендации|Расписание|Показать все)\b[\s\S]*$/i, '')
+    .replace(/\bК сожалению, данный курс[\s\S]*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripLeadingTitle(value: string, title: string): string {
+  return value.replace(new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:.-]*`, 'i'), '').trim();
+}
+
+function clipLead(value: string, maxLength = 280): string {
+  if (value.length <= maxLength) return value;
+  const sentences = value.match(/[^.!?]+[.!?]+/g) || [];
+  let clipped = '';
+  for (const sentence of sentences) {
+    const next = `${clipped} ${sentence}`.trim();
+    if (next.length > maxLength) break;
+    clipped = next;
+    if (next.length >= 110) break;
+  }
+
+  if (clipped) return clipped.trim();
+  return `${value.slice(0, maxLength).trimEnd()}…`;
+}
+
+function extractSeminarLead(seminarDescription: string, seminarName: string, groupName: string): string {
+  const normalized = normalizeLeadCandidate(
+    stripLeadingTitle(cleanSeminarLead(seminarDescription, groupName), seminarName),
+  );
+
+  if (!normalized) return '';
+  if (/^(описание смотрите|записаться|к сожалению)/i.test(normalized)) return '';
+  if (/cst-\d|ser-\d|часть\s*№|записаться/i.test(normalized)) return '';
+  if (normalized.length < 80) return '';
+
+  return clipLead(normalized);
+}
+
+function extractLeadText(cg: CourseGroup, seminarsForGroup: typeof seminars): string {
+  const paragraphs = [...(cg.description_html || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => normalizeLeadCandidate(stripHtml(match[1])))
+    .filter(Boolean);
+  const noisyPattern = /(записаться|cst-\d|ser-\d|уровень|часть\s*№|подробнее|семинар\.?\s*часть|показать все)/i;
+  const lead = paragraphs.find((paragraph) => (
+    paragraph.length >= 80
+      && paragraph.length <= 360
+      && !noisyPattern.test(paragraph)
+  ));
+
+  if (lead) return lead;
+  const seminarLead = seminarsForGroup
+    .map((seminar) => extractSeminarLead(stripHtml(seminar.description_text || ''), seminar.name, cg.name))
+    .find((paragraph) => (
+      paragraph.length >= 90
+      && paragraph.length <= 320
+      && !noisyPattern.test(paragraph)
+      && !paragraph.includes(cg.name)
+    ));
+  if (seminarLead) return seminarLead;
+  if (cg.seo_description && !/^Пройдите обучение в ИКПК по программе/i.test(cg.seo_description)) {
+    return cg.seo_description.replace(/\s*Запись онлайн!?/i, '').trim();
+  }
+  return `Программа обучения «${cg.name}» в ${institute.name}.`;
+}
+
+function extractAdditionalHtml(rawHtml: string): string {
+  if (!rawHtml) return '';
+
+  const additionalIndex = rawHtml.search(/<h[2-4][^>]*>\s*Дополнительная информация\s*<\/h[2-4]>/i);
+  if (additionalIndex >= 0) {
+    return rawHtml.slice(additionalIndex);
+  }
+
+  const headingPattern = /<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = headingPattern.exec(rawHtml)) !== null) {
+    const headingText = stripHtml(match[1]);
+    if (/(профессиональная переподготовка|почему|как проходит обучение|что вы получите|для кого)/i.test(headingText)) {
+      return rawHtml.slice(match.index);
+    }
+  }
+
+  return '';
+}
+
+const leadText = extractLeadText(courseGroup, seminars);
+const additionalHtml = extractAdditionalHtml(courseGroup.description_html || '');
+const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml) : '';
+
 const schema = {
   '@context': 'https://schema.org',
   '@type': 'Course',
   name: courseGroup.name,
-  description: courseGroup.seo_description || courseGroup.description_text?.slice(0, 200),
+  description: courseGroup.seo_description || leadText,
   provider: {
     '@type': 'EducationalOrganization',
     name: 'ИКПК',
@@ -51,41 +154,72 @@ const schema = {
       ]}
     />
 
-    <section class="section">
+    <section class="section course-group-head" data-testid="course-group-head">
       <h1 class="page-title">{courseGroup.name}</h1>
-
-      {courseGroup.description_text && (
-        <div class="cg-intro">
-          <p>{excerpt(courseGroup.description_text, 500)}</p>
-        </div>
-      )}
+      {leadText && <p class="course-group-lead">{leadText}</p>}
     </section>
 
     {seminars.length > 0 && (
-      <section class="section">
-        <h2 class="section-title">Семинары и курсы</h2>
-        <div class="grid grid-2">
-          {seminars.map((s) => (
-            <SeminarCard
-              seminar={s}
-              href={`/${institute.slug}/${courseGroup.slug}/${s.slug}`}
+      <section class="section course-group-seminars" id="seminars" data-testid="course-group-seminars">
+        <div class="course-group-seminars-grid">
+          {seminars.map((seminar) => (
+            <CourseGroupSeminarItem
+              seminar={seminar}
+              href={`/${institute.slug}/${courseGroup.slug}/${seminar.slug}`}
             />
           ))}
         </div>
+      </section>
+    )}
+
+    {cleanedAdditionalHtml && (
+      <section class="section">
+        <div class="course-group-extra rich-content" data-testid="course-group-extra-content" set:html={cleanedAdditionalHtml} />
       </section>
     )}
   </div>
 </BaseLayout>
 
 <style>
-  .page-title {
-    margin-bottom: 1rem;
+  .course-group-head {
+    padding-top: 1.35rem;
+    padding-bottom: 1rem;
   }
 
-  .cg-intro {
-    max-width: 800px;
-    font-size: var(--font-l);
-    line-height: 1.7;
-    margin-bottom: 2rem;
+  .page-title {
+    margin: 0;
+    line-height: 1.15;
+  }
+
+  .course-group-lead {
+    margin: 0.9rem 0 0;
+    max-width: 100%;
+    color: var(--color-gray-600);
+    font-size: var(--font-m);
+    line-height: 1.62;
+  }
+
+  .course-group-seminars {
+    padding-top: 0.2rem;
+  }
+
+  .course-group-seminars-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .course-group-extra {
+    background: #fff;
+    border: 1px solid #d8d8d2;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    padding: 1.2rem 1.25rem;
+  }
+
+  @media (max-width: 768px) {
+    .course-group-head {
+      padding-top: 0.95rem;
+    }
   }
 </style>

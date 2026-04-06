@@ -1,0 +1,141 @@
+---
+import ScheduleEventCard from './ScheduleEventCard.astro';
+
+interface Card {
+  additionalText: string;
+  cityName: string;
+  citySlug: string;
+  dateLabel: string;
+  id: number;
+  imageAlt: string;
+  imageUrl: string;
+  instituteName: string;
+  instituteSlug: string;
+  priceLabel: string;
+  programName: string;
+  programSlug: string;
+  registrationHref: string;
+  searchIndex: string;
+  teacherHref: string;
+  teacherLabel: string;
+  teacherName: string;
+  title: string;
+  titleHref: string;
+}
+
+interface Props {
+  cards: Card[];
+}
+
+const { cards } = Astro.props as Props;
+---
+
+<div class="schedule-list" data-testid="schedule-list">
+  {cards.map((card) => (
+    <div
+      class="schedule-card-item"
+      data-schedule-item
+      data-institute={card.instituteSlug}
+      data-program={card.programSlug}
+      data-city={card.citySlug}
+      data-search={card.searchIndex}
+    >
+      <ScheduleEventCard
+        title={card.title}
+        titleHref={card.titleHref}
+        imageUrl={card.imageUrl}
+        imageAlt={card.imageAlt}
+        teacherLabel={card.teacherLabel}
+        teacherName={card.teacherName}
+        teacherHref={card.teacherHref}
+        instituteName={card.instituteName}
+        programName={card.programName}
+        dateLabel={card.dateLabel}
+        cityName={card.cityName}
+        priceLabel={card.priceLabel}
+        registrationHref={card.registrationHref}
+        additionalText={card.additionalText}
+      />
+    </div>
+  ))}
+</div>
+
+<p class="schedule-empty" data-schedule-empty hidden>По вашему запросу ничего не найдено.</p>
+<nav class="schedule-pagination" data-testid="schedule-pagination" data-schedule-pagination></nav>
+
+<style>
+  .schedule-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .schedule-empty {
+    margin: 1.5rem 0 0;
+    color: var(--color-gray-600);
+  }
+
+  .schedule-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 1.4rem;
+  }
+
+  .schedule-pagination :global(.schedule-page-button) {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    border: 1px solid #bdbdbd;
+    background: #fff;
+    color: var(--color-dark-700);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .schedule-pagination :global(.schedule-page-button[aria-current='page']),
+  .schedule-pagination :global(.schedule-page-button:disabled) {
+    background: #1f3620;
+    border-color: #1f3620;
+    color: #f7f8f6;
+    cursor: default;
+  }
+
+  .schedule-pagination :global(.schedule-page-button--nav:disabled) {
+    background: #f6f6f4;
+    border-color: #cfcfc8;
+    color: var(--color-gray-500);
+  }
+
+  .schedule-pagination :global(.schedule-page-ellipsis) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    color: var(--color-gray-500);
+  }
+
+  :root[data-theme='dark'] .schedule-empty {
+    color: #b2bbb2;
+  }
+
+  :root[data-theme='dark'] .schedule-pagination :global(.schedule-page-button) {
+    border-color: #556055;
+    background: #232723;
+    color: #edf1ec;
+  }
+
+  :root[data-theme='dark'] .schedule-pagination :global(.schedule-page-button[aria-current='page']),
+  :root[data-theme='dark'] .schedule-pagination :global(.schedule-page-button:disabled) {
+    border-color: #446246;
+    background: #355037;
+    color: #f4f7f4;
+  }
+
+  :root[data-theme='dark'] .schedule-pagination :global(.schedule-page-button--nav:disabled) {
+    border-color: #495249;
+    background: #1d201d;
+    color: #8e978e;
+  }
+</style>

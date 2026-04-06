@@ -200,6 +200,55 @@ function removeOrphanedFormUI(html: string): string {
 }
 
 /**
+ * Removes residual UI controls that should never survive content extraction.
+ */
+function removeResidualUiArtifacts(html: string): string {
+  return html
+    .replace(/<button\b[^>]*>\s*Показать\s+ещ(?:е|ё)\s*<\/button>/gi, '')
+    .replace(/<a\b[^>]*>\s*Показать\s+ещ(?:е|ё)\s*<\/a>/gi, '');
+}
+
+/**
+ * Unwraps inline spacer wrappers from scraped content.
+ * These wrappers often carry fixed heights and cause visual overlap once the
+ * original JS/CSS is gone.
+ */
+function unwrapInlineSpacerWrappers(html: string): string {
+  const openRe = /<div([^>]*\sstyle="[^"]*\b(?:min-|max-)?height\s*:\s*\d+px[^"]*"[^>]*)>/gi;
+  let result = html;
+  let searchFrom = 0;
+
+  for (let guard = 0; guard < 50_000; guard++) {
+    openRe.lastIndex = searchFrom;
+    const m = openRe.exec(result);
+    if (!m) break;
+
+    const style = m[1].match(/\bstyle="([^"]*)"/i)?.[1]?.toLowerCase() ?? '';
+    const safeSpacer = /\b(?:min-|max-)?height\s*:\s*\d+px/.test(style)
+      && !/(position\s*:|overflow\s*:|transform\s*:|display\s*:\s*(?:flex|grid|inline-flex))/i.test(style);
+
+    if (!safeSpacer) {
+      searchFrom = m.index + 1;
+      continue;
+    }
+
+    const end = elementEnd(result, m.index, 'div');
+    const inner = result.slice(m.index + m[0].length, end - '</div>'.length);
+
+    if (!/<(?:h[2-6]|p|ul|ol|details)\b/i.test(inner)) {
+      searchFrom = m.index + 1;
+      continue;
+    }
+
+    result = result.slice(0, m.index) + inner + result.slice(end);
+    openRe.lastIndex = m.index;
+    searchFrom = m.index;
+  }
+
+  return result;
+}
+
+/**
  * Step 3 – Unwrap layout wrapper elements.
  * Removes the wrapper tag but preserves all inner HTML.
  */
@@ -412,9 +461,22 @@ function cleanOrphanedTags(html: string): string {
   return out.join('').replace(/\s{3,}/g, ' ').trim();
 }
 
+function removeResidualBrokenTagText(html: string): string {
+  return html.replace(/>\s*\/(li|ul|ol|div|section|article|p|button|a)\s*</gi, '><');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Removes the legacy seminar tail that includes the old schedule block and
+ * newsletter form copied from the original React layout.
+ */
+export function stripLegacySeminarTail(html: string): string {
+  if (!html) return html;
+  return html.replace(/<div\b[^>]*class="[^"]*seminar-form_actionControl__[^"]*"[^>]*>[\s\S]*$/i, '');
+}
 
 /**
  * Cleans scraped Next.js body HTML for use in the Astro rebuild.
@@ -426,13 +488,16 @@ export function cleanBodyHtml(html: string): string {
   let result = html;
   result = removeFormContainers(result);
   result = removeOrphanedFormUI(result);
+  result = removeResidualUiArtifacts(result);
   result = unwrapLayoutWrappers(result);
+  result = unwrapInlineSpacerWrappers(result);
   result = transformCollapsibles(result);
   result = cleanTypographyClasses(result);
   result = unwrapSeRoot(result);
   result = stripCssModuleClasses(result);
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
+  result = removeResidualBrokenTagText(result);
 
   return result;
 }

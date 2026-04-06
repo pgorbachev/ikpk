@@ -5,6 +5,7 @@ interface Props {
   image?: string;
   imageAlt?: string;
   imageRatio?: string;
+  imageFit?: 'cover' | 'contain';
   imageWidth?: number;
   imageHeight?: number;
   target?: string;
@@ -22,6 +23,7 @@ const {
   image,
   imageAlt = '',
   imageRatio = '16 / 9',
+  imageFit = 'cover',
   imageWidth,
   imageHeight,
   target,
@@ -68,6 +70,7 @@ const resolvedImageHeight = imageHeight ?? (
         loading="lazy"
         width={resolvedImageWidth}
         height={resolvedImageHeight}
+        style={`object-fit: ${imageFit};`}
       />
     </div>
   )}

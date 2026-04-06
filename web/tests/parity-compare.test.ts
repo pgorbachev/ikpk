@@ -231,13 +231,15 @@ describe('Parity audit against original site', () => {
     expect(html).toContain('"@type":"Article"');
   });
 
-  it('seminar page keeps sidebar structure and schedule data', () => {
+  it('seminar page keeps inline schedule structure and rich content', () => {
     const html = readLocal(SEMINAR_PATH).html;
-    expect(html).toContain('seminar-sidebar');
-    expect(html).toContain('Записаться');
-    expect(html).toContain('sidebar-price');
-    expect(html).toContain('sidebar-next-date');
-    expect(html).toContain('Преподаватель');
+    expect(html).not.toContain('seminar-sidebar');
+    expect(html).not.toContain('sidebar-price');
+    expect(html).toContain('data-testid="seminar-schedule"');
+    expect(html).toContain('Расписание');
+    expect(html).toContain('Показать все');
+    expect(html).toContain('Зарегистрироваться');
+    expect(html).toContain('seminar-content');
   });
 
   it('static pages keep contact blocks and details sections', () => {
@@ -245,7 +247,7 @@ describe('Parity audit against original site', () => {
     const svedeniya = readLocal('/svedeniya-ob-obrazovatelnoy-organizatsii').html;
     const cooperation = readLocal('/sotrudnichestvo-s-nami').html;
 
-    expect(contacts).toContain('contact-value');
+    expect(contacts).toContain('contact-shell');
     expect(contacts).toContain('info@ikpk.su');
     expect(svedeniya).toContain('<details');
     expect(cooperation).toContain('cta');

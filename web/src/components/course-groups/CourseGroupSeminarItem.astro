@@ -1,0 +1,131 @@
+---
+import type { Seminar } from '../../lib/data';
+
+interface Props {
+  seminar: Seminar;
+  href: string;
+}
+
+const { seminar, href } = Astro.props as Props;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function clipLead(value: string, maxLength = 720): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength).trimEnd()}…`;
+}
+
+const description = (seminar.description_text || '')
+  .replace(new RegExp(`^${escapeRegExp(seminar.name)}\\s*`, 'i'), '')
+  .replace(/Записаться/gi, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const lead = description ? clipLead(description) : '';
+---
+
+<article class="course-group-seminar-item" data-testid="course-group-seminar-card">
+  <a href={href} class="course-group-seminar-main" aria-label={`Семинар "${seminar.name}"`}>
+    <h2 class="course-group-seminar-title">{seminar.name}</h2>
+    {lead && <p class="course-group-seminar-excerpt">{lead}</p>}
+  </a>
+  <div class="course-group-seminar-actions">
+    <a href={href} class="course-group-seminar-cta" aria-label={`Записаться на семинар ${seminar.name}`}>
+      Записаться на семинар
+    </a>
+  </div>
+</article>
+
+<style>
+  .course-group-seminar-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.25rem;
+    align-items: end;
+    padding: 1.15rem 1.25rem 1.2rem;
+    border-radius: 8px;
+    border: 1px solid #d9d9d4;
+    background: #fafaf8;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+    transition: box-shadow 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+  }
+
+  .course-group-seminar-item:hover {
+    border-color: #cdcdc7;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .course-group-seminar-main {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .course-group-seminar-main:hover {
+    text-decoration: none;
+  }
+
+  .course-group-seminar-title {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.42;
+    color: var(--color-dark-700);
+  }
+
+  .course-group-seminar-excerpt {
+    margin: 0.65rem 0 0;
+    color: var(--color-gray-600);
+    font-size: var(--font-s);
+    line-height: 1.6;
+  }
+
+  .course-group-seminar-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  .course-group-seminar-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0 1rem;
+    border-radius: 999px;
+    background: #2e6e32;
+    color: #fff;
+    text-decoration: none;
+    font-size: var(--font-s);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .course-group-seminar-cta:hover {
+    text-decoration: none;
+    background: #285e2b;
+  }
+
+  @media (max-width: 768px) {
+    .course-group-seminar-item {
+      grid-template-columns: 1fr;
+      gap: 0.9rem;
+      align-items: start;
+    }
+
+    .course-group-seminar-actions {
+      justify-content: flex-start;
+    }
+
+    .course-group-seminar-cta {
+      width: 100%;
+    }
+  }
+
+  :root[data-theme='dark'] .course-group-seminar-item {
+    border-color: #434a43;
+    background: #232723;
+  }
+</style>

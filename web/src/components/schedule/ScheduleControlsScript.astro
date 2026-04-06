@@ -1,0 +1,167 @@
+<script is:inline>
+  (() => {
+    const pageSize = 25;
+    const search = document.querySelector('[data-schedule-search]');
+    const institute = document.querySelector('[data-schedule-filter="institute"]');
+    const program = document.querySelector('[data-schedule-filter="program"]');
+    const city = document.querySelector('[data-schedule-filter="city"]');
+    const items = Array.from(document.querySelectorAll('[data-schedule-item]'));
+    const pagination = document.querySelector('[data-schedule-pagination]');
+    const empty = document.querySelector('[data-schedule-empty]');
+    let currentPage = 1;
+
+    if (!(search instanceof HTMLInputElement)
+      || !(institute instanceof HTMLSelectElement)
+      || !(program instanceof HTMLSelectElement)
+      || !(city instanceof HTMLSelectElement)
+      || !(pagination instanceof HTMLElement)
+      || !(empty instanceof HTMLElement)
+    ) {
+      return;
+    }
+
+    const allProgramOptions = Array.from(program.options).map((option) => ({
+      value: option.value,
+      label: option.label,
+      institute: option.dataset.institute || '',
+    }));
+
+    const updateProgramOptions = () => {
+      const selectedInstitute = institute.value;
+      const previousValue = program.value;
+      const allowed = allProgramOptions.filter((option) => !option.institute || option.institute === selectedInstitute);
+
+      program.innerHTML = '';
+      for (const option of allowed) {
+        const nextOption = document.createElement('option');
+        nextOption.value = option.value;
+        nextOption.textContent = option.label;
+        if (option.institute) {
+          nextOption.dataset.institute = option.institute;
+        }
+        program.append(nextOption);
+      }
+
+      program.disabled = !selectedInstitute;
+      if (selectedInstitute && allowed.some((option) => option.value === previousValue)) {
+        program.value = previousValue;
+      } else {
+        program.value = '';
+      }
+    };
+
+    const getFilteredItems = () => {
+      const term = search.value.trim().toLowerCase();
+      return items.filter((item) => {
+        const matchesInstitute = !institute.value || item.dataset.institute === institute.value;
+        const matchesProgram = !program.value || item.dataset.program === program.value;
+        const matchesCity = !city.value || item.dataset.city === city.value;
+        const matchesSearch = !term || (item.dataset.search || '').includes(term);
+        return matchesInstitute && matchesProgram && matchesCity && matchesSearch;
+      });
+    };
+
+    const renderPagination = (pageCount) => {
+      pagination.innerHTML = '';
+      pagination.hidden = pageCount <= 1;
+      if (pageCount <= 1) return;
+
+      const buttons = [];
+      const prev = document.createElement('button');
+      prev.type = 'button';
+      prev.className = 'schedule-page-button schedule-page-button--nav';
+      prev.setAttribute('aria-label', 'Предыдущая страница');
+      prev.textContent = '‹';
+      prev.disabled = currentPage === 1;
+      prev.addEventListener('click', () => {
+        currentPage = Math.max(1, currentPage - 1);
+        applyFilters();
+      });
+      buttons.push(prev);
+
+      const pagesToShow = new Set([1, pageCount, currentPage, currentPage - 1, currentPage + 1].filter((page) => page >= 1 && page <= pageCount));
+      let previousPage = 0;
+      for (const page of Array.from(pagesToShow).sort((a, b) => a - b)) {
+        if (previousPage && page - previousPage > 1) {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'schedule-page-ellipsis';
+          ellipsis.textContent = '…';
+          buttons.push(ellipsis);
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'schedule-page-button';
+        button.setAttribute('aria-label', `Страница ${page}`);
+        button.textContent = String(page);
+        if (page === currentPage) {
+          button.setAttribute('aria-current', 'page');
+          button.setAttribute('aria-disabled', 'true');
+        } else {
+          button.removeAttribute('aria-current');
+          button.removeAttribute('aria-disabled');
+        }
+        button.addEventListener('click', () => {
+          if (page === currentPage) return;
+          currentPage = page;
+          applyFilters();
+        });
+        buttons.push(button);
+        previousPage = page;
+      }
+
+      const next = document.createElement('button');
+      next.type = 'button';
+      next.className = 'schedule-page-button schedule-page-button--nav';
+      next.setAttribute('aria-label', 'Следующая страница');
+      next.textContent = '›';
+      next.disabled = currentPage === pageCount;
+      next.addEventListener('click', () => {
+        currentPage = Math.min(pageCount, currentPage + 1);
+        applyFilters();
+      });
+      buttons.push(next);
+
+      buttons.forEach((button) => pagination.append(button));
+    };
+
+    const applyFilters = () => {
+      const filtered = getFilteredItems();
+      const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+      currentPage = Math.min(currentPage, pageCount);
+
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const visible = new Set(filtered.slice(start, end));
+
+      items.forEach((item) => {
+        item.hidden = !visible.has(item);
+      });
+
+      empty.hidden = filtered.length > 0;
+      renderPagination(pageCount);
+    };
+
+    const onFilterChange = () => {
+      updateProgramOptions();
+      currentPage = 1;
+      applyFilters();
+    };
+
+    search.addEventListener('input', () => {
+      currentPage = 1;
+      applyFilters();
+    });
+    institute.addEventListener('change', onFilterChange);
+    program.addEventListener('change', () => {
+      currentPage = 1;
+      applyFilters();
+    });
+    city.addEventListener('change', () => {
+      currentPage = 1;
+      applyFilters();
+    });
+
+    updateProgramOptions();
+    applyFilters();
+  })();
+</script>
