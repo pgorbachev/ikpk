@@ -113,7 +113,7 @@ const description = page?.seo_description || 'Статьи и публикаци
 
           {/* TODO(TD-2): all articles embedded as <template> — replace with JSON index when catalog grows (see docs/tech-debt.md) */}
           <div hidden aria-hidden="true">
-            {articles.map((article, index) => {
+            {allArticles.map((article, index) => {
               const pageNo = Math.floor(index / ARTICLES_PER_PAGE) + 1;
               return (
                 <template
