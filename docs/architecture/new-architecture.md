@@ -63,6 +63,7 @@ For comparison: the current site ships ~500 KB JS on every page.
 │  │   • /api/teachers                                 │
 │  │   • /api/schedule-entries                         │
 │  │   • /api/form-submissions (seminar applications)  │
+│  │   • /api/payments (YooKassa integration)          │
 │  └───────────────────┘                               │
 │                                                      │
 │  Yandex Cloud Storage (media) — external service     │
@@ -116,6 +117,49 @@ Why Strapi API (instead of an external form service):
 - The CMS already runs on the VPS — no additional cost
 - Submissions are stored in the same database and visible in the admin panel
 - No dependency on foreign services
+
+## Payments: YooKassa Integration
+
+The current site uses YooKassa (ЮKassa) for online payments.
+This integration is preserved in the new architecture.
+
+```
+Visitor clicks "Make Payment"
+       │
+       ▼
+Payment modal (React island)
+  • Select program
+  • Enter name / email / amount
+       │
+       ▼ create payment link
+┌──────────────────┐
+│  YooKassa API    │
+│  (server-side)   │
+│  • create payment with description
+│  • return confirmation_url
+└────────┬─────────┘
+         │ redirect
+         ▼
+┌──────────────────┐
+│  YooKassa        │
+│  checkout page   │
+│  (hosted by      │
+│   YooKassa)      │
+└──────────────────┘
+```
+
+Payment details (who paid, for what program) are tracked
+within YooKassa's dashboard — not stored in the site database.
+No webhook handling or payment status tracking required on our side.
+
+**Supported payment methods:**
+- Cards issued in RF: Visa, Mastercard, Mir, JCB
+- CIS cards: APRA (Abkhazia), BELKART (Belarus), Express Pay (Tajikistan)
+
+**Implementation:** a single server-side endpoint that calls YooKassa API
+to create a payment and returns the redirect URL. ~50 lines of code.
+Can be a Strapi custom route or a standalone serverless function on the VPS.
+YooKassa is a Russian service (yookassa.ru) — complies with the RF-only constraint.
 
 ## Content Update Flow
 

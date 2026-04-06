@@ -97,6 +97,9 @@ Informational pages with no interactive elements.
 
 **Acceptance criteria:**
 - Payment: FAQ accordion (payment methods, refund policy), payment button
+- YooKassa integration: payment modal → create payment via API → redirect to YooKassa checkout
+- No payment status tracking on site — all payment data lives in YooKassa dashboard
+- Supported cards: Visa, Mastercard, Mir, JCB (RF-issued); APRA, BELKART, Express Pay (CIS)
 - Contacts: 5 blocks (phone, email, address, hours, medical center), Yandex.Maps embed
 - Partnership: description + CTA with contact details
 - Educational organization information: accordion with sections

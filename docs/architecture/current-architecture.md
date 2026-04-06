@@ -35,6 +35,7 @@ Both the frontend and backend are written from scratch, without using any off-th
 │  │  - Seminars  │     │  /api/promotions   (401) │  │
 │  │  - Articles  │     │  /api/news         (401) │  │
 │  │  - etc.      │     │  /api/videos       (401) │  │
+│  │              │     │  /api/payments     (401) │  │
 │  └──────┬───────┘     └──────────┬───────────────┘  │
 │         │                        │                   │
 │         │                        ▼                   │

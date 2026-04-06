@@ -23,16 +23,17 @@ Statuses: ✅ done | 🔧 partial | ⬜ not started
 | 1.1 | Pagefind: integration + /search page | ⬜ | 2–3 h | FR-05 | — |
 | 1.2 | React island: schedule filter (institute, city) | ⬜ | 2–3 h | FR-02 | — |
 | 1.3 | React island: seminar enrollment form | ⬜ | 2–3 h | FR-06 | — |
-| 1.4 | Theme: light/dark/system toggle | ⬜ | 1–2 h | — | — |
-| 1.5 | Image optimization (Astro `<Image>`) | ⬜ | 2–3 h | NFR-01 | — |
-| 1.6 | Schema.org JSON-LD (Course, Event, Article, BreadcrumbList) | 🔧 | 2–3 h | NFR-02 | — |
-| 1.7 | SEO: meta tags, canonical, Open Graph on all templates | 🔧 | 1–2 h | NFR-02 | — |
-| 1.8 | 301 redirects: full map (253 URLs → `_redirects`) | 🔧 | 1–2 h | NFR-02 | 0.3 |
-| 1.9 | UI polish: mobile menu, sidebar, breadcrumbs, 404 | 🔧 | 2–3 h | FR-09, FR-12 | — |
-| 1.10 | Security headers (HSTS, X-Content-Type-Options, etc.) | ⬜ | 0.5 h | NFR-03 | — |
-| 1.11 | Analytics: Yandex.Metrica + Mail.ru Top | 🔧 | 0.5 h | NFR-06 | — |
+| 1.4 | React island: payment modal (YooKassa redirect) | ⬜ | 2–3 h | FR-08 | — |
+| 1.5 | Theme: light/dark/system toggle | ⬜ | 1–2 h | — | — |
+| 1.6 | Image optimization (Astro `<Image>`) | ⬜ | 2–3 h | NFR-01 | — |
+| 1.7 | Schema.org JSON-LD (Course, Event, Article, BreadcrumbList) | 🔧 | 2–3 h | NFR-02 | — |
+| 1.8 | SEO: meta tags, canonical, Open Graph on all templates | 🔧 | 1–2 h | NFR-02 | — |
+| 1.9 | 301 redirects: full map (253 URLs → `_redirects`) | 🔧 | 1–2 h | NFR-02 | 0.3 |
+| 1.10 | UI polish: mobile menu, sidebar, breadcrumbs, 404 | 🔧 | 2–3 h | FR-09, FR-12 | — |
+| 1.11 | Security headers (HSTS, X-Content-Type-Options, etc.) | ⬜ | 0.5 h | NFR-03 | — |
+| 1.12 | Analytics: Yandex.Metrica + Mail.ru Top | 🔧 | 0.5 h | NFR-06 | — |
 
-**Phase 1 total: ~17–27 h**
+**Phase 1 total: ~20–32 h**
 
 ## Phase 2: CMS (Strapi)
 
@@ -43,8 +44,9 @@ Statuses: ✅ done | 🔧 partial | ⬜ not started
 | 2.3 | API tokens + RBAC configuration | ⬜ | 0.5 h | NFR-03 | 2.1 |
 | 2.4 | Webhook: Strapi → Astro rebuild | ⬜ | 1–2 h | NFR-07 | 2.1, 3.1 |
 | 2.5 | WYSIWYG configuration + media uploads | ⬜ | 1 h | FR-11 | 2.1 |
+| 2.6 | YooKassa: payment creation endpoint (redirect only) | ⬜ | 1–2 h | FR-08 | 2.1 |
 
-**Phase 2 total: ~7–9 h**
+**Phase 2 total: ~8–12 h**
 
 ## Phase 3: Data Migration
 
@@ -111,15 +113,15 @@ Existing artifacts:
 | Phase | Description | Status | Hours |
 |-------|-------------|--------|-------|
 | 0 | Discovery and prototype | ✅ completed | ~21 |
-| 1 | Frontend refinement | 🔧 in progress | 17–27 |
-| 2 | CMS (Strapi) | 🔧 started | 7–9 |
+| 1 | Frontend refinement | 🔧 in progress | 19–30 |
+| 2 | CMS (Strapi) | 🔧 started | 8–12 |
 | 3 | Data migration | 🔧 scaffold ready | 7–12 |
 | 4 | Deployment and infrastructure | 🔧 started | 6–9 |
 | 5 | Testing and acceptance | ⬜ | 9–12 |
 | 6 | Production migration | ⬜ | 5–6 |
-| | **TOTAL** | | **~72–96 h** |
+| | **TOTAL** | | **~75–102 h** |
 | | Already completed | | **~21 h** |
-| | **Remaining** | | **~51–75 h** |
+| | **Remaining** | | **~54–81 h** |
 
 ## Dependency Graph
 
