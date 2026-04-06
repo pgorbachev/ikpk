@@ -13,6 +13,19 @@ Replace the current website (Next.js + custom Express backend) with a new stack
 | Content manager | IKPK staff member | Updates the schedule, adds articles, edits pages |
 | Administrator | Owner / IT | Manages CMS users, deploys, monitors |
 
+## Out of Scope
+
+The following features are **not** part of this rebuild:
+
+- **User accounts / authentication for visitors** — no registration, login, or personal dashboard
+- **Payment tracking on the site** — payments are handled entirely by YooKassa; the site only redirects to checkout
+- **CRM / student management** — enrollment tracking, certificates, and student progress live outside the site
+- **Online payment gateway beyond redirect** — no webhooks, no payment status pages, no refund processing on-site
+- **E-commerce / shopping cart** — the separate store (kinezio.shop) is out of scope
+- **Mobile app**
+
+The site is a **content showcase + enrollment funnel**: browse → choose → pay (redirect) → manager contacts the student offline.
+
 ## Functional Requirements
 
 ### FR-01: Training Catalog
