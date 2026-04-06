@@ -70,6 +70,7 @@
       const prev = document.createElement('button');
       prev.type = 'button';
       prev.className = 'schedule-page-button schedule-page-button--nav';
+      prev.setAttribute('aria-label', 'Предыдущая страница');
       prev.textContent = '‹';
       prev.disabled = currentPage === 1;
       prev.addEventListener('click', () => {
@@ -90,6 +91,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'schedule-page-button';
+        button.setAttribute('aria-label', `Страница ${page}`);
         button.textContent = String(page);
         if (page === currentPage) {
           button.setAttribute('aria-current', 'page');
@@ -110,6 +112,7 @@
       const next = document.createElement('button');
       next.type = 'button';
       next.className = 'schedule-page-button schedule-page-button--nav';
+      next.setAttribute('aria-label', 'Следующая страница');
       next.textContent = '›';
       next.disabled = currentPage === pageCount;
       next.addEventListener('click', () => {

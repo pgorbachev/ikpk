@@ -1,14 +1,8 @@
 import type { ScheduleEntry } from './data';
 
 // Supplemental schedule entries to patch parity gaps where the CMS data is missing.
-// Dates are set relative to build time (6 months ahead) to stay valid across rebuilds.
+// Dates are fixed far-future values so the build is deterministic across rebuilds.
 // When the real CMS entries are available, remove the corresponding supplement.
-function buildRelativeDate(offsetDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
 
 export const scheduleSupplements: ScheduleEntry[] = [
   {
@@ -25,8 +19,8 @@ export const scheduleSupplements: ScheduleEntry[] = [
       name: 'Институт Апледжера',
       shortname: 'ИА',
     },
-    startAt: buildRelativeDate(180),
-    endAt: buildRelativeDate(180),
+    startAt: '2026-10-01T00:00:00.000Z',
+    endAt: '2026-10-01T00:00:00.000Z',
     teachers: [
       {
         id: 63,
@@ -69,8 +63,8 @@ export const scheduleSupplements: ScheduleEntry[] = [
       name: 'Институт Апледжера',
       shortname: 'ИА',
     },
-    startAt: buildRelativeDate(187),
-    endAt: buildRelativeDate(187),
+    startAt: '2026-10-08T00:00:00.000Z',
+    endAt: '2026-10-08T00:00:00.000Z',
     teachers: [
       {
         id: 63,
