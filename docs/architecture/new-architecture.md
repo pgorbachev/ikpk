@@ -1,60 +1,60 @@
-# Архитектура нового решения
+# New Solution Architecture
 
-## Обзор
+## Overview
 
-Новый сайт — **Astro (статический генератор) + Strapi CMS**.
-Фронтенд и бэкенд полностью разделены. Каждый компонент можно заменить независимо.
+The new website is built on **Astro (static site generator) + Strapi CMS**.
+Frontend and backend are fully decoupled. Each component can be replaced independently.
 
-**Ограничение:** все сервисы размещаются на территории РФ.
-Зарубежные платформы (Cloudflare, Netlify, Vercel и т.п.) не используются.
+**Constraint:** all services are hosted within the Russian Federation.
+Foreign platforms (Cloudflare, Netlify, Vercel, etc.) are not used.
 
-## Стек технологий
+## Technology Stack
 
-| Компонент | Технология | Назначение |
-|-----------|-----------|------------|
-| Фронтенд | Astro (SSG) | Статические HTML-страницы |
-| CMS | Strapi | Админ-панель с веб-интерфейсом + REST API |
-| Поиск | Pagefind | Полнотекстовый поиск в браузере, без сервера |
-| Интерактив | React (islands) | Только для форм и фильтров (~20–50 KB JS) |
-| Хостинг | Российский VPS | Nginx (статика) + Strapi + PostgreSQL |
-| Хранилище медиа | Yandex Cloud Storage | Без изменений, совместимо |
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Frontend | Astro (SSG) | Static HTML pages |
+| CMS | Strapi | Admin panel with web UI + REST API |
+| Search | Pagefind | Full-text in-browser search, no server required |
+| Interactivity | React (islands) | Only for forms and filters (~20–50 KB JS) |
+| Hosting | Russian VPS | Nginx (static files) + Strapi + PostgreSQL |
+| Media storage | Yandex Cloud Storage | No changes, fully compatible |
 
-**JavaScript-бюджет:** базовые страницы — 0 KB JS. Страницы с интерактивом
-(поиск, формы, фильтр расписания) подгружают ~20–50 KB React islands.
-Для сравнения: текущий сайт — ~500 KB JS на каждой странице.
+**JavaScript budget:** basic pages — 0 KB JS. Pages with interactivity
+(search, forms, schedule filter) load ~20–50 KB React islands on demand.
+For comparison: the current site ships ~500 KB JS on every page.
 
-## Архитектура
+## Architecture
 
 ```
-┌─ Российский VPS (Timeweb / Selectel) ──────────────┐
+┌─ Russian VPS (Timeweb / Selectel) ──────────────────┐
 │                                                      │
 │  ┌─────────────────────────────────────────────────┐ │
 │  │               Nginx                             │ │
 │  │                                                 │ │
-│  │  Статика (порт 80/443):                         │ │
-│  │  • ~253 HTML-страницы (Astro SSG)               │ │
-│  │  • CSS + шрифты + SVG                           │ │
-│  │  • React islands (~20–50 KB, по необходимости): │ │
-│  │    – Поиск по сайту (Pagefind)                  │ │
-│  │    – Фильтр расписания                          │ │
-│  │    – Форма записи на семинар                    │ │
-│  │    – Форма подписки на новости                  │ │
+│  │  Static files (port 80/443):                    │ │
+│  │  • ~253 HTML pages (Astro SSG)                  │ │
+│  │  • CSS + fonts + SVG                            │ │
+│  │  • React islands (~20–50 KB, on demand):        │ │
+│  │    – Site search (Pagefind)                     │ │
+│  │    – Schedule filter                            │ │
+│  │    – Seminar enrollment form                    │ │
+│  │    – Newsletter subscription form               │ │
 │  │                                                 │ │
-│  │  Reverse proxy → Strapi (порт 1337):            │ │
-│  │  • /admin/* → админ-панель CMS                  │ │
-│  │  • /api/*   → REST API (формы, webhook)         │ │
+│  │  Reverse proxy → Strapi (port 1337):            │ │
+│  │  • /admin/* → CMS admin panel                   │ │
+│  │  • /api/*   → REST API (forms, webhook)         │ │
 │  └─────────────────────────────────────────────────┘ │
 │                                                      │
 │  ┌───────────────────┐  ┌────────────────────────┐   │
 │  │   Strapi CMS      │  │  PostgreSQL            │   │
-│  │   (Node.js)       │──│  (база данных)         │   │
+│  │   (Node.js)       │──│  (database)            │   │
 │  │                   │  └────────────────────────┘   │
-│  │   Админ-панель:   │                               │
+│  │   Admin panel:    │                               │
 │  │   https://<CMS_HOST>/admin                        │
 │  │                   │                               │
 │  │   • WYSIWYG       │                               │
-│  │   • Загрузка медиа│                               │
-│  │   • Роли: admin / editor                          │
+│  │   • Media upload  │                               │
+│  │   • Roles: admin / editor                         │
 │  │                   │                               │
 │  │   REST API:       │                               │
 │  │   • /api/institutes                               │
@@ -62,198 +62,199 @@
 │  │   • /api/articles                                 │
 │  │   • /api/teachers                                 │
 │  │   • /api/schedule-entries                         │
-│  │   • /api/form-submissions (заявки на семинар)     │
+│  │   • /api/form-submissions (seminar applications)  │
 │  └───────────────────┘                               │
 │                                                      │
-│  Yandex Cloud Storage (медиа) — внешний сервис       │
+│  Yandex Cloud Storage (media) — external service     │
 └──────────────────────────────────────────────────────┘
 
-URL конкретного CMS-хоста (поддомен или отдельный домен)
-задаётся при деплое, в документации используется <CMS_HOST>.
+The URL of the specific CMS host (subdomain or separate domain)
+is set at deploy time; <CMS_HOST> is used throughout this document.
 ```
 
-## Отказоустойчивость
+## Fault Tolerance
 
-Статический сайт и CMS разделены по ответственности:
-
-```
-Strapi CMS упал (VPS перезагрузка, обновление):
-  Посетители   → сайт работает (Nginx отдаёт статику)
-  Поиск        → работает (Pagefind в браузере)
-  Формы        → НЕ работают (зависят от Strapi API)
-  Менеджер     → НЕ может редактировать
-
-Nginx упал:
-  Весь сайт    → НЕ работает
-  Решение      → systemd auto-restart, мониторинг UptimeRobot
-```
-
-Ключевое преимущество: **посетители видят сайт даже при недоступности CMS**.
-Текущий монолит (Next.js + Express) при любом падении — весь сайт недоступен.
-
-## Формы: архитектура отправки
-
-Формы (запись на семинар, подписка на новости) отправляют данные
-на **Strapi REST API** (`POST /api/form-submissions`).
+The static site and the CMS have separate areas of responsibility:
 
 ```
-Посетитель заполняет форму
+Strapi CMS is down (VPS reboot, update):
+  Visitors     → site works (Nginx serves static files)
+  Search       → works (Pagefind runs in the browser)
+  Forms        → DO NOT work (depend on Strapi API)
+  Manager      → CANNOT edit content
+
+Nginx is down:
+  Entire site  → DOES NOT work
+  Mitigation   → systemd auto-restart, UptimeRobot monitoring
+```
+
+Key advantage: **visitors can browse the site even when the CMS is unavailable**.
+The current monolith (Next.js + Express) takes the entire site down on any failure.
+
+## Forms: Submission Architecture
+
+Forms (seminar enrollment, newsletter subscription) send data
+to the **Strapi REST API** (`POST /api/form-submissions`).
+
+```
+Visitor fills out the form
        │
        ▼
-React island (валидация на клиенте)
+React island (client-side validation)
        │
        ▼ POST /api/form-submissions
 ┌──────────────────┐
 │  Strapi API      │
-│  • валидация     │
+│  • validation    │
 │  • rate limiting │
-│  • сохранение    │
-│  • email-уведомление (опционально)
+│  • persistence   │
+│  • email notification (optional)
 └──────────────────┘
 ```
 
-Выбор Strapi API (а не внешний form-сервис):
-- CMS уже есть на VPS, дополнительных затрат нет
-- Заявки хранятся в той же БД, видны в админке
-- Нет зависимости от зарубежных сервисов
+Why Strapi API (instead of an external form service):
+- The CMS already runs on the VPS — no additional cost
+- Submissions are stored in the same database and visible in the admin panel
+- No dependency on foreign services
 
-## Поток обновления контента
+## Content Update Flow
 
 ```
-Контент-менеджер
+Content manager
        │
        ▼
 ┌──────────────────┐
 │  Strapi          │
-│  админ-панель    │  https://<CMS_HOST>/admin
-│  (в браузере)    │
+│  admin panel     │  https://<CMS_HOST>/admin
+│  (in browser)    │
 └────────┬─────────┘
          │
-         │ сохранение
+         │ save
          ▼
 ┌──────────────────┐     webhook      ┌──────────────┐
 │  Strapi API      │────────────────▶│  GitHub       │
-│  (база данных)   │                  │  Actions      │
+│  (database)      │                  │  Actions      │
 └──────────────────┘                  └──────┬───────┘
                                              │
-                                      1. astro build (~5 сек)
-                                      2. rsync → VPS (~10 сек)
+                                      1. astro build (~5 sec)
+                                      2. rsync → VPS (~10 sec)
                                              │
                                              ▼
                                       ┌──────────────┐
                                       │  Nginx       │
-                                      │  (обновлённая│
-                                      │  статика)    │
+                                      │  (updated    │
+                                      │  static files│
                                       └──────┬───────┘
                                              │
                                              ▼
                                       ┌──────────────┐
-                                      │  Посетители  │
-                                      │  видят       │
-                                      │  обновления  │
+                                      │  Visitors    │
+                                      │  see the     │
+                                      │  updates     │
                                       └──────────────┘
 ```
 
-**Разбивка времени от сохранения до публикации:**
+**Time breakdown from save to publish:**
 
-| Этап | Время |
-|------|-------|
-| Strapi webhook → GitHub Actions запуск | ~10–30 сек |
-| `npm ci` (кэшированные deps) | ~15–30 сек |
-| `astro build` (~253 страницы) | ~5–10 сек |
-| `rsync` результата на VPS | ~5–15 сек |
-| **Итого** | **~1–2 мин** |
+| Stage | Time |
+|-------|------|
+| Strapi webhook → GitHub Actions trigger | ~10–30 sec |
+| `npm ci` (cached deps) | ~15–30 sec |
+| `astro build` (~253 pages) | ~5–10 sec |
+| `rsync` output to VPS | ~5–15 sec |
+| **Total** | **~1–2 min** |
 
-**Страховка:** nightly rebuild по cron (GitHub Actions scheduled) на случай
-пропущенного webhook. Ручной trigger через GitHub Actions UI.
+**Safety net:** nightly rebuild via cron (GitHub Actions scheduled) in case
+a webhook is missed. Manual trigger available through GitHub Actions UI.
 
-## Целевые показатели производительности
+## Target Performance Metrics
 
-| Метрика | Текущий сайт | Новый сайт | Улучшение |
-|---------|-------------|------------|-----------|
+| Metric | Current site | New site | Improvement |
+|--------|-------------|----------|-------------|
 | Lighthouse Performance (mobile) | 36–56 | ≥ 85 | **+50–130%** |
-| LCP (mobile) | 8.6–9.8 с | ≤ 2.5 с | **в 3–4 раза** |
-| TBT (mobile) | 290–2070 мс | ≤ 200 мс | **в 1.5–10 раз** |
-| TTFB | 360–1130 мс | ≤ 300 мс | **Nginx + Россия** |
-| JS-бандл | ~500 KB (каждая стр.) | 0–50 KB (только islands) | **в 10–25 раз** |
+| LCP (mobile) | 8.6–9.8 s | ≤ 2.5 s | **3–4×** |
+| TBT (mobile) | 290–2070 ms | ≤ 200 ms | **1.5–10×** |
+| TTFB | 360–1130 ms | ≤ 300 ms | **Nginx + Russia** |
+| JS bundle | ~500 KB (every page) | 0–50 KB (islands only) | **10–25×** |
 
-TTFB улучшается за счёт: (1) статика из Nginx без бэкенда, (2) сервер в РФ
-ближе к целевой аудитории. При 1–5 rps пиковой нагрузки CDN не требуется.
+TTFB improves because: (1) static files served by Nginx with no backend involved,
+(2) the server is located in Russia, closer to the target audience. At a peak load
+of 1–5 rps, a CDN is not required.
 
-**Масштабирование (при необходимости):** если трафик вырастет на порядок,
-можно подключить российский CDN (Selectel CDN, Yandex Cloud CDN, G-Core Labs)
-без изменения архитектуры — Nginx уже отдаёт статику, CDN встаёт перед ним.
-Для аудитории из СНГ (Беларусь, Казахстан) TTFB с московского VPS — ~30–80 мс,
-что укладывается в целевые ≤ 300 мс с большим запасом.
+**Scaling (if needed):** should traffic grow by an order of magnitude,
+a Russian CDN (Selectel CDN, Yandex Cloud CDN, G-Core Labs) can be added
+without changing the architecture — Nginx already serves static files and the CDN
+would sit in front of it. For the CIS audience (Belarus, Kazakhstan), TTFB from a
+Moscow VPS is ~30–80 ms, well within the ≤ 300 ms target with ample margin.
 
-## Преимущества нового решения
+## Benefits of the New Solution
 
-### Для посетителей
-- Страницы загружаются в 3–4 раза быстрее
-- Работает даже на слабом мобильном интернете
-- Сайт доступен даже при проблемах с CMS (статика отдаётся Nginx)
-- Лучше индексируется поисковиками (SEO)
+### For visitors
+- Pages load 3–4× faster
+- Works even on slow mobile connections
+- Site remains accessible even when the CMS is down (Nginx serves static files)
+- Better search engine indexing (SEO)
 
-### Для контент-менеджера
-- Стандартная CMS с понятным интерфейсом (не кастомный код)
-- WYSIWYG-редактор для статей
-- Управление семинарами, расписанием, преподавателями через формы
-- Заявки на семинары видны прямо в CMS
-- Роли доступа (кто может что редактировать)
+### For the content manager
+- Standard CMS with an intuitive interface (no custom code)
+- WYSIWYG editor for articles
+- Manage seminars, schedules, and teachers through forms
+- Seminar applications are visible directly in the CMS
+- Access roles (who can edit what)
 
-### Для владельца
-- Независимость от конкретного разработчика (стандартный стек)
-- Фронтенд и CMS можно менять независимо
-- Всё на территории РФ — нет санкционных и блокировочных рисков
-- Низкая стоимость хостинга (~900–1200 руб/мес за VPS)
-- Автоматические бэкапы базы данных
+### For the owner
+- No vendor lock-in to a specific developer (standard stack)
+- Frontend and CMS can be changed independently
+- Everything is hosted in Russia — no sanctions or blocking risks
+- Low hosting cost (~900–1200 RUB/month for VPS)
+- Automatic database backups
 
-## Поиск по сайту (Pagefind)
+## Site Search (Pagefind)
 
 ```
 astro build
      │
      ▼
 ┌──────────────────┐
-│  ~253 HTML-файла │
+│  ~253 HTML files  │
 └────────┬─────────┘
          │
-   pagefind (индексация)
+   pagefind (indexing)
          │
          ▼
 ┌──────────────────┐     ┌──────────────────┐
-│  Поисковый       │     │  Посетитель      │
-│  индекс (~50 KB) │────▶│  вводит запрос   │
-│  (на сервере)    │     │  в браузере      │
+│  Search          │     │  Visitor         │
+│  index (~50 KB)  │────▶│  enters a query  │
+│  (on server)     │     │  in the browser  │
 └──────────────────┘     └──────────────────┘
 
-Всё работает в браузере. Бэкенд не нужен.
+Everything runs in the browser. No backend needed.
 ```
 
-**Возможности:**
-- Полнотекстовый поиск по всем ~253 страницам
-- Толерантность к опечаткам (fuzzy matching, 1–2 символа)
-- Поддержка русского языка
-- Размер: ~20 KB JS + ~50 KB индекс (подгружается по требованию)
-- Скорость: результаты за ~10 мс
-- Стоимость: бесплатно
+**Capabilities:**
+- Full-text search across all ~253 pages
+- Typo tolerance (fuzzy matching, 1–2 characters)
+- Russian language support
+- Size: ~20 KB JS + ~50 KB index (loaded on demand)
+- Speed: results in ~10 ms
+- Cost: free
 
-## Модель данных (10 сущностей)
+## Data Model (10 Entities)
 
 ```
 Institute (3)
   └── CourseGroup (26)
         └── Seminar (115)
               ├── Teacher (26)  [M:N]
-              └── ScheduleEntry (расписание)
+              └── ScheduleEntry (schedule)
 
 Article (68)
 VideoPlaylist (6)
-News (новости)
-Promotion (акции)
-Page (статические страницы: оплата, контакты, сведения...)
-FormSubmission (заявки на семинары, подписки)
+News (news)
+Promotion (promotions)
+Page (static pages: payment, contacts, institutional info…)
+FormSubmission (seminar applications, subscriptions)
 ```
 
-Каждая сущность с публичной страницей имеет SEO-поля:
+Every entity with a public page has SEO fields:
 - `seo_title`, `seo_description`, `og_image`, `noindex`

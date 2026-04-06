@@ -1,25 +1,25 @@
-# Архитектура текущего решения (ikpk.su)
+# Current Solution Architecture (ikpk.su)
 
-## Обзор
+## Overview
 
-Текущий сайт — **полностью кастомная разработка** на JavaScript-стеке.
-Фронтенд и бэкенд написаны с нуля, без использования готовых CMS.
+The current website is a **fully custom-built** application on a JavaScript stack.
+Both the frontend and backend are written from scratch, without using any off-the-shelf CMS.
 
-## Стек технологий
+## Technology Stack
 
-| Компонент | Технология | Назначение |
-|-----------|-----------|------------|
-| Фронтенд | Next.js (React) | SSG/SSR — статическая генерация и серверный рендеринг страниц |
-| Бэкенд | Node.js + Express | REST API для данных и админки |
-| База данных | PostgreSQL (предположительно) | Хранение контента |
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Frontend | Next.js (React) | SSG/SSR — static site generation and server-side rendering |
+| Backend | Node.js + Express | REST API for data and admin panel |
+| Database | PostgreSQL (presumed) | Content storage |
 
-> **Допущение:** тип БД определён косвенно — по паттернам Express API
-> и типичному стеку Next.js-проектов. Прямого подтверждения нет (API закрыт
-> авторизацией). Требует верификации при получении доступа к серверу.
-| Хранилище медиа | Yandex Cloud Storage | Изображения, PDF-документы |
-| Хостинг | VPS/Cloud | Единый сервер для фронта и бэкенда |
+> **Assumption:** the database type was inferred indirectly — from Express API
+> patterns and the typical stack of Next.js projects. There is no direct confirmation
+> (the API is behind authentication). Requires verification once server access is obtained.
+| Media storage | Yandex Cloud Storage | Images, PDF documents |
+| Hosting | VPS/Cloud | Single server for both frontend and backend |
 
-## Архитектура
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -29,43 +29,43 @@
 │  │  Next.js     │────▶│  Express API (Node.js)   │  │
 │  │  (SSG/SSR)   │     │                          │  │
 │  │              │     │  /api/institutes    (200) │  │
-│  │  Страницы:   │     │  /api/articles     (401) │  │
-│  │  - Главная   │     │  /api/seminars     (401) │  │
-│  │  - Институты │     │  /api/teachers     (401) │  │
-│  │  - Семинары  │     │  /api/promotions   (401) │  │
-│  │  - Статьи    │     │  /api/news         (401) │  │
-│  │  - и др.     │     │  /api/videos       (401) │  │
+│  │  Pages:      │     │  /api/articles     (401) │  │
+│  │  - Home      │     │  /api/seminars     (401) │  │
+│  │  - Institutes│     │  /api/teachers     (401) │  │
+│  │  - Seminars  │     │  /api/promotions   (401) │  │
+│  │  - Articles  │     │  /api/news         (401) │  │
+│  │  - etc.      │     │  /api/videos       (401) │  │
 │  └──────┬───────┘     └──────────┬───────────────┘  │
 │         │                        │                   │
 │         │                        ▼                   │
 │         │             ┌──────────────────┐           │
-│         │             │   База данных    │           │
+│         │             │    Database      │           │
 │         │             │  (PostgreSQL?)   │           │
 │         │             └──────────────────┘           │
 │         │                                            │
 │         ▼                                            │
 │  ┌──────────────┐     ┌──────────────────────────┐  │
-│  │  Посетители  │     │  Кастомная админка       │  │
-│  │  (браузер)   │     │  (закрыта авторизацией)  │  │
+│  │  Visitors    │     │  Custom admin panel       │  │
+│  │  (browser)   │     │  (behind authentication)  │  │
 │  └──────────────┘     └──────────────────────────┘  │
 │                                                     │
 │              ┌─────────────────────────┐             │
 │              │  Yandex Cloud Storage   │             │
-│              │  (изображения, PDF)     │             │
+│              │  (images, PDF)          │             │
 │              └─────────────────────────┘             │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Поток обновления контента
+## Content Update Flow
 
 ```
-Контент-менеджер
+Content manager
        │
        ▼
 ┌──────────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Кастомная       │────▶│  Express API │────▶│  База данных │
-│  админ-панель    │     │  (Node.js)   │     │              │
-│  (в браузере)    │     └──────────────┘     └──────┬───────┘
+│  Custom          │────▶│  Express API │────▶│  Database    │
+│  admin panel     │     │  (Node.js)   │     │              │
+│  (in browser)    │     └──────────────┘     └──────┬───────┘
 └──────────────────┘                                  │
                                                       │
                          ┌──────────────┐             │
@@ -76,34 +76,34 @@
                                 │
                                 ▼
                          ┌──────────────┐
-                         │  Посетители  │
-                         │  видят       │
-                         │  обновления  │
+                         │  Visitors    │
+                         │  see the     │
+                         │  updates     │
                          └──────────────┘
 ```
 
-## Характеристики
+## Characteristics
 
-**Производительность (Lighthouse, mobile):**
-- Performance: 36–56 из 100
-- LCP: 8.6–9.8 секунд
-- TBT: 290–2070 мс
-- JS-бандл: ~500 KB+
+**Performance (Lighthouse, mobile):**
+- Performance: 36–56 out of 100
+- LCP: 8.6–9.8 seconds
+- TBT: 290–2070 ms
+- JS bundle: ~500 KB+
 
-**Количество страниц:** 253 (по sitemap.xml)
+**Number of pages:** 253 (per sitemap.xml)
 
-**Контент:**
-- 3 института, 26 групп курсов, ~115 семинаров
-- 26 преподавателей
-- 68 статей
-- 6 видео-плейлистов
-- 8 статических страниц (оплата, контакты и т.д.)
+**Content:**
+- 3 institutes, 26 course groups, ~115 seminars
+- 26 instructors
+- 68 articles
+- 6 video playlists
+- 8 static pages (payment, contacts, etc.)
 
-## Риски и проблемы
+## Risks and Issues
 
-1. **Кастомный код** — поддержка возможна только разработчиком, знакомым с кодовой базой
-2. **Низкая производительность** — тяжёлый JS-бандл Next.js на каждой странице
-3. **Монолит** — фронтенд и бэкенд связаны, нельзя заменить одно без другого
-4. **Нет стандартной CMS** — если текущий разработчик недоступен, редактирование контента затруднено
-5. **Поиск зависит от сервера** — если бэкенд недоступен, поиск не работает
-6. **Отсутствуют security headers** — HSTS, CSP, X-Frame-Options не настроены
+1. **Custom code** — can only be maintained by a developer familiar with the codebase
+2. **Poor performance** — heavy Next.js JS bundle on every page
+3. **Monolith** — frontend and backend are tightly coupled; one cannot be replaced without the other
+4. **No standard CMS** — if the current developer is unavailable, content editing becomes difficult
+5. **Search depends on the server** — if the backend is down, search does not work
+6. **Missing security headers** — HSTS, CSP, X-Frame-Options are not configured

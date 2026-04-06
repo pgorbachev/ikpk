@@ -1,210 +1,210 @@
 # Use Cases: ikpk.su
 
-## UC-01: Посетитель ищет курс
+## UC-01: Visitor searches for a course
 
 ```
-Актор:    Посетитель (врач, студент)
-Цель:     Найти подходящий семинар и узнать детали
-Предусловие: Посетитель открыл сайт
+Actor:        Visitor (physician, student)
+Goal:         Find a suitable seminar and learn the details
+Precondition: Visitor has opened the website
 
-Основной сценарий:
-1. Посетитель видит 3 института в sidebar
-2. Кликает на институт → видит список групп курсов + преподавателей
-3. Кликает на группу курсов → видит список семинаров с бейджами статуса
-4. Кликает на семинар → видит:
-   - Описание, длительность, тип сертификата
-   - Ближайшую дату, цену, город
-   - Преподавателя (фото, имя → ссылка на профиль)
-   - Кнопку «Записаться»
+Main scenario:
+1. Visitor sees 3 institutes in the sidebar
+2. Clicks on an institute → sees the list of course groups + instructors
+3. Clicks on a course group → sees the list of seminars with status badges
+4. Clicks on a seminar → sees:
+   - Description, duration, certificate type
+   - Nearest date, price, city
+   - Instructor (photo, name → link to profile)
+   - "Enroll" button
 
-Альтернативный сценарий (через расписание):
-1. Посетитель кликает «Расписание и цены» в sidebar
-2. Видит таблицу всех ближайших семинаров
-3. Фильтрует по институту / городу
-4. Кликает на семинар → переход на детальную страницу
+Alternative scenario (via schedule):
+1. Visitor clicks "Schedule & Prices" in the sidebar
+2. Sees a table of all upcoming seminars
+3. Filters by institute / city
+4. Clicks on a seminar → navigates to the detail page
 ```
 
-## UC-02: Посетитель ищет информацию через поиск
+## UC-02: Visitor searches for information via site search
 
 ```
-Актор:    Посетитель
-Цель:     Быстро найти нужную страницу
-Предусловие: Посетитель на любой странице сайта
+Actor:        Visitor
+Goal:         Quickly find the desired page
+Precondition: Visitor is on any page of the website
 
-Основной сценарий:
-1. Кликает на иконку поиска (лупа) в хедере
-2. Открывается поле ввода
-3. Вводит запрос (например, «краниосакральная»)
-4. По мере ввода появляются результаты:
-   - Заголовок страницы
-   - Тип (семинар / статья / институт / курс)
-   - Фрагмент текста с подсветкой совпадения
-5. Кликает на результат → переход на страницу
+Main scenario:
+1. Clicks on the search icon (magnifying glass) in the header
+2. A search input field opens
+3. Types a query (e.g., "craniosacral")
+4. Results appear as the user types:
+   - Page title
+   - Type (seminar / article / institute / course)
+   - Text snippet with the match highlighted
+5. Clicks on a result → navigates to the page
 
-Альтернативный сценарий (опечатка):
-3a. Вводит «кранисакральная» (опечатка)
-4a. Pagefind находит результаты через fuzzy matching
+Alternative scenario (typo):
+3a. Types "cranisacral" (typo)
+4a. Pagefind returns results via fuzzy matching
 ```
 
-## UC-03: Посетитель записывается на семинар
+## UC-03: Visitor enrolls in a seminar
 
 ```
-Актор:    Посетитель
-Цель:     Оставить заявку на участие в семинаре
-Предусловие: Посетитель на странице семинара
+Actor:        Visitor
+Goal:         Submit an enrollment request for a seminar
+Precondition: Visitor is on the seminar page
 
-Основной сценарий:
-1. Посетитель кликает «Записаться» на странице семинара
-2. Открывается форма: имя, email, телефон
-3. Заполняет поля, нажимает «Отправить»
-4. Видит подтверждение: «Заявка отправлена, мы свяжемся с вами»
-5. Заявка сохраняется в CMS / отправляется на email
+Main scenario:
+1. Visitor clicks "Enroll" on the seminar page
+2. A form opens: name, email, phone
+3. Fills in the fields, clicks "Submit"
+4. Sees a confirmation: "Your request has been submitted; we will contact you"
+5. The request is saved in the CMS / sent via email
 
-Альтернативный сценарий (ошибка валидации):
-3a. Оставил пустое обязательное поле или невалидный email
-4a. Видит сообщение об ошибке у соответствующего поля
+Alternative scenario (validation error):
+3a. Leaves a required field empty or enters an invalid email
+4a. Sees an error message next to the corresponding field
 ```
 
-## UC-04: Посетитель подписывается на новости
+## UC-04: Visitor subscribes to the newsletter
 
 ```
-Актор:    Посетитель
-Цель:     Подписаться на email-рассылку
-Предусловие: Посетитель на любой странице (форма перед footer)
+Actor:        Visitor
+Goal:         Subscribe to the email newsletter
+Precondition: Visitor is on any page (form above the footer)
 
-Основной сценарий:
-1. Вводит email в поле подписки
-2. Ставит галочку «Согласен с обработкой ПД»
-3. Нажимает «Подписаться»
-4. Видит: «Вы успешно подписались!»
+Main scenario:
+1. Enters email in the subscription field
+2. Checks the "I agree to data processing" checkbox
+3. Clicks "Subscribe"
+4. Sees: "You have successfully subscribed!"
 
-Альтернативный сценарий (без согласия):
-2a. Не ставит галочку
-3a. Видит: «Необходимо согласие на обработку данных»
+Alternative scenario (no consent):
+2a. Does not check the checkbox
+3a. Sees: "Consent to data processing is required"
 ```
 
-## UC-05: Посетитель читает статью
+## UC-05: Visitor reads an article
 
 ```
-Актор:    Посетитель
-Цель:     Прочитать статью, найти связанный контент
-Предусловие: Посетитель на странице /statyi или пришёл из поиска
+Actor:        Visitor
+Goal:         Read an article and discover related content
+Precondition: Visitor is on the /statyi page or arrived via search
 
-Основной сценарий:
-1. Видит список статей (карточки: картинка, заголовок, дата, отрывок)
-2. Кликает на статью
-3. Читает полный текст с изображениями
-4. В sidebar видит дату публикации и 4 связанные статьи
-5. Кликает на связанную статью → переход
+Main scenario:
+1. Sees a list of articles (cards: image, title, date, excerpt)
+2. Clicks on an article
+3. Reads the full text with images
+4. In the sidebar sees the publication date and 4 related articles
+5. Clicks on a related article → navigates to it
 ```
 
-## UC-06: Посетитель смотрит видео
+## UC-06: Visitor watches a video
 
 ```
-Актор:    Посетитель
-Цель:     Посмотреть обучающее видео
-Предусловие: Посетитель на странице /video
+Actor:        Visitor
+Goal:         Watch an educational video
+Precondition: Visitor is on the /video page
 
-Основной сценарий:
-1. Видит список плейлистов (6 шт)
-2. Кликает на плейлист
-3. Видит встроенный YouTube-плеер с плейлистом
-4. Смотрит видео прямо на сайте
+Main scenario:
+1. Sees a list of playlists (6 total)
+2. Clicks on a playlist
+3. Sees an embedded YouTube player with the playlist
+4. Watches the video directly on the website
 
-Альтернативный сценарий (YouTube недоступен):
-3a. Видит ссылки на RUTUBE и VK
-4a. Переходит на альтернативную платформу
+Alternative scenario (YouTube unavailable):
+3a. Sees links to RUTUBE and VK
+4a. Navigates to the alternative platform
 ```
 
-## UC-07: Контент-менеджер обновляет расписание
+## UC-07: Content manager updates the schedule
 
 ```
-Актор:    Контент-менеджер
-Цель:     Добавить новый семинар в расписание
-Предусловие: Авторизован в Strapi (cms.ikpk.su/admin)
+Actor:        Content manager
+Goal:         Add a new seminar to the schedule
+Precondition: Authenticated in Strapi (cms.ikpk.su/admin)
 
-Основной сценарий:
-1. Открывает раздел «Schedule Entries» в Strapi
-2. Нажимает «Create new entry»
-3. Заполняет: семинар (выбор из списка), дата начала, дата конца,
-   город, цена
-4. Нажимает «Save» → «Publish»
-5. Webhook триггерит rebuild Astro
-6. Через 2–5 минут новый семинар появляется на сайте
-   (расписание + страница семинара)
+Main scenario:
+1. Opens the «Schedule Entries» section in Strapi
+2. Clicks «Create new entry»
+3. Fills in: seminar (select from list), start date, end date,
+   city, price
+4. Clicks «Save» → «Publish»
+5. Webhook triggers an Astro rebuild
+6. Within 2–5 minutes the new seminar appears on the website
+   (schedule + seminar page)
 ```
 
-## UC-08: Контент-менеджер публикует статью
+## UC-08: Content manager publishes an article
 
 ```
-Актор:    Контент-менеджер
-Цель:     Опубликовать новую статью
-Предусловие: Авторизован в Strapi
+Actor:        Content manager
+Goal:         Publish a new article
+Precondition: Authenticated in Strapi
 
-Основной сценарий:
-1. Открывает раздел «Articles» в Strapi
-2. Нажимает «Create new entry»
-3. Заполняет: заголовок, slug, автор, содержание (WYSIWYG)
-4. Загружает изображение (drag-and-drop)
-5. Заполняет SEO-поля: seo_title, seo_description
-6. Нажимает «Save» → «Publish»
-7. Через 2–5 минут статья появляется на сайте
+Main scenario:
+1. Opens the «Articles» section in Strapi
+2. Clicks «Create new entry»
+3. Fills in: title, slug, author, content (WYSIWYG)
+4. Uploads an image (drag-and-drop)
+5. Fills in SEO fields: seo_title, seo_description
+6. Clicks «Save» → «Publish»
+7. Within 2–5 minutes the article appears on the website
 ```
 
-## UC-09: Контент-менеджер редактирует страницу
+## UC-09: Content manager edits a page
 
 ```
-Актор:    Контент-менеджер
-Цель:     Обновить текст на статической странице (оплата, контакты и т.д.)
-Предусловие: Авторизован в Strapi
+Actor:        Content manager
+Goal:         Update text on a static page (payment, contacts, etc.)
+Precondition: Authenticated in Strapi
 
-Основной сценарий:
-1. Открывает раздел «Pages» в Strapi
-2. Находит страницу (например, «Оплата»)
-3. Редактирует текст в WYSIWYG-редакторе
-4. Нажимает «Save»
-5. Webhook → rebuild → обновление на сайте через 2–5 минут
+Main scenario:
+1. Opens the «Pages» section in Strapi
+2. Finds the page (e.g., "Payment")
+3. Edits the text in the WYSIWYG editor
+4. Clicks «Save»
+5. Webhook → rebuild → update on the website within 2–5 minutes
 ```
 
-## UC-10: Администратор добавляет редактора
+## UC-10: Administrator adds an editor
 
 ```
-Актор:    Администратор
-Цель:     Дать доступ новому сотруднику к CMS
-Предусловие: Авторизован как admin в Strapi
+Actor:        Administrator
+Goal:         Grant CMS access to a new team member
+Precondition: Authenticated as admin in Strapi
 
-Основной сценарий:
-1. Открывает Settings → Users
-2. Нажимает «Invite new user»
-3. Вводит email, выбирает роль «Editor»
-4. Новый пользователь получает email с приглашением
-5. Устанавливает пароль и получает доступ к редактированию контента
-   (без доступа к настройкам и ролям)
+Main scenario:
+1. Opens Settings → Users
+2. Clicks «Invite new user»
+3. Enters email, selects the «Editor» role
+4. The new user receives an invitation email
+5. Sets a password and gains access to content editing
+   (without access to settings and roles)
 ```
 
-## UC-11: Администратор выполняет деплой и мониторинг
+## UC-11: Administrator performs deployment and monitoring
 
 ```
-Актор:    Администратор
-Цель:     Обновить сайт, проверить работоспособность, устранить проблему
-Предусловие: Доступ к GitHub Actions и VPS
+Actor:        Administrator
+Goal:         Update the website, verify availability, resolve issues
+Precondition: Access to GitHub Actions and VPS
 
-Сценарий A — ручной rebuild:
-1. Открывает GitHub Actions
-2. Запускает workflow «Deploy» вручную (workflow_dispatch)
-3. Видит статус: build → rsync → done
-4. Проверяет сайт в браузере
+Scenario A — manual rebuild:
+1. Opens GitHub Actions
+2. Triggers the «Deploy» workflow manually (workflow_dispatch)
+3. Sees status: build → rsync → done
+4. Verifies the website in a browser
 
-Сценарий B — мониторинг:
-1. Получает алерт от UptimeRobot (сайт / CMS недоступен)
-2. Подключается к VPS по SSH
-3. Проверяет: systemctl status nginx, systemctl status strapi
-4. Перезапускает упавший сервис
-5. Проверяет логи: journalctl -u strapi --since "1 hour ago"
+Scenario B — monitoring:
+1. Receives an alert from UptimeRobot (website / CMS unreachable)
+2. Connects to the VPS via SSH
+3. Checks: systemctl status nginx, systemctl status strapi
+4. Restarts the failed service
+5. Reviews logs: journalctl -u strapi --since "1 hour ago"
 
-Сценарий C — обновление Strapi:
-1. Подключается к VPS по SSH
+Scenario C — Strapi update:
+1. Connects to the VPS via SSH
 2. cd /opt/cms && npm update @strapi/*
 3. npm run build && systemctl restart strapi
-4. Проверяет админку в браузере
+4. Verifies the admin panel in a browser
 ```

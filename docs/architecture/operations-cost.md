@@ -1,218 +1,218 @@
-# Стоимость эксплуатации нового решения
+# Operations Cost for the New Solution
 
-## Оценка нагрузки
+## Load Estimation
 
-### Профиль аудитории
+### Audience Profile
 
-- Узкая ниша: постдипломное медицинское образование (кинезиология, остеопатия)
-- География: преимущественно Россия + СНГ, основной город — Санкт-Петербург
-- Аудитория: практикующие врачи, массажисты, остеопаты
-- Сезонность: пики перед началом семинаров (объявления в расписании)
+- Narrow niche: postgraduate medical education (kinesiology, osteopathy)
+- Geography: primarily Russia + CIS, main city — Saint Petersburg
+- Audience: practicing physicians, massage therapists, osteopaths
+- Seasonality: peaks before seminar start dates (announcements in the schedule)
 
-### Оценка трафика (консервативная)
-
-```
-Уникальных посетителей:  100–300 / сутки
-Просмотров страниц:      300–1000 / сутки
-Пиковые часы:            10:00–14:00 МСК (рабочие дни)
-Пиковая нагрузка:        1–5 запросов / секунду
-Среднемесячный трафик:   5000–10000 визитов
-```
-
-**Обоснование оценки:**
-- 253 страницы, Яндекс ИКС = низкий/средний (нишевый сайт)
-- Знак Яндекса «Защищённое соединение» (есть), «Популярный сайт» (нет)
-- Нет признаков рекламного трафика (нет UTM-меток, нет /utm/ в URL)
-- 14000+ обучено за 20 лет → ~700/год → ~60/мес активных студентов
-- Основной сценарий: поиск курса → расписание → запись (3–5 страниц за визит)
-
-### Нагрузка на инфраструктуру
+### Traffic Estimation (Conservative)
 
 ```
-                          Текущий (VPS)       Новый (CDN + VPS)
+Unique visitors:          100–300 / day
+Page views:               300–1000 / day
+Peak hours:               10:00–14:00 MSK (weekdays)
+Peak load:                1–5 requests / second
+Average monthly traffic:  5000–10000 visits
+```
+
+**Estimation Rationale:**
+- 253 pages, Yandex ICS = low/medium (niche site)
+- Yandex badge "Secure connection" (yes), "Popular site" (no)
+- No signs of paid traffic (no UTM tags, no /utm/ in URLs)
+- 14000+ trained over 20 years → ~700/year → ~60/month active students
+- Primary scenario: find a course → schedule → enroll (3–5 pages per visit)
+
+### Infrastructure Load
+
+```
+                          Current (VPS)       New (CDN + VPS)
 ─────────────────────────────────────────────────────────────────
-Запросов на VPS:          все (~1000/сут)     только CMS-админка
-Запросов на CDN:          —                   все посетители (~1000/сут)
-Трафик:                   ~1–5 GB/мес         ~1–5 GB/мес (CDN)
-Пиковая нагрузка на VPS:  1–5 rps             ~0 (посетители не видят VPS)
-Rebuild при обновлении:   —                   ~3 сек сборки, 2–10 раз/неделю
+Requests to VPS:          all (~1000/day)     CMS admin panel only
+Requests to CDN:          —                   all visitors (~1000/day)
+Traffic:                  ~1–5 GB/month       ~1–5 GB/month (CDN)
+Peak load on VPS:         1–5 rps             ~0 (visitors don't hit VPS)
+Rebuild on update:        —                   ~3 sec build, 2–10 times/week
 ```
 
-**Реальные обновления контента (публикации через CMS):**
-- Расписание: ~1–5 изменений/неделю
-- Статьи: ~1–2 в месяц
-- Новости/промо: ~1–2 в месяц
-- Статические страницы: ~1 раз в квартал
-- Итого: **~2–10 публикаций/неделю**, каждая → rebuild ~3 сек
+**Actual Content Updates (published via CMS):**
+- Schedule: ~1–5 changes/week
+- Articles: ~1–2 per month
+- News/promos: ~1–2 per month
+- Static pages: ~once per quarter
+- Total: **~2–10 publishes/week**, each → rebuild ~3 sec
 
-**Вывод:** нагрузка минимальная. Бесплатных тарифов CDN хватает с большим запасом.
-VPS для Strapi загружен на ~1–2% — работает только когда менеджер редактирует контент.
+**Conclusion:** load is minimal. Free CDN tiers are more than sufficient.
+VPS for Strapi is utilized at ~1–2% — only active when a content manager edits content.
 
-### Точные данные (после получения доступа к Яндекс.Метрике)
+### Precise Data (After Gaining Access to Yandex.Metrica)
 
-Клиент может предоставить доступ к Яндекс.Метрике (ID: 39506315).
-После этого уточнить:
+The client can provide access to Yandex.Metrica (ID: 39506315).
+Once available, verify:
 
 ```
-Яндекс.Метрика → Отчёты → Посещаемость:
-- Визиты/сутки (среднее за 30 дней)
-- Просмотры/сутки
-- Глубина просмотра (страниц за визит)
-- Доля мобильных
+Yandex.Metrica → Reports → Traffic:
+- Visits/day (30-day average)
+- Page views/day
+- Pages per visit (view depth)
+- Mobile share
 
-Яндекс.Метрика → Отчёты → Нагрузка на сайт:
-- Запросов/мин (пик)
-- Среднее время ответа сервера
+Yandex.Metrica → Reports → Site Load:
+- Requests/min (peak)
+- Average server response time
 ```
 
 ---
 
-## Хостинг и сервисы
+## Hosting and Services
 
-### Фронтенд (Nginx на VPS)
+### Frontend (Nginx on VPS)
 
-Статика раздаётся Nginx с того же VPS, где работает Strapi.
-При нагрузке 100–300 посетителей/сутки дополнительный сервер не нужен.
+Static files are served by Nginx from the same VPS where Strapi runs.
+With 100–300 visitors/day, no additional server is needed.
 
 ```
-Стоимость фронтенда: 0 руб/мес (входит в стоимость VPS для CMS)
+Frontend cost: 0 RUB/month (included in CMS VPS cost)
 ```
 
-**Масштабирование (при необходимости):**
-Если трафик вырастет на порядок — можно подключить российский CDN
-(Selectel CDN, Yandex Cloud CDN, G-Core Labs) перед Nginx без изменений архитектуры.
-Для аудитории из СНГ TTFB с московского VPS — ~30–80 мс (целевой ≤ 300 мс).
+**Scaling (if needed):**
+If traffic grows by an order of magnitude, a Russian CDN can be added
+(Selectel CDN, Yandex Cloud CDN, G-Core Labs) in front of Nginx with no architecture changes.
+For a CIS audience, TTFB from a Moscow VPS is ~30–80 ms (target ≤ 300 ms).
 
 ### CMS (Strapi)
 
-Strapi нужен VPS — он работает как Node.js-приложение + PostgreSQL.
+Strapi requires a VPS — it runs as a Node.js application + PostgreSQL.
 
-| Провайдер | Конфигурация | Цена | Примечание |
-|-----------|-------------|------|------------|
-| **Timeweb Cloud** | 2 vCPU, 4 GB RAM, 40 GB SSD | ~900 руб/мес | Российский, без санкционных рисков |
-| **Selectel** | 2 vCPU, 4 GB RAM, 40 GB SSD | ~1200 руб/мес | Российский, надёжный |
+| Provider | Configuration | Price | Notes |
+|----------|--------------|-------|-------|
+| **Timeweb Cloud** | 2 vCPU, 4 GB RAM, 40 GB SSD | ~900 RUB/month | Russian provider, no sanctions risk |
+| **Selectel** | 2 vCPU, 4 GB RAM, 40 GB SSD | ~1200 RUB/month | Russian provider, reliable |
 
-**Рекомендация:** Timeweb Cloud или Selectel — российские, оплата в рублях,
-не подвержены блокировкам. На этом же VPS работает Nginx для раздачи статики.
+**Recommendation:** Timeweb Cloud or Selectel — Russian providers, payment in RUB,
+not subject to blocking. The same VPS also runs Nginx for serving static files.
 
-**Минимальные требования:** 2 vCPU, 2 GB RAM (Nginx + Strapi + PostgreSQL).
-4 GB RAM рекомендуется для комфортной работы с медиа.
-
-```
-Стоимость CMS-сервера: 900–1200 руб/мес
-```
-
-### Хранилище медиа (изображения, PDF)
-
-| Вариант | Цена | Примечание |
-|---------|------|------------|
-| **Yandex Cloud Storage** (текущий) | ~100–300 руб/мес | Уже используется, менять не нужно |
-| **Strapi Media на VPS** | 0 руб (входит в VPS) | Проще, но бэкапить отдельно |
-
-**Рекомендация:** оставить Yandex Cloud Storage — уже настроено, все URL сохраняются.
+**Minimum requirements:** 2 vCPU, 2 GB RAM (Nginx + Strapi + PostgreSQL).
+4 GB RAM is recommended for comfortable work with media.
 
 ```
-Стоимость медиа: 100–300 руб/мес (уже оплачивается)
+CMS server cost: 900–1200 RUB/month
 ```
 
-### Домен
+### Media Storage (Images, PDF)
+
+| Option | Price | Notes |
+|--------|-------|-------|
+| **Yandex Cloud Storage** (current) | ~100–300 RUB/month | Already in use, no need to change |
+| **Strapi Media on VPS** | 0 RUB (included in VPS) | Simpler, but requires separate backups |
+
+**Recommendation:** keep Yandex Cloud Storage — already configured, all URLs are preserved.
 
 ```
-ikpk.su — уже есть, продление ~300–500 руб/год
+Media cost: 100–300 RUB/month (already being paid)
 ```
 
-### SSL-сертификат
+### Domain
 
 ```
-Let's Encrypt — бесплатно, автопродление
-CDN (Cloudflare/Netlify) — SSL включён бесплатно
+ikpk.su — already owned, renewal ~300–500 RUB/year
 ```
 
-### Аналитика
+### SSL Certificate
 
 ```
-Яндекс.Метрика — бесплатно
-Mail.ru Top — бесплатно
+Let's Encrypt — free, auto-renewal
+CDN (Cloudflare/Netlify) — SSL included for free
 ```
 
-### Поиск (Pagefind)
+### Analytics
 
 ```
-Бесплатно — индекс генерируется при сборке, работает в браузере
+Yandex.Metrica — free
+Mail.ru Top — free
 ```
 
-## Итого: ежемесячные расходы на инфраструктуру
+### Search (Pagefind)
 
 ```
-Фронтенд (Nginx на VPS):      0 руб (входит в VPS)
-CMS-сервер (VPS):              900–1200 руб
-Медиа (Yandex Cloud):          100–300 руб (уже есть)
-SSL:                            0 руб
-Аналитика:                      0 руб
-Поиск:                          0 руб
+Free — index is generated at build time, runs in the browser
+```
+
+## Total: Monthly Infrastructure Costs
+
+```
+Frontend (Nginx on VPS):       0 RUB (included in VPS)
+CMS server (VPS):              900–1200 RUB
+Media (Yandex Cloud):          100–300 RUB (already in place)
+SSL:                            0 RUB
+Analytics:                      0 RUB
+Search:                         0 RUB
 ─────────────────────────────────────
-ИТОГО:                          1000–1500 руб/мес (~12000–18000 руб/год)
+TOTAL:                          1000–1500 RUB/month (~12000–18000 RUB/year)
 ```
 
-Всё размещено на территории РФ. Зарубежные сервисы не используются.
+Everything is hosted within Russia. No foreign services are used.
 
-Для сравнения: текущий сайт тоже работает на VPS + Yandex Cloud,
-так что расходы на инфраструктуру примерно те же.
+For comparison: the current site also runs on VPS + Yandex Cloud,
+so infrastructure costs remain roughly the same.
 
 ---
 
-## Регулярная поддержка (время)
+## Ongoing Maintenance (Time)
 
-### Техническая поддержка
+### Technical Maintenance
 
-| Задача | Частота | Время | Примечание |
-|--------|---------|-------|------------|
-| Обновление Strapi (минорные) | 1 раз/мес | 1–2 ч | npm update + проверка |
-| Обновление Astro | 1 раз/мес | 0.5–1 ч | npm update + build + deploy |
-| Обновление зависимостей (security patches) | По необходимости | 0.5–1 ч | Dependabot уведомляет |
-| Бэкап базы данных | Автоматически (daily) | 0 ч | Настраивается один раз |
-| Мониторинг uptime CMS | Автоматически | 0 ч | UptimeRobot (бесплатно) |
-| Мониторинг 404/ошибок | 1 раз/мес | 0.5 ч | Crawl + проверка логов |
-| SSL-обновление | Автоматически | 0 ч | Let's Encrypt / CDN |
-
-```
-Итого техподдержка: 2–4 часа/мес
-```
-
-### SEO-поддержка
-
-| Задача | Частота | Время | Примечание |
-|--------|---------|-------|------------|
-| Проверка индексации (Яндекс + Google) | 1 раз/мес | 0.5 ч | site:ikpk.su, Search Console |
-| Lighthouse audit (4 шаблона) | 1 раз/мес | 0.5 ч | Автоматизировано через CI |
-| Проверка битых ссылок | 1 раз/мес | 0.5 ч | Автоматический crawl |
-| Обновление schema-разметки | По необходимости | 1–2 ч | При добавлении новых типов контента |
-| Анализ поисковых запросов | 1 раз/мес | 1 ч | Яндекс.Метрика + Вебмастер |
-| Оптимизация мета-тегов | По необходимости | 1–2 ч | По данным аналитики |
+| Task | Frequency | Time | Notes |
+|------|-----------|------|-------|
+| Strapi updates (minor) | Once/month | 1–2 h | npm update + verification |
+| Astro updates | Once/month | 0.5–1 h | npm update + build + deploy |
+| Dependency updates (security patches) | As needed | 0.5–1 h | Dependabot notifications |
+| Database backup | Automatic (daily) | 0 h | One-time setup |
+| CMS uptime monitoring | Automatic | 0 h | UptimeRobot (free) |
+| 404/error monitoring | Once/month | 0.5 h | Crawl + log review |
+| SSL renewal | Automatic | 0 h | Let's Encrypt / CDN |
 
 ```
-Итого SEO: 3–6 часов/мес (первые 3 мес после запуска — больше)
+Total technical maintenance: 2–4 hours/month
 ```
 
-### Контентная поддержка (если делает разработчик, а не менеджер)
+### SEO Maintenance
 
-| Задача | Частота | Время | Примечание |
-|--------|---------|-------|------------|
-| Обновление расписания | По запросу | 0.5 ч | Через CMS (может делать менеджер) |
-| Публикация статей | По запросу | 0.5 ч | Через CMS (может делать менеджер) |
-| Добавление семинара | По запросу | 0.5–1 ч | Через CMS (может делать менеджер) |
-
-**При наличии CMS** контент-менеджер делает это сам.
-Разработчик нужен только для структурных изменений (новый тип страницы, новый компонент).
-
-## Итого: ежемесячная стоимость владения
+| Task | Frequency | Time | Notes |
+|------|-----------|------|-------|
+| Indexing check (Yandex + Google) | Once/month | 0.5 h | site:ikpk.su, Search Console |
+| Lighthouse audit (4 templates) | Once/month | 0.5 h | Automated via CI |
+| Broken link check | Once/month | 0.5 h | Automated crawl |
+| Schema markup updates | As needed | 1–2 h | When adding new content types |
+| Search query analysis | Once/month | 1 h | Yandex.Metrica + Webmaster |
+| Meta tag optimization | As needed | 1–2 h | Based on analytics data |
 
 ```
-Инфраструктура:       1000–1500 руб/мес
-Техподдержка:         2–4 ч/мес
-SEO:                  3–6 ч/мес
+Total SEO: 3–6 hours/month (first 3 months after launch — more)
+```
+
+### Content Maintenance (If Handled by Developer, Not Content Manager)
+
+| Task | Frequency | Time | Notes |
+|------|-----------|------|-------|
+| Schedule updates | On request | 0.5 h | Via CMS (content manager can do this) |
+| Article publishing | On request | 0.5 h | Via CMS (content manager can do this) |
+| Adding a seminar | On request | 0.5–1 h | Via CMS (content manager can do this) |
+
+**With a CMS in place**, the content manager handles this independently.
+A developer is only needed for structural changes (new page type, new component).
+
+## Total: Monthly Cost of Ownership
+
+```
+Infrastructure:           1000–1500 RUB/month
+Technical maintenance:    2–4 h/month
+SEO:                      3–6 h/month
 ─────────────────────────────────────
-Рекуррентные расходы: 1000–1500 руб + 5–10 часов/мес
+Recurring costs:          1000–1500 RUB + 5–10 hours/month
 
-Первые 3 месяца после запуска: +3–5 ч/мес (пост-миграционный мониторинг)
+First 3 months after launch: +3–5 h/month (post-migration monitoring)
 ```

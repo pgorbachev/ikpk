@@ -1,124 +1,124 @@
-# Сравнение архитектур: текущий сайт vs новое решение
+# Architecture Comparison: Current Site vs New Solution
 
-## Сводная таблица
+## Summary Table
 
-| Параметр | Текущий сайт | Новое решение |
+| Parameter | Current Site | New Solution |
 |----------|-------------|---------------|
-| **Фронтенд** | Next.js (React) | Astro (SSG) |
-| **Бэкенд** | Express (кастомный) | Strapi CMS (стандартный) |
-| **Админка** | Кастомная | Strapi (веб-интерфейс) |
-| **Поиск** | Серверный (Express API) | Клиентский (Pagefind, в браузере) |
-| **JS на клиенте** | ~500 KB | 0–50 KB (islands) |
-| **Lighthouse mobile** | 36–56 | ≥ 85 (цель) |
-| **LCP** | 8.6–9.8 с | ≤ 2.5 с |
-| **Хостинг фронта** | VPS | VPS + Nginx (статика) |
-| **Хостинг бэкенда** | VPS | VPS (только CMS) |
-| **Медиа** | Yandex Cloud | Yandex Cloud (без изменений) |
-| **Зависимость от разработчика** | Высокая | Низкая |
-| **Стоимость хостинга** | VPS (всё в одном) | VPS (Nginx + Strapi + PostgreSQL) |
+| **Frontend** | Next.js (React) | Astro (SSG) |
+| **Backend** | Express (custom) | Strapi CMS (standard) |
+| **Admin Panel** | Custom | Strapi (web interface) |
+| **Search** | Server-side (Express API) | Client-side (Pagefind, in-browser) |
+| **Client JS** | ~500 KB | 0–50 KB (islands) |
+| **Lighthouse mobile** | 36–56 | ≥ 85 (target) |
+| **LCP** | 8.6–9.8 s | ≤ 2.5 s |
+| **Frontend hosting** | VPS | VPS + Nginx (static) |
+| **Backend hosting** | VPS | VPS (CMS only) |
+| **Media** | Yandex Cloud | Yandex Cloud (unchanged) |
+| **Developer dependency** | High | Low |
+| **Hosting cost** | VPS (all-in-one) | VPS (Nginx + Strapi + PostgreSQL) |
 
-## Диаграмма: текущая архитектура
+## Diagram: Current Architecture
 
 ```
-    Посетитель                  Контент-менеджер
+    Visitor                     Content Manager
         │                            │
         ▼                            ▼
 ┌─────────────────────────────────────────────┐
 │                 VPS / Cloud                  │
 │                                             │
-│   Next.js ◄──── Express API ◄──── Админка  │
-│   (фронт)       (бэкенд)        (кастом)   │
+│   Next.js ◄──── Express API ◄──── Admin    │
+│   (front)       (backend)        (custom)   │
 │       │              │                      │
 │       └──────┬───────┘                      │
 │              ▼                              │
-│         База данных                         │
+│          Database                           │
 │                                             │
-│      Yandex Cloud Storage (медиа)           │
+│      Yandex Cloud Storage (media)           │
 └─────────────────────────────────────────────┘
 
-         ▲ Всё на одном сервере
-         │ Монолит — нельзя масштабировать по частям
+         ▲ Everything on a single server
+         │ Monolith — cannot scale components independently
 ```
 
-## Диаграмма: новая архитектура
+## Diagram: New Architecture
 
 ```
-    Посетитель                  Контент-менеджер
+    Visitor                     Content Manager
         │                            │
         ▼                            ▼
 ┌───────────────────────────────────────────────────┐
-│   Российский VPS (Nginx)                          │
+│   Russian VPS (Nginx)                             │
 │                                                   │
-│   Astro (статика) ◀── Strapi CMS                  │
-│   HTML + CSS          • Админ-панель              │
+│   Astro (static)  ◀── Strapi CMS                  │
+│   HTML + CSS          • Admin panel               │
 │   0–50 KB JS          • REST API                  │
 │   (islands)           • PostgreSQL                │
 │                                                   │
-│   React islands       Yandex Cloud (медиа)        │
-│   (формы/фильтры)                                 │
+│   React islands       Yandex Cloud (media)        │
+│   (forms/filters)                                 │
 └───────────────────────────────────────────────────┘
                    webhook → GitHub Actions → rsync
-         ▲ Разделение ответственности
-         │ Фронт — статика, CMS — отдельный процесс
+         ▲ Separation of concerns
+         │ Frontend — static, CMS — separate process
 ```
 
-## Ключевые отличия
+## Key Differences
 
-### 1. Производительность
-
-```
-Текущий:   Посетитель ──▶ VPS ──▶ Next.js рендерит ──▶ ~500KB JS
-                          (далеко)     (медленно)      (тяжело)
-
-Новый:     Посетитель ──▶ VPS Nginx ──▶ готовый HTML ──▶ 0–50KB JS
-                          (Россия)      (мгновенно)     (легко)
-```
-
-### 2. Обновление контента
+### 1. Performance
 
 ```
-Текущий:   Менеджер ──▶ Кастомная админка ──▶ API ──▶ БД ──▶ rebuild?
+Current:   Visitor ──▶ VPS ──▶ Next.js renders ──▶ ~500KB JS
+                       (remote)    (slow)          (heavy)
 
-Новый:     Менеджер ──▶ Strapi (стандартная) ──▶ webhook ──▶ rebuild ──▶ Nginx
-                                                            (~1–2 мин)
+New:       Visitor ──▶ VPS Nginx ──▶ pre-built HTML ──▶ 0–50KB JS
+                       (Russia)     (instant)          (light)
 ```
 
-### 3. Зависимость от разработчика
+### 2. Content Updates
 
 ```
-Текущий:   Кастомный Express + кастомная админка
+Current:   Manager ──▶ Custom admin ──▶ API ──▶ DB ──▶ rebuild?
+
+New:       Manager ──▶ Strapi (standard) ──▶ webhook ──▶ rebuild ──▶ Nginx
+                                                         (~1–2 min)
+```
+
+### 3. Developer Dependency
+
+```
+Current:   Custom Express + custom admin panel
            │
-           └──▶ Может поддерживать только тот, кто писал
+           └──▶ Can only be maintained by the original author
 
-Новый:     Strapi (open-source, документация, сообщество)
-           + Astro (open-source, документация, сообщество)
+New:       Strapi (open-source, documentation, community)
+           + Astro (open-source, documentation, community)
            │
-           └──▶ Может поддерживать любой веб-разработчик
+           └──▶ Can be maintained by any web developer
 ```
 
-### 4. Поиск
+### 4. Search
 
 ```
-Текущий:   Посетитель ──▶ React ──▶ Express API ──▶ БД (полнотекстовый)
-           Если сервер лежит — поиск не работает
+Current:   Visitor ──▶ React ──▶ Express API ──▶ DB (full-text)
+           If the server is down — search is unavailable
 
-Новый:     Посетитель ──▶ Pagefind (в браузере) ──▶ индекс на сервере
-           Работает всегда, без бэкенда, ~10 мс
+New:       Visitor ──▶ Pagefind (in-browser) ──▶ index on server
+           Always works, no backend needed, ~10 ms
 ```
 
-## Что сохраняется при переходе
+## What Is Preserved During Migration
 
-- Все 253+ URL (1:1 маппинг, 301-редиректы для изменённых)
-- Весь контент (статьи, семинары, преподаватели, расписание)
-- Все изображения (Yandex Cloud Storage — без изменений)
-- Дизайн и UX (тот же стиль, адаптированный под новый стек)
-- Аналитика (Яндекс.Метрика 39506315, Mail.ru 3752684)
-- SEO-позиции (canonical URL, мета-теги, schema-разметка)
+- All 253+ URLs (1:1 mapping, 301 redirects for changed ones)
+- All content (articles, seminars, instructors, schedule)
+- All images (Yandex Cloud Storage — unchanged)
+- Design and UX (same style, adapted for the new stack)
+- Analytics (Yandex.Metrica 39506315, Mail.ru 3752684)
+- SEO rankings (canonical URL, meta tags, schema markup)
 
-## Что улучшается
+## What Is Improved
 
-- Скорость загрузки: в 3–4 раза
-- SEO: полная schema-разметка (5 типов JSON-LD)
-- Управление контентом: стандартная CMS вместо кастомной
-- Поддержка: стандартный стек, не привязан к одному разработчику
-- Безопасность: security headers, разделение фронта и бэкенда
+- Page load speed: 3–4× faster
+- SEO: full schema markup (5 JSON-LD types)
+- Content management: standard CMS instead of custom
+- Maintainability: standard stack, not tied to a single developer
+- Security: security headers, frontend/backend separation

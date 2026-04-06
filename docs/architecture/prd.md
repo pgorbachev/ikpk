@@ -1,206 +1,206 @@
-# PRD: Rebuild сайта ikpk.su
+# PRD: ikpk.su Website Rebuild
 
-## Цель
+## Goal
 
-Заменить текущий сайт (Next.js + кастомный Express-бэкенд) на новый стек
-(Astro SSG + Strapi CMS), сохранив весь контент и функциональность.
+Replace the current website (Next.js + custom Express backend) with a new stack
+(Astro SSG + Strapi CMS), preserving all content and functionality.
 
-## Пользователи
+## Users
 
-| Роль | Кто | Что делает |
-|------|-----|------------|
-| Посетитель | Врачи, студенты, потенциальные слушатели | Ищет курсы, читает статьи, записывается на семинары |
-| Контент-менеджер | Сотрудник ИКПК | Обновляет расписание, добавляет статьи, редактирует страницы |
-| Администратор | Владелец / IT | Управляет пользователями CMS, деплоит, мониторит |
+| Role | Who | What they do |
+|------|-----|--------------|
+| Visitor | Physicians, students, prospective attendees | Browse courses, read articles, register for seminars |
+| Content manager | IKPK staff member | Updates the schedule, adds articles, edits pages |
+| Administrator | Owner / IT | Manages CMS users, deploys, monitors |
 
-## Функциональные требования
+## Functional Requirements
 
-### FR-01: Каталог обучения
+### FR-01: Training Catalog
 
-Посетитель может просматривать структуру обучения:
-Институт → Группа курсов → Семинар.
-
-**Acceptance criteria:**
-- 3 института, каждый со своей страницей, списком курсов и преподавателей
-- 26 групп курсов со списком семинаров
-- ~115 семинаров: описание, длительность, цена, преподаватель, ближайшие даты
-- Breadcrumbs на каждом уровне вложенности
-- Schema.org: Course, Event на соответствующих страницах
-
-### FR-02: Расписание и цены
-
-Посетитель видит сводную таблицу всех ближайших семинаров с фильтрацией.
+A visitor can browse the training structure:
+Institute → Course Group → Seminar.
 
 **Acceptance criteria:**
-- Таблица: дата, название, институт, город, преподаватель, цена
-- Фильтры: по институту, городу (React island)
-- Сортировка по дате (ближайшие сверху)
-- Кнопка «Записаться» на каждом семинаре
-- Только активные семинары (status = active)
+- 3 institutes, each with its own page, list of courses, and instructors
+- 26 course groups with a list of seminars
+- ~115 seminars: description, duration, price, instructor, upcoming dates
+- Breadcrumbs at every nesting level
+- Schema.org: Course, Event on the corresponding pages
 
-### FR-03: Статьи
+### FR-02: Schedule and Pricing
 
-Посетитель читает статьи преподавателей и экспертов.
+A visitor sees a summary table of all upcoming seminars with filtering.
 
 **Acceptance criteria:**
-- Список статей с карточками (изображение, заголовок, дата, отрывок)
-- Детальная страница статьи с rich HTML, изображениями, sidebar
-- Связанные статьи (4 шт) на детальной странице
+- Table columns: date, title, institute, city, instructor, price
+- Filters: by institute, by city (React island)
+- Sorted by date (soonest first)
+- "Register" button on each seminar
+- Only active seminars (status = active)
+
+### FR-03: Articles
+
+A visitor reads articles by instructors and experts.
+
+**Acceptance criteria:**
+- Article list with cards (image, title, date, excerpt)
+- Article detail page with rich HTML, images, sidebar
+- Related articles (4 items) on the detail page
 - Schema.org: Article
 
-### FR-04: Видео
+### FR-04: Videos
 
-Посетитель смотрит обучающие видео по плейлистам.
-
-**Acceptance criteria:**
-- Список плейлистов (6 шт)
-- Встроенный YouTube-плеер на странице плейлиста
-- Альтернативные ссылки: RUTUBE, VK (YouTube нестабилен в РФ)
-
-### FR-05: Поиск
-
-Посетитель ищет по всему контенту сайта.
+A visitor watches educational videos organized by playlist.
 
 **Acceptance criteria:**
-- Кнопка поиска в хедере
-- Полнотекстовый поиск по всем страницам (Pagefind)
-- Толерантность к опечаткам (1–2 символа)
-- Результаты: заголовок, тип контента, отрывок, ссылка
-- Работает без сервера (клиентский индекс)
+- Playlist listing (6 items)
+- Embedded YouTube player on the playlist page
+- Alternative links: RUTUBE, VK (YouTube is unreliable in Russia)
 
-### FR-06: Форма записи на семинар
+### FR-05: Search
 
-Посетитель оставляет заявку на участие в семинаре.
+A visitor searches across all site content.
 
 **Acceptance criteria:**
-- Форма: имя, email, телефон, выбранный семинар
-- Валидация полей (email, обязательные поля)
-- Отправка на Strapi REST API (`POST /api/form-submissions`)
-- Заявка сохраняется в БД, видна в CMS-админке
-- Подтверждение отправки / сообщение об ошибке
-- Rate limiting на уровне Strapi (защита от спама)
+- Search button in the header
+- Full-text search across all pages (Pagefind)
+- Typo tolerance (1–2 characters)
+- Results: title, content type, excerpt, link
+- Works without a server (client-side index)
 
-### FR-07: Подписка на новости
+### FR-06: Seminar Registration Form
 
-Посетитель подписывается на email-рассылку.
-
-**Acceptance criteria:**
-- Форма на каждой странице (перед footer)
-- Поля: email + checkbox согласия с обработкой ПД
-- Ссылка на политику конфиденциальности (PDF)
-- Валидация email, обязательный checkbox
-- Feedback: успех / ошибка
-
-### FR-08: Статические страницы
-
-Информационные страницы без интерактива.
+A visitor submits an application to attend a seminar.
 
 **Acceptance criteria:**
-- Оплата: FAQ-аккордеон (способы оплаты, условия возврата), кнопка оплаты
-- Контакты: 5 блоков (телефон, email, адрес, часы, мед.центр), Яндекс.Карта
-- Сотрудничество: описание + CTA с контактами
-- Сведения об образовательной организации: аккордеон с секциями
-- Акции и скидки: карточки промо с бейджами
+- Form fields: name, email, phone, selected seminar
+- Field validation (email, required fields)
+- Submission to Strapi REST API (`POST /api/form-submissions`)
+- Submission is stored in the database and visible in the CMS admin panel
+- Success confirmation / error message
+- Rate limiting at the Strapi level (spam protection)
 
-### FR-09: Навигация
+### FR-07: Newsletter Subscription
 
-**Acceptance criteria:**
-- Хедер: логотип (→ /), телефон (tel: ссылка)
-- Sidebar: 15 пунктов меню, сгруппированных в 3 секции (Образование, Публикации, Информация)
-- Секции раскрываются/сворачиваются, состояние сохраняется в localStorage
-- Внешние ссылки: Магазин, Фото, Мед.центр (`target="_blank" rel="noopener noreferrer"`)
-- Active state на текущей странице
-- Мобильное меню: hamburger, overlay, slide-in sidebar
-- Footer: 4 колонки (контакты, обучение, компания, соцсети)
-- Соцсети: VK, YouTube, RUTUBE, Instagram, Facebook, Telegram
-- Breadcrumbs на всех вложенных страницах
-
-### FR-10: Преподаватели
+A visitor subscribes to the email newsletter.
 
 **Acceptance criteria:**
-- Профиль: фото, имя, биография, привязка к институту
-- Список преподавателей на странице института
-- ~26 профилей, каждый со своим URL
+- Form on every page (above the footer)
+- Fields: email + personal-data processing consent checkbox
+- Link to the privacy policy (PDF)
+- Email validation, required checkbox
+- Feedback: success / error
 
-### FR-11: CMS (контент-менеджер)
+### FR-08: Static Pages
 
-**Acceptance criteria:**
-- Веб-интерфейс для редактирования всех типов контента
-- WYSIWYG-редактор для текстов
-- Загрузка изображений
-- Управление расписанием (даты, цены, статус)
-- Роли: администратор (всё) / редактор (контент без настроек)
-- При сохранении → webhook → rebuild сайта (≤ 5 минут до публикации)
-
-### FR-12: Карта сайта и 404
+Informational pages with no interactive elements.
 
 **Acceptance criteria:**
-- HTML-карта сайта (/sitemap) — все разделы, noindex
-- XML sitemap (автогенерация Astro) для поисковиков
-- Страница 404: сообщение + ссылки на главную и карту сайта
+- Payment: FAQ accordion (payment methods, refund policy), payment button
+- Contacts: 5 blocks (phone, email, address, hours, medical center), Yandex.Maps embed
+- Partnership: description + CTA with contact details
+- Educational organization information: accordion with sections
+- Promotions and discounts: promo cards with badges
 
-## Нефункциональные требования
+### FR-09: Navigation
 
-### NFR-01: Производительность
+**Acceptance criteria:**
+- Header: logo (→ /), phone number (tel: link)
+- Sidebar: 15 menu items grouped into 3 sections (Education, Publications, Information)
+- Sections expand/collapse; state is persisted in localStorage
+- External links: Shop, Photos, Medical Center (`target="_blank" rel="noopener noreferrer"`)
+- Active state on the current page
+- Mobile menu: hamburger, overlay, slide-in sidebar
+- Footer: 4 columns (contacts, education, company, social media)
+- Social media: VK, YouTube, RUTUBE, Instagram, Facebook, Telegram
+- Breadcrumbs on all nested pages
 
-| Метрика | Целевое значение | Методика |
-|---------|-----------------|----------|
-| Lighthouse Performance (mobile) | ≥ 85 | Медиана 5 прогонов |
-| LCP (mobile) | ≤ 2.5 с | Lighthouse CI |
-| TBT (mobile) | ≤ 200 мс | Lighthouse CI |
+### FR-10: Instructors
+
+**Acceptance criteria:**
+- Profile: photo, name, biography, institute affiliation
+- Instructor list on the institute page
+- ~26 profiles, each with its own URL
+
+### FR-11: CMS (Content Manager)
+
+**Acceptance criteria:**
+- Web interface for editing all content types
+- WYSIWYG editor for text
+- Image uploads
+- Schedule management (dates, prices, status)
+- Roles: administrator (full access) / editor (content only, no settings)
+- On save → webhook → site rebuild (≤ 5 minutes to publication)
+
+### FR-12: Sitemap and 404
+
+**Acceptance criteria:**
+- HTML sitemap (/sitemap) — all sections, noindex
+- XML sitemap (auto-generated by Astro) for search engines
+- 404 page: message + links to homepage and sitemap
+
+## Non-Functional Requirements
+
+### NFR-01: Performance
+
+| Metric | Target | Method |
+|--------|--------|--------|
+| Lighthouse Performance (mobile) | ≥ 85 | Median of 5 runs |
+| LCP (mobile) | ≤ 2.5 s | Lighthouse CI |
+| TBT (mobile) | ≤ 200 ms | Lighthouse CI |
 | CLS | ≤ 0.1 | Lighthouse CI |
-| TTFB | ≤ 300 мс (p75) | Synthetic, Москва + СПб |
+| TTFB | ≤ 300 ms (p75) | Synthetic, Moscow + Saint Petersburg |
 
 ### NFR-02: SEO
 
-- Уникальные title + description на каждой странице
-- `<link rel="canonical">` на каждой странице
-- Open Graph теги (title, description, image, url, locale)
+- Unique title + description on every page
+- `<link rel="canonical">` on every page
+- Open Graph tags (title, description, image, url, locale)
 - Schema.org JSON-LD: EducationalOrganization, Course, Event, Article, BreadcrumbList
 - robots.txt + XML sitemap
-- 301-редиректы для всех изменённых URL (100% покрытие карты)
+- 301 redirects for all changed URLs (100% URL map coverage)
 - Lighthouse SEO ≥ 95
 
-### NFR-03: Безопасность
+### NFR-03: Security
 
-- HTTPS на всех страницах
+- HTTPS on all pages
 - Security headers: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy
-- Strapi: API tokens с минимальными правами, RBAC
-- Формы: валидация на клиенте и сервере, rate limiting
-- PII только в Strapi (не в логах CDN)
+- Strapi: API tokens with least-privilege access, RBAC
+- Forms: client-side and server-side validation, rate limiting
+- PII stored only in Strapi (not in CDN logs)
 
-### NFR-04: Доступность
+### NFR-04: Accessibility
 
-- `lang="ru"` на `<html>`
-- Семантическая разметка (nav, main, article, aside)
-- Alt-тексты на изображениях
-- Фокус-состояния на интерактивных элементах
-- Минимальный контраст текста ≥ 4.5:1
-- Проверка: Lighthouse Accessibility ≥ 90, axe-core (CI)
+- `lang="ru"` on `<html>`
+- Semantic markup (nav, main, article, aside)
+- Alt text on images
+- Focus states on interactive elements
+- Minimum text contrast ≥ 4.5:1
+- Verification: Lighthouse Accessibility ≥ 90, axe-core (CI)
 
-### NFR-05: Совместимость
+### NFR-05: Browser Compatibility
 
-- Мобильные: iOS Safari 15+, Chrome Android
-- Десктоп: Chrome, Firefox, Safari, Edge (последние 2 версии)
+- Mobile: iOS Safari 15+, Chrome Android
+- Desktop: Chrome, Firefox, Safari, Edge (last 2 versions)
 - Breakpoints: 1024px, 768px, 640px, 480px
 
-### NFR-06: Аналитика
+### NFR-06: Analytics
 
-- Яндекс.Метрика (ID: 39506315) — все страницы, webvisor
-- Mail.ru Top (ID: 3752684) — все страницы
-- Оба счётчика: sync pageview queue + deferred script loading
+- Yandex.Metrika (ID: 39506315) — all pages, webvisor
+- Mail.ru Top (ID: 3752684) — all pages
+- Both counters: sync pageview queue + deferred script loading
 
-### NFR-07: Обновление контента (SLA)
+### NFR-07: Content Update SLA
 
-- От сохранения в CMS до появления на сайте: ≤ 5 минут
-- Nightly rebuild как страховка от пропущенных webhook
-- Fallback: ручной trigger rebuild через CI/CD
+- From CMS save to live on site: ≤ 5 minutes
+- Nightly rebuild as a safety net for missed webhooks
+- Fallback: manual rebuild trigger via CI/CD
 
-## Критерии приёмки (Definition of Done)
+## Acceptance Criteria (Definition of Done)
 
-1. Все FR-01…FR-12 выполнены и проверены
-2. Все NFR-01…NFR-07 соответствуют целевым значениям
-3. Все URL из текущего sitemap.xml (253 шт) → 200 или 301
-4. Билд проходит без ошибок
-5. E2E-тесты проходят (Playwright)
-6. UAT пройден с контент-менеджером
+1. All FR-01…FR-12 are implemented and verified
+2. All NFR-01…NFR-07 meet their target values
+3. All URLs from the current sitemap.xml (253 total) → 200 or 301
+4. Build completes without errors
+5. E2E tests pass (Playwright)
+6. UAT completed with the content manager

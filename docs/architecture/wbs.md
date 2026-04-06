@@ -1,154 +1,154 @@
-# WBS: Rebuild сайта ikpk.su
+# WBS: ikpk.su Website Rebuild
 
-Work Breakdown Structure — декомпозиция работ с привязкой к FR/NFR из [PRD](prd.md).
+Work Breakdown Structure — task decomposition mapped to FR/NFR from [PRD](prd.md).
 
-Статусы: ✅ сделано | 🔧 частично | ⬜ не начато
+Statuses: ✅ done | 🔧 partial | ⬜ not started
 
-## Фаза 0: Discovery и прототип
+## Phase 0: Discovery and Prototype
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Артефакт |
-|---|--------|--------|-------------|--------|----------|
-| 0.1 | Анализ текущего сайта (стек, API, sitemap) | ✅ | 2 ч | — | `docs/architecture/current-architecture.md` |
-| 0.2 | Скрейпинг контента (10 сущностей, 253 URL) | ✅ | 3 ч | — | `discovery/entities/*.json` (6.5 MB) |
-| 0.3 | Карта URL: старые → новые (1023 записи) | ✅ | 1 ч | NFR-02 | `discovery/url_map.csv` |
-| 0.4 | Прототип фронтенда на Astro (256 страниц) | ✅ | 12 ч | FR-01,03,04,08,09,10 | `web/` |
-| 0.5 | Архитектурная документация | ✅ | 3 ч | — | `docs/architecture/` |
+| # | Task | Status | Effort | FR/NFR | Artifact |
+|---|------|--------|--------|--------|----------|
+| 0.1 | Current site analysis (stack, API, sitemap) | ✅ | 2 h | — | `docs/architecture/current-architecture.md` |
+| 0.2 | Content scraping (10 entities, 253 URLs) | ✅ | 3 h | — | `discovery/entities/*.json` (6.5 MB) |
+| 0.3 | URL map: old → new (1023 entries) | ✅ | 1 h | NFR-02 | `discovery/url_map.csv` |
+| 0.4 | Frontend prototype on Astro (256 pages) | ✅ | 12 h | FR-01,03,04,08,09,10 | `web/` |
+| 0.5 | Architecture documentation | ✅ | 3 h | — | `docs/architecture/` |
 
-**Итого фаза 0: ~21 ч (выполнено)**
+**Phase 0 total: ~21 h (completed)**
 
-## Фаза 1: Доработка фронтенда
+## Phase 1: Frontend Refinement
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 1.1 | Pagefind: интеграция + страница /search | ⬜ | 2–3 ч | FR-05 | — |
-| 1.2 | React island: фильтр расписания (институт, город) | ⬜ | 2–3 ч | FR-02 | — |
-| 1.3 | React island: форма записи на семинар | ⬜ | 2–3 ч | FR-06 | — |
-| 1.4 | Тема: переключение light/dark/system | ⬜ | 1–2 ч | — | — |
-| 1.5 | Оптимизация изображений (Astro `<Image>`) | ⬜ | 2–3 ч | NFR-01 | — |
-| 1.6 | Schema.org JSON-LD (Course, Event, Article, BreadcrumbList) | 🔧 | 2–3 ч | NFR-02 | — |
-| 1.7 | SEO: мета-теги, canonical, Open Graph на всех шаблонах | 🔧 | 1–2 ч | NFR-02 | — |
-| 1.8 | 301-редиректы: полная карта (253 URL → `_redirects`) | 🔧 | 1–2 ч | NFR-02 | 0.3 |
-| 1.9 | Доводка UI: мобильное меню, sidebar, breadcrumbs, 404 | 🔧 | 2–3 ч | FR-09, FR-12 | — |
-| 1.10 | Security headers (HSTS, X-Content-Type-Options, etc.) | ⬜ | 0.5 ч | NFR-03 | — |
-| 1.11 | Аналитика: Яндекс.Метрика + Mail.ru Top | 🔧 | 0.5 ч | NFR-06 | — |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 1.1 | Pagefind: integration + /search page | ⬜ | 2–3 h | FR-05 | — |
+| 1.2 | React island: schedule filter (institute, city) | ⬜ | 2–3 h | FR-02 | — |
+| 1.3 | React island: seminar enrollment form | ⬜ | 2–3 h | FR-06 | — |
+| 1.4 | Theme: light/dark/system toggle | ⬜ | 1–2 h | — | — |
+| 1.5 | Image optimization (Astro `<Image>`) | ⬜ | 2–3 h | NFR-01 | — |
+| 1.6 | Schema.org JSON-LD (Course, Event, Article, BreadcrumbList) | 🔧 | 2–3 h | NFR-02 | — |
+| 1.7 | SEO: meta tags, canonical, Open Graph on all templates | 🔧 | 1–2 h | NFR-02 | — |
+| 1.8 | 301 redirects: full map (253 URLs → `_redirects`) | 🔧 | 1–2 h | NFR-02 | 0.3 |
+| 1.9 | UI polish: mobile menu, sidebar, breadcrumbs, 404 | 🔧 | 2–3 h | FR-09, FR-12 | — |
+| 1.10 | Security headers (HSTS, X-Content-Type-Options, etc.) | ⬜ | 0.5 h | NFR-03 | — |
+| 1.11 | Analytics: Yandex.Metrica + Mail.ru Top | 🔧 | 0.5 h | NFR-06 | — |
 
-**Итого фаза 1: ~17–27 ч**
+**Phase 1 total: ~17–27 h**
 
-## Фаза 2: CMS (Strapi)
+## Phase 2: CMS (Strapi)
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 2.1 | Content model: 10 сущностей в Strapi | 🔧 | 3–4 ч | FR-11 | — |
-| 2.2 | Роли и permissions (admin / editor) | ⬜ | 1 ч | FR-11 | 2.1 |
-| 2.3 | API tokens + RBAC настройка | ⬜ | 0.5 ч | NFR-03 | 2.1 |
-| 2.4 | Webhook: Strapi → rebuild Astro | ⬜ | 1–2 ч | NFR-07 | 2.1, 3.1 |
-| 2.5 | WYSIWYG настройка + загрузка медиа | ⬜ | 1 ч | FR-11 | 2.1 |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 2.1 | Content model: 10 entities in Strapi | 🔧 | 3–4 h | FR-11 | — |
+| 2.2 | Roles and permissions (admin / editor) | ⬜ | 1 h | FR-11 | 2.1 |
+| 2.3 | API tokens + RBAC configuration | ⬜ | 0.5 h | NFR-03 | 2.1 |
+| 2.4 | Webhook: Strapi → Astro rebuild | ⬜ | 1–2 h | NFR-07 | 2.1, 3.1 |
+| 2.5 | WYSIWYG configuration + media uploads | ⬜ | 1 h | FR-11 | 2.1 |
 
-**Итого фаза 2: ~7–9 ч**
+**Phase 2 total: ~7–9 h**
 
-## Фаза 3: Миграция данных
+## Phase 3: Data Migration
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 3.1 | Маппинг JSON-структур → Strapi content model | ⬜ | 2–3 ч | — | 2.1 |
-| 3.2 | Импорт-скрипт (JSON → Strapi API), идемпотентный | 🔧 | 2–3 ч | — | 3.1 |
-| 3.3 | Миграция медиа: привязка Yandex Cloud URL к записям | ⬜ | 1–2 ч | — | 3.2 |
-| 3.4 | Валидация: slug уникальность, связи, полнота данных | ⬜ | 1–2 ч | — | 3.2 |
-| 3.5 | Прогон импорта на staging и ручная проверка | ⬜ | 1–2 ч | — | 3.2, 3.3 |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 3.1 | JSON structure mapping → Strapi content model | ⬜ | 2–3 h | — | 2.1 |
+| 3.2 | Import script (JSON → Strapi API), idempotent | 🔧 | 2–3 h | — | 3.1 |
+| 3.3 | Media migration: link Yandex Cloud URLs to entries | ⬜ | 1–2 h | — | 3.2 |
+| 3.4 | Validation: slug uniqueness, relations, data completeness | ⬜ | 1–2 h | — | 3.2 |
+| 3.5 | Run import on staging and manual verification | ⬜ | 1–2 h | — | 3.2, 3.3 |
 
-Существующие артефакты:
-- `discovery/entities/*.json` — 10 сущностей, 6.5 MB (уже отскраплено)
-- `scripts/import.ts` — 879 строк, идемпотентный импорт в 4 фазы (каркас готов)
-- `scripts/validate-urls.ts` — 266 строк, валидация URL после импорта
+Existing artifacts:
+- `discovery/entities/*.json` — 10 entities, 6.5 MB (already scraped)
+- `scripts/import.ts` — 879 lines, idempotent 4-phase import (scaffold ready)
+- `scripts/validate-urls.ts` — 266 lines, URL validation after import
 
-**Итого фаза 3: ~7–12 ч**
+**Phase 3 total: ~7–12 h**
 
-## Фаза 4: Деплой и инфраструктура
+## Phase 4: Deployment and Infrastructure
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 4.1 | VPS: provision + настройка (Node, PostgreSQL, Nginx) | 🔧 | 1–2 ч | — | — |
-| 4.2 | Strapi: деплой на VPS + SSL (cms.ikpk.su) | ⬜ | 1–2 ч | — | 4.1, 2.1 |
-| 4.3 | Nginx: конфигурация для статики + reverse proxy Strapi | ⬜ | 1 ч | — | 4.1 |
-| 4.4 | CI/CD: GitHub Actions → build → rsync на VPS | 🔧 | 1–2 ч | — | 4.1 |
-| 4.5 | DNS: переключение ikpk.su на новый VPS | ⬜ | 0.5 ч | — | 4.1, 4.2 |
-| 4.6 | Бэкапы: PostgreSQL daily + media | ⬜ | 1 ч | — | 4.2 |
-| 4.7 | Мониторинг: UptimeRobot + алерты | ⬜ | 0.5 ч | — | 4.2, 4.3 |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 4.1 | VPS: provisioning + setup (Node, PostgreSQL, Nginx) | 🔧 | 1–2 h | — | — |
+| 4.2 | Strapi: deploy to VPS + SSL (cms.ikpk.su) | ⬜ | 1–2 h | — | 4.1, 2.1 |
+| 4.3 | Nginx: configuration for static files + reverse proxy for Strapi | ⬜ | 1 h | — | 4.1 |
+| 4.4 | CI/CD: GitHub Actions → build → rsync to VPS | 🔧 | 1–2 h | — | 4.1 |
+| 4.5 | DNS: switch ikpk.su to the new VPS | ⬜ | 0.5 h | — | 4.1, 4.2 |
+| 4.6 | Backups: PostgreSQL daily + media | ⬜ | 1 h | — | 4.2 |
+| 4.7 | Monitoring: UptimeRobot + alerts | ⬜ | 0.5 h | — | 4.2, 4.3 |
 
-Существующие артефакты:
-- `scripts/bootstrap-vps.sh` — 66 строк, provisioning VPS
-- `scripts/deploy-web.sh` — 75 строк, деплой фронта
+Existing artifacts:
+- `scripts/bootstrap-vps.sh` — 66 lines, VPS provisioning
+- `scripts/deploy-web.sh` — 75 lines, frontend deployment
 
-**Итого фаза 4: ~6–9 ч**
+**Phase 4 total: ~6–9 h**
 
-## Фаза 5: Тестирование и приёмка
+## Phase 5: Testing and Acceptance
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 5.1 | E2E-тесты: ключевые сценарии (Playwright) | ⬜ | 3–4 ч | — | 1.*, 2.* |
-| 5.2 | Lighthouse CI: 4 шаблона × mobile/desktop | ⬜ | 1 ч | NFR-01 | 1.5 |
-| 5.3 | Валидация 301 редиректов (253 URL) | ⬜ | 1 ч | NFR-02 | 1.8, 4.5 |
-| 5.4 | Проверка форм: запись, подписка, поиск | ⬜ | 1 ч | FR-05,06,07 | 1.1, 1.3 |
-| 5.5 | UAT с контент-менеджером | ⬜ | 2 ч | FR-11 | 2.*, 3.* |
-| 5.6 | Кроссбраузерная проверка (mobile + desktop) | ⬜ | 1–2 ч | NFR-05 | 1.* |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 5.1 | E2E tests: key scenarios (Playwright) | ⬜ | 3–4 h | — | 1.*, 2.* |
+| 5.2 | Lighthouse CI: 4 templates × mobile/desktop | ⬜ | 1 h | NFR-01 | 1.5 |
+| 5.3 | 301 redirect validation (253 URLs) | ⬜ | 1 h | NFR-02 | 1.8, 4.5 |
+| 5.4 | Form testing: enrollment, subscription, search | ⬜ | 1 h | FR-05,06,07 | 1.1, 1.3 |
+| 5.5 | UAT with content manager | ⬜ | 2 h | FR-11 | 2.*, 3.* |
+| 5.6 | Cross-browser testing (mobile + desktop) | ⬜ | 1–2 h | NFR-05 | 1.* |
 
-**Итого фаза 5: ~9–12 ч**
+**Phase 5 total: ~9–12 h**
 
-## Фаза 6: Миграция production
+## Phase 6: Production Migration
 
-| # | Задача | Статус | Трудоёмкость | FR/NFR | Зависит от |
-|---|--------|--------|-------------|--------|------------|
-| 6.1 | Финальный импорт данных в production Strapi | ⬜ | 1 ч | — | 3.5, 4.2 |
-| 6.2 | DNS-переключение + проверка SSL | ⬜ | 0.5 ч | — | 4.5 |
-| 6.3 | Smoke-тесты на production | ⬜ | 1 ч | — | 6.2 |
-| 6.4 | Мониторинг 404/ошибок (первые 48 ч) | ⬜ | 2 ч | — | 6.2 |
-| 6.5 | Проверка индексации (Яндекс, Google) | ⬜ | 1 ч | NFR-02 | 6.2 |
+| # | Task | Status | Effort | FR/NFR | Depends on |
+|---|------|--------|--------|--------|------------|
+| 6.1 | Final data import into production Strapi | ⬜ | 1 h | — | 3.5, 4.2 |
+| 6.2 | DNS switchover + SSL verification | ⬜ | 0.5 h | — | 4.5 |
+| 6.3 | Smoke tests on production | ⬜ | 1 h | — | 6.2 |
+| 6.4 | 404/error monitoring (first 48 h) | ⬜ | 2 h | — | 6.2 |
+| 6.5 | Indexing verification (Yandex, Google) | ⬜ | 1 h | NFR-02 | 6.2 |
 
-**Итого фаза 6: ~5–6 ч**
+**Phase 6 total: ~5–6 h**
 
-## Сводка
+## Summary
 
-| Фаза | Описание | Статус | Часы |
-|------|----------|--------|------|
-| 0 | Discovery и прототип | ✅ выполнено | ~21 |
-| 1 | Доработка фронтенда | 🔧 в работе | 17–27 |
-| 2 | CMS (Strapi) | 🔧 начато | 7–9 |
-| 3 | Миграция данных | 🔧 каркас есть | 7–12 |
-| 4 | Деплой и инфраструктура | 🔧 начато | 6–9 |
-| 5 | Тестирование и приёмка | ⬜ | 9–12 |
-| 6 | Миграция production | ⬜ | 5–6 |
-| | **ИТОГО** | | **~72–96 ч** |
-| | Из них уже выполнено | | **~21 ч** |
-| | **Осталось** | | **~51–75 ч** |
+| Phase | Description | Status | Hours |
+|-------|-------------|--------|-------|
+| 0 | Discovery and prototype | ✅ completed | ~21 |
+| 1 | Frontend refinement | 🔧 in progress | 17–27 |
+| 2 | CMS (Strapi) | 🔧 started | 7–9 |
+| 3 | Data migration | 🔧 scaffold ready | 7–12 |
+| 4 | Deployment and infrastructure | 🔧 started | 6–9 |
+| 5 | Testing and acceptance | ⬜ | 9–12 |
+| 6 | Production migration | ⬜ | 5–6 |
+| | **TOTAL** | | **~72–96 h** |
+| | Already completed | | **~21 h** |
+| | **Remaining** | | **~51–75 h** |
 
-## Граф зависимостей
+## Dependency Graph
 
 ```
-Фаза 0 (✅ done)
+Phase 0 (✅ done)
   │
-  ├──▶ Фаза 1 (фронтенд)──────────────────┐
+  ├──▶ Phase 1 (frontend)──────────────────┐
   │                                         │
-  ├──▶ Фаза 2 (CMS) ──▶ Фаза 3 (миграция) │
+  ├──▶ Phase 2 (CMS) ──▶ Phase 3 (migration) │
   │         │                    │          │
   │         ▼                    ▼          ▼
-  └──▶ Фаза 4 (деплой) ──▶ Фаза 5 (тесты)
+  └──▶ Phase 4 (deploy) ──▶ Phase 5 (testing)
                                   │
                                   ▼
-                           Фаза 6 (go-live)
+                           Phase 6 (go-live)
 ```
 
-Фазы 1, 2, 4 можно вести параллельно. Фазы 3, 5, 6 — последовательно.
+Phases 1, 2, 4 can run in parallel. Phases 3, 5, 6 are sequential.
 
-## Что уже есть (артефакты прототипа)
+## Existing Artifacts (Prototype)
 
-| Артефакт | Строк | Что покрывает |
-|----------|-------|---------------|
-| `web/` (Astro фронтенд) | ~5100 | FR-01, FR-03, FR-04, FR-08, FR-09, FR-10 |
-| `discovery/entities/*.json` | ~5500 | 10 сущностей, готовы к импорту |
-| `discovery/url_map.csv` | 1023 | Полная карта URL для 301-редиректов |
-| `scripts/import.ts` | 879 | Каркас идемпотентного импорта в Strapi |
-| `scripts/validate-urls.ts` | 266 | Валидация URL после миграции |
-| `scripts/bootstrap-vps.sh` | 66 | Provisioning VPS |
-| `scripts/deploy-web.sh` | 75 | Деплой фронта |
-| `cms/` (Strapi) | — | Инициализирован, content model частично |
-| `docs/architecture/` | 6 файлов | PRD, use cases, архитектура, сравнение, ops cost |
+| Artifact | Lines | Coverage |
+|----------|-------|----------|
+| `web/` (Astro frontend) | ~5100 | FR-01, FR-03, FR-04, FR-08, FR-09, FR-10 |
+| `discovery/entities/*.json` | ~5500 | 10 entities, ready for import |
+| `discovery/url_map.csv` | 1023 | Full URL map for 301 redirects |
+| `scripts/import.ts` | 879 | Idempotent import scaffold for Strapi |
+| `scripts/validate-urls.ts` | 266 | URL validation after migration |
+| `scripts/bootstrap-vps.sh` | 66 | VPS provisioning |
+| `scripts/deploy-web.sh` | 75 | Frontend deployment |
+| `cms/` (Strapi) | — | Initialized, content model partially done |
+| `docs/architecture/` | 6 files | PRD, use cases, architecture, comparison, ops cost |
