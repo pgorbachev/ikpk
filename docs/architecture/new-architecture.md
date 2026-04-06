@@ -161,6 +161,31 @@ to create a payment and returns the redirect URL. ~50 lines of code.
 Can be a Strapi custom route or a standalone serverless function on the VPS.
 YooKassa is a Russian service (yookassa.ru) — complies with the RF-only constraint.
 
+## Environments
+
+```
+Development (developer's Mac)
+├── Strapi + SQLite (local DB, safe to break)
+├── Astro dev server
+└── Schema changes and new features tested here first
+
+        │ code ready → git push
+        ▼
+
+VPS (production)
+├── Nginx
+│   ├── ikpk.su         → /var/www/production/   (manual deploy trigger)
+│   └── staging.ikpk.su → /var/www/staging/       (auto-deploy from main)
+├── Strapi + PostgreSQL (single instance, single DB)
+└── Schema migrations: backup → apply → verify (rollback from backup)
+```
+
+**Why single Strapi + single DB:**
+- Staging tests code (templates, components, new features), not content
+- Content is the same in both environments — no sync needed
+- Schema changes are rare (~once per few months), handled via backup → migrate
+- Two Strapi instances would add complexity disproportionate to the project scale
+
 ## Content Update Flow
 
 ```
