@@ -204,7 +204,8 @@ Scenario B — monitoring:
 
 Scenario C — Strapi update:
 1. Connects to the VPS via SSH
-2. cd /opt/cms && npm update @strapi/*
-3. npm run build && systemctl restart strapi
-4. Verifies the admin panel in a browser
+2. cd /opt/cms && npm run upgrade:dry
+3. npm run upgrade
+4. npm run build && systemctl restart strapi
+5. Verifies the admin panel in a browser
 ```

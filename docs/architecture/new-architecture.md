@@ -72,7 +72,7 @@ For comparison: the current site ships ~500 KB JS on every page.
 └──────────────────────────────────────────────────────┘
 
 The URL of the specific CMS host (subdomain or separate domain)
-is set at deploy time; <CMS_HOST> is used throughout this document.
+is set at deploy time; `<CMS_HOST>` is used throughout this document.
 ```
 
 ## Fault Tolerance
