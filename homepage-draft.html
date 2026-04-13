@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ИКПК — заготовка главной (draft)</title>
+<style>
+  :root{
+    --accent-500:#357a38; --accent-600:#29662a; --accent-700:#1f4d20; --accent-50:#e6f2e6;
+    --cta:#e87722; --cta-hover:#cc6516;
+    --dark:#1a1a1a; --g600:#707070; --g400:#b8b8b8; --g200:#e5e5e5; --g100:#f4f4f4;
+    --radius-s:8px; --radius-m:12px; --radius-l:16px;
+    --shadow-s:0 2px 8px rgba(0,0,0,.06); --shadow-m:0 6px 20px rgba(0,0,0,.08);
+    --max:1200px; --header-h:72px;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--dark);line-height:1.5;background:#fff}
+  img,svg{display:block;max-width:100%}
+  a{color:inherit;text-decoration:none}
+  .container{max-width:var(--max);margin:0 auto;padding:0 24px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:var(--radius-s);font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;transition:.15s}
+  .btn-primary{background:var(--cta);color:#fff}
+  .btn-primary:hover{background:var(--cta-hover)}
+  .btn-ghost{background:transparent;color:var(--accent-700);border-color:var(--accent-500)}
+  .btn-ghost:hover{background:var(--accent-50)}
+
+  /* ===== HEADER ===== */
+  .topstrip{background:var(--accent-700);color:#fff;font-size:13px}
+  .topstrip .container{display:flex;justify-content:space-between;align-items:center;height:32px}
+  .topstrip a{opacity:.85} .topstrip a:hover{opacity:1}
+  .topstrip .msg{display:flex;gap:14px}
+
+  header.site{position:sticky;top:0;background:#fff;z-index:50;border-bottom:1px solid var(--g200);height:var(--header-h)}
+  header.site .container{display:flex;align-items:center;gap:32px;height:100%}
+  .logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .logo-mark{width:52px;height:52px;border-radius:12px;background:#fff;border:1px solid var(--g200);display:grid;place-items:center;flex-shrink:0}
+  .logo-mark svg{width:36px;height:36px;display:block}
+  footer .logo-mark{background:#fff;border-color:transparent}
+  .logo-text{line-height:1.15}
+  .logo-text .name{font-weight:700;font-size:16px;letter-spacing:.02em}
+  .logo-text .sub{font-size:11px;color:var(--g600);white-space:nowrap}
+  header.site .logo-text .sub{max-width:180px;white-space:normal;line-height:1.25;font-size:11px}
+  nav.main{display:flex;gap:22px;flex-wrap:nowrap;align-items:center;min-width:0;margin:0 auto}
+  nav.main a{font-size:15px;font-weight:500;padding:8px 0;position:relative;white-space:nowrap;line-height:1}
+  .mega-host{display:flex;align-items:center}
+  nav.main a.has-mega::after{content:"▾";font-size:10px;margin-left:4px;color:var(--g600)}
+  nav.main a:hover{color:var(--accent-600)}
+  .header-right{display:flex;align-items:center;gap:16px;flex-shrink:0}
+  .phone{font-weight:600;font-size:15px;white-space:nowrap}
+  .phone small{display:block;font-weight:400;font-size:11px;color:var(--g600)}
+
+  /* mobile burger + call */
+  .burger,.call-mob{display:none;width:44px;height:44px;border:1px solid var(--g200);border-radius:10px;background:#fff;align-items:center;justify-content:center;cursor:pointer;padding:0}
+  .burger svg,.call-mob svg{width:22px;height:22px;stroke:var(--dark);fill:none;stroke-width:2;stroke-linecap:round}
+  .call-mob{background:var(--accent-50);border-color:var(--accent-500)}
+  .call-mob svg{stroke:var(--accent-700)}
+
+  /* mobile drawer */
+  .m-drawer{position:fixed;inset:0;background:#fff;z-index:60;display:none;flex-direction:column;overflow-y:auto}
+  .m-drawer.open{display:flex}
+  .m-drawer .m-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--g200)}
+  .m-drawer .m-close{width:40px;height:40px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;color:var(--dark)}
+  .m-drawer nav{display:flex;flex-direction:column;padding:8px 0}
+  .m-drawer nav a{padding:14px 20px;border-bottom:1px solid var(--g100);font-size:17px;font-weight:500;color:var(--dark)}
+  .m-drawer nav a.sub{padding-left:36px;font-size:15px;font-weight:400;color:var(--g600)}
+  .m-drawer nav h5{margin:16px 20px 6px;font-size:12px;text-transform:uppercase;color:var(--g600);letter-spacing:.04em}
+  .m-drawer .m-foot{padding:20px;border-top:1px solid var(--g200);display:grid;gap:10px;margin-top:auto}
+
+  /* mega menu demo */
+  .mega-host{position:relative}
+  .mega{position:absolute;left:-24px;right:auto;top:calc(100% + 1px);background:#fff;box-shadow:var(--shadow-m);border:1px solid var(--g200);border-radius:var(--radius-m);padding:24px;display:none;min-width:720px;grid-template-columns:1fr 1fr 1fr;gap:24px}
+  .mega-host:hover .mega{display:grid}
+  .mega h4{margin:0 0 12px;font-size:12px;text-transform:uppercase;color:var(--g600);letter-spacing:.04em}
+  .mega a{display:block;padding:6px 0;font-size:14px}
+
+  /* ===== HERO ===== */
+  .hero{padding:56px 0 64px;background:linear-gradient(180deg,#fff 0%,var(--accent-50) 100%)}
+  .hero-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center}
+  .eyebrow{display:inline-block;background:#fff;border:1px solid var(--accent-200,#b8d9b8);color:var(--accent-700);font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;margin-bottom:16px}
+  h1.hero-title{font-size:clamp(28px,4vw,44px);line-height:1.15;margin:0 0 16px;letter-spacing:-.01em}
+  .hero-sub{font-size:17px;color:var(--g600);margin:0 0 24px;max-width:560px}
+  ul.bullets{list-style:none;padding:0;margin:0 0 28px;display:grid;gap:10px}
+  ul.bullets li{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+  ul.bullets li::before{content:"";width:20px;height:20px;flex-shrink:0;background:var(--accent-500);mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20 6L9 17l-5-5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20 6L9 17l-5-5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat}
+  .cta-row{display:flex;gap:12px;flex-wrap:wrap}
+  .hero-visual{position:relative;border-radius:var(--radius-l);aspect-ratio:4/3;box-shadow:var(--shadow-m);overflow:hidden;background:linear-gradient(135deg,#e8f4e8 0%,#c9e4c9 100%)}
+  .hero-visual::before{content:"";position:absolute;inset:0;background:
+    radial-gradient(circle at 20% 30%, rgba(53,122,56,.25) 0, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(232,119,34,.2) 0, transparent 45%)}
+  .hero-visual .badge{position:absolute;bottom:20px;left:20px;right:20px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-radius:var(--radius-m);padding:14px 18px;display:flex;gap:12px;align-items:center;box-shadow:var(--shadow-s)}
+  .hero-visual .badge .b-icon{width:40px;height:40px;border-radius:50%;background:var(--accent-500);color:#fff;display:grid;place-items:center;flex-shrink:0;font-size:18px}
+  .hero-visual .badge .b-text{font-size:13px;line-height:1.35}
+  .hero-visual .badge .b-text strong{display:block;font-size:14px;color:var(--dark)}
+  .hero-visual svg.hv-art{position:absolute;inset:0;width:100%;height:100%}
+
+  /* ===== TRUST STRIP ===== */
+  .trust{border-top:1px solid var(--g200);border-bottom:1px solid var(--g200);background:#fff}
+  .trust .container{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding-top:24px;padding-bottom:24px}
+  .trust-item{text-align:center}
+  .trust-num{font-size:28px;font-weight:700;color:var(--accent-600);line-height:1}
+  .trust-lbl{font-size:13px;color:var(--g600);margin-top:6px}
+
+  /* ===== SECTION BASE ===== */
+  section.s{padding:72px 0}
+  section.s h2{font-size:clamp(24px,3vw,32px);margin:0 0 8px;letter-spacing:-.01em}
+  section.s .lead{color:var(--g600);margin:0 0 32px;font-size:16px;max-width:680px}
+
+  /* ===== SEGMENTATION ===== */
+  .seg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .seg{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-m);padding:28px;transition:.2s;display:flex;flex-direction:column}
+  .seg:hover{border-color:var(--accent-500);transform:translateY(-2px);box-shadow:var(--shadow-m)}
+  .seg-icon{width:48px;height:48px;border-radius:12px;background:var(--accent-50);display:grid;place-items:center;color:var(--accent-600);margin-bottom:16px}
+  .seg-icon svg{width:24px;height:24px;stroke:var(--accent-600);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .seg h3{margin:0 0 8px;font-size:19px}
+  .seg p{margin:0 0 16px;color:var(--g600);font-size:14px;flex:1}
+  .seg a.more{color:var(--accent-600);font-weight:600;font-size:14px}
+
+  /* ===== PROGRAMS ===== */
+  .s.alt{background:var(--g100)}
+  .prg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .prg{background:#fff;border-radius:var(--radius-m);overflow:hidden;border:1px solid var(--g200);display:flex;flex-direction:column}
+  .prg-cover{aspect-ratio:16/9;display:grid;place-items:center;color:#fff;font-weight:700;font-size:28px;letter-spacing:.04em;position:relative;overflow:hidden}
+  .prg-cover::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.18) 0, transparent 55%)}
+  .prg-cover.c-ak{background:linear-gradient(135deg,#357a38,#1f4d20)}
+  .prg-cover.c-cst{background:linear-gradient(135deg,#2b7a78,#185858)}
+  .prg-cover.c-vm{background:linear-gradient(135deg,#e87722,#b8550f)}
+  .prg-cover span{position:relative;z-index:1}
+  .prg-body{padding:20px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .prg-date{font-size:12px;color:var(--accent-600);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .prg h3{margin:0;font-size:17px;line-height:1.3}
+  .prg-meta{display:flex;gap:12px;font-size:13px;color:var(--g600);margin-top:auto;padding-top:12px;border-top:1px solid var(--g200)}
+  .prg-foot{padding:0 20px 20px;display:flex;justify-content:space-between;align-items:center}
+  .prg-price{font-weight:700;font-size:18px}
+
+  /* ===== LEAD MAGNET ===== */
+  .lm{background:linear-gradient(135deg,var(--accent-700) 0%,var(--accent-500) 100%);color:#fff;border-radius:var(--radius-l);padding:48px;display:grid;grid-template-columns:1.2fr .8fr;gap:32px;align-items:center;margin:0 24px}
+  .lm h2{margin:0 0 12px;font-size:28px;color:#fff}
+  .lm p{margin:0 0 20px;opacity:.9}
+  .lm-form{background:#fff;border-radius:var(--radius-m);padding:20px;color:var(--dark)}
+  .lm-form label{font-size:13px;color:var(--g600);display:block;margin-bottom:4px}
+  .lm-form input{width:100%;padding:12px 14px;border:1px solid var(--g200);border-radius:var(--radius-s);font:inherit;font-size:15px;margin-bottom:12px}
+  .lm-form .btn{width:100%;justify-content:center}
+  .lm ul{list-style:none;padding:0;margin:0;display:grid;gap:8px;font-size:15px}
+  .lm ul li::before{content:"✓ ";color:var(--accent-100,#abd6ac);font-weight:700}
+
+  /* ===== FACULTY / TESTIMONIALS ===== */
+  .fac-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  .fac{text-align:center}
+  .fac-photo{aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,var(--accent-500),var(--accent-700));margin:0 auto 12px;max-width:140px;display:grid;place-items:center;color:#fff;font-weight:600;font-size:32px;letter-spacing:.02em;box-shadow:var(--shadow-s)}
+  .fac h4{margin:0 0 4px;font-size:15px}
+  .fac small{color:var(--g600);font-size:13px}
+
+  .tes-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  .tes{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-m);overflow:hidden}
+  .tes-video{aspect-ratio:16/9;background:linear-gradient(135deg,#2b4a2c,#1a1a1a);display:grid;place-items:center;color:#fff;position:relative;cursor:pointer;overflow:hidden}
+  .tes-video::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(53,122,56,.35) 0, transparent 60%)}
+  .tes-video .play{position:relative;z-index:1;width:68px;height:68px;border-radius:50%;background:rgba(255,255,255,.95);display:grid;place-items:center;box-shadow:var(--shadow-m);transition:.2s}
+  .tes-video:hover .play{transform:scale(1.08)}
+  .tes-video .play::before{content:"";width:0;height:0;border-left:18px solid var(--accent-700);border-top:11px solid transparent;border-bottom:11px solid transparent;margin-left:4px}
+  .tes-body{padding:20px}
+  .tes-body blockquote{margin:0 0 12px;font-style:italic;color:var(--dark)}
+  .tes-body cite{font-style:normal;font-weight:600;font-size:14px}
+  .tes-body cite small{display:block;color:var(--g600);font-weight:400;margin-top:2px}
+
+  /* ===== FOOTER ===== */
+  footer{background:var(--dark);color:#c9c9c9;padding:56px 0 0;font-size:14px}
+  footer .f-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px}
+  footer h5{color:#fff;font-size:14px;margin:0 0 14px;text-transform:uppercase;letter-spacing:.04em}
+  footer a{display:block;padding:4px 0;color:#c9c9c9} footer a:hover{color:#fff}
+  .copy{border-top:1px solid #333;margin-top:40px;padding:20px 0;color:#888;font-size:12px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .copy a{display:inline;padding:0}
+
+  /* ===== FLOATING MESSENGERS ===== */
+  .fab{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:40}
+  .fab a{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--accent-500);color:#fff;box-shadow:var(--shadow-m);font-size:22px}
+  .fab a.tg{background:#0088cc} .fab a.wa{background:#25d366}
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width:960px){
+    nav.main, .phone small, .topstrip{display:none}
+    .header-right .phone{display:none}
+    .hero-grid, .trust .container, .seg-grid, .prg-grid, .fac-grid, .tes-grid, .lm, footer .f-grid{grid-template-columns:1fr}
+    .trust .container{grid-template-columns:repeat(2,1fr)}
+    .fac-grid{grid-template-columns:repeat(2,1fr)}
+    .lm{padding:28px;margin:0 16px}
+    section.s{padding:48px 0}
+    .hero{padding:32px 0 48px}
+    .burger,.call-mob{display:inline-flex}
+    header.site .container{gap:12px;padding:0 16px}
+    .header-right{gap:8px}
+    .header-right .btn{padding:10px 14px;font-size:14px}
+    .logo-mark{width:44px;height:44px}
+    .logo-mark svg{width:30px;height:30px}
+    .hero-visual{aspect-ratio:16/10}
+  }
+  @media (max-width:420px){
+    .header-right .btn{display:none}
+    .fab a{width:44px;height:44px;font-size:18px}
+    .fab{right:12px;bottom:12px;gap:8px}
+    .hero-title{font-size:26px !important}
+    .lm{padding:24px 20px}
+    .lm h2{font-size:22px}
+    .prg-cover{font-size:22px}
+    .fac-photo{max-width:100px;font-size:24px}
+  }
+</style>
+</head>
+<body>
+
+<!-- Top strip -->
+<div class="topstrip">
+  <div class="container">
+    <span>Санкт-Петербург · Приём заявок на весенний поток 2026</span>
+    <div class="msg">
+      <a href="#">Личный кабинет</a>
+      <a href="#">Для партнёров</a>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="site">
+  <div class="container">
+    <a href="/" class="logo">
+      <div class="logo-mark"><svg viewBox="0 0 33 34" xmlns="http://www.w3.org/2000/svg" aria-label="ИКПК"><path fill="#02AEC4" fill-rule="evenodd" clip-rule="evenodd" d="M15.907 11.444c.044.312-.12.327-.431.49-.342.193-.654.297-1.01.401-.267.074-.52.148-.698.282-.268-1.47-.372-3.149-.327-4.649.015-.713.104-1.515.357-2.198.178-.46.579-.639 1.054-.535.787.164 1.1.61 1.292 1.218.179.58.283 1.174.283 1.783-.743.148-.996 1.054-.98 1.693 0 .03-.016.044-.03.06-.06.029-.06.103-.015.177.059.104.074.208.06.312-.016.09-.03.179.088.179.03 0 .045.014.074.03.03.044.045.118.045.192-.03.387.208.357.238.565Zm1.396 0c-.045.312.119.327.43.49.342.193.654.297 1.01.401.268.074.52.148.699.282.267-1.47.37-3.149.326-4.649-.015-.713-.104-1.515-.356-2.198-.178-.46-.58-.639-1.055-.535-.787.164-1.099.61-1.292 1.218a6.042 6.042 0 0 0-.282 1.783c.743.148.995 1.054.98 1.693 0 .03.015.044.03.06.06.029.06.103.015.177a.474.474 0 0 0-.06.312c.015.09.03.179-.089.179-.03 0-.044.014-.074.03a.372.372 0 0 0-.045.192c.03.387-.207.357-.237.565Zm-.698 22.026h.297c.03-.49.06-.965.104-1.44.044-.476 0-.906-.06-1.382-.163-1.114-.223-2.183 0-3.416.208-1.01.149-1.752-.015-2.703-.148-.92-.148-1.886-.297-2.822 0-.03-.014-.045-.044-.045-.015 0-.03.015-.045.045-.133.95-.148 1.901-.297 2.822-.148.95-.223 1.708-.015 2.703.223 1.233.179 2.302 0 3.416-.074.46-.104.892-.059 1.382.044.475.074.965.104 1.44h.327Zm3.267-20.422c.045.163.045.371.06.639 0 .356 0 .653.104 1.01.118.386.223.757.252 1.158.03.282.074.446.208.698.535.965.995 2.065 1.485 3.134.075.163.134.208.297.252.179.06.312.134.446.268.074.074.163.134.238.208.06.044.119.119.193.148.118.045.148.193-.015.193-.09 0-.149 0-.223-.03-.074-.029-.148-.088-.208-.133-.089-.06-.148-.06-.104.06.134.4.372.787.49 1.188.06.193-.089.237-.178.074l-.312-.58c-.03-.044-.074-.014-.06.03.105.238.224.476.327.713.09.208-.103.238-.178.075-.133-.238-.237-.476-.356-.713-.03-.045-.09-.015-.06.03.09.207.194.415.283.623.074.193-.09.238-.194.074-.103-.193-.193-.4-.297-.609-.014-.044-.074-.014-.059.03.074.178.149.357.208.535.045.163-.074.193-.163.06a3.49 3.49 0 0 1-.327-.67 3.158 3.158 0 0 1-.267-1.039c-.03-.356-.134-.52-.372-.787-.371-.416-.728-.772-1.025-1.188a4.502 4.502 0 0 1-.564-1.01c-.149-.416-.253-.817-.475-1.218-.178-.342-.193-.609-.223-.966 0-.074-.074-.074-.074 0a3.613 3.613 0 0 1-.208 1.13c-.283.787-.297 1.44-.12 2.257.343 1.456.417 3.06.343 4.575-.03.594-.06 1.203-.223 1.767-.238.772-.223 1.381-.075 2.183a5.766 5.766 0 0 1-.222 2.124c-.149.52-.327.98-.401 1.515-.149.995-.179 1.99.594 2.644 3-.134 4.797-.163 6.386-1.456 1.649-1.336 3.105-3.208 4.456-4.841.98-1.218 1.233-2.526 1.5-4.01.446-2.57 1.604-5.036 1.916-7.531.09-.668.045-1.396-.638-1.619-.758-.252-1.367.208-1.857.713-.965.965-1.56 2.154-2.064 3.386-.401 1.025-.713 2.05-1.01 3.105-.238.831-.595 1.44-1.159 1.945-.342.312-.876.758-1.366.847-.149.03-.223-.134-.104-.238 1.351-1.054 2.213-2.332 2.584-4.025.401-1.842 1.277-3.847 2.54-5.436.134-3.594.208-7.723-1.53-11.02-.832-1.575-3.134-1.278-2.703.787.119.564.252 1.114.386 1.678.178.743.327 1.47.475 2.213.342 1.723.223 3.357.119 5.094-.074 1.114-.09 2.288-.193 3.402-.045.43-.475.371-.46-.015.014-1.693.222-3.891.37-5.555.105-1.263-.148-2.332-.415-3.55-.238-1.07-.475-2.139-.728-3.193-.134-.743-.327-1.456.401-1.931-.326-1.1-.639-1.857-1.93-1.738-1.1.104-1.144 1.04-1.13 1.916.03 1.575.342 3.149.684 4.887.267 1.366.4 2.718.326 4.1-.118 1.202-.326 2.45-.356 3.653 0 .223 0 .46-.015.683-.015.401-.43.371-.445.015-.015-.238 0-.49 0-.728.03-1.04.163-2.05.282-3.09.193-1.41.06-2.643-.193-4.04-.297-1.648-.476-3.326-.61-5.004-.103-.654-.177-1.055-.875-1.055-.936.134-1.114.876-1.174 1.634 0 .668.06 1.337.104 2.005.06.772.119 1.53.163 2.302.09 1.56.015 3.12-.163 4.649-.06.238-.089.416-.119.609Zm-6.535 0c-.044.163-.044.371-.06.639 0 .356 0 .653-.103 1.01-.12.386-.223.757-.253 1.158-.03.282-.074.446-.208.698-.534.965-.995 2.065-1.485 3.134-.074.163-.134.208-.297.252-.178.06-.312.134-.446.268-.074.074-.163.134-.237.208-.06.044-.12.119-.193.148-.12.045-.149.193.014.193.09 0 .15 0 .223-.03.075-.029.149-.088.208-.133.09-.06.149-.06.104.06-.133.4-.371.787-.49 1.188-.06.193.09.237.178.074l.312-.58c.03-.044.075-.014.06.03-.104.238-.223.476-.327.713-.09.208.104.238.178.075.134-.238.238-.476.357-.713.03-.045.089-.015.059.03-.09.207-.193.415-.282.623-.074.193.089.238.193.074.104-.193.193-.4.297-.609.015-.044.074-.014.06.03-.075.178-.15.357-.209.535-.044.163.075.193.164.06.133-.209.237-.431.326-.67.15-.356.238-.653.268-1.039.03-.356.134-.52.371-.787.372-.416.728-.772 1.025-1.188.223-.312.43-.654.564-1.01.149-.416.253-.817.476-1.218.178-.342.193-.609.223-.966 0-.074.074-.074.074 0 .015.402.074.758.208 1.13.282.787.297 1.44.118 2.257-.341 1.456-.415 3.06-.341 4.575.03.594.06 1.203.223 1.767.237.772.208 1.381.074 2.183-.06.728.015 1.396.223 2.124.148.52.326.98.4 1.515.15.995.179 1.99-.593 2.644-3-.134-4.798-.163-6.387-1.456-1.649-1.336-3.104-3.208-4.456-4.841-.98-1.218-1.233-2.526-1.5-4.01-.445-2.57-1.604-5.036-1.916-7.531-.089-.668-.044-1.396.639-1.619.757-.252 1.366.208 1.856.713.966.965 1.56 2.154 2.065 3.386.4 1.025.713 2.05 1.01 3.105.238.831.594 1.44 1.158 1.945.342.312.877.758 1.367.847.163.03.223-.134.104-.238-1.352-1.054-2.213-2.332-2.585-4.025-.4-1.842-1.277-3.847-2.54-5.436-.133-3.594-.207-7.723 1.53-11.02.832-1.575 3.134-1.278 2.704.787-.12.564-.253 1.114-.387 1.678-.178.743-.326 1.47-.475 2.213-.341 1.723-.223 3.357-.119 5.094.075 1.114.09 2.288.193 3.402.045.43.476.371.46-.015-.014-1.693-.222-3.891-.37-5.555-.104-1.263.148-2.332.415-3.55.238-1.07.476-2.139.728-3.193.134-.743.327-1.456-.4-1.931.326-1.1.638-1.857 1.93-1.738 1.1.104 1.144 1.04 1.129 1.916-.03 1.575-.342 3.149-.683 4.887-.268 1.366-.401 2.718-.327 4.1.119 1.202.327 2.45.356 3.653 0 .223 0 .46.015.683.015.401.43.371.446.015.015-.238 0-.49 0-.728-.03-1.04-.164-2.05-.282-3.09-.194-1.41-.06-2.643.193-4.04.297-1.648.475-3.326.609-5.004.104-.654.178-1.055.876-1.055.936.134 1.114.876 1.173 1.634 0 .668-.06 1.337-.104 2.005-.06.772-.118 1.53-.163 2.302-.09 1.56-.015 3.12.163 4.649.06.238.09.416.12.609Z"/></svg></div>
+    </a>
+    <nav class="main">
+      <div class="mega-host">
+        <a href="#" class="has-mega">Обучение</a>
+        <div class="mega">
+          <div>
+            <h4>Институты</h4>
+            <a href="#">Прикладной кинезиологии</a>
+            <a href="#">Апледжера</a>
+            <a href="#">Барраля</a>
+            <a href="#">Остеопатии</a>
+          </div>
+          <div>
+            <h4>Ближайшие семинары</h4>
+            <a href="#">AK-101 · 12 мая</a>
+            <a href="#">CST-201 · 24 мая</a>
+            <a href="#">VM-1 · 6 июня</a>
+          </div>
+          <div>
+            <h4>Для кого</h4>
+            <a href="#">Врачам</a>
+            <a href="#">Массажистам</a>
+            <a href="#">Фитнес-тренерам</a>
+          </div>
+        </div>
+      </div>
+      <a href="#">Расписание</a>
+      <a href="#">Магазин</a>
+      <a href="#">Статьи</a>
+      <a href="#">Об институте</a>
+      <a href="#">Контакты</a>
+    </nav>
+    <div class="header-right">
+      <a href="tel:+78126465450" class="phone">+7 (812) 646-54-50<small>пн–пт, 10:00–19:00</small></a>
+      <a href="tel:+78126465450" class="call-mob" aria-label="Позвонить"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg></a>
+      <a href="#request" class="btn btn-primary">Записаться</a>
+      <button class="burger" aria-label="Меню" onclick="document.getElementById('mDrawer').classList.add('open');document.body.style.overflow='hidden'"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<!-- Mobile drawer -->
+<div class="m-drawer" id="mDrawer">
+  <div class="m-head">
+    <div style="font-weight:700;font-size:20px;letter-spacing:.05em;color:#02AEC4">ИКПК</div>
+    <button class="m-close" aria-label="Закрыть" onclick="document.getElementById('mDrawer').classList.remove('open');document.body.style.overflow=''">&times;</button>
+  </div>
+  <nav>
+    <a href="#">Обучение</a>
+    <a class="sub" href="#">Для врачей</a>
+    <a class="sub" href="#">Для массажистов</a>
+    <a class="sub" href="#">Для тренеров</a>
+    <a href="#">Расписание</a>
+    <a href="#">Магазин</a>
+    <a href="#">Статьи</a>
+    <a href="#">Об институте</a>
+    <a href="#">Контакты</a>
+  </nav>
+  <div class="m-foot">
+    <a href="tel:+78126465450" class="btn btn-ghost" style="justify-content:center">+7 (812) 646-54-50</a>
+    <a href="#request" class="btn btn-primary" style="justify-content:center">Записаться</a>
+  </div>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <span class="eyebrow">Обучение с 2005 года · Лицензия Рособрнадзора</span>
+      <h1 class="hero-title">Станьте дипломированным прикладным кинезиологом международного уровня</h1>
+      <p class="hero-sub">Фундаментальное постдипломное образование для врачей, массажистов и реабилитологов. Программы согласованы с международными стандартами ICAK.</p>
+      <ul class="bullets">
+        <li>Официальное удостоверение о повышении квалификации, сведения в&nbsp;ФИС&nbsp;ФРДО</li>
+        <li>Вхождение в международные реестры ICAK, IAHE и&nbsp;Barral Institute</li>
+        <li>Практика с первого модуля в собственной клинике под&nbsp;руководством экспертов</li>
+      </ul>
+      <div class="cta-row">
+        <a href="#programs" class="btn btn-primary">Выбрать программу обучения</a>
+        <a href="#lead" class="btn btn-ghost">Скачать учебный план</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <svg class="hv-art" viewBox="0 0 480 360" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- stylised spine/body figure -->
+        <circle cx="240" cy="90" r="34" fill="#29662a" opacity=".85"/>
+        <path d="M240 128 C 218 170, 214 220, 228 280 L 252 280 C 266 220, 262 170, 240 128 Z" fill="#357a38" opacity=".8"/>
+        <path d="M200 170 C 170 180, 155 210, 158 248" stroke="#29662a" stroke-width="10" stroke-linecap="round" opacity=".7"/>
+        <path d="M280 170 C 310 180, 325 210, 322 248" stroke="#29662a" stroke-width="10" stroke-linecap="round" opacity=".7"/>
+        <path d="M228 280 C 214 310, 204 330, 200 348" stroke="#1f4d20" stroke-width="11" stroke-linecap="round"/>
+        <path d="M252 280 C 266 310, 276 330, 280 348" stroke="#1f4d20" stroke-width="11" stroke-linecap="round"/>
+        <!-- dots / nodes along spine -->
+        <circle cx="240" cy="150" r="4" fill="#e87722"/>
+        <circle cx="240" cy="180" r="4" fill="#e87722"/>
+        <circle cx="240" cy="210" r="4" fill="#e87722"/>
+        <circle cx="240" cy="240" r="4" fill="#e87722"/>
+      </svg>
+      <div class="badge">
+        <div class="b-icon">✓</div>
+        <div class="b-text"><strong>Практика с 1-го модуля</strong>Работа с пациентами в клинике института</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Trust strip -->
+<div class="trust">
+  <div class="container">
+    <div class="trust-item"><div class="trust-num">20+</div><div class="trust-lbl">лет в постдипломном образовании</div></div>
+    <div class="trust-item"><div class="trust-num">5000+</div><div class="trust-lbl">выпускников в России и СНГ</div></div>
+    <div class="trust-item"><div class="trust-num">40+</div><div class="trust-lbl">действующих программ</div></div>
+    <div class="trust-item"><div class="trust-num">5</div><div class="trust-lbl">представительств в регионах</div></div>
+  </div>
+</div>
+
+<!-- Segmentation -->
+<section class="s">
+  <div class="container">
+    <h2>Для кого обучение</h2>
+    <p class="lead">Запросы и бэкграунд у специалистов разные — поэтому и программы строятся под три аудитории.</p>
+    <div class="seg-grid">
+      <div class="seg">
+        <div class="seg-icon"><svg viewBox="0 0 24 24"><path d="M8 2v5a4 4 0 008 0V2"/><path d="M12 11v4a5 5 0 005 5 5 5 0 005-5v-2"/><circle cx="22" cy="13" r="2"/></svg></div>
+        <h3>Врачам</h3>
+        <p>Неврологам, ортопедам, педиатрам, реабилитологам — углублённая диагностика, ЗЕТ и НМО, повышение стоимости приёма.</p>
+        <a class="more" href="#">Программы для врачей →</a>
+      </div>
+      <div class="seg">
+        <div class="seg-icon"><svg viewBox="0 0 24 24"><path d="M7 11V5a2 2 0 114 0v6"/><path d="M11 11V4a2 2 0 114 0v7"/><path d="M15 11V6a2 2 0 114 0v8a7 7 0 01-7 7 7 7 0 01-7-7v-2a2 2 0 114 0"/></svg></div>
+        <h3>Массажистам</h3>
+        <p>Расширение компетенций и среднего чека, новые инструменты работы с болью, диагностика до сеанса.</p>
+        <a class="more" href="#">Программы для массажистов →</a>
+      </div>
+      <div class="seg">
+        <div class="seg-icon"><svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M4 22l3-8 4 2v6"/><path d="M11 16l-3-4 4-5 3 2 3-1"/><path d="M15 11l2 3 4 1"/></svg></div>
+        <h3>Тренерам и реабилитологам</h3>
+        <p>Глубокая диагностика движения, работа с клиентами после травм, мост между ЛФК и спортом.</p>
+        <a class="more" href="#">Программы для тренеров →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Programs -->
+<section class="s alt" id="programs">
+  <div class="container">
+    <h2>Ближайшие семинары</h2>
+    <p class="lead">Очно в Санкт-Петербурге, Москве и онлайн-трансляция с поддержкой куратора.</p>
+    <div class="prg-grid">
+      <article class="prg">
+        <div class="prg-cover c-ak"><span>AK-101</span></div>
+        <div class="prg-body">
+          <span class="prg-date">12–14 мая · СПб</span>
+          <h3>AK-101. Введение в прикладную кинезиологию</h3>
+          <div class="prg-meta"><span>3 дня</span><span>24 ак. часа</span></div>
+        </div>
+        <div class="prg-foot">
+          <span class="prg-price">45 000 ₽</span>
+          <a href="#" class="btn btn-ghost">Подробнее</a>
+        </div>
+      </article>
+      <article class="prg">
+        <div class="prg-cover c-cst"><span>CST-201</span></div>
+        <div class="prg-body">
+          <span class="prg-date">24–26 мая · Москва</span>
+          <h3>CST-201. Краниосакральная терапия, II ступень</h3>
+          <div class="prg-meta"><span>3 дня</span><span>24 ак. часа</span></div>
+        </div>
+        <div class="prg-foot">
+          <span class="prg-price">52 000 ₽</span>
+          <a href="#" class="btn btn-ghost">Подробнее</a>
+        </div>
+      </article>
+      <article class="prg">
+        <div class="prg-cover c-vm"><span>VM-1</span></div>
+        <div class="prg-body">
+          <span class="prg-date">6–9 июня · Онлайн</span>
+          <h3>VM-1. Висцеральная мануальная терапия Барраля</h3>
+          <div class="prg-meta"><span>4 дня</span><span>32 ак. часа</span></div>
+        </div>
+        <div class="prg-foot">
+          <span class="prg-price">58 000 ₽</span>
+          <a href="#" class="btn btn-ghost">Подробнее</a>
+        </div>
+      </article>
+    </div>
+    <div style="text-align:center;margin-top:32px">
+      <a href="#" class="btn btn-ghost">Всё расписание →</a>
+    </div>
+  </div>
+</section>
+
+<!-- Lead magnet -->
+<section class="s" id="lead">
+  <div class="container" style="padding:0">
+    <div class="lm">
+      <div>
+        <h2>Бесплатный чек-лист для профессионалов</h2>
+        <p>«ТОП-5 мышечных тестов для мгновенной диагностики причин боли в пояснице». PDF на 5 страниц с пошаговым алгоритмом и фото.</p>
+        <ul>
+          <li>Применяйте завтра в работе с клиентом</li>
+          <li>Пошаговая схема тестирования</li>
+          <li>Присылаем в Telegram или на e-mail</li>
+        </ul>
+      </div>
+      <form class="lm-form">
+        <label>Имя</label>
+        <input type="text" placeholder="Как к вам обращаться" />
+        <label>Telegram или e-mail</label>
+        <input type="text" placeholder="@nickname или you@mail.ru" />
+        <button type="button" class="btn btn-primary">Получить чек-лист</button>
+        <small style="display:block;margin-top:10px;color:var(--g600);font-size:12px">Согласие на обработку ПДн в соответствии с 152-ФЗ</small>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Faculty -->
+<section class="s alt">
+  <div class="container">
+    <h2>Преподаватели</h2>
+    <p class="lead">Практикующие врачи с регалиями и собственной клинической практикой.</p>
+    <div class="fac-grid">
+      <div class="fac"><div class="fac-photo">ИП</div><h4>Иван Петров</h4><small>К.м.н., невролог · 18 лет практики</small></div>
+      <div class="fac"><div class="fac-photo">АС</div><h4>Анна Смирнова</h4><small>Остеопат D.O. · член ICAK</small></div>
+      <div class="fac"><div class="fac-photo">ДК</div><h4>Дмитрий Козлов</h4><small>Реабилитолог · преподаёт с 2012</small></div>
+      <div class="fac"><div class="fac-photo">МВ</div><h4>Мария Волкова</h4><small>Мануальный терапевт · D.O.</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonials -->
+<section class="s">
+  <div class="container">
+    <h2>Истории выпускников</h2>
+    <p class="lead">Реальные кейсы «до и после» — как обучение изменило практику и доход.</p>
+    <div class="tes-grid">
+      <div class="tes">
+        <div class="tes-video"><div class="play"></div></div>
+        <div class="tes-body">
+          <blockquote>«Был массажистом со средним чеком 2500 ₽. После курса AK-101 ввёл диагностику — чек вырос до 6000 ₽, запись на месяц вперёд.»</blockquote>
+          <cite>Алексей М.<small>Санкт-Петербург · выпуск 2024</small></cite>
+        </div>
+      </div>
+      <div class="tes">
+        <div class="tes-video"><div class="play"></div></div>
+        <div class="tes-body">
+          <blockquote>«Как невролог получила инструмент, которого не хватало 10 лет. Теперь веду частный приём, очередь на 2 месяца.»</blockquote>
+          <cite>Елена К.<small>Москва · выпуск 2023</small></cite>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="f-grid">
+      <div>
+        <div class="logo" style="margin-bottom:12px">
+          <div class="logo-mark"><svg viewBox="0 0 33 34" xmlns="http://www.w3.org/2000/svg" aria-label="ИКПК"><path fill="#02AEC4" fill-rule="evenodd" clip-rule="evenodd" d="M15.907 11.444c.044.312-.12.327-.431.49-.342.193-.654.297-1.01.401-.267.074-.52.148-.698.282-.268-1.47-.372-3.149-.327-4.649.015-.713.104-1.515.357-2.198.178-.46.579-.639 1.054-.535.787.164 1.1.61 1.292 1.218.179.58.283 1.174.283 1.783-.743.148-.996 1.054-.98 1.693 0 .03-.016.044-.03.06-.06.029-.06.103-.015.177.059.104.074.208.06.312-.016.09-.03.179.088.179.03 0 .045.014.074.03.03.044.045.118.045.192-.03.387.208.357.238.565Zm1.396 0c-.045.312.119.327.43.49.342.193.654.297 1.01.401.268.074.52.148.699.282.267-1.47.37-3.149.326-4.649-.015-.713-.104-1.515-.356-2.198-.178-.46-.58-.639-1.055-.535-.787.164-1.099.61-1.292 1.218a6.042 6.042 0 0 0-.282 1.783c.743.148.995 1.054.98 1.693 0 .03.015.044.03.06.06.029.06.103.015.177a.474.474 0 0 0-.06.312c.015.09.03.179-.089.179-.03 0-.044.014-.074.03a.372.372 0 0 0-.045.192c.03.387-.207.357-.237.565Zm-.698 22.026h.297c.03-.49.06-.965.104-1.44.044-.476 0-.906-.06-1.382-.163-1.114-.223-2.183 0-3.416.208-1.01.149-1.752-.015-2.703-.148-.92-.148-1.886-.297-2.822 0-.03-.014-.045-.044-.045-.015 0-.03.015-.045.045-.133.95-.148 1.901-.297 2.822-.148.95-.223 1.708-.015 2.703.223 1.233.179 2.302 0 3.416-.074.46-.104.892-.059 1.382.044.475.074.965.104 1.44h.327Zm3.267-20.422c.045.163.045.371.06.639 0 .356 0 .653.104 1.01.118.386.223.757.252 1.158.03.282.074.446.208.698.535.965.995 2.065 1.485 3.134.075.163.134.208.297.252.179.06.312.134.446.268.074.074.163.134.238.208.06.044.119.119.193.148.118.045.148.193-.015.193-.09 0-.149 0-.223-.03-.074-.029-.148-.088-.208-.133-.089-.06-.148-.06-.104.06.134.4.372.787.49 1.188.06.193-.089.237-.178.074l-.312-.58c-.03-.044-.074-.014-.06.03.105.238.224.476.327.713.09.208-.103.238-.178.075-.133-.238-.237-.476-.356-.713-.03-.045-.09-.015-.06.03.09.207.194.415.283.623.074.193-.09.238-.194.074-.103-.193-.193-.4-.297-.609-.014-.044-.074-.014-.059.03.074.178.149.357.208.535.045.163-.074.193-.163.06a3.49 3.49 0 0 1-.327-.67 3.158 3.158 0 0 1-.267-1.039c-.03-.356-.134-.52-.372-.787-.371-.416-.728-.772-1.025-1.188a4.502 4.502 0 0 1-.564-1.01c-.149-.416-.253-.817-.475-1.218-.178-.342-.193-.609-.223-.966 0-.074-.074-.074-.074 0a3.613 3.613 0 0 1-.208 1.13c-.283.787-.297 1.44-.12 2.257.343 1.456.417 3.06.343 4.575-.03.594-.06 1.203-.223 1.767-.238.772-.223 1.381-.075 2.183a5.766 5.766 0 0 1-.222 2.124c-.149.52-.327.98-.401 1.515-.149.995-.179 1.99.594 2.644 3-.134 4.797-.163 6.386-1.456 1.649-1.336 3.105-3.208 4.456-4.841.98-1.218 1.233-2.526 1.5-4.01.446-2.57 1.604-5.036 1.916-7.531.09-.668.045-1.396-.638-1.619-.758-.252-1.367.208-1.857.713-.965.965-1.56 2.154-2.064 3.386-.401 1.025-.713 2.05-1.01 3.105-.238.831-.595 1.44-1.159 1.945-.342.312-.876.758-1.366.847-.149.03-.223-.134-.104-.238 1.351-1.054 2.213-2.332 2.584-4.025.401-1.842 1.277-3.847 2.54-5.436.134-3.594.208-7.723-1.53-11.02-.832-1.575-3.134-1.278-2.703.787.119.564.252 1.114.386 1.678.178.743.327 1.47.475 2.213.342 1.723.223 3.357.119 5.094-.074 1.114-.09 2.288-.193 3.402-.045.43-.475.371-.46-.015.014-1.693.222-3.891.37-5.555.105-1.263-.148-2.332-.415-3.55-.238-1.07-.475-2.139-.728-3.193-.134-.743-.327-1.456.401-1.931-.326-1.1-.639-1.857-1.93-1.738-1.1.104-1.144 1.04-1.13 1.916.03 1.575.342 3.149.684 4.887.267 1.366.4 2.718.326 4.1-.118 1.202-.326 2.45-.356 3.653 0 .223 0 .46-.015.683-.015.401-.43.371-.445.015-.015-.238 0-.49 0-.728.03-1.04.163-2.05.282-3.09.193-1.41.06-2.643-.193-4.04-.297-1.648-.476-3.326-.61-5.004-.103-.654-.177-1.055-.875-1.055-.936.134-1.114.876-1.174 1.634 0 .668.06 1.337.104 2.005.06.772.119 1.53.163 2.302.09 1.56.015 3.12-.163 4.649-.06.238-.089.416-.119.609Zm-6.535 0c-.044.163-.044.371-.06.639 0 .356 0 .653-.103 1.01-.12.386-.223.757-.253 1.158-.03.282-.074.446-.208.698-.534.965-.995 2.065-1.485 3.134-.074.163-.134.208-.297.252-.178.06-.312.134-.446.268-.074.074-.163.134-.237.208-.06.044-.12.119-.193.148-.12.045-.149.193.014.193.09 0 .15 0 .223-.03.075-.029.149-.088.208-.133.09-.06.149-.06.104.06-.133.4-.371.787-.49 1.188-.06.193.09.237.178.074l.312-.58c.03-.044.075-.014.06.03-.104.238-.223.476-.327.713-.09.208.104.238.178.075.134-.238.238-.476.357-.713.03-.045.089-.015.059.03-.09.207-.193.415-.282.623-.074.193.089.238.193.074.104-.193.193-.4.297-.609.015-.044.074-.014.06.03-.075.178-.15.357-.209.535-.044.163.075.193.164.06.133-.209.237-.431.326-.67.15-.356.238-.653.268-1.039.03-.356.134-.52.371-.787.372-.416.728-.772 1.025-1.188.223-.312.43-.654.564-1.01.149-.416.253-.817.476-1.218.178-.342.193-.609.223-.966 0-.074.074-.074.074 0 .015.402.074.758.208 1.13.282.787.297 1.44.118 2.257-.341 1.456-.415 3.06-.341 4.575.03.594.06 1.203.223 1.767.237.772.208 1.381.074 2.183-.06.728.015 1.396.223 2.124.148.52.326.98.4 1.515.15.995.179 1.99-.593 2.644-3-.134-4.798-.163-6.387-1.456-1.649-1.336-3.104-3.208-4.456-4.841-.98-1.218-1.233-2.526-1.5-4.01-.445-2.57-1.604-5.036-1.916-7.531-.089-.668-.044-1.396.639-1.619.757-.252 1.366.208 1.856.713.966.965 1.56 2.154 2.065 3.386.4 1.025.713 2.05 1.01 3.105.238.831.594 1.44 1.158 1.945.342.312.877.758 1.367.847.163.03.223-.134.104-.238-1.352-1.054-2.213-2.332-2.585-4.025-.4-1.842-1.277-3.847-2.54-5.436-.133-3.594-.207-7.723 1.53-11.02.832-1.575 3.134-1.278 2.704.787-.12.564-.253 1.114-.387 1.678-.178.743-.326 1.47-.475 2.213-.341 1.723-.223 3.357-.119 5.094.075 1.114.09 2.288.193 3.402.045.43.476.371.46-.015-.014-1.693-.222-3.891-.37-5.555-.104-1.263.148-2.332.415-3.55.238-1.07.476-2.139.728-3.193.134-.743.327-1.456-.4-1.931.326-1.1.638-1.857 1.93-1.738 1.1.104 1.144 1.04 1.129 1.916-.03 1.575-.342 3.149-.683 4.887-.268 1.366-.401 2.718-.327 4.1.119 1.202.327 2.45.356 3.653 0 .223 0 .46.015.683.015.401.43.371.446.015.015-.238 0-.49 0-.728-.03-1.04-.164-2.05-.282-3.09-.194-1.41-.06-2.643.193-4.04.297-1.648.475-3.326.609-5.004.104-.654.178-1.055.876-1.055.936.134 1.114.876 1.173 1.634 0 .668-.06 1.337-.104 2.005-.06.772-.118 1.53-.163 2.302-.09 1.56-.015 3.12.163 4.649.06.238.09.416.12.609Z"/></svg></div>
+          <div class="logo-text"><div class="name" style="color:#fff">ИКПК</div><div class="sub" style="color:#888">с 2005 года</div></div>
+        </div>
+        <p style="margin:0;color:#888;max-width:280px">Постдипломное образование в области холистической медицины. Лицензия Рособрнадзора №XXXX.</p>
+      </div>
+      <div>
+        <h5>Обучение</h5>
+        <a href="#">Расписание</a><a href="#">Для врачей</a><a href="#">Для массажистов</a><a href="#">Для тренеров</a>
+      </div>
+      <div>
+        <h5>Институт</h5>
+        <a href="#">О нас</a><a href="#">Преподаватели</a><a href="#">Сведения об ОО</a><a href="#">Акции</a>
+      </div>
+      <div>
+        <h5>Контакты</h5>
+        <a href="tel:+78126465450">+7 (812) 646-54-50</a><a href="mailto:info@ikpk.su">info@ikpk.su</a><a href="#">СПб, ул. ... 1</a>
+      </div>
+    </div>
+    <div class="copy">
+      <span>© 2005–2026 ИКПК · Все права защищены</span>
+      <span><a href="#">Политика конфиденциальности</a> · <a href="#">Публичная оферта</a></span>
+    </div>
+  </div>
+</footer>
+
+<!-- Floating messengers -->
+<div class="fab">
+  <a href="#" class="tg" title="Telegram">✈</a>
+  <a href="#" class="wa" title="WhatsApp">✆</a>
+</div>
+
+</body>
+</html>
