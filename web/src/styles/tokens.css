@@ -33,7 +33,8 @@
 
   --color-dark-700: #1a1a1a;
   --color-gray-600: #707070;
-  --color-gray-500: #8a8a8a;
+  /* WCAG AA: darkened from #8a8a8a (3.3:1) to pass 4.5:1 on white/#fafafa */
+  --color-gray-500: #717171;
   --color-gray-400: #b8b8b8;
   --color-gray-300: #d0d0d0;
   --color-gray-200: #e5e5e5;
@@ -41,7 +42,8 @@
   --color-gray-250: #d9d9d9;
   --color-light-100: #fff;
   --color-light-300: #fafafa;
-  --color-info-500: #468ef5;
+  /* WCAG AA: darkened from #468ef5 (3.25:1) to pass 4.5:1 on white */
+  --color-info-500: #2f6fd0;
   --color-warning-50: #fef3cd;
   --color-warning-700: #856404;
 

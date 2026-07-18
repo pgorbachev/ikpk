@@ -18,6 +18,7 @@
     "test:build:remote": "astro build && PARITY_REMOTE=1 PARITY_REMOTE_STRICT=1 vitest run --config vitest.build.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test tests/site.spec.ts --project=desktop --project=mobile",
+    "test:e2e:a11y": "playwright test tests/a11y.spec.ts --project=desktop --project=mobile",
     "test:e2e:compat": "playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:e2e:smoke:attached": "playwright test tests/site.spec.ts --config=playwright.attached.config.ts --project=desktop --project=mobile",
     "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
@@ -31,7 +32,9 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.37.0",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.58.2",
     "eslint": "^9.37.0",
     "eslint-plugin-astro": "^1.3.1",
