@@ -16,7 +16,7 @@
  *  9. Clean up orphaned closing tags and excess whitespace
  */
 
-import { localizeAssetUrls, injectImgDimensions } from './media.js';
+import { injectImgDimensions } from './media.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -490,7 +490,8 @@ export function cleanBodyHtml(html: string): string {
   if (!html) return html;
 
   let result = html;
-  result = localizeAssetUrls(result);
+  // Локализация URL бакета живёт в единственной точке — data.ts loadJson
+  // (весь raw JSON до парсинга); здесь только размеры <img> из манифеста.
   result = injectImgDimensions(result);
   result = removeFormContainers(result);
   result = removeOrphanedFormUI(result);

@@ -31,7 +31,8 @@ const articleSchema = {
   description: article.seo_description || article.body_text?.slice(0, 200),
   url: `https://ikpk.su/statyi/${article.slug}`,
   ...(article.published_at ? { datePublished: article.published_at } : {}),
-  ...(article.image ? { image: article.image } : {}),
+  // JSON-LD требует абсолютный URL картинки (image локализован в /media/**)
+  ...(article.image ? { image: new URL(article.image, Astro.site).href } : {}),
   author: {
     '@type': 'Organization',
     name: 'ИКПК',

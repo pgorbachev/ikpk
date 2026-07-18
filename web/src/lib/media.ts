@@ -8,13 +8,13 @@
  */
 import manifest from './media-manifest.json';
 
+// Продублирован в scripts/download-media.ts (разные npm-пакеты) —
+// при изменении бакета править ОБА места.
 export const BUCKET_PREFIX = 'https://storage.yandexcloud.net/ikpk-image';
 
 interface ManifestEntry {
   width?: number;
   height?: number;
-  bytes: number;
-  sha256: string;
 }
 
 const MANIFEST = manifest as Record<string, ManifestEntry>;
@@ -25,16 +25,18 @@ export function localizeAssetUrls(text: string): string {
   return text.replaceAll(BUCKET_PREFIX, '');
 }
 
-/** Размеры локального ассета по его пути (например, /media/users/1/images/x.webp). */
+/**
+ * Размеры локального ассета по его пути (например, /media/users/1/images/x.webp).
+ * Ключи манифеста хранятся в декодированном виде; src может прийти percent-encoded.
+ */
 export function getAssetDimensions(path: string): { width: number; height: number } | undefined {
-  let entry = MANIFEST[path];
-  if (!entry) {
-    try {
-      entry = MANIFEST[decodeURI(path)];
-    } catch {
-      return undefined;
-    }
+  let key = path;
+  try {
+    key = decodeURI(path);
+  } catch {
+    // битая %-последовательность — ищем как есть
   }
+  const entry = MANIFEST[key];
   if (entry?.width && entry?.height) return { width: entry.width, height: entry.height };
   return undefined;
 }
@@ -42,14 +44,17 @@ export function getAssetDimensions(path: string): { width: number; height: numbe
 /**
  * Проставляет width/height у <img src="/media/...">, где их нет — по манифесту.
  * Браузер резервирует место до загрузки картинки → нет сдвига макета (CLS).
+ * Тег с ЛЮБЫМ из атрибутов не трогаем — уважаем авторский размер и не плодим
+ * дубликаты атрибутов.
  */
 export function injectImgDimensions(html: string): string {
   if (!html || !html.includes('<img')) return html;
   return html.replace(/<img\b[^>]*>/gi, (tag) => {
-    if (/\bwidth\s*=/.test(tag) && /\bheight\s*=/.test(tag)) return tag;
-    const srcMatch = tag.match(/\bsrc\s*=\s*"([^"]+)"/i);
-    if (!srcMatch || !srcMatch[1].startsWith('/')) return tag;
-    const dim = getAssetDimensions(srcMatch[1]);
+    if (/[\s"']width\s*=/.test(tag) || /[\s"']height\s*=/.test(tag)) return tag;
+    const srcMatch = tag.match(/\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+    const src = srcMatch?.[1] ?? srcMatch?.[2];
+    if (!src || !src.startsWith('/')) return tag;
+    const dim = getAssetDimensions(src);
     if (!dim) return tag;
     return tag.replace(/^<img\b/i, `<img width="${dim.width}" height="${dim.height}"`);
   });

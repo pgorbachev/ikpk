@@ -55,10 +55,9 @@ describe('Fixture 1: Article HTML', () => {
     expect(result).toContain('<p>20 янв., 2025</p>');
   });
 
-  it('preserves the image and localizes its URL (Этап 2)', () => {
+  it('preserves the image untouched (локализация URL живёт в data.ts loadJson)', () => {
     const result = cleanBodyHtml(input);
-    expect(result).toContain('src="/photo.webp"');
-    expect(result).not.toContain('storage.yandexcloud.net');
+    expect(result).toContain('ikpk-image/photo.webp');
   });
 
   it('removes h1 tags', () => {

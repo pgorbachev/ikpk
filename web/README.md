@@ -43,8 +43,11 @@ npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 | `lint.yml` | PR-гейт | eslint + astro check (web/cms/scripts) |
 | `test.yml` | PR-гейт | vitest unit + build-тесты + Playwright smoke + axe |
 | `security.yml` | PR-гейт + weekly | gitleaks + npm audit (prod, high) |
-| `lighthouse.yml` | PR-гейт | бюджеты kpi-validation.md, медиана 5×4 шаблона |
+| `lighthouse.yml` | PR-гейт* | бюджеты kpi-validation.md, медиана 5×4 шаблона |
 | `nightly.yml` | cron 02:30 | compat 7 проектов + parity против живого ikpk.su |
+
+\* required-чеком в branch protection становится после мерджа PR Этапа 2
+(до этого — информационный; WBS 2.5).
 
 ## Тесты
 

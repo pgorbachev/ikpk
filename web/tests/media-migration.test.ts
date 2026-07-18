@@ -38,21 +38,21 @@ describe('media migration (Этап 2)', () => {
     expect(count).toBeGreaterThanOrEqual(170);
   });
 
-  it('content <img> tags reference existing local files', () => {
-    // выборка: все /media/-src на 3 репрезентативных шаблонах существуют в dist
-    const pages = [
-      'statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme/index.html',
-      'institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/index.html',
-      'index.html',
-    ];
-    for (const page of pages) {
-      const html = readFileSync(join(dist, page), 'utf-8');
-      const srcs = [...html.matchAll(/<img\b[^>]*\bsrc="(\/media\/[^"]+)"/gi)].map((m) => m[1]);
-      for (const src of srcs) {
-        const local = join(dist, decodeURI(src));
-        expect(existsSync(local), `${page}: missing ${src}`).toBe(true);
+  it('every /media|/terms reference across ALL dist pages resolves to a local file', () => {
+    // Исчерпывающая проверка (не выборка): локализация URL в loadJson безусловна,
+    // поэтому недокачанный ассет дал бы тихий 404 — ловим здесь.
+    const missing: string[] = [];
+    for (const file of walkFiles(dist, ['.html'])) {
+      const html = readFileSync(file, 'utf-8');
+      const refs = [
+        ...html.matchAll(/\b(?:src|href)="(\/(?:media|terms)\/[^"]+)"/gi),
+      ].map((m) => m[1]);
+      for (const ref of refs) {
+        const local = join(dist, decodeURI(ref.split('?')[0]));
+        if (!existsSync(local)) missing.push(`${file.replace(dist, '')}: ${ref}`);
       }
     }
+    expect(missing, `missing local assets:\n${missing.join('\n')}`).toEqual([]);
   });
 
   it('content images carry width/height (CLS guard)', () => {
