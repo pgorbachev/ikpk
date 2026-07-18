@@ -44,3 +44,4 @@ discovery/media_inventory_proxy_urls_DEPRECATED.json
 # lh_*.json — Lighthouse reports
 # *.html — saved page snapshots
 web/test-results/
+.lighthouseci/
