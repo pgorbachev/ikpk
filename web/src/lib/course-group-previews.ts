@@ -1,6 +1,6 @@
 import type { CourseGroup, Seminar } from './data.js';
 
-const IMAGE_BASE = 'https://storage.yandexcloud.net/ikpk-image/media/users/1/images';
+const IMAGE_BASE = '/media/users/1/images';
 
 const COURSE_GROUP_PREVIEW_SUPPLEMENTS: Record<string, string> = {
   'institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls': `${IMAGE_BASE}/1-1763647472405.webp`,

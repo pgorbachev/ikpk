@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { localizeAssetUrls } from './media.js';
 export { cleanBodyHtml, stripLegacySeminarTail } from './html-cleaner.js';
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 
 function loadJson<T>(filename: string): T {
   const raw = readFileSync(join(ENTITIES_DIR, filename), 'utf-8');
-  return JSON.parse(raw) as T;
+  // Единая точка локализации медиа: все URL бакета (в любых полях, включая
+  // HTML-строки) заменяются на локальные /media/** до парсинга (Этап 2).
+  return JSON.parse(localizeAssetUrls(raw)) as T;
 }
 
 // ---------- Types ----------

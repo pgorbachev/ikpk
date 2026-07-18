@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'tests/perf-a11y.test.ts',
       'tests/parity-compare.test.ts',
+      'tests/media-migration.test.ts',
     ],
   },
 });
