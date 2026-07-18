@@ -87,10 +87,11 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 | 5.1 | Full gate run on staging (LHCI mobile+desktop, axe, compat) | ⬜ | 1–4 |
 | 5.2 | CSP report-only → enforce | ⬜ | 1.5, 4.2, 4.3 |
 | 5.3 | Re-audit 003 (Must Match Before Go-Live) | ⬜ | 2, 4 |
-| 5.4 | Content refresh + written confirmation; content-update.md; nightly rebuild cron | ⬜ | client |
-| 5.5 | Rewrite migration-runbook.md + observability.md for VPS | ⬜ | 1 |
-| 5.6 | Parity tests → snapshot mode | ⬜ | — |
-| 5.7 | Baseline positions from Webmaster/GSC/Metrika | ⬜ | client accesses |
+| 5.4 | Дифф живого ikpk.su vs discovery-снапшот (re-scrape entities: новые статьи/семинары/акции); повторить перед go-live | ⬜ | — (автономно) |
+| 5.5 | Content refresh + written confirmation; content-update.md; nightly rebuild cron | ⬜ | client |
+| 5.6 | Rewrite migration-runbook.md + observability.md for VPS | ⬜ | 1 |
+| 5.7 | Parity tests → snapshot mode | ⬜ | — |
+| 5.8 | Baseline positions from Webmaster/GSC/Metrika | ⬜ | client accesses |
 
 ## Этап 6: UAT и go-live *(критический путь, +14 дней наблюдения)*
 
