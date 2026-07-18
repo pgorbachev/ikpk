@@ -72,24 +72,30 @@ const seminarBodyHtml = seminar.description_html
   ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html))
   : '';
 
-const eventSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'Event',
-  name: seminar.name,
-  description: seminar.seo_description || seminar.description_text?.slice(0, 200),
-  url: seminarUrl,
-  organizer: {
-    '@type': 'EducationalOrganization',
-    name: 'ИКПК',
-    url: 'https://ikpk.su',
-  },
-  location: {
-    '@type': 'Place',
-    name: 'ИКПК',
-    address: { '@type': 'PostalAddress', addressLocality: 'Санкт-Петербург', addressCountry: 'RU' },
-  },
-  ...(schedule.length > 0
+// Event без startDate невалиден (Google Rich Results) — Этап 3, план 004.
+// Семинар с назначенной датой → Event; без даты → Course (программа обучения).
+const seminarSchema =
+  schedule.length > 0
     ? {
+        '@context': 'https://schema.org',
+        '@type': 'Event',
+        name: seminar.name,
+        description: seminar.seo_description || seminar.description_text?.slice(0, 200),
+        url: seminarUrl,
+        organizer: {
+          '@type': 'EducationalOrganization',
+          name: 'ИКПК',
+          url: 'https://ikpk.su',
+        },
+        location: {
+          '@type': 'Place',
+          name: 'ИКПК',
+          address: {
+            '@type': 'PostalAddress',
+            addressLocality: 'Санкт-Петербург',
+            addressCountry: 'RU',
+          },
+        },
         startDate: schedule[0].startAt,
         endDate: schedule[0].endAt,
         eventStatus: 'https://schema.org/EventScheduled',
@@ -102,11 +108,21 @@ const eventSchema = {
           availability: 'https://schema.org/InStock',
         },
       }
-    : {}),
-};
+    : {
+        '@context': 'https://schema.org',
+        '@type': 'Course',
+        name: seminar.name,
+        description: seminar.seo_description || seminar.description_text?.slice(0, 200),
+        url: seminarUrl,
+        provider: {
+          '@type': 'EducationalOrganization',
+          name: 'ИКПК',
+          url: 'https://ikpk.su',
+        },
+      };
 ---
 
-<BaseLayout title={seminar.seo_title} description={seminar.seo_description} schema={eventSchema}>
+<BaseLayout title={seminar.seo_title} description={seminar.seo_description} schema={seminarSchema}>
   <div class="container">
     <Breadcrumbs
       items={[

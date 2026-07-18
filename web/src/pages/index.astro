@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import MediaCard from '../components/ui/MediaCard.astro';
 import FeatureCard from '../components/home/FeatureCard.astro';
 import { getInstitutes, getNews, getPage, cleanBodyHtml } from '../lib/data';
+import { relForExternalUrl } from '../lib/html-cleaner';
 
 const news = getNews();
 const institutes = getInstitutes();
@@ -217,7 +218,7 @@ const barralInstitute = institutes.find((inst) => inst.slug === 'institut-barral
                   imageAlt={item.name}
                   imageRatio="3 / 2"
                   target="_blank"
-                  rel="noopener"
+                  rel={[...new Set(['noopener', ...(relForExternalUrl(item.link) ?? [])])].join(' ')}
                   className="news-card"
                 >
                   <div class="news-card-desc text-small" set:html={cleanBodyHtml(item.description)} />

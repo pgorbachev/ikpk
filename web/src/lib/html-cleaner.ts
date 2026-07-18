@@ -486,6 +486,41 @@ export function stripLegacySeminarTail(html: string): string {
  * Cleans scraped Next.js body HTML for use in the Astro rebuild.
  * Applies all transformation rules in the correct order.
  */
+/**
+ * Политика rel для внешних ссылок в контенте (discovery/domain_strategy.md):
+ * - medshop.ikpk.su — дубль kinezio.shop, будет закрыт 301-редиректом:
+ *   не передаём SEO-вес (nofollow) и держим noopener;
+ * - disk.yandex.ru — утечка веса на Яндекс.Диск: nofollow noopener;
+ * - kinezio.shop / mudriydoctor.ru — свои проекты: noopener достаточно.
+ */
+const NOFOLLOW_HOSTS = /https?:\/\/(?:medshop\.ikpk\.su|disk\.yandex\.ru)/i;
+const NOOPENER_HOSTS = /https?:\/\/(?:[^"'\s]*\.)?(?:kinezio\.shop|mudriydoctor\.ru)/i;
+
+/** rel-атрибуты, которые политика требует для данного URL (undefined — без требований). */
+export function relForExternalUrl(url: string): string[] | undefined {
+  if (NOFOLLOW_HOSTS.test(url)) return ['nofollow', 'noopener'];
+  if (NOOPENER_HOSTS.test(url)) return ['noopener'];
+  return undefined;
+}
+
+function applyExternalLinkPolicy(html: string): string {
+  if (!html.includes('<a ')) return html;
+  return html.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+    const url = href?.[1] ?? href?.[2];
+    if (!url) return tag;
+    const wanted = relForExternalUrl(url);
+    if (!wanted) return tag;
+    const relMatch = tag.match(/\brel\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+    const existing = (relMatch?.[1] ?? relMatch?.[2] ?? '').split(/\s+/).filter(Boolean);
+    const merged = [...new Set([...existing, ...wanted])].join(' ');
+    if (relMatch) {
+      return tag.replace(relMatch[0], `rel="${merged}"`);
+    }
+    return tag.replace(/^<a\b/i, `<a rel="${merged}"`);
+  });
+}
+
 export function cleanBodyHtml(html: string): string {
   if (!html) return html;
 
@@ -504,6 +539,7 @@ export function cleanBodyHtml(html: string): string {
   result = stripCssModuleClasses(result);
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
+  result = applyExternalLinkPolicy(result);
   result = removeResidualBrokenTagText(result);
 
   return result;

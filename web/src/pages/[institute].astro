@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro';
 import InstituteProgramsSection from '../components/institutes/InstituteProgramsSection.astro';
 import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
@@ -131,6 +132,7 @@ const hiddenTeachers = teacherCards.slice(3);
 
 <BaseLayout title={institute.seo_title} description={institute.seo_description}>
   <div class="container institute-page">
+    <Breadcrumbs items={[{ label: institute.name }]} />
     <section class="section institute-hero" data-testid="institute-hero">
       <div class="institute-hero-copy">
         <h1 class="page-title">{institute.name}</h1>

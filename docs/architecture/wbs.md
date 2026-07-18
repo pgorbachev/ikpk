@@ -55,17 +55,17 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 | 2.2 | astro:assets для изображений из полей данных | ✅* | NFR-01 | не нужно: после даунскейла и локализации все LHCI-бюджеты проходят без него |
 | 2.3 | CI grep gate: 0 hotlinks in dist/ (forever) | ✅ | — | `web/tests/media-migration.test.ts` |
 | 2.4 | Real OG-image 1200×630 (og:locale/type/site_name уже были) | ✅ | NFR-02 | `web/public/og-image.png` |
-| 2.5 | Flip LHCI to required PR check | 🔧 | NFR-01 | после зелёного прогона lighthouse.yml в CI |
+| 2.5 | Flip LHCI to required PR check | ✅ | NFR-01 | 9 required checks на main (2026-07-18) |
 
 ## Этап 3: SEO-пакет *(∥)*
 
-| # | Task | Status | FR/NFR | Depends on |
+| # | Task | Status | FR/NFR | Notes |
 |---|------|--------|--------|------------|
-| 3.1 | Sitemap: /statyi/*, lastmod everywhere; robots.txt Clean-Param | ⬜ | NFR-02 | — |
-| 3.2 | Orphans: link 27 teachers + 6 playlists; crawl test in CI | ⬜ | NFR-02 | — |
-| 3.3 | Crawlable links fix; BreadcrumbList depth 1; remove excess ItemList | ⬜ | NFR-02 | — |
-| 3.4 | External links: nofollow per domain_strategy; grep gate | ⬜ | NFR-02 | — |
-| 3.5 | JSON-LD validation in CI; H1→H2→H3; typo/title fixes; 404 <20KB | ⬜ | NFR-02 | 404 is 25.8KB now |
+| 3.1 | Sitemap: /statyi/*, lastmod everywhere; robots.txt Clean-Param | ✅ | NFR-02 | lastmod: статьи — published_at, прочие — дата снапшота; PDF: Disallow (осознанно); снят Disallow /_astro/ (блокировал CSS/JS от рендер-краулинга) |
+| 3.2 | Orphans: crawl test in CI (обход dist от / по ссылкам) | ✅ | NFR-02 | 0 сирот — преподаватели/плейлисты уже слинкованы, тест закрепляет навсегда |
+| 3.3 | Crawlable links; BreadcrumbList depth 1; excess ItemList | ✅ | NFR-02 | некликабельных якорей и ItemList в ребилде не было; крошки добавлены на 3 института + расписание |
+| 3.4 | External links: nofollow per domain_strategy; grep gate | ✅ | NFR-02 | политика в html-cleaner: medshop/я.диск nofollow; корневые medshop-ссылки → kinezio.shop; продуктовые — nofollow (в kinezio нет зеркальных slug); 0 staging |
+| 3.5 | JSON-LD validation in CI; H1→H2→H3; typo/title fixes; 404 <20KB | ✅ | NFR-02 | Event без даты → Course; футер-колонки не заголовки; расписание h3→h2; typo + дубль вебинаров + 6 пустых title плейлистов (имена из YouTube); 404 = 14KB без сайдбара |
 
 ## Этап 4: Конверсионный минимум *(∥, после Этапа 0)*
 

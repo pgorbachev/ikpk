@@ -7,6 +7,8 @@ interface Props {
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
   newsletterVariant?: 'band' | 'card' | 'none';
+  /** Лёгкий режим без сайдбара — для 404 (цель <20KB, план 004 Этап 3) */
+  noSidebar?: boolean;
 }
 
 import Header from '../components/Header.astro';
@@ -23,6 +25,7 @@ const {
   schema,
   preloadHero = false,
   newsletterVariant = 'band',
+  noSidebar = false,
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
@@ -66,7 +69,7 @@ const siteName = 'ИКПК';
   </head>
   <body>
     <Header />
-    <Sidebar />
+    {!noSidebar && <Sidebar />}
     <main>
       <slot />
     </main>
