@@ -493,13 +493,26 @@ export function stripLegacySeminarTail(html: string): string {
  * - disk.yandex.ru — утечка веса на Яндекс.Диск: nofollow noopener;
  * - kinezio.shop / mudriydoctor.ru — свои проекты: noopener достаточно.
  */
-const NOFOLLOW_HOSTS = /https?:\/\/(?:medshop\.ikpk\.su|disk\.yandex\.ru)/i;
-const NOOPENER_HOSTS = /https?:\/\/(?:[^"'\s]*\.)?(?:kinezio\.shop|mudriydoctor\.ru)/i;
+// Сопоставление по РАСПАРСЕННОМУ hostname (не по подстроке): исключает и
+// ложные срабатывания на URL в query-параметрах, и обход через поддомены.
+const NOFOLLOW_HOSTS = ['medshop.ikpk.su', 'disk.yandex.ru'];
+const NOOPENER_HOSTS = ['kinezio.shop', 'mudriydoctor.ru'];
+
+function hostMatches(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith('.' + domain);
+}
 
 /** rel-атрибуты, которые политика требует для данного URL (undefined — без требований). */
 export function relForExternalUrl(url: string): string[] | undefined {
-  if (NOFOLLOW_HOSTS.test(url)) return ['nofollow', 'noopener'];
-  if (NOOPENER_HOSTS.test(url)) return ['noopener'];
+  let hostname: string;
+  try {
+    // protocol-relative (//host/…) резолвим относительно https
+    hostname = new URL(url, 'https://ikpk.su').hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  if (NOFOLLOW_HOSTS.some((d) => hostMatches(hostname, d))) return ['nofollow', 'noopener'];
+  if (NOOPENER_HOSTS.some((d) => hostMatches(hostname, d))) return ['noopener'];
   return undefined;
 }
 

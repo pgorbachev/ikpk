@@ -2,8 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import MediaCard from '../components/ui/MediaCard.astro';
 import FeatureCard from '../components/home/FeatureCard.astro';
-import { getInstitutes, getNews, getPage, cleanBodyHtml } from '../lib/data';
-import { relForExternalUrl } from '../lib/html-cleaner';
+import { getInstitutes, getNews, getPage, cleanBodyHtml, relForExternalUrl } from '../lib/data';
 
 const news = getNews();
 const institutes = getInstitutes();

@@ -1,29 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync, statSync } from 'fs';
 import { join } from 'path';
+import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
 
 // ─── Этап 3 (план 004): SEO-пакет как вечные CI-гейты ───────────────────────
-
-const dist = join(import.meta.dirname, '..', 'dist');
-
-function* walkHtml(dir: string): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) yield* walkHtml(full);
-    else if (name.endsWith('.html')) yield full;
-  }
-}
-
-/** Все html-страницы dist как канонические пути ('/', '/statyi/', …). */
-function allPages(): string[] {
-  return [...walkHtml(dist)]
-    .filter((f) => f.endsWith('index.html'))
-    .map((f) => f.replace(dist, '').replace(/index\.html$/, ''));
-}
-
-function readPage(path: string): string {
-  return readFileSync(join(dist, path, 'index.html'), 'utf-8');
-}
 
 // ── 3.2: 0 страниц-сирот — обход dist по внутренним ссылкам ────────────────
 describe('orphan pages (обход по внутренним ссылкам)', () => {
@@ -36,6 +16,9 @@ describe('orphan pages (обход по внутренним ссылкам)', (
       if (visited.has(page)) continue;
       visited.add(page);
       const html = readPage(page);
+      // Осознанное допущение: Astro эмитит внутренние ссылки как
+      // root-relative href в двойных кавычках; абсолютные/одинарные формы
+      // не считаются внутренними навигационными рёбрами.
       for (const m of html.matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)[#?]?[^"]*"/gi)) {
         let target = decodeURI(m[1]);
         if (!target.endsWith('/')) target += '/';
@@ -53,7 +36,7 @@ describe('orphan pages (обход по внутренним ссылкам)', (
 describe('external link policy (domain_strategy.md)', () => {
   it('0 links to staging domains anywhere in dist', () => {
     const offenders: string[] = [];
-    for (const f of walkHtml(dist)) {
+    for (const f of walkHtml()) {
       if (readFileSync(f, 'utf-8').includes('staging.ikpk.su')) offenders.push(f.replace(dist, ''));
     }
     expect(offenders).toEqual([]);
@@ -61,7 +44,7 @@ describe('external link policy (domain_strategy.md)', () => {
 
   it('every medshop link carries rel with nofollow (дубль kinezio.shop, будет закрыт)', () => {
     const offenders: string[] = [];
-    for (const f of walkHtml(dist)) {
+    for (const f of walkHtml()) {
       const html = readFileSync(f, 'utf-8');
       for (const m of html.matchAll(/<a\b[^>]*medshop\.ikpk\.su[^>]*>/gi)) {
         if (!/rel="[^"]*nofollow[^"]*"/i.test(m[0])) offenders.push(`${f.replace(dist, '')}: ${m[0].slice(0, 120)}`);
@@ -91,7 +74,7 @@ describe('JSON-LD validation', () => {
   it('every ld+json block parses and known types carry required fields', () => {
     const problems: string[] = [];
     const seenTypes = new Set<string>();
-    for (const f of walkHtml(dist)) {
+    for (const f of walkHtml()) {
       const html = readFileSync(f, 'utf-8');
       for (const m of html.matchAll(
         /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi
@@ -123,8 +106,13 @@ describe('JSON-LD validation', () => {
       }
     }
     expect(problems.slice(0, 20), problems.slice(0, 20).join('\n')).toEqual([]);
-    // все 5 типов реально присутствуют на сайте
-    for (const t of Object.keys(REQUIRED_FIELDS)) expect([...seenTypes]).toContain(t);
+    // Базовые типы присутствуют всегда. Event НЕ требуем: он эмитится только
+    // семинарами с будущими датами (build-time) — без предстоящих семинаров
+    // Event легитимно отсутствует (страницы переходят на Course), и это не
+    // должно красить CI. Структура Event валидируется выше, когда он есть.
+    for (const t of ['Organization', 'Article', 'Course', 'BreadcrumbList']) {
+      expect([...seenTypes]).toContain(t);
+    }
   });
 
   it('BreadcrumbList present on depth-1 hub pages', () => {
@@ -154,9 +142,10 @@ describe('headings and titles', () => {
       const html = readPage(p);
       const levels = [...html.matchAll(/<h([1-6])\b/gi)].map((m) => Number(m[1]));
       expect(levels.filter((l) => l === 1).length, `${p}: exactly one H1`).toBe(1);
+      expect(levels[0], `${p}: first heading must be H1`).toBe(1);
       let prev = 0;
       for (const l of levels) {
-        expect(l - prev, `${p}: heading level jump to h${l} after h${prev}`).toBeLessThanOrEqual(1 + (prev === 0 ? 0 : l > prev ? 1 : 6));
+        // вниз по дереву — только на один уровень за шаг (h2→h4 запрещён)
         if (l > prev) expect(l - prev, `${p}: skipped level before h${l}`).toBeLessThanOrEqual(1);
         prev = l;
       }

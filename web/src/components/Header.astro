@@ -1,12 +1,19 @@
 ---
+interface Props {
+  /** Скрыть гамбургер, когда страница рендерится без сайдбара (например, 404) */
+  noMenuToggle?: boolean;
+}
+const { noMenuToggle = false } = Astro.props;
 ---
 
 <header class="header">
   <div class="header-inner">
     <!-- Mobile menu toggle -->
-    <button class="mobile-toggle" id="menu-toggle" aria-label="Открыть меню" aria-expanded="false">
-      <span class="hamburger"></span>
-    </button>
+    {!noMenuToggle && (
+      <button class="mobile-toggle" id="menu-toggle" aria-label="Открыть меню" aria-expanded="false">
+        <span class="hamburger"></span>
+      </button>
+    )}
 
     <!-- Logo -->
     <a href="/" class="logo" aria-label="ИКПК — Главная">

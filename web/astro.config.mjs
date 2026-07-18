@@ -8,12 +8,12 @@ import sitemap from '@astrojs/sitemap';
 // - остальные страницы — дата снапшота данных (максимальный published_at
 //   по всем статьям): стабильна между пересборками и меняется только
 //   при реальном обновлении контента (не даёт ложных сигналов краулерам).
+/** @type {Array<{ slug: string; published_at?: string }>} */
 const articles = JSON.parse(
   readFileSync(new URL('../discovery/entities/articles.json', import.meta.url), 'utf-8')
 );
-/** @type {Map<string, string>} */
 const articleDates = new Map(
-  articles.filter((a) => a.published_at).map((a) => [a.slug, a.published_at])
+  articles.filter((a) => a.published_at).map((a) => [a.slug, /** @type {string} */ (a.published_at)])
 );
 const snapshotDate = [...articleDates.values()].sort().at(-1) ?? new Date(0).toISOString();
 

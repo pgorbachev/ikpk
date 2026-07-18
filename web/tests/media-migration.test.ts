@@ -1,23 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { dist, walkFiles } from './helpers/dist-pages';
 
 // ─── Этап 2 (план 004): вечный CI-гейт «0 хотлинков на чужой бакет» ─────────
 // Все медиа-ассеты самохостятся из public/media (и /terms); ни одна страница
 // в dist/ не должна ссылаться на storage.yandexcloud.net.
-
-const dist = join(import.meta.dirname, '..', 'dist');
-
-function* walkFiles(dir: string, exts: string[]): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      yield* walkFiles(full, exts);
-    } else if (exts.some((e) => name.endsWith(e))) {
-      yield full;
-    }
-  }
-}
 
 describe('media migration (Этап 2)', () => {
   it('dist/ contains zero hotlinks to storage.yandexcloud.net', () => {

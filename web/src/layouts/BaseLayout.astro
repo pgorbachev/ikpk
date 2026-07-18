@@ -68,7 +68,7 @@ const siteName = 'ИКПК';
 
   </head>
   <body>
-    <Header />
+    <Header noMenuToggle={noSidebar} />
     {!noSidebar && <Sidebar />}
     <main>
       <slot />
