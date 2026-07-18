@@ -1,156 +1,129 @@
 # WBS: ikpk.su Website Rebuild
 
-Work Breakdown Structure — task decomposition mapped to FR/NFR from [PRD](prd.md).
+Work Breakdown Structure — task decomposition mapped to FR/NFR from [PRD](prd.md),
+restructured around the accepted **static-first MVP plan** ([004-mvp-plan.md](../plans/004-mvp-plan.md)).
+The original Strapi-first phase breakdown is superseded; Strapi/YooKassa work moved to Post-MVP.
 
 Statuses: ✅ done | 🔧 partial | ⬜ not started
 
-## Phase 0: Discovery and Prototype
+**Canonical counts** (single source of truth for all gates and docs):
 
-| # | Task | Status | Effort | FR/NFR | Artifact |
-|---|------|--------|--------|--------|----------|
-| 0.1 | Current site analysis (stack, API, sitemap) | ✅ | 2 h | — | `docs/architecture/current-architecture.md` |
-| 0.2 | Content scraping (10 entities, 253 URLs) | ✅ | 3 h | — | `discovery/entities/*.json` (6.5 MB) |
-| 0.3 | URL map: old → new (1023 entries) | ✅ | 1 h | NFR-02 | `discovery/url_map.csv` |
-| 0.4 | Frontend prototype on Astro (256 pages) | ✅ | 12 h | FR-01,03,04,08,09,10 | `web/` |
-| 0.5 | Architecture documentation | ✅ | 3 h | — | `docs/architecture/` |
+| Metric | Value | Definition |
+|---|---|---|
+| Built pages | **256** | 255 content pages + 404 (`astro build` output) |
+| Redirect map | **1022** | data rows in `discovery/url_map.csv` (1023 lines incl. header) |
+| Old sitemap URLs | 253 | historical count from the legacy site's sitemap.xml |
 
-**Phase 0 total: ~21 h (completed)**
+## Этап 0: Реанимация репо и CI-фундамент *(критический путь)*
 
-## Phase 1: Frontend Refinement
+| # | Task | Status | FR/NFR | Artifact |
+|---|------|--------|--------|----------|
+| 0.1 | Commit 404.astro + serve.sh | ✅ | FR-12 | `web/src/pages/404.astro` |
+| 0.2 | Remove React 19 + @astrojs/react (0 islands) | ✅ | NFR-01 | commit a7e2171 |
+| 0.3 | Delete dead `_redirects`/`_headers`, capture content for Nginx | ✅ | NFR-02 | `docs/nginx-migration-notes.md` |
+| 0.4 | CI PR gate: vitest unit + build tests, Playwright smoke | ✅ | — | `.github/workflows/test.yml` |
+| 0.5 | Nightly: compat (7 projects) + parity vs live ikpk.su | ✅ | NFR-05 | `.github/workflows/nightly.yml` |
+| 0.6 | axe-core a11y gate (0 critical/serious, 4 templates) | ✅ | NFR-04 | `web/tests/a11y.spec.ts` |
+| 0.7 | Lighthouse CI budgets (median 5×, 4 templates) | ✅* | NFR-01 | `.github/workflows/lighthouse.yml` |
+| 0.8 | WCAG AA contrast fix (gray-500, info-500 tokens) | ✅ | NFR-04 | `web/src/styles/tokens.css` |
+| 0.9 | Rewrite README, actualize WBS, unify page counts | ✅ | — | this file, `web/README.md` |
+| 0.10 | Related-domains backlog file | ✅ | — | `docs/backlog-related-domains.md` |
+| 0.11 | Client request list with deadlines (день 1!) | ✅ | — | `docs/client-requests.md` |
+| 0.12 | Branch protection on main (required checks) | ⬜ | — | needs repo admin |
 
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 1.1 | Pagefind: integration + /search page | ⬜ | 2–3 h | FR-05 | — |
-| 1.2 | React island: schedule filter (institute, city) | ⬜ | 2–3 h | FR-02 | — |
-| 1.3 | React island: seminar enrollment form | ⬜ | 2–3 h | FR-06 | — |
-| 1.4 | React island: payment modal (YooKassa redirect) | ⬜ | 2–3 h | FR-08 | — |
-| 1.5 | Theme: light/dark/system toggle | ⬜ | 1–2 h | — | — |
-| 1.6 | Image optimization (Astro `<Image>`) | ⬜ | 2–3 h | NFR-01 | — |
-| 1.7 | Schema.org JSON-LD (Course, Event, Article, BreadcrumbList) | 🔧 | 2–3 h | NFR-02 | — |
-| 1.8 | SEO: meta tags, canonical, Open Graph on all templates | 🔧 | 1–2 h | NFR-02 | — |
-| 1.9 | 301 redirects: full map (253 URLs → `_redirects`) | 🔧 | 1–2 h | NFR-02 | 0.3 |
-| 1.10 | UI polish: mobile menu, sidebar, breadcrumbs, 404 | 🔧 | 2–3 h | FR-09, FR-12 | — |
-| 1.11 | Security headers (HSTS, X-Content-Type-Options, etc.) | ⬜ | 0.5 h | NFR-03 | — |
-| 1.12 | Analytics: Yandex.Metrica + Mail.ru Top | 🔧 | 0.5 h | NFR-06 | — |
+\* LHCI is intentionally **not a required check** until Этап 2: the article template
+expectedly fails LCP (5.7s > 2.5s) because hero images are hotlinked from
+storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep gate.
 
-**Phase 1 total: ~20–32 h**
+## Этап 1: Инфраструктура — VPS, staging, редиректы как код *(∥ 2–4)*
 
-## Phase 2: CMS (Strapi)
+| # | Task | Status | FR/NFR | Depends on |
+|---|------|--------|--------|------------|
+| 1.1 | Fix VPS provider (ДЦ Москва/СПб, RF-only) | ⬜ | NFR-08 | client decision |
+| 1.2 | `infra/` in repo: Nginx configs, idempotent bootstrap, deploy script | ⬜ | — | 1.1; reuse `scripts/bootstrap-vps.sh`, `scripts/deploy-web.sh` |
+| 1.3 | Nginx 301 map generator from url_map.csv (1022 rows, 1-hop) | ⬜ | NFR-02 | see `docs/nginx-migration-notes.md` for extra aliases |
+| 1.4 | HTTPS (Certbot), gzip+brotli, security/cache headers | ⬜ | NFR-03 | 1.2 |
+| 1.5 | CSP in Report-Only mode (enforce — Этап 5) | ⬜ | NFR-03 | 1.4 |
+| 1.6 | GH Actions: main → auto-staging; prod — workflow_dispatch | ⬜ | — | 1.2 |
+| 1.7 | UptimeRobot + daily backups | ⬜ | — | 1.2 |
 
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 2.1 | Content model: 10 entities in Strapi | 🔧 | 3–4 h | FR-11 | — |
-| 2.2 | Roles and permissions (admin / editor) | ⬜ | 1 h | FR-11 | 2.1 |
-| 2.3 | API tokens + RBAC configuration | ⬜ | 0.5 h | NFR-03 | 2.1 |
-| 2.4 | Webhook: Strapi → Astro rebuild | ⬜ | 1–2 h | NFR-07 | 2.1, 3.1 |
-| 2.5 | WYSIWYG configuration + media uploads | ⬜ | 1 h | FR-11 | 2.1 |
-| 2.6 | YooKassa: payment creation endpoint (redirect only) | ⬜ | 1–2 h | FR-08 | 2.1 |
+## Этап 2: Миграция изображений *(∥, риск-приоритет — старт в день 1)*
 
-**Phase 2 total: ~8–12 h**
+| # | Task | Status | FR/NFR | Depends on |
+|---|------|--------|--------|------------|
+| 2.1 | Download all storage.yandexcloud.net assets, rewrite URLs in html-cleaner (+width/height) | ⬜ | NFR-01 | — |
+| 2.2 | astro:assets для изображений из полей данных (превью-карточки, hero) | ⬜ | NFR-01 | — |
+| 2.3 | CI grep gate: 0 hotlinks in dist/ (forever) | ⬜ | — | 2.1 |
+| 2.4 | Real OG-image 1200×630 + og:locale/type/site_name | ⬜ | NFR-02 | — |
+| 2.5 | Flip LHCI to required PR check | ⬜ | NFR-01 | 2.1 |
 
-## Phase 3: Data Migration
+## Этап 3: SEO-пакет *(∥)*
 
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 3.1 | JSON structure mapping → Strapi content model | ⬜ | 2–3 h | — | 2.1 |
-| 3.2 | Import script (JSON → Strapi API), idempotent | 🔧 | 2–3 h | — | 3.1 |
-| 3.3 | Media migration: link Yandex Cloud URLs to entries | ⬜ | 1–2 h | — | 3.2 |
-| 3.4 | Validation: slug uniqueness, relations, data completeness | ⬜ | 1–2 h | — | 3.2 |
-| 3.5 | Run import on staging and manual verification | ⬜ | 1–2 h | — | 3.2, 3.3 |
+| # | Task | Status | FR/NFR | Depends on |
+|---|------|--------|--------|------------|
+| 3.1 | Sitemap: /statyi/*, lastmod everywhere; robots.txt Clean-Param | ⬜ | NFR-02 | — |
+| 3.2 | Orphans: link 27 teachers + 6 playlists; crawl test in CI | ⬜ | NFR-02 | — |
+| 3.3 | Crawlable links fix; BreadcrumbList depth 1; remove excess ItemList | ⬜ | NFR-02 | — |
+| 3.4 | External links: nofollow per domain_strategy; grep gate | ⬜ | NFR-02 | — |
+| 3.5 | JSON-LD validation in CI; H1→H2→H3; typo/title fixes; 404 <20KB | ⬜ | NFR-02 | 404 is 25.8KB now |
 
-Existing artifacts:
-- `discovery/entities/*.json` — 10 entities, 6.5 MB (already scraped)
-- `scripts/import.ts` — idempotent 4-phase import (scaffold ready)
-- `scripts/validate-urls.ts` — URL validation after import
+## Этап 4: Конверсионный минимум *(∥, после Этапа 0)*
 
-**Phase 3 total: ~7–12 h**
+| # | Task | Status | FR/NFR | Depends on |
+|---|------|--------|--------|------------|
+| 4.1 | Pagefind search (build-time index, lazy load) | ⬜ | FR-05 | — |
+| 4.2 | Bitrix24 Open Lines chat (requestIdleCallback) | ⬜ | FR-13 | client keys |
+| 4.3 | Bitrix24 CRM form **embed** (не редирект) on schedule entries + seminar pages, UTM | ⬜ | FR-06 | client keys |
+| 4.4 | NewsletterSignup → Bitrix24 form or hide (decision) | ⬜ | FR-07 | 152-ФЗ page |
+| 4.5 | 152-ФЗ privacy policy page + links from forms/footer | ⬜ | NFR-03 | client text |
+| 4.6 | YouTube facade + lazy Yandex.Maps | ⬜ | FR-04, FR-08 | — |
+| 4.7 | Homepage quick-wins: offer H1, sticky CTA, trust bar, upcoming seminars, **сегментация «для кого»** | ⬜ | — | client numbers (сегментация — без контента заказчика) |
+| 4.8 | Metrika goals on CTA/lead/subscribe | ⬜ | NFR-06 | — |
 
-## Phase 4: Deployment and Infrastructure
+## Этап 5: Качественные гейты, контент-freeze, runbook *(критический путь)*
 
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 4.1 | VPS: provisioning + setup (Node, PostgreSQL, Nginx) | 🔧 | 1–2 h | — | — |
-| 4.2 | Strapi: deploy to VPS + SSL (cms.ikpk.su) | ⬜ | 1–2 h | — | 4.1, 2.1 |
-| 4.3 | Nginx: configuration for static files + reverse proxy for Strapi | ⬜ | 1 h | — | 4.1 |
-| 4.4 | CI/CD: GitHub Actions → build → rsync to VPS | 🔧 | 1–2 h | — | 4.1 |
-| 4.5 | DNS: switch ikpk.su to the new VPS | ⬜ | 0.5 h | — | 4.1, 4.2 |
-| 4.6 | Backups: PostgreSQL daily + media | ⬜ | 1 h | — | 4.2 |
-| 4.7 | Monitoring: UptimeRobot + alerts | ⬜ | 0.5 h | — | 4.2, 4.3 |
+| # | Task | Status | Depends on |
+|---|------|--------|------------|
+| 5.1 | Full gate run on staging (LHCI mobile+desktop, axe, compat) | ⬜ | 1–4 |
+| 5.2 | CSP report-only → enforce | ⬜ | 1.5, 4.2, 4.3 |
+| 5.3 | Re-audit 003 (Must Match Before Go-Live) | ⬜ | 2, 4 |
+| 5.4 | Content refresh + written confirmation; content-update.md; nightly rebuild cron | ⬜ | client |
+| 5.5 | Rewrite migration-runbook.md + observability.md for VPS | ⬜ | 1 |
+| 5.6 | Parity tests → snapshot mode | ⬜ | — |
+| 5.7 | Baseline positions from Webmaster/GSC/Metrika | ⬜ | client accesses |
 
-Existing artifacts:
-- `scripts/bootstrap-vps.sh` — 66 lines, VPS provisioning
-- `scripts/deploy-web.sh` — 75 lines, frontend deployment
+## Этап 6: UAT и go-live *(критический путь, +14 дней наблюдения)*
 
-**Phase 4 total: ~6–9 h**
+| # | Task | Status | Depends on |
+|---|------|--------|------------|
+| 6.1 | UAT sign-off (письменно) | ⬜ | 5 |
+| 6.2 | DNS pre-flight: zone inventory, TTL 300s, A/AAAA only | ⬜ | client DNS access |
+| 6.3 | Switch + post-switch checks (validate-urls, sitemap, Metrika, почта) | ⬜ | 6.2 |
+| 6.4 | 14-day parallel period, rollback triggers | ⬜ | 6.3 |
 
-## Phase 5: Testing and Acceptance
+## Post-MVP (см. план 004 §5)
 
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 5.1 | E2E tests: key scenarios (Playwright) | ⬜ | 3–4 h | — | 1.*, 2.* |
-| 5.2 | Lighthouse CI: 4 templates × mobile/desktop | ⬜ | 1 h | NFR-01 | 1.5 |
-| 5.3 | 301 redirect validation (253 URLs) | ⬜ | 1 h | NFR-02 | 1.8, 4.5 |
-| 5.4 | Form testing: enrollment, subscription, search | ⬜ | 1 h | FR-05,06,07 | 1.1, 1.3 |
-| 5.5 | UAT with content manager | ⬜ | 2 h | FR-11 | 2.*, 3.* |
-| 5.6 | Cross-browser testing (mobile + desktop) | ⬜ | 1–2 h | NFR-05 | 1.* |
+1. **Strapi CMS (FR-11)** — дедлайн ≤6 недель после запуска; до этого JSON→PR→деплой (artifacts: `cms/`, `scripts/import.ts` 879 lines)
+2. **YooKassa endpoint (FR-08)** — вместе со Strapi
+3. Полный редизайн главной; лид-магнит (PDF запрошен у заказчика в Этапе 0); RUTUBE/VK-зеркала; SEO-долг (уникализация title); backlog связанных доменов; техдолг TD-1..TD-3
 
-**Phase 5 total: ~9–12 h**
-
-## Phase 6: Production Migration
-
-| # | Task | Status | Effort | FR/NFR | Depends on |
-|---|------|--------|--------|--------|------------|
-| 6.1 | Final data import into production Strapi | ⬜ | 1 h | — | 3.5, 4.2 |
-| 6.2 | DNS switchover + SSL verification | ⬜ | 0.5 h | — | 4.5 |
-| 6.3 | Smoke tests on production | ⬜ | 1 h | — | 6.2 |
-| 6.4 | 404/error monitoring (first 48 h) | ⬜ | 2 h | — | 6.2 |
-| 6.5 | Indexing verification (Yandex, Google) | ⬜ | 1 h | NFR-02 | 6.2 |
-
-**Phase 6 total: ~5–6 h**
-
-## Summary
-
-| Phase | Description | Status | Hours |
-|-------|-------------|--------|-------|
-| 0 | Discovery and prototype | ✅ completed | ~21 |
-| 1 | Frontend refinement | 🔧 in progress | 19–30 |
-| 2 | CMS (Strapi) | 🔧 started | 8–12 |
-| 3 | Data migration | 🔧 scaffold ready | 7–12 |
-| 4 | Deployment and infrastructure | 🔧 started | 6–9 |
-| 5 | Testing and acceptance | ⬜ | 9–12 |
-| 6 | Production migration | ⬜ | 5–6 |
-| | **TOTAL** | | **~75–102 h** |
-| | Already completed | | **~21 h** |
-| | **Remaining** | | **~54–81 h** |
-
-## Dependency Graph
+## Критический путь
 
 ```
-Phase 0 (✅ done)
-  │
-  ├──▶ Phase 1 (frontend)──────────────────┐
-  │                                         │
-  ├──▶ Phase 2 (CMS) ──▶ Phase 3 (migration) │
-  │         │                    │          │
-  │         ▼                    ▼          ▼
-  └──▶ Phase 4 (deploy) ──▶ Phase 5 (testing)
-                                  │
-                                  ▼
-                           Phase 6 (go-live)
+Этап 0 ──▶ (1 ∥ 2 ∥ 3 ∥ 4) ──▶ 5 ──▶ 6
+~15–19 раб. дней до DNS-switch + 14 дней параллельного периода
+(календарно НЕ включает ожидание входов заказчика — см. docs/client-requests.md)
 ```
 
-Phases 1, 2, 4 can run in parallel. Phases 3, 5, 6 are sequential.
+## Existing Artifacts
 
-## Existing Artifacts (Prototype)
-
-| Artifact | Lines | Coverage |
-|----------|-------|----------|
-| `web/` (Astro frontend) | ~5100 | FR-01, FR-03, FR-04, FR-08, FR-09, FR-10 |
-| `discovery/entities/*.json` | ~5500 | 10 entities, ready for import |
-| `discovery/url_map.csv` | 1023 | Full URL map for 301 redirects |
-| `scripts/import.ts` | 879 | Idempotent import scaffold for Strapi |
-| `scripts/validate-urls.ts` | 266 | URL validation after migration |
-| `scripts/bootstrap-vps.sh` | 66 | VPS provisioning |
-| `scripts/deploy-web.sh` | 75 | Frontend deployment |
-| `cms/` (Strapi) | — | Initialized, content model partially done |
-| `docs/architecture/` | 6 files | PRD, use cases, architecture, comparison, ops cost |
+| Artifact | Lines | Role in MVP |
+|----------|-------|-------------|
+| `web/` (Astro frontend) | ~5100 | ядро; FR-01,02,03,04,09,10,12 done/partial |
+| `discovery/entities/*.json` | 6.5 MB | источник данных до Strapi |
+| `discovery/url_map.csv` | 1022 rows | Nginx 301 map (Этап 1) |
+| `scripts/validate-urls.ts` | 266 | gate Этапов 1/6 |
+| `scripts/bootstrap-vps.sh` | 66 | база для `infra/` (Этап 1) |
+| `scripts/deploy-web.sh` | 75 | база для `infra/` (Этап 1) |
+| `scripts/import.ts` | 879 | Post-MVP (Strapi) |
+| `cms/` (Strapi) | — | Post-MVP, заморожен |

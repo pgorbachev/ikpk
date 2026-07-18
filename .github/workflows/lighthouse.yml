@@ -1,0 +1,49 @@
+name: Lighthouse CI
+
+# Бюджеты из docs/kpi-validation.md, медиана 5 прогонов на 4 шаблонах
+# (конфиг: web/lighthouserc.cjs).
+#
+# СТАТУС ГЕЙТА: пока НЕ в required checks ветки main — шаблон «статья»
+# ожидаемо валит LCP (5.7s > 2.5s) из-за хотлинка hero-изображений со
+# storage.yandexcloud.net. Перевести в required сразу после Этапа 2
+# (миграция изображений, план 004) — вместе с grep-гейтом «0 хотлинков».
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lhci:
+    name: Lighthouse budgets (4 templates, median of 5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        run: npx lhci autorun

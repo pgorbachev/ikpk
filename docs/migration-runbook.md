@@ -5,7 +5,7 @@
 Complete **all** items before scheduling go-live.
 
 - [ ] Strapi populated with all content (run `cd scripts && npm run import`, verify entity counts match `discovery/content_dump.json`)
-- [ ] All 255 pages building without errors (`cd web && npm run build` — zero errors)
+- [ ] All 256 pages building without errors (`cd web && npm run build` — zero errors; 255 content pages + 404, see canonical counts in `docs/architecture/wbs.md`)
 - [ ] Lighthouse CI on 4 templates (home, course, seminar, articles) — record baselines, verify KPI targets (see `docs/kpi-validation.md`)
 - [ ] Crawl all URLs from sitemap, verify 200 status (`cd scripts && npx tsx validate-urls.ts --base-url https://staging.ikpk.su`)
 - [ ] Test 301 redirects from `discovery/url_map.csv` (script validates all entries; manually spot-check 20+ URLs in browser)
@@ -44,7 +44,7 @@ Deploy the `web/dist/` directory to CDN (Vercel/Netlify).
 
 ```bash
 find web/dist -name '*.html' | wc -l
-# Expected: ~255
+# Expected: 256 (255 content pages + 404.html)
 ```
 
 ### 3. Verify New Site at CDN URL

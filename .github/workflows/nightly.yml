@@ -1,0 +1,73 @@
+name: Nightly full checks
+
+# Полный compat-прогон (7 проектов) и parity-тесты против живого ikpk.su.
+# Осознанно НЕ в PR-гейте: живой сайт вне нашего контроля, флаки не должны
+# блокировать мерджи (план 004, Этап 0). После переключения DNS parity
+# переводится в snapshot-режим (Этап 5).
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compat:
+    name: Cross-browser compat (7 projects)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build site
+        run: npm run build
+
+      - name: Run compat tests
+        run: npm run test:e2e:compat
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-compat-report
+          path: web/playwright-report/
+          retention-days: 7
+
+  parity-remote:
+    name: Parity vs live ikpk.su
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run remote parity tests
+        run: npm run test:build:remote

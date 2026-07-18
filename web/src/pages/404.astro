@@ -1,0 +1,51 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Страница не найдена — ИКПК" noindex={true}>
+  <div class="container">
+    <section class="not-found">
+      <h1>404</h1>
+      <p class="not-found-text">Страница не найдена</p>
+      <p class="not-found-hint">Возможно, она была перемещена или удалена.</p>
+      <div class="not-found-actions">
+        <a href="/" class="btn btn-accent">На главную</a>
+        <a href="/sitemap" class="btn btn-outline">Карта сайта</a>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .not-found {
+    text-align: center;
+    padding: 4rem 1rem;
+  }
+
+  .not-found h1 {
+    font-size: 6rem;
+    font-weight: 700;
+    color: var(--color-accent-300);
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+
+  .not-found-text {
+    font-size: var(--font-xxl);
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin-bottom: 0.5rem;
+  }
+
+  .not-found-hint {
+    color: var(--color-gray-500);
+    margin-bottom: 2rem;
+  }
+
+  .not-found-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>
