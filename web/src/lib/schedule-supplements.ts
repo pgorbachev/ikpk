@@ -29,7 +29,7 @@ export const scheduleSupplements: ScheduleEntry[] = [
     ],
     image: {
       id: 'supplement-1',
-      url: 'https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1775132739287.webp',
+      url: '/media/users/1/images/1-1775132739287.webp',
     },
     isFree: true,
     isEventCollection: false,
@@ -73,7 +73,7 @@ export const scheduleSupplements: ScheduleEntry[] = [
     ],
     image: {
       id: 'supplement-2',
-      url: 'https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1775132825348.webp',
+      url: '/media/users/1/images/1-1775132825348.webp',
     },
     isFree: true,
     isEventCollection: false,

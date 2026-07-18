@@ -3,6 +3,8 @@
  * Transforms scraped Next.js HTML (with CSS Module hashed classes) into clean semantic HTML.
  *
  * Transformation pipeline (applied in order):
+ *  0. Localize media URLs (storage.yandexcloud.net → local /media/**) and
+ *     inject width/height on <img> from the media manifest (CLS guard)
  *  1. Remove entire form containers (subscribe-news-form_, PhoneInput*)
  *  2. Remove orphaned form UI elements left over from form containers
  *  3. Unwrap layout wrapper elements (keep children, remove outer tag)
@@ -13,6 +15,8 @@
  *  8. Strip h1 tags (page template provides its own h1)
  *  9. Clean up orphaned closing tags and excess whitespace
  */
+
+import { injectImgDimensions } from './media.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -486,6 +490,9 @@ export function cleanBodyHtml(html: string): string {
   if (!html) return html;
 
   let result = html;
+  // Локализация URL бакета живёт в единственной точке — data.ts loadJson
+  // (весь raw JSON до парсинга); здесь только размеры <img> из манифеста.
+  result = injectImgDimensions(result);
   result = removeFormContainers(result);
   result = removeOrphanedFormUI(result);
   result = removeResidualUiArtifacts(result);

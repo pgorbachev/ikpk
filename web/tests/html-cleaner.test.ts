@@ -55,7 +55,7 @@ describe('Fixture 1: Article HTML', () => {
     expect(result).toContain('<p>20 янв., 2025</p>');
   });
 
-  it('preserves the image', () => {
+  it('preserves the image untouched (локализация URL живёт в data.ts loadJson)', () => {
     const result = cleanBodyHtml(input);
     expect(result).toContain('ikpk-image/photo.webp');
   });

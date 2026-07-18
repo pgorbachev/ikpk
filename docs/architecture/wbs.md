@@ -51,11 +51,11 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 
 | # | Task | Status | FR/NFR | Depends on |
 |---|------|--------|--------|------------|
-| 2.1 | Download all storage.yandexcloud.net assets, rewrite URLs in html-cleaner (+width/height) | ⬜ | NFR-01 | — |
-| 2.2 | astro:assets для изображений из полей данных (превью-карточки, hero) | ⬜ | NFR-01 | — |
-| 2.3 | CI grep gate: 0 hotlinks in dist/ (forever) | ⬜ | — | 2.1 |
-| 2.4 | Real OG-image 1200×630 + og:locale/type/site_name | ⬜ | NFR-02 | — |
-| 2.5 | Flip LHCI to required PR check | ⬜ | NFR-01 | 2.1 |
+| 2.1 | Download all storage.yandexcloud.net assets (178), rewrite URLs (+width/height, downscale >1200px) | ✅ | NFR-01 | `scripts/download-media.ts` |
+| 2.2 | astro:assets для изображений из полей данных | ✅* | NFR-01 | не нужно: после даунскейла и локализации все LHCI-бюджеты проходят без него |
+| 2.3 | CI grep gate: 0 hotlinks in dist/ (forever) | ✅ | — | `web/tests/media-migration.test.ts` |
+| 2.4 | Real OG-image 1200×630 (og:locale/type/site_name уже были) | ✅ | NFR-02 | `web/public/og-image.png` |
+| 2.5 | Flip LHCI to required PR check | 🔧 | NFR-01 | после зелёного прогона lighthouse.yml в CI |
 
 ## Этап 3: SEO-пакет *(∥)*
 

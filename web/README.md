@@ -43,12 +43,11 @@ npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 | `lint.yml` | PR-гейт | eslint + astro check (web/cms/scripts) |
 | `test.yml` | PR-гейт | vitest unit + build-тесты + Playwright smoke + axe |
 | `security.yml` | PR-гейт + weekly | gitleaks + npm audit (prod, high) |
-| `lighthouse.yml` | PR (пока не required) | бюджеты kpi-validation.md, медиана 5×4 шаблона |
+| `lighthouse.yml` | PR-гейт* | бюджеты kpi-validation.md, медиана 5×4 шаблона |
 | `nightly.yml` | cron 02:30 | compat 7 проектов + parity против живого ikpk.su |
 
-Lighthouse станет required-чеком после Этапа 2 (миграция изображений):
-сейчас шаблон «статья» ожидаемо валит LCP из-за хотлинка hero-изображений
-со storage.yandexcloud.net.
+\* required-чеком в branch protection становится после мерджа PR Этапа 2
+(до этого — информационный; WBS 2.5).
 
 ## Тесты
 
@@ -72,8 +71,15 @@ src/
 public/fonts/     # self-hosted шрифты
 ```
 
+## Медиа
+
+Все контентные изображения самохостятся из `public/media/**` (178 файлов,
+скачаны с бакета старого сайта скриптом `scripts/download-media.ts`;
+оверсайз >1200px даунскейлится). Build-тест держит вечный гейт
+«0 хотлинков на storage.yandexcloud.net в dist/». При появлении новых
+картинок в entities — перезапустить скрипт.
+
 ## Известные ограничения (до соответствующих этапов плана 004)
 
-- Контентные изображения хотлинкаются со storage.yandexcloud.net → Этап 2
 - Конверсионный контур (поиск, запись, подписка, чат) не подключён → Этап 4
 - Деплой-таргет GitHub Pages временный; прод — VPS + Nginx → Этап 1
