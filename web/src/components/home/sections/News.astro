@@ -6,7 +6,7 @@ import { getNews, cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
 const news = getNews();
 ---
 {news.length > 0 && (
-  <section class="section section-alt">
+  <section class="section section-alt" data-reveal>
     <div class="container">
       <h2 class="section-title">Новости</h2>
       <div class="news-slider" data-news-slider>

@@ -1,0 +1,169 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Динамика и современная полировка (промоушен варианта D → шлифовка).
+   Принципы:
+   - Прогрессивное улучшение: класс .has-motion ставится синхронно в <head>
+     ТОЛЬКО если поддержан IntersectionObserver и пользователь не просил
+     reduce. Без него контент виден статично (деградация без JS/при reduce).
+   - Только transform/opacity → нулевой вклад в CLS.
+   - hero-заголовок (LCP-элемент) анимируется БЕЗ opacity — не задерживает LCP.
+   - prefers-reduced-motion полностью гасит движение (в самом низу файла).
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Появление секций при скролле ──────────────────────────────────────── */
+.has-motion [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.has-motion [data-reveal].in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Вход hero (стаггер) ────────────────────────────────────────────────── */
+.has-motion .hero-d-copy > * {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: hero-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* Заголовок — LCP: держим opacity:1, двигаем только по Y, чтобы не тормозить LCP */
+.has-motion .hero-d-title {
+  opacity: 1;
+  animation-name: hero-rise-solid;
+}
+.has-motion .hero-d-badge {
+  animation-delay: 0.05s;
+}
+.has-motion .hero-d-sub {
+  animation-delay: 0.16s;
+}
+.has-motion .hero-d-proofs {
+  animation-delay: 0.24s;
+}
+.has-motion .hero-d-next {
+  animation-delay: 0.32s;
+}
+.has-motion .hero-d-actions {
+  animation-delay: 0.4s;
+}
+.has-motion .hero-d-visual {
+  opacity: 0;
+  transform: scale(0.97);
+  animation: hero-visual-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+@keyframes hero-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes hero-rise-solid {
+  from {
+    transform: translateY(14px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes hero-visual-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Микроинтеракции карточек ──────────────────────────────────────────── */
+.feature-card,
+.segment-card,
+.teacher-card,
+.upcoming-card,
+.stat-card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+@media (hover: hover) {
+  .feature-card:hover,
+  .segment-card:hover,
+  .teacher-card:hover,
+  .upcoming-card:hover,
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-m);
+  }
+}
+
+/* ── Кнопки ─────────────────────────────────────────────────────────────── */
+.btn {
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+@media (hover: hover) {
+  .btn-primary:hover,
+  .btn-accent:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-m);
+  }
+}
+.btn:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* ── Уплотнение верхней навигации при скролле ──────────────────────────── */
+.topnav {
+  transition:
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+.topnav-bar {
+  transition: padding 0.2s ease;
+}
+.topnav[data-scrolled] {
+  box-shadow: 0 4px 20px rgb(0 0 0 / 8%);
+}
+.topnav[data-scrolled] .topnav-bar {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+/* ── Плавная смена темы (класс добавляется после load) ─────────────────── */
+.theme-anim .topnav,
+.theme-anim .cta-band,
+.theme-anim .section-alt,
+.theme-anim .feature-card,
+.theme-anim .segment-card,
+.theme-anim .stat-card,
+.theme-anim .hero-d {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
+}
+
+/* ── prefers-reduced-motion: гасим всякое движение ─────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .feature-card:hover,
+  .segment-card:hover,
+  .teacher-card:hover,
+  .upcoming-card:hover,
+  .stat-card:hover,
+  .btn-primary:hover,
+  .btn-accent:hover,
+  .btn:active {
+    transform: none !important;
+  }
+}

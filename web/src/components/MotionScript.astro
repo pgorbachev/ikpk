@@ -1,0 +1,57 @@
+---
+// Прогрессивное улучшение: появление секций при скролле, уплотнение шапки и
+// плавная смена темы. Ставим синхронно в <head>, чтобы секции с [data-reveal]
+// не мелькали видимым состоянием до старта анимации. Всё уважает
+// prefers-reduced-motion и деградирует к статике без JS / без IntersectionObserver.
+---
+<script is:inline>
+  (function () {
+    var root = document.documentElement;
+    var reduce = false;
+    try {
+      reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch (e) {
+      /* matchMedia недоступен — считаем, что движение разрешено */
+    }
+    var canReveal = !reduce && 'IntersectionObserver' in window;
+    if (canReveal) root.classList.add('has-motion');
+
+    document.addEventListener('DOMContentLoaded', function () {
+      if (canReveal) {
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (en) {
+              if (en.isIntersecting) {
+                en.target.classList.add('in');
+                io.unobserve(en.target);
+              }
+            });
+          },
+          { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
+        );
+        document.querySelectorAll('[data-reveal]').forEach(function (el) {
+          io.observe(el);
+        });
+      }
+
+      // Уплотнение шапки при скролле (смена плотности, а не «движение»).
+      var topnav = document.querySelector('.topnav');
+      if (topnav) {
+        var onScroll = function () {
+          if (window.scrollY > 8) topnav.setAttribute('data-scrolled', '');
+          else topnav.removeAttribute('data-scrolled');
+        };
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+      }
+    });
+
+    // Плавные переходы темы включаем после полной загрузки — чтобы не было
+    // анимации при первичной установке data-theme (иначе «переход-вспышка»).
+    window.addEventListener('load', function () {
+      requestAnimationFrame(function () {
+        root.classList.add('theme-anim');
+      });
+    });
+  })();
+</script>
