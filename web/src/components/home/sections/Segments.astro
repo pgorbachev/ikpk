@@ -1,0 +1,60 @@
+---
+// Сегментация «для кого» (рекомендация маркетолога). Тексты нейтральные,
+// ссылки — на существующие разделы.
+const segments = [
+  {
+    icon: '🩺',
+    title: 'Врачам',
+    text: 'Неврологам, ортопедам, педиатрам, реабилитологам — углублённая функциональная диагностика и новые методы работы с пациентом.',
+    href: '/institut-klinicheskoy-prikladnoy-kineziologii',
+    cta: 'Программы для врачей',
+  },
+  {
+    icon: '🤲',
+    title: 'Массажистам',
+    text: 'Расширение компетенций: работа с болью, мышечное тестирование, диагностика причины до сеанса вместо работы «вслепую».',
+    href: '/raspisanie-i-tseny',
+    cta: 'Программы для массажистов',
+  },
+  {
+    icon: '🏃',
+    title: 'Тренерам и реабилитологам',
+    text: 'Диагностика движения, работа с клиентами после травм, мост между ЛФК и спортивной подготовкой.',
+    href: '/raspisanie-i-tseny',
+    cta: 'Программы для тренеров',
+  },
+];
+---
+<section class="segments section">
+  <div class="container">
+    <h2 class="section-title">Для кого обучение</h2>
+    <p class="section-sub">Программы строятся под задачи и бэкграунд специалиста.</p>
+    <div class="segments-grid">
+      {segments.map((s) => (
+        <article class="segment-card">
+          <div class="segment-icon" aria-hidden="true">{s.icon}</div>
+          <h3>{s.title}</h3>
+          <p>{s.text}</p>
+          <a href={s.href} class="segment-link">{s.cta} →</a>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .section-sub { color: var(--color-gray-500); margin-bottom: 1.5rem; }
+  .segments-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  .segment-card {
+    border: 1px solid var(--color-gray-150); border-radius: 12px; padding: 1.5rem; background: var(--color-light-100);
+  }
+  .segment-icon {
+    width: 46px; height: 46px; border-radius: 10px; background: var(--color-accent-50, #eef5ee);
+    display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 0.9rem;
+  }
+  .segment-card h3 { font-size: var(--font-l); margin-bottom: 0.5rem; }
+  .segment-card p { font-size: var(--font-s); color: var(--color-gray-600); line-height: 1.5; margin-bottom: 0.9rem; }
+  .segment-link { font-size: var(--font-s); font-weight: 600; color: var(--color-accent-600); text-decoration: none; }
+  .segment-link:hover { text-decoration: underline; }
+  @media (max-width: 780px) { .segments-grid { grid-template-columns: 1fr; } }
+</style>

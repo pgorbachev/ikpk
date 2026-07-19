@@ -1,0 +1,33 @@
+---
+// Лид-магнит (чек-лист за e-mail/Telegram). ЗАБЛОКИРОВАН: PDF не существует,
+// воронка не спроектирована (запрос заказчику). Каркас-заглушка для превью.
+import PlaceholderNote from './PlaceholderNote.astro';
+---
+<section class="lead section">
+  <div class="container lead-inner">
+    <div class="lead-copy">
+      <PlaceholderNote text="Черновой блок: PDF-чек-лист и воронка (e-mail/Telegram) у заказчика пока нет — запрошены." />
+      <h2>Бесплатный чек-лист для профессионалов</h2>
+      <p>«ТОП-5 мышечных тестов для быстрой диагностики причин боли» — PDF на 5 страниц с пошаговым алгоритмом.</p>
+    </div>
+    <form class="lead-form" onsubmit="return false" aria-label="Заглушка формы лид-магнита">
+      <input type="text" placeholder="Как к вам обращаться" disabled />
+      <input type="text" placeholder="Telegram или e-mail" disabled />
+      <button class="btn btn-primary" type="button" disabled>Получить чек-лист</button>
+      <span class="lead-consent">Согласие на обработку ПДн (152-ФЗ) — появится с рабочей формой</span>
+    </form>
+  </div>
+</section>
+
+<style>
+  .lead-inner {
+    display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 2rem; align-items: center;
+    background: var(--color-accent-500); color: #fff; border-radius: 16px; padding: 2rem;
+  }
+  .lead-copy h2 { color: #fff; font-size: var(--font-xxl); margin-bottom: 0.5rem; }
+  .lead-copy p:not(.placeholder-note) { color: rgb(255 255 255 / 96%); line-height: 1.5; }
+  .lead-form { display: flex; flex-direction: column; gap: 0.6rem; }
+  .lead-form input { padding: 0.7rem 0.9rem; border-radius: 8px; border: 0; font-size: var(--font-s); }
+  .lead-consent { font-size: 0.72rem; color: #fff; }
+  @media (max-width: 780px) { .lead-inner { grid-template-columns: 1fr; } }
+</style>

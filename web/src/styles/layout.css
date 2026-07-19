@@ -1,9 +1,11 @@
-body {
+/* Отступы под фиксированные шапку+сайдбар — только для sidebar-layout.
+   TopNavLayout (класс layout-topnav) со sticky-навигацией их не использует. */
+body:not(.layout-topnav) {
   padding-top: var(--header-height);
 }
 
 @media (min-width: 1025px) {
-  body {
+  body:not(.layout-topnav) {
     padding-left: var(--sidebar-width);
   }
 }

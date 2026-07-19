@@ -29,7 +29,7 @@ export default tseslint.config(
   {
     files: [
       'src/components/Breadcrumbs.astro',
-      'src/layouts/BaseLayout.astro',
+      'src/components/HeadMeta.astro',
       'src/pages/\\[institute\\].astro',
       'src/pages/\\[institute\\]/\\[courseGroup\\].astro',
       'src/pages/\\[institute\\]/\\[courseGroup\\]/\\[seminar\\].astro',

@@ -1,0 +1,69 @@
+---
+// Преподаватели — реальные (27 с фото, локализованы в Этапе 2).
+// Маркетолог: личность преподавателя — «50% решения о покупке».
+import { getTeachers } from '../../../lib/data';
+import { getAssetDimensions } from '../../../lib/media';
+
+interface Props {
+  limit?: number;
+}
+const { limit = 8 } = Astro.props;
+
+// Короткое имя: «Фамилия Имя» без длинного хвоста титулов после запятой.
+function shortName(full: string): string {
+  return full.split(',')[0].trim();
+}
+function credentials(full: string): string {
+  const idx = full.indexOf(',');
+  return idx >= 0 ? full.slice(idx + 1).trim() : '';
+}
+
+const teachers = getTeachers()
+  .filter((t) => t.photo)
+  .slice(0, limit)
+  .map((t) => ({
+    name: shortName(t.name),
+    credentials: credentials(t.name),
+    photo: t.photo,
+    href: `/${t.institute_legacy_id}/prepodavatel/${t.slug}`,
+    dim: getAssetDimensions(t.photo),
+  }));
+---
+<section class="teachers section">
+  <div class="container">
+    <h2 class="section-title">Преподаватели</h2>
+    <p class="section-sub">Практикующие врачи с регалиями и собственной клинической практикой.</p>
+    <div class="teachers-grid">
+      {teachers.map((t) => (
+        <a class="teacher-card" href={t.href}>
+          <img
+            class="teacher-photo"
+            src={t.photo}
+            alt={t.name}
+            width={t.dim?.width}
+            height={t.dim?.height}
+            loading="lazy"
+          />
+          <span class="teacher-name">{t.name}</span>
+          {t.credentials && <span class="teacher-cred">{t.credentials}</span>}
+        </a>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .teachers-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+  .teacher-card {
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.4rem;
+    text-decoration: none; color: var(--color-dark-700);
+  }
+  .teacher-photo {
+    width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 12px;
+    background: var(--color-gray-150); transition: transform 0.2s;
+  }
+  .teacher-card:hover .teacher-photo { transform: translateY(-3px); }
+  .teacher-name { font-weight: 600; font-size: var(--font-s); margin-top: 0.4rem; }
+  .teacher-cred { font-size: 0.75rem; color: var(--color-gray-500); line-height: 1.3; }
+  @media (max-width: 780px) { .teachers-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>

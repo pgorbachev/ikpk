@@ -1,4 +1,7 @@
 ---
+// Layout-вариант с верхней навигацией (редизайн B). Тот же <head> и аналитика,
+// что у SidebarLayout (через общие компоненты) — варианты не расходятся по SEO.
+// Сайдбара нет: полную перелинковку держит футер.
 interface Props {
   title: string;
   description?: string;
@@ -6,16 +9,11 @@ interface Props {
   noindex?: boolean;
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
-  newsletterVariant?: 'band' | 'card' | 'none';
-  /** Лёгкий режим без сайдбара — для 404 (цель <20KB, план 004 Этап 3) */
-  noSidebar?: boolean;
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
-import Header from '../components/Header.astro';
-import Sidebar from '../components/Sidebar.astro';
+import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
-import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
 import '../styles/global.css';
 
@@ -26,8 +24,6 @@ const {
   noindex = false,
   schema,
   preloadHero = false,
-  newsletterVariant = 'band',
-  noSidebar = false,
 } = Astro.props;
 ---
 
@@ -43,20 +39,14 @@ const {
       preloadHero={preloadHero}
     />
   </head>
-  <body>
-    <Header noMenuToggle={noSidebar} />
-    {!noSidebar && <Sidebar />}
-    {/* data-pagefind-body: индексируется только контент — шапка/сайдбар/футер
-        с одинаковыми ссылками на всех 256 страницах размывали релевантность.
-        noindex-страницы (404) из внутреннего поиска исключаются. */}
+  <body class="layout-topnav">
+    <TopNav />
+    {/* noindex-страницы (превью вариантов) не индексируются и внутренним
+        поиском Pagefind — иначе черновик всплыл бы в результатах на проде */}
     <main data-pagefind-body={noindex ? undefined : true} data-pagefind-ignore={noindex ? true : undefined}>
       <slot />
     </main>
-
-    {newsletterVariant !== 'none' && <NewsletterSignup variant={newsletterVariant} />}
-
     <Footer />
-
     <Analytics />
   </body>
 </html>

@@ -1,0 +1,44 @@
+---
+// Аналитика (Метрика + Mail.ru top): синхронные заглушки ставят pageview
+// сразу, тяжёлые скрипты грузятся после idle. Общий компонент для всех layout.
+---
+<script is:inline>
+  // Yandex.Metrika — queue pageview synchronously so it's never lost
+  window.ym = window.ym || function (...args) {
+    (window.ym.a = window.ym.a || []).push(args);
+  };
+  window.ym.l = +new Date();
+  ym(39506315, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: true });
+
+  // Mail.ru — queue pageview synchronously
+  const _tmr = window._tmr || (window._tmr = []);
+  _tmr.push({ id: '3752684', type: 'pageView', start: new Date().getTime() });
+
+  // Defer heavy script downloads
+  function _loadAnalyticsScripts() {
+    const d = document;
+    (function () {
+      for (let j = 0; j < d.scripts.length; j += 1) {
+        if (d.scripts[j].src === 'https://mc.yandex.ru/metrika/tag.js') return;
+      }
+      const k = d.createElement('script');
+      k.async = true;
+      k.src = 'https://mc.yandex.ru/metrika/tag.js';
+      d.head.appendChild(k);
+    })();
+    if (!d.getElementById('tmr-code')) {
+      const ts = d.createElement('script');
+      ts.async = true;
+      ts.id = 'tmr-code';
+      ts.src = 'https://top-fwz1.mail.ru/js/code.js';
+      d.head.appendChild(ts);
+    }
+  }
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(_loadAnalyticsScripts, { timeout: 3000 });
+  } else {
+    setTimeout(_loadAnalyticsScripts, 2000);
+  }
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/39506315" style="position:absolute;left:-9999px;" alt="" /></div></noscript>
+<noscript><div><img src="https://top-fwz1.mail.ru/counter?id=3752684;js=na" style="position:absolute;left:-9999px;" alt="" /></div></noscript>

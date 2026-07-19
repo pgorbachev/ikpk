@@ -21,7 +21,8 @@ export default defineConfig({
   site: 'https://ikpk.su',
   integrations: [
     sitemap({
-      filter: (page) => !page.includes('/sitemap'),
+      // /preview/* — noindex-черновики вариантов, вне карты сайта
+      filter: (page) => !page.includes('/sitemap') && !page.includes('/preview/'),
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;

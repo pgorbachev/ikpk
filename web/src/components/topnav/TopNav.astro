@@ -1,0 +1,212 @@
+---
+// Верхняя навигация (вариант редизайна B). Все пункты — настоящие <a href>,
+// выпадашки — CSS/details, поэтому ссылки видны краулеру. Мобильное меню —
+// нативный <details> drawer без внешнего JS.
+import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
+
+// rel берём из navigation.ts как есть (уже 'noopener noreferrer' — согласовано
+// с Footer); дефолт на случай внешней ссылки без явного rel.
+const rel = (link: { external?: boolean; rel?: string }) =>
+  link.external ? link.rel || 'noopener noreferrer' : undefined;
+const target = (link: { external?: boolean }) => (link.external ? '_blank' : undefined);
+---
+
+<header class="topnav">
+  <div class="topnav-bar">
+    <a href="/" class="topnav-logo" aria-label="ИКПК — Главная">
+      <img src="/logo-wordmark.svg" alt="ИКПК" width="120" height="34" class="topnav-logo-mark" />
+      <span class="topnav-logo-desc">Обучение по международным стандартам</span>
+    </a>
+
+    <nav class="topnav-menu" aria-label="Основная навигация">
+      <ul>
+        {primaryNav.map((item) =>
+          item.children ? (
+            <li class="has-dropdown">
+              <a href={item.href} class="topnav-link">
+                {item.label}
+                <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5L6 7.5l3-3" stroke="currentColor" stroke-width="1.3" fill="none" /></svg>
+              </a>
+              <ul class="dropdown">
+                {item.children.map((c) => (
+                  <li><a href={c.href} target={target(c)} rel={rel(c)}>{c.label}</a></li>
+                ))}
+              </ul>
+            </li>
+          ) : (
+            <li>
+              <a href={item.href} class="topnav-link" target={target(item)} rel={rel(item)}>
+                {item.label}
+              </a>
+            </li>
+          )
+        )}
+      </ul>
+    </nav>
+
+    <div class="topnav-actions">
+      <a href={PHONE_HREF} class="topnav-phone">{PHONE}</a>
+      <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Записаться</a>
+
+      <!-- Мобильное меню: нативный details, без внешнего JS -->
+      <details class="topnav-mobile">
+        <summary aria-label="Открыть меню"><span class="burger"></span></summary>
+        <div class="topnav-drawer">
+          <nav aria-label="Мобильная навигация">
+            {primaryNav.map((item) => (
+              <div class="drawer-group">
+                <a href={item.href} class="drawer-link" target={target(item)} rel={rel(item)}>{item.label}</a>
+                {item.children && (
+                  <div class="drawer-sub">
+                    {item.children.map((c) => (
+                      <a href={c.href} target={target(c)} rel={rel(c)}>{c.label}</a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </nav>
+          <a href={CTA_HREF} class="btn btn-primary drawer-cta" data-cta="drawer">Записаться на обучение</a>
+          <a href={PHONE_HREF} class="drawer-phone">{PHONE}</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<style>
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--color-light-100);
+    border-bottom: 1px solid var(--color-gray-150);
+  }
+  .topnav-bar {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 1.25rem;
+  }
+  .topnav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: var(--color-dark-700);
+    flex-shrink: 0;
+  }
+  .topnav-logo { flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+  .topnav-logo-mark { display: block; }
+  .topnav-logo-desc { font-size: 0.68rem; color: var(--color-gray-500); }
+
+  .topnav-menu { flex: 1; }
+  .topnav-menu > ul {
+    display: flex;
+    gap: 0.35rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .topnav-menu li { position: relative; }
+  .topnav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.6rem;
+    font-size: var(--font-s);
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-dark-700);
+    text-decoration: none;
+    border-radius: var(--radius-m);
+  }
+  .topnav-link:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
+  .chev { width: 12px; height: 12px; }
+
+  .dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 280px;
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-150);
+    border-radius: var(--radius-m);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+    list-style: none;
+    margin: 0;
+    padding: 0.4rem;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px);
+    transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  }
+  .has-dropdown:hover .dropdown,
+  .has-dropdown:focus-within .dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .dropdown a {
+    display: block;
+    padding: 0.55rem 0.7rem;
+    font-size: var(--font-s);
+    color: var(--color-dark-700);
+    text-decoration: none;
+    border-radius: 6px;
+  }
+  .dropdown a:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
+
+  .topnav-actions { display: flex; align-items: center; gap: 0.9rem; flex-shrink: 0; }
+  .topnav-phone { font-size: var(--font-s); font-weight: 600; color: var(--color-dark-700); text-decoration: none; white-space: nowrap; }
+  .topnav-cta { padding: 0.5rem 1.1rem; }
+
+  .topnav-mobile { display: none; }
+
+  /* На средних десктопах телефон уходит (он есть в футере и в CTA) — чтобы
+     кнопка «Записаться» всегда влезала */
+  @media (max-width: 1180px) {
+    .topnav-phone { display: none; }
+  }
+
+  @media (max-width: 900px) {
+    .topnav-menu, .topnav-phone { display: none; }
+    .topnav-mobile { display: block; position: relative; }
+    .topnav-mobile > summary {
+      list-style: none;
+      cursor: pointer;
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--color-gray-300);
+      border-radius: var(--radius-m);
+    }
+    .topnav-mobile > summary::-webkit-details-marker { display: none; }
+    .burger, .burger::before, .burger::after {
+      display: block; width: 18px; height: 2px; background: var(--color-dark-700); position: relative;
+    }
+    .burger::before, .burger::after { content: ''; position: absolute; left: 0; }
+    .burger::before { top: -5px; } .burger::after { top: 5px; }
+
+    .topnav-drawer {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      width: min(88vw, 340px);
+      max-height: 80vh;
+      overflow-y: auto;
+      background: var(--color-light-100);
+      border: 1px solid var(--color-gray-150);
+      border-radius: var(--radius-m);
+      box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
+      padding: 0.8rem;
+    }
+    .drawer-group { border-bottom: 1px solid var(--color-gray-150); padding: 0.2rem 0; }
+    .drawer-link { display: block; padding: 0.55rem 0.4rem; font-weight: 600; font-size: var(--font-m); color: var(--color-dark-700); text-decoration: none; }
+    .drawer-sub { padding: 0 0 0.4rem 0.8rem; display: flex; flex-direction: column; }
+    .drawer-sub a { padding: 0.4rem; font-size: var(--font-s); color: var(--color-gray-600); text-decoration: none; }
+    .drawer-cta { display: block; text-align: center; margin: 0.8rem 0 0.5rem; }
+    .drawer-phone { display: block; text-align: center; font-weight: 600; color: var(--color-dark-700); text-decoration: none; padding: 0.4rem; }
+  }
+</style>
