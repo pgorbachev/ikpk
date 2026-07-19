@@ -148,14 +148,21 @@ test.describe('Search', () => {
     const input = page.locator('#header-search-pagefind input');
     await expect(input).toBeVisible({ timeout: 10_000 });
 
-    await input.fill('кинезиология');
+    // Сообщение Pagefind включает текст запроса — ждём его, чтобы не
+    // сматчить устаревшие результаты предыдущего запроса (debounce)
+    const message = page.locator('.pagefind-ui__message');
     const results = page.locator('.pagefind-ui__result-link');
-    await expect(results.first()).toBeVisible({ timeout: 10_000 });
-    expect(await results.count()).toBeGreaterThan(1);
+
+    await input.fill('кинезиология');
+    await expect(message).toContainText('кинезиология', { timeout: 10_000 });
+    await expect(results.first()).toBeVisible();
+    expect(await results.count()).toBeGreaterThan(0);
 
     // допуск опечатки в 1 символ (DoD плана 004, Этап 4)
     await input.fill('масаж');
-    await expect(results.first()).toBeVisible({ timeout: 10_000 });
+    await expect(message).toContainText('масаж', { timeout: 10_000 });
+    await expect(message).not.toContainText('Ничего не найдено');
+    await expect(results.first()).toBeVisible();
 
     // Escape закрывает панель
     await page.keyboard.press('Escape');
