@@ -41,7 +41,10 @@ import { CTA_HREF } from '../../../lib/navigation';
     display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
     text-transform: uppercase; color: var(--color-accent-600); margin-bottom: 1rem;
   }
-  .hero-offer-title { font-size: var(--font-xxxl); font-weight: 700; line-height: 1.15; max-width: 640px; }
+  /* min-width:0 — grid-элемент может сжиматься ниже intrinsic width
+     (иначе длинные слова распирают вьюпорт на 320px) */
+  .hero-offer-copy { min-width: 0; }
+  .hero-offer-title { font-size: var(--font-xxxl); font-weight: 700; line-height: 1.15; max-width: 640px; overflow-wrap: break-word; }
   .hero-offer-title .accent { color: var(--color-accent-600); }
   .hero-offer-sub { margin: 1rem 0 1.25rem; color: var(--color-gray-600); line-height: 1.5; max-width: 560px; }
   .hero-offer-points { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
