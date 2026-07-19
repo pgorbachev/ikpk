@@ -171,6 +171,16 @@ describe('headings and titles', () => {
 
 // ── 3.5: лёгкая 404 и sitemap lastmod ───────────────────────────────────────
 describe('404 and sitemap', () => {
+  it('kontakty map is lazy — no eager iframe in static HTML (FR-08)', () => {
+    const html = readPage('/kontakty/');
+    // единственный <iframe> в статике — внутри <noscript> (fallback);
+    // рабочая карта подставляется JS по IntersectionObserver
+    const iframes = [...html.matchAll(/<iframe\b/gi)];
+    expect(iframes.length, 'eager map iframe in static HTML').toBe(1);
+    const noscriptIframe = /<noscript>[\s\S]*<iframe[\s\S]*<\/noscript>/i.test(html);
+    expect(noscriptIframe, 'the only iframe must be the <noscript> fallback').toBe(true);
+  });
+
   it('404.html is lighter than 20KB', () => {
     expect(statSync(join(dist, '404.html')).size).toBeLessThan(20 * 1024);
   });

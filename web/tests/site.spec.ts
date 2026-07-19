@@ -192,3 +192,15 @@ test.describe('Video', () => {
     await expect(page.getByRole('link', { name: /Канал на VK Видео/ })).toBeVisible();
   });
 });
+
+// ─── Contacts lazy map (FR-08) ───────────────────────────
+test.describe('Contacts map', () => {
+  test('Yandex map is injected by JS (not eager) with the right src', async ({ page }) => {
+    await page.goto('/kontakty/');
+    await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
+    // карта подставляется скриптом (IntersectionObserver), а не статикой
+    const iframe = page.locator('.contact-shell-map iframe');
+    await expect(iframe).toHaveCount(1);
+    await expect(iframe).toHaveAttribute('src', /yandex\.ru\/map-widget/);
+  });
+});

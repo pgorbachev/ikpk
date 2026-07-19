@@ -99,19 +99,57 @@ const {
     </div>
   </address>
 
-  <div class="contact-shell-map">
-    <iframe
-      src={mapSrc}
-      title="Карта ИКПК"
-      loading="lazy"
-      referrerpolicy="no-referrer-when-downgrade"
-    ></iframe>
+  {/* FR-08: карта подгружается лениво по появлению в зоне видимости
+      (IntersectionObserver) — кросс-браузерно, в т.ч. Safari, где нативный
+      iframe loading="lazy" не работает и тяжёлый виджет грузился бы сразу. */}
+  <div class="contact-shell-map" data-map-src={mapSrc}>
+    <div class="contact-shell-map-placeholder" aria-hidden="true">
+      <span class="contact-shell-map-pin">
+        <svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" fill="currentColor"/></svg>
+      </span>
+      <span class="contact-shell-map-loading">Загрузка карты…</span>
+    </div>
     {mapOpenUrl && (
       <a class="contact-shell-map-link" href={mapOpenUrl} target="_blank" rel="noopener">
         Открыть карту в отдельном окне
       </a>
     )}
   </div>
+  <noscript>
+    <iframe
+      src={mapSrc}
+      title="Карта ИКПК"
+      referrerpolicy="no-referrer-when-downgrade"
+      style="width:100%;height:100%;border:0"
+    ></iframe>
+  </noscript>
+
+  <script>
+    document.querySelectorAll<HTMLElement>('.contact-shell-map[data-map-src]').forEach((box) => {
+      const src = box.dataset.mapSrc;
+      if (!src) return;
+      const load = () => {
+        if (box.querySelector('iframe')) return;
+        const iframe = document.createElement('iframe');
+        iframe.src = src;
+        iframe.title = 'Карта ИКПК';
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        box.querySelector('.contact-shell-map-placeholder')?.remove();
+        box.prepend(iframe);
+      };
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((entries, obs) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            load();
+            obs.disconnect();
+          }
+        }, { rootMargin: '200px' });
+        io.observe(box);
+      } else {
+        load();
+      }
+    });
+  </script>
 </section>
 
 <style>
@@ -212,6 +250,22 @@ const {
     border: 0;
     flex: 1;
   }
+
+  .contact-shell-map-placeholder {
+    flex: 1;
+    min-height: 26rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background:
+      radial-gradient(circle at 50% 42%, rgb(53 122 56 / 8%), transparent 60%),
+      var(--color-light-300);
+    color: var(--color-gray-500);
+  }
+  .contact-shell-map-pin { color: var(--color-accent-500); }
+  .contact-shell-map-loading { font-size: var(--font-s); }
 
   .contact-shell-map-link {
     display: block;

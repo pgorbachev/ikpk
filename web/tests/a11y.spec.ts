@@ -20,6 +20,8 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
   { name: 'preview-b', path: '/preview/b/' },
   // страница видео-плейлиста с фасадом (FR-04)
   { name: 'video', path: '/video/33/' },
+  // контакты с ленивой картой + форма подписки (card-вариант)
+  { name: 'kontakty', path: '/kontakty/' },
 ];
 
 test.describe('Accessibility', () => {
