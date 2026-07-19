@@ -181,8 +181,11 @@ describe('404 and sitemap', () => {
     expect(noscriptIframe, 'the only iframe must be the <noscript> fallback').toBe(true);
   });
 
-  it('404.html is lighter than 20KB', () => {
-    expect(statSync(join(dist, '404.html')).size).toBeLessThan(20 * 1024);
+  // После промоушена верхнего меню 404 несёт полноценную навигацию (выпадашки +
+  // поиск + тумблер темы) — это осознанный UX-выбор (со страницы ошибки удобно
+  // уйти куда угодно). Бюджет поднят с 20KB; ~22KB сырого HTML → ~6KB в gzip.
+  it('404.html is lighter than 26KB', () => {
+    expect(statSync(join(dist, '404.html')).size).toBeLessThan(26 * 1024);
   });
 
   it('sitemap has lastmod on every url and includes /statyi/*', () => {

@@ -52,4 +52,36 @@ test.describe('Accessibility', () => {
       ).toEqual([]);
     });
   }
+
+  // Тёмная тема главной: гард против регрессий контраста (ревью PR #22 —
+  // hero и CTA-полоса ломались в dark mode). Тест сам по себе проверяет
+  // РЕЗУЛЬТАТ переключения темы, а не только смену data-theme.
+  test('home template (dark theme) has no critical/serious axe violations', async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('ikpk.theme', 'dark');
+      } catch {
+        /* приватный режим — тест просто пройдёт по светлой теме */
+      }
+    });
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .exclude('.contact-shell-map iframe')
+      .exclude('.video-facade iframe')
+      .analyze();
+
+    const blocking = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious'
+    );
+
+    expect(
+      blocking,
+      blocking
+        .map((v) => `[${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} nodes)`)
+        .join('\n')
+    ).toEqual([]);
+  });
 });

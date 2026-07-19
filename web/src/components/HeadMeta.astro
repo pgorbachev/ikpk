@@ -20,6 +20,21 @@ const siteName = 'ИКПК';
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+{/* Тема: синхронно выставляем data-theme ДО отрисовки body, чтобы у
+    пользователей с сохранённой тёмной темой не мелькала светлая вспышка (FOUC).
+    localStorage в приватном режиме может бросать — гасим в try/catch. */}
+<script is:inline>
+  (function () {
+    try {
+      if (localStorage.getItem('ikpk.theme') === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    } catch {
+      /* localStorage недоступен — остаётся светлая тема по умолчанию */
+    }
+  })();
+</script>
+
 <title>{title}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={canonicalURL.href} />

@@ -1,14 +1,5 @@
-/* Отступы под фиксированные шапку+сайдбар — только для sidebar-layout.
-   TopNavLayout (класс layout-topnav) со sticky-навигацией их не использует. */
-body:not(.layout-topnav) {
-  padding-top: var(--header-height);
-}
-
-@media (min-width: 1025px) {
-  body:not(.layout-topnav) {
-    padding-left: var(--sidebar-width);
-  }
-}
+/* Sticky-навигация (topnav) занимает место в потоке — отдельные отступы под
+   фиксированную шапку/сайдбар больше не нужны (промоушен варианта D). */
 
 .content-sidebar-layout {
   display: grid;

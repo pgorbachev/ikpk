@@ -1,0 +1,232 @@
+---
+// Инструменты шапки для верхнего меню: поиск (Pagefind, ленивый) + тумблер
+// тёмной темы. Извлечено из Header.astro для фичепаритета при промоушене
+// верхнего меню (vision-кнопка была нефункциональной заглушкой — не переносим).
+---
+<div class="header-tools" role="toolbar" aria-label="Инструменты шапки">
+  <button
+    class="header-tool-button"
+    id="header-search-toggle"
+    type="button"
+    aria-label="Открыть поиск"
+    aria-expanded="false"
+    aria-controls="header-search"
+  >
+    <svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"></circle><path d="M20 20L16.65 16.65"></path></svg>
+  </button>
+  <button
+    class="header-theme-toggle"
+    id="theme-toggle"
+    type="button"
+    role="switch"
+    aria-label="Переключить на темную тему"
+    aria-checked="false"
+    data-theme-control
+  >
+    <span class="theme-toggle-track" aria-hidden="true">
+      <span class="theme-toggle-thumb" data-theme-thumb></span>
+    </span>
+  </button>
+</div>
+
+<div class="header-search" id="header-search" hidden>
+  <div class="header-search-form" role="search">
+    <div class="header-search-pagefind" id="header-search-pagefind" data-state="idle"></div>
+    <button class="header-search-close" id="header-search-close" type="button" aria-label="Закрыть поиск">✕</button>
+  </div>
+</div>
+
+<style>
+  .header-tools { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .header-tool-button {
+    width: 38px; height: 38px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--color-gray-300); border-radius: var(--radius-m);
+    background: var(--color-light-100); color: var(--color-dark-700); cursor: pointer;
+  }
+  .header-tool-button:hover { background: var(--color-gray-150); }
+  .control-icon { width: 20px; height: 20px; }
+
+  .header-theme-toggle {
+    width: 52px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer;
+  }
+  .theme-toggle-track {
+    display: block; width: 52px; height: 30px; border-radius: 999px;
+    background: var(--color-gray-300); position: relative; transition: background 0.15s;
+  }
+  .theme-toggle-thumb {
+    position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--color-light-100); box-shadow: 0 1px 3px rgb(0 0 0 / 25%); transition: transform 0.15s;
+  }
+  .header-theme-toggle[aria-checked='true'] .theme-toggle-track { background: var(--color-accent-500); }
+  .header-theme-toggle[aria-checked='true'] .theme-toggle-thumb { transform: translateX(22px); }
+
+  /* На мобиле в баре остаётся только поиск — тумблер темы (52px) убираем,
+     чтобы шапка с логотипом + CTA + бургером не распирала узкий вьюпорт. */
+  @media (max-width: 900px) {
+    .header-theme-toggle { display: none; }
+  }
+
+  .header-search {
+    position: absolute; left: 0; right: 0; top: 100%;
+    background: var(--color-light-100); border-bottom: 1px solid var(--color-gray-150);
+    padding: 0.7rem 1.25rem; z-index: 90;
+  }
+  .header-search-form { max-width: 1240px; margin: 0 auto; display: flex; align-items: flex-start; gap: 0.5rem; }
+  .header-search-pagefind { flex: 1; min-height: 38px; font-size: var(--font-s); }
+  .header-search-pagefind[data-state='loading']::before { content: 'Загружаем поиск…'; color: var(--color-gray-500); }
+  .header-search-close {
+    margin-top: 6px; width: 34px; height: 34px; border: 0; background: transparent;
+    color: var(--color-gray-600); cursor: pointer; font-size: 1rem;
+  }
+</style>
+
+<style is:global>
+  .header-search-pagefind {
+    --pagefind-ui-primary: var(--color-accent-500);
+    --pagefind-ui-text: var(--color-dark-700);
+    --pagefind-ui-background: var(--color-light-100);
+    --pagefind-ui-border: var(--color-gray-300);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: 6px;
+    --pagefind-ui-scale: 0.85;
+    --pagefind-ui-font: inherit;
+  }
+  .header-search-pagefind .pagefind-ui__drawer {
+    max-height: min(60vh, 480px); overflow-y: auto;
+    background: var(--color-light-100); border: 1px solid var(--color-gray-300);
+    border-radius: 6px; padding: 0 0.9rem; box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  }
+</style>
+
+<script>
+  const searchToggle = document.getElementById('header-search-toggle');
+  const searchPanel = document.getElementById('header-search') as HTMLElement | null;
+  const searchMount = document.getElementById('header-search-pagefind') as HTMLElement | null;
+  const searchClose = document.getElementById('header-search-close');
+  // Тумблеров темы может быть несколько (в баре + в мобильном drawer).
+  const themeControls = Array.from(document.querySelectorAll('[data-theme-control]'));
+
+  let pagefindReady = false;
+  const initPagefind = () => {
+    if (pagefindReady || !searchMount) return;
+    pagefindReady = true;
+    searchMount.dataset.state = 'loading';
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/pagefind/pagefind-ui.css';
+    document.head.appendChild(css);
+    const script = document.createElement('script');
+    script.src = '/pagefind/pagefind-ui.js';
+    script.onload = () => {
+      // @ts-expect-error PagefindUI приходит глобалом из pagefind-ui.js
+      new PagefindUI({
+        element: '#header-search-pagefind',
+        showImages: false,
+        showSubResults: true,
+        autofocus: true,
+        translations: {
+          placeholder: 'Поиск по сайту',
+          clear_search: 'Очистить',
+          load_more: 'Показать ещё',
+          search_label: 'Поиск по сайту',
+          zero_results: 'Ничего не найдено по запросу «[SEARCH_TERM]»',
+          many_results: 'Найдено [COUNT] результатов по запросу «[SEARCH_TERM]»',
+          one_result: 'Найден [COUNT] результат по запросу «[SEARCH_TERM]»',
+          searching: 'Ищем «[SEARCH_TERM]»…',
+        },
+      });
+      searchMount.dataset.state = 'ready';
+      focusSearchInput();
+    };
+    script.onerror = () => {
+      searchMount.dataset.state = 'error';
+      searchMount.textContent = 'Поиск доступен только в собранной версии сайта.';
+    };
+    document.head.appendChild(script);
+  };
+
+  const focusSearchInput = () => {
+    const input = searchMount?.querySelector<HTMLInputElement>('input');
+    if (input) requestAnimationFrame(() => { input.focus(); input.select(); });
+  };
+
+  const closeSearch = () => {
+    if (!searchPanel || !searchToggle) return;
+    searchPanel.hidden = true;
+    searchToggle.setAttribute('aria-expanded', 'false');
+    searchToggle.focus();
+  };
+  const openSearch = () => {
+    if (!searchPanel || !searchToggle) return;
+    searchPanel.hidden = false;
+    searchToggle.setAttribute('aria-expanded', 'true');
+    initPagefind();
+    focusSearchInput();
+  };
+  searchToggle?.addEventListener('click', () => {
+    if (searchToggle.getAttribute('aria-expanded') === 'true') closeSearch();
+    else openSearch();
+  });
+  searchClose?.addEventListener('click', closeSearch);
+
+  // Открытие поиска из мобильного drawer (в баре кнопка скрыта на ≤360px).
+  document.querySelectorAll('[data-search-open]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      // Без stopPropagation этот же клик всплывёт в outside-click хендлер ниже
+      // и мгновенно закроет только что открытую панель поиска.
+      e.stopPropagation();
+      const details = btn.closest('details');
+      if (details instanceof HTMLDetailsElement) details.open = false;
+      openSearch();
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && searchPanel && !searchPanel.hidden) closeSearch();
+  });
+  document.addEventListener('click', (e) => {
+    if (!searchPanel || searchPanel.hidden) return;
+    const t = e.target;
+    if (!(t instanceof Node)) return;
+    if (searchPanel.contains(t) || searchToggle?.contains(t)) return;
+    closeSearch();
+  });
+
+  // Тема (тёмный режим). Хранилище может быть недоступно (приватный режим) —
+  // читаем/пишем через try/catch, чтобы переключатель не падал.
+  const resolveTheme = (v: string) => (v === 'dark' ? 'dark' : 'light');
+  const readStoredTheme = (): string | null => {
+    try {
+      return localStorage.getItem('ikpk.theme');
+    } catch {
+      return null;
+    }
+  };
+  const storeTheme = (theme: string) => {
+    try {
+      localStorage.setItem('ikpk.theme', theme);
+    } catch {
+      /* localStorage недоступен — тема не сохранится между визитами */
+    }
+  };
+  const applyTheme = (theme: string) => {
+    const normalized = resolveTheme(theme);
+    document.documentElement.dataset.theme = normalized;
+    const isDark = normalized === 'dark';
+    for (const control of themeControls) {
+      control.setAttribute('aria-checked', String(isDark));
+      control.setAttribute('aria-label', isDark ? 'Переключить на светлую тему' : 'Переключить на темную тему');
+      const label = control.querySelector('[data-theme-label]');
+      if (label) label.textContent = isDark ? 'Светлая тема' : 'Тёмная тема';
+    }
+  };
+  applyTheme(resolveTheme(readStoredTheme() || document.documentElement.dataset.theme || 'light'));
+  for (const control of themeControls) {
+    control.addEventListener('click', () => {
+      const next = resolveTheme(document.documentElement.dataset.theme || 'light') === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      storeTheme(next);
+    });
+  }
+</script>

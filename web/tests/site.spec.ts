@@ -7,11 +7,16 @@ test.describe('Homepage', () => {
     await expect(page).toHaveTitle(/Институт клинической прикладной кинезиологии/);
   });
 
-  test('has header with navigation', async ({ page }) => {
+  test('has top navigation', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('header')).toBeVisible();
-    // Navigation is now in sidebar, check sidebar exists
-    await expect(page.locator('#sidebar')).toHaveCount(1);
+    // Промоушен варианта D: навигация сайта — верхнее меню (topnav).
+    // Пункты меню видны на десктопе, на мобиле — в бургер-drawer, поэтому
+    // проверяем присутствие ссылок в DOM, а не их видимость.
+    await expect(page.locator('header.topnav')).toBeVisible();
+    await expect(page.locator('.topnav-logo')).toBeVisible();
+    expect(
+      await page.locator('.topnav a[href="/raspisanie-i-tseny"]').count(),
+    ).toBeGreaterThan(0);
   });
 
   test('has newsletter subscription form', async ({ page }) => {

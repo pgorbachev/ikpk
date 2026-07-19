@@ -17,6 +17,9 @@ import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
 
 <style>
   .cta-band { background: var(--color-accent-500); color: #fff; }
+  /* В тёмной теме accent-500 становится светло-зелёным (#7eaa7f) — белый текст
+     на нём даёт контраст ~2.6:1. Берём тёмный оттенок accent под фон полосы. */
+  :root[data-theme='dark'] .cta-band { background: var(--color-accent-200); }
   .cta-band-inner {
     display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
     padding-top: 2.5rem; padding-bottom: 2.5rem; flex-wrap: wrap;
@@ -25,6 +28,9 @@ import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
   .cta-band p { color: rgb(255 255 255 / 96%); max-width: 520px; line-height: 1.5; }
   .cta-band-actions { display: flex; align-items: center; gap: 1.25rem; }
   .btn-light { background: #fff; color: var(--color-accent-600); border-color: #fff; }
-  .btn-light:hover { background: var(--color-light-300); }
+  /* Кнопка всегда белая (контраст с брендовой полосой) — hover и цвет текста
+     держим светлыми/тёмно-зелёными вне зависимости от темы. */
+  .btn-light:hover { background: #eef2ee; }
+  :root[data-theme='dark'] .btn-light { color: var(--color-accent-100); }
   .cta-band-phone { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
 </style>

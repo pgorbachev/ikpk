@@ -1,15 +1,24 @@
 ---
+// Главная = продвинутый вариант D (верхнее меню). Композиция из
+// переиспользуемых секций; заглушки (видео-отзывы, лид-магнит) на проде
+// НЕ показываем — они появятся, когда заказчик пришлёт контент.
 import BaseLayout from '../layouts/BaseLayout.astro';
+import HeroHybrid from '../components/home/sections/HeroHybrid.astro';
 import Advantages from '../components/home/sections/Advantages.astro';
 import Approach from '../components/home/sections/Approach.astro';
 import Programs from '../components/home/sections/Programs.astro';
+import Segments from '../components/home/sections/Segments.astro';
+import UpcomingSeminars from '../components/home/sections/UpcomingSeminars.astro';
+import Teachers from '../components/home/sections/Teachers.astro';
 import News from '../components/home/sections/News.astro';
+import CtaBand from '../components/home/sections/CtaBand.astro';
 import { getPage } from '../lib/data';
 
 const homepage = getPage('homepage');
-
-const title = homepage?.seo_title || 'ИКПК — Институт клинической прикладной кинезиологии';
-const description = homepage?.seo_description || 'Ведущий институт клинической прикладной кинезиологии в РФ и СНГ.';
+const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
+const description =
+  homepage?.seo_description ||
+  'Практико-ориентированное постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии для врачей, массажистов и реабилитологов. Ближайшие очные семинары в Санкт-Петербурге и Москве.';
 
 const schema = {
   '@context': 'https://schema.org',
@@ -26,97 +35,14 @@ const schema = {
 };
 ---
 
-<BaseLayout title={title} description={description} schema={schema} preloadHero={true}>
-  <!-- Hero -->
-  <section class="hero">
-    <div class="container hero-inner">
-      <div class="hero-content">
-        <h1 class="hero-title">Институт клинической прикладной кинезиологии</h1>
-        <p class="hero-subtitle">
-          За 20 лет наш институт стал ведущим центром постдипломного образования
-          России и СНГ в области холистической медицины. Эксклюзивное представительство
-          мировых лидеров в этой области — Институтов Апледжера и Барраля — предоставляет
-          нашим уважаемым студентам ИКПК возможность учиться по международным стандартам.
-        </p>
-        <a href="/raspisanie-i-tseny" class="btn btn-primary hero-cta">
-          Записаться на обучение
-        </a>
-      </div>
-      <div class="hero-visual" aria-hidden="true">
-        <img
-          src="/hero-main.svg"
-          alt=""
-          class="hero-illustration"
-          loading="eager"
-          fetchpriority="high"
-          width="516"
-          height="504"
-        />
-      </div>
-    </div>
-  </section>
-
+<BaseLayout title={title} description={description} schema={schema}>
+  <HeroHybrid />
   <Advantages />
   <Approach />
   <Programs />
+  <Segments />
+  <UpcomingSeminars />
+  <Teachers />
   <News />
+  <CtaBand />
 </BaseLayout>
-
-<style>
-  .hero {
-    background: linear-gradient(135deg, var(--color-accent-50) 0%, var(--color-light-100) 100%);
-    padding: 4rem 0;
-  }
-
-  .hero-inner {
-    display: flex;
-    align-items: center;
-    gap: 3rem;
-    max-width: 960px;
-  }
-
-  .hero-content {
-    flex: 1;
-  }
-
-  .hero-visual {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: min(100%, 420px);
-  }
-
-  .hero-illustration {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-
-  .hero-title {
-    font-size: var(--font-xxxl);
-    margin-bottom: 1rem;
-    color: var(--color-dark-700);
-  }
-
-  .hero-subtitle {
-    font-size: var(--font-l);
-    color: var(--color-gray-600);
-    margin-bottom: 2rem;
-  }
-
-  .hero-cta {
-    font-size: var(--font-l);
-    padding: 0.75rem 2rem;
-  }
-
-  @media (max-width: 768px) {
-    .hero-inner {
-      flex-direction: column;
-      text-align: center;
-    }
-    .hero-visual {
-      width: min(100%, 300px);
-      order: -1;
-    }
-  }
-</style>

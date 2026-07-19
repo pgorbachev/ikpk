@@ -426,16 +426,19 @@ test.describe('Homepage mandatory sections', () => {
     await expect(section).toBeVisible();
   });
 
-  test('hero contains full text about exclusive representation', async ({ page }) => {
+  // Промоушен варианта D: у новой главной hero-hybrid (.hero-d). Старую копию
+  // «Эксклюзивное представительство / международным стандартам» намеренно
+  // заменили на предметный оффер без неподтверждённых заявлений.
+  test('hero shows the applied-kinesiology training offer', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
-    const heroText = await page.locator('.hero').textContent() ?? '';
-    expect(heroText).toContain('Эксклюзивное представительство');
-    expect(heroText).toContain('международным стандартам');
+    const heroText = await page.locator('.hero-d').textContent() ?? '';
+    expect(heroText).toContain('Обучение прикладной кинезиологии');
+    expect(heroText).toContain('Институтов Апледжера и Барраля');
   });
 
-  test('hero has visual illustration', async ({ page }) => {
+  test('hero has visual block', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
-    await expect(page.locator('.hero-visual')).toBeVisible();
+    await expect(page.locator('.hero-d-visual')).toBeVisible();
   });
 });
 

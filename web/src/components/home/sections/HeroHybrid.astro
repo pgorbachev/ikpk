@@ -45,7 +45,7 @@ const next = getUpcomingSeminars(1)[0];
       </div>
     </div>
 
-    <div class="hero-d-visual" role="img" aria-label="Здесь будет фото реального занятия ИКПК">
+    <div class="hero-d-visual">
       <svg class="hero-d-visual-icon" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="currentColor"/></svg>
       <span class="hero-d-visual-cap">Фото реального занятия ИКПК</span>
       <span class="hero-d-visual-note">преподаватель · участники · практика</span>
@@ -55,6 +55,11 @@ const next = getUpcomingSeminars(1)[0];
 
 <style>
   .hero-d { background: linear-gradient(135deg, #f2f8f2 0%, #e6f0e7 100%); }
+  /* В тёмной теме фон должен уходить в тёмный — иначе светлый текст (H1,
+     подзаголовок, пруфы) сливается со светло-зелёным градиентом (ревью PR #22). */
+  :root[data-theme='dark'] .hero-d {
+    background: linear-gradient(135deg, var(--color-light-300) 0%, var(--color-light-100) 100%);
+  }
   .hero-d-inner {
     max-width: 1240px; margin: 0 auto; padding: 3rem 1.25rem;
     display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 2.5rem; align-items: center;

@@ -116,7 +116,7 @@
 - **Фикс «Links are not crawlable»** (High в Lighthouse SEO): все навигационные элементы — настоящие `<a href>`.
 - **BreadcrumbList и на страницах глубины 1** (сейчас только 2+); **удалить избыточные ItemList-блоки навигации** (3–4 на страницу — шум для парсеров).
 - Внешние ссылки per domain_strategy.md: «Фото» → rel="nofollow noopener"; grep-тест на 0 ссылок staging.ikpk.su/medshop в dist/.
-- Валидация JSON-LD 5 типов скриптом в CI + иерархия H1→H2→H3 на шаблонах статей/расписания/курса; фиксы typo «кинезиолога» и дубля title вебинаров; 404 < 20KB.
+- Валидация JSON-LD 5 типов скриптом в CI + иерархия H1→H2→H3 на шаблонах статей/расписания/курса; фиксы typo «кинезиолога» и дубля title вебинаров; 404 < 20KB (позже пересогласовано до <26KB при промоушене варианта D — 404 несёт полную топ-навигацию).
 
 Критерий готовности: все проверки в CI зелёные; Rich Results Test чист на 4 шаблонах (добавлен в pre-launch чек-лист kpi-validation.md).
 
@@ -182,7 +182,7 @@
 - [ ] иерархия H1→H2→H3 корректна на шаблонах статей/расписания/курса; уникальные title (дубль вебинаров и typo устранены)
 - [ ] «Links are not crawlable» устранён; BreadcrumbList на всех глубинах включая 1; избыточные ItemList удалены
 - [ ] «Фото» (Яндекс.Диск) с rel="nofollow noopener"; kinezio.shop/mudriydoctor.ru — rel="noopener"
-- [ ] лёгкая 404 (<20KB); security headers, gzip/brotli и Cache-Control подтверждены curl (securityheaders.com — A); CSP в enforce не ломает виджеты
+- [ ] 404 с полной навигацией (<26KB сырого HTML / ~6KB gzip — бюджет пересогласован при промоушене варианта D: со страницы ошибки должна быть доступна вся топ-навигация + поиск, ранее было <20KB без сайдбара); security headers, gzip/brotli и Cache-Control подтверждены curl (securityheaders.com — A); CSP в enforce не ломает виджеты
 - [ ] доступы к Вебмастеру/GSC/Метрике получены, baseline позиций снят **до** переключения DNS; sitemap отправлен после
 
 **Конверсия и контент:**
