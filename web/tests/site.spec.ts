@@ -137,3 +137,28 @@ test.describe('Content quality', () => {
     expect(await rows.count()).toBeGreaterThan(0);
   });
 });
+
+// ─── Search (FR-05, Pagefind) ────────────────────────────
+test.describe('Search', () => {
+  test('opens from header, finds seminars, tolerates typos', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#header-search-toggle').click();
+
+    // Pagefind UI грузится лениво при первом открытии
+    const input = page.locator('#header-search-pagefind input');
+    await expect(input).toBeVisible({ timeout: 10_000 });
+
+    await input.fill('кинезиология');
+    const results = page.locator('.pagefind-ui__result-link');
+    await expect(results.first()).toBeVisible({ timeout: 10_000 });
+    expect(await results.count()).toBeGreaterThan(1);
+
+    // допуск опечатки в 1 символ (DoD плана 004, Этап 4)
+    await input.fill('масаж');
+    await expect(results.first()).toBeVisible({ timeout: 10_000 });
+
+    // Escape закрывает панель
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#header-search')).toBeHidden();
+  });
+});
