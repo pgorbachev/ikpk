@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { getVideoPlaylists, getPage } from '../../lib/data';
+import { VK_CHANNEL_URL, RUTUBE_CHANNEL_URL } from '../../lib/video-mirrors';
 
 const page = getPage('video');
 const playlists = getVideoPlaylists();
@@ -21,8 +22,8 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
         <p>
           В связи с тем, что видеохостинг YouTube в РФ работает нестабильно,
           мы дублируем все видео на платформы
-          <a href="https://rutube.ru/channel/30422569/videos/" target="_blank" rel="noopener">RUTUBE</a> и
-          <a href="https://vk.com/video/@clubikpk" target="_blank" rel="noopener">VK</a>.
+          <a href={VK_CHANNEL_URL} target="_blank" rel="noopener noreferrer">VK Видео</a> и
+          <a href={RUTUBE_CHANNEL_URL} target="_blank" rel="noopener noreferrer">RUTUBE</a>.
         </p>
       </div>
 

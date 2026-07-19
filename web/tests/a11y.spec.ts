@@ -18,6 +18,8 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
   { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme/' },
   // вариант редизайна B (верхнее меню) — новый layout под гейтом
   { name: 'preview-b', path: '/preview/b/' },
+  // страница видео-плейлиста с фасадом (FR-04)
+  { name: 'video', path: '/video/33/' },
 ];
 
 test.describe('Accessibility', () => {

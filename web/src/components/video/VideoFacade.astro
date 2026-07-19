@@ -7,7 +7,7 @@ interface Props {
 }
 const { embedUrl, title } = Astro.props;
 ---
-<div class="video-facade" data-embed={embedUrl}>
+<div class="video-facade" data-embed={embedUrl} data-title={`Видео: ${title}`}>
   <button type="button" class="video-facade-btn" aria-label={`Смотреть видео: ${title}`}>
     <span class="video-facade-play" aria-hidden="true">
       <svg viewBox="0 0 68 48" width="68" height="48"><path d="M66.5 7.7a8.6 8.6 0 0 0-6-6C55.2 0 34 0 34 0S12.8 0 7.5 1.7a8.6 8.6 0 0 0-6 6A90 90 0 0 0 0 24a90 90 0 0 0 1.5 16.3 8.6 8.6 0 0 0 6 6C12.8 48 34 48 34 48s21.2 0 26.5-1.7a8.6 8.6 0 0 0 6-6A90 90 0 0 0 68 24a90 90 0 0 0-1.5-16.3z" fill="#e02f2f"/><path d="M27 34l18-10-18-10z" fill="#fff"/></svg>
@@ -58,9 +58,14 @@ const { embedUrl, title } = Astro.props;
       if (!url) return;
       const iframe = document.createElement('iframe');
       iframe.src = url + '?autoStart=true';
+      iframe.title = facade.dataset.title || 'Видео';
       iframe.allow = 'autoplay; fullscreen; clipboard-write; encrypted-media; picture-in-picture';
       iframe.setAttribute('allowfullscreen', 'true');
       facade.replaceChildren(iframe);
+      // кнопка с фокусом уничтожена — переносим фокус на плеер, иначе он
+      // улетает в <body> (WCAG 2.4.3)
+      iframe.tabIndex = -1;
+      iframe.focus();
     });
   });
 </script>
