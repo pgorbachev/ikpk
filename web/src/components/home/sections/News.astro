@@ -117,7 +117,9 @@ const news = getNews();
     .news-track { --news-visible: 2; }
   }
 
-  @media (max-width: 640px) {
+  /* 680px — синхронно с JS getVisibleCount() (≤680 → 1 карточка), иначе
+     на 641–680px грид рисует 2 колонки, а видима 1 → пустая ячейка */
+  @media (max-width: 680px) {
     .news-slider { gap: 0.5rem; }
     .news-nav-btn { width: 34px; }
     .news-track { --news-visible: 1; }
