@@ -33,10 +33,11 @@ test.describe('Accessibility', () => {
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        // Сторонние эмбеды (Яндекс.Карта, RUTUBE-плеер) — чужой markup,
-        // их a11y мы не контролируем; axe не должен спускаться внутрь них.
-        .exclude('.contact-shell-map')
-        .exclude('.video-facade')
+        // Исключаем ТОЛЬКО сами сторонние iframe (Яндекс.Карта, RUTUBE) —
+        // их markup мы не контролируем. Наши кнопка запуска видео и
+        // fallback-ссылка карты остаются под проверкой.
+        .exclude('.contact-shell-map iframe')
+        .exclude('.video-facade iframe')
         .analyze();
 
       const blocking = results.violations.filter(
