@@ -10,22 +10,22 @@
 ---
 <script is:inline>
   (function () {
-    var root = document.documentElement;
-    var reduce = false;
+    const root = document.documentElement;
+    let reduce = false;
     try {
       reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    } catch (e) {
+    } catch {
       /* matchMedia недоступен — считаем, что движение разрешено */
     }
     // typeof …=== 'function' (не 'in'): исключаем существующее, но
     // неконструируемое значение — иначе бросок в new оставил бы контент скрытым.
-    var canReveal = !reduce && typeof IntersectionObserver === 'function';
+    const canReveal = !reduce && typeof IntersectionObserver === 'function';
     if (canReveal) root.classList.add('has-motion');
 
     document.addEventListener('DOMContentLoaded', function () {
       if (canReveal) {
         try {
-          var io = new IntersectionObserver(
+          const io = new IntersectionObserver(
             function (entries) {
               entries.forEach(function (en) {
                 if (en.isIntersecting) {
@@ -39,7 +39,7 @@
           document.querySelectorAll('[data-reveal]').forEach(function (el) {
             io.observe(el);
           });
-        } catch (e) {
+        } catch {
           // Observer не создался — fail-open: возвращаем контент в видимое
           // состояние, убрав класс (правила .has-motion [data-reveal] отключатся).
           root.classList.remove('has-motion');
@@ -47,11 +47,11 @@
       }
 
       // Тень шапки при скролле (геометрию не меняем — без layout shift).
-      var topnav = document.querySelector('.topnav');
+      const topnav = document.querySelector('.topnav');
       if (topnav) {
-        var scrolled = false;
-        var onScroll = function () {
-          var next = window.scrollY > 8;
+        let scrolled = false;
+        const onScroll = function () {
+          const next = window.scrollY > 8;
           if (next === scrolled) return; // мутируем DOM только на смене порога
           scrolled = next;
           if (next) topnav.setAttribute('data-scrolled', '');
