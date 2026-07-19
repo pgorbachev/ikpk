@@ -7,9 +7,10 @@ import { CTA_HREF } from '../../../lib/navigation';
 import { getUpcomingSeminars } from '../../../lib/home';
 
 const next = getUpcomingSeminars(1)[0];
-// Реальное фото практического занятия (самохост). Плейсхолдер-качества —
-// заменить на профессиональное фото обучения от заказчика (client-requests).
-const heroPhoto = '/media/video-thumbs/31.jpg';
+// Визуал hero — нейтральный брендовый плейсхолдер: реального фото занятия
+// (преподаватель + участники + мануальная практика) у нас пока нет,
+// запрошено у заказчика (docs/client-requests.md). Тёмный видео-thumbnail
+// вводил в заблуждение при оценке дизайна (ревью #19).
 ---
 <section class="hero-d">
   <div class="hero-d-inner">
@@ -24,7 +25,7 @@ const heroPhoto = '/media/video-thumbs/31.jpg';
       </p>
 
       <ul class="hero-d-proofs">
-        <li>Практика с первого модуля</li>
+        <li>Практическая отработка на семинарах</li>
         <li>Программы Институтов Апледжера и Барраля</li>
         <li>Очно в Санкт-Петербурге и Москве</li>
       </ul>
@@ -44,8 +45,10 @@ const heroPhoto = '/media/video-thumbs/31.jpg';
       </div>
     </div>
 
-    <div class="hero-d-visual">
-      <img src={heroPhoto} alt="Практическое занятие ИКПК" width="640" height="360" loading="eager" fetchpriority="high" />
+    <div class="hero-d-visual" role="img" aria-label="Здесь будет фото реального занятия ИКПК">
+      <svg class="hero-d-visual-icon" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="currentColor"/></svg>
+      <span class="hero-d-visual-cap">Фото реального занятия ИКПК</span>
+      <span class="hero-d-visual-note">преподаватель · участники · практика</span>
     </div>
   </div>
 </section>
@@ -78,12 +81,23 @@ const heroPhoto = '/media/video-thumbs/31.jpg';
   .hero-d-next-value { font-size: var(--font-m); font-weight: 600; color: var(--color-dark-700); }
 
   .hero-d-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
-  .hero-d-visual { display: flex; justify-content: center; }
-  .hero-d-visual img { width: 100%; max-width: 520px; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / 12%); }
+  .hero-d-visual {
+    width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 16 / 9;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+    border-radius: 14px;
+    border: 2px dashed var(--color-accent-300);
+    background:
+      radial-gradient(120% 100% at 50% 0%, rgb(53 122 56 / 8%), transparent 65%),
+      var(--color-light-100);
+    color: var(--color-accent-600);
+  }
+  .hero-d-visual-cap { font-weight: 700; font-size: var(--font-m); color: var(--color-dark-700); }
+  .hero-d-visual-note { font-size: var(--font-s); color: var(--color-gray-500); }
 
   @media (max-width: 860px) {
     .hero-d-inner { grid-template-columns: 1fr; gap: 1.5rem; }
-    .hero-d-visual { order: -1; }
-    .hero-d-visual img { max-width: 100%; }
+    /* На мобильном оффер и CTA идут ПЕРВЫМИ (суть + действие за 3-5 сек),
+       визуал — после (порядок DOM: copy → visual, без order-переворота) */
+    .hero-d-visual { max-width: 100%; }
   }
 </style>
