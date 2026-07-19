@@ -214,6 +214,31 @@ describe('404 and sitemap', () => {
     }
   });
 
+  it('variant D is content-complete (parity-блоки в нужном порядке)', () => {
+    const html = readPage('/preview/d/');
+    // обязательные секции content-complete главной, по порядку
+    const expectedOrder = [
+      'для врачей и специалистов', // hero-hybrid H1
+      'Наши преимущества',
+      'Наш подход к обучению',
+      'Наши программы',
+      'Для кого обучение',
+      'Ближайшие семинары',
+      'Преподаватели',
+      'Новости',
+    ];
+    let cursor = 0;
+    for (const marker of expectedOrder) {
+      const idx = html.indexOf(marker, cursor);
+      expect(idx, `секция «${marker}» отсутствует или не по порядку в /preview/d/`).toBeGreaterThan(-1);
+      cursor = idx;
+    }
+    // ключевые счётчики контента (защита от случайного удаления)
+    expect((html.match(/feature-card-title/g) ?? []).length, '6 преимуществ').toBeGreaterThanOrEqual(6);
+    expect((html.match(/prog-card/g) ?? []).length, '3 института').toBeGreaterThanOrEqual(3);
+    expect(html, 'статистика 14000+').toContain('14000+');
+  });
+
   it('preview variant internal links all resolve to built pages', () => {
     // Ссылки секций (в т.ч. href семинаров из home.ts, собранный join двух
     // датасетов) должны вести на реальные страницы — не в 404/фолбэк.
