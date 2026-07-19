@@ -13,14 +13,14 @@ import { CTA_HREF } from '../../../lib/navigation';
     <p class="hero-c-sub">
       Постдипломное обучение для врачей, массажистов и реабилитологов:
       мышечное тестирование, краниосакральная и висцеральная терапия.
-      Практика с первого модуля под руководством практикующих преподавателей.
+      Практическая отработка на семинарах под руководством практикующих преподавателей.
     </p>
 
-    <div class="hero-c-audience" role="list" aria-label="Кому подходит">
-      <a class="hero-c-chip" role="listitem" href="/institut-klinicheskoy-prikladnoy-kineziologii">Врачам</a>
-      <a class="hero-c-chip" role="listitem" href="/raspisanie-i-tseny">Массажистам</a>
-      <a class="hero-c-chip" role="listitem" href="/raspisanie-i-tseny">Тренерам и реабилитологам</a>
-    </div>
+    <ul class="hero-c-audience" aria-label="Кому подходит">
+      <li><a class="hero-c-chip" href="/institut-klinicheskoy-prikladnoy-kineziologii">Врачам</a></li>
+      <li><a class="hero-c-chip" href="/raspisanie-i-tseny">Массажистам</a></li>
+      <li><a class="hero-c-chip" href="/raspisanie-i-tseny">Тренерам и реабилитологам</a></li>
+    </ul>
 
     <div class="hero-c-actions">
       <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Выбрать программу обучения</a>
@@ -68,6 +68,8 @@ import { CTA_HREF } from '../../../lib/navigation';
     justify-content: center;
     flex-wrap: wrap;
     margin-bottom: 1.6rem;
+    list-style: none;
+    padding: 0;
   }
   .hero-c-chip {
     padding: 0.5rem 1rem;

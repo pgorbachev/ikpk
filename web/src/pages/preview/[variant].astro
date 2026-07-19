@@ -8,6 +8,7 @@ import { variants, type SectionKey } from '../../lib/variants';
 
 import HeroOffer from '../../components/home/sections/HeroOffer.astro';
 import HeroCentered from '../../components/home/sections/HeroCentered.astro';
+import HeroHybrid from '../../components/home/sections/HeroHybrid.astro';
 import Segments from '../../components/home/sections/Segments.astro';
 import UpcomingSeminars from '../../components/home/sections/UpcomingSeminars.astro';
 import Teachers from '../../components/home/sections/Teachers.astro';
@@ -27,6 +28,7 @@ const variant = variants[variantId as string]!;
 const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   'hero-offer': HeroOffer,
   'hero-centered': HeroCentered,
+  'hero-hybrid': HeroHybrid,
   segments: Segments,
   upcoming: UpcomingSeminars,
   teachers: Teachers,
@@ -36,7 +38,7 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   cta: CtaBand,
 };
 ---
-<TopNavLayout title={variant.title} description={variant.description} noindex={true} preloadHero={true}>
+<TopNavLayout title={variant.title} description={variant.description} noindex={true} preloadHero={variant.preloadHero ?? false}>
   <div class="preview-ribbon">
     Превью варианта «{variant.label}» · noindex · не влияет на текущий сайт
   </div>
