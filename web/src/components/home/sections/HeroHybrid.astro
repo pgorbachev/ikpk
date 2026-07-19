@@ -55,6 +55,11 @@ const next = getUpcomingSeminars(1)[0];
 
 <style>
   .hero-d { background: linear-gradient(135deg, #f2f8f2 0%, #e6f0e7 100%); }
+  /* В тёмной теме фон должен уходить в тёмный — иначе светлый текст (H1,
+     подзаголовок, пруфы) сливается со светло-зелёным градиентом (ревью PR #22). */
+  :root[data-theme='dark'] .hero-d {
+    background: linear-gradient(135deg, var(--color-light-300) 0%, var(--color-light-100) 100%);
+  }
   .hero-d-inner {
     max-width: 1240px; margin: 0 auto; padding: 3rem 1.25rem;
     display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 2.5rem; align-items: center;
