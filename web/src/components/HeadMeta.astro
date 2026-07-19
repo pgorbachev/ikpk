@@ -29,7 +29,7 @@ const siteName = 'ИКПК';
       if (localStorage.getItem('ikpk.theme') === 'dark') {
         document.documentElement.dataset.theme = 'dark';
       }
-    } catch (e) {
+    } catch {
       /* localStorage недоступен — остаётся светлая тема по умолчанию */
     }
   })();
