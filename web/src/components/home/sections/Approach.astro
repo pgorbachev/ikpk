@@ -1,0 +1,110 @@
+---
+// Секция «Наш подход к обучению» + статистика. Извлечена из index.astro.
+// Цифры — текущий контент боевого сайта; перед promotion сверяются с
+// заказчиком (claims registry, docs/client-requests.md).
+---
+<section class="section section-alt">
+  <div class="container approach-wrap">
+    <div class="approach-text">
+      <h2 class="section-title">Наш подход к обучению</h2>
+      <p>В течение каждого курса, большую часть времени, мы уделяем практической отработке приобретенных навыков и знаний. Это ключевой подход, который позволяет нашим студентам успешно применять полученные знания в реальных ситуациях и готовиться к профессиональной деятельности на самом высоком уровне.</p>
+      <a href="/raspisanie-i-tseny" class="btn btn-primary approach-cta">Записаться на обучение</a>
+    </div>
+    <div class="approach-visual" aria-hidden="true">
+      <img
+        src="/approach-learning.svg"
+        alt=""
+        class="approach-illustration"
+        loading="lazy"
+        width="450"
+        height="370"
+      />
+    </div>
+    <div class="grid grid-3 stats-grid">
+      <div class="stat-card">
+        <span class="stat-number">14000+</span>
+        <span class="stat-label">специалистов обучили</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">&gt;&nbsp;20 лет</span>
+        <span class="stat-label">обучаем новых специалистов</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number">1500+</span>
+        <span class="stat-label">получили государственную аккредитацию</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .section-alt { background-color: var(--color-light-300); }
+
+  .approach-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .approach-text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 2rem;
+  }
+
+  .approach-text .section-title { width: 100%; }
+
+  .approach-text p {
+    color: var(--color-gray-600);
+    margin-bottom: 1.5rem;
+    max-width: 620px;
+    flex: 1;
+  }
+
+  .approach-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 450px);
+    margin: 0 auto;
+  }
+
+  .approach-illustration {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .approach-cta {
+    display: inline-block;
+    width: 100%;
+  }
+
+  .stats-grid { margin-top: 0; }
+
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.5rem 1rem;
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+  }
+
+  .stat-number {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: var(--color-accent-500);
+    line-height: 1.1;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-label {
+    font-size: var(--font-s);
+    color: var(--color-gray-600);
+    line-height: 1.4;
+  }
+</style>

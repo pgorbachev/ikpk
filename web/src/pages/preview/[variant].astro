@@ -9,6 +9,10 @@ import { variants, type SectionKey } from '../../lib/variants';
 import HeroOffer from '../../components/home/sections/HeroOffer.astro';
 import HeroCentered from '../../components/home/sections/HeroCentered.astro';
 import HeroHybrid from '../../components/home/sections/HeroHybrid.astro';
+import Advantages from '../../components/home/sections/Advantages.astro';
+import Approach from '../../components/home/sections/Approach.astro';
+import Programs from '../../components/home/sections/Programs.astro';
+import News from '../../components/home/sections/News.astro';
 import Segments from '../../components/home/sections/Segments.astro';
 import UpcomingSeminars from '../../components/home/sections/UpcomingSeminars.astro';
 import Teachers from '../../components/home/sections/Teachers.astro';
@@ -29,6 +33,10 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   'hero-offer': HeroOffer,
   'hero-centered': HeroCentered,
   'hero-hybrid': HeroHybrid,
+  advantages: Advantages,
+  approach: Approach,
+  programs: Programs,
+  news: News,
   segments: Segments,
   upcoming: UpcomingSeminars,
   teachers: Teachers,

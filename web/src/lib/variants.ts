@@ -8,6 +8,10 @@ export type SectionKey =
   | 'hero-offer'
   | 'hero-centered'
   | 'hero-hybrid'
+  | 'advantages'
+  | 'approach'
+  | 'programs'
+  | 'news'
   | 'segments'
   | 'upcoming'
   | 'teachers'
@@ -52,15 +56,21 @@ export const variants: Record<string, Variant> = {
   },
   d: {
     id: 'd',
-    label: 'D — синтез: предметный оффер + ближайшая дата/цена (верхнее меню)',
+    label: 'D — content-complete: синтез + весь parity-контент (верхнее меню)',
     layout: 'topnav',
     // Короткий title под основной поисковый интент (рекомендация ревью).
     title: 'Обучение прикладной кинезиологии — ИКПК',
     description:
       'Практико-ориентированное постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии для врачей, массажистов и реабилитологов. Ближайшие очные семинары в Санкт-Петербурге и Москве.',
-    // Каркас B (сегменты → семинары → преподаватели), hero — гибрид с
-    // ближайшей датой/ценой и реальным фото.
-    sections: ['hero-hybrid', 'segments', 'upcoming', 'teachers', 'trust', 'testimonials', 'lead', 'cta'],
+    // Полная главная: гибрид-hero + весь обязательный parity-контент
+    // (преимущества, подход+статистика, институты, новости) + маркетинговые
+    // блоки. Статистика в approach покрывает trust — отдельный trust-плейсхолдер
+    // не нужен. testimonials/lead — заглушки (нет видео/PDF от заказчика).
+    sections: [
+      'hero-hybrid', 'advantages', 'approach', 'programs',
+      'segments', 'upcoming', 'teachers', 'news',
+      'testimonials', 'lead', 'cta',
+    ],
   },
 };
 
