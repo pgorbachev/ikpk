@@ -1,8 +1,11 @@
 User-agent: *
 Allow: /
+# Осознанное решение (Этап 3, план 004): единственный PDF — пользовательское
+# соглашение (/terms/*.pdf), SEO-ценности не несёт, в выдаче не нужен.
+Disallow: /*.pdf$
+
+# Clean-param — Яндекс: рекламные/трекинговые параметры не создают дублей
+# (понимает только Яндекс; Google игнорирует незнакомые директивы)
+Clean-param: utm_source&utm_medium&utm_campaign&utm_term&utm_content&yclid&gclid&ysclid
 
 Sitemap: https://ikpk.su/sitemap-index.xml
-
-# Block internal resources
-Disallow: /api/
-Disallow: /_astro/

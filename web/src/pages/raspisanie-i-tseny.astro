@@ -1,6 +1,7 @@
 ---
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatPrice, getInstitutes, getPage, getScheduleEntries, getTeachers } from '../lib/data';
 import { scheduleSupplements } from '../lib/schedule-supplements';
 
@@ -139,6 +140,7 @@ const cards = entries.map((entry) => {
 
 <BaseLayout title={title} description={description} newsletterVariant="none">
   <div class="container schedule-page">
+    <Breadcrumbs items={[{ label: 'Расписание и цены' }]} />
     <SchedulePage title="Расписание и цены" institutes={visibleInstitutes} programs={visiblePrograms} cities={visibleCities} cards={cards} />
   </div>
 </BaseLayout>

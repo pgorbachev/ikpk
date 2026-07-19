@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
-export { cleanBodyHtml, stripLegacySeminarTail } from './html-cleaner.js';
+export { cleanBodyHtml, stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 

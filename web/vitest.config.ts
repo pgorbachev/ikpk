@@ -8,6 +8,7 @@ export default defineConfig({
       'tests/perf-a11y.test.ts',
       'tests/parity-compare.test.ts',
       'tests/media-migration.test.ts',
+      'tests/seo-package.test.ts',
     ],
   },
 });
