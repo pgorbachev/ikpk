@@ -7,6 +7,7 @@ import TopNavLayout from '../../layouts/TopNavLayout.astro';
 import { variants, type SectionKey } from '../../lib/variants';
 
 import HeroOffer from '../../components/home/sections/HeroOffer.astro';
+import HeroCentered from '../../components/home/sections/HeroCentered.astro';
 import Segments from '../../components/home/sections/Segments.astro';
 import UpcomingSeminars from '../../components/home/sections/UpcomingSeminars.astro';
 import Teachers from '../../components/home/sections/Teachers.astro';
@@ -25,6 +26,7 @@ const variant = variants[variantId as string]!;
 
 const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   'hero-offer': HeroOffer,
+  'hero-centered': HeroCentered,
   segments: Segments,
   upcoming: UpcomingSeminars,
   teachers: Teachers,

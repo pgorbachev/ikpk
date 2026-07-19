@@ -16,8 +16,9 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
     path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej/',
   },
   { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme/' },
-  // вариант редизайна B (верхнее меню) — новый layout под гейтом
+  // варианты редизайна (верхнее меню) — новый layout + hero-компоненты под гейтом
   { name: 'preview-b', path: '/preview/b/' },
+  { name: 'preview-c', path: '/preview/c/' },
   // страница видео-плейлиста с фасадом (FR-04)
   { name: 'video', path: '/video/33/' },
   // контакты с ленивой картой + форма подписки (card-вариант)

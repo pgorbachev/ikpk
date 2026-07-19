@@ -6,6 +6,7 @@
 
 export type SectionKey =
   | 'hero-offer'
+  | 'hero-centered'
   | 'segments'
   | 'upcoming'
   | 'teachers'
@@ -32,6 +33,17 @@ export const variants: Record<string, Variant> = {
     description:
       'Постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии для врачей, массажистов и реабилитологов.',
     sections: ['hero-offer', 'segments', 'upcoming', 'teachers', 'trust', 'testimonials', 'lead', 'cta'],
+  },
+  c: {
+    id: 'c',
+    label: 'C — акцент на практику и преподавателей (верхнее меню)',
+    layout: 'topnav',
+    title: 'Обучение прикладной кинезиологии — от первого семинара до практики | ИКПК',
+    description:
+      'Постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии: практика с первого модуля, практикующие преподаватели.',
+    // Иная композиция: центрированный hero, преподаватели подняты выше
+    // (личность преподавателя — ключевой фактор решения по маркетологу).
+    sections: ['hero-centered', 'teachers', 'segments', 'upcoming', 'trust', 'testimonials', 'lead', 'cta'],
   },
 };
 
