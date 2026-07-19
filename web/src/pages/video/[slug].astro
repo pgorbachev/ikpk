@@ -1,8 +1,10 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import VideoFacade from '../../components/video/VideoFacade.astro';
 import { getVideoPlaylists } from '../../lib/data';
 import type { VideoPlaylist } from '../../lib/data';
+import { getVideoMirror, rutubeEmbedUrl, VK_CHANNEL_URL } from '../../lib/video-mirrors';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -14,11 +16,12 @@ export const getStaticPaths: GetStaticPaths = () => {
 };
 
 const { playlist } = Astro.props as { playlist: VideoPlaylist };
+const mirror = getVideoMirror(playlist.slug);
 ---
 
 <BaseLayout
   title={playlist.seo_title || `${playlist.title} — Видео ИКПК`}
-  description={playlist.seo_description || `Видео: ${playlist.title}`}
+  description={playlist.seo_description || `Видео-плейлист «${playlist.title}» ИКПК: записи семинаров и обучающие материалы.`}
 >
   <div class="container">
     <Breadcrumbs
@@ -31,10 +34,23 @@ const { playlist } = Astro.props as { playlist: VideoPlaylist };
     <article class="section">
       <h1 class="page-title">{playlist.title}</h1>
 
-      {playlist.description_text && (
-        <div class="playlist-desc rich-content">
-          <p>{playlist.description_text}</p>
+      {mirror ? (
+        <div class="video-block">
+          <VideoFacade embedUrl={rutubeEmbedUrl(mirror.rutubeEmbedVideoId)} title={playlist.title} />
+          <div class="video-links">
+            <a href={mirror.rutubePlaylistUrl} class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+              Весь плейлист на RUTUBE →
+            </a>
+            <a href={VK_CHANNEL_URL} class="btn btn-outline" target="_blank" rel="noopener noreferrer">
+              Канал на VK Видео
+            </a>
+          </div>
+          <p class="video-note">Видео открывается на RU-доступных площадках. Полный плейлист и другие записи — по ссылкам выше.</p>
         </div>
+      ) : (
+        <p class="video-note">
+          Плейлист доступен на <a href={VK_CHANNEL_URL} target="_blank" rel="noopener noreferrer">VK Видео</a>.
+        </p>
       )}
 
       <div class="back-link">
@@ -45,16 +61,9 @@ const { playlist } = Astro.props as { playlist: VideoPlaylist };
 </BaseLayout>
 
 <style>
-  .page-title {
-    margin-bottom: 1.5rem;
-  }
-
-  .playlist-desc {
-    max-width: 800px;
-    margin-bottom: 2rem;
-  }
-
-  .back-link {
-    margin-top: 2rem;
-  }
+  .page-title { margin-bottom: 1.5rem; }
+  .video-block { max-width: 800px; }
+  .video-links { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.25rem; }
+  .video-note { color: var(--color-gray-500); font-size: var(--font-s); margin-top: 1rem; }
+  .back-link { margin-top: 2rem; }
 </style>
