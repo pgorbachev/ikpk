@@ -2,9 +2,10 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { getVideoPlaylists, getPage } from '../../lib/data';
+import { VK_CHANNEL_URL, RUTUBE_CHANNEL_URL, getVideoMirror } from '../../lib/video-mirrors';
 
 const page = getPage('video');
-const playlists = getVideoPlaylists();
+const playlists = getVideoPlaylists().map((pl) => ({ ...pl, mirror: getVideoMirror(pl.slug) }));
 
 const title = page?.seo_title || 'Видео — ИКПК';
 const description = page?.seo_description || 'Видеоматериалы ИКПК.';
@@ -21,8 +22,8 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
         <p>
           В связи с тем, что видеохостинг YouTube в РФ работает нестабильно,
           мы дублируем все видео на платформы
-          <a href="https://rutube.ru/channel/30422569/videos/" target="_blank" rel="noopener">RUTUBE</a> и
-          <a href="https://vk.com/video/@clubikpk" target="_blank" rel="noopener">VK</a>.
+          <a href={VK_CHANNEL_URL} target="_blank" rel="noopener noreferrer">VK Видео</a> и
+          <a href={RUTUBE_CHANNEL_URL} target="_blank" rel="noopener noreferrer">RUTUBE</a>.
         </p>
       </div>
 
@@ -30,6 +31,19 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
         <div class="grid grid-3">
           {playlists.map((pl) => (
             <a href={`/video/${pl.slug}`} class="card playlist-card">
+              <div class="playlist-thumb">
+                {pl.mirror?.thumbnail && (
+                  <img src={pl.mirror.thumbnail} alt={`Плейлист «${pl.title}»`} width="640" height="360" loading="lazy" />
+                )}
+                <span class="playlist-play" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="26" height="26"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                </span>
+                {pl.mirror && (
+                  <span class="playlist-count">
+                    {pl.mirror.videoCount}{pl.mirror.videoCountCapped ? '+' : ''} видео
+                  </span>
+                )}
+              </div>
               <div class="card-body">
                 <h3 class="playlist-title">{pl.title}</h3>
               </div>
@@ -61,10 +75,60 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
     display: block;
     text-decoration: none;
     color: inherit;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
   }
 
-  .playlist-card:hover { text-decoration: none; }
+  .playlist-card:hover {
+    text-decoration: none;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+  }
 
+  .playlist-thumb {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: linear-gradient(135deg, #1e3b1f, #0d1a0d);
+    overflow: hidden;
+  }
+  .playlist-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .playlist-play {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 55%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 3px;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .playlist-card:hover .playlist-play {
+    background: var(--color-accent-500);
+    transform: scale(1.06);
+  }
+  .playlist-count {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: var(--color-accent-500);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+  }
+
+  /* padding даёт обёртка .card-body — не дублируем на заголовке */
   .playlist-title {
     font-size: var(--font-m);
     font-weight: 600;

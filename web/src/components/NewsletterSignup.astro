@@ -206,7 +206,8 @@ const isCard = variant === 'card';
   .newsletter-signup-button--card {
     height: 2.75rem;
     border-radius: 4px;
-    background: #4ea847;
+    /* accent-600 вместо #4ea847: WCAG AA (2.99→4.5:1) для белого текста */
+    background: var(--color-accent-600);
     color: #fff;
   }
 

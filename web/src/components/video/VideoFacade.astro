@@ -1,0 +1,81 @@
+---
+// Фасад видео: постер-заглушка + кнопка Play; по клику лениво подставляется
+// RUTUBE-iframe. 0 сторонних запросов до клика (не бьёт по TBT/LCP).
+interface Props {
+  embedUrl: string;
+  title: string;
+  poster?: string;
+}
+const { embedUrl, title, poster } = Astro.props;
+---
+<div class="video-facade" data-embed={embedUrl} data-title={`Видео: ${title}`}>
+  {poster && <img class="video-facade-poster" src={poster} alt="" width="800" height="450" loading="lazy" />}
+  <button type="button" class="video-facade-btn" aria-label={`Смотреть видео: ${title}`}>
+    <span class="video-facade-play" aria-hidden="true">
+      <svg viewBox="0 0 68 48" width="68" height="48"><path d="M66.5 7.7a8.6 8.6 0 0 0-6-6C55.2 0 34 0 34 0S12.8 0 7.5 1.7a8.6 8.6 0 0 0-6 6A90 90 0 0 0 0 24a90 90 0 0 0 1.5 16.3 8.6 8.6 0 0 0 6 6C12.8 48 34 48 34 48s21.2 0 26.5-1.7a8.6 8.6 0 0 0 6-6A90 90 0 0 0 68 24a90 90 0 0 0-1.5-16.3z" fill="#e02f2f"/><path d="M27 34l18-10-18-10z" fill="#fff"/></svg>
+    </span>
+    <span class="video-facade-label">Смотреть на RUTUBE</span>
+  </button>
+</div>
+
+<style>
+  .video-facade {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: linear-gradient(135deg, #1e3b1f 0%, #0d1a0d 100%);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .video-facade-poster {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .video-facade-btn {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    background: rgb(0 0 0 / 25%);
+    border: 0;
+    cursor: pointer;
+    color: #fff;
+  }
+  .video-facade-btn:hover { background: rgb(0 0 0 / 40%); }
+  .video-facade-play { transition: transform 0.2s; }
+  .video-facade-btn:hover .video-facade-play { transform: scale(1.08); }
+  .video-facade-label { font-size: var(--font-s); font-weight: 600; letter-spacing: 0.02em; }
+  .video-facade :global(iframe) {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.video-facade').forEach((facade) => {
+    const btn = facade.querySelector('button');
+    btn?.addEventListener('click', () => {
+      const url = facade.dataset.embed;
+      if (!url) return;
+      const iframe = document.createElement('iframe');
+      iframe.src = url + '?autoStart=true';
+      iframe.title = facade.dataset.title || 'Видео';
+      iframe.allow = 'autoplay; fullscreen; clipboard-write; encrypted-media; picture-in-picture';
+      iframe.setAttribute('allowfullscreen', 'true');
+      facade.replaceChildren(iframe);
+      // кнопка с фокусом уничтожена — переносим фокус на плеер, иначе он
+      // улетает в <body> (WCAG 2.4.3)
+      iframe.tabIndex = -1;
+      iframe.focus();
+    });
+  });
+</script>

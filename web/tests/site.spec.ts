@@ -169,3 +169,38 @@ test.describe('Search', () => {
     await expect(page.locator('#header-search')).toBeHidden();
   });
 });
+
+// ─── Video facade (FR-04, RUTUBE embed) ──────────────────
+test.describe('Video', () => {
+  test('playlist facade loads RUTUBE embed on click, accessibly', async ({ page }) => {
+    await page.goto('/video/33/');
+
+    // до клика — 0 iframe (ленивая загрузка, не бьёт по perf)
+    await expect(page.locator('.video-facade iframe')).toHaveCount(0);
+
+    await page.locator('.video-facade-btn').click();
+
+    const iframe = page.locator('.video-facade iframe');
+    await expect(iframe).toHaveCount(1);
+    await expect(iframe).toHaveAttribute('src', /rutube\.ru\/play\/embed\//);
+    // a11y: у плеера есть title и он получил фокус (кнопка уничтожена)
+    await expect(iframe).toHaveAttribute('title', /Видео:/);
+    await expect(iframe).toBeFocused();
+
+    // ссылки на полный плейлист и VK-канал присутствуют
+    await expect(page.getByRole('link', { name: /Весь плейлист на RUTUBE/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Канал на VK Видео/ })).toBeVisible();
+  });
+});
+
+// ─── Contacts lazy map (FR-08) ───────────────────────────
+test.describe('Contacts map', () => {
+  test('Yandex map is injected by JS (not eager) with the right src', async ({ page }) => {
+    await page.goto('/kontakty/');
+    await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
+    // карта подставляется скриптом (IntersectionObserver), а не статикой
+    const iframe = page.locator('.contact-shell-map iframe');
+    await expect(iframe).toHaveCount(1);
+    await expect(iframe).toHaveAttribute('src', /yandex\.ru\/map-widget/);
+  });
+});

@@ -76,7 +76,8 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 | 4.3 | Bitrix24 CRM form **embed** (не редирект) on schedule entries + seminar pages, UTM | ⬜ | FR-06 | client keys |
 | 4.4 | NewsletterSignup → Bitrix24 form or hide (decision) | ⬜ | FR-07 | 152-ФЗ page |
 | 4.5 | 152-ФЗ privacy policy page + links from forms/footer | ⬜ | NFR-03 | client text |
-| 4.6 | YouTube facade + lazy Yandex.Maps | ⬜ | FR-04, FR-08 | — |
+| 4.6a | Видео: RUTUBE-фасад + ссылка VK (вместо YouTube — замедлен в РФ) | ✅ | FR-04 | эмбед RUTUBE (RU-доступ), VK Видео @clubikpk основной канал; фикс пустого Rutube в футере |
+| 4.6b | Ленивые Яндекс.Карты на /kontakty | ✅ | FR-08 | IntersectionObserver-фасад (кросс-браузерно, вкл. Safari без iframe lazy); noscript-fallback; build-гейт «нет eager-iframe» |
 | 4.7 | Homepage quick-wins: offer H1, sticky CTA, trust bar, upcoming seminars, **сегментация «для кого»** | ⬜ | — | client numbers (сегментация — без контента заказчика) |
 | 4.8 | Metrika goals on CTA/lead/subscribe | ⬜ | NFR-06 | — |
 

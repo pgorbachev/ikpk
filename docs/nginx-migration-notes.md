@@ -26,3 +26,10 @@
 Плюс требования Этапа 1 сверху: gzip+brotli, security headers
 (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy),
 CSP сначала в Report-Only.
+
+## CSP (Этап 1 report-only → Этап 5 enforce): frame-src
+
+Видео-фасад встраивает RUTUBE-плеер по клику. В `Content-Security-Policy`
+`frame-src` должен включать `https://rutube.ru` (иначе плеер не загрузится
+под enforce). Основной видео-канал (ссылки, не iframe) — VK Видео
+`vkvideo.ru/@clubikpk`.
