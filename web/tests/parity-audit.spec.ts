@@ -18,7 +18,8 @@ test.describe('Parity Audit Acceptance', () => {
     await expect(header.locator('a[href^="tel:"]').first()).toBeVisible();
     await expect(header.getByRole('button', { name: /Открыть поиск/i })).toBeVisible();
 
-    const themeSwitch = header.locator('[role="switch"][aria-label*="тем"]');
+    // Тумблеров темы теперь два (бар + мобильный drawer) — проверяем баровый.
+    const themeSwitch = header.locator('#theme-toggle[role="switch"][aria-label*="тем"]');
     await expect(themeSwitch).toBeVisible();
     await expect(header.locator('[data-theme-thumb]')).toHaveCount(1);
 

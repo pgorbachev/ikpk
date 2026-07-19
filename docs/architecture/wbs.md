@@ -65,7 +65,7 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 | 3.2 | Orphans: crawl test in CI (обход dist от / по ссылкам) | ✅ | NFR-02 | 0 сирот — преподаватели/плейлисты уже слинкованы, тест закрепляет навсегда |
 | 3.3 | Crawlable links; BreadcrumbList depth 1; excess ItemList | ✅ | NFR-02 | некликабельных якорей и ItemList в ребилде не было; крошки добавлены на 3 института + расписание |
 | 3.4 | External links: nofollow per domain_strategy; grep gate | ✅ | NFR-02 | политика в html-cleaner: medshop/я.диск nofollow; корневые medshop-ссылки → kinezio.shop; продуктовые — nofollow (в kinezio нет зеркальных slug); 0 staging |
-| 3.5 | JSON-LD validation in CI; H1→H2→H3; typo/title fixes; 404 <20KB | ✅ | NFR-02 | Event без даты → Course; футер-колонки не заголовки; расписание h3→h2; typo + дубль вебинаров + 6 пустых title плейлистов (имена из YouTube); 404 = 14KB без сайдбара |
+| 3.5 | JSON-LD validation in CI; H1→H2→H3; typo/title fixes; 404 <20KB | ✅ | NFR-02 | Event без даты → Course; футер-колонки не заголовки; расписание h3→h2; typo + дубль вебинаров + 6 пустых title плейлистов (имена из YouTube); 404 = 14KB без сайдбара. **Обновлено при промоушене варианта D:** 404 несёт полную топ-навигацию + поиск → бюджет пересогласован до <26KB сырого / ~6KB gzip |
 
 ## Этап 4: Конверсионный минимум *(∥, после Этапа 0)*
 

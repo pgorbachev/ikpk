@@ -21,6 +21,7 @@
     role="switch"
     aria-label="Переключить на темную тему"
     aria-checked="false"
+    data-theme-control
   >
     <span class="theme-toggle-track" aria-hidden="true">
       <span class="theme-toggle-thumb" data-theme-thumb></span>
@@ -103,7 +104,8 @@
   const searchPanel = document.getElementById('header-search') as HTMLElement | null;
   const searchMount = document.getElementById('header-search-pagefind') as HTMLElement | null;
   const searchClose = document.getElementById('header-search-close');
-  const themeToggle = document.getElementById('theme-toggle');
+  // Тумблеров темы может быть несколько (в баре + в мобильном drawer).
+  const themeControls = Array.from(document.querySelectorAll('[data-theme-control]'));
 
   let pagefindReady = false;
   const initPagefind = () => {
@@ -167,6 +169,19 @@
     else openSearch();
   });
   searchClose?.addEventListener('click', closeSearch);
+
+  // Открытие поиска из мобильного drawer (в баре кнопка скрыта на ≤360px).
+  document.querySelectorAll('[data-search-open]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      // Без stopPropagation этот же клик всплывёт в outside-click хендлер ниже
+      // и мгновенно закроет только что открытую панель поиска.
+      e.stopPropagation();
+      const details = btn.closest('details');
+      if (details instanceof HTMLDetailsElement) details.open = false;
+      openSearch();
+    });
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && searchPanel && !searchPanel.hidden) closeSearch();
   });
@@ -178,20 +193,40 @@
     closeSearch();
   });
 
-  // Тема (тёмный режим)
+  // Тема (тёмный режим). Хранилище может быть недоступно (приватный режим) —
+  // читаем/пишем через try/catch, чтобы переключатель не падал.
   const resolveTheme = (v: string) => (v === 'dark' ? 'dark' : 'light');
+  const readStoredTheme = (): string | null => {
+    try {
+      return localStorage.getItem('ikpk.theme');
+    } catch {
+      return null;
+    }
+  };
+  const storeTheme = (theme: string) => {
+    try {
+      localStorage.setItem('ikpk.theme', theme);
+    } catch {
+      /* localStorage недоступен — тема не сохранится между визитами */
+    }
+  };
   const applyTheme = (theme: string) => {
     const normalized = resolveTheme(theme);
     document.documentElement.dataset.theme = normalized;
-    if (!themeToggle) return;
     const isDark = normalized === 'dark';
-    themeToggle.setAttribute('aria-checked', String(isDark));
-    themeToggle.setAttribute('aria-label', isDark ? 'Переключить на светлую тему' : 'Переключить на темную тему');
+    for (const control of themeControls) {
+      control.setAttribute('aria-checked', String(isDark));
+      control.setAttribute('aria-label', isDark ? 'Переключить на светлую тему' : 'Переключить на темную тему');
+      const label = control.querySelector('[data-theme-label]');
+      if (label) label.textContent = isDark ? 'Светлая тема' : 'Тёмная тема';
+    }
   };
-  applyTheme(resolveTheme(localStorage.getItem('ikpk.theme') || document.documentElement.dataset.theme || 'light'));
-  themeToggle?.addEventListener('click', () => {
-    const next = resolveTheme(document.documentElement.dataset.theme || 'light') === 'dark' ? 'light' : 'dark';
-    applyTheme(next);
-    localStorage.setItem('ikpk.theme', next);
-  });
+  applyTheme(resolveTheme(readStoredTheme() || document.documentElement.dataset.theme || 'light'));
+  for (const control of themeControls) {
+    control.addEventListener('click', () => {
+      const next = resolveTheme(document.documentElement.dataset.theme || 'light') === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      storeTheme(next);
+    });
+  }
 </script>
