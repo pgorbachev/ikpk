@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Атомарный деплой статики (releases + symlink current, хранит 5 релизов).
+# Ключ доступа задаётся через SSH_KEY (по умолчанию — ключ проекта; тело
+# ключа лежит только локально в ~/.ssh, в репозиторий не попадает).
+# На сервере должен быть настроен nginx-vhost для сайта (root WEB_ROOT/current).
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <host-or-ip>"
-  echo "Example: $0 146.103.124.113"
+  echo "Example: SSH_KEY=~/.ssh/id_ed25519_ikpk_vps $0 <server-ip>"
   exit 1
 fi
 
@@ -15,7 +19,7 @@ WEB_DIR="${WEB_DIR:-${REPO_ROOT}/web}"
 DIST_DIR="${DIST_DIR:-${WEB_DIR}/dist}"
 
 SSH_USER="${SSH_USER:-root}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_vdsina_root}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_ikpk_vps}"
 SITE_NAME="${SITE_NAME:-ikpk}"
 WEB_ROOT="${WEB_ROOT:-/var/www/${SITE_NAME}}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
