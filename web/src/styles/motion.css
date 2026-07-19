@@ -80,9 +80,13 @@
 .teacher-card,
 .upcoming-card,
 .stat-card {
+  /* hover-подъём + плавная смена темы одним объявлением — отдельное
+     theme-переопределение shorthand'ом стирало бы transform/box-shadow. */
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    background-color 0.3s ease,
+    border-color 0.3s ease;
 }
 @media (hover: hover) {
   .feature-card:hover,
@@ -115,35 +119,28 @@
   transform: translateY(0) scale(0.985);
 }
 
-/* ── Уплотнение верхней навигации при скролле ──────────────────────────── */
+/* ── Тень верхней навигации при скролле ────────────────────────────────── */
+/* Геометрию sticky-шапки НЕ трогаем (иначе контент под ней сдвигается —
+   post-load layout shift). Только тень-«отрыв» + плавная смена темы фона. */
 .topnav {
   transition:
     box-shadow 0.2s ease,
-    background-color 0.2s ease;
-}
-.topnav-bar {
-  transition: padding 0.2s ease;
+    background-color 0.3s ease;
 }
 .topnav[data-scrolled] {
   box-shadow: 0 4px 20px rgb(0 0 0 / 8%);
 }
-.topnav[data-scrolled] .topnav-bar {
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-}
 
-/* ── Плавная смена темы (класс добавляется после load) ─────────────────── */
-.theme-anim .topnav,
-.theme-anim .cta-band,
-.theme-anim .section-alt,
-.theme-anim .feature-card,
-.theme-anim .segment-card,
-.theme-anim .stat-card,
-.theme-anim .hero-d {
+/* ── Плавная смена темы для крупных поверхностей ───────────────────────── */
+/* Тему выставляем синхронно в <head> до первой отрисовки, поэтому на старте
+   переход не срабатывает (нечему меняться) — отдельный класс-гейт не нужен.
+   .hero-d не включаем: у него градиент (background-image), а не
+   background-color — плавно не интерполируется, дал бы «вспышку». */
+.cta-band,
+.section-alt {
   transition:
     background-color 0.3s ease,
-    border-color 0.3s ease,
-    color 0.3s ease;
+    border-color 0.3s ease;
 }
 
 /* ── prefers-reduced-motion: гасим всякое движение ─────────────────────── */

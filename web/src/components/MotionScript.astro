@@ -1,8 +1,12 @@
 ---
-// Прогрессивное улучшение: появление секций при скролле, уплотнение шапки и
-// плавная смена темы. Ставим синхронно в <head>, чтобы секции с [data-reveal]
-// не мелькали видимым состоянием до старта анимации. Всё уважает
-// prefers-reduced-motion и деградирует к статике без JS / без IntersectionObserver.
+// Прогрессивное улучшение: появление секций при скролле и тень шапки при
+// скролле. Ставим синхронно в <head>, чтобы секции с [data-reveal] не мелькали
+// видимым состоянием до старта анимации. Всё уважает prefers-reduced-motion и
+// деградирует к статике без JS / без IntersectionObserver.
+//
+// Плавная смена темы задаётся чисто в CSS (motion.css): тема выставляется
+// синхронно в <head> до первой отрисовки, поэтому на старте переход не
+// срабатывает — отдельный JS-гейт не нужен.
 ---
 <script is:inline>
   (function () {
@@ -13,45 +17,49 @@
     } catch (e) {
       /* matchMedia недоступен — считаем, что движение разрешено */
     }
-    var canReveal = !reduce && 'IntersectionObserver' in window;
+    // typeof …=== 'function' (не 'in'): исключаем существующее, но
+    // неконструируемое значение — иначе бросок в new оставил бы контент скрытым.
+    var canReveal = !reduce && typeof IntersectionObserver === 'function';
     if (canReveal) root.classList.add('has-motion');
 
     document.addEventListener('DOMContentLoaded', function () {
       if (canReveal) {
-        var io = new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (en) {
-              if (en.isIntersecting) {
-                en.target.classList.add('in');
-                io.unobserve(en.target);
-              }
-            });
-          },
-          { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
-        );
-        document.querySelectorAll('[data-reveal]').forEach(function (el) {
-          io.observe(el);
-        });
+        try {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting) {
+                  en.target.classList.add('in');
+                  io.unobserve(en.target);
+                }
+              });
+            },
+            { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
+          );
+          document.querySelectorAll('[data-reveal]').forEach(function (el) {
+            io.observe(el);
+          });
+        } catch (e) {
+          // Observer не создался — fail-open: возвращаем контент в видимое
+          // состояние, убрав класс (правила .has-motion [data-reveal] отключатся).
+          root.classList.remove('has-motion');
+        }
       }
 
-      // Уплотнение шапки при скролле (смена плотности, а не «движение»).
+      // Тень шапки при скролле (геометрию не меняем — без layout shift).
       var topnav = document.querySelector('.topnav');
       if (topnav) {
+        var scrolled = false;
         var onScroll = function () {
-          if (window.scrollY > 8) topnav.setAttribute('data-scrolled', '');
+          var next = window.scrollY > 8;
+          if (next === scrolled) return; // мутируем DOM только на смене порога
+          scrolled = next;
+          if (next) topnav.setAttribute('data-scrolled', '');
           else topnav.removeAttribute('data-scrolled');
         };
         onScroll();
         window.addEventListener('scroll', onScroll, { passive: true });
       }
-    });
-
-    // Плавные переходы темы включаем после полной загрузки — чтобы не было
-    // анимации при первичной установке data-theme (иначе «переход-вспышка»).
-    window.addEventListener('load', function () {
-      requestAnimationFrame(function () {
-        root.classList.add('theme-anim');
-      });
     });
   })();
 </script>
