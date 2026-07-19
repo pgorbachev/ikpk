@@ -63,17 +63,10 @@ const { noMenuToggle = false } = Astro.props;
     </div>
   </div>
   <div class="header-search" id="header-search" hidden>
-    <form class="header-search-form" action="/statyi" method="get" role="search">
-      <label class="sr-only" for="header-search-input">Поиск по сайту</label>
-      <input
-        id="header-search-input"
-        class="header-search-input"
-        type="search"
-        name="q"
-        placeholder="Поиск по сайту"
-        autocomplete="off"
-      />
-      <button class="header-search-submit" type="submit">Найти</button>
+    <div class="header-search-form" role="search">
+      <!-- Pagefind UI (FR-05): индекс строится на build, скрипт грузится
+           лениво при первом открытии поиска — 0 JS до клика -->
+      <div class="header-search-pagefind" id="header-search-pagefind" data-state="idle"></div>
       <button
         class="header-search-close"
         id="header-search-close"
@@ -82,7 +75,7 @@ const { noMenuToggle = false } = Astro.props;
       >
         ✕
       </button>
-    </form>
+    </div>
   </div>
 </header>
 
@@ -293,42 +286,23 @@ const { noMenuToggle = false } = Astro.props;
     margin-left: 0;
     width: 100%;
     display: flex;
-    align-items: center;
+    align-items: flex-start; /* кнопка закрытия у верха, выпадашка растёт вниз */
     gap: 0.4rem;
   }
 
-  .header-search-input {
+  .header-search-close {
+    margin-top: 6px;
+  }
+
+  .header-search-pagefind {
     width: 100%;
-    height: 38px;
-    border: 1px solid var(--color-gray-300);
-    border-radius: 6px;
-    background: var(--color-light-100);
-    color: var(--color-dark-700);
-    padding: 0 0.75rem;
+    min-height: 38px;
     font-size: var(--font-s);
   }
 
-  .header-search-input:focus {
-    outline: 2px solid var(--color-dark-700);
-    outline-offset: 0;
-    border-color: var(--color-dark-700);
-  }
-
-  .header-search-submit {
-    height: 38px;
-    padding: 0 0.95rem;
-    border: 1px solid var(--color-gray-300);
-    border-radius: 6px;
-    background: var(--color-gray-150);
-    color: var(--color-dark-700);
-    font-size: var(--font-s);
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .header-search-submit:hover {
-    background: var(--color-gray-200);
+  .header-search-pagefind[data-state='loading']::before {
+    content: 'Загружаем поиск…';
+    color: var(--color-gray-500);
   }
 
   .header-search-close {
@@ -401,16 +375,37 @@ const { noMenuToggle = false } = Astro.props;
     .header-search-form {
       width: 100%;
     }
-
-    .header-search-submit {
-      display: none;
-    }
   }
 
   @media (max-width: 480px) {
     .logo-wordmark {
       height: 24px;
     }
+  }
+</style>
+
+<style is:global>
+  /* Тема Pagefind UI под токены сайта (классы приходят из pagefind-ui.css,
+     поэтому нужен глобальный скоуп) */
+  .header-search-pagefind {
+    --pagefind-ui-primary: var(--color-accent-500);
+    --pagefind-ui-text: var(--color-dark-700);
+    --pagefind-ui-background: var(--color-light-100);
+    --pagefind-ui-border: var(--color-gray-300);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: 6px;
+    --pagefind-ui-scale: 0.85;
+    --pagefind-ui-font: inherit;
+  }
+
+  .header-search-pagefind .pagefind-ui__drawer {
+    max-height: min(60vh, 480px);
+    overflow-y: auto;
+    background: var(--color-light-100);
+    border: 1px solid var(--color-gray-300);
+    border-radius: 6px;
+    padding: 0 0.9rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
   }
 </style>
 
@@ -421,8 +416,62 @@ const { noMenuToggle = false } = Astro.props;
   const themeToggle = document.getElementById('theme-toggle');
   const searchToggle = document.getElementById('header-search-toggle');
   const searchPanel = document.getElementById('header-search') as HTMLElement | null;
-  const searchInput = document.getElementById('header-search-input') as HTMLInputElement | null;
+  const searchMount = document.getElementById('header-search-pagefind') as HTMLElement | null;
   const searchClose = document.getElementById('header-search-close');
+
+  // Ленивая инициализация Pagefind UI при первом открытии поиска.
+  // В dev-режиме astro индекса нет (/pagefind/* создаётся на build) —
+  // показываем подсказку вместо падения.
+  let pagefindReady = false;
+  const initPagefind = () => {
+    if (pagefindReady || !searchMount) return;
+    pagefindReady = true;
+    searchMount.dataset.state = 'loading';
+
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/pagefind/pagefind-ui.css';
+    document.head.appendChild(css);
+
+    const script = document.createElement('script');
+    script.src = '/pagefind/pagefind-ui.js';
+    script.onload = () => {
+      // @ts-expect-error PagefindUI приходит глобалом из pagefind-ui.js
+      new PagefindUI({
+        element: '#header-search-pagefind',
+        showImages: false,
+        showSubResults: true,
+        autofocus: true,
+        translations: {
+          placeholder: 'Поиск по сайту',
+          clear_search: 'Очистить',
+          load_more: 'Показать ещё',
+          search_label: 'Поиск по сайту',
+          zero_results: 'Ничего не найдено по запросу «[SEARCH_TERM]»',
+          many_results: 'Найдено [COUNT] результатов по запросу «[SEARCH_TERM]»',
+          one_result: 'Найден [COUNT] результат по запросу «[SEARCH_TERM]»',
+          searching: 'Ищем «[SEARCH_TERM]»…',
+        },
+      });
+      searchMount.dataset.state = 'ready';
+      focusSearchInput();
+    };
+    script.onerror = () => {
+      searchMount.dataset.state = 'error';
+      searchMount.textContent = 'Поиск доступен только в собранной версии сайта.';
+    };
+    document.head.appendChild(script);
+  };
+
+  const focusSearchInput = () => {
+    const input = searchMount?.querySelector<HTMLInputElement>('input');
+    if (input) {
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+    }
+  };
 
   toggle?.addEventListener('click', () => {
     const isOpen = sidebar?.classList.toggle('open');
@@ -438,13 +487,11 @@ const { noMenuToggle = false } = Astro.props;
   };
 
   const openSearch = () => {
-    if (!searchPanel || !searchToggle || !searchInput) return;
+    if (!searchPanel || !searchToggle) return;
     searchPanel.hidden = false;
     searchToggle.setAttribute('aria-expanded', 'true');
-    requestAnimationFrame(() => {
-      searchInput.focus();
-      searchInput.select();
-    });
+    initPagefind();
+    focusSearchInput();
   };
 
   searchToggle?.addEventListener('click', () => {

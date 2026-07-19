@@ -182,6 +182,16 @@ describe('404 and sitemap', () => {
     expect((xml.match(/ikpk\.su\/statyi\//g)?.length ?? 0)).toBeGreaterThan(60);
   });
 
+  it('pagefind search index is built (FR-05)', () => {
+    // артефакты Pagefind в dist: ленивый UI + индекс
+    for (const f of ['pagefind/pagefind.js', 'pagefind/pagefind-ui.js', 'pagefind/pagefind-ui.css']) {
+      expect(statSync(join(dist, f)).size, `${f} is empty`).toBeGreaterThan(1000);
+    }
+    // индекс нетривиален (256 страниц → фрагменты + словари)
+    const entry = JSON.parse(readFileSync(join(dist, 'pagefind', 'pagefind-entry.json'), 'utf-8'));
+    expect(Object.keys(entry.languages ?? {}).length).toBeGreaterThan(0);
+  });
+
   it('robots.txt: Sitemap + Clean-param, no CSS/JS blocking', () => {
     const robots = readFileSync(join(dist, 'robots.txt'), 'utf-8');
     expect(robots).toContain('Sitemap: https://ikpk.su/sitemap-index.xml');

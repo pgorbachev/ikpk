@@ -70,7 +70,9 @@ const siteName = 'ИКПК';
   <body>
     <Header noMenuToggle={noSidebar} />
     {!noSidebar && <Sidebar />}
-    <main>
+    {/* data-pagefind-body: индексируется только контент — шапка/сайдбар/футер
+        с одинаковыми ссылками на всех 256 страницах размывали релевантность */}
+    <main data-pagefind-body>
       <slot />
     </main>
 

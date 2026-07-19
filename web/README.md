@@ -36,6 +36,10 @@ npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 > версия бинарника Playwright разошлась с `@playwright/test` из lock-файла.
 > Лечится `npx playwright install chromium`.
 
+> **Gotcha:** e2e-тесты поиска требуют dist, собранный через `npm run build`
+> (он включает pagefind-индексацию). После голого `astro build` поиск в
+> превью не работает и тест Search упадёт.
+
 ## CI
 
 | Workflow | Когда | Что |

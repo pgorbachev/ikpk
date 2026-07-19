@@ -57,8 +57,9 @@ test.describe('Parity Audit Acceptance', () => {
     await expect(searchButton).toBeVisible();
     await searchButton.click();
 
-    const searchInput = page.locator('#header-search-input');
-    await expect(searchInput).toBeVisible();
+    // Pagefind UI создаёт input лениво при первом открытии панели
+    const searchInput = page.locator('#header-search-pagefind input');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
     await expect(searchInput).toBeFocused();
     await searchInput.fill('апледжер');
     await expect(searchInput).toHaveValue('апледжер');

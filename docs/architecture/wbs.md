@@ -71,7 +71,7 @@ storage.yandexcloud.net. Flip to required together with the "0 hotlinks" grep ga
 
 | # | Task | Status | FR/NFR | Depends on |
 |---|------|--------|--------|------------|
-| 4.1 | Pagefind search (build-time index, lazy load) | ⬜ | FR-05 | — |
+| 4.1 | Pagefind search (build-time index, lazy load) | ✅ | FR-05 | индекс в `npm run build` (только `<main>`); UI лениво; шапочная форма «поиск только по статьям» заменена сайт-wide поиском — серверный фильтр /statyi?q= при этом жив; e2e с опечаткой |
 | 4.2 | Bitrix24 Open Lines chat (requestIdleCallback) | ⬜ | FR-13 | client keys |
 | 4.3 | Bitrix24 CRM form **embed** (не редирект) on schedule entries + seminar pages, UTM | ⬜ | FR-06 | client keys |
 | 4.4 | NewsletterSignup → Bitrix24 form or hide (decision) | ⬜ | FR-07 | 152-ФЗ page |
