@@ -33,6 +33,10 @@ test.describe('Accessibility', () => {
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        // Сторонние эмбеды (Яндекс.Карта, RUTUBE-плеер) — чужой markup,
+        // их a11y мы не контролируем; axe не должен спускаться внутрь них.
+        .exclude('.contact-shell-map')
+        .exclude('.video-facade')
         .analyze();
 
       const blocking = results.violations.filter(
