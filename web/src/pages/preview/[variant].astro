@@ -19,8 +19,9 @@ export const getStaticPaths: GetStaticPaths = () =>
   Object.keys(variants).map((id) => ({ params: { variant: id } }));
 
 const { variant: variantId } = Astro.params;
-const variant = variants[variantId as string];
-if (!variant) return Astro.redirect('/404');
+// Инвариант: getStaticPaths генерирует только id из реестра, поэтому вариант
+// всегда определён на этапе сборки.
+const variant = variants[variantId as string]!;
 
 const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   'hero-offer': HeroOffer,

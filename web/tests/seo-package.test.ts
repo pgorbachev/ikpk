@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, statSync } from 'fs';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { gunzipSync } from 'zlib';
 import { join } from 'path';
 import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
 
@@ -201,6 +202,41 @@ describe('404 and sitemap', () => {
       expect(readPage(p), `${p} must be noindex`).toContain('noindex');
       expect(xml.includes(p), `${p} must NOT be in sitemap`).toBe(false);
     }
+  });
+
+  it('preview variant internal links all resolve to built pages', () => {
+    // Ссылки секций (в т.ч. href семинаров из home.ts, собранный join двух
+    // датасетов) должны вести на реальные страницы — не в 404/фолбэк.
+    const built = new Set(allPages());
+    const broken: string[] = [];
+    for (const p of allPages().filter((x) => x.startsWith('/preview/'))) {
+      const html = readPage(p);
+      for (const m of html.matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)"/gi)) {
+        let target = decodeURI(m[1]);
+        if (!target.endsWith('/')) target += '/';
+        // якоря (#upcoming) и внешние уже отфильтрованы паттерном
+        if (!built.has(target)) broken.push(`${p} → ${m[1]}`);
+      }
+    }
+    expect(broken, `preview links to non-existent pages:\n${broken.join('\n')}`).toEqual([]);
+  });
+
+  it('preview draft content is NOT in the Pagefind index (утечка в поиск)', () => {
+    const fragDir = join(dist, 'pagefind', 'fragment');
+    // фрагменты Pagefind сжаты; проверяем, что ни один не ссылается на /preview/
+    let leaked = false;
+    for (const f of readdirSync(fragDir)) {
+      const buf = readFileSync(join(fragDir, f));
+      // grep по gunzip-контенту
+      try {
+        const text = gunzipSync(buf).toString('utf-8');
+        if (text.includes('/preview/')) leaked = true;
+      } catch {
+        // не gzip — ищем как есть
+        if (buf.toString('utf-8').includes('/preview/')) leaked = true;
+      }
+    }
+    expect(leaked, 'preview draft leaked into Pagefind search index').toBe(false);
   });
 
   it('robots.txt: Sitemap + Clean-param, no CSS/JS blocking', () => {

@@ -4,8 +4,10 @@
 // нативный <details> drawer без внешнего JS.
 import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
 
+// rel берём из navigation.ts как есть (уже 'noopener noreferrer' — согласовано
+// с Footer); дефолт на случай внешней ссылки без явного rel.
 const rel = (link: { external?: boolean; rel?: string }) =>
-  link.external ? [link.rel, 'noopener'].filter(Boolean).join(' ') || 'noopener' : undefined;
+  link.external ? link.rel || 'noopener noreferrer' : undefined;
 const target = (link: { external?: boolean }) => (link.external ? '_blank' : undefined);
 ---
 
@@ -21,7 +23,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
         {primaryNav.map((item) =>
           item.children ? (
             <li class="has-dropdown">
-              <a href={item.href} class="topnav-link" aria-haspopup="true">
+              <a href={item.href} class="topnav-link">
                 {item.label}
                 <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5L6 7.5l3-3" stroke="currentColor" stroke-width="1.3" fill="none" /></svg>
               </a>

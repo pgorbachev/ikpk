@@ -47,8 +47,9 @@ const {
     <Header noMenuToggle={noSidebar} />
     {!noSidebar && <Sidebar />}
     {/* data-pagefind-body: индексируется только контент — шапка/сайдбар/футер
-        с одинаковыми ссылками на всех 256 страницах размывали релевантность */}
-    <main data-pagefind-body>
+        с одинаковыми ссылками на всех 256 страницах размывали релевантность.
+        noindex-страницы (404) из внутреннего поиска исключаются. */}
+    <main data-pagefind-body={noindex ? undefined : true} data-pagefind-ignore={noindex ? true : undefined}>
       <slot />
     </main>
 

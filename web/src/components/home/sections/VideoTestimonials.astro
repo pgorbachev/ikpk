@@ -1,10 +1,11 @@
 ---
 // Видео-отзывы «до/после». ЗАБЛОКИРОВАНА контентом: видео нет (запрос
 // заказчику в client-requests.md). Показывается в превью как каркас-заглушка.
+import PlaceholderNote from './PlaceholderNote.astro';
 ---
 <section class="testimonials section section-alt">
   <div class="container">
-    <p class="placeholder-note">⚠ Черновой блок: видео-отзывы выпускников заказчик пока не предоставил (запрошены). Каркас для оценки композиции.</p>
+    <PlaceholderNote text="Черновой блок: видео-отзывы выпускников заказчик пока не предоставил (запрошены). Каркас для оценки композиции." />
     <h2 class="section-title">Истории выпускников</h2>
     <p class="section-sub">Реальные кейсы «до и после» — как обучение изменило практику и доход.</p>
     <div class="testimonials-grid">
@@ -20,10 +21,6 @@
 </section>
 
 <style>
-  .placeholder-note {
-    font-size: var(--font-s); color: #8a5a00; background: #fff3cd; border: 1px solid #ffe08a;
-    border-radius: 8px; padding: 0.6rem 0.9rem; margin-bottom: 1.25rem;
-  }
   .section-sub { color: var(--color-gray-500); margin-bottom: 1.5rem; }
   .testimonials-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
   .testimonial-card { border: 1px solid var(--color-gray-150); border-radius: 12px; overflow: hidden; background: var(--color-light-100); }

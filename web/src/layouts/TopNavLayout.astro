@@ -41,7 +41,9 @@ const {
   </head>
   <body class="layout-topnav">
     <TopNav />
-    <main data-pagefind-body>
+    {/* noindex-страницы (превью вариантов) не индексируются и внутренним
+        поиском Pagefind — иначе черновик всплыл бы в результатах на проде */}
+    <main data-pagefind-body={noindex ? undefined : true} data-pagefind-ignore={noindex ? true : undefined}>
       <slot />
     </main>
     <Footer />

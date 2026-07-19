@@ -26,7 +26,7 @@ export const primaryNav: NavItem[] = [
     ],
   },
   { label: 'Расписание', href: '/raspisanie-i-tseny' },
-  { label: 'Магазин', href: 'https://kinezio.shop/', external: true, rel: 'noopener' },
+  { label: 'Магазин', href: 'https://kinezio.shop/', external: true, rel: 'noopener noreferrer' },
   { label: 'Статьи', href: '/statyi' },
   {
     label: 'Об институте',
@@ -36,7 +36,7 @@ export const primaryNav: NavItem[] = [
       { label: 'Сотрудничество с нами', href: '/sotrudnichestvo-s-nami' },
       { label: 'Акции и скидки', href: '/aktsii-i-skidki' },
       { label: 'Видео', href: '/video' },
-      { label: 'Медицинский центр', href: 'https://mudriydoctor.ru/', external: true, rel: 'noopener' },
+      { label: 'Медицинский центр', href: 'https://mudriydoctor.ru/', external: true, rel: 'noopener noreferrer' },
     ],
   },
   { label: 'Контакты', href: '/kontakty' },
