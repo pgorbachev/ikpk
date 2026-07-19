@@ -35,7 +35,7 @@ export default tseslint.config(
       'src/pages/\\[institute\\]/\\[courseGroup\\]/\\[seminar\\].astro',
       'src/pages/\\[institute\\]/prepodavatel/\\[id\\].astro',
       'src/pages/aktsii-i-skidki.astro',
-      'src/pages/index.astro',
+      'src/components/home/sections/News.astro',
       'src/pages/oplata.astro',
       'src/pages/sotrudnichestvo-s-nami.astro',
       'src/pages/statyi/\\[slug\\].astro',

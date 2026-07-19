@@ -1,0 +1,174 @@
+---
+// Секция «Новости» (слайдер). Извлечена из index.astro вместе с CSS и JS.
+import MediaCard from '../../ui/MediaCard.astro';
+import { getNews, cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
+
+const news = getNews();
+---
+{news.length > 0 && (
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Новости</h2>
+      <div class="news-slider" data-news-slider>
+        <button type="button" class="news-nav-btn" aria-label="Предыдущий слайд" data-news-prev>
+          <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M12.5 4.5L7 10l5.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div class="news-viewport" data-news-viewport>
+          <div class="news-track" data-news-track>
+            {news.map((item) => (
+              <MediaCard
+                href={item.link}
+                title={item.name}
+                image={item.image?.url}
+                imageAlt={item.name}
+                imageRatio="3 / 2"
+                target="_blank"
+                rel={[...new Set(['noopener', ...(relForExternalUrl(item.link) ?? [])])].join(' ')}
+                className="news-card"
+              >
+                <div class="news-card-desc text-small" set:html={cleanBodyHtml(item.description)} />
+              </MediaCard>
+            ))}
+          </div>
+        </div>
+        <button type="button" class="news-nav-btn" aria-label="Следующий слайд" data-news-next>
+          <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </section>
+)}
+
+<style>
+  .section-alt { background-color: var(--color-light-300); }
+
+  .news-slider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .news-viewport {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .news-track {
+    --news-visible: 4;
+    display: grid;
+    grid-template-columns: repeat(var(--news-visible), minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  :global(.news-card) {
+    display: none;
+    min-width: 0;
+  }
+
+  :global(.news-card.is-visible) {
+    display: block;
+  }
+
+  .news-nav-btn {
+    width: 40px;
+    border: 1px solid var(--color-gray-250);
+    border-radius: var(--radius-s);
+    background: var(--color-light-100);
+    color: var(--color-dark-700);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .news-nav-btn:hover {
+    background: #f5f5f5;
+    border-color: #cdcdcd;
+  }
+
+  .news-nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  :global(.news-card .card-body) {
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  :global(.news-card .media-card-title) {
+    font-size: 0.94rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .news-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  @media (max-width: 1024px) {
+    .news-track { --news-visible: 2; }
+  }
+
+  /* 680px — синхронно с JS getVisibleCount() (≤680 → 1 карточка), иначе
+     на 641–680px грид рисует 2 колонки, а видима 1 → пустая ячейка */
+  @media (max-width: 680px) {
+    .news-slider { gap: 0.5rem; }
+    .news-nav-btn { width: 34px; }
+    .news-track { --news-visible: 1; }
+  }
+</style>
+
+<script>
+  const slider = document.querySelector<HTMLElement>('[data-news-slider]');
+  const track = slider?.querySelector<HTMLElement>('[data-news-track]');
+  const prevBtn = slider?.querySelector<HTMLButtonElement>('[data-news-prev]');
+  const nextBtn = slider?.querySelector<HTMLButtonElement>('[data-news-next]');
+
+  if (slider && track && prevBtn && nextBtn) {
+    const slides = Array.from(track.children) as HTMLElement[];
+    let startIndex = 0;
+
+    const getVisibleCount = () => {
+      const width = window.innerWidth;
+      if (width <= 680) return 1;
+      if (width <= 1024) return 2;
+      return 4;
+    };
+
+    const render = () => {
+      if (slides.length === 0) return;
+      const visibleCount = Math.min(getVisibleCount(), slides.length);
+      track.style.setProperty('--news-visible', String(visibleCount));
+      track.setAttribute('data-start-index', String(startIndex));
+      track.setAttribute('data-visible-count', String(visibleCount));
+      slides.forEach((slide, idx) => {
+        const relative = (idx - startIndex + slides.length) % slides.length;
+        slide.style.order = String(relative);
+        slide.classList.toggle('is-visible', relative < visibleCount);
+      });
+    };
+
+    prevBtn.addEventListener('click', () => {
+      if (slides.length === 0) return;
+      startIndex = (startIndex - 1 + slides.length) % slides.length;
+      render();
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (slides.length === 0) return;
+      startIndex = (startIndex + 1) % slides.length;
+      render();
+    });
+
+    window.addEventListener('resize', render);
+    render();
+  }
+</script>

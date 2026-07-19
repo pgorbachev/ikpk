@@ -1,0 +1,109 @@
+---
+// Секция «Наши преимущества» (6 карточек + CTA-полоса). Извлечена из index.astro
+// для переиспользования (текущая главная + варианты редизайна).
+import FeatureCard from '../FeatureCard.astro';
+
+const advantages = [
+  {
+    icon: '/adv-icon-1.svg',
+    title: 'Наш многолетний опыт в образовании',
+    text: 'Подготовка квалифицированных специалистов в медицине — сложная и ответственная задача. У нас получается делать это лучше других, потому что наработали годами проверенные методики и продолжаем оттачивать их.',
+  },
+  {
+    icon: '/adv-icon-2.svg',
+    title: 'Сотрудничество с зарубежными институтами',
+    text: 'ИКПК — единственный официальный представитель институтов Апледжера и Барраля в России, предлагающий уникальные методики ведущих специалистов. Это даёт вам возможность обучаться по мировым стандартам.',
+  },
+  {
+    icon: '/adv-icon-3.svg',
+    title: 'Настоящие преподаватели – ключ к успеху',
+    text: 'Чтобы стать хорошим преподавателем, недостаточно быть просто отличным врачом. Поэтому в педагогическом штате ИКПК — лучшие из лучших, создавшие авторские программы и щедро делящиеся своими знаниями и опытом.',
+  },
+  {
+    icon: '/adv-icon-4.svg',
+    title: 'Документы об образовании для наших студентов',
+    text: 'Студенты с базовым медицинским образованием получают удостоверения о повышении квалификации с внесением сведений в ФИС ФРДО. Они также имеют возможность получить единицы трудоёмкости (ЗЕТ, баллы НМО).',
+  },
+  {
+    icon: '/adv-icon-5.svg',
+    title: 'Издательство медицинской литературы',
+    text: 'Издательский дом ИКПК занимается лицензированным переводом и изданием на русском языке научной и учебной литературы по остеопатии и прикладной кинезиологии. Большинство книг изданы в России впервые.',
+  },
+  {
+    icon: '/adv-icon-6.svg',
+    title: 'Практика в нашем медицинском центре',
+    text: 'В нашем медицинском центре студенты могут под руководством опытных преподавателей совершенствовать знания, полученные в процессе обучения. Такой аналог интернатуры в области холистической медицины доступен только здесь.',
+  },
+];
+---
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Наши преимущества</h2>
+    <div class="grid grid-3 advantages-grid">
+      {advantages.map((item) => (
+        <FeatureCard icon={item.icon} title={item.title} text={item.text} />
+      ))}
+    </div>
+    <div class="adv-cta">
+      <div class="adv-cta-shell">
+        <div class="adv-cta-copy">
+          <p class="adv-cta-lead">Готовы к нам присоединиться?</p>
+          <p class="adv-cta-sub">Выбирайте направление обучения и записывайтесь на ближайший поток ИКПК.</p>
+        </div>
+        <a href="/raspisanie-i-tseny" class="btn btn-primary adv-cta-btn">Записаться на обучение</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .advantages-grid { gap: 1.2rem; }
+
+  .adv-cta { margin-top: 2.25rem; }
+
+  .adv-cta-shell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.35rem;
+    padding: 1.25rem 1.4rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #46554f 0%, #3d4b46 100%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
+  }
+
+  .adv-cta-copy { max-width: 640px; }
+
+  .adv-cta-lead {
+    font-size: 1.45rem;
+    font-weight: 600;
+    color: #f7fbf9;
+    margin-bottom: 0.35rem;
+    line-height: 1.25;
+  }
+
+  .adv-cta-sub {
+    color: rgba(245, 250, 248, 0.88);
+    margin: 0;
+    line-height: 1.5;
+    font-size: var(--font-m);
+  }
+
+  .adv-cta-btn {
+    flex-shrink: 0;
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow: none;
+  }
+
+  @media (max-width: 860px) {
+    .adv-cta-shell {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .adv-cta-btn {
+      width: 100%;
+      text-align: center;
+    }
+  }
+</style>
