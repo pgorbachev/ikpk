@@ -173,6 +173,11 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 
   @media (max-width: 900px) {
     .topnav-menu, .topnav-phone { display: none; }
+    /* дескриптор под лого не помещается рядом с CTA+бургером на узком
+       мобильном — прячем, чтобы шапка не распирала вьюпорт */
+    .topnav-logo-desc { display: none; }
+    .topnav-bar { gap: 0.6rem; padding: 0.6rem 0.9rem; }
+    .topnav-cta { padding: 0.5rem 0.85rem; }
     .topnav-mobile { display: block; position: relative; }
     .topnav-mobile > summary {
       list-style: none;

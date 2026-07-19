@@ -1,0 +1,89 @@
+---
+// Hero варианта D (синтез): каркас-сплит как в B, но предметный оффер (без
+// неподтверждённого «международного уровня»), 3 подтверждённых доказательства,
+// строка ближайшего семинара (реальные дата/город/цена) и реальное фото
+// практики вместо абстрактной иллюстрации.
+import { CTA_HREF } from '../../../lib/navigation';
+import { getUpcomingSeminars } from '../../../lib/home';
+
+const next = getUpcomingSeminars(1)[0];
+// Реальное фото практического занятия (самохост). Плейсхолдер-качества —
+// заменить на профессиональное фото обучения от заказчика (client-requests).
+const heroPhoto = '/media/video-thumbs/31.jpg';
+---
+<section class="hero-d">
+  <div class="hero-d-inner">
+    <div class="hero-d-copy">
+      <span class="hero-d-badge">Институты Апледжера и Барраля · Санкт-Петербург</span>
+      <h1 class="hero-d-title">
+        Обучение прикладной кинезиологии <span class="accent">для врачей и специалистов по движению</span>
+      </h1>
+      <p class="hero-d-sub">
+        Практико-ориентированные программы ИКПК, Институтов Апледжера и Барраля.
+        Подберите направление и ближайший очный семинар.
+      </p>
+
+      <ul class="hero-d-proofs">
+        <li>Практика с первого модуля</li>
+        <li>Программы Институтов Апледжера и Барраля</li>
+        <li>Очно в Санкт-Петербурге и Москве</li>
+      </ul>
+
+      {next && (
+        <a class="hero-d-next" href={next.href}>
+          <span class="hero-d-next-label">Ближайший семинар</span>
+          <span class="hero-d-next-value">
+            {next.dateLabel} · {next.cityName}{!next.isFree && ` · ${next.priceLabel}`}
+          </span>
+        </a>
+      )}
+
+      <div class="hero-d-actions">
+        <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Подобрать программу</a>
+        <a href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>
+      </div>
+    </div>
+
+    <div class="hero-d-visual">
+      <img src={heroPhoto} alt="Практическое занятие ИКПК" width="640" height="360" loading="eager" fetchpriority="high" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-d { background: linear-gradient(135deg, #f2f8f2 0%, #e6f0e7 100%); }
+  .hero-d-inner {
+    max-width: 1240px; margin: 0 auto; padding: 3rem 1.25rem;
+    display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 2.5rem; align-items: center;
+  }
+  .hero-d-badge {
+    display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--color-accent-600); margin-bottom: 1rem;
+  }
+  .hero-d-title { font-size: clamp(1.8rem, 4vw, var(--font-xxxl)); font-weight: 700; line-height: 1.15; }
+  .hero-d-title .accent { color: var(--color-accent-600); }
+  .hero-d-sub { margin: 1rem 0 1.25rem; color: var(--color-gray-600); line-height: 1.5; max-width: 560px; }
+  .hero-d-proofs { list-style: none; margin: 0 0 1.25rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .hero-d-proofs li { position: relative; padding-left: 1.6rem; font-size: var(--font-s); }
+  .hero-d-proofs li::before { content: '✓'; position: absolute; left: 0; color: var(--color-accent-500); font-weight: 700; }
+
+  .hero-d-next {
+    display: inline-flex; flex-direction: column; gap: 0.1rem;
+    background: var(--color-light-100); border: 1px solid var(--color-accent-500);
+    border-left-width: 4px; border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 1.5rem;
+    text-decoration: none; transition: box-shadow 0.15s;
+  }
+  .hero-d-next:hover { box-shadow: 0 4px 14px rgb(53 122 56 / 18%); }
+  .hero-d-next-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-accent-600); }
+  .hero-d-next-value { font-size: var(--font-m); font-weight: 600; color: var(--color-dark-700); }
+
+  .hero-d-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+  .hero-d-visual { display: flex; justify-content: center; }
+  .hero-d-visual img { width: 100%; max-width: 520px; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / 12%); }
+
+  @media (max-width: 860px) {
+    .hero-d-inner { grid-template-columns: 1fr; gap: 1.5rem; }
+    .hero-d-visual { order: -1; }
+    .hero-d-visual img { max-width: 100%; }
+  }
+</style>

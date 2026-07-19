@@ -19,6 +19,7 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
   // варианты редизайна (верхнее меню) — новый layout + hero-компоненты под гейтом
   { name: 'preview-b', path: '/preview/b/' },
   { name: 'preview-c', path: '/preview/c/' },
+  { name: 'preview-d', path: '/preview/d/' },
   // страница видео-плейлиста с фасадом (FR-04)
   { name: 'video', path: '/video/33/' },
   // контакты с ленивой картой + форма подписки (card-вариант)
