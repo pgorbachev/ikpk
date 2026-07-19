@@ -1,0 +1,90 @@
+---
+// Hero варианта C — центрированный, «результат/практика» + аудиторные чипы.
+// Ось отличия от варианта B (сплит, «международный уровень»). Факты честные.
+import { CTA_HREF } from '../../../lib/navigation';
+---
+<section class="hero-c">
+  <div class="hero-c-inner">
+    <span class="hero-c-badge">Институты Апледжера и Барраля · Санкт-Петербург</span>
+    <h1 class="hero-c-title">
+      Освойте прикладную кинезиологию —<br />
+      <span class="accent">от первого семинара до собственной практики</span>
+    </h1>
+    <p class="hero-c-sub">
+      Постдипломное обучение для врачей, массажистов и реабилитологов:
+      мышечное тестирование, краниосакральная и висцеральная терапия.
+      Практика с первого модуля под руководством практикующих преподавателей.
+    </p>
+
+    <div class="hero-c-audience" role="list" aria-label="Кому подходит">
+      <a class="hero-c-chip" role="listitem" href="/institut-klinicheskoy-prikladnoy-kineziologii">Врачам</a>
+      <a class="hero-c-chip" role="listitem" href="/raspisanie-i-tseny">Массажистам</a>
+      <a class="hero-c-chip" role="listitem" href="/raspisanie-i-tseny">Тренерам и реабилитологам</a>
+    </div>
+
+    <div class="hero-c-actions">
+      <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Выбрать программу обучения</a>
+      <a href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-c {
+    background:
+      radial-gradient(1100px 420px at 50% -10%, rgb(53 122 56 / 12%), transparent 70%),
+      linear-gradient(180deg, #f4f9f4 0%, var(--color-light-100) 100%);
+    text-align: center;
+  }
+  .hero-c-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 3.5rem 1.25rem 3rem;
+  }
+  .hero-c-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent-600);
+    margin-bottom: 1.1rem;
+  }
+  .hero-c-title {
+    font-size: clamp(1.9rem, 4.5vw, var(--font-xxxl));
+    font-weight: 700;
+    line-height: 1.15;
+  }
+  .hero-c-title .accent { color: var(--color-accent-600); }
+  .hero-c-sub {
+    margin: 1.1rem auto 1.5rem;
+    max-width: 640px;
+    color: var(--color-gray-600);
+    line-height: 1.55;
+  }
+  .hero-c-audience {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.6rem;
+  }
+  .hero-c-chip {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-accent-500);
+    border-radius: 999px;
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-accent-600);
+    text-decoration: none;
+    background: var(--color-light-100);
+    transition: background 0.15s, color 0.15s;
+  }
+  .hero-c-chip:hover { background: var(--color-accent-500); color: #fff; }
+  .hero-c-actions {
+    display: flex;
+    gap: 0.8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>
