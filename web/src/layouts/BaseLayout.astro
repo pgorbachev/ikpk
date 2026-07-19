@@ -7,13 +7,10 @@ interface Props {
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
   newsletterVariant?: 'band' | 'card' | 'none';
-  /** Лёгкий режим без сайдбара — для 404 (цель <20KB, план 004 Этап 3) */
-  noSidebar?: boolean;
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
-import Header from '../components/Header.astro';
-import Sidebar from '../components/Sidebar.astro';
+import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
@@ -27,7 +24,6 @@ const {
   schema,
   preloadHero = false,
   newsletterVariant = 'band',
-  noSidebar = false,
 } = Astro.props;
 ---
 
@@ -43,11 +39,10 @@ const {
       preloadHero={preloadHero}
     />
   </head>
-  <body>
-    <Header noMenuToggle={noSidebar} />
-    {!noSidebar && <Sidebar />}
-    {/* data-pagefind-body: индексируется только контент — шапка/сайдбар/футер
-        с одинаковыми ссылками на всех 256 страницах размывали релевантность.
+  <body class="layout-topnav">
+    <TopNav />
+    {/* data-pagefind-body: индексируется только контент — шапка/футер с
+        одинаковыми ссылками на всех страницах размывали релевантность.
         noindex-страницы (404) из внутреннего поиска исключаются. */}
     <main data-pagefind-body={noindex ? undefined : true} data-pagefind-ignore={noindex ? true : undefined}>
       <slot />

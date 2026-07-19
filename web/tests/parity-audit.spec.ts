@@ -9,44 +9,20 @@ test.describe('Parity Audit Acceptance', () => {
   test('homepage header keeps required controls', async ({ page }) => {
     await gotoAttachedPath(page, '/');
 
-    const header = page.locator('header').first();
+    // Промоушен варианта D: chrome — верхнее меню (topnav) с инструментами
+    // HeaderTools. Кнопку «для слабовидящих» намеренно не переносим — на старой
+    // шапке она была нефункциональной заглушкой. Обязательный минимум:
+    // телефон, поиск (Pagefind), тумблер темы с бегунком и основной CTA.
+    const header = page.locator('header.topnav');
     await expect(header).toBeVisible();
-    await expect(header.locator('a[href^="tel:"]')).toBeVisible();
+    await expect(header.locator('a[href^="tel:"]').first()).toBeVisible();
     await expect(header.getByRole('button', { name: /Открыть поиск/i })).toBeVisible();
-    await expect(header.getByRole('button', { name: /слабовидящ/i })).toBeVisible();
-    await expect(header.locator('[role="switch"][aria-label*="тем"]')).toBeVisible();
 
-    const headerControlMetrics = await header.locator('.header-controls').evaluate((node) => {
-      const search = node.querySelector('[data-header-tool="search"]') as HTMLElement | null;
-      const vision = node.querySelector('[data-header-tool="vision"]') as HTMLElement | null;
-      const theme = node.querySelector('[data-header-tool="theme"]') as HTMLElement | null;
-      const themeThumb = node.querySelector('[data-theme-thumb]') as HTMLElement | null;
+    const themeSwitch = header.locator('[role="switch"][aria-label*="тем"]');
+    await expect(themeSwitch).toBeVisible();
+    await expect(header.locator('[data-theme-thumb]')).toHaveCount(1);
 
-      if (!search || !vision || !theme) {
-        return null;
-      }
-
-      const searchRect = search.getBoundingClientRect();
-      const visionRect = vision.getBoundingClientRect();
-      const themeRect = theme.getBoundingClientRect();
-      const searchRadius = Number.parseFloat(getComputedStyle(search).borderTopLeftRadius);
-      const themeRadius = Number.parseFloat(getComputedStyle(theme).borderTopLeftRadius);
-
-      return {
-        searchWidth: searchRect.width,
-        visionWidth: visionRect.width,
-        themeWidth: themeRect.width,
-        searchRadius,
-        themeRadius,
-        hasThemeThumb: Boolean(themeThumb),
-      };
-    });
-
-    expect(headerControlMetrics).not.toBeNull();
-    expect(headerControlMetrics?.hasThemeThumb).toBeTruthy();
-    expect(headerControlMetrics!.themeWidth).toBeGreaterThan(headerControlMetrics!.searchWidth + 12);
-    expect(headerControlMetrics!.themeRadius).toBeGreaterThan(headerControlMetrics!.searchRadius + 8);
-    expect(headerControlMetrics!.visionWidth).toBeGreaterThanOrEqual(headerControlMetrics!.searchWidth);
+    await expect(header.locator('[data-cta="header"]')).toBeVisible();
   });
 
   test('homepage search control opens and focuses a real input', async ({ page }) => {
@@ -283,16 +259,14 @@ test.describe('Parity Audit Acceptance', () => {
   test('typography and tone smoke', async ({ page }) => {
     await gotoAttachedPath(page, '/');
     const homeChrome = await page.evaluate(() => {
-      const header = document.querySelector('header');
-      const sidebar = document.getElementById('sidebar');
+      // Промоушен варианта D: chrome — верхнее меню (topnav), сайдбара нет
+      const header = document.querySelector('header.topnav');
       return {
         headerBg: header ? getComputedStyle(header).backgroundColor : '',
-        sidebarBg: sidebar ? getComputedStyle(sidebar).backgroundColor : '',
       };
     });
 
-    expect(homeChrome.headerBg).toBe('rgb(250, 250, 250)');
-    expect(homeChrome.sidebarBg).toBe('rgb(250, 250, 250)');
+    expect(homeChrome.headerBg).toBe('rgb(255, 255, 255)');
     const homepageCtaTone = await page.locator('.adv-cta-shell').evaluate((node) => {
       const cs = getComputedStyle(node);
       return {

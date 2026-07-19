@@ -61,9 +61,10 @@ describe('Self-hosted Inter font', () => {
 
 // ─── Hero image optimization ────────────────────────────────────────────────
 describe('Hero image', () => {
-  it('homepage has hero preload with fetchpriority', () => {
-    expect(homepage).toMatch(/rel="preload"[^>]*href="\/hero-main\.svg"/);
-    expect(homepage).toMatch(/fetchpriority="high"/);
+  // Редизайн (вариант D): у героя нет фонового изображения — панель-плейсхолдер,
+  // LCP теперь текстовый (H1). Поэтому preload hero-картинки на главной больше нет.
+  it('homepage does not preload a hero raster (text LCP)', () => {
+    expect(homepage).not.toMatch(/rel="preload"[^>]*href="\/hero-main\.svg"/);
   });
 
   it('subpages do not preload hero', () => {

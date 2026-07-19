@@ -3,6 +3,7 @@
 // выпадашки — CSS/details, поэтому ссылки видны краулеру. Мобильное меню —
 // нативный <details> drawer без внешнего JS.
 import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
+import HeaderTools from './HeaderTools.astro';
 
 // rel берём из navigation.ts как есть (уже 'noopener noreferrer' — согласовано
 // с Footer); дефолт на случай внешней ссылки без явного rel.
@@ -45,7 +46,8 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     </nav>
 
     <div class="topnav-actions">
-      <a href={PHONE_HREF} class="topnav-phone">{PHONE}</a>
+      <a href={PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${PHONE}`}>{PHONE}</a>
+      <div class="topnav-tools"><HeaderTools /></div>
       <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Записаться</a>
 
       <!-- Мобильное меню: нативный details, без внешнего JS -->
@@ -176,8 +178,9 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     /* дескриптор под лого не помещается рядом с CTA+бургером на узком
        мобильном — прячем, чтобы шапка не распирала вьюпорт */
     .topnav-logo-desc { display: none; }
-    .topnav-bar { gap: 0.6rem; padding: 0.6rem 0.9rem; }
-    .topnav-cta { padding: 0.5rem 0.85rem; }
+    .topnav-bar { gap: 0.5rem; padding: 0.6rem 0.7rem; }
+    .topnav-actions { gap: 0.5rem; }
+    .topnav-cta { padding: 0.5rem 0.8rem; }
     .topnav-mobile { display: block; position: relative; }
     .topnav-mobile > summary {
       list-style: none;
@@ -213,5 +216,12 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .drawer-sub a { padding: 0.4rem; font-size: var(--font-s); color: var(--color-gray-600); text-decoration: none; }
     .drawer-cta { display: block; text-align: center; margin: 0.8rem 0 0.5rem; }
     .drawer-phone { display: block; text-align: center; font-weight: 600; color: var(--color-dark-700); text-decoration: none; padding: 0.4rem; }
+  }
+
+  /* Совсем узкие экраны (старые iPhone SE / компактный Android): логотип,
+     CTA и бургер приоритетнее — кнопку поиска убираем, чтобы бар не
+     переполнялся по горизонтали. Поиск остаётся доступен на ≥ 361px. */
+  @media (max-width: 360px) {
+    .topnav-tools { display: none; }
   }
 </style>
