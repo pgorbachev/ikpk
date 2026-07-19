@@ -36,7 +36,7 @@ const mirror = getVideoMirror(playlist.slug);
 
       {mirror ? (
         <div class="video-block">
-          <VideoFacade embedUrl={rutubeEmbedUrl(mirror.rutubeEmbedVideoId)} title={playlist.title} />
+          <VideoFacade embedUrl={rutubeEmbedUrl(mirror.rutubeEmbedVideoId)} title={playlist.title} poster={mirror.thumbnail} />
           <div class="video-links">
             <a href={mirror.rutubePlaylistUrl} class="btn btn-primary" target="_blank" rel="noopener noreferrer">
               Весь плейлист на RUTUBE →
