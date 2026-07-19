@@ -8,7 +8,8 @@ import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
 // ── 3.2: 0 страниц-сирот — обход dist по внутренним ссылкам ────────────────
 describe('orphan pages (обход по внутренним ссылкам)', () => {
   it('every built page is reachable from / via internal <a href>', () => {
-    const pages = new Set(allPages());
+    // /preview/* — noindex-черновики вариантов, намеренно не слинкованы
+    const pages = new Set(allPages().filter((p) => !p.startsWith('/preview/')));
     const visited = new Set<string>();
     const queue = ['/'];
     while (queue.length) {
@@ -190,6 +191,16 @@ describe('404 and sitemap', () => {
     // индекс нетривиален (256 страниц → фрагменты + словари)
     const entry = JSON.parse(readFileSync(join(dist, 'pagefind', 'pagefind-entry.json'), 'utf-8'));
     expect(Object.keys(entry.languages ?? {}).length).toBeGreaterThan(0);
+  });
+
+  it('preview variant pages are noindex and excluded from sitemap', () => {
+    const previews = allPages().filter((p) => p.startsWith('/preview/'));
+    expect(previews.length, 'no preview variants built').toBeGreaterThan(0);
+    const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
+    for (const p of previews) {
+      expect(readPage(p), `${p} must be noindex`).toContain('noindex');
+      expect(xml.includes(p), `${p} must NOT be in sitemap`).toBe(false);
+    }
   });
 
   it('robots.txt: Sitemap + Clean-param, no CSS/JS blocking', () => {

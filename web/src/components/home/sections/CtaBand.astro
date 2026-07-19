@@ -1,0 +1,30 @@
+---
+// Финальная CTA-полоса.
+import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
+---
+<section class="cta-band">
+  <div class="container cta-band-inner">
+    <div>
+      <h2>Готовы начать обучение?</h2>
+      <p>Подберём программу под ваш профиль и опыт. Оставьте заявку — менеджер свяжется и ответит на вопросы.</p>
+    </div>
+    <div class="cta-band-actions">
+      <a href={CTA_HREF} class="btn btn-light" data-cta="band">Выбрать программу</a>
+      <a href={PHONE_HREF} class="cta-band-phone">{PHONE}</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-band { background: var(--color-accent-500); color: #fff; }
+  .cta-band-inner {
+    display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
+    padding-top: 2.5rem; padding-bottom: 2.5rem; flex-wrap: wrap;
+  }
+  .cta-band h2 { color: #fff; font-size: var(--font-xxl); margin-bottom: 0.4rem; }
+  .cta-band p { color: rgb(255 255 255 / 96%); max-width: 520px; line-height: 1.5; }
+  .cta-band-actions { display: flex; align-items: center; gap: 1.25rem; }
+  .btn-light { background: #fff; color: var(--color-accent-600); border-color: #fff; }
+  .btn-light:hover { background: var(--color-light-300); }
+  .cta-band-phone { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
+</style>

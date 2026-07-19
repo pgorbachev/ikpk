@@ -1,0 +1,38 @@
+---
+// Видео-отзывы «до/после». ЗАБЛОКИРОВАНА контентом: видео нет (запрос
+// заказчику в client-requests.md). Показывается в превью как каркас-заглушка.
+---
+<section class="testimonials section section-alt">
+  <div class="container">
+    <p class="placeholder-note">⚠ Черновой блок: видео-отзывы выпускников заказчик пока не предоставил (запрошены). Каркас для оценки композиции.</p>
+    <h2 class="section-title">Истории выпускников</h2>
+    <p class="section-sub">Реальные кейсы «до и после» — как обучение изменило практику и доход.</p>
+    <div class="testimonials-grid">
+      {[1, 2].map(() => (
+        <article class="testimonial-card">
+          <div class="testimonial-video" aria-hidden="true"><span class="play">▶</span></div>
+          <blockquote>«Здесь появится реальная история выпускника — цитата и результат.»</blockquote>
+          <cite>Имя · выпуск ____</cite>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .placeholder-note {
+    font-size: var(--font-s); color: #8a5a00; background: #fff3cd; border: 1px solid #ffe08a;
+    border-radius: 8px; padding: 0.6rem 0.9rem; margin-bottom: 1.25rem;
+  }
+  .section-sub { color: var(--color-gray-500); margin-bottom: 1.5rem; }
+  .testimonials-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+  .testimonial-card { border: 1px solid var(--color-gray-150); border-radius: 12px; overflow: hidden; background: var(--color-light-100); }
+  .testimonial-video {
+    aspect-ratio: 16 / 9; background: linear-gradient(135deg, #2a4d2b, #1a1a1a);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .testimonial-video .play { width: 54px; height: 54px; border-radius: 50%; background: rgb(255 255 255 / 92%); color: var(--color-accent-600); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .testimonial-card blockquote { padding: 1rem 1.2rem 0.3rem; font-size: var(--font-s); color: var(--color-gray-600); }
+  .testimonial-card cite { display: block; padding: 0 1.2rem 1.1rem; font-size: 0.78rem; color: var(--color-gray-500); font-style: normal; }
+  @media (max-width: 780px) { .testimonials-grid { grid-template-columns: 1fr; } }
+</style>

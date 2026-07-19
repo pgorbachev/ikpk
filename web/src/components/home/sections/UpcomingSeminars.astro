@@ -1,0 +1,49 @@
+---
+// Ближайшие семинары — реальные данные (schedule_entries), сортировка по дате,
+// прошедшие отфильтрованы по дате сборки.
+import { getUpcomingSeminars } from '../../../lib/home';
+const seminars = getUpcomingSeminars(3);
+---
+{seminars.length > 0 && (
+  <section id="upcoming" class="upcoming section section-alt">
+    <div class="container">
+      <div class="upcoming-head">
+        <h2 class="section-title">Ближайшие семинары</h2>
+        <a href="/raspisanie-i-tseny" class="upcoming-all">Всё расписание →</a>
+      </div>
+      <div class="upcoming-grid">
+        {seminars.map((s) => (
+          <article class="upcoming-card">
+            <span class="upcoming-date">{s.dateLabel} · {s.cityName}</span>
+            <h3 class="upcoming-title"><a href={s.href}>{s.title}</a></h3>
+            <span class="upcoming-meta">{s.instituteName}</span>
+            <div class="upcoming-foot">
+              <span class="upcoming-price" class:list={[{ free: s.isFree }]}>{s.priceLabel}</span>
+              <a href={s.href} class="btn btn-primary">Подробнее</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+)}
+
+<style>
+  .upcoming-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.25rem; gap: 1rem; }
+  .upcoming-all { font-size: var(--font-s); font-weight: 600; color: var(--color-accent-600); text-decoration: none; white-space: nowrap; }
+  .upcoming-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  .upcoming-card {
+    display: flex; flex-direction: column; gap: 0.6rem;
+    border: 1px solid var(--color-gray-150); border-radius: 12px; padding: 1.4rem;
+    background: var(--color-light-100); box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+  }
+  .upcoming-date { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-accent-600); }
+  .upcoming-title { font-size: var(--font-m); font-weight: 600; line-height: 1.35; flex: 1; }
+  .upcoming-title a { color: var(--color-dark-700); text-decoration: none; }
+  .upcoming-title a:hover { color: var(--color-accent-600); }
+  .upcoming-meta { font-size: var(--font-s); color: var(--color-gray-500); }
+  .upcoming-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.4rem; }
+  .upcoming-price { font-size: var(--font-l); font-weight: 700; }
+  .upcoming-price.free { color: var(--color-accent-600); }
+  @media (max-width: 780px) { .upcoming-grid { grid-template-columns: 1fr; } }
+</style>

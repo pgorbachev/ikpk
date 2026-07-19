@@ -1,0 +1,51 @@
+---
+// Превью-роуты вариантов главной: /preview/b, /preview/c …
+// noindex, вне sitemap (astro.config фильтрует /preview), вне parity/orphan-гейтов.
+// Живое сравнение вариантов заказчиком до выбора победителя.
+import type { GetStaticPaths } from 'astro';
+import TopNavLayout from '../../layouts/TopNavLayout.astro';
+import { variants, type SectionKey } from '../../lib/variants';
+
+import HeroOffer from '../../components/home/sections/HeroOffer.astro';
+import Segments from '../../components/home/sections/Segments.astro';
+import UpcomingSeminars from '../../components/home/sections/UpcomingSeminars.astro';
+import Teachers from '../../components/home/sections/Teachers.astro';
+import TrustBar from '../../components/home/sections/TrustBar.astro';
+import VideoTestimonials from '../../components/home/sections/VideoTestimonials.astro';
+import LeadMagnet from '../../components/home/sections/LeadMagnet.astro';
+import CtaBand from '../../components/home/sections/CtaBand.astro';
+
+export const getStaticPaths: GetStaticPaths = () =>
+  Object.keys(variants).map((id) => ({ params: { variant: id } }));
+
+const { variant: variantId } = Astro.params;
+const variant = variants[variantId as string];
+if (!variant) return Astro.redirect('/404');
+
+const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
+  'hero-offer': HeroOffer,
+  segments: Segments,
+  upcoming: UpcomingSeminars,
+  teachers: Teachers,
+  trust: TrustBar,
+  testimonials: VideoTestimonials,
+  lead: LeadMagnet,
+  cta: CtaBand,
+};
+---
+<TopNavLayout title={variant.title} description={variant.description} noindex={true} preloadHero={true}>
+  <div class="preview-ribbon">
+    Превью варианта «{variant.label}» · noindex · не влияет на текущий сайт
+  </div>
+  {variant.sections.map((key) => {
+    const Section = SECTIONS[key];
+    return <Section />;
+  })}
+</TopNavLayout>
+
+<style>
+  .preview-ribbon {
+    background: #1a1a1a; color: #fff; text-align: center;
+    font-size: 0.8rem; padding: 0.4rem 1rem;
+  }
+</style>

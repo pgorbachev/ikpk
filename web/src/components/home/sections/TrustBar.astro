@@ -1,0 +1,43 @@
+---
+// Trust-полоса. ЗАБЛОКИРОВАНА контентом: цифры (выпускников, лет, семинаров)
+// и номер лицензии должен подтвердить заказчик. Показывается ТОЛЬКО в превью
+// с пометкой-плейсхолдером — на прод не идёт без подтверждённых данных.
+interface Props {
+  placeholder?: boolean;
+}
+const { placeholder = true } = Astro.props;
+
+// Плейсхолдерные значения — НЕ факты, помечены явно.
+const stats = [
+  { value: '20+', label: 'лет в постдипломном образовании' },
+  { value: '____', label: 'выпускников (уточняется у заказчика)' },
+  { value: '40+', label: 'действующих программ' },
+  { value: '2', label: 'города очных семинаров' },
+];
+---
+<section class="trust section">
+  <div class="container">
+    {placeholder && (
+      <p class="placeholder-note">⚠ Черновой блок: цифры и номер лицензии заполняются после подтверждения заказчиком (152-ФЗ / достоверность).</p>
+    )}
+    <div class="trust-grid">
+      {stats.map((s) => (
+        <div class="trust-item">
+          <span class="trust-value">{s.value}</span>
+          <span class="trust-label">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .placeholder-note {
+    font-size: var(--font-s); color: #8a5a00; background: #fff3cd; border: 1px solid #ffe08a;
+    border-radius: 8px; padding: 0.6rem 0.9rem; margin-bottom: 1.25rem;
+  }
+  .trust-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; text-align: center; }
+  .trust-value { display: block; font-size: 2rem; font-weight: 800; color: var(--color-accent-600); }
+  .trust-label { font-size: var(--font-s); color: var(--color-gray-600); }
+  @media (max-width: 780px) { .trust-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>

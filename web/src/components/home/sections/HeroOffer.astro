@@ -1,0 +1,60 @@
+---
+// Офферный hero (редизайн B). Факты — только подтверждённые (представительство
+// институтов есть на текущем сайте). Без цифр/лицензий до данных заказчика.
+import { CTA_HREF } from '../../../lib/navigation';
+---
+<section class="hero-offer">
+  <div class="hero-offer-inner">
+    <div class="hero-offer-copy">
+      <span class="hero-badge">Постдипломное образование · Санкт-Петербург</span>
+      <h1 class="hero-offer-title">
+        Станьте прикладным кинезиологом <span class="accent">международного уровня</span>
+      </h1>
+      <p class="hero-offer-sub">
+        Фундаментальное обучение для врачей, массажистов и реабилитологов.
+        Эксклюзивное представительство Институтов Апледжера и Барраля в России —
+        программы по международным стандартам.
+      </p>
+      <ul class="hero-offer-points">
+        <li>Практикующие преподаватели с собственной клинической практикой</li>
+        <li>Программы Институтов Апледжера и Барраля</li>
+        <li>Очные семинары в Санкт-Петербурге и Москве</li>
+      </ul>
+      <div class="hero-offer-actions">
+        <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Выбрать программу обучения</a>
+        <a href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>
+      </div>
+    </div>
+    <div class="hero-offer-visual" aria-hidden="true">
+      <img src="/hero-main.svg" alt="" width="440" height="440" loading="eager" fetchpriority="high" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-offer { background: linear-gradient(135deg, #f2f8f2 0%, #e6f0e7 100%); }
+  .hero-offer-inner {
+    max-width: 1240px; margin: 0 auto; padding: 3rem 1.25rem;
+    display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 2rem; align-items: center;
+  }
+  .hero-badge {
+    display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--color-accent-600); margin-bottom: 1rem;
+  }
+  .hero-offer-title { font-size: var(--font-xxxl); font-weight: 700; line-height: 1.15; max-width: 640px; }
+  .hero-offer-title .accent { color: var(--color-accent-600); }
+  .hero-offer-sub { margin: 1rem 0 1.25rem; color: var(--color-gray-600); line-height: 1.5; max-width: 560px; }
+  .hero-offer-points { list-style: none; margin: 0 0 1.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .hero-offer-points li { position: relative; padding-left: 1.6rem; font-size: var(--font-s); color: var(--color-dark-700); }
+  .hero-offer-points li::before {
+    content: '✓'; position: absolute; left: 0; color: var(--color-accent-500); font-weight: 700;
+  }
+  .hero-offer-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+  .hero-offer-visual { display: flex; justify-content: center; }
+  .hero-offer-visual img { max-width: 100%; height: auto; }
+
+  @media (max-width: 860px) {
+    .hero-offer-inner { grid-template-columns: 1fr; }
+    .hero-offer-visual { display: none; }
+  }
+</style>

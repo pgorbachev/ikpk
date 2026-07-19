@@ -1,0 +1,46 @@
+---
+// Единый источник <head>-мета для всех layout (SidebarLayout, TopNavLayout).
+// Гарантирует, что варианты главной не разъедутся с реальными страницами
+// по canonical/OG/JSON-LD.
+interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+  noindex?: boolean;
+  schema?: Record<string, unknown>;
+  preloadHero?: boolean;
+}
+const { title, description, ogImage, noindex = false, schema, preloadHero = false } = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const siteName = 'ИКПК';
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalURL.href} />
+
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content={canonicalURL.href} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:site_name" content={siteName} />
+<meta property="og:locale" content="ru_RU" />
+<meta property="og:image" content={ogImage || new URL('/og-image.png', Astro.site).href} />
+{!ogImage && <meta property="og:image:width" content="1200" />}
+{!ogImage && <meta property="og:image:height" content="630" />}
+
+<!-- Self-hosted Inter font -->
+<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/inter-cyrillic.woff2" as="font" type="font/woff2" crossorigin />
+
+{preloadHero && <link rel="preload" href="/hero-main.svg" as="image" fetchpriority="high" />}
+
+{schema && <script type="application/ld+json" set:html={JSON.stringify(schema)} />}
