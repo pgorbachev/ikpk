@@ -12,6 +12,7 @@ interface Props {
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
+import MotionScript from '../components/MotionScript.astro';
 import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import Analytics from '../components/Analytics.astro';
@@ -38,6 +39,7 @@ const {
       schema={schema}
       preloadHero={preloadHero}
     />
+    <MotionScript />
   </head>
   <body class="layout-topnav">
     <TopNav />

@@ -1,0 +1,65 @@
+---
+// Прогрессивное улучшение: появление секций при скролле и тень шапки при
+// скролле. Ставим синхронно в <head>, чтобы секции с [data-reveal] не мелькали
+// видимым состоянием до старта анимации. Всё уважает prefers-reduced-motion и
+// деградирует к статике без JS / без IntersectionObserver.
+//
+// Плавная смена темы задаётся чисто в CSS (motion.css): тема выставляется
+// синхронно в <head> до первой отрисовки, поэтому на старте переход не
+// срабатывает — отдельный JS-гейт не нужен.
+---
+<script is:inline>
+  (function () {
+    const root = document.documentElement;
+    let reduce = false;
+    try {
+      reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      /* matchMedia недоступен — считаем, что движение разрешено */
+    }
+    // typeof …=== 'function' (не 'in'): исключаем существующее, но
+    // неконструируемое значение — иначе бросок в new оставил бы контент скрытым.
+    const canReveal = !reduce && typeof IntersectionObserver === 'function';
+    if (canReveal) root.classList.add('has-motion');
+
+    document.addEventListener('DOMContentLoaded', function () {
+      if (canReveal) {
+        try {
+          const io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting) {
+                  en.target.classList.add('in');
+                  io.unobserve(en.target);
+                }
+              });
+            },
+            { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
+          );
+          document.querySelectorAll('[data-reveal]').forEach(function (el) {
+            io.observe(el);
+          });
+        } catch {
+          // Observer не создался — fail-open: возвращаем контент в видимое
+          // состояние, убрав класс (правила .has-motion [data-reveal] отключатся).
+          root.classList.remove('has-motion');
+        }
+      }
+
+      // Тень шапки при скролле (геометрию не меняем — без layout shift).
+      const topnav = document.querySelector('.topnav');
+      if (topnav) {
+        let scrolled = false;
+        const onScroll = function () {
+          const next = window.scrollY > 8;
+          if (next === scrolled) return; // мутируем DOM только на смене порога
+          scrolled = next;
+          if (next) topnav.setAttribute('data-scrolled', '');
+          else topnav.removeAttribute('data-scrolled');
+        };
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+      }
+    });
+  })();
+</script>
