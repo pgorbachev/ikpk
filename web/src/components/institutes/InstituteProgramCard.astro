@@ -51,7 +51,7 @@ const { href, title, description = '', image = '' } = Astro.props as Props;
 
   .program-card:hover {
     text-decoration: none;
-    transform: translateY(-1px);
+    transform: translateY(var(--lift-y-subtle));
     border-color: #cdcdc7;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   }

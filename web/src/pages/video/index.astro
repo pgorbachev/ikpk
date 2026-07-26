@@ -81,7 +81,7 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
 
   .playlist-card:hover {
     text-decoration: none;
-    transform: translateY(-3px);
+    transform: translateY(var(--lift-y));
     box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
   }
 
@@ -114,7 +114,7 @@ const description = page?.seo_description || 'Видеоматериалы ИК�
   }
   .playlist-card:hover .playlist-play {
     background: var(--color-accent-500);
-    transform: scale(1.06);
+    transform: scale(var(--zoom-hover, 1.06));
   }
   .playlist-count {
     position: absolute;
