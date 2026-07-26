@@ -264,3 +264,56 @@ test.describe('Top navigation affordance', () => {
     expect(await dropdown.locator('a').count()).toBeGreaterThan(1);
   });
 });
+
+// Кнопка, которую нельзя прочитать, хуже отсутствия кнопки. Здесь это выходило
+// из конфликта специфичности: `.rich-content a` (0,1,1) перебивает `.btn-primary`
+// (0,1,0), поэтому CTA внутри легаси-контента получал синий текст на зелёном
+// фоне — контраст ~1.08:1. Build-гейты такое не видят: разметка корректна,
+// классы на месте, дефект возникает только в вычисленных стилях.
+test.describe('Contrast of CTA inside rich content', () => {
+  const parse = (c: string) => c.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+  const lum = ([r, g, b]: number[]) => {
+    const f = (v: number) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+
+  test('CTA text is readable on its own background', async ({ page }) => {
+    await page.goto('/oplata');
+
+    const cta = page.locator('.rich-content a.btn').first();
+    await expect(cta).toBeVisible();
+
+    const { color, background } = await cta.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, background: s.backgroundColor };
+    });
+
+    const [l1, l2] = [lum(parse(color)), lum(parse(background))].sort((a, b) => b - a);
+    const ratio = (l1 + 0.05) / (l2 + 0.05);
+    expect(ratio, `контраст текста CTA ${color} на фоне ${background} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// В тёмной теме фон страницы и фон карточки брались из одного токена
+// (--color-light-100), поэтому поверхности не различались: карточка держалась
+// только на рамке. Это видно глазом, но не ловится ни разметочными гейтами,
+// ни axe (контраст текста при этом в норме).
+test.describe('Dark theme surfaces', () => {
+  test('card surface differs from page surface', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+
+    const { pageBg, cardBg } = await page.evaluate(() => {
+      const card = document.querySelector('.card, .institute-card, .segment-card')!;
+      return {
+        pageBg: getComputedStyle(document.body).backgroundColor,
+        cardBg: getComputedStyle(card).backgroundColor,
+      };
+    });
+
+    expect(cardBg, `фон карточки ${cardBg} совпадает с фоном страницы ${pageBg}`).not.toBe(pageBg);
+  });
+});
