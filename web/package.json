@@ -25,7 +25,9 @@
     "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
     "verify": "npm test && npm run test:build && npm run test:e2e:smoke && npm run test:e2e:compat",
     "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached",
-    "build:demo": "DEMO_FORMS=stub astro build && pagefind --site dist"
+    "build:demo": "DEMO_FORMS=stub astro build && pagefind --site dist",
+    "prebuild": "npx -y tsx ../scripts/make-derivatives.ts",
+    "media:derivatives": "npx -y tsx ../scripts/make-derivatives.ts --force"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",

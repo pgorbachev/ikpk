@@ -1566,16 +1566,15 @@
     "height": 360
   },
   "/media/video-thumbs/34.jpg": {
-    "width": 1280,
-    "height": 720
+    "width": 1200,
+    "height": 675
   },
   "/media/video-thumbs/36.jpg": {
     "width": 360,
     "height": 640
   },
   "/media/video-thumbs/37.jpg": {
-    "width": 1280,
-    "height": 720
-  },
-  "/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf": {}
+    "width": 1200,
+    "height": 675
+  }
 }

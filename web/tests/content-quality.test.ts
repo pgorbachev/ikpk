@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
+import { join } from 'path';
 import { dist, walkHtml, walkFiles } from './helpers/dist-pages';
 
 // ─── Качество отрендеренного контента ───────────────────────────────────────
@@ -225,6 +226,52 @@ describe('rendered content quality', () => {
     expect(
       offenders.slice(0, 6),
       `кнопки без класса (неоформленный нативный контрол):\n${offenders.slice(0, 6).join('\n')}`
+    ).toEqual([]);
+  });
+});
+
+// ─── Вес изображений на странице ─────────────────────────────────────────────
+// Бюджеты в seo-package.test.ts считают ТОЛЬКО размер HTML, поэтому тяжёлые
+// картинки им не видны: страница со 8 МБ изображений проходила все гейты.
+// Дыра вскрылась, когда загрузчик перестал уменьшать оригиналы (это было
+// правильно — он уничтожал исходники), и в public/ легли файлы до 3520px.
+// Правильная схема — оригинал в репозитории, производная на странице; этот
+// гейт держит вторую половину.
+describe('page image weight', () => {
+  // Это РАТЧЕТ, а не цель. Порог стоит чуть выше нынешнего максимума, чтобы
+  // ловить ухудшение: он уже поймал момент, когда в public/ легли оригиналы и
+  // /statyi стала тянуть 8,3 МБ.
+  //
+  // Цель — около 800 КБ. Разрыв не в оригиналах (их отдаём через производные
+  // шириной 1200px), а в том, что список статей показывает 68 карточек, каждая
+  // выводится примерно на 300–400px, а файл отдаётся на 1200px. Лечится
+  // адаптивными производными и srcset — задача про конвейер изображений.
+  // Состояние это НЕ новое: столько же было и до перехода на оригиналы.
+  const BUDGET_KB = 2800;
+
+  it('no page pulls more than its image budget', () => {
+    const offenders: string[] = [];
+
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      const refs = new Set(
+        [...html.matchAll(/(?:src|href)="(\/media\/[^"]+\.(?:webp|jpe?g|png|gif))"/gi)].map((m) => m[1]),
+      );
+
+      let total = 0;
+      for (const ref of refs) {
+        const p = join(dist, decodeURIComponent(ref).replace(/^\//, ''));
+        if (existsSync(p)) total += statSync(p).size;
+      }
+
+      const kb = Math.round(total / 1024);
+      if (kb > BUDGET_KB) offenders.push(`${file.replace(dist, '')}: ${kb} КБ в ${refs.size} картинках`);
+    }
+
+    offenders.sort((a, b) => Number(b.split(': ')[1]) - Number(a.split(': ')[1]));
+    expect(
+      offenders.slice(0, 6),
+      `картинок на странице больше бюджета ${BUDGET_KB} КБ (страниц: ${offenders.length}):\n${offenders.slice(0, 6).join('\n')}`,
     ).toEqual([]);
   });
 });

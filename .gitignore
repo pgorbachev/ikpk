@@ -45,3 +45,12 @@ discovery/media_inventory_proxy_urls_DEPRECATED.json
 # *.html — saved page snapshots
 web/test-results/
 .lighthouseci/
+
+# Отдаваемые версии изображений генерируются из media-originals/ скриптом
+# scripts/make-derivatives.ts (prebuild). В git держим только оригиналы —
+# они единственная копия: бакет старого сайта умрёт при переключении DNS.
+web/public/media/
+
+# личные файлы владельца и настройки сторонних инструментов
+.codex/
+*.docx

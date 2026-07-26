@@ -32,7 +32,12 @@ import sharp from 'sharp';
 const ROOT = join(import.meta.dirname, '..');
 const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
 const PUBLIC_DIR = join(ROOT, 'web', 'public');
-const MANIFEST_PATH = join(ROOT, 'web', 'src', 'lib', 'media-manifest.json');
+// Оригиналы НЕ отдаются посетителю: из них scripts/make-derivatives.ts делает
+// уменьшенные версии в web/public/media. Причина — загрузчик раньше уменьшал
+// файлы при скачивании и уничтожал исходники (у 37 файлов оригинал был крупнее,
+// вплоть до 3520×1980), а складывать оригиналы прямо в public нельзя: страница
+// /statyi начинала тянуть 8,3 МБ картинок.
+const ORIGINALS_DIR = join(ROOT, 'media-originals');
 
 // Тот же префикс продублирован в web/src/lib/media.ts (BUCKET_PREFIX) —
 // разные npm-пакеты; при изменении бакета править ОБА места.
@@ -46,6 +51,9 @@ const LOCAL_RE = /["'`(](\/(?:media|terms)\/[^"'`\\\s)<>]+\.(?:webp|jpe?g|png|gi
  * Всё шире MAX_WIDTH даунскейлится при скачивании В ИСХОДНОМ ФОРМАТЕ
  * (расширение файла остаётся честным). Оригиналы остаются в бакете.
  */
+// Порог, выше которого файл считается «оригиналом, требующим производной для
+// вывода». САМ ФАЙЛ НЕ УМЕНЬШАЕТСЯ — порог нужен только для отчёта в логе и
+// для будущего шага нарезки производных.
 const MAX_WIDTH = 1200;
 const QUALITY = 80;
 
@@ -178,7 +186,6 @@ interface ManifestEntry {
   width?: number;
   height?: number;
 }
-const manifest: Record<string, ManifestEntry> = {};
 
 let downloaded = 0;
 let skipped = 0;
@@ -186,7 +193,10 @@ let failed = 0;
 
 for (const path of [...paths].sort()) {
   const url = sourceUrlFor(path);
-  const localPath = join(PUBLIC_DIR, ...path.split('/').filter(Boolean));
+  const segments = path.split('/').filter(Boolean);
+  const localPath = segments[0] === 'media'
+    ? join(ORIGINALS_DIR, ...segments.slice(1))
+    : join(PUBLIC_DIR, ...segments);
 
   if (!force && existsSync(localPath) && statSync(localPath).size > 0) {
     skipped++;
@@ -195,7 +205,7 @@ for (const path of [...paths].sort()) {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let buf = Buffer.from(await res.arrayBuffer());
-      let resized = '';
+      let oversize = '';
       const ext = path.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
 
       // upload-API старого сайта отдаёт под одинаковыми URL и картинки, и PDF.
@@ -226,7 +236,9 @@ for (const path of [...paths].sort()) {
       let transcoded = '';
       if (ext === 'webp' && (actual === 'image/jpeg' || actual === 'image/png')) {
         const before = buf.length;
-        buf = await sharp(buf).webp({ quality: QUALITY }).toBuffer();
+        // качество выше обычного: это единственная лишняя перекодировка в
+        // цепочке, и терять на ней исходную детализацию незачем
+        buf = await sharp(buf).webp({ quality: 92 }).toBuffer();
         transcoded = ` [transcoded ${actual.replace('image/', '')}→webp ${Math.round(before / 1024)}KB→${Math.round(buf.length / 1024)}KB]`;
       } else if (ext && expected[ext] && actual && actual !== expected[ext]) {
         throw new Error(
@@ -237,32 +249,25 @@ for (const path of [...paths].sort()) {
         );
       }
 
+      // РАЗМЕР НЕ УМЕНЬШАЕМ и в качестве не теряем: качаем оригинал как он есть.
+      //
+      // Раньше здесь стоял даунскейл всего, что шире MAX_WIDTH, и пережатие в
+      // качество 80. Для отдачи посетителю это правильно, но исходники при
+      // этом уничтожались безвозвратно: проверка показала, что из 48 файлов,
+      // упёршихся в лимит, у 37 оригинал крупнее — вплоть до 3520×1980 и
+      // 3463×3463. Из-за этого сложился ложный вывод «крупных кадров у нас
+      // нет» и появился запрос съёмки, которая на самом деле не нужна.
+      //
+      // Бакет живёт, пока жив старый сайт: после переключения DNS оригиналы
+      // исчезнут, восстановить их будет негде. Поэтому храним исходные пиксели,
+      // а уменьшенные версии под конкретные места вывода готовит отдельный
+      // шаг сборки (задача про конвейер изображений). Иначе выбор всегда между
+      // «тяжёлые страницы» и «нет материала для крупной подачи», хотя нужен
+      // третий вариант: оригинал в репозитории, производные на страницах.
       if (ext && ['webp', 'jpg', 'jpeg', 'png'].includes(ext)) {
         const meta = await sharp(buf).metadata();
-        const tooWide = (meta.width ?? 0) > MAX_WIDTH;
-
-        // Даунскейл оверсайза + пережатие раздутых файлов. Второе не менее
-        // важно: upload-API старого сайта отдаёт webp практически без сжатия
-        // (до 2.8 МБ на 974×1349 ≈ 2 байта на пиксель), и такие картинки
-        // уезжают посетителю как есть. Кодируем в ИСХОДНЫЙ формат, чтобы
-        // расширение оставалось честным, и оставляем результат ТОЛЬКО если он
-        // меньше оригинала — уже оптимизированные файлы не портим.
-        if (tooWide || ['webp', 'jpg', 'jpeg'].includes(ext)) {
-          const pipeline = sharp(buf);
-          if (tooWide) pipeline.resize({ width: MAX_WIDTH });
-          if (ext === 'webp') pipeline.webp({ quality: QUALITY });
-          else if (ext === 'png') pipeline.png();
-          else pipeline.jpeg({ quality: QUALITY });
-
-          const candidate = Buffer.from(await pipeline.toBuffer());
-          const gain = buf.length - candidate.length;
-          if (tooWide || gain > 0) {
-            const from = `${(buf.length / 1024).toFixed(0)}KB`;
-            buf = candidate;
-            resized =
-              (tooWide ? ` [resized ${meta.width}→${MAX_WIDTH}px]` : '') +
-              (gain > 0 ? ` [recompressed ${from}→${(buf.length / 1024).toFixed(0)}KB]` : '');
-          }
+        if ((meta.width ?? 0) > MAX_WIDTH) {
+          oversize = ` [оригинал ${meta.width}×${meta.height}, нужна производная для вывода]`;
         }
       }
       mkdirSync(dirname(localPath), { recursive: true });
@@ -271,30 +276,25 @@ for (const path of [...paths].sort()) {
       writeFileSync(tmpPath, buf);
       renameSync(tmpPath, localPath);
       downloaded++;
-      console.log(`  ✓ ${path} (${(buf.length / 1024).toFixed(0)} KB)${transcoded}${resized}`);
+      console.log(`  ✓ ${path} (${(buf.length / 1024).toFixed(0)} KB)${transcoded}${oversize}`);
     } catch (err) {
       failed++;
       console.error(`  ✗ ${path}: ${(err as Error).message}`);
-      continue;
+      // НЕ пропускаем сборку записи манифеста: файл мог остаться с прошлого
+      // прогона, и он валиден. Манифест описывает то, что лежит в public/, а не
+      // результат последней загрузки — иначе неудачный запрос молча лишает
+      // картинку width/height, и возвращается сдвиг макета. Так пропали 6
+      // обложек видео: они приходят с видеохостинга, а в бакете их адрес 404.
+      if (!existsSync(localPath) || statSync(localPath).size === 0) continue;
     }
   }
 
-  const entry: ManifestEntry = {};
-  if (!path.endsWith('.pdf') && !path.endsWith('.svg')) {
-    try {
-      const dim = await sharp(readFileSync(localPath)).metadata();
-      entry.width = dim.width;
-      entry.height = dim.height;
-    } catch {
-      console.warn(`  ? no dimensions for ${path}`);
-    }
-  }
-  manifest[path] = entry;
+  // Манифест размеров собирает scripts/make-derivatives.ts: размеры нужны от
+  // ОТДАВАЕМОЙ версии, а не от оригинала. Иначе в <img> уедет width/height
+  // оригинала (например 3520px) при картинке 1200px — и вернётся сдвиг макета.
 }
-
-writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
 console.log(
-  `\nDone: ${downloaded} downloaded, ${skipped} already present, ${failed} FAILED.` +
-    `\nManifest: ${MANIFEST_PATH} (${Object.keys(manifest).length} entries)`
+  `\nDone: ${downloaded} downloaded, ${skipped} already present, ${failed} FAILED.`
 );
+console.log('дальше: npx tsx ../scripts/make-derivatives.ts (собирает отдаваемые версии и манифест)');
 if (failed > 0) process.exit(1);
