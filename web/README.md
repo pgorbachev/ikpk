@@ -40,6 +40,20 @@ npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 > (он включает pagefind-индексацию). После голого `astro build` поиск в
 > превью не работает и тест Search упадёт.
 
+> **Gotcha (lock-файл):** CI ставит зависимости через `npm ci` на **Node 22
+> → npm 10**. Локальный `npm install` под **npm 11** пишет lock, который
+> npm 10 считает рассинхронизированным и падает с
+> `Missing: @emnapi/... from lock file` (npm 11 прунит optional-транзитивы
+> платформенных вариантов `sharp`, npm 10 их требует). Локально это не
+> видно: на darwin/arm64 `npm ci` пропускает `@img/sharp-wasm32` и не
+> валидирует его поддерево.
+> Поэтому lock-файл обновляем **под npm 10**:
+> ```sh
+> npx -y npm@10 install --package-lock-only
+> npx -y npm@10 ci --dry-run   # должен пройти — это ровно то, что делает CI
+> ```
+> Такой lock совместим и с npm 11.
+
 ## CI
 
 | Workflow | Когда | Что |
