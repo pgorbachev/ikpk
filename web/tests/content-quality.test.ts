@@ -27,6 +27,50 @@ describe('rendered content quality', () => {
     ).toEqual([]);
   });
 
+  // Адреса старого сайта — без завершающего слэша (ikpk.su/kontakty). У нас
+  // из-за дефолта Astro получалось /kontakty/, то есть после переключения DNS
+  // канонический адрес всех 245 совпадающих страниц сменился бы и поисковик
+  // переиндексировал бы сайт целиком. Решение владельца (2026-07-26): привести
+  // к виду старого сайта.
+  it('canonical, og:url and sitemap have no trailing slash', () => {
+    const offenders: string[] = [];
+
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(
+        /(?:rel="canonical" href|property="og:url" content)="(https:\/\/ikpk\.su\/[^"]*)"/g
+      )) {
+        // главная — единственный адрес, где слэш уместен
+        if (m[1] !== 'https://ikpk.su/' && m[1].endsWith('/')) {
+          offenders.push(`${file.replace(dist, '')}: ${m[1]}`);
+        }
+      }
+    }
+
+    for (const map of walkFiles(dist, ['.xml'])) {
+      for (const m of readFileSync(map, 'utf-8').matchAll(/<loc>(https:\/\/ikpk\.su\/[^<]*)<\/loc>/g)) {
+        if (m[1] !== 'https://ikpk.su/' && m[1].endsWith('/')) {
+          offenders.push(`${map.replace(dist, '')}: ${m[1]}`);
+        }
+      }
+    }
+
+    // и сами внутренние ссылки — иначе посетитель попадёт на адрес, с которого
+    // сервер его редиректит, а это лишний переход на каждом клике
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*\/)"/gi)) {
+        if (m[1] !== '/') offenders.push(`${file.replace(dist, '')}: ссылка ${m[1]}`);
+      }
+    }
+
+    const uniq = [...new Set(offenders)];
+    expect(
+      uniq.slice(0, 6),
+      `адрес со завершающим слэшем — расходится со старым сайтом (всего ${uniq.length}):\n${uniq.slice(0, 6).join('\n')}`
+    ).toEqual([]);
+  });
+
   // Форма-заглушка, которая собирает персональные данные и никуда их не
   // отправляет, — хуже отсутствия формы: посетитель считает, что подписался.
   // На старом сайте «Подписаться» было обычной ссылкой на форму Bitrix24.

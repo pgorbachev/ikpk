@@ -48,7 +48,13 @@ server {
   index index.html;
 
   location / {
-    try_files \$uri \$uri/ =404;
+    # Порядок здесь несущий. Сайт адресует страницы БЕЗ завершающего слэша
+    # (ikpk.su/kontakty — как старый сайт, и так же в canonical и в карте
+    # сайта), а раскладка файлов каталогами: /kontakty/index.html. Если
+    # \$uri/ окажется раньше \$uri/index.html, nginx на запрос /kontakty
+    # ответит 301 на /kontakty/ — адрес разойдётся с каноническим, и вся
+    # затея потеряет смысл.
+    try_files \$uri \$uri/index.html \$uri/ =404;
   }
 
   error_page 404 /404.html;
