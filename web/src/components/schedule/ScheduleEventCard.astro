@@ -1,4 +1,5 @@
 ---
+import { srcsetFor } from '../../lib/media';
 import { isExternalFormHref } from '../../lib/forms';
 
 interface Props {
@@ -47,6 +48,8 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
     {imageUrl ? (
       <img
         src={imageUrl}
+        srcset={srcsetFor(imageUrl)}
+        sizes="(max-width: 640px) 100vw, 420px"
         alt={imageAlt || `Изображение для события «${title}»`}
         loading="lazy"
         width="420"

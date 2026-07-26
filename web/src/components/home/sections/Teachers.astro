@@ -2,7 +2,7 @@
 // Преподаватели — реальные (27 с фото, локализованы в Этапе 2).
 // Маркетолог: личность преподавателя — «50% решения о покупке».
 import { getTeachers } from '../../../lib/data';
-import { getAssetDimensions } from '../../../lib/media';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
 
 interface Props {
   limit?: number;
@@ -39,6 +39,8 @@ const teachers = getTeachers()
           <img
             class="teacher-photo"
             src={t.photo}
+            srcset={srcsetFor(t.photo)}
+            sizes="(max-width: 640px) 45vw, 260px"
             alt={t.name}
             width={t.dim?.width}
             height={t.dim?.height}

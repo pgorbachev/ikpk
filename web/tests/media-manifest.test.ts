@@ -29,6 +29,10 @@ describe('media manifest', () => {
     const missing: string[] = [];
     for (const file of walk(MEDIA_DIR)) {
       const key = file.replace(PUBLIC_DIR, '');
+      // /media/_w/** — адаптивные варианты. Своих записей в манифесте у них нет
+      // по замыслу: доступные ширины перечислены у базового файла в widths,
+      // оттуда собирается srcset.
+      if (key.startsWith('/media/_w/')) continue;
       const entry = manifest[key];
       if (!entry?.width || !entry?.height) missing.push(key);
     }
