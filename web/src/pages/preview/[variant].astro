@@ -5,6 +5,7 @@
 import type { GetStaticPaths } from 'astro';
 import TopNavLayout from '../../layouts/TopNavLayout.astro';
 import { variants, type SectionKey } from '../../lib/variants';
+import { isDemoForms } from '../../lib/forms';
 
 import HeroOffer from '../../components/home/sections/HeroOffer.astro';
 import HeroCentered from '../../components/home/sections/HeroCentered.astro';
@@ -21,8 +22,12 @@ import VideoTestimonials from '../../components/home/sections/VideoTestimonials.
 import LeadMagnet from '../../components/home/sections/LeadMagnet.astro';
 import CtaBand from '../../components/home/sections/CtaBand.astro';
 
+// Черновики вариантов нужны на превью-стенде и НЕ нужны в боевой сборке: они
+// публично доступны по прямому адресу, а на старом сайте таких URL нет. noindex
+// защищает от индексации, но не от того, что страницу откроют по ссылке.
+// Режим тот же, что у форм: стенд собирается с DEMO_FORMS.
 export const getStaticPaths: GetStaticPaths = () =>
-  Object.keys(variants).map((id) => ({ params: { variant: id } }));
+  isDemoForms ? Object.keys(variants).map((id) => ({ params: { variant: id } })) : [];
 
 const { variant: variantId } = Astro.params;
 // Инвариант: getStaticPaths генерирует только id из реестра, поэтому вариант

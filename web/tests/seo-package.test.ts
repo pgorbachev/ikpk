@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { gunzipSync } from 'zlib';
 import { join } from 'path';
 import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
@@ -224,9 +224,16 @@ describe('404 and sitemap', () => {
     expect(Object.keys(entry.languages ?? {}).length).toBeGreaterThan(0);
   });
 
+  // Черновики вариантов собираются только в демо-режиме (они не должны уезжать
+  // в прод), поэтому в боевой сборке проверять нечего — и это не повод краснеть.
   it('preview variant pages are noindex and excluded from sitemap', () => {
     const previews = allPages().filter((p) => p.startsWith('/preview/'));
-    expect(previews.length, 'no preview variants built').toBeGreaterThan(0);
+    if (previews.length === 0) {
+      expect(readPage('/'), 'черновиков нет — это допустимо только в боевой сборке').not.toContain(
+        'data-demo-banner',
+      );
+      return;
+    }
     const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
     for (const p of previews) {
       expect(readPage(p), `${p} must be noindex`).toContain('noindex');
@@ -235,6 +242,11 @@ describe('404 and sitemap', () => {
   });
 
   it('variant D is content-complete (parity-блоки в нужном порядке)', () => {
+    // то же: в боевой сборке черновика нет
+    if (!allPages().includes('/preview/d/')) {
+      expect(readPage('/')).not.toContain('data-demo-banner');
+      return;
+    }
     const html = readPage('/preview/d/');
     // обязательные секции content-complete главной, по порядку
     const expectedOrder = [
@@ -333,6 +345,68 @@ describe('title and description on every page', () => {
     expect(
       offenders.slice(0, 8),
       `страниц без описания: ${offenders.length}\n${offenders.slice(0, 8).join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─── Служебные страницы не уезжают в прод ───────────────────────────────────
+// Черновики вариантов (/preview/*) и заглушка форм демо-стенда (/demo-zayavka)
+// нужны на превью-стенде, но в боевой сборке им делать нечего: они публично
+// доступны по прямому адресу, а на старом сайте таких URL нет. noindex защищает
+// от индексации, но не от того, что страницу увидят по ссылке.
+describe('служебные страницы вне прод-сборки', () => {
+  // Признак — САМ ЭЛЕМЕНТ баннера (data-demo-banner), а не имя класса:
+  // класс .demo-banner лежит в общем CSS независимо от режима, и проверка по
+  // нему делала этот гейт пустым — он уходил в демо-ветку на боевой сборке.
+  const isDemoBuild = readPage('/').includes('data-demo-banner');
+
+  it('в прод-сборке нет черновиков вариантов и демо-заглушки', () => {
+    if (isDemoBuild) {
+      // на демо-стенде они и должны быть — это его назначение
+      expect(allPages().some((p) => p.startsWith('/preview/'))).toBe(true);
+      return;
+    }
+
+    const leaked = allPages().filter(
+      (p) => p.startsWith('/preview/') || p.startsWith('/demo-zayavka'),
+    );
+    expect(
+      leaked,
+      `служебные страницы попали в боевую сборку:\n${leaked.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
+// ─── Редиректы ведут на существующие страницы ───────────────────────────────
+// Перенаправление на несуществующий адрес хуже отсутствия перенаправления:
+// поисковик видит 404 по цепочке и выбрасывает страницу из индекса, а
+// посетитель попадает в тупик. Гейт сверяет сгенерированный конфиг nginx
+// (deploy/nginx-redirects.conf) с тем, что реально собрано.
+describe('редиректы легаси-адресов', () => {
+  const CONF = join(dist, '..', '..', 'deploy', 'nginx-redirects.conf');
+
+  it('каждая цель редиректа существует в сборке', () => {
+    if (!existsSync(CONF)) {
+      throw new Error('нет deploy/nginx-redirects.conf — запустите npm run redirects:gen');
+    }
+    const conf = readFileSync(CONF, 'utf-8');
+    const built = new Set(allPages());
+    const broken: string[] = [];
+
+    for (const m of conf.matchAll(/location = (\S+) \{ return 301 (\S+); \}/g)) {
+      const [, from, to] = m;
+      // файлы (карта сайта, PDF) — не страницы, проверяем наличие файла
+      if (/\.[a-z0-9]{2,5}$/i.test(to)) {
+        if (!existsSync(join(dist, to.replace(/^\//, '')))) broken.push(`${from} → ${to} (нет файла)`);
+        continue;
+      }
+      const normalized = to.endsWith('/') ? to : `${to}/`;
+      if (!built.has(normalized)) broken.push(`${from} → ${to}`);
+    }
+
+    expect(
+      broken.slice(0, 10),
+      `редиректов в никуда: ${broken.length}\n${broken.slice(0, 10).join('\n')}`,
     ).toEqual([]);
   });
 });
