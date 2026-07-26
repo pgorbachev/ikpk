@@ -19,10 +19,17 @@ export const getStaticPaths: GetStaticPaths = () => {
 
 const { article } = Astro.props as { article: Article };
 
-// Pick up to 4 other articles for "related" section
+// До 4 «других статей». Подбор ДЕТЕРМИНИРОВАННЫЙ: раньше здесь был
+// sort(() => Math.random() - 0.5), но это frontmatter статической сборки —
+// выполняется на build, а не на визите, поэтому разнообразия пользователю не
+// давало (все видят один набор до следующей пересборки), зато делало сборку
+// невоспроизводимой: 68 страниц менялись от прогона к прогону, а вместе с ними
+// и Pagefind-индекс, из-за чего апгрейды нельзя было валидировать диффом dist.
+// Набор у каждой статьи свой (сдвиг зависит от её slug) и устойчивый.
 const allArticles = getArticles().filter((a) => a.slug !== article.slug);
-const shuffled = allArticles.sort(() => Math.random() - 0.5);
-const relatedArticles = shuffled.slice(0, 4);
+const seed = [...article.slug].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 100003, 7);
+const offset = allArticles.length > 0 ? seed % allArticles.length : 0;
+const relatedArticles = [...allArticles.slice(offset), ...allArticles.slice(0, offset)].slice(0, 4);
 
 const articleSchema = {
   '@context': 'https://schema.org',

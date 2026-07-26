@@ -1,4 +1,642 @@
 {
+  "/media/legacy/educationMinistryIcon.png": {
+    "width": 578,
+    "height": 593
+  },
+  "/media/legacy/logo-barral-inst.png": {
+    "width": 390,
+    "height": 234
+  },
+  "/media/legacy/logo-upledger-inst.png": {
+    "width": 390,
+    "height": 234
+  },
+  "/media/legacy/logo-v2.png": {
+    "width": 406,
+    "height": 112
+  },
+  "/media/legacy/scienceEducationMinistryIcon.png": {
+    "width": 707,
+    "height": 593
+  },
+  "/media/uploads/05e730d4-2bae-46bc-9fc2-b7cd62a08248.webp": {
+    "width": 974,
+    "height": 667
+  },
+  "/media/uploads/05f1f870-e396-484d-943a-9a66691a1728.webp": {
+    "width": 974,
+    "height": 629
+  },
+  "/media/uploads/068bd6f1-c327-4067-968d-a0b83e0a05d1.webp": {
+    "width": 974,
+    "height": 686
+  },
+  "/media/uploads/06bf88bd-a17e-457c-b7b5-a935e0e27d64.webp": {
+    "width": 506,
+    "height": 592
+  },
+  "/media/uploads/0a334f76-1141-437d-abf4-5e8258d080e7.webp": {
+    "width": 854,
+    "height": 421
+  },
+  "/media/uploads/0ac14ca3-d1ed-46e2-86dc-3d9243e57325.webp": {
+    "width": 974,
+    "height": 649
+  },
+  "/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp": {
+    "width": 1200,
+    "height": 655
+  },
+  "/media/uploads/11ee4845-acf4-48aa-ae1d-ac5ce0ae8806.webp": {
+    "width": 611,
+    "height": 290
+  },
+  "/media/uploads/177d800c-104b-407a-9fe5-1b08b2394881.webp": {
+    "width": 974,
+    "height": 676
+  },
+  "/media/uploads/18779abd-086c-424b-9119-45b179d0633a.webp": {
+    "width": 417,
+    "height": 469
+  },
+  "/media/uploads/19516cbd-d4cb-4550-9905-5ef27e7c9db3.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/1a40f9c7-f24a-475b-a53b-c8708bb2b9af.webp": {
+    "width": 974,
+    "height": 694
+  },
+  "/media/uploads/1c141f24-0f92-44bd-a3c0-fab9b2b152fb.webp": {
+    "width": 974,
+    "height": 270
+  },
+  "/media/uploads/1e188810-863b-4b03-a8cc-2cbea2e4b1e3.webp": {
+    "width": 937,
+    "height": 625
+  },
+  "/media/uploads/1f6a0274-1ec2-4ffe-bdf9-2975eb8709df.webp": {
+    "width": 974,
+    "height": 322
+  },
+  "/media/uploads/203cf2b2-1da7-4bad-bfe8-c9aa29f04942.webp": {
+    "width": 974,
+    "height": 465
+  },
+  "/media/uploads/2252fcab-7a34-4513-a56a-99d92b70a7bc.webp": {
+    "width": 974,
+    "height": 713
+  },
+  "/media/uploads/2313df24-e23c-4e0f-81f1-cff6dc835671.webp": {
+    "width": 974,
+    "height": 653
+  },
+  "/media/uploads/264a7ba6-c573-4cda-98e7-26e38b45802b.webp": {
+    "width": 974,
+    "height": 681
+  },
+  "/media/uploads/2726b736-818e-4687-9e21-2e32ac91a99b.webp": {
+    "width": 974,
+    "height": 659
+  },
+  "/media/uploads/27bf55a8-1b8a-4673-b049-ed2afc953f9c.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/28642805-4c6e-4bcb-b4f7-1d657536f21c.webp": {
+    "width": 974,
+    "height": 703
+  },
+  "/media/uploads/28dd4a69-03fb-4725-bf17-2be3122549f7.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/2a504dd8-d4ab-4126-8a00-f724d307071a.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/2d63f54c-3f1a-4f45-b37b-4089687f232e.webp": {
+    "width": 974,
+    "height": 399
+  },
+  "/media/uploads/2e0787c1-a28f-4a83-bcfd-78c10cdfee8a.webp": {
+    "width": 974,
+    "height": 423
+  },
+  "/media/uploads/2eb2c008-c7fb-4074-a820-86b59e986267.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/2ffc8121-2a3a-4fd4-8c4f-4bc92083e34e.webp": {
+    "width": 974,
+    "height": 729
+  },
+  "/media/uploads/31239ff1-c84b-4a03-8322-9c0c34b238b5.webp": {
+    "width": 974,
+    "height": 448
+  },
+  "/media/uploads/31561c65-59a4-4736-9d23-b2ff85f11996.webp": {
+    "width": 974,
+    "height": 634
+  },
+  "/media/uploads/334d1dc7-5a54-40e5-a683-4581ea2f0fa4.webp": {
+    "width": 974,
+    "height": 363
+  },
+  "/media/uploads/344a4efe-b1da-4370-bb64-edc2538fd23d.webp": {
+    "width": 640,
+    "height": 1419
+  },
+  "/media/uploads/376d3dc5-e786-41c1-a764-b9cf08d6a74d.webp": {
+    "width": 974,
+    "height": 347
+  },
+  "/media/uploads/386a1735-3e45-4ec3-b796-6101de083716.webp": {
+    "width": 557,
+    "height": 625
+  },
+  "/media/uploads/39afbb6c-9d25-485b-8b66-45e59e0873f6.webp": {
+    "width": 974,
+    "height": 1127
+  },
+  "/media/uploads/3d2df0f2-6dee-4184-aec3-d7f97bd93b5f.webp": {
+    "width": 974,
+    "height": 864
+  },
+  "/media/uploads/41d569c9-1d57-4cd3-9dc5-83c686f9b741.webp": {
+    "width": 974,
+    "height": 634
+  },
+  "/media/uploads/4440d581-14e8-4680-a750-21d24a8ddc01.webp": {
+    "width": 740,
+    "height": 625
+  },
+  "/media/uploads/46069b43-fd7c-4649-b8b3-f1becde05a94.webp": {
+    "width": 974,
+    "height": 623
+  },
+  "/media/uploads/46426134-e7a1-4609-b3ed-b2e36218c93f.webp": {
+    "width": 974,
+    "height": 441
+  },
+  "/media/uploads/4a2ac00d-5d5c-4fdd-97f6-fdcde61c0e4e.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/4c6fe518-2172-4db8-be05-2531e57db4a0.webp": {
+    "width": 790,
+    "height": 1518
+  },
+  "/media/uploads/4d861b0f-b530-4430-b6a3-e9ca58d5aa31.webp": {
+    "width": 624,
+    "height": 297
+  },
+  "/media/uploads/4e49eee8-353c-4fc7-913e-ff9376b7f15c.webp": {
+    "width": 974,
+    "height": 679
+  },
+  "/media/uploads/4e7fcada-b6df-4a4b-b4c5-826d733a3094.webp": {
+    "width": 573,
+    "height": 625
+  },
+  "/media/uploads/4f375950-cfc0-4b99-84e0-3061f4467297.webp": {
+    "width": 833,
+    "height": 758
+  },
+  "/media/uploads/4fae1fa9-594e-405a-94b7-c3a279336186.webp": {
+    "width": 841,
+    "height": 1015
+  },
+  "/media/uploads/508064e5-be42-442e-bdf3-4138e4dcfd21.webp": {
+    "width": 974,
+    "height": 604
+  },
+  "/media/uploads/514f7d7d-4a1c-4c76-a786-efed2e503714.webp": {
+    "width": 624,
+    "height": 342
+  },
+  "/media/uploads/52107076-d795-4802-b016-1d83ec57d4e8.webp": {
+    "width": 974,
+    "height": 350
+  },
+  "/media/uploads/53107b18-27ba-4cf6-925d-03c0bcfcc971.webp": {
+    "width": 854,
+    "height": 767
+  },
+  "/media/uploads/538491bb-e416-4982-af68-333f09f5c07d.webp": {
+    "width": 974,
+    "height": 564
+  },
+  "/media/uploads/542b1544-02c5-4e3f-ab8a-174fbb889371.webp": {
+    "width": 974,
+    "height": 666
+  },
+  "/media/uploads/552bf932-b695-4d34-a343-0323babfb738.webp": {
+    "width": 974,
+    "height": 478
+  },
+  "/media/uploads/59204a2c-3e4e-4cfe-badc-517ce8047e9b.webp": {
+    "width": 940,
+    "height": 625
+  },
+  "/media/uploads/5bd04880-c895-45b7-a7ca-85539a4be7b1.webp": {
+    "width": 974,
+    "height": 386
+  },
+  "/media/uploads/5e9cdb50-0f63-4531-be65-95920c2e7c5d.webp": {
+    "width": 974,
+    "height": 676
+  },
+  "/media/uploads/5ec9f6db-eec9-4254-9e79-21ca9966ee34.webp": {
+    "width": 974,
+    "height": 506
+  },
+  "/media/uploads/5f2a6fdf-3aad-4478-b02a-8294d7287963.webp": {
+    "width": 974,
+    "height": 577
+  },
+  "/media/uploads/60430264-38b2-4141-acff-f2987e3f5b6c.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/616418fe-e36a-49d4-bbd1-c3ff7f10ed47.webp": {
+    "width": 974,
+    "height": 416
+  },
+  "/media/uploads/618e1a9f-00a2-4114-81e3-2ee83e3adc44.webp": {
+    "width": 588,
+    "height": 425
+  },
+  "/media/uploads/62c671ca-fca8-446d-8bc0-a894f1e603c1.webp": {
+    "width": 620,
+    "height": 405
+  },
+  "/media/uploads/62e6db5b-dccb-4cef-98e5-2e53b733499d.webp": {
+    "width": 974,
+    "height": 539
+  },
+  "/media/uploads/6534d87e-ff68-4216-a61b-70c4ef428663.webp": {
+    "width": 974,
+    "height": 629
+  },
+  "/media/uploads/69e09a34-4342-4dc5-89e2-b6c8fde06ec3.webp": {
+    "width": 974,
+    "height": 658
+  },
+  "/media/uploads/6abce0ef-b261-4093-b8ba-053ced42b5f8.webp": {
+    "width": 623,
+    "height": 625
+  },
+  "/media/uploads/6b0ab13f-448e-4b8e-aaab-0ff92258cc1e.webp": {
+    "width": 974,
+    "height": 1212
+  },
+  "/media/uploads/6b8eb6f3-869e-4da4-9181-bcbf897ba242.webp": {
+    "width": 974,
+    "height": 589
+  },
+  "/media/uploads/6b9a2d01-dbdb-44b1-bc0b-b6dc329a5509.webp": {
+    "width": 916,
+    "height": 1518
+  },
+  "/media/uploads/6e8164d7-fe26-4891-90e6-eddd3eff43a6.webp": {
+    "width": 974,
+    "height": 494
+  },
+  "/media/uploads/715724a8-0a70-4a8d-a9b7-0749c2f97466.webp": {
+    "width": 974,
+    "height": 427
+  },
+  "/media/uploads/736a64e6-278b-4b14-b7c0-4e4f51fd555d.webp": {
+    "width": 417,
+    "height": 498
+  },
+  "/media/uploads/73b62399-5a42-4f86-b4e0-144ef8a4452c.webp": {
+    "width": 780,
+    "height": 307
+  },
+  "/media/uploads/742ac672-4dfb-487d-91b6-5d8b930f2702.webp": {
+    "width": 974,
+    "height": 914
+  },
+  "/media/uploads/747e2206-361c-4f4f-85ba-e88aa25f8166.webp": {
+    "width": 974,
+    "height": 299
+  },
+  "/media/uploads/76d9d654-8a8f-49c9-b39d-a46a69ebfddf.webp": {
+    "width": 974,
+    "height": 427
+  },
+  "/media/uploads/79f5a477-2a86-4d69-a17d-e7972ad500d2.webp": {
+    "width": 974,
+    "height": 405
+  },
+  "/media/uploads/7ccadd51-6fd1-481b-ae50-dcfdbf62f7b1.webp": {
+    "width": 974,
+    "height": 386
+  },
+  "/media/uploads/7d88781f-a375-4036-92c3-2c50bf9c6450.webp": {
+    "width": 974,
+    "height": 676
+  },
+  "/media/uploads/7fdead36-661d-44b0-9412-f7b5bf07b349.webp": {
+    "width": 974,
+    "height": 654
+  },
+  "/media/uploads/7ff06f0a-cce7-469b-a9f7-29bc9fd92f0c.webp": {
+    "width": 974,
+    "height": 1352
+  },
+  "/media/uploads/8133adb3-6527-4f34-a83b-54c292c34c3c.webp": {
+    "width": 974,
+    "height": 626
+  },
+  "/media/uploads/817d71a1-ab40-4da5-be33-36b985a53476.webp": {
+    "width": 974,
+    "height": 458
+  },
+  "/media/uploads/8220728f-4622-41f2-9add-1a17dce1f6e6.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/83ad5cef-6d52-4533-9a0b-e8f0ba997503.webp": {
+    "width": 974,
+    "height": 324
+  },
+  "/media/uploads/848683f8-6832-483e-a433-aa45c29400cd.webp": {
+    "width": 974,
+    "height": 355
+  },
+  "/media/uploads/853b5c7b-bd40-4df9-ab85-fac77f3d716c.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/85f403f8-9096-4cd1-8848-0cac93c582cf.webp": {
+    "width": 974,
+    "height": 1239
+  },
+  "/media/uploads/872c5f71-2abd-46ce-a5f4-9fe8bf19247e.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/893c783a-30bc-4a1b-89f4-aca152bcfc0f.pdf": {},
+  "/media/uploads/8b045a24-0cf9-497d-8927-b0e1a853f56f.webp": {
+    "width": 624,
+    "height": 342
+  },
+  "/media/uploads/8be88a94-35c7-43be-b983-30a2593fbfd0.webp": {
+    "width": 854,
+    "height": 742
+  },
+  "/media/uploads/8d3a03ae-90ce-469c-9a69-0b57cf1816e8.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/8eae7d6d-829e-4490-a22b-d2e3d244d6b1.webp": {
+    "width": 974,
+    "height": 684
+  },
+  "/media/uploads/9157d491-aa15-4b52-bd8f-a5b602882cb5.webp": {
+    "width": 974,
+    "height": 559
+  },
+  "/media/uploads/93ef4f44-ae4f-4b16-ad98-4153a70ed949.webp": {
+    "width": 865,
+    "height": 625
+  },
+  "/media/uploads/9459a935-f830-43e2-aaac-861b3b0a6888.webp": {
+    "width": 974,
+    "height": 1416
+  },
+  "/media/uploads/96e049eb-85d4-4c71-b05e-06ddaf58c57f.webp": {
+    "width": 974,
+    "height": 678
+  },
+  "/media/uploads/971a7fd2-cfeb-4d9b-86bb-d48bc410e875.webp": {
+    "width": 974,
+    "height": 598
+  },
+  "/media/uploads/9ca5061b-c931-443f-9785-5c0caa4d9efb.webp": {
+    "width": 974,
+    "height": 622
+  },
+  "/media/uploads/9e2b457e-fc9a-4ff9-879e-fa75df09b2a7.webp": {
+    "width": 974,
+    "height": 502
+  },
+  "/media/uploads/9f24d124-f543-40fb-a0c6-3f70ae7a52e1.webp": {
+    "width": 974,
+    "height": 416
+  },
+  "/media/uploads/9f5a0045-1704-4468-869b-71487b1092e1.webp": {
+    "width": 974,
+    "height": 1079
+  },
+  "/media/uploads/a0678648-158c-4bc9-847f-7f599bc927d6.webp": {
+    "width": 974,
+    "height": 619
+  },
+  "/media/uploads/a0a75cab-9736-4b28-acdf-28dcc703e780.webp": {
+    "width": 974,
+    "height": 663
+  },
+  "/media/uploads/a36454e4-5455-4e50-91bf-88da930a1c73.webp": {
+    "width": 833,
+    "height": 600
+  },
+  "/media/uploads/a7044d50-bb4b-44c1-ab6a-d4abccc062f0.webp": {
+    "width": 974,
+    "height": 658
+  },
+  "/media/uploads/a749c9a3-8aca-4d84-b583-a06cc86cffdc.webp": {
+    "width": 431,
+    "height": 625
+  },
+  "/media/uploads/a842eb2f-1a15-4773-bab2-11bfa8d6c027.pdf": {},
+  "/media/uploads/a8a29cf1-be7f-43f8-837e-8bee63428f59.webp": {
+    "width": 974,
+    "height": 1368
+  },
+  "/media/uploads/ac71181c-eeb8-494d-af9c-5b812ea127a2.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/aea8bff0-d074-4ff9-a99c-8b2ececce406.webp": {
+    "width": 667,
+    "height": 625
+  },
+  "/media/uploads/aeb250e0-a0b5-42bd-bb7d-b85188efad32.webp": {
+    "width": 948,
+    "height": 1518
+  },
+  "/media/uploads/af3adc22-8aa9-45c3-a87b-f5bcf008b817.webp": {
+    "width": 974,
+    "height": 542
+  },
+  "/media/uploads/b2eaa230-b53c-47dc-a8bf-c2cfef8fd910.webp": {
+    "width": 974,
+    "height": 660
+  },
+  "/media/uploads/b33a15ca-94d0-433d-8b6e-e5cba3a563af.webp": {
+    "width": 974,
+    "height": 725
+  },
+  "/media/uploads/b46af0db-06f0-4f76-80ee-ca7fc50d3137.webp": {
+    "width": 974,
+    "height": 640
+  },
+  "/media/uploads/b74bc8f2-794a-4b76-8de1-563ba07ce688.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/b9832484-2493-4754-aae4-a7ed70054d34.webp": {
+    "width": 974,
+    "height": 495
+  },
+  "/media/uploads/b9984374-0122-4eee-83ad-f059d3d26d05.webp": {
+    "width": 974,
+    "height": 684
+  },
+  "/media/uploads/baa2ec51-e8d1-41d4-a291-fe6c38962adc.webp": {
+    "width": 417,
+    "height": 423
+  },
+  "/media/uploads/be867fbb-891c-416e-b650-6a308689891f.webp": {
+    "width": 974,
+    "height": 655
+  },
+  "/media/uploads/c0dfe8d8-a732-4027-b78b-1d8ebb796525.webp": {
+    "width": 974,
+    "height": 918
+  },
+  "/media/uploads/c335180c-7cb7-4761-bb1e-c06fb3ee1a56.webp": {
+    "width": 974,
+    "height": 1289
+  },
+  "/media/uploads/c7618647-fd1d-4c5b-abb4-37495c585a39.webp": {
+    "width": 974,
+    "height": 1349
+  },
+  "/media/uploads/c95fc8d4-968f-4ee4-b764-a1a9aebd891c.webp": {
+    "width": 974,
+    "height": 377
+  },
+  "/media/uploads/ca0d4990-2456-45c0-92a5-929e491dd8db.webp": {
+    "width": 974,
+    "height": 386
+  },
+  "/media/uploads/cfe2bc12-9ba8-4550-a8f7-32892acde2ca.webp": {
+    "width": 937,
+    "height": 565
+  },
+  "/media/uploads/d0c1b4f3-ff3a-4d1a-8d5c-2754dbde22da.webp": {
+    "width": 974,
+    "height": 773
+  },
+  "/media/uploads/d2988141-ab4c-4347-87f3-bc515158e672.webp": {
+    "width": 974,
+    "height": 322
+  },
+  "/media/uploads/d67254e7-5a44-4fc9-9aa9-7e86afb89592.webp": {
+    "width": 974,
+    "height": 614
+  },
+  "/media/uploads/d7a4c80c-a975-4572-83ca-72bc62459ea9.webp": {
+    "width": 780,
+    "height": 612
+  },
+  "/media/uploads/d861dab9-36e7-415b-b2cf-f1de3a25c4f0.webp": {
+    "width": 974,
+    "height": 280
+  },
+  "/media/uploads/d8a217af-c17a-47a0-a032-76e9385ac468.webp": {
+    "width": 974,
+    "height": 641
+  },
+  "/media/uploads/d94251c4-8210-48f6-b5a6-07bf0732f0a1.webp": {
+    "width": 974,
+    "height": 1304
+  },
+  "/media/uploads/dc7947d9-3187-4146-ab94-28a5740188f5.webp": {
+    "width": 974,
+    "height": 299
+  },
+  "/media/uploads/e20eb80c-92e5-4909-b85f-25d421e84791.webp": {
+    "width": 974,
+    "height": 672
+  },
+  "/media/uploads/e217e23f-6cc4-4cd5-a00e-d9fd9c1eeb70.webp": {
+    "width": 974,
+    "height": 621
+  },
+  "/media/uploads/e21d495c-3e00-4789-b45f-c0d65d38907b.webp": {
+    "width": 974,
+    "height": 634
+  },
+  "/media/uploads/e24c706b-b64e-4e5b-9e65-6d5cf170c250.webp": {
+    "width": 500,
+    "height": 896
+  },
+  "/media/uploads/e2909139-3e7d-45e1-8bee-4ae809acb505.webp": {
+    "width": 974,
+    "height": 636
+  },
+  "/media/uploads/e505e992-12cf-44fe-b7da-1a73ea2754b9.webp": {
+    "width": 974,
+    "height": 456
+  },
+  "/media/uploads/e87579a5-9ecb-4bdc-bb89-6bc6ce909b66.webp": {
+    "width": 974,
+    "height": 713
+  },
+  "/media/uploads/e9f44528-7f12-4d9d-bf1f-65b7f14af0df.webp": {
+    "width": 833,
+    "height": 892
+  },
+  "/media/uploads/eb1a1608-7248-4828-950d-3d2cfca56847.webp": {
+    "width": 974,
+    "height": 708
+  },
+  "/media/uploads/eb85639c-fee6-4a94-9d9c-259fe0e8fc06.webp": {
+    "width": 974,
+    "height": 324
+  },
+  "/media/uploads/eba70506-b27f-4669-a921-ea00c912b247.webp": {
+    "width": 974,
+    "height": 386
+  },
+  "/media/uploads/ece587cd-9a69-4023-baf0-c5dbb46c363c.webp": {
+    "width": 974,
+    "height": 824
+  },
+  "/media/uploads/eddd335b-31e3-4014-8671-7f3869c35cd6.webp": {
+    "width": 974,
+    "height": 646
+  },
+  "/media/uploads/f0b8513a-34f3-4e82-ba82-5a076f8bac9c.webp": {
+    "width": 974,
+    "height": 429
+  },
+  "/media/uploads/f32423f3-cad0-4036-98f2-c7b29d79600c.webp": {
+    "width": 974,
+    "height": 648
+  },
+  "/media/uploads/f347c004-25a7-4e67-aff9-31f61d7f3ae1.webp": {
+    "width": 974,
+    "height": 501
+  },
+  "/media/uploads/fc310235-4db3-4d86-ac80-16f285e3c770.webp": {
+    "width": 974,
+    "height": 490
+  },
+  "/media/uploads/fdd5762a-b9fe-4451-ab29-0ac80d4f72ef.webp": {
+    "width": 974,
+    "height": 689
+  },
+  "/media/uploads/fff466b2-b7fe-4dfb-a3b3-8dc57c40b708.webp": {
+    "width": 961,
+    "height": 1251
+  },
   "/media/users/1/images/1-1727008400454.webp": {
     "width": 1132,
     "height": 849
@@ -706,6 +1344,30 @@
   "/media/users/1/images/1-1775132825348.webp": {
     "width": 626,
     "height": 626
+  },
+  "/media/video-thumbs/31.jpg": {
+    "width": 640,
+    "height": 360
+  },
+  "/media/video-thumbs/32.jpg": {
+    "width": 640,
+    "height": 360
+  },
+  "/media/video-thumbs/33.jpg": {
+    "width": 640,
+    "height": 360
+  },
+  "/media/video-thumbs/34.jpg": {
+    "width": 1280,
+    "height": 720
+  },
+  "/media/video-thumbs/36.jpg": {
+    "width": 360,
+    "height": 640
+  },
+  "/media/video-thumbs/37.jpg": {
+    "width": 1280,
+    "height": 720
   },
   "/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf": {}
 }
