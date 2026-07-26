@@ -1,8 +1,25 @@
 ---
 // Аналитика (Метрика + Mail.ru top): синхронные заглушки ставят pageview
 // сразу, тяжёлые скрипты грузятся после idle. Общий компонент для всех layout.
+//
+// ВАЖНО про глобальную область (комментарии держим здесь, во frontmatter:
+// он не попадает в вывод, а тело <script is:inline> уходит клиенту на всех
+// 259 страницах и упирается в бюджет веса 404):
+//
+// 1. Тело скрипта обёрнуто в IIFE. Сторонние счётчики объявляют свои
+//    переменные через var в той же глобальной области, поэтому любое
+//    лексическое объявление (const/let) на верхнем уровне здесь даёт
+//    «Uncaught SyntaxError: Identifier … has already been declared».
+// 2. Очередь Mail.ru ставим ТОЛЬКО через свойство window._tmr, без
+//    лексического объявления. Ровно этот баг и был: пара var (из code.js)
+//    + лексическое объявление у нас → SyntaxError, который выбрасывался
+//    ДО нашего push, так что pageview Mail.ru молча терялся на каждой
+//    странице. Гейт в tests/perf-a11y.test.ts закрепляет инвариант.
+// 3. Стабы window.ym / window._tmr — присваивание свойств (как в
+//    официальных сниппетах), а не объявления: коллизий не создают.
 ---
 <script is:inline>
+  (function () {
   // Yandex.Metrika — queue pageview synchronously so it's never lost
   window.ym = window.ym || function (...args) {
     (window.ym.a = window.ym.a || []).push(args);
@@ -10,9 +27,9 @@
   window.ym.l = +new Date();
   ym(39506315, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: true });
 
-  // Mail.ru — queue pageview synchronously
-  const _tmr = window._tmr || (window._tmr = []);
-  _tmr.push({ id: '3752684', type: 'pageView', start: new Date().getTime() });
+  // Mail.ru — queue pageview synchronously (см. frontmatter, п. 2)
+  window._tmr = window._tmr || [];
+  window._tmr.push({ id: '3752684', type: 'pageView', start: new Date().getTime() });
 
   // Defer heavy script downloads
   function _loadAnalyticsScripts() {
@@ -39,6 +56,7 @@
   } else {
     setTimeout(_loadAnalyticsScripts, 2000);
   }
+  })();
 </script>
 <noscript><div><img src="https://mc.yandex.ru/watch/39506315" style="position:absolute;left:-9999px;" alt="" /></div></noscript>
 <noscript><div><img src="https://top-fwz1.mail.ru/counter?id=3752684;js=na" style="position:absolute;left:-9999px;" alt="" /></div></noscript>
