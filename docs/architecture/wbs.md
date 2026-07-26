@@ -10,7 +10,7 @@ Statuses: ✅ done | 🔧 partial | ⬜ not started
 
 | Metric | Value | Definition |
 |---|---|---|
-| Built pages | **256** | 255 content pages + 404 (`astro build` output) |
+| Built pages | **259** | 255 content pages + 404 + 3 noindex preview variants (`astro build` output) |
 | Redirect map | **1022** | data rows in `discovery/url_map.csv` (1023 lines incl. header) |
 | Old sitemap URLs | 253 | historical count from the legacy site's sitemap.xml |
 

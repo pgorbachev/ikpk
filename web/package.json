@@ -27,8 +27,8 @@
     "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.2",
-    "astro": "^6.1.2"
+    "@astrojs/sitemap": "^3.7.3",
+    "astro": "^7.1.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
