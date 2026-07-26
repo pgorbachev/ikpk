@@ -25,7 +25,12 @@
  * Апскейла нет: вариант шире оригинала не создаётся — это дало бы мыло вместо
  * детализации.
  *
- * Запуск: npx tsx scripts/make-derivatives.ts [--force]
+ * Запуск: из web/ — `npm run media:derivatives` (или `tsx scripts/make-derivatives.ts`).
+ *
+ * Скрипт лежит именно в web/, а не в корневом scripts/: prebuild выполняется в
+ * окружении, где установлен только web/node_modules. Пока генератор жил в
+ * корневом scripts/, Node разрешал `sharp` из scripts/node_modules — локально
+ * это работало, а в CI и при деплое чистая сборка падала с ERR_MODULE_NOT_FOUND.
  * Вызывается автоматически перед сборкой (prebuild в web/package.json).
  */
 
@@ -41,9 +46,9 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ORIGINALS = join(ROOT, 'media-originals');
 const SHIPPED = join(ROOT, 'web', 'public', 'media');
 const VARIANTS_DIR = join(SHIPPED, '_w');
@@ -77,7 +82,7 @@ function isFresh(out: string, src: string): boolean {
   return !force && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs;
 }
 
-function encode(pipeline: sharp.Sharp, ext: string): sharp.Sharp {
+function encode(pipeline: Sharp, ext: string): Sharp {
   if (ext === 'png') return pipeline.png();
   if (ext === 'webp') return pipeline.webp({ quality: QUALITY });
   return pipeline.jpeg({ quality: QUALITY });

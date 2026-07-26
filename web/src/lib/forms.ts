@@ -16,7 +16,8 @@
 // умолчанию — настоящие формы.
 
 const PROD_FORM_HOST = 'b24-cbqwqo.bitrix24site.ru';
-const DEMO_STUB_PATH = '/demo-zayavka/';
+// без завершающего слэша: сайт адресует страницы как старый (см. trailingSlash)
+const DEMO_STUB_PATH = '/demo-zayavka';
 
 const mode = (import.meta.env.DEMO_FORMS ?? '').trim();
 

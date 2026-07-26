@@ -55,7 +55,6 @@ const LOCAL_RE = /["'`(](\/(?:media|terms)\/[^"'`\\\s)<>]+\.(?:webp|jpe?g|png|gi
 // вывода». САМ ФАЙЛ НЕ УМЕНЬШАЕТСЯ — порог нужен только для отчёта в логе и
 // для будущего шага нарезки производных.
 const MAX_WIDTH = 1200;
-const QUALITY = 80;
 
 /**
  * Ассеты СТАРОЙ Next.js-сборки: эмблемы трёх институтов (главная) и иконки
@@ -182,10 +181,6 @@ console.log(`Found ${paths.size} unique assets (bucket + legacy Next.js)`);
 
 // ---------- download ----------
 
-interface ManifestEntry {
-  width?: number;
-  height?: number;
-}
 
 let downloaded = 0;
 let skipped = 0;

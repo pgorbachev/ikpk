@@ -32,7 +32,7 @@ test.describe('Homepage', () => {
     const href = await cta.getAttribute('href');
     // в demo-режиме ссылка ведёт на заглушку — в прод-CRM заказчика с демо-стенда
     // подписки уходить не должны
-    expect(href).toMatch(/bitrix24site\.ru|\/demo-zayavka\//);
+    expect(href).toMatch(/bitrix24site\.ru|\/demo-zayavka/);
 
     await expect(page.locator('.newsletter-signup form')).toHaveCount(0);
   });

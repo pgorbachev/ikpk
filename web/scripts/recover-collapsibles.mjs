@@ -78,6 +78,11 @@ const save = () => {
  * Поэтому раскрываем строго по одной: открыть → снять → закрыть.
  */
 async function extract(page) {
+  // Колбэк ниже исполняется В СТРАНИЦЕ, а не в Node: document и setTimeout там
+  // существуют. Для ESLint, который разбирает файл как node-скрипт, объявляем
+  // document точечно — включать browser-окружение на весь файл нельзя, иначе
+  // потеряем проверку node-части. setTimeout объявлять не нужно: он есть и в Node.
+  /* global document */
   return page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const triggers = [...document.querySelectorAll('button[class*="collapsible_trigger"]')];

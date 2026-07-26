@@ -238,83 +238,79 @@ describe('rendered content quality', () => {
 // Правильная схема — оригинал в репозитории, производная на странице; этот
 // гейт держит вторую половину.
 describe('page image weight', () => {
-  // Порог по фактически загружаемому весу. История: сначала гейт поймал момент,
-  // когда в public/ легли оригиналы и /statyi стала тянуть 8,3 МБ; затем
-  // разделение уровней (оригинал → производная) снизило это до 2,9 МБ; затем
-  // адаптивный набор с srcset — до 0,9 МБ, потому что карточка на 380px больше
-  // не грузит файл на 1200px.
-  // Два порога вместо одного. Первый — расточительность: сколько весит ОДНА
-  // картинка в среднем. Он и ловит настоящую беду (файл на 1200px там, где
-  // показывается 380px). Второй — абсолютный потолок против страниц-складов.
-  //
-  // Одного порога на страницу не хватает: статья с 38 фотографиями честно
-  // весит 1,4 МБ при 37 КБ на кадр, и наказывать её за количество бессмысленно,
-  // а вот 68 карточек по 120 КБ — это дефект.
-  const PER_IMAGE_KB = 80;
-  const TOTAL_KB = 2000;
+  // Оценка ПО РАЗМЕТКЕ, а не по реальной загрузке: браузер здесь не
+  // запускается, кандидат из srcset выбирается по ширине показа из sizes.
+  // Поэтому считаем оба сценария — обычный экран и экран с удвоенной
+  // плотностью, где браузер берёт вариант вдвое шире. Раньше гейт молча
+  // моделировал только DPR 1 и выдавал это за «то, что загрузит браузер».
+  const BUDGETS = [
+    { dpr: 1, perImageKb: 80, totalKb: 2000 },
+    { dpr: 2, perImageKb: 190, totalKb: 4200 },
+  ];
 
-  it('no page pulls more than its image budget', () => {
-    const offenders: string[] = [];
+  /** Вес картинок страницы при заданной плотности экрана. */
+  function weigh(html: string, dpr: number): { kb: number; count: number } {
+    let total = 0;
+    const counted = new Set<string>();
 
-    for (const file of walkHtml()) {
-      const html = readFileSync(file, 'utf-8');
-      const refs = new Set(
-        [...html.matchAll(/(?:src|href)="(\/media\/[^"]+\.(?:webp|jpe?g|png|gif))"/gi)].map((m) => m[1]),
-      );
+    for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
+      const tag = m[0];
+      const src = tag.match(/\bsrc="(\/media\/[^"]+)"/i)?.[1];
+      if (!src || counted.has(src)) continue;
+      counted.add(src);
 
-      // Считаем то, что БРАУЗЕР РЕАЛЬНО ЗАГРУЗИТ: при наличии srcset он берёт
-      // вариант под размер показа, а не базовый файл. Сумма базовых файлов
-      // завышала бы вес втрое и мешала бы видеть настоящую картину.
-      let total = 0;
-      const counted = new Set<string>();
+      const srcset = tag.match(/\bsrcset="([^"]+)"/i)?.[1];
+      const sizes = tag.match(/\bsizes="([^"]+)"/i)?.[1] ?? '';
+      // ширина показа на десктопе — последнее значение в sizes (после медиа-условий)
+      const cssWidth = Number(sizes.match(/(\d+)px\s*$/)?.[1] ?? 800);
+      const needed = cssWidth * dpr;
 
-      for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
-        const tag = m[0];
-        const src = tag.match(/\bsrc="(\/media\/[^"]+)"/i)?.[1];
-        if (!src || counted.has(src)) continue;
-        counted.add(src);
-
-        const srcset = tag.match(/\bsrcset="([^"]+)"/i)?.[1];
-        const sizes = tag.match(/\bsizes="([^"]+)"/i)?.[1] ?? '';
-        // ширина показа на десктопе — последнее значение в sizes (после медиа-условий)
-        const desktop = Number(sizes.match(/(\d+)px\s*$/)?.[1] ?? 800);
-
-        let file = join(dist, decodeURIComponent(src).replace(/^\//, ''));
-        if (srcset) {
-          const cands = srcset.split(',').map((part) => {
-            const [url, w] = part.trim().split(/\s+/);
-            return { url, w: Number(w.replace('w', '')) };
-          });
-          const fit = cands.filter((c) => c.w >= desktop).sort((a, b) => a.w - b.w)[0] ?? cands.at(-1)!;
-          file = join(dist, decodeURIComponent(fit.url).replace(/^\//, ''));
-        }
-        if (existsSync(file)) total += statSync(file).size;
+      let file = join(dist, decodeURIComponent(src).replace(/^\//, ''));
+      if (srcset) {
+        const cands = srcset.split(',').map((part) => {
+          const [url, w] = part.trim().split(/\s+/);
+          return { url, w: Number(w.replace('w', '')) };
+        });
+        const fit = cands.filter((c) => c.w >= needed).sort((a, b) => a.w - b.w)[0] ?? cands.at(-1)!;
+        file = join(dist, decodeURIComponent(fit.url).replace(/^\//, ''));
       }
-
-      // картинки вне <img> (например в CSS через href) — по базовому файлу
-      for (const ref of refs) {
-        if (counted.has(ref)) continue;
-        const p = join(dist, decodeURIComponent(ref).replace(/^\//, ''));
-        if (existsSync(p)) total += statSync(p).size;
-      }
-
-      const kb = Math.round(total / 1024);
-      const count = Math.max(counted.size, 1);
-      const perImage = Math.round(kb / count);
-
-      // средний вес имеет смысл считать только по набору: на странице
-      // преподавателя одна крупная фотография — это её содержание, а не
-      // расточительность. Такие случаи ловит абсолютный потолок.
-      if (count >= 4 && perImage > PER_IMAGE_KB) {
-        offenders.push(`${file.replace(dist, '')}: ${perImage} КБ на картинку (${kb} КБ / ${count})`);
-      } else if (kb > TOTAL_KB) {
-        offenders.push(`${file.replace(dist, '')}: ${kb} КБ всего в ${count} картинках`);
-      }
+      if (existsSync(file)) total += statSync(file).size;
     }
 
-    expect(
-      offenders.slice(0, 6),
-      `вес картинок вне бюджета — не больше ${PER_IMAGE_KB} КБ на картинку и ${TOTAL_KB} КБ на страницу (страниц: ${offenders.length}):\n${offenders.slice(0, 6).join('\n')}`,
-    ).toEqual([]);
-  });
+    // картинки вне <img> (например ссылки в разметке) — по базовому файлу
+    for (const m of html.matchAll(/(?:src|href)="(\/media\/[^"]+\.(?:webp|jpe?g|png|gif))"/gi)) {
+      if (counted.has(m[1])) continue;
+      counted.add(m[1]);
+      const p = join(dist, decodeURIComponent(m[1]).replace(/^\//, ''));
+      if (existsSync(p)) total += statSync(p).size;
+    }
+
+    return { kb: Math.round(total / 1024), count: Math.max(counted.size, 1) };
+  }
+
+  for (const { dpr, perImageKb, totalKb } of BUDGETS) {
+    it(`укладывается в бюджет при плотности экрана ${dpr}x`, () => {
+      const offenders: string[] = [];
+
+      for (const file of walkHtml()) {
+        const html = readFileSync(file, 'utf-8');
+        const { kb, count } = weigh(html, dpr);
+        const perImage = Math.round(kb / count);
+
+        // средний вес имеет смысл только по набору: на странице преподавателя
+        // одна крупная фотография — это содержание, а не расточительность,
+        // такие случаи ловит абсолютный потолок
+        if (count >= 4 && perImage > perImageKb) {
+          offenders.push(`${file.replace(dist, '')}: ${perImage} КБ на картинку (${kb} КБ / ${count})`);
+        } else if (kb > totalKb) {
+          offenders.push(`${file.replace(dist, '')}: ${kb} КБ всего в ${count} картинках`);
+        }
+      }
+
+      expect(
+        offenders.slice(0, 6),
+        `при ${dpr}x вне бюджета (не больше ${perImageKb} КБ на картинку и ${totalKb} КБ на страницу), страниц: ${offenders.length}:\n${offenders.slice(0, 6).join('\n')}`,
+      ).toEqual([]);
+    });
+  }
 });
