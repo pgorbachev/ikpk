@@ -70,6 +70,30 @@ describe('media migration (Этап 2)', () => {
     expect(missing, `битые локальные ссылки:\n${missing.slice(0, 15).join('\n')}`).toEqual([]);
   });
 
+  // Гейт на класс «ссылка/действие работает только благодаря старому сайту».
+  // Формы с action="#" на статике = POST на .html → 405 от nginx и уход со
+  // страницы. Пока FR-06/07 не подключены к Bitrix24, отправка должна быть
+  // заглушена, а не «как бы работать».
+  it('no form can POST to a static page (405 guard)', () => {
+    const offenders: string[] = [];
+    for (const file of walkFiles(dist, ['.html'])) {
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(/<form\b[^>]*>/gi)) {
+        const tag = m[0];
+        const action = tag.match(/\baction="([^"]*)"/i)?.[1] ?? '';
+        const isSelfPost = /\bmethod="post"/i.test(tag) && (action === '' || action === '#');
+        const stopped = /\bonsubmit="return false"/i.test(tag) || /\bdisabled\b/i.test(tag);
+        if (isSelfPost && !stopped) {
+          offenders.push(`${file.replace(dist, '')}: ${tag.slice(0, 110)}`);
+        }
+      }
+    }
+    expect(
+      offenders.slice(0, 5),
+      `формы отправляют POST на статику (405 + уход со страницы):\n${offenders.slice(0, 5).join('\n')}`
+    ).toEqual([]);
+  });
+
   it('local media assets are present in dist', () => {
     const mediaDir = join(dist, 'media');
     expect(existsSync(mediaDir)).toBe(true);
