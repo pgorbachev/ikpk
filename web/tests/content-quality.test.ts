@@ -27,6 +27,35 @@ describe('rendered content quality', () => {
     ).toEqual([]);
   });
 
+  // Ссылки, про которые мы ЗНАЕМ, что они мертвы: проверены запросом
+  // 2026-07-26. Три из них появились при переносе — ими были заменены живые
+  // аккаунты старого сайта, то есть мы своими руками отправили посетителей
+  // в никуда на всех 260 страницах. Гейт офлайновый: он не проверяет
+  // доступность сети, а держит уже разобранные адреса вне сборки.
+  const KNOWN_DEAD = [
+    'vk.com/ikpksu', //           404; живое сообщество — vk.com/clubikpk
+    'youtube.com/@ikpk_su', //    404; живой канал — youtube.com/user/TheKinesiology
+    'vkvideo.ru/@clubikpk', //    редирект на errorCode=11300 invalid user
+    't.me/ikpk_su', //            страница есть, но это не канал: нет счётчика
+    //                            подписчиков; живой канал — t.me/ikpk_spb (1877)
+    'www.medshop.ikpk.su', //     хост не отвечает вообще
+  ];
+
+  it('no known-dead external links in the build', () => {
+    const offenders: string[] = [];
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      for (const dead of KNOWN_DEAD) {
+        if (html.includes(dead)) offenders.push(`${file.replace(dist, '')}: ${dead}`);
+      }
+    }
+    const uniq = [...new Set(offenders.map((o) => o.split(': ')[1]))];
+    expect(
+      uniq,
+      `мёртвые ссылки в сборке (${offenders.length} вхождений):\n${uniq.join('\n')}`
+    ).toEqual([]);
+  });
+
   // Документ, который лежит в сборке, но на который нет ни одной ссылки,
   // недостижим для посетителя. Для «Пользовательского соглашения» это ещё и
   // юридическая проблема: документ обязателен, а дойти до него нельзя.
