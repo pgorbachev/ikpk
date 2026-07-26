@@ -27,6 +27,33 @@ describe('rendered content quality', () => {
     ).toEqual([]);
   });
 
+  // Форма-заглушка, которая собирает персональные данные и никуда их не
+  // отправляет, — хуже отсутствия формы: посетитель считает, что подписался.
+  // На старом сайте «Подписаться» было обычной ссылкой на форму Bitrix24.
+  // Отдельно: у заглушки был чекбокс согласия на обработку персональных данных
+  // без ссылки на документ и без указания, кто обработчик.
+  it('no dead forms collecting personal data', () => {
+    const offenders: string[] = [];
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(/<form\b[^>]*>[\s\S]*?<\/form>/gi)) {
+        const form = m[0];
+        const dead =
+          /onsubmit\s*=\s*"return false"/i.test(form) ||
+          /\baction\s*=\s*"#"/i.test(form);
+        const collectsPii = /type="(?:tel|email)"/i.test(form) || /name="(?:phone|email|name)"/i.test(form);
+        if (dead && collectsPii) {
+          offenders.push(file.replace(dist, ''));
+        }
+      }
+    }
+    const uniq = [...new Set(offenders)];
+    expect(
+      uniq.slice(0, 5),
+      `форма собирает персональные данные и ничего с ними не делает (страниц: ${uniq.length}):\n${uniq.slice(0, 5).join('\n')}`
+    ).toEqual([]);
+  });
+
   // Ссылки, про которые мы ЗНАЕМ, что они мертвы: проверены запросом
   // 2026-07-26. Три из них появились при переносе — ими были заменены живые
   // аккаунты старого сайта, то есть мы своими руками отправили посетителей

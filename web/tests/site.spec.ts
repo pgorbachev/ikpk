@@ -19,10 +19,22 @@ test.describe('Homepage', () => {
     ).toBeGreaterThan(0);
   });
 
-  test('has newsletter subscription form', async ({ page }) => {
+  // Подписка — ссылка на форму Bitrix24, как на старом сайте, а не форма на
+  // странице: наша прежняя форма-заглушка собирала имя, телефон и почту и
+  // никуда их не отправляла.
+  test('newsletter block links to a working subscription form', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.newsletter-signup')).toBeVisible();
-    await expect(page.locator('.newsletter-signup input[type="email"]')).toBeVisible();
+
+    const cta = page.locator('.newsletter-signup a.newsletter-signup-button');
+    await expect(cta).toBeVisible();
+
+    const href = await cta.getAttribute('href');
+    // в demo-режиме ссылка ведёт на заглушку — в прод-CRM заказчика с демо-стенда
+    // подписки уходить не должны
+    expect(href).toMatch(/bitrix24site\.ru|\/demo-zayavka\//);
+
+    await expect(page.locator('.newsletter-signup form')).toHaveCount(0);
   });
 
   test('has footer with correct phone', async ({ page }) => {
