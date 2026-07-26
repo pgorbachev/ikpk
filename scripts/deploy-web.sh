@@ -36,7 +36,17 @@ if [[ "${SSH_STRICT_HOST_KEY_CHECKING:-yes}" == "no" ]]; then
   SSH_ARGS+=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 fi
 
-echo "[deploy] Building Astro site"
+# Демо/превью-стенд собираем в режиме DEMO_FORMS: кнопки «Записаться» не должны
+# писать в продакшен-CRM заказчика (см. web/src/lib/forms.ts). Задать можно
+# извне: DEMO_FORMS=stub (по умолчанию для этого скрипта) или свой тестовый
+# портал Bitrix24. Прод-деплой должен явно передать DEMO_FORMS="".
+DEMO_FORMS="${DEMO_FORMS-stub}"
+export DEMO_FORMS
+if [[ -n "$DEMO_FORMS" ]]; then
+  echo "[deploy] Building Astro site (DEMO_FORMS=$DEMO_FORMS — формы заявки заглушены)"
+else
+  echo "[deploy] Building Astro site (ПРОД-режим: формы ведут в реальную CRM)"
+fi
 npm --prefix "$WEB_DIR" ci
 npm --prefix "$WEB_DIR" run build
 
