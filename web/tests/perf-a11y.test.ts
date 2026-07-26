@@ -125,6 +125,24 @@ describe('Button contrast', () => {
   });
 });
 
+// ─── CSS-совместимость со старыми браузерами ────────────────────────────────
+// Vite 8 минифицирует CSS через lightningcss, который по умолчанию переписывает
+// медиазапросы в range-синтаксис: (max-width:640px) → (width<=640px). Он требует
+// Safari 16.4+, то есть на iOS 15 (iPhone 6s/7) ВСЕ брейкпоинты молча
+// перестают применяться. Защищено пином build.cssTarget в astro.config.mjs;
+// гейт держит инвариант на выходе сборки, а не на конкретной строке конфига
+// (переживает рефакторинг способа настройки). Playwright-compat это не ловит:
+// у него всегда свежий WebKit независимо от имени профиля устройства.
+describe('CSS media query syntax', () => {
+  it('no lightningcss range syntax — old Safari keeps its breakpoints', () => {
+    // плюс инлайновые <style> — минификация проходит и по ним
+    const inlineStyles = readPage('/') + readFileSync(join(dist, '404.html'), 'utf-8');
+    const allCss = readBuiltCss() + inlineStyles;
+    expect(allCss).not.toMatch(/\(\s*width\s*[<>]=?/);
+    expect(allCss).toContain('max-width:');
+  });
+});
+
 // ─── Accessibility ──────────────────────────────────────────────────────────
 describe('Accessibility', () => {
   it('phone link has aria-label', () => {
