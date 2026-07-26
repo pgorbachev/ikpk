@@ -69,7 +69,7 @@ const scheduleRows = sortedSchedule.map((entry) => ({
   }),
 }));
 const seminarBodyHtml = seminar.description_html
-  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html))
+  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
   : '';
 
 // Event без startDate невалиден (Google Rich Results) — Этап 3, план 004.

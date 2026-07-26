@@ -1,7 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
-export { cleanBodyHtml, stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
+export { stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
+import { cleanBodyHtml as cleanHtml } from './html-cleaner.js';
+
+let _panels: Record<string, Record<string, string>> | null = null;
+
+/**
+ * Контент свёрнутых секций, восстановленный с живого сайта отдельным проходом
+ * браузера (web/scripts/recover-collapsibles.mjs). Понадобился потому, что на
+ * ikpk.su аккордеоны сделаны на Radix Collapsible: закрытая панель не
+ * смонтирована в DOM, и обычный HTTP-скрейп забрал только заголовки — 401
+ * секция на 96 страницах, включая учебные планы программ и всю «Оплату».
+ */
+function panelsFor(path?: string): Record<string, string> | undefined {
+  if (!path) return undefined;
+  if (!_panels) _panels = loadJson<Record<string, Record<string, string>>>('collapsible_panels.json');
+  const key = path.replace(/\/+$/, '') || '/';
+  return _panels[key];
+}
+
+/**
+ * Чистит легаси-HTML для вывода. `path` — путь страницы: по нему
+ * подставляется восстановленный контент свёрнутых секций.
+ */
+export function cleanBodyHtml(html: string, path?: string): string {
+  return cleanHtml(html, { panels: panelsFor(path) });
+}
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 

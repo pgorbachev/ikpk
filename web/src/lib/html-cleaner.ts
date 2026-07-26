@@ -289,7 +289,10 @@ function unwrapLayoutWrappers(html: string): string {
  *     [<div class="…collapsible_content…" data-state="open">CONTENT</div>]
  *   </div>
  */
-function transformCollapsibles(html: string): string {
+function transformCollapsibles(
+  html: string,
+  panels?: Record<string, string>,
+): string {
   // Match the outer wrapper: a div that has data-state and wraps a collapsible_trigger
   const stateRe = /<div([^>]*\bdata-state="(?:closed|open)"[^>]*)>/gi;
   let result = html;
@@ -337,9 +340,18 @@ function transformCollapsibles(html: string): string {
       }
     }
 
+    // Контент, восстановленный с живого сайта отдельным проходом браузера:
+    // Radix не монтирует закрытую панель, поэтому в HTTP-скрейпе её нет.
+    if (!content && panels) {
+      content = (panels[title] ?? '').trim();
+    }
+
+    // Заголовок, раскрывающийся в пустоту, хуже отсутствия заголовка: он
+    // обещает контент, которого нет. Часть секций на живом сайте и правда
+    // пустая — такие просто не выводим.
     const replacement = content
       ? `<details open><summary>${title}</summary>${content}</details>`
-      : `<details><summary>${title}</summary></details>`;
+      : '';
 
     result = result.slice(0, m.index) + replacement + result.slice(end);
     searchFrom = m.index + replacement.length;
@@ -566,7 +578,10 @@ function normalizeLegacyControls(html: string): string {
   //    (/svedeniya-ob-obrazovatelnoy-organizatsii#3), её нельзя потерять.
   //    Через CSS (:has) не решить — старый Safari его не поддерживает.
   const accordionInside = /^(?:\s*<div[^>]*>)*\s*<details/i;
-  for (const tag of ['li', 'ul']) {
+  // Порядок важен: сначала внешний <ul>, потом <li>. Наоборот не работает —
+  // после замены <li> на <div> список перестаёт опознаваться как обёртка
+  // аккордеонов и остаётся невалидный <ul> с <div> внутри.
+  for (const tag of ['ul', 'li']) {
     const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi');
     let from = 0;
     for (let guard = 0; guard < 10_000; guard++) {
@@ -594,6 +609,39 @@ function normalizeLegacyControls(html: string): string {
     }
   }
 
+  // 0. Пустая обёртка списка — висячий маркер без текста. Остаётся, когда из
+  //    <li> убрали содержимое (например секцию без контента).
+  out = out.replace(/<li[^>]*>\s*<\/li>/gi, '');
+  out = out.replace(/<(ul|ol)[^>]*>\s*<\/\1>/gi, '');
+
+  // 3. Разворот обёрток иногда оставляет список внутри списка без <li>:
+  //    <ul><ul>…</ul></ul>. Это невалидно, а вложенный список ещё и получает
+  //    лишний отступ. Внешний уровень снимаем.
+  const openList = /<(ul|ol)(\s[^>]*)?>/gi;
+  let listFrom = 0;
+  for (let guard = 0; guard < 10_000; guard++) {
+    openList.lastIndex = listFrom;
+    const m = openList.exec(out);
+    if (!m) break;
+
+    const tag = m[1].toLowerCase();
+    const end = elementEnd(out, m.index, tag);
+    const inner = out.slice(m.index + m[0].length, end - `</${tag}>`.length);
+    const trimmed = inner.trim();
+
+    // внутри ровно один список и ничего больше
+    const nested = trimmed.match(/^<(ul|ol)(\s[^>]*)?>/i);
+    const wholeInner =
+      nested && elementEnd(trimmed, 0, nested[1]) === trimmed.length;
+    if (!wholeInner) {
+      listFrom = m.index + 1;
+      continue;
+    }
+
+    out = out.slice(0, m.index) + trimmed + out.slice(end);
+    listFrom = m.index;
+  }
+
   return out;
 }
 
@@ -615,7 +663,15 @@ function applyExternalLinkPolicy(html: string): string {
   });
 }
 
-export function cleanBodyHtml(html: string): string {
+export interface CleanOptions {
+  /**
+   * Контент свёрнутых секций, восстановленный с живого сайта
+   * (см. web/scripts/recover-collapsibles.mjs), в виде {заголовок: html}.
+   */
+  panels?: Record<string, string>;
+}
+
+export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
   if (!html) return html;
 
   let result = html;
@@ -627,7 +683,7 @@ export function cleanBodyHtml(html: string): string {
   result = removeResidualUiArtifacts(result);
   result = unwrapLayoutWrappers(result);
   result = unwrapInlineSpacerWrappers(result);
-  result = transformCollapsibles(result);
+  result = transformCollapsibles(result, opts.panels);
   result = cleanTypographyClasses(result);
   result = unwrapSeRoot(result);
   result = stripCssModuleClasses(result);

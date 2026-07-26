@@ -256,6 +256,9 @@ describe('404 and sitemap', () => {
       const html = readPage(p);
       for (const m of html.matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)"/gi)) {
         let target = decodeURI(m[1]);
+        // ссылка на файл (PDF документа, картинка) — это не страница, ей
+        // неоткуда взяться в списке собранных маршрутов
+        if (/\.[a-z0-9]{2,5}$/i.test(target)) continue;
         if (!target.endsWith('/')) target += '/';
         // якоря (#upcoming) и внешние уже отфильтрованы паттерном
         if (!built.has(target)) broken.push(`${p} → ${m[1]}`);

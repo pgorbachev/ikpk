@@ -110,10 +110,22 @@ describe('Fixture 2: Seminar HTML', () => {
     expect(result).not.toContain('seminar-form_');
   });
 
-  it('converts collapsible trigger to <details><summary>', () => {
+  // Свёрнутая секция без контента больше не выводится: на живом сайте Radix не
+  // монтирует закрытую панель, поэтому в скрейпе её нет, и заголовок
+  // раскрывался в пустоту. Контент подставляется отдельно — из панелей,
+  // снятых браузером (web/scripts/recover-collapsibles.mjs).
+  it('drops a collapsible with no content available', () => {
     const result = cleanBodyHtml(input);
-    expect(result).toContain('<details>');
+    expect(result).not.toContain('<summary>Учебный план</summary>');
+    expect(result).not.toContain('collapsible_trigger');
+  });
+
+  it('renders a collapsible when recovered content is supplied', () => {
+    const result = cleanBodyHtml(input, {
+      panels: { 'Учебный план': '<p>Темы занятий</p>' },
+    });
     expect(result).toContain('<summary>Учебный план</summary>');
+    expect(result).toContain('<p>Темы занятий</p>');
   });
 
   it('removes the collapsible trigger button', () => {
@@ -143,17 +155,20 @@ describe('Fixture 2: Seminar HTML', () => {
   });
 
   it('can strip legacy seminar schedule tail before cleaning', () => {
-    const result = cleanBodyHtml(stripLegacySeminarTail(input));
+    const result = cleanBodyHtml(stripLegacySeminarTail(input), {
+      panels: { 'Учебный план': '<p>Темы занятий</p>' },
+    });
     expect(result).not.toContain('<h3>Расписание</h3>');
     expect(result).not.toContain('Показать все');
     expect(result).not.toContain('К сожалению, данный курс');
     expect(result).toContain('Seminar description text.');
-    expect(result).toContain('<details>');
+    // секции остаются на месте: срезается только хвост с расписанием
+    expect(result).toContain('<summary>Учебный план</summary>');
   });
 
   it('removes residual broken closing-tag text nodes', () => {
     const broken = '<ul><li><div><details><summary>Рекомендации</summary></details></div>/li</li></ul>';
-    const result = cleanBodyHtml(broken);
+    const result = cleanBodyHtml(broken, { panels: { 'Рекомендации': '<p>Книга</p>' } });
     expect(result).not.toContain('</div>/li<');
     expect(result).toContain('<summary>Рекомендации</summary>');
   });
@@ -271,9 +286,11 @@ describe('Fixture 4: Svedeniya (educational-organization) page', () => {
     expect(result).not.toContain('educational-organization_');
   });
 
-  it('converts closed collapsible to <details> without open attribute', () => {
+  it('drops a closed collapsible instead of showing an empty one', () => {
     const result = cleanBodyHtml(input);
-    expect(result).toContain('<details><summary>Основные сведения</summary></details>');
+    expect(result).not.toContain('<summary>Основные сведения</summary>');
+    // и не оставляет за собой пустую обёртку списка с висячим маркером
+    expect(result).not.toMatch(/<li[^>]*>\s*<\/li>/);
   });
 
   it('converts open collapsible to <details open> with content', () => {

@@ -98,9 +98,37 @@ function extractAdditionalHtml(rawHtml: string): string {
   return '';
 }
 
+/**
+ * Схема обучения: PDF со программами, проводимыми в РФ, плюс ссылка на полный
+ * каталог головного института. На старом сайте это отдельный блок на странице
+ * института; при переносе он выпал вместе с обоими ссылками — PDF в сборке
+ * лежал, но дойти до него было нельзя.
+ */
+function extractSchemeBlock(rawHtml: string) {
+  const at = rawHtml.indexOf('Схема обучения');
+  if (at < 0) return null;
+
+  const window = rawHtml.slice(at, at + 2200);
+  const pdf = window.match(/href="(\/media\/uploads\/[^"]+\.pdf)"/)?.[1];
+  const catalog = window.match(/href="(https?:\/\/[^"]*courses\.php[^"]*)"/)?.[1];
+  if (!pdf) return null;
+
+  return { pdf, catalog };
+}
+
+/**
+ * Телеграм-бот института — отдельный канал привлечения (у Апледжера и Барраля
+ * разные боты). Ссылка есть в данных, но на нашей странице блок не выводился.
+ */
+function extractBotLink(rawHtml: string): string | undefined {
+  return rawHtml.match(/href="(https:\/\/t\.me\/[A-Za-z0-9_]+)"/)?.[1];
+}
+
 const leadText = extractLeadText(institute);
 const logoImage = institute.images?.[0] || '';
-const cleanedAdditionalHtml = cleanBodyHtml(extractAdditionalHtml(institute.description_html || ''));
+const scheme = extractSchemeBlock(institute.description_html || '');
+const botLink = extractBotLink(institute.description_html || '');
+const cleanedAdditionalHtml = cleanBodyHtml(extractAdditionalHtml(institute.description_html || ''), Astro.url.pathname);
 
 const allSeminars = getSeminars();
 const programCards = courseGroups.map((courseGroup) => {
@@ -172,6 +200,40 @@ const hiddenTeachers = teacherCards.slice(3);
       </section>
     )}
 
+    {scheme && (
+      <section class="section scheme-section">
+        <div class="scheme-card">
+          <h2>Схема обучения в {institute.name}</h2>
+          <p>
+            В схеме указаны программы, которые проводятся на территории РФ.
+            {scheme.catalog && (
+              <>
+                {' '}Все направления головного института —{' '}
+                <a href={scheme.catalog} target="_blank" rel="noopener noreferrer">в его каталоге</a>.
+              </>
+            )}
+          </p>
+          <a class="btn btn-primary" href={scheme.pdf} target="_blank" rel="noopener noreferrer">
+            Скачать схему обучения (PDF)
+          </a>
+        </div>
+      </section>
+    )}
+
+    {botLink && (
+      <section class="section bot-section">
+        <div class="bot-card">
+          <div>
+            <h2>У нас есть Телеграм-бот</h2>
+            <p>Посвящён программам и методикам {institute.name}.</p>
+          </div>
+          <a class="btn btn-secondary" href={botLink} target="_blank" rel="noopener noreferrer">
+            Перейти в чат-бот
+          </a>
+        </div>
+      </section>
+    )}
+
     {cleanedAdditionalHtml && (
       <section class="section institute-extra-shell" data-testid="institute-extra-content">
         <div class="institute-extra rich-content" set:html={cleanedAdditionalHtml} />
@@ -181,6 +243,39 @@ const hiddenTeachers = teacherCards.slice(3);
 </BaseLayout>
 
 <style>
+  .scheme-card,
+  .bot-card {
+    border: 1px solid var(--color-gray-200);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem;
+    background: var(--color-light-100);
+  }
+
+  .bot-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .scheme-card h2,
+  .bot-card h2 {
+    margin: 0 0 0.5rem;
+    font-size: var(--font-l);
+  }
+
+  .scheme-card p,
+  .bot-card p {
+    margin: 0 0 1rem;
+    color: var(--color-gray-600);
+    max-width: 60ch;
+  }
+
+  .bot-card p {
+    margin-bottom: 0;
+  }
+
   .institute-page {
     padding-top: 0.5rem;
   }

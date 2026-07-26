@@ -31,7 +31,7 @@ const description = page?.seo_description || 'Информация об опла
       </div>
 
       {page?.body_html ? (
-        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html)} />
+        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname)} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

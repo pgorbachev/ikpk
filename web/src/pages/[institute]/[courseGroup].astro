@@ -129,7 +129,7 @@ function extractAdditionalHtml(rawHtml: string): string {
 
 const leadText = extractLeadText(courseGroup, seminars);
 const additionalHtml = extractAdditionalHtml(courseGroup.description_html || '');
-const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml) : '';
+const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml, Astro.url.pathname) : '';
 
 const schema = {
   '@context': 'https://schema.org',

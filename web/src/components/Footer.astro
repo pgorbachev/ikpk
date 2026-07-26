@@ -55,6 +55,16 @@
 
     <div class="footer-bottom">
       <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
+      {/* Документ обязателен, и на старом сайте ссылка на него была в футере
+          каждой страницы. При переносе она потерялась: файл в сборку попал,
+          а дойти до него было нельзя. */}
+      <p class="footer-legal">
+        <a
+          href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Пользовательское соглашение и политика конфиденциальности</a>
+      </p>
     </div>
   </div>
 </footer>
@@ -142,6 +152,20 @@
     padding-top: 1.5rem;
     text-align: center;
     font-size: var(--font-xs);
+  }
+
+  .footer-legal {
+    margin-top: 0.5rem;
+  }
+
+  .footer-legal a {
+    color: var(--color-gray-300);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .footer-legal a:hover {
+    color: #fff;
   }
 
   @media (max-width: 768px) {
