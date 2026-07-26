@@ -209,3 +209,46 @@ test.describe('Contacts map', () => {
     await expect(iframe).toHaveAttribute('src', /yandex\.ru\/map-widget/);
   });
 });
+
+// ─── Верхнее меню: подсказка о подменю ───────────────────────────────────────
+// Регресс-тест к багу: шеврон (▾) был в разметке, но SVG без intrinsic-ширины
+// внутри flex-контейнера сжимался до width:0 — пользователь не видел, у каких
+// пунктов есть подменю, и поведение выглядело случайным. Ловится только реальным
+// браузером: build-гейты layout не считают.
+test.describe('Top navigation affordance', () => {
+  test('items with a dropdown show a visible chevron', async ({ page }) => {
+    await page.goto('/');
+
+    const menu = page.locator('.topnav-menu');
+    // на мобильной раскладке меню скрыто (там drawer) — проверять нечего
+    if (!(await menu.isVisible())) test.skip();
+
+    const withDropdown = page.locator('.topnav-menu > ul > li.has-dropdown');
+    const count = await withDropdown.count();
+    expect(count, 'в меню должны быть пункты с подменю').toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i += 1) {
+      const item = withDropdown.nth(i);
+      const label = (await item.locator('> a').innerText()).trim();
+      const chev = item.locator('.chev');
+      await expect(chev, `у «${label}» нет шеврона в разметке`).toHaveCount(1);
+      const box = await chev.boundingBox();
+      expect(box, `шеврон «${label}» не отрисован`).not.toBeNull();
+      expect(box!.width, `шеврон «${label}» имеет нулевую ширину`).toBeGreaterThan(4);
+      expect(box!.height, `шеврон «${label}» имеет нулевую высоту`).toBeGreaterThan(4);
+    }
+  });
+
+  test('hovering an item with a dropdown reveals its links', async ({ page }) => {
+    await page.goto('/');
+    const menu = page.locator('.topnav-menu');
+    if (!(await menu.isVisible())) test.skip();
+
+    const item = page.locator('.topnav-menu > ul > li.has-dropdown').first();
+    const dropdown = item.locator('.dropdown');
+    await expect(dropdown).not.toBeVisible();
+    await item.hover();
+    await expect(dropdown).toBeVisible();
+    expect(await dropdown.locator('a').count()).toBeGreaterThan(1);
+  });
+});

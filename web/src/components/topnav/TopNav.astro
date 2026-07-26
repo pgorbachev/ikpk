@@ -136,7 +136,10 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     border-radius: var(--radius-m);
   }
   .topnav-link:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
-  .chev { width: 12px; height: 12px; }
+  /* flex: none обязателен: SVG без intrinsic-ширины внутри flex-контейнера
+     сжимался до width:0 — шеврон был в разметке, но не рисовался, и подменю
+     выглядели «случайными» (нет подсказки, у каких пунктов они есть). */
+  .chev { width: 12px; height: 12px; flex: none; }
 
   .dropdown {
     position: absolute;
