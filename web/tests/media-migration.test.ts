@@ -50,6 +50,19 @@ describe('media migration (Этап 2)', () => {
       }
       for (const m of html.matchAll(/url\((['"]?)([^'")]+)\1\)/gi)) refs.push(m[2]);
 
+      // JSON-LD: image/logo — значения внутри JSON-строки, теги их не ловят
+      for (const m of html.matchAll(
+        /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi
+      )) {
+        for (const f of m[1].matchAll(/"(?:image|logo|thumbnailUrl)"\s*:\s*"([^"]+)"/gi)) {
+          // JSON-LD требует АБСОЛЮТНЫЙ URL, поэтому свой домен здесь легитимен:
+          // проверяем, что это наш домен, и что путь существует локально
+          const val = f[1];
+          const own = val.replace(/^https:\/\/ikpk\.su/, '');
+          refs.push(own === val ? val : own);
+        }
+      }
+
       for (const raw of refs) {
         const ref = raw.trim();
         if (!ref || ref.startsWith('data:')) continue;
@@ -63,6 +76,19 @@ describe('media migration (Этап 2)', () => {
         if (!ref.startsWith('/')) continue; // относительные внутри страницы не используем
         const local = join(dist, decodeURI(ref.split('?')[0].split('#')[0]));
         if (!existsSync(local)) missing.push(`${page}: ${ref}`);
+      }
+    }
+
+    // CSS-бандлы: background-image из <style> в .astro попадает в dist/_astro/*.css,
+    // а не в HTML — без этого прохода внешняя картинка в CSS ускользала от обоих гейтов
+    for (const file of walkFiles(dist, ['.css'])) {
+      const css = readFileSync(file, 'utf-8');
+      for (const m of css.matchAll(/url\((['"]?)([^'")]+)\1\)/gi)) {
+        const ref = m[2].trim();
+        if (!ref || ref.startsWith('data:')) continue;
+        if (/^(?:https?:)?\/\//.test(ref)) {
+          external.push(`${file.replace(dist, '')}: ${ref}`);
+        }
       }
     }
 
