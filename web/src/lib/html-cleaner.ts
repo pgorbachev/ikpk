@@ -539,6 +539,64 @@ function redirectFormLinksInDemo(html: string): string {
   });
 }
 
+/**
+ * Легаси-контент приносит два визуальных дефекта, заметных глазом:
+ *
+ * 1. Нативная <button> без класса (например «Произвести оплату» на /oplata) —
+ *    серый браузерный контрол посреди страницы, к тому же МЁРТВЫЙ: на старом
+ *    сайте её обрабатывал React, у нас обработчика нет. Пока онлайн-оплата
+ *    (FR-08) не подключена, ведём пользователя туда, где сценарий работает —
+ *    в расписание, где есть запись через CRM-форму.
+ * 2. Аккордеоны, обёрнутые в <ul><li> — у карточек торчат маркеры списка.
+ *    Разворачиваем такие обёртки, чтобы маркеры не появлялись ни в одном
+ *    браузере (CSS :has() не покрыл бы старый Safari).
+ */
+function normalizeLegacyControls(html: string): string {
+  let out = html;
+
+  // 1. кнопки без класса → оформленная ссылка на расписание
+  out = out.replace(
+    /<button(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/button>/gi,
+    (_m, label) => `<a class="btn btn-primary" href="/raspisanie-i-tseny">${label}</a>`
+  );
+
+  // 2. <ul>/<li> вокруг аккордеонов — это не список, а layout-обёртка из
+  //    легаси-вёрстки: у крупных блоков торчат маркеры. Меняем теги на <div>,
+  //    а не разворачиваем: у <li> бывает id — цель анкорной ссылки
+  //    (/svedeniya-ob-obrazovatelnoy-organizatsii#3), её нельзя потерять.
+  //    Через CSS (:has) не решить — старый Safari его не поддерживает.
+  const accordionInside = /^(?:\s*<div[^>]*>)*\s*<details/i;
+  for (const tag of ['li', 'ul']) {
+    const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi');
+    let from = 0;
+    for (let guard = 0; guard < 10_000; guard++) {
+      openRe.lastIndex = from;
+      const m = openRe.exec(out);
+      if (!m) break;
+
+      const end = elementEnd(out, m.index, tag);
+      const inner = out.slice(m.index + m[0].length, end - `</${tag}>`.length);
+      // для <ul> достаточно, чтобы аккордеон был в любом из <li>
+      const hit = tag === 'li'
+        ? accordionInside.test(inner)
+        : /<li[^>]*>(?:\s*<div[^>]*>)*\s*<details/i.test(inner);
+      if (!hit) {
+        from = m.index + 1;
+        continue;
+      }
+
+      const attrs = m[1] ?? '';
+      out =
+        out.slice(0, m.index) +
+        `<div${attrs}>` + inner + '</div>' +
+        out.slice(end);
+      from = m.index + 1;
+    }
+  }
+
+  return out;
+}
+
 function applyExternalLinkPolicy(html: string): string {
   if (!html.includes('<a ')) return html;
   return html.replace(/<a\b[^>]*>/gi, (tag) => {
@@ -576,6 +634,7 @@ export function cleanBodyHtml(html: string): string {
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
   result = applyExternalLinkPolicy(result);
+  result = normalizeLegacyControls(result);
   result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
 

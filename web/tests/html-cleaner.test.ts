@@ -369,11 +369,14 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
     expect(result).toContain('Regular paragraph with a link');
   });
 
-  it('strips CSS Module classes from button', () => {
+  it('turns a legacy button into a styled CTA link', () => {
     const result = cleanBodyHtml(input);
     expect(result).not.toContain('button_primary__q1q5a');
-    // The button element itself should remain
-    expect(result).toContain('<button');
+    // A <button> from the scraped content is always dead in a static build:
+    // its React handler is gone. Keeping it would show an unstyled native
+    // control that does nothing, so it becomes a styled CTA instead.
+    expect(result).not.toContain('<button');
+    expect(result).toContain('<a class="btn btn-primary" href="/raspisanie-i-tseny">');
     expect(result).toContain('Schedule a meeting');
   });
 
