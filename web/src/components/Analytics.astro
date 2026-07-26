@@ -10,9 +10,12 @@
   window.ym.l = +new Date();
   ym(39506315, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: true });
 
-  // Mail.ru — queue pageview synchronously
-  const _tmr = window._tmr || (window._tmr = []);
-  _tmr.push({ id: '3752684', type: 'pageView', start: new Date().getTime() });
+  // Mail.ru — queue pageview synchronously. Через свойство window._tmr, БЕЗ
+  // лексического `const _tmr`: внешний code.js объявляет свой `_tmr` в той же
+  // глобальной области, и `var` + наш `const` давали SyntaxError
+  // «Identifier '_tmr' has already been declared».
+  window._tmr = window._tmr || [];
+  window._tmr.push({ id: '3752684', type: 'pageView', start: new Date().getTime() });
 
   // Defer heavy script downloads
   function _loadAnalyticsScripts() {
