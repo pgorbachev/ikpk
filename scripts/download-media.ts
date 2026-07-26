@@ -86,6 +86,26 @@ function uploadLocalPath(uuid: string): string {
   return `${UPLOAD_LOCAL_PREFIX}${uuid}.webp`;
 }
 
+/**
+ * Тип файла по сигнатуре первых байтов. Нужен там, где сервер не выставил
+ * content-type: заголовок `application/octet-stream` не говорит ничего, а
+ * подменённое расширение надо поймать (упаковать PDF под именем .webp нельзя —
+ * sharp потом тихо упадёт на метаданных).
+ */
+function sniffType(buf: Buffer): string | null {
+  if (buf.length < 12) return null;
+  const hex = buf.subarray(0, 4).toString('hex').toUpperCase();
+  if (buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buf.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (hex.startsWith('FFD8FF')) return 'image/jpeg';
+  if (hex === '89504E47') return 'image/png';
+  if (buf.subarray(0, 3).toString('ascii') === 'GIF') return 'image/gif';
+  if (buf.subarray(0, 4).toString('ascii') === '%PDF') return 'application/pdf';
+  const head = buf.subarray(0, 256).toString('utf-8');
+  if (head.includes('<svg') || head.includes('<?xml')) return 'image/svg+xml';
+  return null;
+}
+
 /** Откуда качать данный локальный путь: легаси-деплой, upload-API или бакет. */
 function sourceUrlFor(path: string): string {
   const legacy = LEGACY_NEXT_ASSETS[path];
@@ -191,10 +211,29 @@ for (const path of [...paths].sort()) {
         svg: 'image/svg+xml',
         pdf: 'application/pdf',
       };
-      if (ext && expected[ext] && contentType && contentType !== expected[ext]) {
+      // Часть файлов бакет отдаёт как application/octet-stream — тип там просто
+      // не выставлен, и это НЕ значит, что содержимое не то. Заголовку в таком
+      // случае верить нечему, поэтому смотрим на сигнатуру байтов.
+      const INCONCLUSIVE = ['', 'application/octet-stream', 'binary/octet-stream'];
+      const actual = INCONCLUSIVE.includes(contentType)
+        ? sniffType(buf)
+        : contentType;
+
+      // Бакет старого сайта хранит часть файлов как JPEG/PNG под именем .webp.
+      // Ссылки в данных ведут на .webp, переименование потребовало бы правки
+      // всех ссылок — поэтому приводим СОДЕРЖИМОЕ к расширению: перекодируем
+      // в настоящий webp. Имя остаётся честным, размер обычно падает.
+      let transcoded = '';
+      if (ext === 'webp' && (actual === 'image/jpeg' || actual === 'image/png')) {
+        const before = buf.length;
+        buf = await sharp(buf).webp({ quality: QUALITY }).toBuffer();
+        transcoded = ` [transcoded ${actual.replace('image/', '')}→webp ${Math.round(before / 1024)}KB→${Math.round(buf.length / 1024)}KB]`;
+      } else if (ext && expected[ext] && actual && actual !== expected[ext]) {
         throw new Error(
-          `content-type mismatch: ссылка обещает .${ext} (${expected[ext]}), ` +
-            `сервер отдал ${contentType} — поправьте расширение в ссылке`
+          `тип не совпадает с расширением: ссылка обещает .${ext} (${expected[ext]}), ` +
+            `фактически ${actual}` +
+            (INCONCLUSIVE.includes(contentType) ? ' (по сигнатуре файла)' : ' (по content-type)') +
+            ' — поправьте расширение в ссылке'
         );
       }
 
@@ -232,7 +271,7 @@ for (const path of [...paths].sort()) {
       writeFileSync(tmpPath, buf);
       renameSync(tmpPath, localPath);
       downloaded++;
-      console.log(`  ✓ ${path} (${(buf.length / 1024).toFixed(0)} KB)${resized}`);
+      console.log(`  ✓ ${path} (${(buf.length / 1024).toFixed(0)} KB)${transcoded}${resized}`);
     } catch (err) {
       failed++;
       console.error(`  ✗ ${path}: ${(err as Error).message}`);
