@@ -100,6 +100,16 @@ describe('Analytics', () => {
     expect(tmrIndex).toBeLessThan(deferIndex);
   });
 
+  // Регресс-гейт: внешний code.js объявляет свой `var _tmr` в той же глобальной
+  // области. Лексическое `const/let _tmr` у нас → SyntaxError при его парсинге,
+  // причём ДО нашего push, то есть pageview Mail.ru молча терялся на всех
+  // страницах. Ассерт выше это не ловил: он матчит и сломанную форму
+  // (`const _tmr; _tmr.push(...)`), и рабочую — был зелёным, пока баг жил.
+  it('Mail.ru queue goes through window._tmr, no lexical declaration', () => {
+    expect(homepage).toContain('window._tmr = window._tmr ||');
+    expect(homepage).not.toMatch(/\b(const|let)\s+_tmr\b/);
+  });
+
   it('defers script downloads via requestIdleCallback', () => {
     expect(homepage).toContain('requestIdleCallback(_loadAnalyticsScripts');
   });
