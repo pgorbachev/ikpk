@@ -49,6 +49,55 @@ const LOCAL_RE = /["'`(](\/(?:media|terms)\/[^"'`\\\s)<>]+\.(?:webp|jpe?g|png|gi
 const MAX_WIDTH = 1200;
 const QUALITY = 80;
 
+/**
+ * Ассеты СТАРОЙ Next.js-сборки: эмблемы трёх институтов (главная) и иконки
+ * министерств (/svedeniya-ob-obrazovatelnoy-organizatsii). Лежали на
+ * ikpk.su/_next/static/media/** — то есть на умирающем деплое: при переключении
+ * DNS этот путь исчезает вместе со старым сайтом, и логотипы на главной
+ * отвалились бы разом. Захвачены локально; ссылки в discovery/entities
+ * переписаны на /media/legacy/**. Ключ — локальный путь, значение — источник
+ * (сохранён для провенанса; хеш в имени файла не переносим).
+ */
+const LEGACY_NEXT_ASSETS: Record<string, string> = {
+  '/media/legacy/logo-v2.png': 'https://ikpk.su/_next/static/media/logo-v2.68e2bc89.png',
+  '/media/legacy/logo-upledger-inst.png':
+    'https://ikpk.su/_next/static/media/logo-upledger-inst.8710042f.png',
+  '/media/legacy/logo-barral-inst.png':
+    'https://ikpk.su/_next/static/media/logo-barral-inst.3978004d.png',
+  '/media/legacy/educationMinistryIcon.png':
+    'https://ikpk.su/_next/static/media/educationMinistryIcon.cf7143fa.png',
+  '/media/legacy/scienceEducationMinistryIcon.png':
+    'https://ikpk.su/_next/static/media/scienceEducationMinistryIcon.4180b187.png',
+};
+
+/**
+ * Третий источник картинок старого сайта: его собственный API
+ * `https://ikpk.su/api/upload/file/<uuid>` (без расширения, отдаёт image/webp).
+ * Это эндпоинт умирающего бэкенда: при переключении DNS он исчезает вместе
+ * со старым сайтом, а на него смотрят изображения в статьях, группах курсов
+ * и на страницах институтов. Локально раскладываем как
+ * /media/uploads/<uuid>.webp.
+ */
+const UPLOAD_API_PREFIX = 'https://ikpk.su/api/upload/file/';
+const UPLOAD_API_RE = /https:\/\/ikpk\.su\/api\/upload\/file\/([a-f0-9-]{36})/g;
+const UPLOAD_LOCAL_PREFIX = '/media/uploads/';
+
+function uploadLocalPath(uuid: string): string {
+  return `${UPLOAD_LOCAL_PREFIX}${uuid}.webp`;
+}
+
+/** Откуда качать данный локальный путь: легаси-деплой, upload-API или бакет. */
+function sourceUrlFor(path: string): string {
+  const legacy = LEGACY_NEXT_ASSETS[path];
+  if (legacy) return legacy;
+  if (path.startsWith(UPLOAD_LOCAL_PREFIX)) {
+    // расширение локальное (по content-type), в URL API его нет — срезаем любое
+    const uuid = path.slice(UPLOAD_LOCAL_PREFIX.length).replace(/\.[a-z0-9]+$/i, '');
+    return UPLOAD_API_PREFIX + uuid;
+  }
+  return BUCKET_PREFIX + encodeURI(path);
+}
+
 const force = process.argv.includes('--force');
 
 // ---------- collect unique bucket paths ----------
@@ -94,8 +143,14 @@ for (const file of sources) {
     const decoded = safeDecode(match[1]);
     if (decoded) paths.add(decoded);
   }
+  // картинки из upload-API старого сайта
+  for (const match of raw.matchAll(UPLOAD_API_RE)) paths.add(uploadLocalPath(match[1]));
 }
-console.log(`Found ${paths.size} unique bucket assets`);
+// Легаси-ассеты добавляем всегда: после рерайта ссылок они уже не находятся
+// как внешние URL, а без них главная теряет эмблемы институтов.
+for (const path of Object.keys(LEGACY_NEXT_ASSETS)) paths.add(path);
+
+console.log(`Found ${paths.size} unique assets (bucket + legacy Next.js)`);
 
 // ---------- download ----------
 
@@ -110,7 +165,7 @@ let skipped = 0;
 let failed = 0;
 
 for (const path of [...paths].sort()) {
-  const url = BUCKET_PREFIX + encodeURI(path);
+  const url = sourceUrlFor(path);
   const localPath = join(PUBLIC_DIR, ...path.split('/').filter(Boolean));
 
   if (!force && existsSync(localPath) && statSync(localPath).size > 0) {
@@ -122,16 +177,53 @@ for (const path of [...paths].sort()) {
       let buf = Buffer.from(await res.arrayBuffer());
       let resized = '';
       const ext = path.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+
+      // upload-API старого сайта отдаёт под одинаковыми URL и картинки, и PDF.
+      // Расширение в ссылке должно совпадать с реальным типом, иначе на прод
+      // уедет PDF под именем .webp (и sharp тихо упадёт на метаданных).
+      const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+      const expected: Record<string, string> = {
+        webp: 'image/webp',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        gif: 'image/gif',
+        svg: 'image/svg+xml',
+        pdf: 'application/pdf',
+      };
+      if (ext && expected[ext] && contentType && contentType !== expected[ext]) {
+        throw new Error(
+          `content-type mismatch: ссылка обещает .${ext} (${expected[ext]}), ` +
+            `сервер отдал ${contentType} — поправьте расширение в ссылке`
+        );
+      }
+
       if (ext && ['webp', 'jpg', 'jpeg', 'png'].includes(ext)) {
         const meta = await sharp(buf).metadata();
-        if ((meta.width ?? 0) > MAX_WIDTH) {
-          // кодируем в ИСХОДНЫЙ формат — расширение файла остаётся честным
-          const pipeline = sharp(buf).resize({ width: MAX_WIDTH });
+        const tooWide = (meta.width ?? 0) > MAX_WIDTH;
+
+        // Даунскейл оверсайза + пережатие раздутых файлов. Второе не менее
+        // важно: upload-API старого сайта отдаёт webp практически без сжатия
+        // (до 2.8 МБ на 974×1349 ≈ 2 байта на пиксель), и такие картинки
+        // уезжают посетителю как есть. Кодируем в ИСХОДНЫЙ формат, чтобы
+        // расширение оставалось честным, и оставляем результат ТОЛЬКО если он
+        // меньше оригинала — уже оптимизированные файлы не портим.
+        if (tooWide || ['webp', 'jpg', 'jpeg'].includes(ext)) {
+          const pipeline = sharp(buf);
+          if (tooWide) pipeline.resize({ width: MAX_WIDTH });
           if (ext === 'webp') pipeline.webp({ quality: QUALITY });
           else if (ext === 'png') pipeline.png();
           else pipeline.jpeg({ quality: QUALITY });
-          buf = Buffer.from(await pipeline.toBuffer());
-          resized = ` [resized ${meta.width}→${MAX_WIDTH}px]`;
+
+          const candidate = Buffer.from(await pipeline.toBuffer());
+          const gain = buf.length - candidate.length;
+          if (tooWide || gain > 0) {
+            const from = `${(buf.length / 1024).toFixed(0)}KB`;
+            buf = candidate;
+            resized =
+              (tooWide ? ` [resized ${meta.width}→${MAX_WIDTH}px]` : '') +
+              (gain > 0 ? ` [recompressed ${from}→${(buf.length / 1024).toFixed(0)}KB]` : '');
+          }
         }
       }
       mkdirSync(dirname(localPath), { recursive: true });

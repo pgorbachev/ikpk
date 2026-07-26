@@ -18,7 +18,7 @@ const isCard = variant === 'card';
       </p>
 
       {isCard ? (
-        <form class="newsletter-signup-form newsletter-signup-form--card" action="#" method="post">
+        <form class="newsletter-signup-form newsletter-signup-form--card" action="#" method="post" onsubmit="return false" data-newsletter-stub>
           <input
             type="text"
             name="name"
@@ -49,7 +49,7 @@ const isCard = variant === 'card';
           <button type="submit" class="newsletter-signup-button newsletter-signup-button--card">Подписаться</button>
         </form>
       ) : (
-        <form class="newsletter-signup-form newsletter-signup-form--band" action="#" method="post">
+        <form class="newsletter-signup-form newsletter-signup-form--band" action="#" method="post" onsubmit="return false" data-newsletter-stub>
           <input
             type="email"
             name="email"
