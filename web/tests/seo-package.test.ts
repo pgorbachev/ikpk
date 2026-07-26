@@ -304,3 +304,35 @@ describe('404 and sitemap', () => {
     expect(robots).not.toContain('Disallow: /_astro/');
   });
 });
+
+// ─── Заголовок и описание есть у КАЖДОЙ страницы ────────────────────────────
+// Гейт выше проверял title только у списка ключевых страниц — и пропустил
+// момент, когда обновление каталога с живого API привело 138 страниц к пустому
+// <title>: API отдаёт seo-поля пустыми (живой сайт собирает заголовок шаблоном),
+// а наши шаблоны подставляли значение напрямую. Пустой title — это и серьёзное
+// нарушение доступности (axe: document-title), и потеря сниппета в поиске.
+describe('title and description on every page', () => {
+  it('every built page has a non-empty <title>', () => {
+    const offenders: string[] = [];
+    for (const p of allPages()) {
+      const m = readPage(p).match(/<title>([^<]*)<\/title>/);
+      if (!m || !m[1].trim()) offenders.push(p);
+    }
+    expect(
+      offenders.slice(0, 8),
+      `страниц без заголовка: ${offenders.length}\n${offenders.slice(0, 8).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every built page has a non-empty meta description', () => {
+    const offenders: string[] = [];
+    for (const p of allPages()) {
+      const m = readPage(p).match(/<meta name="description" content="([^"]*)"/);
+      if (!m || !m[1].trim()) offenders.push(p);
+    }
+    expect(
+      offenders.slice(0, 8),
+      `страниц без описания: ${offenders.length}\n${offenders.slice(0, 8).join('\n')}`,
+    ).toEqual([]);
+  });
+});

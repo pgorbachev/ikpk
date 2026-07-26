@@ -63,6 +63,8 @@ export interface CourseGroup {
   description_html: string;
   description_text: string;
   images: string[];
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Seminar {
@@ -79,6 +81,8 @@ export interface Seminar {
   status: string;
   hours?: number | string | null;
   certificate_type?: string | null;
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Teacher {
@@ -90,6 +94,8 @@ export interface Teacher {
   bio_html: string;
   bio_text: string;
   photo: string;
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Article {
@@ -184,12 +190,29 @@ export function getInstitute(slug: string): Institute | undefined {
 }
 
 let _courseGroups: CourseGroup[] | null = null;
+/**
+ * Порядок следования, снятый с живого сайта (поле priority в его API).
+ *
+ * Без него сортировка выходила алфавитной, и это ломало не оформление, а
+ * педагогическую последовательность: на группе КСТ продвинутые ADV шли раньше
+ * обязательных SER, а флагманская «Прикладная кинезиология» на странице ИКПК
+ * оказывалась седьмой вместо первой.
+ *
+ * Записи без order (исчезли с живого, оставлены осознанно) уходят в конец.
+ */
+function byOrder<T extends { order?: number; name?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const d = (a.order ?? 9000) - (b.order ?? 9000);
+    return d !== 0 ? d : (a.name ?? '').localeCompare(b.name ?? '', 'ru');
+  });
+}
+
 export function getCourseGroups(instituteSlug?: string): CourseGroup[] {
   if (!_courseGroups) _courseGroups = loadJson<CourseGroup[]>('course_groups.json');
   if (instituteSlug) {
-    return _courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug);
+    return byOrder(_courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug));
   }
-  return _courseGroups;
+  return byOrder(_courseGroups);
 }
 
 export function getCourseGroup(slug: string): CourseGroup | undefined {
@@ -200,9 +223,9 @@ let _seminars: Seminar[] | null = null;
 export function getSeminars(courseGroupLegacyId?: string): Seminar[] {
   if (!_seminars) _seminars = loadJson<Seminar[]>('seminars.json');
   if (courseGroupLegacyId) {
-    return _seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId);
+    return byOrder(_seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId));
   }
-  return _seminars;
+  return byOrder(_seminars);
 }
 
 export function getSeminar(slug: string): Seminar | undefined {
@@ -213,9 +236,9 @@ let _teachers: Teacher[] | null = null;
 export function getTeachers(instituteSlug?: string): Teacher[] {
   if (!_teachers) _teachers = loadJson<Teacher[]>('teachers.json');
   if (instituteSlug) {
-    return _teachers.filter((t) => t.institute_legacy_id === instituteSlug);
+    return byOrder(_teachers.filter((t) => t.institute_legacy_id === instituteSlug));
   }
-  return _teachers;
+  return byOrder(_teachers);
 }
 
 export function getTeacher(slug: string): Teacher | undefined {

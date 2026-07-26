@@ -72,6 +72,26 @@ const seminarBodyHtml = seminar.description_html
   ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
   : '';
 
+// Описание для схемы: у части семинаров нет ни seo-описания, ни секций (живой
+// API отдаёт их пустыми — таких 5 из 126). Пустое description ломает разметку
+// Course, поэтому цепочка отступлений заканчивается осмысленным текстом,
+// собранным из имеющихся фактов, а не заглушкой «нет описания».
+// Заголовок и описание страницы. У 11 семинаров, появившихся при обновлении
+// каталога, seo-полей нет в природе: живой сайт собирает их шаблоном на месте.
+// Подстановка пустого значения оставляла страницу без <title> — это и потеря
+// сниппета в поиске, и нарушение доступности (axe: document-title).
+const pageTitle =
+  seminar.seo_title?.trim() ||
+  `${seminar.name} — ${institute.name}: запись на обучение`;
+const pageDescription =
+  seminar.seo_description?.trim() ||
+  `${seminar.name}: программа обучения ${courseGroup.name} в ${institute.name}. Расписание, стоимость и запись на семинар.`;
+
+const schemaDescription =
+  seminar.seo_description?.trim() ||
+  seminar.description_text?.slice(0, 200) ||
+  pageDescription;
+
 // Event без startDate невалиден (Google Rich Results) — Этап 3, план 004.
 // Семинар с назначенной датой → Event; без даты → Course (программа обучения).
 const seminarSchema =
@@ -80,7 +100,7 @@ const seminarSchema =
         '@context': 'https://schema.org',
         '@type': 'Event',
         name: seminar.name,
-        description: seminar.seo_description || seminar.description_text?.slice(0, 200),
+        description: schemaDescription,
         url: seminarUrl,
         organizer: {
           '@type': 'EducationalOrganization',
@@ -112,7 +132,7 @@ const seminarSchema =
         '@context': 'https://schema.org',
         '@type': 'Course',
         name: seminar.name,
-        description: seminar.seo_description || seminar.description_text?.slice(0, 200),
+        description: schemaDescription,
         url: seminarUrl,
         provider: {
           '@type': 'EducationalOrganization',
@@ -122,7 +142,7 @@ const seminarSchema =
       };
 ---
 
-<BaseLayout title={seminar.seo_title} description={seminar.seo_description} schema={seminarSchema}>
+<BaseLayout title={pageTitle} description={pageDescription} schema={seminarSchema}>
   <div class="container">
     <Breadcrumbs
       items={[

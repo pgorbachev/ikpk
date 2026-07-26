@@ -28,7 +28,8 @@
     "build:demo": "DEMO_FORMS=stub astro build && pagefind --site dist",
     "prebuild": "tsx scripts/make-derivatives.ts",
     "media:derivatives": "tsx scripts/make-derivatives.ts --force",
-    "prebuild:demo": "tsx scripts/make-derivatives.ts"
+    "prebuild:demo": "tsx scripts/make-derivatives.ts",
+    "data:refresh": "tsx scripts/refresh-catalog.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
