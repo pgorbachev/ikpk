@@ -9,8 +9,13 @@ import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
 // ── 3.2: 0 страниц-сирот — обход dist по внутренним ссылкам ────────────────
 describe('orphan pages (обход по внутренним ссылкам)', () => {
   it('every built page is reachable from / via internal <a href>', () => {
-    // /preview/* — noindex-черновики вариантов, намеренно не слинкованы
-    const pages = new Set(allPages().filter((p) => !p.startsWith('/preview/')));
+    // Из проверки исключаем noindex-страницы: это служебные (черновики
+    // вариантов /preview/*, заглушка форм демо-стенда), они намеренно не
+    // слинкованы и в индекс не идут. Правило по метатегу, а не по списку
+    // префиксов — само подхватывает новые служебные страницы.
+    const pages = new Set(
+      allPages().filter((p) => !/<meta name="robots" content="noindex/.test(readPage(p)))
+    );
     const visited = new Set<string>();
     const queue = ['/'];
     while (queue.length) {

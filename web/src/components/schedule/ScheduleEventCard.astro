@@ -1,4 +1,6 @@
 ---
+import { isExternalFormHref } from '../../lib/forms';
+
 interface Props {
   title: string;
   titleHref: string;
@@ -101,7 +103,12 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
       <div class="schedule-card-actions">
         <a href={titleHref} class="btn btn-outline">Подробнее</a>
         {registrationHref && (
-          <a href={registrationHref} class="btn btn-primary" target="_blank" rel="noopener">
+          <a
+            href={registrationHref}
+            class="btn btn-primary"
+            target={isExternalFormHref(registrationHref) ? '_blank' : undefined}
+            rel={isExternalFormHref(registrationHref) ? 'noopener' : undefined}
+          >
             Зарегистрироваться
           </a>
         )}

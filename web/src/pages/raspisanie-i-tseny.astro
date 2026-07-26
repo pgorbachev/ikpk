@@ -3,6 +3,7 @@ import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatPrice, getInstitutes, getPage, getScheduleEntries, getTeachers } from '../lib/data';
+import { registrationHref } from '../lib/forms';
 import { scheduleSupplements } from '../lib/schedule-supplements';
 
 const page = getPage('raspisanie-i-tseny');
@@ -127,7 +128,8 @@ const cards = entries.map((entry) => {
     priceLabel: entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,
-    registrationHref: entry.registrationFormLink,
+    // на демо-стенде подменяется заглушкой/тестовым порталом (см. lib/forms.ts)
+    registrationHref: registrationHref(entry.registrationFormLink),
     searchIndex,
     teacherHref,
     teacherLabel: entry.institute.shortname === 'ИКПК' ? 'Преподаватель:' : 'Автор:',

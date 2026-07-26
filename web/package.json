@@ -24,7 +24,8 @@
     "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
     "verify": "npm test && npm run test:build && npm run test:e2e:smoke && npm run test:e2e:compat",
-    "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached"
+    "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached",
+    "build:demo": "DEMO_FORMS=stub astro build && pagefind --site dist"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",

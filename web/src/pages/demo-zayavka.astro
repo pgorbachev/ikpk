@@ -1,0 +1,79 @@
+---
+// Страница-заглушка для ДЕМО-стенда: сюда ведут кнопки «Записаться», когда
+// сборка сделана с DEMO_FORMS=stub. Смысл — показывать заказчику рабочий
+// сценарий, но не создавать живых лидов в его продакшен-CRM.
+// В прод-сборке страница тоже собирается (безвредна), но ссылок на неё нет.
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { isDemoForms } from '../lib/forms';
+---
+
+<BaseLayout
+  title="Демо-стенд: заявка не отправляется — ИКПК"
+  description="Служебная страница демо-стенда."
+  noindex={true}
+>
+  <div class="container">
+    <section class="demo-stub">
+      <p class="demo-stub-badge">Демо-стенд</p>
+      <h1>Заявка здесь не отправляется</h1>
+      <p class="demo-stub-lead">
+        Вы на демонстрационной версии сайта. Кнопки записи специально
+        отключены, чтобы показ не создавал реальных обращений в CRM.
+      </p>
+      <p class="demo-stub-note">
+        На рабочем сайте эта кнопка открывает CRM-форму Bitrix24, и заявка
+        попадает в воронку продаж вместе с UTM-метками источника.
+      </p>
+      {!isDemoForms && (
+        <p class="demo-stub-note">
+          <strong>Примечание:</strong> текущая сборка сделана без режима демо —
+          на остальных страницах кнопки ведут на настоящие формы.
+        </p>
+      )}
+      <div class="demo-stub-actions">
+        <a href="/raspisanie-i-tseny" class="btn btn-primary">Вернуться к расписанию</a>
+        <a href="/" class="btn btn-outline">На главную</a>
+      </div>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .demo-stub {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 3rem 0 4rem;
+    text-align: center;
+  }
+  .demo-stub-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-accent-600);
+    margin-bottom: 0.9rem;
+  }
+  .demo-stub h1 {
+    font-size: var(--font-xxl);
+    margin-bottom: 0.9rem;
+  }
+  .demo-stub-lead {
+    color: var(--color-gray-600);
+    line-height: 1.55;
+    margin-bottom: 0.9rem;
+  }
+  .demo-stub-note {
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
+    line-height: 1.5;
+    margin-bottom: 0.8rem;
+  }
+  .demo-stub-actions {
+    display: flex;
+    gap: 0.8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1.6rem;
+  }
+</style>

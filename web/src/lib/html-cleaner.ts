@@ -17,6 +17,7 @@
  */
 
 import { injectImgDimensions } from './media.js';
+import { registrationHref, isDemoForms } from './forms.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -516,6 +517,28 @@ export function relForExternalUrl(url: string): string[] | undefined {
   return undefined;
 }
 
+/**
+ * Демо-режим: ссылки на CRM-формы Bitrix24, вшитые в КОНТЕНТ (а не в поле
+ * registrationFormLink), тоже не должны писать в продакшен-CRM заказчика.
+ * В данных таких порталов два: b24-cbqwqo и b24-kbo5ls. В прод-сборке
+ * (DEMO_FORMS не задана) функция ничего не делает.
+ */
+function redirectFormLinksInDemo(html: string): string {
+  if (!isDemoForms || !html.includes('bitrix24site.ru')) return html;
+  return html.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+    const url = href?.[1] ?? href?.[2];
+    if (!url || !/bitrix24site\.ru/i.test(url)) return tag;
+    const replaced = registrationHref(url);
+    let out = tag.replace(url, replaced);
+    // на локальную заглушку не нужен новый таб
+    if (!/^https?:\/\//.test(replaced)) {
+      out = out.replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*')/i, '');
+    }
+    return out;
+  });
+}
+
 function applyExternalLinkPolicy(html: string): string {
   if (!html.includes('<a ')) return html;
   return html.replace(/<a\b[^>]*>/gi, (tag) => {
@@ -553,6 +576,7 @@ export function cleanBodyHtml(html: string): string {
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
   result = applyExternalLinkPolicy(result);
+  result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
 
   return result;
