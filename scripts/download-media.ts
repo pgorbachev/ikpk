@@ -32,7 +32,7 @@ import sharp from 'sharp';
 const ROOT = join(import.meta.dirname, '..');
 const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
 const PUBLIC_DIR = join(ROOT, 'web', 'public');
-// Оригиналы НЕ отдаются посетителю: из них scripts/make-derivatives.ts делает
+// Оригиналы НЕ отдаются посетителю: из них web/scripts/make-derivatives.ts делает
 // уменьшенные версии в web/public/media. Причина — загрузчик раньше уменьшал
 // файлы при скачивании и уничтожал исходники (у 37 файлов оригинал был крупнее,
 // вплоть до 3520×1980), а складывать оригиналы прямо в public нельзя: страница
@@ -284,12 +284,12 @@ for (const path of [...paths].sort()) {
     }
   }
 
-  // Манифест размеров собирает scripts/make-derivatives.ts: размеры нужны от
+  // Манифест размеров собирает web/scripts/make-derivatives.ts: размеры нужны от
   // ОТДАВАЕМОЙ версии, а не от оригинала. Иначе в <img> уедет width/height
   // оригинала (например 3520px) при картинке 1200px — и вернётся сдвиг макета.
 }
 console.log(
   `\nDone: ${downloaded} downloaded, ${skipped} already present, ${failed} FAILED.`
 );
-console.log('дальше: npx tsx ../scripts/make-derivatives.ts (собирает отдаваемые версии и манифест)');
+console.log("дальше: npm --prefix ../web run media:derivatives (собирает отдаваемые версии и манифест)");
 if (failed > 0) process.exit(1);

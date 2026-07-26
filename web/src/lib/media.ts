@@ -15,7 +15,7 @@ export const BUCKET_PREFIX = 'https://storage.yandexcloud.net/ikpk-image';
 interface ManifestEntry {
   width?: number;
   height?: number;
-  /** Ширины адаптивного набора, доступные для этого файла (см. scripts/make-derivatives.ts). */
+  /** Ширины адаптивного набора, доступные для этого файла (см. web/scripts/make-derivatives.ts). */
   widths?: number[];
 }
 
