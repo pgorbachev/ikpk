@@ -69,6 +69,65 @@
 
   /* Высота верхней навигации (topnav); используется как offset для sticky
      in-content сайдбаров статей/семинаров. */
+
+  /* ── РОЛИ ────────────────────────────────────────────────────────────────
+   *
+   * Фундамент под master template: значения ниже НЕ новые, это те же, что уже
+   * стоят в компонентах, только названные по роли. Смысл в том, чтобы вариант
+   * оформления менялся сменой значений, а не правкой десятков файлов.
+   *
+   * Правило: здесь только СУЩЕСТВУЮЩИЕ значения. Всё, что меняет облик (темнее
+   * текст, крупнее кегль, узкая колонка, немонотонность зелёной рампы, где
+   * accent-500 темнее accent-600 и hover светлит вместо затемнения), задаётся в
+   * вариантах прототипов — иначе облик поменяется под видом технической
+   * подготовки.
+   */
+
+  /* Поверхности */
+  --surface-subtle: var(--color-light-300);
+  --surface-inverse: var(--color-dark-700);
+
+  /* Текст */
+  --text-primary: var(--color-dark-700);
+  --text-body: var(--color-gray-600);
+  --text-muted: var(--color-gray-500);
+  --text-inverse: var(--color-light-100);
+  --text-link: var(--color-info-500);
+
+  /* Границы: у контрола, блока и акцентной рамки разные роли */
+  --border-subtle: var(--color-gray-150);
+  --border-default: var(--color-gray-200);
+  --border-strong: var(--color-gray-300);
+  --border-accent: var(--color-accent-500);
+
+  /* Скругления: контрол и контейнер — разные роли. Сейчас значения совпадают с
+     существующими (4px и 8px); в вариантах они и разойдутся. */
+  --radius-control: var(--radius-s);
+  --radius-container: var(--radius-m);
+  --radius-pill: 999px;
+
+  /* Действие */
+  --cta-bg: var(--color-accent-500);
+  --cta-text: var(--color-light-100);
+  --cta-bg-hover: var(--color-accent-600);
+
+  /* Интервалы секций: значения взяты из фактических отступов компонентов */
+  --space-section: 3rem;
+  --space-section-tight: 2rem;
+  --space-block: 1.5rem;
+
+  /* Длительности движения. До этого в коде было восемь разных значений; роли
+     собирают их в три ступени, сохраняя нынешние числа. */
+  --dur-fast: 0.12s;
+  --dur-base: 0.15s;
+  --dur-slow: 0.2s;
+  --dur-reveal: 0.6s;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Ширины */
+  --wrapper: var(--max-width);
+  --measure: 70ch;
+
   --header-height: 60px;
   --max-width: 1200px;
 }
@@ -99,5 +158,14 @@
   --surface-page: #171a17;
   --surface-raised: #1f241f;
   --color-light-300: #1f241f;
+
+  /* Роли в тёмной теме: ссылаются на переопределённые выше цвета, но у
+     поверхностей и текста значения свои — иначе приподнятый блок сливается с
+     полотном (это уже было). */
+  --surface-subtle: var(--color-light-300);
+  --surface-inverse: var(--color-light-100);
+  --text-primary: var(--color-light-100);
+  --text-inverse: var(--color-dark-700);
+
   --color-info-500: #7bb4ff;
 }

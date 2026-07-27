@@ -100,10 +100,10 @@
 
 .card {
   background: var(--surface-raised);
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-container);
   overflow: hidden;
-  transition: box-shadow 0.2s;
+  transition: box-shadow var(--dur-slow);
 }
 
 .card:hover {
