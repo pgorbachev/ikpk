@@ -8,9 +8,15 @@ interface Props {
 }
 
 const { seminar, href } = Astro.props as Props;
+// Значения статуса приходят из данных каталога, поэтому подписи должны
+// покрывать ВСЕ возможные: незнакомый статус выводился как есть, то есть
+// посетитель увидел бы английское «planned». Формулировка «Даты уточняются»
+// вместо «Не запланирован» — по образцу живых сайтов: семинар из программы не
+// снят, просто набор ещё не открыт.
 const statusLabel: Record<string, string> = {
+  planned: 'Набор открыт',
   active: 'Набор открыт',
-  not_planned: 'Не запланирован',
+  not_planned: 'Даты уточняются',
   completed: 'Завершён',
 };
 
@@ -39,9 +45,11 @@ const cleanedExcerpt = seminar.description_text
     )}
   </div>
   <div class="seminar-card-head">
-    {seminar.status && (
+    {seminar.status && statusLabel[seminar.status] && (
       <span class:list={['badge', `badge-${seminar.status}`]}>
-        {statusLabel[seminar.status] || seminar.status}
+        {/* Незнакомый статус не показываем сырым: лучше без бейджа, чем с
+            техническим словом на английском. */}
+        {statusLabel[seminar.status] ?? ''}
       </span>
     )}
     <span class="seminar-card-kind">Семинар</span>

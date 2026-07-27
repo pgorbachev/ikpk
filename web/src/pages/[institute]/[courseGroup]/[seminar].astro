@@ -1,4 +1,5 @@
 ---
+import { seminarTitleFallback, seminarDescriptionFallback } from '../../../lib/seo-fallback';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
 import SeminarScheduleSection from '../../../components/seminars/SeminarScheduleSection.astro';
@@ -82,10 +83,10 @@ const seminarBodyHtml = seminar.description_html
 // сниппета в поиске, и нарушение доступности (axe: document-title).
 const pageTitle =
   seminar.seo_title?.trim() ||
-  `${seminar.name} — ${institute.name}: запись на обучение`;
+  seminarTitleFallback(seminar.name, institute.slug, institute.name);
 const pageDescription =
   seminar.seo_description?.trim() ||
-  `${seminar.name}: программа обучения ${courseGroup.name} в ${institute.name}. Расписание, стоимость и запись на семинар.`;
+  seminarDescriptionFallback(seminar.name, courseGroup.name, institute.slug, institute.name);
 
 const schemaDescription =
   seminar.seo_description?.trim() ||

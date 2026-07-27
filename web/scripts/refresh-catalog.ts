@@ -109,10 +109,34 @@ const text = (html: string | null | undefined): string =>
  * cleanBodyHtml: заголовок + содержимое. Названия совпадают с живым сайтом,
  * потому что по ним же подставлялся восстановленный контент.
  */
+/**
+ * Контент, который МЫ САМИ собрали из секций API, отличим от перенесённого с
+ * сайта: он начинается с нашего же заголовка секции и не содержит основного
+ * текста семинара. Такой контент надо пересобирать при каждом обновлении —
+ * иначе ошибка в соответствии полей (как перепутанные «Учебный план» и «Как
+ * проходит обучение») останется навсегда, потому что слияние берёт старое.
+ */
+const OUR_SECTION_HEADS = [
+  'Учебный план',
+  'Как проходит обучение',
+  'Выдаваемые документы',
+  'Рекомендации',
+];
+
+function isApiGenerated(html: string): boolean {
+  const trimmed = (html || '').trim();
+  return OUR_SECTION_HEADS.some((h) => trimmed.startsWith(`<h2>${h}</h2>`));
+}
+
 function sectionsHtml(s: SeminarDetail): string {
+  // ВНИМАНИЕ на соответствие полей: имена в API обманчивы. `curriculum`
+  // содержит РЕЖИМ обучения («2 дня с 10:00 до 18:00», «объём 36 часов»), а
+  // `learningProcess` — собственно учебный план с темами теории и практики.
+  // Первая версия подписала их наоборот, и 11 новых семинаров получили под
+  // «Учебным планом» одну строку про длительность.
   const parts: Array<[string, string | null | undefined]> = [
-    ['Учебный план', s.curriculum],
-    ['Как проходит обучение', s.learningProcess],
+    ['Учебный план', s.learningProcess],
+    ['Как проходит обучение', s.curriculum],
     ['Выдаваемые документы', s.certificates],
     ['Рекомендации', s.recommendations],
   ];
@@ -226,6 +250,26 @@ function groupPath(program: ProgramItem | undefined): string | null {
  * Проверка ниже («контента стало заметно меньше») ловит ровно эту ошибку: на
  * первом прогоне с перезаписью она показала потерю у 112 семинаров из 125.
  */
+/**
+ * Актуально запланированные семинары — по расписанию, а не по полю `events`.
+ *
+ * `events` у семинара означает, что событие когда-либо существовало, включая
+ * прошедшие: по нему статус planned получали 107 семинаров при 47 реально
+ * имеющих будущие даты. Ложный «запланирован» хуже отсутствия статуса — человек
+ * идёт искать даты, которых нет.
+ */
+const scheduleEntries = JSON.parse(
+  readFileSync(join(ENTITIES, 'schedule_entries.json'), 'utf-8'),
+) as Array<{ status?: string; startAt?: string; seminar?: { slug?: string } | null }>;
+
+const nowIso = new Date().toISOString();
+const plannedSlugs = new Set(
+  scheduleEntries
+    .filter((e) => e.status === 'active' && (e.startAt ?? '') >= nowIso && e.seminar?.slug)
+    .map((e) => e.seminar!.slug!),
+);
+console.log(`семинаров с будущими датами по расписанию: ${plannedSlugs.size}`);
+
 const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'utf-8')) as Array<{
   slug: string;
   description_html?: string;
@@ -239,8 +283,11 @@ let contentFromApi = 0;
 
 const nextSeminars = seminars.map((s) => {
   const prev = oldBySlug.get(s.slug);
-  const html = prev?.description_html?.trim() ? prev.description_html : sectionsHtml(s);
-  if (!prev) contentFromApi += 1;
+  const prevHtml = prev?.description_html?.trim() ?? '';
+  // перенесённый контент сохраняем, свой собственный — пересобираем
+  const reuse = prevHtml && !isApiGenerated(prevHtml);
+  const html = reuse ? prevHtml : sectionsHtml(s);
+  if (!reuse) contentFromApi += 1;
 
   const program = programById.get(s.program?.id ?? 0);
   const group = groupPath(program);
@@ -258,9 +305,9 @@ const nextSeminars = seminars.map((s) => {
   seo_title: s.seoTitle?.trim() || prev?.seo_title || '',
   seo_description: s.seoDescription?.trim() || prev?.seo_description || '',
   description_html: html,
-  description_text: prev?.description_text?.trim() ? prev.description_text : text(html),
+  description_text: reuse && prev?.description_text?.trim() ? prev.description_text : text(html),
   images: prev?.images ?? ([] as string[]),
-  status: (s.events?.length ?? 0) > 0 ? 'planned' : 'not_planned',
+  status: plannedSlugs.has(s.slug) ? 'planned' : 'not_planned',
   order: s.priority,
   institute_legacy_id: instituteSlugById.get(s.institute?.id ?? 0) ?? null,
   teachers: (s.teachers ?? []).map((t) => ({ legacy_id: t.id, name: t.fullName, order: t.priority })),
@@ -391,4 +438,8 @@ console.log('\nсохраняю:');
 save('seminars.json', seminarsOut);
 save('course_groups.json', nextGroups);
 save('teachers.json', teachersOut);
-console.log('\nдальше: npm run build (медиа новых картинок скачает download-media)');
+console.log(
+  '\nданные записаны. Медиа новых картинок НЕ скачано этим шагом — используйте' +
+    '\n  npm run data:refresh   (обновление + скачивание медиа + производные)' +
+    '\nиначе сборка сошлётся на локальный файл, которого нет.',
+);
