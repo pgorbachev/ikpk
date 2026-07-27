@@ -314,3 +314,29 @@ describe('page image weight', () => {
     });
   }
 });
+
+// ─── Широкие таблицы прокручиваются и доступны с клавиатуры ─────────────────
+// Таблица из легаси-контента на узком экране не влезает и получает
+// горизонтальную прокрутку. Прокручиваемая область обязана быть достижима с
+// клавиатуры, иначе часть таблицы недоступна тем, кто не пользуется мышью
+// (axe: scrollable-region-focusable). Правило появилось после того, как гейт
+// поймал это на «Сведениях об образовательной организации».
+describe('таблицы в контенте', () => {
+  it('каждая таблица лежит в прокручиваемой области с доступом с клавиатуры', () => {
+    const offenders: string[] = [];
+
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(/<table[\s>]/gi)) {
+        const before = html.slice(Math.max(0, m.index! - 220), m.index!);
+        const wrapped = /<div[^>]*class="[^"]*table-scroll[^"]*"[^>]*tabindex="0"[^>]*>\s*$/i.test(before);
+        if (!wrapped) offenders.push(`${file.replace(dist, '')}: ${before.slice(-60)}<table`);
+      }
+    }
+
+    expect(
+      offenders.slice(0, 5),
+      `таблица без прокручиваемой области (${offenders.length}):\n${offenders.slice(0, 5).join('\n')}`,
+    ).toEqual([]);
+  });
+});

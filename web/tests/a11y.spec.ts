@@ -24,12 +24,31 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
   { name: 'video', path: '/video/33/' },
   // контакты с ленивой картой + форма подписки (card-вариант)
   { name: 'kontakty', path: '/kontakty/' },
+  // Внутренние страницы, которых в списке не было, а правки их касаются:
+  // фильтры статей (видимый фокус), аккордеоны оплаты и «Сведений»,
+  // расписание с фасетами, страница института с портретами.
+  { name: 'oplata', path: '/oplata/' },
+  { name: 'statyi', path: '/statyi/' },
+  { name: 'raspisanie', path: '/raspisanie-i-tseny/' },
+  { name: 'svedeniya', path: '/svedeniya-ob-obrazovatelnoy-organizatsii/' },
+  { name: 'institute', path: '/institut-apledzhera/' },
 ];
 
 test.describe('Accessibility', () => {
+  // axe разбирает всё дерево страницы, и на списках это долго: у расписания 63
+  // события, у статей 68 карточек, у «Сведений» 17 раскрывающихся разделов с
+  // восстановленным контентом. Общего лимита 10 секунд не хватает, и тесты
+  // падали не по нарушениям, а по таймауту — то есть врали.
+  test.describe.configure({ timeout: 60_000 });
+
   for (const { name, path } of TEMPLATES) {
     test(`${name} template has no critical/serious axe violations`, async ({ page }) => {
-      await page.goto(path);
+      const response = await page.goto(path);
+      // Черновики вариантов собираются только в демо-режиме: в боевой сборке их
+      // нет, и это не повод краснеть — проверять просто нечего.
+      if (name.startsWith('preview-') && response?.status() === 404) {
+        test.skip(true, 'черновик варианта отсутствует в боевой сборке');
+      }
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

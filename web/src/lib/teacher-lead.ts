@@ -1,0 +1,117 @@
+/**
+ * Краткое описание преподавателя для карточки на странице института.
+ *
+ * Вынесено из шаблона страницы, потому что логика неочевидна и её надо
+ * проверять тестами на настоящих данных: аудит паритета нашёл в прежней версии
+ * два дефекта, и оба видны посетителю.
+ *
+ * 1. Описание начиналось с середины фразы — первым символом шла запятая или
+ *    строчная буква («, специалист по физической культуре…»). Причина: когда
+ *    подходящего абзаца не находилось, текст резался по длине из середины
+ *    биографии.
+ *
+ * 2. У основателя института выпадала главная строка позиционирования
+ *    («Основатель Института клинической прикладной кинезиологии»). Причина
+ *    обиднее: отбор считал «шумным» любой абзац со словом «институт» — а именно
+ *    в нём и была самая ценная строка.
+ *
+ * Отсюда правила: берём ПЕРВЫЙ содержательный абзац (а не любой подходящий по
+ * длине), отбрасываем только настоящий служебный шум, и обрезаем по границе
+ * предложения, а если её нет — по границе слова.
+ */
+
+const MAX_LEN = 220;
+/** Порог осмысленности для описания в целом. */
+const MIN_LEN = 40;
+/**
+ * Порог для АБЗАЦА заметно ниже: «Врач-кинезиолог, Дипломант DIBAK.» — это 33
+ * символа и вполне достойное описание. С порогом 40 такой абзац отбрасывался, и
+ * код уходил в список регалий, начиная описание с середины фразы («с
+ * хроническими заболеваниями…»).
+ */
+const MIN_PARAGRAPH_LEN = 20;
+
+/** Служебные заголовки и подписи, которые попадают в биографию из вёрстки. */
+const NOISE = /^(преподаваемые направления|о преподавателе|образование|контакты)\b/i;
+
+/**
+ * Метка перед списком: «Работает:», «Специализация:». Сама по себе описанием не
+ * является, а если её пропустить и взять следующий за ней список, описание
+ * начнётся с середины фразы.
+ */
+const LABEL = /[:：]\s*$/;
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&laquo;/g, '«')
+    .replace(/&raquo;/g, '»')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Обрезка до предела: сначала пробуем границу предложения, затем границу слова.
+ * Обрыв посреди слова недопустим — он читается как ошибка вёрстки.
+ */
+function cut(text: string, max = MAX_LEN): string {
+  if (text.length <= max) return text;
+
+  const window = text.slice(0, max + 1);
+  const sentenceEnd = Math.max(
+    window.lastIndexOf('. '),
+    window.lastIndexOf('! '),
+    window.lastIndexOf('? '),
+  );
+  if (sentenceEnd >= MIN_LEN) return window.slice(0, sentenceEnd + 1).trim();
+
+  const wordEnd = window.lastIndexOf(' ');
+  return `${window.slice(0, wordEnd > MIN_LEN ? wordEnd : max).trim()}…`;
+}
+
+/** Убирает повтор имени в начале биографии: в карточке имя уже есть рядом. */
+function dropLeadingName(text: string, name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (!parts.length) return text;
+
+  const surname = parts[0];
+  const pattern = new RegExp(`^${surname}[^.]{0,40}?[.,]?\\s*`, 'i');
+  const stripped = text.replace(pattern, '').trim();
+  // если после снятия имени осталась пустота или обрывок — оставляем как было
+  return stripped.length >= MIN_LEN ? stripped : text;
+}
+
+export function teacherLead(bioHtml: string, bioText: string, name: string): string {
+  const html = bioHtml || '';
+
+  // Абзац — авторское начало биографии, берём первый содержательный.
+  const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((m) => stripTags(m[1]))
+    .filter((p) => p.length >= MIN_PARAGRAPH_LEN && !NOISE.test(p) && !LABEL.test(p));
+  if (paragraphs[0]) return cut(dropLeadingName(paragraphs[0], name));
+
+  // Биографии из API приходят СПИСКОМ регалий. Пункты нельзя склеивать одним
+  // пробелом: конец одного срастается с началом следующего и читается как
+  // ошибка («…(DIBAK) Вице-президент…»). Разделяем точкой с запятой и не
+  // повторяем знак, если пункт уже заканчивается на знак препинания.
+  const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+    .map((m) => stripTags(m[1]))
+    .filter((i) => i.length > 1 && !NOISE.test(i));
+
+  if (items.length) {
+    const joined = items
+      .map((i) => i.replace(/[;.,]\s*$/, ''))
+      .join('; ');
+    return cut(dropLeadingName(joined, name));
+  }
+
+  const plain = stripTags(bioText || '');
+  if (plain.length < MIN_LEN) return '';
+
+  // Отступление на случай, когда абзацев нет вовсе: берём НАЧАЛО текста, а не
+  // срез из середины — именно срез и давал описания с середины фразы.
+  return cut(dropLeadingName(plain, name));
+}

@@ -1,4 +1,5 @@
 ---
+import { teacherLead } from '../lib/teacher-lead';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro';
@@ -55,35 +56,7 @@ function extractCardLead(rawHtml: string, title: string): string {
   return lead || '';
 }
 
-function sanitizeBioText(value: string, name: string): string {
-  return value
-    .replace(new RegExp(name, 'gi'), '')
-    .replace(/Институт[^.]+\.?/gi, '')
-    .replace(/Преподаваемые направления[^.]*\.?/gi, '')
-    .replace(/О преподавателе/gi, '')
-    .replace(/^[\s.:-]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
-function extractTeacherLead(rawHtml: string, rawText: string, name: string): string {
-  const paragraphs = [...(rawHtml || '').matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
-    .map((match) => stripHtml(match[1]))
-    .filter(Boolean);
-  const noisyPattern = /(институт|преподаваемые направления|о преподавателе)/i;
-  const lead = paragraphs.find((paragraph) => (
-    paragraph.length >= 80
-      && paragraph.length <= 220
-      && !noisyPattern.test(paragraph)
-  ));
-
-  if (lead) return lead;
-
-  const cleanedText = sanitizeBioText(rawText, name);
-  if (!cleanedText) return '';
-
-  return excerpt(cleanedText, 165);
-}
 
 function extractAdditionalHtml(rawHtml: string): string {
   if (!rawHtml) return '';
@@ -151,7 +124,7 @@ const teacherCards = teachers.map((teacher) => ({
   href: `/${institute.slug}/prepodavatel/${teacher.slug}`,
   name: teacher.name,
   photo: teacher.photo,
-  excerpt: extractTeacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
+  excerpt: teacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
 }));
 
 const visibleTeachers = teacherCards.slice(0, 3);

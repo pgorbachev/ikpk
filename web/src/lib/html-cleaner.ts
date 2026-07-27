@@ -615,6 +615,18 @@ function normalizeLegacyControls(html: string): string {
   //    вопрос к заказчику, поэтому здесь убираем только заведомо мёртвый www.
   out = out.replaceAll('www.medshop.ikpk.su', 'medshop.ikpk.su');
 
+  // Широкая таблица на узком экране получает горизонтальную прокрутку, а
+  //    прокручиваемая область обязана быть достижима с клавиатуры — иначе часть
+  //    таблицы недоступна тем, кто не пользуется мышью (WCAG 2.1.1, axe:
+  //    scrollable-region-focusable). Обёртка даёт и прокрутку, и фокус, и
+  //    подпись для программ чтения с экрана.
+  out = out.replace(
+    /<table(?![^>]*\bdata-wrapped\b)/gi,
+    '<div class="table-scroll" tabindex="0" role="region" aria-label="Таблица">§TABLE§',
+  );
+  out = out.replace(/<\/table>/gi, '</table></div>');
+  out = out.replaceAll('§TABLE§', '<table data-wrapped');
+
   // 0. Пустая обёртка списка — висячий маркер без текста. Остаётся, когда из
   //    <li> убрали содержимое (например секцию без контента).
   out = out.replace(/<li[^>]*>\s*<\/li>/gi, '');
