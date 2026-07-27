@@ -31,8 +31,30 @@ const MIN_LEN = 40;
  */
 const MIN_PARAGRAPH_LEN = 20;
 
-/** Служебные заголовки и подписи, которые попадают в биографию из вёрстки. */
-const NOISE = /^(преподаваемые направления|о преподавателе|образование|контакты)\b/i;
+/**
+ * Служебные строки, которые попадают в биографию из вёрстки старого сайта и не
+ * являются описанием преподавателя.
+ *
+ * Правила ТОЧНЫЕ, а не «всё, где встречается слово институт»: именно широкое
+ * правило теряло строку позиционирования основателя («Основатель Института
+ * клинической прикладной кинезиологии»). Здесь отбрасывается только строка,
+ * которая ЦЕЛИКОМ состоит из названия института, и явные заглушки.
+ */
+// ВНИМАНИЕ: без \b. В JS граница слова определена по латинице, поэтому после
+// кириллического «направления» её нет, и правило с \b молча не срабатывало —
+// служебная строка «Преподаваемые направления: скоро будут добавлены» проходила
+// фильтр и попадала в карточку.
+const NOISE_PREFIX = /^(преподаваемые направления|о преподавателе|образование|контакты)(?![а-яё])/i;
+
+/** Заглушка вместо биографии: «Информация о преподавателе будет позже». */
+const PLACEHOLDER = /^информаци\S*\s+о\s+преподавател\S*\s+(будет|появится|добавлен)/i;
+
+/** Строка целиком из названия института — остаток вёрстки, а не описание. */
+const INSTITUTE_ONLY = /^институт\s+[^.;]{0,60}$/i;
+
+function isNoise(text: string): boolean {
+  return NOISE_PREFIX.test(text) || PLACEHOLDER.test(text) || INSTITUTE_ONLY.test(text);
+}
 
 /**
  * Метка перед списком: «Работает:», «Специализация:». Сама по себе описанием не
@@ -90,7 +112,7 @@ export function teacherLead(bioHtml: string, bioText: string, name: string): str
   // Абзац — авторское начало биографии, берём первый содержательный.
   const paragraphs = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
     .map((m) => stripTags(m[1]))
-    .filter((p) => p.length >= MIN_PARAGRAPH_LEN && !NOISE.test(p) && !LABEL.test(p));
+    .filter((p) => p.length >= MIN_PARAGRAPH_LEN && !isNoise(p) && !LABEL.test(p));
   if (paragraphs[0]) return cut(dropLeadingName(paragraphs[0], name));
 
   // Биографии из API приходят СПИСКОМ регалий. Пункты нельзя склеивать одним
@@ -99,7 +121,7 @@ export function teacherLead(bioHtml: string, bioText: string, name: string): str
   // повторяем знак, если пункт уже заканчивается на знак препинания.
   const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
     .map((m) => stripTags(m[1]))
-    .filter((i) => i.length > 1 && !NOISE.test(i));
+    .filter((i) => i.length > 1 && !isNoise(i));
 
   if (items.length) {
     const joined = items
@@ -109,7 +131,7 @@ export function teacherLead(bioHtml: string, bioText: string, name: string): str
   }
 
   const plain = stripTags(bioText || '');
-  if (plain.length < MIN_LEN) return '';
+  if (plain.length < MIN_LEN || isNoise(plain)) return '';
 
   // Отступление на случай, когда абзацев нет вовсе: берём НАЧАЛО текста, а не
   // срез из середины — именно срез и давал описания с середины фразы.

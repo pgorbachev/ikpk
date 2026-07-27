@@ -72,9 +72,22 @@ function parseCsv(text: string): Array<Record<string, string>> {
 const rows = parseCsv(readFileSync(MAP_CSV, 'utf-8'));
 
 /** Только настоящие перенаправления и только если адрес реально меняется. */
-const redirects = rows.filter(
+const all301 = rows.filter(
   (r) => r.redirect_type === '301' && r.old_path && r.new_path && r.old_path !== r.new_path,
 );
+
+/**
+ * Адреса с query-параметром в конфиг НЕ идут: nginx сопоставляет location с
+ * путём БЕЗ строки запроса, поэтому `location = /page?section=3` не выберется
+ * никогда — правило выглядело рабочим, но не делало ничего.
+ *
+ * Для таких адресов редирект и не нужен: параметр надо ПОДДЕРЖАТЬ на странице
+ * (открыть нужный раздел и прокрутить к нему), а не срезать. Перенаправление со
+ * срезанным параметром сломало бы глубокую ссылку, которой футер старого сайта
+ * ведёт на «Документы».
+ */
+const withQuery = all301.filter((r) => r.old_path.includes('?'));
+const redirects = all301.filter((r) => !r.old_path.includes('?'));
 
 // Дубликаты по старому адресу: nginx возьмёт первое совпадение, а разные цели у
 // одного адреса — это ошибка карты, а не выбор.
@@ -100,6 +113,15 @@ const lines = [
   '',
   'location = /sitemap.xml { return 301 /sitemap-index.xml; }',
   '',
+  ...(withQuery.length
+    ? [
+        '# Адреса с query-параметром здесь СОЗНАТЕЛЬНО отсутствуют: nginx',
+        '# сопоставляет location без строки запроса. Их нужно поддерживать на',
+        '# самой странице, а не перенаправлять со срезанным параметром:',
+        ...withQuery.map((r) => `#   ${r.old_path}  (ожидается поддержка в странице)`),
+        '',
+      ]
+    : []),
   '# Точные совпадения: адрес → адрес',
   ...[...seen.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -113,6 +135,12 @@ writeFileSync(tmp, `${lines.join('\n')}\n`, 'utf-8');
 renameSync(tmp, OUT);
 
 console.log(`правил в карте: ${rows.length}, перенаправлений: ${redirects.length}`);
+if (withQuery.length) {
+  console.log(
+    `с query-параметром (в конфиг не идут, нужна поддержка в странице): ${withQuery.length}` +
+      ` → ${withQuery.map((r) => r.old_path).join(', ')}`,
+  );
+}
 console.log(`уникальных адресов: ${seen.size}`);
 if (conflicts.length) {
   console.log(`\nКОНФЛИКТЫ (один адрес, разные цели) — ${conflicts.length}:`);

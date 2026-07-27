@@ -36,6 +36,7 @@
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sectionsHtml, SECTION_TITLES } from './lib/seminar-sections.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ENTITIES = join(ROOT, 'discovery', 'entities');
@@ -104,47 +105,6 @@ const text = (html: string | null | undefined): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/**
- * Секции семинара собираются в один HTML в том же виде, в каком их ждёт
- * cleanBodyHtml: заголовок + содержимое. Названия совпадают с живым сайтом,
- * потому что по ним же подставлялся восстановленный контент.
- */
-/**
- * Контент, который МЫ САМИ собрали из секций API, отличим от перенесённого с
- * сайта: он начинается с нашего же заголовка секции и не содержит основного
- * текста семинара. Такой контент надо пересобирать при каждом обновлении —
- * иначе ошибка в соответствии полей (как перепутанные «Учебный план» и «Как
- * проходит обучение») останется навсегда, потому что слияние берёт старое.
- */
-const OUR_SECTION_HEADS = [
-  'Учебный план',
-  'Как проходит обучение',
-  'Выдаваемые документы',
-  'Рекомендации',
-];
-
-function isApiGenerated(html: string): boolean {
-  const trimmed = (html || '').trim();
-  return OUR_SECTION_HEADS.some((h) => trimmed.startsWith(`<h2>${h}</h2>`));
-}
-
-function sectionsHtml(s: SeminarDetail): string {
-  // ВНИМАНИЕ на соответствие полей: имена в API обманчивы. `curriculum`
-  // содержит РЕЖИМ обучения («2 дня с 10:00 до 18:00», «объём 36 часов»), а
-  // `learningProcess` — собственно учебный план с темами теории и практики.
-  // Первая версия подписала их наоборот, и 11 новых семинаров получили под
-  // «Учебным планом» одну строку про длительность.
-  const parts: Array<[string, string | null | undefined]> = [
-    ['Учебный план', s.learningProcess],
-    ['Как проходит обучение', s.curriculum],
-    ['Выдаваемые документы', s.certificates],
-    ['Рекомендации', s.recommendations],
-  ];
-  return parts
-    .filter(([, html]) => (html ?? '').trim().length > 0)
-    .map(([title, html]) => `<h2>${title}</h2>${html}`)
-    .join('');
-}
 
 interface SeminarListItem {
   id: number;
@@ -262,10 +222,18 @@ const scheduleEntries = JSON.parse(
   readFileSync(join(ENTITIES, 'schedule_entries.json'), 'utf-8'),
 ) as Array<{ status?: string; startAt?: string; seminar?: { slug?: string } | null }>;
 
-const nowIso = new Date().toISOString();
+// Сравниваем КАЛЕНДАРНЫЕ даты, а не полные метки времени: startAt хранится с
+// временем 00:00, поэтому уже в 00:01 дня проведения полное сравнение давало
+// «в прошлом», и идущий сегодня семинар превращался в «Даты уточняются».
+// Берём последний день (endAt, если он есть): у 60 событий обучение длится
+// несколько дней, и всё это время оно актуально.
+const today = new Date().toISOString().slice(0, 10);
+const lastDay = (e: { startAt?: string; endAt?: string }): string =>
+  ((e.endAt ?? '') > (e.startAt ?? '') ? e.endAt! : (e.startAt ?? '')).slice(0, 10);
+
 const plannedSlugs = new Set(
   scheduleEntries
-    .filter((e) => e.status === 'active' && (e.startAt ?? '') >= nowIso && e.seminar?.slug)
+    .filter((e) => e.status === 'active' && lastDay(e) >= today && e.seminar?.slug)
     .map((e) => e.seminar!.slug!),
 );
 console.log(`семинаров с будущими датами по расписанию: ${plannedSlugs.size}`);
@@ -280,6 +248,17 @@ const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'ut
 }>;
 const oldBySlug = new Map(oldSeminars.map((s) => [s.slug, s]));
 let contentFromApi = 0;
+
+/**
+ * Контент, собранный НАМИ из секций API, отличим от перенесённого с сайта: он
+ * начинается нашим же заголовком секции. Такой пересобираем при каждом
+ * обновлении — иначе ошибка в соответствии полей осталась бы навсегда, потому
+ * что слияние сохраняет старое.
+ */
+function isApiGenerated(html: string): boolean {
+  const trimmed = html.trim();
+  return Object.values(SECTION_TITLES).some((h) => trimmed.startsWith(`<h2>${h}</h2>`));
+}
 
 const nextSeminars = seminars.map((s) => {
   const prev = oldBySlug.get(s.slug);

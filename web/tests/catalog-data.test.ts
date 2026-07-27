@@ -15,6 +15,7 @@ interface Seminar {
 interface Entry {
   status?: string;
   startAt?: string;
+  endAt?: string;
   seminar?: { slug?: string } | null;
 }
 
@@ -31,25 +32,46 @@ describe('данные каталога', () => {
   // («2 дня с 10:00 до 18:00», «объём 36 часов»), а learningProcess — учебный
   // план с темами. Первая версия импорта подписала их наоборот, и 11 семинаров
   // получили под «Учебным планом» одну строку про длительность.
-  it('секции семинара подписаны по смыслу, а не по имени поля API', () => {
-    const swapped: string[] = [];
+  // Фикстура с ОБОИМИ непустыми полями: именно так выглядит прежний дефект в
+  // общем виде. Проверка по реальным данным ловила лишь частный случай — когда
+  // «Как проходит обучение» пусто, — и перестановку двух заполненных полей
+  // пропускала.
+  it('секции подписаны по смыслу, а не по имени поля API', async () => {
+    const { sectionsHtml, SECTION_TITLES } = await import('../scripts/lib/seminar-sections');
 
+    const fixture = {
+      // как в живом API: curriculum — режим, learningProcess — план
+      curriculum: '<p>Объем программы: 36 академических часов. 3 дня с 10:00 до 18:00.</p>',
+      learningProcess: '<p><b>Теория</b></p><p>1. История развития прикладной кинезиологии.</p>',
+      certificates: '<p>Удостоверение о повышении квалификации.</p>',
+      recommendations: '<p>Рекомендуется книга.</p>',
+    };
+
+    const html = sectionsHtml(fixture);
+    const plan = section(html, SECTION_TITLES.plan);
+    const process = section(html, SECTION_TITLES.process);
+
+    expect(plan, 'под «Учебным планом» должны быть темы').toMatch(/История развития/);
+    expect(process, 'под «Как проходит обучение» — режим и объём').toMatch(/академических часов/);
+    expect(plan, 'в «Учебном плане» не должно быть режима').not.toMatch(/академических часов/);
+    expect(process, 'в «Как проходит обучение» не должно быть тем').not.toMatch(/История развития/);
+  });
+
+  // Дополнительно — по реальным данным: под «Учебным планом» не должно
+  // оказаться одной строки про длительность.
+  it('в текущих данных под «Учебным планом» не режим обучения', () => {
+    const swapped: string[] = [];
     for (const s of seminars) {
       const plan = section(s.description_html, 'Учебный план');
-      const process = section(s.description_html, 'Как проходит обучение');
-
-      // признак режима обучения: «N дня/дней», «часов», интервал времени
-      const looksLikeSchedule = (v: string): boolean =>
-        v.length < 200 && /(\d+\s*(дня|дней|день)|академических часов|\d{1,2}:\d{2})/i.test(v);
-
-      if (plan && looksLikeSchedule(plan) && !process) {
-        swapped.push(`${s.slug}: под «Учебным планом» режим обучения — «${plan.slice(0, 60)}»`);
-      }
+      const looksLikeSchedule =
+        plan.length > 0 &&
+        plan.length < 200 &&
+        /(\d+\s*(дня|дней|день)|академических часов|\d{1,2}:\d{2})/i.test(plan);
+      if (looksLikeSchedule) swapped.push(`${s.slug}: «${plan.slice(0, 60)}»`);
     }
-
     expect(
       swapped.slice(0, 5),
-      `секции перепутаны (${swapped.length}):\n${swapped.slice(0, 5).join('\n')}`,
+      `под «Учебным планом» режим обучения (${swapped.length}):\n${swapped.slice(0, 5).join('\n')}`,
     ).toEqual([]);
   });
 
@@ -57,10 +79,17 @@ describe('данные каталога', () => {
   // включая прошедшие. Статус по нему давал 107 «запланированных» при 47
   // реально имеющих будущие даты: человек идёт искать даты, которых нет.
   it('статус «запланирован» соответствует будущим датам в расписании', () => {
-    const now = new Date().toISOString();
+    // Календарные даты, а не полные метки: startAt хранится с временем 00:00, и
+    // сравнение с текущим моментом выбрасывало семинар из «запланированных» уже
+    // в первую минуту дня проведения. Учитываем последний день многодневного
+    // обучения — таких событий 60 из 63.
+    const today = new Date().toISOString().slice(0, 10);
+    const lastDay = (e: Entry): string =>
+      ((e.endAt ?? '') > (e.startAt ?? '') ? e.endAt! : (e.startAt ?? '')).slice(0, 10);
+
     const withFuture = new Set(
       schedule
-        .filter((e) => e.status === 'active' && (e.startAt ?? '') >= now && e.seminar?.slug)
+        .filter((e) => e.status === 'active' && lastDay(e) >= today && e.seminar?.slug)
         .map((e) => e.seminar!.slug!),
     );
 

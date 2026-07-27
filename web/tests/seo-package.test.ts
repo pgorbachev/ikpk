@@ -385,6 +385,19 @@ describe('служебные страницы вне прод-сборки', () 
 describe('редиректы легаси-адресов', () => {
   const CONF = join(dist, '..', '..', 'deploy', 'nginx-redirects.conf');
 
+  // nginx сопоставляет location с путём БЕЗ строки запроса, поэтому правило с
+  // «?» не выберется никогда: оно выглядит рабочим и ничего не делает.
+  it('в конфиге нет правил с query-параметром', () => {
+    const conf = readFileSync(CONF, 'utf-8');
+    const bad = conf
+      .split('\n')
+      .filter((l) => /^\s*location\b/.test(l) && l.includes('?'));
+    expect(
+      bad,
+      `правило с query-параметром не сработает в nginx:\n${bad.join('\n')}`,
+    ).toEqual([]);
+  });
+
   it('каждая цель редиректа существует в сборке', () => {
     if (!existsSync(CONF)) {
       throw new Error('нет deploy/nginx-redirects.conf — запустите npm run redirects:gen');
