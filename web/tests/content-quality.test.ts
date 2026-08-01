@@ -340,3 +340,33 @@ describe('таблицы в контенте', () => {
     ).toEqual([]);
   });
 });
+
+// ─── Футер содержит все соцсети живого сайта ─────────────────────────────────
+// Аудит паритета показал, что при переносе из футера пропали Instagram и
+// Facebook, а три оставшихся адреса были заменены несуществующими. Первое —
+// потеря функционала относительно оригинала, второе — уже исправлено.
+//
+// Список сверен с разметкой живого ikpk.su 2026-07-27. Проверять доступность
+// запросом здесь нельзя (гейт должен работать без сети, а сервисы Meta в России
+// заблокированы), поэтому гейт держит СОСТАВ: ни одна сеть не должна исчезнуть
+// из футера незаметно.
+describe('соцсети в футере', () => {
+  const EXPECTED = [
+    { name: 'ВКонтакте', match: /vk\.com\/clubikpk/ },
+    { name: 'Youtube', match: /youtube\.com\/user\/TheKinesiology/ },
+    { name: 'Telegram', match: /t\.me\/ikpk_spb/ },
+    { name: 'Rutube', match: /rutube\.ru\/channel\/30422569/ },
+    { name: 'Instagram', match: /instagram\.com\/ikpk812/ },
+    { name: 'Facebook', match: /facebook\.com\/prikladnaya\.kineziologiya/ },
+  ];
+
+  it('все сети живого сайта присутствуют', () => {
+    const html = readFileSync(`${dist}/index.html`, 'utf-8');
+    const missing = EXPECTED.filter(({ match }) => !match.test(html)).map((e) => e.name);
+
+    expect(
+      missing,
+      `в футере нет соцсетей, которые есть на живом сайте: ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
+});

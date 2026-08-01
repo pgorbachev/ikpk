@@ -29,6 +29,14 @@ export const SOCIAL_LINKS: SocialLink[] = [
   { label: 'Telegram', href: 'https://t.me/ikpk_spb' },
   // совпадает со старым сайтом; на запрос отвечает 403 — это антибот, не поломка
   { label: 'Rutube', href: 'https://rutube.ru/channel/30422569/' },
+  // Instagram и Facebook есть в разметке живого сайта, и по решению владельца
+  // (2026-07-27) возвращаются. Адреса взяты оттуда как есть.
+  //
+  // Проверить доступность запросом нельзя: сервисы Meta в России заблокированы,
+  // поэтому «живость» этих страниц наши гейты подтвердить не могут — в отличие
+  // от остальных четырёх, проверенных ответом сервера.
+  { label: 'Instagram', href: 'https://www.instagram.com/ikpk812/' },
+  { label: 'Facebook', href: 'https://www.facebook.com/prikladnaya.kineziologiya/' },
 ];
 
 /**
