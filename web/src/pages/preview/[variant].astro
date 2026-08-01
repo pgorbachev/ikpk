@@ -59,9 +59,73 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
     const Section = SECTIONS[key];
     return <Section />;
   })}
+
+  {/* Пометки происхождения изображений — только в прототипе.
+      Без них владелец оценит стоковую картинку как собственную съёмку
+      института и выберет вариант, которого потом не получит. Подлинный
+      фотоактив ИКПК — только портреты преподавателей; изображения
+      институтов, событий и статей — сток и CGI (проверено просмотром
+      файлов). Снимков занятий и залов не существует ни в каком разрешении. */}
+  <aside class="provenance-legend" data-provenance-legend>
+    <strong>Происхождение изображений на этой странице</strong>
+    <ul>
+      <li><span class="pv pv-authentic"></span> подлинное фото ИКПК — портреты преподавателей</li>
+      <li><span class="pv pv-stock"></span> сток или 3D-рендер — не съёмка института</li>
+      <li><span class="pv pv-brand"></span> знак бренда — логотип, эмблема</li>
+    </ul>
+    <p>
+      Кадров занятий, залов и работы в парах в медиатеке нет ни одного, поэтому
+      ни одно направление не построено на них. Рамка вокруг картинки показывает
+      её происхождение.
+    </p>
+  </aside>
+
+  <script is:inline>
+    // Разметка происхождения ставится в браузере: картинки приходят из десятка
+    // разных компонентов, и обходить их все ради служебной пометки прототипа
+    // незачем. Скрипт живёт ТОЛЬКО на страницах прототипов.
+    (function () {
+      const brand = /logo|emblem|icon|\/media\/legacy\//i;
+      const portrait = /\/media\/users\/\d+\/images\//;
+      document.querySelectorAll('img[src^="/media"], img[src*="/media/_w/"]').forEach(function (img) {
+        const src = img.getAttribute('src') || '';
+        let kind = brand.test(src) ? 'brand' : portrait.test(src) ? 'authentic' : 'stock';
+        // портретом считаем только то, что выводится как фото преподавателя:
+        // в media/users/** лежат и контентные картинки
+        const inTeacherCard = img.closest('[class*="teacher"]') !== null;
+        if (kind === 'authentic' && !inTeacherCard) kind = 'stock';
+        img.setAttribute('data-provenance', kind);
+      });
+    })();
+  </script>
 </TopNavLayout>
 
 <style>
+  /* ── Пометки происхождения (только прототипы) ───────────────────────────── */
+  .provenance-legend {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    background: var(--surface-inverse);
+    color: var(--text-inverse);
+    padding: 0.75rem 1rem;
+    font-size: var(--font-xs);
+    line-height: 1.5;
+  }
+  .provenance-legend strong { display: block; margin-bottom: 0.35rem; }
+  .provenance-legend ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0 0 0.35rem; padding: 0; }
+  .provenance-legend li { display: flex; align-items: center; gap: 0.4rem; }
+  .provenance-legend p { margin: 0; opacity: 0.8; max-width: 90ch; }
+  .pv { width: 0.9rem; height: 0.9rem; border-radius: 2px; display: inline-block; }
+  .pv-authentic { background: #4d9450; }
+  .pv-stock { background: #c46a1f; }
+  .pv-brand { background: #6b7280; }
+
+  /* Рамка на самой картинке: видно происхождение, не наводя курсор */
+  :global(img[data-provenance='stock']) { outline: 3px solid #c46a1f; outline-offset: -3px; }
+  :global(img[data-provenance='authentic']) { outline: 3px solid #4d9450; outline-offset: -3px; }
+  :global(img[data-provenance='brand']) { outline: 2px dashed #6b7280; outline-offset: -2px; }
+
   .preview-ribbon {
     background: #1a1a1a; color: #fff; text-align: center;
     font-size: 0.8rem; padding: 0.4rem 1rem;
