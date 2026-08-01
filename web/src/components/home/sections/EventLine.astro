@@ -1,0 +1,120 @@
+---
+/**
+ * Ближайшее событие строкой-анонсом между линейками.
+ *
+ * Подача для редакционного направления (Institutional Editorial): дата первым
+ * элементом, дальше город, название, объём и цена, справа действие. Строка, а не
+ * карточка — по двум причинам.
+ *
+ * 1. Карточка тянет за собой изображение, а изображения событий у нас стоковые
+ *    (силуэт в прыжке на закате с разорванной цепью и подобное). Ставить сток в
+ *    первый экран института последипломного медицинского образования — удар по
+ *    доверию, а не украшение.
+ * 2. Редакционная подача держится на типографике: анонс читается как строка в
+ *    издании, а не как товар в каталоге.
+ *
+ * Приём подсмотрен у Institute for Functional Medicine: дата — первый элемент, а
+ * не подпись в подвале карточки, и отсутствие цены не ломает раскладку.
+ */
+import { getUpcomingSeminars } from '../../../lib/home';
+import { registrationHref } from '../../../lib/forms';
+
+const [next] = getUpcomingSeminars(1);
+---
+
+{next && (
+  <section class="event-line-section">
+    <div class="container">
+      <div class="event-line" data-event-line>
+        <div class="event-line-facts">
+          <span class="event-line-date">{next.dateLabel}</span>
+          <span class="event-line-sep" aria-hidden="true">·</span>
+          <span>{next.cityName}</span>
+          <span class="event-line-sep" aria-hidden="true">·</span>
+          <a class="event-line-title" href={next.href}>{next.title}</a>
+          <span class="event-line-sep" aria-hidden="true">·</span>
+          <span class="event-line-price">{next.priceLabel}</span>
+        </div>
+        <a class="event-line-action" href={registrationHref(undefined) || next.href}>
+          Записаться<span aria-hidden="true"> →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+)}
+
+<style>
+  .event-line-section {
+    padding: var(--space-block) 0;
+  }
+
+  /* Линейки сверху и снизу вместо рамки карточки: строка принадлежит странице,
+     а не выделяется из неё объектом. */
+  .event-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .event-line-facts {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    color: var(--text-body);
+    font-size: var(--font-s);
+  }
+
+  /* Дата — первый и самый заметный элемент строки. */
+  .event-line-date {
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .event-line-sep {
+    color: var(--text-muted);
+  }
+
+  .event-line-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .event-line-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .event-line-price {
+    color: var(--text-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Действие ссылкой, а не кнопкой: в редакционной подаче кнопка спорит с
+     текстом за внимание. */
+  .event-line-action {
+    color: var(--color-accent-700);
+    font-weight: 600;
+    font-size: var(--font-s);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    .event-line {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+  }
+</style>
