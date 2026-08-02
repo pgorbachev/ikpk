@@ -78,8 +78,12 @@ find .claude .codex -name '*.md' -exec perl -pi -e \
   's{(?<![\w/\$.\-])openspec(?= (new|status|instructions|store|list|archive|validate|show|update|apply|diff)\b)}{./bin/openspec}g; s{Bash\(openspec:\*\)}{Bash(./bin/openspec:*)}g' {} +
 ```
 
-Проверка после патча: `grep -rE "(^|[^./\w-])openspec (new|status|list)\b" .claude
-.codex` не должен находить ничего.
+Проверка после патча — `./bin/check-openspec-integration`. Он ловит **любой** голый
+вызов, а не список известных подкоманд: первая версия проверки перечисляла
+`new|status|list` и оказалась уже самого патча — при потере замены по `instructions`,
+`store` или `archive` она осталась бы зелёной на нерабочей интеграции. Тот же скрипт
+запускается в CI (job «OpenSpec integration» в `lint.yml`), поэтому потерянный патч
+виден на PR, а не в момент, когда у кого-то не запустится `/opsx:*`.
 
 **Не устанавливать CLI глобально** ради того, чтобы патч стал не нужен: глобальная
 установка уводит вызовы из-под обёртки, и телеметрия снова включается.
