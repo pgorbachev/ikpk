@@ -52,3 +52,17 @@ jobs:
 
       - name: Run typecheck
         run: npm run ${{ matrix.typecheck-script }}
+
+  # Файлы интеграции OpenSpec патчатся после генерации: из коробки они зовут бинарь
+  # `openspec`, которого в проекте нет. Без этой проверки потеря патча (свежий init,
+  # апгрейд, ручная правка) обнаружилась бы только когда у кого-то не запустится
+  # /opsx:*, — то есть молча. Проверка репозиторного уровня, поэтому вне матрицы
+  # пакетов и без установки зависимостей.
+  openspec-integration:
+    name: OpenSpec integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for bare openspec calls
+        run: ./bin/check-openspec-integration
