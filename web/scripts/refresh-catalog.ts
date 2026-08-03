@@ -37,6 +37,7 @@ import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sectionsHtml, SECTION_TITLES } from './lib/seminar-sections.js';
+import { calendarToday, plannedSlugs as derivePlannedSlugs } from './lib/planned-seminars.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ENTITIES = join(ROOT, 'discovery', 'entities');
@@ -212,30 +213,14 @@ function groupPath(program: ProgramItem | undefined): string | null {
  */
 /**
  * Актуально запланированные семинары — по расписанию, а не по полю `events`.
- *
- * `events` у семинара означает, что событие когда-либо существовало, включая
- * прошедшие: по нему статус planned получали 107 семинаров при 47 реально
- * имеющих будущие даты. Ложный «запланирован» хуже отсутствия статуса — человек
- * идёт искать даты, которых нет.
+ * Сам вывод живёт в `./lib/planned-seminars.ts`: там он проверяется фикстурами
+ * с фиксированной датой, а не живыми данными, ход времени которых красил гейт.
  */
 const scheduleEntries = JSON.parse(
   readFileSync(join(ENTITIES, 'schedule_entries.json'), 'utf-8'),
-) as Array<{ status?: string; startAt?: string; seminar?: { slug?: string } | null }>;
+) as Array<{ status?: string; startAt?: string; endAt?: string; seminar?: { slug?: string } | null }>;
 
-// Сравниваем КАЛЕНДАРНЫЕ даты, а не полные метки времени: startAt хранится с
-// временем 00:00, поэтому уже в 00:01 дня проведения полное сравнение давало
-// «в прошлом», и идущий сегодня семинар превращался в «Даты уточняются».
-// Берём последний день (endAt, если он есть): у 60 событий обучение длится
-// несколько дней, и всё это время оно актуально.
-const today = new Date().toISOString().slice(0, 10);
-const lastDay = (e: { startAt?: string; endAt?: string }): string =>
-  ((e.endAt ?? '') > (e.startAt ?? '') ? e.endAt! : (e.startAt ?? '')).slice(0, 10);
-
-const plannedSlugs = new Set(
-  scheduleEntries
-    .filter((e) => e.status === 'active' && lastDay(e) >= today && e.seminar?.slug)
-    .map((e) => e.seminar!.slug!),
-);
+const plannedSlugs = derivePlannedSlugs(scheduleEntries, calendarToday());
 console.log(`семинаров с будущими датами по расписанию: ${plannedSlugs.size}`);
 
 const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'utf-8')) as Array<{
