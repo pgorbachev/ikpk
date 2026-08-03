@@ -24,8 +24,14 @@ import { join } from 'path';
 const TESTS_DIR = import.meta.dirname;
 const REDIRECTS = join(import.meta.dirname, '..', '..', 'deploy', 'nginx-redirects.conf');
 
-/** `page.goto('/путь')` — только относительные адреса: они идут в baseURL сборки. */
-const GOTO = /goto\(\s*'(\/[^']*)'/g;
+// Ловим ЛЮБОЙ строковый литерал-адрес, а не только аргумент `page.goto(...)`.
+// Первая версия гейта смотрела лишь на `goto('...')` — и пропустила 13 адресов в
+// `a11y.spec.ts`, где они лежат в константе `TEMPLATES` и передаются в goto
+// переменной. Из-за этого 10 шаблонов из 14 проверялись на странице 404: axe
+// находил там ноль нарушений, и «36 проверок доступности» были зелёными,
+// не проверяя ничего. Перечислять способы передачи адреса бессмысленно — их
+// больше, чем можно предугадать; общий признак — сам вид адреса.
+const PATH_LITERAL = /'(\/[A-Za-z0-9\-._~/%]*)'/g;
 
 interface Address {
   file: string;
@@ -41,7 +47,7 @@ function collectAddresses(): Address[] {
   for (const file of files) {
     const lines = readFileSync(join(TESTS_DIR, file), 'utf-8').split('\n');
     lines.forEach((text, index) => {
-      for (const m of text.matchAll(GOTO)) found.push({ file, line: index + 1, path: m[1] });
+      for (const m of text.matchAll(PATH_LITERAL)) found.push({ file, line: index + 1, path: m[1] });
     });
   }
   return found;
@@ -61,7 +67,7 @@ describe('адреса в браузерных тестах', () => {
   // выполнена», а не «дефектов нет». Без этого гейта переименование файлов
   // тестов молча обнулило бы обе проверки ниже.
   it('материал для проверки на месте', () => {
-    expect(collectAddresses().length, 'ни одного page.goto с относительным адресом').toBeGreaterThan(
+    expect(collectAddresses().length, 'ни одного адреса-литерала в браузерных тестах').toBeGreaterThan(
       0,
     );
     expect(existsSync(REDIRECTS), `нет конфигурации редиректов: ${REDIRECTS}`).toBe(true);

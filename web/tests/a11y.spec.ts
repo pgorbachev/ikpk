@@ -9,29 +9,29 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
   { name: 'home', path: '/' },
   {
     name: 'course',
-    path: '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/',
+    path: '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya',
   },
   {
     name: 'seminar',
-    path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej/',
+    path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej',
   },
-  { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme/' },
+  { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme' },
   // варианты редизайна (верхнее меню) — новый layout + hero-компоненты под гейтом
-  { name: 'preview-b', path: '/preview/b/' },
-  { name: 'preview-c', path: '/preview/c/' },
-  { name: 'preview-d', path: '/preview/d/' },
+  { name: 'preview-b', path: '/preview/b' },
+  { name: 'preview-c', path: '/preview/c' },
+  { name: 'preview-d', path: '/preview/d' },
   // страница видео-плейлиста с фасадом (FR-04)
-  { name: 'video', path: '/video/33/' },
+  { name: 'video', path: '/video/33' },
   // контакты с ленивой картой + форма подписки (card-вариант)
-  { name: 'kontakty', path: '/kontakty/' },
+  { name: 'kontakty', path: '/kontakty' },
   // Внутренние страницы, которых в списке не было, а правки их касаются:
   // фильтры статей (видимый фокус), аккордеоны оплаты и «Сведений»,
   // расписание с фасетами, страница института с портретами.
-  { name: 'oplata', path: '/oplata/' },
-  { name: 'statyi', path: '/statyi/' },
-  { name: 'raspisanie', path: '/raspisanie-i-tseny/' },
-  { name: 'svedeniya', path: '/svedeniya-ob-obrazovatelnoy-organizatsii/' },
-  { name: 'institute', path: '/institut-apledzhera/' },
+  { name: 'oplata', path: '/oplata' },
+  { name: 'statyi', path: '/statyi' },
+  { name: 'raspisanie', path: '/raspisanie-i-tseny' },
+  { name: 'svedeniya', path: '/svedeniya-ob-obrazovatelnoy-organizatsii' },
+  { name: 'institute', path: '/institut-apledzhera' },
 ];
 
 test.describe('Accessibility', () => {
@@ -49,6 +49,15 @@ test.describe('Accessibility', () => {
       if (name.startsWith('preview-') && response?.status() === 404) {
         test.skip(true, 'черновик варианта отсутствует в боевой сборке');
       }
+
+      // 404 — это «проверять нечего», а не «нарушений нет». Страница 404 у нас
+      // крошечная, axe находит на ней ноль нарушений, и гейт зеленеет: именно так
+      // 10 шаблонов из 14 проверялись впустую, пока адреса в списке шли со
+      // слэшем на конце, а сборка перешла на `trailingSlash: 'never'`.
+      expect(
+        response?.status(),
+        `${path}: страница не отдалась — axe проверил бы страницу 404, а не шаблон`,
+      ).toBe(200);
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
