@@ -96,7 +96,11 @@ test.describe('Accessibility', () => {
 // (прямая проверка поведения раскладки; в реальности переход к масштабируемому
 // корню происходит через фикс html{font-size} в base.css — сам факт роста
 // кегля здесь смоделирован, а не выведен из фикса).
-const ZOOM_PATHS = ['/', '/statyi/', '/raspisanie-i-tseny/'];
+// Адреса без слэша на конце: сейчас сборка отдаёт обе формы, но в ветке с
+// каталогом медиа и редиректами включён `trailingSlash: 'never'`, и форма со
+// слэшем там отдаёт 404. Тест на переполнение на странице 404 прошёл бы молча —
+// «нарушений нет» вместо «проверять нечего», поэтому код ответа проверяется ниже.
+const ZOOM_PATHS = ['/', '/statyi', '/raspisanie-i-tseny'];
 
 // Опущенное закрытым <details> содержимое (мобильный дровер шапки) остаётся в
 // layout-дереве ради scroll-вычислений, но не окрашивается и не видно
@@ -144,7 +148,8 @@ test.describe('Root font-size scaling (a11y text zoom)', () => {
     test(`${path}: header (TopNav) does not overflow horizontally at 2x root font-size`, async ({ page }) => {
       test.fixme(true, 'TD-4: TopNav переполняется при увеличенном кегле — см. docs/tech-debt.md');
 
-      await page.goto(path);
+      const response = await page.goto(path);
+      expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
       await page.evaluate(() => {
         document.documentElement.style.fontSize = '32px';
       });
@@ -158,13 +163,14 @@ test.describe('Root font-size scaling (a11y text zoom)', () => {
       // готовые к росту кегля (не связано с дефектом html{font-size}) —
       // заведено как TD-5. Список — не молчаливое сужение: каждая пара
       // явно поименована и привязана к конкретному долгу.
-      const knownBroken = new Set(['/|desktop', '/|mobile', '/raspisanie-i-tseny/|mobile']);
+      const knownBroken = new Set(['/|desktop', '/|mobile', '/raspisanie-i-tseny|mobile']);
       test.fixme(
         knownBroken.has(`${path}|${testInfo.project.name}`),
         'TD-5: секции вне шапки не готовы к росту кегля — см. docs/tech-debt.md'
       );
 
-      await page.goto(path);
+      const response = await page.goto(path);
+      expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
       await page.evaluate(() => {
         document.documentElement.style.fontSize = '32px';
       });
