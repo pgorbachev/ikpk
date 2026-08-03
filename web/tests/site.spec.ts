@@ -190,7 +190,7 @@ test.describe('Search', () => {
 // ─── Video facade (FR-04, RUTUBE embed) ──────────────────
 test.describe('Video', () => {
   test('playlist facade loads RUTUBE embed on click, accessibly', async ({ page }) => {
-    await page.goto('/video/33/');
+    await page.goto('/video/33');
 
     // до клика — 0 iframe (ленивая загрузка, не бьёт по perf)
     await expect(page.locator('.video-facade iframe')).toHaveCount(0);
@@ -213,7 +213,7 @@ test.describe('Video', () => {
 // ─── Contacts lazy map (FR-08) ───────────────────────────
 test.describe('Contacts map', () => {
   test('Yandex map is injected by JS (not eager) with the right src', async ({ page }) => {
-    await page.goto('/kontakty/');
+    await page.goto('/kontakty');
     await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
     // карта подставляется скриптом (IntersectionObserver), а не статикой
     const iframe = page.locator('.contact-shell-map iframe');
