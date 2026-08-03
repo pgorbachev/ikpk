@@ -5,6 +5,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: [
       // dist-зависимые тесты — только в vitest.build.config.ts (после сборки)
+      'tests/article-catalog.test.ts',
       'tests/perf-a11y.test.ts',
       'tests/parity-compare.test.ts',
       'tests/media-migration.test.ts',
