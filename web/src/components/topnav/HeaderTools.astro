@@ -23,7 +23,7 @@
     aria-checked="false"
     data-theme-control
   >
-    <span class="theme-toggle-track" aria-hidden="true">
+    <span class="theme-toggle-track" aria-hidden="true"><i class="tt-icon" data-state="sun"></i><i class="tt-icon" data-state="moon"></i>
       <span class="theme-toggle-thumb" data-theme-thumb></span>
     </span>
   </button>
@@ -57,13 +57,12 @@
      Токен существующий: палитру этот фикс не меняет. */
   .theme-toggle-track {
     display: block; width: 52px; height: 30px; border-radius: 999px;
-    background: var(--color-gray-500); position: relative; transition: background 0.15s;
+    position: relative; transition: background 0.15s;
   }
   .theme-toggle-thumb {
     position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
-    background: var(--color-light-100); box-shadow: 0 1px 3px rgb(0 0 0 / 25%); transition: transform 0.15s;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 25%); transition: transform 0.15s;
   }
-  .header-theme-toggle[aria-checked='true'] .theme-toggle-track { background: var(--color-accent-500); }
   .header-theme-toggle[aria-checked='true'] .theme-toggle-thumb { transform: translateX(22px); }
 
   /* На мобиле в баре остаётся только поиск — тумблер темы (52px) убираем,

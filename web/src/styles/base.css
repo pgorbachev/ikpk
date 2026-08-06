@@ -141,3 +141,108 @@ table {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ── Тумблер темы ────────────────────────────────────────────────────────────
+   Модель как на старом сайте (владелец сверил по скриншотам): иконка стоит НА
+   ДОРОЖКЕ и показывает, КУДА переключит — в светлой теме луна, в тёмной солнце, —
+   а кружок ВСЕГДА белый и лишь указывает текущую сторону.
+
+   Цвета заданы литералами, а не токенами: `--color-light-100` и `--color-dark-700`
+   в тёмной теме инвертируются (light-100 = #171a17), и взятые как «светлый» они
+   сделали в тёмной теме и солнце, и кружок почти чёрными. `--color-accent-500` там
+   же становится светлым #7eaa7f, на котором белый кружок давал 2.64:1.
+
+   Замеры, порог WCAG 1.4.11 для контролов — 3:1 (гейт «Контраст тумблера темы в
+   обеих темах» проверяет все три пары в обоих состояниях):
+     светлая, выкл: дорожка→фон 4.88 · кружок→дорожка 4.88 · луна→дорожка 4.88
+     светлая, вкл:  дорожка→фон 6.42 · кружок→дорожка 6.42 · солнце→дорожка 3.58
+     тёмная,  выкл: дорожка→фон 4.43 · кружок→дорожка 3.23 · луна→дорожка 4.93
+     тёмная,  вкл:  дорожка→фон 3.43 · кружок→дорожка 4.17 · солнце→дорожка 3.23
+
+   Рисуется CSS, а не вложенным SVG: разметка контрола встречается на странице
+   дважды, и SVG-вариант добавлял ~1 КБ в каждую страницу — гейт веса 404 упал.
+   Правила общие для шапки и мобильного меню, поэтому живут здесь: стили Astro
+   ограничены своим компонентом. */
+.theme-toggle-track,
+.drawer-theme-track {
+  background: #717171;
+}
+
+.header-theme-toggle[aria-checked='true'] .theme-toggle-track,
+.drawer-theme[aria-checked='true'] .drawer-theme-track {
+  background: #2f6b32;
+}
+
+.theme-toggle-thumb,
+.drawer-theme-thumb {
+  background: #fff;
+}
+
+/* В тёмной теме дорожки светлее: одним цветом нельзя контрастировать и с белым
+   фоном шапки, и с тёмным — гейт это показал (тёмно-зелёная дорожка на тёмном фоне
+   давала 2.23:1). Кружок остаётся белым, как на старом сайте. */
+:root[data-theme='dark'] .theme-toggle-track,
+:root[data-theme='dark'] .drawer-theme-track {
+  background: #8a918a;
+}
+
+:root[data-theme='dark'] .header-theme-toggle[aria-checked='true'] .theme-toggle-track,
+:root[data-theme='dark'] .drawer-theme[aria-checked='true'] .drawer-theme-track {
+  /* Зелёная дорожка в тёмной теме не проходит: фон под контролом там #3f413f
+     (замерено гейтом, не предположено), и любой оттенок, контрастный к нему, теряет
+     контраст с белым кружком. Оба состояния используют один серый; различие несут
+     иконка и сторона кружка — как на старом сайте, где дорожка тоже не меняла цвет. */
+  background: #8a918a;
+}
+
+.tt-icon {
+  position: absolute;
+  top: 50%;
+  display: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+}
+
+/* Луна: серп из круга с прозрачным вырезом у верхнего правого края. */
+.tt-icon[data-state='moon'] {
+  right: 6px;
+  background: radial-gradient(circle at 128% 18%, transparent 58%, #fff 59%);
+}
+
+:root[data-theme='dark'] .tt-icon[data-state='moon'] {
+  background: radial-gradient(circle at 128% 18%, transparent 58%, #1f231f 59%);
+}
+
+/* Солнце: плотный диск с короткими зубцами. Восемь отдельных лучей на расстоянии
+   5 px читались как жёлтая снежинка — владелец это и увидел. */
+.tt-icon[data-state='sun'] {
+  left: 5px;
+  background:
+    radial-gradient(circle, #ffb300 0 44%, transparent 45%),
+    conic-gradient(
+      #ffb300 0 7%, transparent 7% 12.5%, #ffb300 12.5% 19.5%, transparent 19.5% 25%,
+      #ffb300 25% 32%, transparent 32% 37.5%, #ffb300 37.5% 44.5%, transparent 44.5% 50%,
+      #ffb300 50% 57%, transparent 57% 62.5%, #ffb300 62.5% 69.5%, transparent 69.5% 75%,
+      #ffb300 75% 82%, transparent 82% 87.5%, #ffb300 87.5% 94.5%, transparent 94.5%
+    );
+}
+
+:root[data-theme='dark'] .tt-icon[data-state='sun'] {
+  background:
+    radial-gradient(circle, #2b3a2b 0 44%, transparent 45%),
+    conic-gradient(
+      #2b3a2b 0 7%, transparent 7% 12.5%, #2b3a2b 12.5% 19.5%, transparent 19.5% 25%,
+      #2b3a2b 25% 32%, transparent 32% 37.5%, #2b3a2b 37.5% 44.5%, transparent 44.5% 50%,
+      #2b3a2b 50% 57%, transparent 57% 62.5%, #2b3a2b 62.5% 69.5%, transparent 69.5% 75%,
+      #2b3a2b 75% 82%, transparent 82% 87.5%, #2b3a2b 87.5% 94.5%, transparent 94.5%
+    );
+}
+
+[aria-checked='false'] .theme-toggle-track > .tt-icon[data-state='moon'],
+[aria-checked='false'] .drawer-theme-track > .tt-icon[data-state='moon'],
+[aria-checked='true'] .theme-toggle-track > .tt-icon[data-state='sun'],
+[aria-checked='true'] .drawer-theme-track > .tt-icon[data-state='sun'] {
+  display: block;
+}

@@ -331,3 +331,158 @@ test.describe('Нетекстовый контраст контролов', () =
     });
   }
 });
+
+// ─── Состояние тумблера темы читается не только цветом (WCAG 1.4.1) ──────────
+// Дефект: у контрола не было ни иконки, ни подписи — состояние передавалось
+// цветом дорожки и позицией кружка. После исправления контраста выключенное
+// состояние (#717171) стало ТЕМНЕЕ включённого (#7eaa7f), то есть выглядело
+// активнее; владелец, глядя на светлую тему, спросил «ночная версия?».
+test.describe('Состояние тумблера темы различимо', () => {
+  for (const project of ['bar', 'drawer'] as const) {
+    test(`иконка отличает состояния (${project})`, async ({ page }) => {
+      const response = await page.goto('/');
+      expect(response?.status(), 'страница не отдалась').toBe(200);
+
+      const inBar = await page.locator('#theme-toggle').isVisible().catch(() => false);
+      if (project === 'bar' && !inBar) test.skip(true, 'в этом вьюпорте тумблера в баре нет');
+      if (project === 'drawer' && inBar) test.skip(true, 'парный контрол проверяется на узком экране');
+      if (!inBar) await page.locator('.topnav-mobile > summary').click();
+
+      const selector = inBar ? '#theme-toggle' : '.drawer-theme';
+      const toggle = page.locator(selector);
+
+      const shape = async (): Promise<string> =>
+        toggle.evaluate((el) => {
+          // Видимая иконка состояния: та, что не скрыта.
+          // Иконки рисуются CSS, поэтому ищем элементы состояния по признаку, а не
+          // по тегу: реализация может быть <i>, <span> или <svg> — важно, что
+          // видимый признак состояния есть и он меняется.
+          const icons = [...el.querySelectorAll('[data-state]')].filter((node) => {
+            const s = getComputedStyle(node);
+            return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0;
+          });
+          return icons.map((node) => node.getAttribute('data-state') ?? '').join('|');
+        });
+
+      // Иконка показывает ЦЕЛЬ переключения, как на старом сайте: в светлой теме
+      // видна луна («переключить на тёмную»), в тёмной — солнце. Владелец сверил со
+      // старым сайтом и попросил именно эту модель: иконка на дорожке, кружок пустой.
+      const off = await shape();
+      expect(
+        off,
+        'в светлой теме на тумблере должна быть ЛУНА — цель переключения',
+      ).toBe('moon');
+
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-checked', 'true');
+      const on = await shape();
+      expect(on, 'в тёмной теме на тумблере должно быть СОЛНЦЕ — цель переключения').toBe('sun');
+    });
+  }
+});
+
+// ─── Контраст всех частей тумблера в ОБЕИХ темах ─────────────────────────────
+// Дефект, ради которого гейт заведён: токены `--color-light-100` и
+// `--color-dark-700` в тёмной теме инвертируются (light-100 = #171a17) — они
+// задают роль, а не яркость. Использованные как «светлый»/«тёмный», они сделали в
+// тёмной теме и солнце, и сам кружок почти чёрными; владелец это увидел на экране.
+// То же с accent-500: в тёмной теме он светлый (#7eaa7f), и белый кружок давал на
+// нём 2.64:1 при требуемых 3:1.
+//
+// Прежний гейт контраста смотрел только дорожку к фону шапки, поэтому обе поломки
+// пропустил. Здесь проверяются ВСЕ пары: дорожка к шапке, кружок к дорожке, иконка
+// к дорожке — и в светлой, и в тёмной теме.
+test.describe('Контраст тумблера темы в обеих темах', () => {
+  const MIN = 3;
+  const lum = ([r, g, b]: number[]): number => {
+    const f = (c: number): number => {
+      const v = c / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const parse = (color: string): number[] =>
+    (color.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+  const ratio = (a: string, b: string): number => {
+    const [hi, lo] = [lum(parse(a)), lum(parse(b))].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`все части тумблера различимы (${theme})`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      const response = await page.goto('/');
+      expect(response?.status(), 'страница не отдалась').toBe(200);
+
+      const inBar = await page.locator('#theme-toggle').isVisible().catch(() => false);
+      if (!inBar) await page.locator('.topnav-mobile > summary').click();
+      const toggle = page.locator(inBar ? '#theme-toggle' : '.drawer-theme');
+
+      // Проверяем ОБА состояния контрола: включённое состояние в светлой теме и
+      // выключенное в тёмной тоже достижимы пользователем.
+      for (const pass of ['как есть', 'после переключения'] as const) {
+        if (pass === 'после переключения') {
+          await toggle.click();
+          await page.waitForTimeout(200);
+        }
+
+        const m = await toggle.evaluate((el) => {
+          const track = el.querySelector('[class*="-track"]') as HTMLElement;
+          const thumb = el.querySelector('[class*="-thumb"]') as HTMLElement;
+          const icon = [...el.querySelectorAll('[data-state]')].find((n) => {
+            const cs = getComputedStyle(n);
+            return cs.display !== 'none' && Number(cs.opacity) > 0;
+          }) as HTMLElement | undefined;
+
+          // Фон под контролом: ближайший предок с непрозрачным цветом.
+          let node: HTMLElement | null = el.parentElement;
+          let behind = 'rgb(255, 255, 255)';
+          while (node) {
+            const bg = getComputedStyle(node).backgroundColor;
+            if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) {
+              behind = bg;
+              break;
+            }
+            node = node.parentElement;
+          }
+
+          const iconStyle = icon ? getComputedStyle(icon) : null;
+          return {
+            checked: el.getAttribute('aria-checked'),
+            track: getComputedStyle(track).backgroundColor,
+            thumb: getComputedStyle(thumb).backgroundColor,
+            iconState: icon?.getAttribute('data-state') ?? null,
+            // У иконки цвет может быть в background-color или в градиенте.
+            iconColor: iconStyle
+              ? iconStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
+                ? iconStyle.backgroundColor
+                : (iconStyle.backgroundImage.match(/rgb\([^)]+\)/) ?? ['rgb(0,0,0)'])[0]
+              : null,
+            behind,
+          };
+        });
+
+        expect(m.iconState, `${theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
+
+        const checks: Array<[string, number]> = [
+          [`дорожка ${m.track} к фону ${m.behind}`, ratio(m.track, m.behind)],
+          [`кружок ${m.thumb} к дорожке ${m.track}`, ratio(m.thumb, m.track)],
+          [`иконка ${m.iconState} ${m.iconColor} к дорожке ${m.track}`, ratio(m.iconColor!, m.track)],
+        ];
+
+        for (const [what, value] of checks) {
+          expect(
+            value,
+            `${theme}, ${pass} (aria-checked=${m.checked}): ${what} — ${value.toFixed(2)}:1 при требуемых ${MIN}:1`,
+          ).toBeGreaterThanOrEqual(MIN);
+        }
+      }
+    });
+  }
+});
