@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { isCurrentOrFuture, lastDay } from '../src/lib/schedule-window';
 
@@ -54,23 +54,42 @@ describe('окно актуальности записи расписания', 
 // через общий вывод, а не сравнивать `startAt` напрямую. Проверка текстовая
 // намеренно — поведение страниц Astro на этапе сборки юнит-тестом не наблюдаемо, а
 // браузерный тест увидит дефект только в те дни, когда идёт многодневный семинар.
-describe('страницы не фильтруют расписание по startAt напрямую', () => {
-  const PAGES = [
-    join('src', 'pages', 'raspisanie-i-tseny.astro'),
-    join('src', 'pages', '[institute]', '[courseGroup]', '[seminar].astro'),
+// Гейт против возврата дефекта: НИ ОДИН файл в `src/` не должен сравнивать время
+// начала события с текущей датой. Первая редакция перечисляла два пути руками — и
+// пропустила третью копию в `web/src/lib/home.ts`, из-за которой расписание
+// показывало идущий семинар, а «Ближайшие семинары» на главной нет. Перечисление
+// частных случаев запрещено правилами проекта именно по этой причине.
+describe('нигде в src нет фильтра расписания по startAt', () => {
+  const SRC = join(import.meta.dirname, '..', 'src');
+  // Признак общий: сравнение startAt с датой/меткой времени в любом виде.
+  const BAD = [
+    /new Date\(\s*\w+\.startAt\s*\)\.getTime\(\)\s*[<>]=?/,
+    /\w+\.startAt(?:\s*\?\?\s*'')?\.slice\(0,\s*10\)\s*[<>]=?\s*(?!.*isCurrentOrFuture)\w/,
   ];
 
-  it('обе страницы используют общий вывод актуальности', () => {
+  function* files(dir: string): Generator<string> {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) yield* files(full);
+      else if (/\.(astro|ts)$/.test(name)) yield full;
+    }
+  }
+
+  it('сравнений startAt с датой не осталось', () => {
+    const all = [...files(SRC)];
+    expect(all.length, 'файлов в src не найдено — проверять нечего').toBeGreaterThan(0);
+
     const offenders: string[] = [];
-    for (const rel of PAGES) {
-      const text = readFileSync(join(import.meta.dirname, '..', rel), 'utf-8');
-      // Опасный признак: сравнение времени начала с текущей датой.
-      if (/new Date\((?:entry|e)\.startAt\)\.getTime\(\)\s*>=/.test(text)) {
-        offenders.push(`${rel}: фильтр по startAt вместо последнего дня события`);
-      }
-      if (!/isCurrentOrFuture/.test(text)) {
-        offenders.push(`${rel}: не использует isCurrentOrFuture`);
-      }
+    for (const file of all) {
+      // Файл общего вывода — единственное законное место, где даты сравниваются.
+      if (file.endsWith('schedule-window.ts')) continue;
+      const text = readFileSync(file, 'utf-8');
+      text.split('\n').forEach((line, i) => {
+        if (line.trimStart().startsWith('//')) return;
+        if (BAD.some((re) => re.test(line))) {
+          offenders.push(`${file.slice(SRC.length + 1)}:${i + 1} → ${line.trim().slice(0, 80)}`);
+        }
+      });
     }
     expect(
       offenders,

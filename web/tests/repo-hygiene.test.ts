@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 // Правила репозитория, которые ломаются молча и потому нуждаются в гейте.
@@ -106,22 +106,53 @@ describe('гигиена репозитория', () => {
     ).toBe(true);
   });
 
-  // Генераторы данных не должны сообщать об ошибках и завершаться нулём: prebuild
-  // и деплой продолжали работу на неполных данных при зелёном прогоне.
-  it('генераторы завершаются ненулевым кодом при потере данных', () => {
-    const cases: Array<{ file: string; what: string }> = [
-      { file: join('web', 'scripts', 'make-derivatives.ts'), what: 'ошибки генерации изображений' },
-      { file: join('web', 'scripts', 'gen-redirects.ts'), what: 'конфликты в карте адресов' },
-      { file: join('web', 'scripts', 'refresh-catalog.ts'), what: 'потеря данных каталога' },
-      {
-        file: join('web', 'scripts', 'recover-collapsibles.mjs'),
-        what: 'незавершённое восстановление секций',
-      },
-    ];
-    const silent = cases
-      .filter(({ file }) => !/process\.exit\(1\)/.test(readFileSync(join(ROOT, file), 'utf-8')))
-      .map(({ file, what }) => `${file}: ${what} не роняет процесс`);
-    expect(silent, silent.join('\n')).toEqual([]);
+  // Генераторы не должны сообщать об ошибках и завершаться нулём. Проверяем
+  // ПОВЕДЕНИЕ, запуская генератор на негодных данных, а не наличие строки
+  // `process.exit(1)` в тексте.
+  //
+  // Первая редакция искала именно строку — и была декоративной дважды: её
+  // удовлетворял комментарий вида «раньше здесь был process.exit(1)», а по
+  // `make-derivatives.ts` она была зелёной ДО исправления, потому что `exit(1)` там
+  // уже стоял в другой ветке (отсутствие каталога оригиналов). То есть негативную
+  // проверку эта строка пройти не могла, хотя я утверждала обратное.
+  it('генератор редиректов падает на конфликте в карте адресов', () => {
+    const map = join(ROOT, 'discovery', 'url_map.csv');
+    const rows = readFileSync(map, 'utf-8').split('\n');
+    const idx = rows.findIndex((r) => r.startsWith('https://ikpk.su/contacts,'));
+    expect(idx, 'в карте нет опорной строки для проверки — предмет изменился').toBeGreaterThan(0);
+
+    const cols = rows[idx].split(',');
+    cols[2] = '/konflikt-proverka';
+    const withConflict = [...rows.slice(0, idx + 1), cols.join(','), ...rows.slice(idx + 1)].join(
+      '\n',
+    );
+
+    // Карта передаётся генератору отдельным файлом, рабочая копия не трогается.
+    const probe = join(ROOT, 'discovery', 'url_map.conflict-probe.csv');
+    try {
+      writeFileSync(probe, withConflict, 'utf-8');
+      let status = 0;
+      let output = '';
+      try {
+        output = execFileSync(
+          'npx',
+          ['tsx', 'scripts/gen-redirects.ts', '--map=discovery/url_map.conflict-probe.csv'],
+          { cwd: join(ROOT, 'web'), encoding: 'utf-8', stdio: 'pipe' },
+        );
+      } catch (err) {
+        const e = err as { status?: number; stdout?: string; stderr?: string };
+        status = e.status ?? -1;
+        output = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+      }
+      expect(status, `генератор завершился нулём на конфликте:\n${output}`).not.toBe(0);
+      expect(output, 'генератор не назвал конфликт в выводе').toMatch(/КОНФЛИКТ/);
+    } finally {
+      // Убираем и подменённую карту, и конфиг, который генератор мог успеть
+      // записать: иначе прогон со снятым отказом оставляет файл в рабочем дереве —
+      // ровно тот мусор, от которого правило про постусловие мутации и написано.
+      rmSync(probe, { force: true });
+      rmSync(join(ROOT, 'deploy', 'nginx-redirects.probe.conf'), { force: true });
+    }
   });
 
   // Скрипт восстановления секций должен работать из чистого checkout: прежде он

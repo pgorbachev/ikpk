@@ -70,15 +70,23 @@ if (!existsSync(TARGETS)) {
   process.exit(1);
 }
 const targets = JSON.parse(readFileSync(TARGETS, 'utf-8'));
-if (!Array.isArray(targets) || targets.length === 0) {
+if ((Array.isArray(targets) ? targets.length : Object.keys(targets).length) === 0) {
   console.error(`список адресов пуст: ${TARGETS} — обходить нечего`);
   process.exit(1);
 }
 const collected = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf-8')) : {};
 
-const paths = Object.keys(targets)
-  .filter((p) => force || !collected[p])
-  .slice(0, limit);
+// Список адресов — массив путей. `Object.keys` на массиве даёт индексы
+// ('0','1',…), и первая редакция этой правки именно так и ходила бы — за
+// `https://ikpk.su/0`. Прежний черновой файл был объектом `{путь: [...]}`, поэтому
+// принимаем оба вида: форма данных и обход обязаны совпадать, а не совпадать по
+// случайности.
+const targetPaths = Array.isArray(targets) ? targets : Object.keys(targets);
+if (!targetPaths.every((p) => typeof p === 'string' && p.startsWith('/'))) {
+  console.error(`в ${TARGETS} ожидались пути вида "/adres" — обходить нечего`);
+  process.exit(1);
+}
+const paths = targetPaths.filter((p) => force || !collected[p]).slice(0, limit);
 
 console.log(
   `страниц к обработке: ${paths.length} из ${Object.keys(targets).length}` +

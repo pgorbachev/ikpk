@@ -24,8 +24,16 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const MAP_CSV = join(ROOT, 'discovery', 'url_map.csv');
-const OUT = join(ROOT, 'deploy', 'nginx-redirects.conf');
+// Путь к карте переопределяется `--map=<файл>`: иначе проверку поведения
+// генератора (падает ли он на конфликте) нельзя выполнить, не подменяя рабочую
+// карту — а подмена рабочих данных в тесте оставляет мусор при любом обрыве.
+const mapArg = process.argv.find((a) => a.startsWith('--map='));
+const MAP_CSV = mapArg
+  ? join(ROOT, mapArg.slice('--map='.length))
+  : join(ROOT, 'discovery', 'url_map.csv');
+const OUT = mapArg
+  ? join(ROOT, 'deploy', 'nginx-redirects.probe.conf')
+  : join(ROOT, 'deploy', 'nginx-redirects.conf');
 
 /** Разбор CSV с учётом кавычек: в заголовках страниц есть запятые. */
 function parseCsv(text: string): Array<Record<string, string>> {
