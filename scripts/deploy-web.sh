@@ -115,8 +115,29 @@ echo "[deploy] Uploading nginx redirects ($(grep -c '^location' "$REDIRECTS_SRC"
 # Смотрим на то, что реально уедет на сервер, и требуем непустой результат: ноль
 # найденных ссылок на формы — это «проверить не удалось», а не «всё верно».
 PROD_FORM_HOST='b24-cbqwqo.bitrix24site.ru'
-stub_pages=$(grep -rl '/demo-zayavka' "$DIST_DIR" 2>/dev/null | wc -l | tr -d ' ')
-prod_pages=$(grep -rl "$PROD_FORM_HOST" "$DIST_DIR" 2>/dev/null | wc -l | tr -d ' ')
+
+# Коды возврата grep разбираются явно: 0 — нашёл, 1 — не нашёл, 2+ — ошибка чтения.
+# Без этого `x=$(grep … | wc -l)` под `set -euo pipefail` роняет скрипт молча, когда
+# совпадений законно ноль — на первом же деплое стенда так и вышло: `prod_pages`
+# равен нулю по замыслу, а скрипт упал до вывода собственной проверки. Смешивать «не
+# нашёл» с «не смог прочитать» тоже нельзя: второе означает, что проверка не
+# выполнена.
+count_pages() {
+  local pattern="$1" list rc
+  set +e
+  list=$(grep -rl -- "$pattern" "$DIST_DIR" 2>/dev/null)
+  rc=$?
+  set -e
+  case "$rc" in
+    0) printf '%s\n' "$list" | grep -c . ;;
+    1) echo 0 ;;
+    *) echo "grep не смог прочитать $DIST_DIR (код $rc) — проверка артефакта не выполнена" >&2
+       exit 1 ;;
+  esac
+}
+
+stub_pages=$(count_pages '/demo-zayavka')
+prod_pages=$(count_pages "$PROD_FORM_HOST")
 echo "[deploy] Проверка артефакта: страниц с заглушкой ${stub_pages}, с боевым хостом ${prod_pages}"
 
 case "$DEPLOY_MODE" in
