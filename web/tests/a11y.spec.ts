@@ -496,3 +496,95 @@ test.describe('Контраст тумблера темы в обеих тема
     });
   }
 });
+
+// Симулируем увеличенный кегль через document.documentElement.style.fontSize
+// (прямая проверка поведения раскладки; в реальности переход к масштабируемому
+// корню происходит через фикс html{font-size} в base.css — сам факт роста
+// кегля здесь смоделирован, а не выведен из фикса).
+// Адреса без слэша на конце: сейчас сборка отдаёт обе формы, но в ветке с
+// каталогом медиа и редиректами включён `trailingSlash: 'never'`, и форма со
+// слэшем там отдаёт 404. Тест на переполнение на странице 404 прошёл бы молча —
+// «нарушений нет» вместо «проверять нечего», поэтому код ответа проверяется ниже.
+const ZOOM_PATHS = ['/', '/statyi', '/raspisanie-i-tseny'];
+
+// Опущенное закрытым <details> содержимое (мобильный дровер шапки) остаётся в
+// layout-дереве ради scroll-вычислений, но не окрашивается и не видно
+// пользователю — checkVisibility() отличает такие узлы от реально видимого
+// переполнения.
+async function findOverflowingVisible(
+  page: import('@playwright/test').Page,
+  rootSelector: string,
+  excludeSelector?: string
+): Promise<string[]> {
+  return page.evaluate(
+    ({ rootSelector, excludeSelector }) => {
+      const root = document.querySelector(rootSelector);
+      if (!root) return [`root not found: ${rootSelector}`];
+      const viewportWidth = window.innerWidth;
+      const offenders: string[] = [];
+      for (const el of root.querySelectorAll('*')) {
+        if (excludeSelector && el.closest(excludeSelector)) continue;
+        const withVisibility = el as Element & { checkVisibility?: () => boolean };
+        if (typeof withVisibility.checkVisibility === 'function' && !withVisibility.checkVisibility()) {
+          continue;
+        }
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) continue;
+        if (rect.right > viewportWidth + 1) {
+          offenders.push(`${el.tagName}.${(el as HTMLElement).className || ''} right=${Math.round(rect.right)} > viewport=${viewportWidth}`);
+        }
+      }
+      return offenders;
+    },
+    { rootSelector, excludeSelector }
+  );
+}
+
+test.describe('Root font-size scaling (a11y text zoom)', () => {
+  for (const path of ZOOM_PATHS) {
+    // Шапка (TopNav) — известный, отдельный от html{font-size} дефект: плоский
+    // flex-ряд без flex-wrap переполняется по горизонтали при увеличенном
+    // кегле на ВСЕХ проверенных страницах и viewport'ах. Разобрано и заведено
+    // как TD-4 (docs/tech-debt.md) — исправление требует изменений раскладки,
+    // которые при baseline-кегле уже меняют высоту/перенос шапки (проверено
+    // вручную), то есть выходят за рамки точечного a11y-фикса и нуждаются в
+    // мокапе по правилам проекта. Тест зафиксирован как fixme, а не удалён —
+    // проверка реальна и должна позеленеть после фикса TD-4.
+    test(`${path}: header (TopNav) does not overflow horizontally at 2x root font-size`, async ({ page }) => {
+      test.fixme(true, 'TD-4: TopNav переполняется при увеличенном кегле — см. docs/tech-debt.md');
+
+      const response = await page.goto(path);
+      expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '32px';
+      });
+
+      const offenders = await findOverflowingVisible(page, 'header.topnav');
+      expect(offenders, `шапка переполняется по горизонтали при увеличенном кегле:\n${offenders.join('\n')}`).toEqual([]);
+    });
+
+    test(`${path}: content outside the header has no new horizontal overflow at 2x root font-size`, async ({ page }, testInfo) => {
+      // Часть страниц/viewport'ов уже сейчас содержит СЕКЦИИ вне шапки, не
+      // готовые к росту кегля (не связано с дефектом html{font-size}) —
+      // заведено как TD-5. Список — не молчаливое сужение: каждая пара
+      // явно поименована и привязана к конкретному долгу.
+      const knownBroken = new Set(['/|desktop', '/|mobile', '/raspisanie-i-tseny|mobile']);
+      test.fixme(
+        knownBroken.has(`${path}|${testInfo.project.name}`),
+        'TD-5: секции вне шапки не готовы к росту кегля — см. docs/tech-debt.md'
+      );
+
+      const response = await page.goto(path);
+      expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '32px';
+      });
+
+      const offenders = await findOverflowingVisible(page, 'body', 'header.topnav');
+      expect(
+        offenders,
+        `вне шапки — горизонтальное переполнение при увеличенном кегле:\n${offenders.join('\n')}`
+      ).toEqual([]);
+    });
+  }
+});

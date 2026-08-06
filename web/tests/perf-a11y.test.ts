@@ -188,3 +188,35 @@ describe('LCP: hero не анимируется из прозрачности', 
     ).toEqual([]);
   });
 });
+
+describe('Root font-size', () => {
+  it('html rule has no absolute font-size (px/pt/etc.) — user text-size preference must apply', () => {
+    const allCss = readBuiltCss();
+
+    // Селектор "html" встречается и одиночным правилом, и внутри @media —
+    // берём тело правила после символа "html" в любом из этих контекстов,
+    // но не путаем с ".html", "xhtml" и т.п. соседством символов.
+    const htmlRuleRe = /(^|[,{}])\s*html\s*\{([^}]*)\}/g;
+    const bodies: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = htmlRuleRe.exec(allCss))) {
+      bodies.push(match[2]);
+    }
+
+    // Различаем «дефекта нет» и «не смогли проверить»: если ни одного правила
+    // для селектора html не нашлось вообще — гейт слепой (сборка/минификация
+    // изменились), а не «всё хорошо».
+    expect(
+      bodies.length,
+      'ни одного CSS-правила для селектора "html" не найдено в собранном CSS — гейт не может подтвердить отсутствие дефекта'
+    ).toBeGreaterThan(0);
+
+    const absoluteFontSize = /font-size\s*:\s*[\d.]+\s*(px|pt|cm|mm|in|pc|q)\b/i;
+    const offending = bodies.filter((b) => absoluteFontSize.test(b));
+
+    expect(
+      offending,
+      `html { } задаёт абсолютный font-size — подавляет пользовательскую настройку размера шрифта браузера:\n${offending.join('\n')}`
+    ).toEqual([]);
+  });
+});
