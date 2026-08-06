@@ -26,11 +26,18 @@ export default defineConfig({
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;
-        return { ...item, lastmod };
+        // адреса в карте — как на старом сайте, без завершающего слэша
+        const url = item.url.replace(/(.)\/+$/, '$1');
+        return { ...item, url, lastmod };
       },
     }),
   ],
   output: 'static',
+  // Старый сайт адресует страницы без завершающего слэша (ikpk.su/kontakty).
+  // Раскладку файлов оставляем каталогами: nginx отдаёт /kontakty напрямую из
+  // /kontakty/index.html, если в try_files поставить $uri/index.html ПЕРЕД
+  // $uri/ — иначе он редиректит на вариант со слэшем и смысл теряется.
+  trailingSlash: 'never',
   vite: {
     build: {
       // Vite 8 минифицирует CSS через lightningcss, который по умолчанию

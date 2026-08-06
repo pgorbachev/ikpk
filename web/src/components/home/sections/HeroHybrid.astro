@@ -45,10 +45,20 @@ const next = getUpcomingSeminars(1)[0];
       </div>
     </div>
 
+    {/* Пока заказчик не пришлёт постановочное фото занятия (запрос в
+        docs/client-requests.md), берём реальный снимок из медиабазы института:
+        специалист за работой с пациентом. Он же используется превью авторских
+        семинаров. Исходник 4:3 — кроп до 16:9 смещён вверх, чтобы лица не
+        обрезались. */}
     <div class="hero-d-visual">
-      <svg class="hero-d-visual-icon" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="currentColor"/></svg>
-      <span class="hero-d-visual-cap">Фото реального занятия ИКПК</span>
-      <span class="hero-d-visual-note">преподаватель · участники · практика</span>
+      <img
+        src="/media/users/1/images/1-1763647472405.webp"
+        alt="Занятие по прикладной кинезиологии: работа с пациентом"
+        width="700"
+        height="525"
+        loading="eager"
+        fetchpriority="high"
+      />
     </div>
   </div>
 </section>
@@ -88,16 +98,18 @@ const next = getUpcomingSeminars(1)[0];
   .hero-d-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
   .hero-d-visual {
     width: 100%; max-width: 520px; margin: 0 auto; aspect-ratio: 16 / 9;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
     border-radius: 14px;
-    border: 2px dashed var(--color-accent-300);
-    background:
-      radial-gradient(120% 100% at 50% 0%, rgb(53 122 56 / 8%), transparent 65%),
-      var(--color-light-100);
-    color: var(--color-accent-600);
+    overflow: hidden;
+    background: var(--color-light-300);
+    box-shadow: 0 6px 22px rgb(0 0 0 / 10%);
   }
-  .hero-d-visual-cap { font-weight: 700; font-size: var(--font-m); color: var(--color-dark-700); }
-  .hero-d-visual-note { font-size: var(--font-s); color: var(--color-gray-500); }
+  .hero-d-visual img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    /* исходник 4:3, кроп смещён вверх — иначе обрезает лица */
+    object-position: center 22%;
+    display: block;
+  }
 
   @media (max-width: 860px) {
     .hero-d-inner { grid-template-columns: 1fr; gap: 1.5rem; }

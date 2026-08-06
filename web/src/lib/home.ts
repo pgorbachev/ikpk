@@ -1,5 +1,6 @@
 // Хелперы для секций главной (варианты редизайна).
 import { getScheduleEntries, getInstitutes, formatPrice, type ScheduleEntry } from './data.js';
+import { isCurrentOrFuture } from './schedule-window';
 
 export interface UpcomingSeminar {
   id: number;
@@ -38,7 +39,10 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
   const today = now.toISOString().slice(0, 10);
 
   return getScheduleEntries()
-    .filter((e) => e.status === 'active' && e.startAt && e.startAt.slice(0, 10) >= today)
+    // По последнему дню события, а не по первому: многодневных записей 60 из 63,
+    // и фильтр по startAt убирал бы идущий семинар с главной на второй день —
+    // при том, что расписание его показывает. Общий вывод в schedule-window.ts.
+    .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today))
     .sort((a, b) => a.startAt.localeCompare(b.startAt))
     .slice(0, limit)
     .map((e: ScheduleEntry): UpcomingSeminar => {

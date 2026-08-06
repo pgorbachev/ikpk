@@ -22,8 +22,8 @@ const description = page?.seo_description || 'Информация об опла
         <div class="payment-highlight-body">
           <p class="payment-highlight-title">Вопросы по оплате?</p>
           <p class="payment-highlight-text">
-            Свяжитесь с нами:
-            <a href="tel:+78126465450">+7 (812) 646-54-50</a> или
+            Свяжитесь с нами:{' '}
+            <a href="tel:+78126465450">+7 (812) 646-54-50</a>{' '}или{' '}
             <a href="mailto:info@ikpk.su">info@ikpk.su</a>
           </p>
           <p class="payment-highlight-hours">Пн–Пт, 10:00–18:00</p>
@@ -31,7 +31,7 @@ const description = page?.seo_description || 'Информация об опла
       </div>
 
       {page?.body_html ? (
-        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html)} />
+        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname)} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}
@@ -76,13 +76,20 @@ const description = page?.seo_description || 'Информация об опла
   }
 
   .payment-highlight-text a {
-    color: var(--color-accent-600);
+    /* accent-600 на светло-зелёном фоне плашки давал 4,25:1 — ниже порога 4,5.
+       Это правило перебивало общее по специфичности, поэтому цвет меняем здесь,
+       а не добавляем ещё одно правило поверх. */
+    color: var(--color-accent-700);
     font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .payment-highlight-hours {
     font-size: var(--font-s);
-    color: var(--color-gray-500);
+    /* На светло-зелёной плашке серый gray-500 даёт 4,23:1 при 14px — ниже
+       порога. Затемняем до значения, которое проходит с запасом (5,5:1). */
+    color: #5a615a;
   }
 
   .payment-content {

@@ -1,3 +1,16 @@
+/* ── Подъём при наведении ────────────────────────────────────────────────────
+ *
+ * Величина живёт в переменной, а не в каждом компоненте. Причина: под
+ * prefers-reduced-motion конечные transform раньше гасились хардкод-списком из
+ * пяти классов главной, и внутренние страницы в него не попали — карточки
+ * расписания, плейлистов и программ смещались даже при включённом сокращении
+ * движения. Со переменной достаточно обнулить её один раз, и правило
+ * распространяется на все компоненты, включая будущие. */
+:root {
+  --lift-y: -3px;
+  --lift-y-subtle: -1px;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Динамика и современная полировка (промоушен варианта D → шлифовка).
    Принципы:
@@ -14,24 +27,30 @@
   opacity: 0;
   transform: translateY(18px);
   transition:
-    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 0.6s var(--ease-out),
+    transform 0.6s var(--ease-out);
 }
 .has-motion [data-reveal].in {
   opacity: 1;
   transform: none;
 }
 
-/* ── Вход hero (стаггер) ────────────────────────────────────────────────── */
+/* ── Вход hero (стаггер) ──────────────────────────────────────────────────
+ *
+ * Первый экран анимируется ТОЛЬКО сдвигом, без прозрачности. Причина: элемент
+ * с opacity: 0 исключается из кандидатов LCP, то есть анимация задерживает
+ * метрику, по которой оценивают скорость страницы.
+ *
+ * Раньше правило для заголовка стояло исключением (`opacity: 1`) при общем
+ * `.hero-d-copy > * { opacity: 0 }` — и не работало: специфичность у обоих
+ * селекторов одинаковая, побеждал последний по порядку. То есть защита
+ * заголовка была декоративной. Плюс картинка героя гасилась совсем, а по
+ * площади (~152 000 px² против ~70 000 у H1) LCP-кандидат на десктопе —
+ * именно она. Поэтому прозрачность убрана из первого экрана целиком, а не
+ * заплатана исключениями. */
 .has-motion .hero-d-copy > * {
-  opacity: 0;
   transform: translateY(14px);
-  animation: hero-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-/* Заголовок — LCP: держим opacity:1, двигаем только по Y, чтобы не тормозить LCP */
-.has-motion .hero-d-title {
-  opacity: 1;
-  animation-name: hero-rise-solid;
+  animation: hero-rise-solid 0.6s var(--ease-out) both;
 }
 .has-motion .hero-d-badge {
   animation-delay: 0.05s;
@@ -49,9 +68,8 @@
   animation-delay: 0.4s;
 }
 .has-motion .hero-d-visual {
-  opacity: 0;
   transform: scale(0.97);
-  animation: hero-visual-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+  animation: hero-visual-in 0.7s var(--ease-out) 0.18s both;
 }
 @keyframes hero-rise {
   to {
@@ -69,7 +87,6 @@
 }
 @keyframes hero-visual-in {
   to {
-    opacity: 1;
     transform: none;
   }
 }
@@ -83,8 +100,8 @@
   /* hover-подъём + плавная смена темы одним объявлением — отдельное
      theme-переопределение shorthand'ом стирало бы transform/box-shadow. */
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
+    transform var(--dur-slow) ease,
+    box-shadow var(--dur-slow) ease,
     background-color 0.3s ease,
     border-color 0.3s ease;
 }
@@ -102,11 +119,11 @@
 /* ── Кнопки ─────────────────────────────────────────────────────────────── */
 .btn {
   transition:
-    transform 0.12s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+    transform var(--dur-fast) ease,
+    box-shadow var(--dur-base) ease,
+    background-color var(--dur-base) ease,
+    color var(--dur-base) ease,
+    border-color var(--dur-base) ease;
 }
 @media (hover: hover) {
   .btn-primary:hover,
@@ -124,7 +141,7 @@
    post-load layout shift). Только тень-«отрыв» + плавная смена темы фона. */
 .topnav {
   transition:
-    box-shadow 0.2s ease,
+    box-shadow var(--dur-slow) ease,
     background-color 0.3s ease;
 }
 .topnav[data-scrolled] {
@@ -145,6 +162,12 @@
 
 /* ── prefers-reduced-motion: гасим всякое движение ─────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+  /* структурно: обнуляем сам подъём, а не перечисляем классы */
+  :root {
+    --lift-y: 0px;
+    --lift-y-subtle: 0px;
+  }
+
   *,
   *::before,
   *::after {

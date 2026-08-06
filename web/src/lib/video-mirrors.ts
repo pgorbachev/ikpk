@@ -19,7 +19,9 @@ export interface VideoMirror {
   videoCountCapped: boolean;
 }
 
-export const VK_CHANNEL_URL = 'https://vkvideo.ru/@clubikpk';
+// Адрес vkvideo.ru/@clubikpk отдавал invalid user — вёл посетителей в никуда
+// прямо из CTA на страницах видео. Ведём в сообщество, где видео и лежат.
+export { VK_COMMUNITY_URL as VK_CHANNEL_URL } from './social.js';
 export const RUTUBE_CHANNEL_URL = 'https://rutube.ru/channel/30422569/';
 
 const MIRRORS: Record<string, VideoMirror> = {

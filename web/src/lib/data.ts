@@ -1,7 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
-export { cleanBodyHtml, stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
+export { stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
+import { cleanBodyHtml as cleanHtml } from './html-cleaner.js';
+
+let _panels: Record<string, Record<string, string>> | null = null;
+
+/**
+ * Контент свёрнутых секций, восстановленный с живого сайта отдельным проходом
+ * браузера (web/scripts/recover-collapsibles.mjs). Понадобился потому, что на
+ * ikpk.su аккордеоны сделаны на Radix Collapsible: закрытая панель не
+ * смонтирована в DOM, и обычный HTTP-скрейп забрал только заголовки — 401
+ * секция на 96 страницах, включая учебные планы программ и всю «Оплату».
+ */
+function panelsFor(path?: string): Record<string, string> | undefined {
+  if (!path) return undefined;
+  if (!_panels) _panels = loadJson<Record<string, Record<string, string>>>('collapsible_panels.json');
+  const key = path.replace(/\/+$/, '') || '/';
+  return _panels[key];
+}
+
+/**
+ * Чистит легаси-HTML для вывода. `path` — путь страницы: по нему
+ * подставляется восстановленный контент свёрнутых секций.
+ */
+export function cleanBodyHtml(html: string, path?: string): string {
+  return cleanHtml(html, { panels: panelsFor(path) });
+}
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
 
@@ -38,6 +63,8 @@ export interface CourseGroup {
   description_html: string;
   description_text: string;
   images: string[];
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Seminar {
@@ -51,9 +78,19 @@ export interface Seminar {
   description_html: string;
   description_text: string;
   images: string[];
-  status: string;
+  // Поля `status` здесь нет намеренно, хотя в данных оно есть. Это СНИМОК на
+  // момент импорта: `refresh-catalog.ts` считает его от календаря того дня, и со
+  // временем «planned» превращается в ложное «Набор открыт» у семинара, чьи
+  // даты прошли. Страница обязана считать актуальность от даты сборки — так уже
+  // делают расписание и страница семинара, отбирая записи расписания с будущей
+  // датой. Отсутствие поля в типе делает возврат дефекта ошибкой typecheck, а не
+  // тихой регрессией: ранее компонент `SeminarCard.astro` выводил по нему
+  // «Набор открыт», причём отрендерен он не был ни на одной странице — ревью
+  // правило подписи в мёртвом коде.
   hours?: number | string | null;
   certificate_type?: string | null;
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Teacher {
@@ -65,6 +102,8 @@ export interface Teacher {
   bio_html: string;
   bio_text: string;
   photo: string;
+  /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
+  order?: number;
 }
 
 export interface Article {
@@ -159,12 +198,29 @@ export function getInstitute(slug: string): Institute | undefined {
 }
 
 let _courseGroups: CourseGroup[] | null = null;
+/**
+ * Порядок следования, снятый с живого сайта (поле priority в его API).
+ *
+ * Без него сортировка выходила алфавитной, и это ломало не оформление, а
+ * педагогическую последовательность: на группе КСТ продвинутые ADV шли раньше
+ * обязательных SER, а флагманская «Прикладная кинезиология» на странице ИКПК
+ * оказывалась седьмой вместо первой.
+ *
+ * Записи без order (исчезли с живого, оставлены осознанно) уходят в конец.
+ */
+function byOrder<T extends { order?: number; name?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const d = (a.order ?? 9000) - (b.order ?? 9000);
+    return d !== 0 ? d : (a.name ?? '').localeCompare(b.name ?? '', 'ru');
+  });
+}
+
 export function getCourseGroups(instituteSlug?: string): CourseGroup[] {
   if (!_courseGroups) _courseGroups = loadJson<CourseGroup[]>('course_groups.json');
   if (instituteSlug) {
-    return _courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug);
+    return byOrder(_courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug));
   }
-  return _courseGroups;
+  return byOrder(_courseGroups);
 }
 
 export function getCourseGroup(slug: string): CourseGroup | undefined {
@@ -175,9 +231,9 @@ let _seminars: Seminar[] | null = null;
 export function getSeminars(courseGroupLegacyId?: string): Seminar[] {
   if (!_seminars) _seminars = loadJson<Seminar[]>('seminars.json');
   if (courseGroupLegacyId) {
-    return _seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId);
+    return byOrder(_seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId));
   }
-  return _seminars;
+  return byOrder(_seminars);
 }
 
 export function getSeminar(slug: string): Seminar | undefined {
@@ -188,9 +244,9 @@ let _teachers: Teacher[] | null = null;
 export function getTeachers(instituteSlug?: string): Teacher[] {
   if (!_teachers) _teachers = loadJson<Teacher[]>('teachers.json');
   if (instituteSlug) {
-    return _teachers.filter((t) => t.institute_legacy_id === instituteSlug);
+    return byOrder(_teachers.filter((t) => t.institute_legacy_id === instituteSlug));
   }
-  return _teachers;
+  return byOrder(_teachers);
 }
 
 export function getTeacher(slug: string): Teacher | undefined {

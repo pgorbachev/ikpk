@@ -1,4 +1,5 @@
 ---
+import { srcsetFor } from '../../lib/media';
 interface Props {
   href: string;
   name: string;
@@ -12,7 +13,15 @@ const { href, name, photo = '', excerpt = '' } = Astro.props as Props;
 <a href={href} class="teacher-card" data-testid="institute-teacher-card">
   {photo && (
     <div class="teacher-card-photo">
-      <img src={photo} alt={name} loading="lazy" width="280" height="240" />
+      <img
+        src={photo}
+        srcset={srcsetFor(photo)}
+        sizes="(max-width: 640px) 50vw, 280px"
+        alt={name}
+        loading="lazy"
+        width="280"
+        height="240"
+      />
     </div>
   )}
   <div class="teacher-card-body">
@@ -38,7 +47,7 @@ const { href, name, photo = '', excerpt = '' } = Astro.props as Props;
 
   .teacher-card:hover {
     text-decoration: none;
-    transform: translateY(-1px);
+    transform: translateY(var(--lift-y-subtle));
     border-color: #cdcdc7;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   }
