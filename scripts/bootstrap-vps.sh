@@ -47,6 +47,16 @@ server {
   root ${WEB_ROOT}/current;
   index index.html;
 
+  # Правила перенаправления со старых адресов: генерируются из карты адресов
+  # (npm run redirects:gen) и загружаются деплоем в shared/. Без этого include
+  # 265 правил существовали только в репозитории — на сервере старые адреса
+  # отдавали 404, а проверить 301 на стенде было нечем.
+  #
+  # Файл создаётся пустым ниже, до `nginx -t`: include одного отсутствующего
+  # файла — ошибка конфигурации, а пустой include законен и значит «правил пока
+  # нет».
+  include ${WEB_ROOT}/shared/nginx-redirects.conf;
+
   location / {
     # Порядок здесь несущий. Сайт адресует страницы БЕЗ завершающего слэша
     # (ikpk.su/kontakty — как старый сайт, и так же в canonical и в карте
@@ -60,6 +70,8 @@ server {
   error_page 404 /404.html;
 }
 NGINX
+
+touch "${WEB_ROOT}/shared/nginx-redirects.conf"
 
 ln -sfn "/etc/nginx/sites-available/${SITE_NAME}.conf" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
 rm -f /etc/nginx/sites-enabled/default

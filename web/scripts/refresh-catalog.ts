@@ -375,6 +375,15 @@ function keepVanished<T extends { slug: string; order?: number }>(
 
 console.log('\nисчезнувшее с живого:');
 const seminarsOut = keepVanished(oldSeminars as never[], nextSeminars as never[], 'семинары');
+// Группы курсов защищаются так же, как семинары и преподаватели. Прежде
+// `course_groups.json` писался прямо из ответа API: неполный, но успешный ответ
+// удалял страницы групп вместе со всеми маршрутами `[institute]/[courseGroup]/**`,
+// то есть уносил куски сайта из индекса — при коде выхода 0.
+const groupsOut = keepVanished(
+  JSON.parse(readFileSync(join(ENTITIES, 'course_groups.json'), 'utf-8')) as never[],
+  nextGroups as never[],
+  'группы курсов',
+);
 const teachersOut = keepVanished(
   JSON.parse(readFileSync(join(ENTITIES, 'teachers.json'), 'utf-8')),
   nextTeachers as never[],
@@ -390,6 +399,44 @@ if (dryRun) {
   process.exit(0);
 }
 
+/**
+ * Обновление, похожее на потерю, НЕ записывается.
+ *
+ * Прежде расхождения только печатались, и скрипт завершался нулём: пустой или
+ * усечённый успешный ответ API затирал данные, а узнавали об этом по пропавшим
+ * страницам. Логи в этом случае не помогают — их читают, когда уже поздно.
+ *
+ * Порог: сущностей стало меньше более чем на четверть, либо у семинаров заметно
+ * усох контент. Обойти можно осознанно — `--allow-loss`, когда потеря настоящая
+ * (заказчик снял курс с программы), и тогда решение видно в истории команды, а не
+ * прячется в молчаливом умолчании.
+ */
+const allowLoss = process.argv.includes('--allow-loss');
+const shrink = (before: number, after: number): boolean => before > 0 && after < before * 0.75;
+const blockers: string[] = [];
+if (shrink(oldSeminars.length, nextSeminars.length)) {
+  blockers.push(`семинары: было ${oldSeminars.length}, стало ${nextSeminars.length}`);
+}
+if (shrink(oldGroups.length, nextGroups.length)) {
+  blockers.push(`группы курсов: было ${oldGroups.length}, стало ${nextGroups.length}`);
+}
+if (lostContent.length > 0) {
+  blockers.push(`семинаров с усохшим контентом: ${lostContent.length}`);
+}
+if (blockers.length && !allowLoss) {
+  console.error('\nобновление похоже на потерю данных, файлы НЕ записаны:');
+  for (const b of blockers) console.error(`  ${b}`);
+  console.error(
+    '\nЕсли потеря настоящая — повторите с --allow-loss.' +
+      '\nЕсли нет — проверьте ответ API: успешный код не значит полный ответ.',
+  );
+  process.exit(1);
+}
+if (blockers.length) {
+  console.log('\n--allow-loss: потеря принята осознанно:');
+  for (const b of blockers) console.log(`  ${b}`);
+}
+
 function save(file: string, data: unknown): void {
   const target = join(ENTITIES, file);
   const tmp = `${target}.tmp`;
@@ -400,7 +447,7 @@ function save(file: string, data: unknown): void {
 
 console.log('\nсохраняю:');
 save('seminars.json', seminarsOut);
-save('course_groups.json', nextGroups);
+save('course_groups.json', groupsOut);
 save('teachers.json', teachersOut);
 console.log(
   '\nданные записаны. Медиа новых картинок НЕ скачано этим шагом — используйте' +

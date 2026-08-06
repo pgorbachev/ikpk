@@ -13,6 +13,7 @@ import {
   stripLegacySeminarTail,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
+import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -40,13 +41,12 @@ const { seminar, courseGroup, institute } = Astro.props as {
   institute: Institute;
 };
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+// Актуальность считается по ПОСЛЕДНЕМУ дню события, а не по первому: из 63
+// записей расписания 60 многодневные, и фильтр по startAt убирал бы идущий
+// семинар со страницы уже на второй день обучения.
+const today = calendarToday();
 const schedule = getScheduleEntries().filter(
-  (e) =>
-    e.seminar?.slug === seminar.slug &&
-    e.status === 'active' &&
-    new Date(e.startAt).getTime() >= today.getTime()
+  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
 );
 const sortedSchedule = [...schedule].sort(
   (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()

@@ -49,16 +49,37 @@ SSH_KEY=~/.ssh/custom_key bash scripts/bootstrap-vps.sh 146.103.124.113
 3. переключает symlink `current`,
 4. перезагружает Nginx.
 
+**Режим форм задаётся явно, умолчания нет.** Причина: обе ошибки молча дорогие —
+боевой сайт с заглушкой теряет заявки клиентов, а стенд в боевом режиме пишет
+тестовые обращения в CRM заказчика.
+
 ```bash
 cd /Users/pgorbachev/projects/private/ikpk
-bash scripts/deploy-web.sh 146.103.124.113
+
+# стенд: формы ведут на локальную заглушку /demo-zayavka
+DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
+
+# боевой сайт: формы ведут в CRM заказчика
+DEPLOY_MODE=prod ./scripts/deploy-web.sh <ip>
+
+# стенд со своим тестовым порталом Bitrix24 вместо заглушки
+DEPLOY_MODE=stand DEMO_FORMS=b24-test123.bitrix24site.ru ./scripts/deploy-web.sh <ip>
+```
+
+Деплой загружает `deploy/nginx-redirects.conf` в `shared/` — vhost подключает файл
+по постоянному пути. После деплоя проверить, что перенаправления действуют, иначе о
+них узнают только при переключении DNS:
+
+```bash
+curl -o /dev/null -sw '%{http_code} %{redirect_url}\n' http://<ip>/kontakty/
+curl -o /dev/null -sw '%{http_code} %{redirect_url}\n' http://<ip>/contacts
 ```
 
 Опциональные переменные:
 
 ```bash
-KEEP_RELEASES=10 bash scripts/deploy-web.sh 146.103.124.113
-SSH_USER=root SSH_KEY=~/.ssh/id_ed25519_vdsina_root bash scripts/deploy-web.sh 146.103.124.113
+KEEP_RELEASES=10 DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
+SSH_KEY=~/.ssh/id_ed25519_ikpk_vps DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
 ```
 
 ## 4. Что важно

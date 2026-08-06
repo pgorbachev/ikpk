@@ -129,6 +129,17 @@ const lines = [
     .map(([from, to]) => `location = ${from} { return 301 ${to}; }`),
 ];
 
+// Конфликт в карте — ошибка данных, а не примечание к выводу. Прежде генератор
+// выбирал первую цель, писал конфиг и печатал конфликты уже ПОСЛЕ записи с кодом
+// выхода 0: неверная карта уезжала в production молча. Проверяем до записи, чтобы
+// на диске не остался конфиг, собранный по произвольному выбору.
+if (conflicts.length) {
+  console.error(`КОНФЛИКТЫ (один адрес, разные цели) — ${conflicts.length}:`);
+  for (const c of conflicts) console.error(`  ${c}`);
+  console.error('\nКонфиг НЕ записан: карту адресов нужно исправить.');
+  process.exit(1);
+}
+
 mkdirSync(dirname(OUT), { recursive: true });
 const tmp = `${OUT}.tmp`;
 writeFileSync(tmp, `${lines.join('\n')}\n`, 'utf-8');
@@ -142,8 +153,4 @@ if (withQuery.length) {
   );
 }
 console.log(`уникальных адресов: ${seen.size}`);
-if (conflicts.length) {
-  console.log(`\nКОНФЛИКТЫ (один адрес, разные цели) — ${conflicts.length}:`);
-  for (const c of conflicts.slice(0, 10)) console.log(`  ${c}`);
-}
 console.log(`\nзаписан ${OUT.replace(ROOT, '.')}`);

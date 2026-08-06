@@ -23,12 +23,25 @@
  */
 
 import { chromium } from 'playwright';
-import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const TARGETS = resolve(ROOT, 'scratch-empty.json');
+/**
+ * Список адресов для обхода. Путь задаётся аргументом `--targets=<файл>`; по
+ * умолчанию — `discovery/collapsible_targets.json`, который лежит в репозитории.
+ *
+ * Прежде путь был жёстко задан как `scratch-empty.json` — черновой файл, которого
+ * в репозитории нет: из чистого checkout скрипт падал на чтении, то есть
+ * восстановление 401 секции было невоспроизводимо, а сами секции существовали
+ * только в чьём-то рабочем дереве.
+ */
+const targetsArg = process.argv.find((a) => a.startsWith('--targets='));
+const TARGETS = resolve(
+  ROOT,
+  targetsArg ? targetsArg.slice('--targets='.length) : 'discovery/collapsible_targets.json',
+);
 const OUT = resolve(ROOT, 'discovery/entities/collapsible_panels.json');
 const ORIGIN = 'https://ikpk.su';
 
@@ -51,7 +64,16 @@ const force = args.includes('--force');
 const limit = flag('limit', Infinity);
 const concurrency = flag('concurrency', 4);
 
+if (!existsSync(TARGETS)) {
+  console.error(`нет файла со списком адресов: ${TARGETS}`);
+  console.error('Укажите свой: --targets=<путь к json со списком путей>');
+  process.exit(1);
+}
 const targets = JSON.parse(readFileSync(TARGETS, 'utf-8'));
+if (!Array.isArray(targets) || targets.length === 0) {
+  console.error(`список адресов пуст: ${TARGETS} — обходить нечего`);
+  process.exit(1);
+}
 const collected = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf-8')) : {};
 
 const paths = Object.keys(targets)
@@ -154,7 +176,14 @@ async function worker(queue) {
 
         const panels = await extract(page);
         const found = Object.keys(panels).length;
-        if (found === 0) empty++;
+        // Ноль панелей — это НЕ успех. Прежде такой результат сохранялся и на
+        // следующем прогоне страница пропускалась как уже обработанная: пустая
+        // выдача навсегда закреплялась вместо содержимого. Считаем попыткой и
+        // повторяем, а по итогам обхода завершаемся ненулевым кодом.
+        if (found === 0) {
+          empty++;
+          throw new Error('ни одной панели не найдено (страница не сохранена)');
+        }
 
         collected[path] = panels;
         save();
@@ -191,4 +220,12 @@ if (empty) console.log(`страниц, где не нашлось ни одно
 if (failures.length) {
   console.log(`не удалось (${failures.length}):`);
   for (const f of failures) console.log(`  ${f.path}: ${f.error}`);
+}
+// Незакрытые страницы и нулевые выдачи — результат «не выполнено», а не «дефектов
+// нет»: с кодом 0 вызывающий продолжал бы работу на неполных данных.
+if (failures.length || sections === 0) {
+  console.error(
+    `\nвосстановление не завершено: страниц с ошибкой ${failures.length}, секций собрано ${sections}`,
+  );
+  process.exit(1);
 }
