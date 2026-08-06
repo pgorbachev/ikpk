@@ -114,58 +114,59 @@ echo "[deploy] Uploading nginx redirects ($(grep -c '^location' "$REDIRECTS_SRC"
 #
 # Смотрим на то, что реально уедет на сервер, и требуем непустой результат: ноль
 # найденных ссылок на формы — это «проверить не удалось», а не «всё верно».
-PROD_FORM_HOST='b24-cbqwqo.bitrix24site.ru'
-
-# Коды возврата grep разбираются явно: 0 — нашёл, 1 — не нашёл, 2+ — ошибка чтения.
-# Без этого `x=$(grep … | wc -l)` под `set -euo pipefail` роняет скрипт молча, когда
-# совпадений законно ноль — на первом же деплое стенда так и вышло: `prod_pages`
-# равен нулю по замыслу, а скрипт упал до вывода собственной проверки. Смешивать «не
-# нашёл» с «не смог прочитать» тоже нельзя: второе означает, что проверка не
-# выполнена.
-count_pages() {
-  local pattern="$1" list rc
-  set +e
-  list=$(grep -rl -- "$pattern" "$DIST_DIR" 2>/dev/null)
-  rc=$?
-  set -e
-  case "$rc" in
-    0) printf '%s\n' "$list" | grep -c . ;;
-    1) echo 0 ;;
-    *) echo "grep не смог прочитать $DIST_DIR (код $rc) — проверка артефакта не выполнена" >&2
-       exit 1 ;;
-  esac
-}
-
-stub_pages=$(count_pages '/demo-zayavka')
-prod_pages=$(count_pages "$PROD_FORM_HOST")
-echo "[deploy] Проверка артефакта: страниц с заглушкой ${stub_pages}, с боевым хостом ${prod_pages}"
-
+# Проверяется ВЕСЬ набор ссылок на формы, а не наличие хотя бы одного файла.
+#
+# Первая редакция считала файлы с `/demo-zayavka` и с боевым хостом: этого мало —
+# заглушку в набор могла внести сама служебная страница, а прод-проверке хватало
+# одного совпадения, и остальные формы могли вести куда угодно. Кастомный
+# `DEMO_FORMS=<host>` не сверялся вовсе.
+#
+# Признак ссылки на форму: `crm_form` (формы Bitrix24, в том числе на своём портале)
+# либо путь заглушки. Коды grep разбираются явно — 0 нашёл, 1 не нашёл, 2+ ошибка.
+# Порталов Bitrix24 у заказчика НЕСКОЛЬКО: в данных встречаются b24-cbqwqo и
+# b24-kbo5ls (проверка это и обнаружила — привязка к одному хосту отвергала
+# законную боевую сборку). Поэтому в прод-режиме признак общий: адрес формы на
+# портале Bitrix24, а не конкретный поддомен. Заглушка при этом запрещена, и чужой
+# домен тоже не пройдёт.
 case "$DEPLOY_MODE" in
+  prod) EXPECT_RE='^https://b24-[a-z0-9]+\.bitrix24site\.ru/crm_form_' ; EXPECT_HUMAN='https://b24-*.bitrix24site.ru/crm_form_*' ;;
   stand)
-    if (( stub_pages == 0 )); then
-      echo "Собран НЕ стенд: ссылок на /demo-zayavka в сборке нет. Загрузка отменена." >&2
-      echo "Проверьте web/.env и переменные окружения: DEMO_FORMS должен быть задан." >&2
-      exit 1
-    fi
-    if (( prod_pages > 0 )); then
-      echo "В сборке стенда ${prod_pages} страниц с боевым хостом форм ${PROD_FORM_HOST}." >&2
-      echo "Заявки со стенда уйдут в CRM заказчика. Загрузка отменена." >&2
-      exit 1
-    fi
-    ;;
-  prod)
-    if (( prod_pages == 0 )); then
-      echo "Собран НЕ боевой сайт: ссылок на ${PROD_FORM_HOST} в сборке нет." >&2
-      echo "Заявки клиентов уходили бы в никуда. Загрузка отменена." >&2
-      exit 1
-    fi
-    if (( stub_pages > 0 )); then
-      echo "В боевой сборке ${stub_pages} страниц ведут на заглушку /demo-zayavka." >&2
-      echo "Заявки клиентов терялись бы молча. Загрузка отменена." >&2
-      exit 1
+    if [[ "$DEMO_FORMS" == "stub" ]]; then
+      EXPECT_RE='^(/demo-zayavka|https://[^/]+/demo-zayavka)$'
+      EXPECT_HUMAN='/demo-zayavka'
+    else
+      EXPECT_RE="^https://${DEMO_FORMS}/crm_form_"
+      EXPECT_HUMAN="https://${DEMO_FORMS}/crm_form_*"
     fi
     ;;
 esac
+
+set +e
+form_links=$(grep -roh 'href="[^"]*\(crm_form\|demo-zayavka\)[^"]*"' "$DIST_DIR" --include='*.html' 2>/dev/null \
+  | sed 's/^href="//; s/"$//' | sort -u)
+grep_rc=$?
+set -e
+if (( grep_rc > 1 )); then
+  echo "не удалось прочитать $DIST_DIR (grep код $grep_rc) — проверка форм не выполнена" >&2
+  exit 1
+fi
+
+form_count=$(printf '%s\n' "$form_links" | grep -c . || true)
+if (( form_count == 0 )); then
+  echo "В сборке нет ни одной ссылки на форму заявки — проверять нечего, загрузка отменена." >&2
+  echo "Ожидался набор вида ${EXPECT_HUMAN}." >&2
+  exit 1
+fi
+
+wrong=$(printf '%s\n' "$form_links" | grep -vE "$EXPECT_RE" || true)
+if [[ -n "$wrong" ]]; then
+  echo "Ссылки форм не соответствуют режиму ${DEPLOY_MODE} (ожидалось ${EXPECT_HUMAN}):" >&2
+  printf '%s\n' "$wrong" | head -5 >&2
+  echo "Загрузка отменена: в режиме stand это увело бы заявки в CRM заказчика," >&2
+  echo "в режиме prod — потеряло бы обращения клиентов." >&2
+  exit 1
+fi
+echo "[deploy] Проверка форм: ${form_count} различных адресов, все соответствуют ${EXPECT_HUMAN}"
 
 # ── Preflight: активный vhost обязан подключать файл редиректов.
 #
