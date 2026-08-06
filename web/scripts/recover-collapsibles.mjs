@@ -76,6 +76,13 @@ if ((Array.isArray(targets) ? targets.length : Object.keys(targets).length) === 
 }
 const collected = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf-8')) : {};
 
+// В отчёте печатается только найденное число секций: ожидаемого в списке нет.
+// Прежний знаменатель `targets[path].length` брался из чернового объекта
+// `{путь: [заголовки]}`; на массиве путей `targets['/adres']` — undefined, и
+// `.length` бросал TypeError. Строка стоит ПОСЛЕ `ok = true`, поэтому исключение
+// попадало во внешний catch и глоталось: страница считалась обработанной, а отчёта
+// по ней не было.
+//
 // Список адресов — массив путей. `Object.keys` на массиве даёт индексы
 // ('0','1',…), и первая редакция этой правки именно так и ходила бы — за
 // `https://ikpk.su/0`. Прежний черновой файл был объектом `{путь: [...]}`, поэтому
@@ -198,7 +205,7 @@ async function worker(queue) {
         ok = true;
         done++;
         console.log(
-          `[${done}/${paths.length}] ${path} — секций: ${found}/${targets[path].length}`,
+          `[${done}/${paths.length}] ${path} — секций: ${found}`,
         );
       } catch (err) {
         if (attempt === 3) {

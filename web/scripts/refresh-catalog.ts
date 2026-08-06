@@ -272,7 +272,12 @@ const nextSeminars = seminars.map((s) => {
   // считаются отдельно и блокируют запись ниже.
   const previousGroup = oldBySlug.get(s.slug)?.course_group_legacy_id ?? null;
   const group = groupPath(program) ?? previousGroup;
-  if (!groupPath(program) && previousGroup) brokenLinks.push(`${s.slug} → ${previousGroup}`);
+  // Считаем ЛЮБУЮ запись без итоговой группы, а не только ту, у которой связь была
+  // раньше. Первая редакция проверяла `previousGroup`, поэтому НОВЫЙ семинар без
+  // программы сохранялся с `course_group_legacy_id: null` — то есть с адресом
+  // `/<slug>` вместо `/<группа>/<slug>` и без маршрута в сборке.
+  if (!group) brokenLinks.push(`${s.slug} → группы нет ни в ответе API, ни в прежних данных`);
+  else if (!groupPath(program)) brokenLinks.push(`${s.slug} → связь взята из прежних данных: ${previousGroup}`);
 
   return {
   legacy_id: group ? `${group}/${s.slug}` : s.slug,
