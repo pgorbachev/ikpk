@@ -10,8 +10,6 @@ import { scheduleSupplements } from '../lib/schedule-supplements';
 const page = getPage('raspisanie-i-tseny');
 const institutes = getInstitutes();
 const teachers = getTeachers();
-const today = new Date();
-today.setHours(0, 0, 0, 0);
 
 const title = page?.seo_title || 'Расписание и цены — ИКПК';
 const description = page?.seo_description || 'Расписание семинаров и цены на обучение в ИКПК.';

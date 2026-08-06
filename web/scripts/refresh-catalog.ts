@@ -230,8 +230,13 @@ const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'ut
   images?: string[];
   seo_title?: string;
   seo_description?: string;
+  /** Прежняя связь с группой: страховка от неполного ответа API программ. */
+  course_group_legacy_id?: string | null;
 }>;
 const oldBySlug = new Map(oldSeminars.map((s) => [s.slug, s]));
+const oldTeachers = JSON.parse(readFileSync(join(ENTITIES, 'teachers.json'), 'utf-8')) as Array<{
+  slug: string;
+}>;
 let contentFromApi = 0;
 
 /**
@@ -245,6 +250,10 @@ function isApiGenerated(html: string): boolean {
   return Object.values(SECTION_TITLES).some((h) => trimmed.startsWith(`<h2>${h}</h2>`));
 }
 
+// Семинары, у которых ответ API не дал группу, а прежние данные её знали: связь
+// восстановлена из прежних данных, но это сигнал неполного ответа.
+const brokenLinks: string[] = [];
+
 const nextSeminars = seminars.map((s) => {
   const prev = oldBySlug.get(s.slug);
   const prevHtml = prev?.description_html?.trim() ?? '';
@@ -254,7 +263,16 @@ const nextSeminars = seminars.map((s) => {
   if (!reuse) contentFromApi += 1;
 
   const program = programById.get(s.program?.id ?? 0);
-  const group = groupPath(program);
+  // Связь с группой берётся из ответа API, а при её отсутствии — из прежних данных.
+  // Иначе неполный ответ API программ менял бы у существующего семинара
+  // `course_group_legacy_id` на null, а вместе с ним `legacy_id` и `legacy_url` —
+  // то есть АДРЕС страницы, и статический маршрут исчезал бы из сборки. Потеря
+  // одной программы из 26 меньше любого разумного порога по объёму, поэтому
+  // блокировка по объёму этот случай не ловит принципиально; разрывы связей
+  // считаются отдельно и блокируют запись ниже.
+  const previousGroup = oldBySlug.get(s.slug)?.course_group_legacy_id ?? null;
+  const group = groupPath(program) ?? previousGroup;
+  if (!groupPath(program) && previousGroup) brokenLinks.push(`${s.slug} → ${previousGroup}`);
 
   return {
   legacy_id: group ? `${group}/${s.slug}` : s.slug,
@@ -422,6 +440,19 @@ if (shrink(oldGroups.length, nextGroups.length)) {
 }
 if (lostContent.length > 0) {
   blockers.push(`семинаров с усохшим контентом: ${lostContent.length}`);
+}
+// Разрыв связи — порог 1: потеря даже одной программы уносит маршруты её
+// семинаров, а по объёму это меньше любого разумного порога.
+if (brokenLinks.length > 0) {
+  blockers.push(
+    `семинаров, чью группу ответ API не дал: ${brokenLinks.length}` +
+      ` → ${brokenLinks.slice(0, 5).join(', ')}`,
+  );
+}
+// Преподаватели проверяются на объём наравне с остальными: прежде они выпадали из
+// blockers, хотя `keepVanished` защищает все три сущности одинаково.
+if (shrink(oldTeachers.length, nextTeachers.length)) {
+  blockers.push(`преподаватели: было ${oldTeachers.length}, стало ${nextTeachers.length}`);
 }
 if (blockers.length && !allowLoss) {
   console.error('\nобновление похоже на потерю данных, файлы НЕ записаны:');

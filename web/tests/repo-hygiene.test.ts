@@ -64,25 +64,42 @@ describe('гигиена репозитория', () => {
     ).toEqual([]);
   });
 
-  // Режим форм не должен иметь умолчания: прежде скрипт по умолчанию ставил
-  // DEMO_FORMS=stub, а runbook звал его без переопределения — оператор развернул бы
-  // боевой сайт, где заявки уходят на заглушку, и узнал бы об этом от клиентов.
-  it('деплой требует явный режим форм и не подставляет умолчание', () => {
-    const deploy = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8');
-    expect(
-      /DEMO_FORMS="\$\{DEMO_FORMS-/.test(deploy),
-      'у DEMO_FORMS снова появилось умолчание на уровне скрипта',
-    ).toBe(false);
-    expect(
-      /DEPLOY_MODE/.test(deploy) && /exit 2/.test(deploy),
-      'скрипт не требует явный DEPLOY_MODE с отказом',
-    ).toBe(true);
+  // Режим форм: проверяется ПОВЕДЕНИЕ скрипта, а не наличие строк в тексте.
+  //
+  // Первая редакция искала `DEPLOY_MODE` и `exit 2` где угодно в файле и была
+  // декоративной: замена всего блока обязательности на
+  // `DEPLOY_MODE="${DEPLOY_MODE:-stand}"` оставляла её зелёной, то есть умолчание
+  // возвращалось незамеченным (проверено ревью). Скрипт отказывает до сборки и до
+  // обращений к сети, поэтому его можно просто запустить.
+  it('деплой отказывается работать без явного режима форм', () => {
+    const run = (env: Record<string, string>): { status: number; out: string } => {
+      try {
+        const out = execFileSync('bash', [join(ROOT, 'scripts', 'deploy-web.sh'), '203.0.113.1'], {
+          cwd: ROOT,
+          encoding: 'utf-8',
+          env: { ...process.env, ...env },
+          stdio: 'pipe',
+        });
+        return { status: 0, out };
+      } catch (err) {
+        const e = err as { status?: number; stdout?: string; stderr?: string };
+        return { status: e.status ?? -1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+      }
+    };
 
+    const noMode = run({ DEPLOY_MODE: '', DEMO_FORMS: '' });
+    expect(noMode.status, `без DEPLOY_MODE скрипт не отказал:\n${noMode.out}`).toBe(2);
+    expect(noMode.out, 'отказ не называет допустимые режимы').toMatch(/stand/);
+
+    const both = run({ DEPLOY_MODE: 'prod', DEMO_FORMS: 'stub' });
+    expect(both.status, `prod + DEMO_FORMS не отвергнут:\n${both.out}`).toBe(2);
+
+    const wrong = run({ DEPLOY_MODE: 'staging-maybe', DEMO_FORMS: '' });
+    expect(wrong.status, `неизвестный режим принят:\n${wrong.out}`).toBe(2);
+
+    // Runbook обязан показывать режим: иначе оператор снова позовёт скрипт без него.
     const runbook = readFileSync(join(ROOT, 'docs', 'deploy-vps.md'), 'utf-8');
-    expect(
-      /DEPLOY_MODE=(stand|prod)/.test(runbook),
-      'runbook не показывает явный режим — оператор снова запустит скрипт без него',
-    ).toBe(true);
+    expect(/DEPLOY_MODE=(stand|prod)/.test(runbook), 'runbook не показывает явный режим').toBe(true);
   });
 
   // Файл редиректов должен попадать на сервер: генератор его создаёт, но пока
@@ -96,13 +113,28 @@ describe('гигиена репозитория', () => {
       existsSync(join(ROOT, 'deploy', 'nginx-redirects.conf')),
       'нет deploy/nginx-redirects.conf — запустите npm run redirects:gen',
     ).toBe(true);
+    // Смотрим на ИСПОЛНЯЕМЫЙ код, а не на любое упоминание имени файла: первая
+    // редакция искала подстроку по всему тексту, и удаление блока загрузки с
+    // оставленным комментарием её не роняло (проверено ревью).
+    const strip = (text: string): string =>
+      text
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('#'))
+        .join('\n');
+
     expect(
-      /include\s+\S*nginx-redirects\.conf/.test(bootstrap),
-      'bootstrap-vps.sh не подключает файл редиректов в vhost — правила на сервере не действуют',
+      /include\s+\S*nginx-redirects\.conf/.test(strip(bootstrap)),
+      'include файла редиректов закомментирован или отсутствует в vhost — правила на сервере не действуют',
+    ).toBe(true);
+    // Требуем именно передачу файла на сервер, а не упоминание его имени.
+    const deployCode = strip(deploy);
+    expect(
+      /nginx-redirects\.conf/.test(deployCode),
+      'deploy-web.sh не обращается к файлу редиректов',
     ).toBe(true);
     expect(
-      /nginx-redirects\.conf/.test(deploy),
-      'deploy-web.sh не загружает файл редиректов на сервер',
+      /shared\/nginx-redirects\.conf/.test(deployCode) && /\bcat\b/.test(deployCode),
+      'deploy-web.sh не загружает файл редиректов на сервер (блок передачи отсутствует)',
     ).toBe(true);
   });
 

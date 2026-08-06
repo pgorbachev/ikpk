@@ -22,7 +22,7 @@ chmod 600 /root/.ssh/authorized_keys
 Проверка входа по ключу:
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_vdsina_root -o BatchMode=yes root@146.103.124.113 "echo ok"
+ssh -i ~/.ssh/id_ed25519_vdsina_root -o BatchMode=yes root@<ip-сервера> "echo ok"
 ```
 
 ## 2. Первичная настройка сервера
@@ -31,15 +31,26 @@ ssh -i ~/.ssh/id_ed25519_vdsina_root -o BatchMode=yes root@146.103.124.113 "echo
 
 ```bash
 cd /Users/pgorbachev/projects/private/ikpk
-bash scripts/bootstrap-vps.sh 146.103.124.113
+bash scripts/bootstrap-vps.sh <ip-сервера>
 ```
 
 Опциональные переменные:
 
 ```bash
-DOMAIN=ikpk.su bash scripts/bootstrap-vps.sh 146.103.124.113
-SSH_KEY=~/.ssh/custom_key bash scripts/bootstrap-vps.sh 146.103.124.113
+DOMAIN=ikpk.su bash scripts/bootstrap-vps.sh <ip-сервера>
+SSH_KEY=~/.ssh/custom_key bash scripts/bootstrap-vps.sh <ip-сервера>
 ```
+
+Ключ, если его ещё нет:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_ikpk_vps -C ikpk-vps
+ssh-copy-id -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519_ikpk_vps.pub root@<ip-сервера>
+```
+
+Скрипты ходят с `BatchMode=yes` — пароль они запросить не могут, поэтому ключ нужен до
+первого запуска. Умолчания у скриптов **разные** (`bootstrap-vps.sh` — `id_ed25519_vdsina_root`,
+`deploy-web.sh` — `id_ed25519_ikpk_vps`), так что `SSH_KEY=` лучше передавать явно обоим.
 
 ## 3. Деплой сайта
 
@@ -57,7 +68,7 @@ SSH_KEY=~/.ssh/custom_key bash scripts/bootstrap-vps.sh 146.103.124.113
 cd /Users/pgorbachev/projects/private/ikpk
 
 # стенд: формы ведут на локальную заглушку /demo-zayavka
-DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
+DEPLOY_MODE=stand ./scripts/deploy-web.sh <ip-сервера>
 
 # боевой сайт: формы ведут в CRM заказчика
 DEPLOY_MODE=prod ./scripts/deploy-web.sh <ip>
@@ -78,8 +89,8 @@ curl -o /dev/null -sw '%{http_code} %{redirect_url}\n' http://<ip>/contacts
 Опциональные переменные:
 
 ```bash
-KEEP_RELEASES=10 DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
-SSH_KEY=~/.ssh/id_ed25519_ikpk_vps DEPLOY_MODE=stand ./scripts/deploy-web.sh 193.124.115.99
+KEEP_RELEASES=10 DEPLOY_MODE=stand ./scripts/deploy-web.sh <ip-сервера>
+SSH_KEY=~/.ssh/id_ed25519_ikpk_vps DEPLOY_MODE=stand ./scripts/deploy-web.sh <ip-сервера>
 ```
 
 ## 4. Что важно
