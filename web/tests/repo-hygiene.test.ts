@@ -147,18 +147,27 @@ describe('гигиена репозитория', () => {
       .filter((line) => !line.trimStart().startsWith('#'))
       .join('\n');
 
-    // Артефакт: обе стороны, и непустой результат — ноль найденных ссылок это
-    // «проверить не удалось», а не «всё верно».
-    expect(/stub_pages/.test(code) && /prod_pages/.test(code), 'артефакт не сверяется').toBe(true);
+    // Артефакт сверяется по ВСЕМУ набору адресов форм и против заказанного режима:
+    // подсчёт файлов этого не доказывал — заглушку могла внести сама служебная
+    // страница, а прод-проверке хватало одного совпадения.
     expect(
-      /stub_pages == 0/.test(code) && /prod_pages == 0/.test(code),
+      /form_links=/.test(code) && /EXPECT_RE/.test(code),
+      'набор адресов форм не извлекается и не сверяется с ожидаемым',
+    ).toBe(true);
+    expect(
+      /form_count == 0/.test(code),
       'вакуумный результат (ноль ссылок на формы) не считается провалом',
+    ).toBe(true);
+    // Режимы различаются: stub, кастомный host и прод — три разных ожидания.
+    expect(
+      /DEMO_FORMS" == "stub"/.test(code) && /bitrix24site/.test(code),
+      'режимы stub и кастомного портала не различаются',
     ).toBe(true);
 
     // Preflight по развёрнутой конфигурации, а не по загруженному файлу.
     expect(/nginx -T/.test(code), 'нет preflight по развёрнутой конфигурации nginx').toBe(true);
 
-    const posArtifact = code.indexOf('stub_pages=');
+    const posArtifact = code.indexOf('form_links=');
     const posPreflight = code.indexOf('nginx -T');
     const posSwitch = code.indexOf('Switching current symlink');
     expect(posArtifact, 'сверки артефакта нет').toBeGreaterThan(0);
