@@ -17,6 +17,7 @@
  */
 
 import { injectImgDimensions } from './media.js';
+import { registrationHref, isDemoForms } from './forms.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -288,7 +289,10 @@ function unwrapLayoutWrappers(html: string): string {
  *     [<div class="…collapsible_content…" data-state="open">CONTENT</div>]
  *   </div>
  */
-function transformCollapsibles(html: string): string {
+function transformCollapsibles(
+  html: string,
+  panels?: Record<string, string>,
+): string {
   // Match the outer wrapper: a div that has data-state and wraps a collapsible_trigger
   const stateRe = /<div([^>]*\bdata-state="(?:closed|open)"[^>]*)>/gi;
   let result = html;
@@ -336,9 +340,18 @@ function transformCollapsibles(html: string): string {
       }
     }
 
+    // Контент, восстановленный с живого сайта отдельным проходом браузера:
+    // Radix не монтирует закрытую панель, поэтому в HTTP-скрейпе её нет.
+    if (!content && panels) {
+      content = (panels[title] ?? '').trim();
+    }
+
+    // Заголовок, раскрывающийся в пустоту, хуже отсутствия заголовка: он
+    // обещает контент, которого нет. Часть секций на живом сайте и правда
+    // пустая — такие просто не выводим.
     const replacement = content
       ? `<details open><summary>${title}</summary>${content}</details>`
-      : `<details><summary>${title}</summary></details>`;
+      : '';
 
     result = result.slice(0, m.index) + replacement + result.slice(end);
     searchFrom = m.index + replacement.length;
@@ -516,6 +529,140 @@ export function relForExternalUrl(url: string): string[] | undefined {
   return undefined;
 }
 
+/**
+ * Демо-режим: ссылки на CRM-формы Bitrix24, вшитые в КОНТЕНТ (а не в поле
+ * registrationFormLink), тоже не должны писать в продакшен-CRM заказчика.
+ * В данных таких порталов два: b24-cbqwqo и b24-kbo5ls. В прод-сборке
+ * (DEMO_FORMS не задана) функция ничего не делает.
+ */
+function redirectFormLinksInDemo(html: string): string {
+  if (!isDemoForms || !html.includes('bitrix24site.ru')) return html;
+  return html.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+    const url = href?.[1] ?? href?.[2];
+    if (!url || !/bitrix24site\.ru/i.test(url)) return tag;
+    const replaced = registrationHref(url);
+    let out = tag.replace(url, replaced);
+    // на локальную заглушку не нужен новый таб
+    if (!/^https?:\/\//.test(replaced)) {
+      out = out.replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*')/i, '');
+    }
+    return out;
+  });
+}
+
+/**
+ * Легаси-контент приносит два визуальных дефекта, заметных глазом:
+ *
+ * 1. Нативная <button> без класса (например «Произвести оплату» на /oplata) —
+ *    серый браузерный контрол посреди страницы, к тому же МЁРТВЫЙ: на старом
+ *    сайте её обрабатывал React, у нас обработчика нет. Пока онлайн-оплата
+ *    (FR-08) не подключена, ведём пользователя туда, где сценарий работает —
+ *    в расписание, где есть запись через CRM-форму.
+ * 2. Аккордеоны, обёрнутые в <ul><li> — у карточек торчат маркеры списка.
+ *    Разворачиваем такие обёртки, чтобы маркеры не появлялись ни в одном
+ *    браузере (CSS :has() не покрыл бы старый Safari).
+ */
+function normalizeLegacyControls(html: string): string {
+  let out = html;
+
+  // 1. кнопки без класса → оформленная ссылка на расписание
+  out = out.replace(
+    /<button(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/button>/gi,
+    (_m, label) => `<a class="btn btn-primary" href="/raspisanie-i-tseny">${label}</a>`
+  );
+
+  // 2. <ul>/<li> вокруг аккордеонов — это не список, а layout-обёртка из
+  //    легаси-вёрстки: у крупных блоков торчат маркеры. Меняем теги на <div>,
+  //    а не разворачиваем: у <li> бывает id — цель анкорной ссылки
+  //    (/svedeniya-ob-obrazovatelnoy-organizatsii#3), её нельзя потерять.
+  //    Через CSS (:has) не решить — старый Safari его не поддерживает.
+  const accordionInside = /^(?:\s*<div[^>]*>)*\s*<details/i;
+  // Порядок важен: сначала внешний <ul>, потом <li>. Наоборот не работает —
+  // после замены <li> на <div> список перестаёт опознаваться как обёртка
+  // аккордеонов и остаётся невалидный <ul> с <div> внутри.
+  for (const tag of ['ul', 'li']) {
+    const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi');
+    let from = 0;
+    for (let guard = 0; guard < 10_000; guard++) {
+      openRe.lastIndex = from;
+      const m = openRe.exec(out);
+      if (!m) break;
+
+      const end = elementEnd(out, m.index, tag);
+      const inner = out.slice(m.index + m[0].length, end - `</${tag}>`.length);
+      // для <ul> достаточно, чтобы аккордеон был в любом из <li>
+      const hit = tag === 'li'
+        ? accordionInside.test(inner)
+        : /<li[^>]*>(?:\s*<div[^>]*>)*\s*<details/i.test(inner);
+      if (!hit) {
+        from = m.index + 1;
+        continue;
+      }
+
+      const attrs = m[1] ?? '';
+      out =
+        out.slice(0, m.index) +
+        `<div${attrs}>` + inner + '</div>' +
+        out.slice(end);
+      from = m.index + 1;
+    }
+  }
+
+  // Хост www.medshop.ikpk.su не отвечает вообще, а он стоял и в ссылке, и в
+  //    видимой подписи. Домен без www рабочий; какой домен магазина считать
+  //    актуальным (medshop.ikpk.su или kinezio.shop, как на старом сайте) —
+  //    вопрос к заказчику, поэтому здесь убираем только заведомо мёртвый www.
+  out = out.replaceAll('www.medshop.ikpk.su', 'medshop.ikpk.su');
+
+  // Широкая таблица на узком экране получает горизонтальную прокрутку, а
+  //    прокручиваемая область обязана быть достижима с клавиатуры — иначе часть
+  //    таблицы недоступна тем, кто не пользуется мышью (WCAG 2.1.1, axe:
+  //    scrollable-region-focusable). Обёртка даёт и прокрутку, и фокус, и
+  //    подпись для программ чтения с экрана.
+  out = out.replace(
+    /<table(?![^>]*\bdata-wrapped\b)/gi,
+    '<div class="table-scroll" tabindex="0" role="region" aria-label="Таблица">§TABLE§',
+  );
+  out = out.replace(/<\/table>/gi, '</table></div>');
+  out = out.replaceAll('§TABLE§', '<table data-wrapped');
+
+  // 0. Пустая обёртка списка — висячий маркер без текста. Остаётся, когда из
+  //    <li> убрали содержимое (например секцию без контента).
+  out = out.replace(/<li[^>]*>\s*<\/li>/gi, '');
+  out = out.replace(/<(ul|ol)[^>]*>\s*<\/\1>/gi, '');
+
+  // 3. Разворот обёрток иногда оставляет список внутри списка без <li>:
+  //    <ul><ul>…</ul></ul>. Это невалидно, а вложенный список ещё и получает
+  //    лишний отступ. Внешний уровень снимаем.
+  const openList = /<(ul|ol)(\s[^>]*)?>/gi;
+  let listFrom = 0;
+  for (let guard = 0; guard < 10_000; guard++) {
+    openList.lastIndex = listFrom;
+    const m = openList.exec(out);
+    if (!m) break;
+
+    const tag = m[1].toLowerCase();
+    const end = elementEnd(out, m.index, tag);
+    const inner = out.slice(m.index + m[0].length, end - `</${tag}>`.length);
+    const trimmed = inner.trim();
+
+    // внутри ровно один список и ничего больше
+    const nested = trimmed.match(/^<(ul|ol)(\s[^>]*)?>/i);
+    const wholeInner =
+      nested && elementEnd(trimmed, 0, nested[1]) === trimmed.length;
+    if (!wholeInner) {
+      listFrom = m.index + 1;
+      continue;
+    }
+
+    out = out.slice(0, m.index) + trimmed + out.slice(end);
+    listFrom = m.index;
+  }
+
+  return out;
+}
+
 function applyExternalLinkPolicy(html: string): string {
   if (!html.includes('<a ')) return html;
   return html.replace(/<a\b[^>]*>/gi, (tag) => {
@@ -534,7 +681,15 @@ function applyExternalLinkPolicy(html: string): string {
   });
 }
 
-export function cleanBodyHtml(html: string): string {
+export interface CleanOptions {
+  /**
+   * Контент свёрнутых секций, восстановленный с живого сайта
+   * (см. web/scripts/recover-collapsibles.mjs), в виде {заголовок: html}.
+   */
+  panels?: Record<string, string>;
+}
+
+export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
   if (!html) return html;
 
   let result = html;
@@ -546,13 +701,15 @@ export function cleanBodyHtml(html: string): string {
   result = removeResidualUiArtifacts(result);
   result = unwrapLayoutWrappers(result);
   result = unwrapInlineSpacerWrappers(result);
-  result = transformCollapsibles(result);
+  result = transformCollapsibles(result, opts.panels);
   result = cleanTypographyClasses(result);
   result = unwrapSeRoot(result);
   result = stripCssModuleClasses(result);
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
   result = applyExternalLinkPolicy(result);
+  result = normalizeLegacyControls(result);
+  result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
 
   return result;

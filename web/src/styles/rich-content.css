@@ -31,8 +31,17 @@
   margin: 1rem 0;
 }
 
-.rich-content a {
+/* Только «голые» ссылки внутри контента. С селектором `.rich-content a`
+   (специфичность 0,1,1) правило перебивало `.btn-primary` (0,1,0) и красило
+   текст кнопки в синий на зелёном фоне — контраст 1,08:1, надпись не читалась.
+   Ссылка со своим классом сама отвечает за свой цвет. */
+.rich-content a:not([class]) {
   color: var(--color-info-500);
+  /* Подчёркивание обязательно: внутри абзаца ссылка не должна отличаться от
+     текста ТОЛЬКО цветом — это требование WCAG 1.4.1, и axe его проверяет
+     (link-in-text-block). Заодно так привычнее в длинных текстах. */
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* Details / Collapsible sections */
@@ -93,10 +102,11 @@
 }
 
 @media (max-width: 768px) {
+  /* Прокрутку держит ОБЁРТКА .table-scroll: у неё есть tabindex, то есть доступ
+     с клавиатуры. Если прокручивать саму таблицу, она становится второй
+     прокручиваемой областью — уже без фокуса, и axe справедливо это ловит. */
   .rich-content table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    display: table;
   }
 }
 
@@ -116,4 +126,17 @@
   background: var(--color-light-300);
   font-weight: 600;
   color: var(--color-dark-700);
+}
+
+/* Обёртка таблицы: прокрутка по горизонтали вместо того, чтобы ломать страницу,
+   плюс видимый фокус — область достижима с клавиатуры (см. html-cleaner). */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll > table {
+  margin: 0;
 }

@@ -12,7 +12,11 @@ interface Props {
 }
 const { title, description, ogImage, noindex = false, schema, preloadHero = false } = Astro.props;
 
-const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+// Адреса старого сайта — без завершающего слэша. Astro по умолчанию отдаёт
+// pathname со слэшем (/kontakty/), и канонический адрес всех страниц разошёлся
+// бы с проиндексированными. Главная — единственное исключение.
+const canonicalPath = Astro.url.pathname.replace(/(.)\/+$/, '$1');
+const canonicalURL = new URL(canonicalPath, Astro.site);
 const siteName = 'ИКПК';
 ---
 

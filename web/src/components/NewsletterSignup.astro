@@ -1,10 +1,20 @@
 ---
+import { registrationHref } from '../lib/forms';
+
 interface Props {
   variant?: 'band' | 'card';
 }
 
 const { variant = 'band' } = Astro.props as Props;
 const isCard = variant === 'card';
+
+// На старом сайте «Подписаться» — обычная ссылка на форму Bitrix24, а не форма
+// на странице. У нас стояла заглушка: собирала имя, телефон и почту и никуда
+// их не отправляла, да ещё с чекбоксом согласия без ссылки на документ.
+// Форма, которая делает вид, что работает, хуже её отсутствия, поэтому
+// возвращаем буквальный паритет — ссылку. Через registrationHref, чтобы на
+// демо-стенде подписка не уходила в прод-CRM заказчика.
+const subscribeHref = registrationHref('https://b24-cbqwqo.bitrix24site.ru/news/');
 ---
 
 <section class:list={['newsletter-signup', isCard ? 'newsletter-signup--card' : 'newsletter-signup--band']} data-newsletter-variant={variant}>
@@ -17,50 +27,16 @@ const isCard = variant === 'card';
           : 'Чтобы не пропускать наши активности и акции'}
       </p>
 
-      {isCard ? (
-        <form class="newsletter-signup-form newsletter-signup-form--card" action="#" method="post" onsubmit="return false" data-newsletter-stub>
-          <input
-            type="text"
-            name="name"
-            placeholder="Ваше имя"
-            autocomplete="name"
-            class="newsletter-signup-input"
-          />
-          <input
-            type="tel"
-            name="phone"
-            placeholder="Ваш телефон"
-            autocomplete="tel"
-            class="newsletter-signup-input"
-          />
-          <input
-            type="email"
-            name="email"
-            placeholder="Ваша почта"
-            autocomplete="email"
-            inputmode="email"
-            required
-            class="newsletter-signup-input"
-          />
-          <label class="newsletter-signup-consent">
-            <input type="checkbox" name="consent" required />
-            <span>Я согласен с обработкой персональных данных и политикой конфиденциальности</span>
-          </label>
-          <button type="submit" class="newsletter-signup-button newsletter-signup-button--card">Подписаться</button>
-        </form>
-      ) : (
-        <form class="newsletter-signup-form newsletter-signup-form--band" action="#" method="post" onsubmit="return false" data-newsletter-stub>
-          <input
-            type="email"
-            name="email"
-            placeholder="Ваш email"
-            required
-            autocomplete="email"
-            class="newsletter-signup-input newsletter-signup-input--band"
-          />
-          <button type="submit" class="newsletter-signup-button newsletter-signup-button--band">Подписаться</button>
-        </form>
-      )}
+      <a
+        class:list={[
+          'newsletter-signup-button',
+          isCard ? 'newsletter-signup-button--card' : 'newsletter-signup-button--band',
+        ]}
+        href={subscribeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+      >Подписаться</a>
+
     </div>
   </div>
 </section>
@@ -69,6 +45,7 @@ const isCard = variant === 'card';
   .newsletter-signup {
     margin-top: 3rem;
   }
+
 
   .newsletter-signup--band {
     background: var(--color-accent-900);

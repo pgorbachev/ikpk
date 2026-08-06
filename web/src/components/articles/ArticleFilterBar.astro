@@ -60,11 +60,13 @@ const { query = '' } = Astro.props as Props;
     transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
   }
 
+  /* Раньше здесь стоял outline: none с «компенсацией» тенью в 8% чёрного —
+     фактически фокус был невидим, а в тёмной теме хардкод 18,18,18 совпадал с
+     фоном. Ринг рисует глобальное правило в base.css, здесь только подсветка
+     рамки поля. */
   .article-filter-search input:focus,
   .article-filter-bar select:focus {
-    outline: none;
-    border-color: var(--color-gray-400);
-    box-shadow: 0 0 0 2px rgba(18, 18, 18, 0.08);
+    border-color: var(--color-accent-500);
   }
 
   .article-filter-search input {

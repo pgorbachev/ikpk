@@ -21,7 +21,7 @@ const description = page?.seo_description || 'Сведения об образо
       </p>
 
       {page?.body_html ? (
-        <div class="svedeniya-content rich-content" set:html={cleanBodyHtml(page.body_html)} />
+        <div class="svedeniya-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname)} />
       ) : (
         <p class="text-muted">Информация будет добавлена позже.</p>
       )}

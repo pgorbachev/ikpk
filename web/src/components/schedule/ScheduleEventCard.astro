@@ -1,4 +1,7 @@
 ---
+import { srcsetFor } from '../../lib/media';
+import { isExternalFormHref } from '../../lib/forms';
+
 interface Props {
   title: string;
   titleHref: string;
@@ -45,6 +48,8 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
     {imageUrl ? (
       <img
         src={imageUrl}
+        srcset={srcsetFor(imageUrl)}
+        sizes="(max-width: 640px) 100vw, 420px"
         alt={imageAlt || `Изображение для события «${title}»`}
         loading="lazy"
         width="420"
@@ -101,7 +106,12 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
       <div class="schedule-card-actions">
         <a href={titleHref} class="btn btn-outline">Подробнее</a>
         {registrationHref && (
-          <a href={registrationHref} class="btn btn-primary" target="_blank" rel="noopener">
+          <a
+            href={registrationHref}
+            class="btn btn-primary"
+            target={isExternalFormHref(registrationHref) ? '_blank' : undefined}
+            rel={isExternalFormHref(registrationHref) ? 'noopener' : undefined}
+          >
             Зарегистрироваться
           </a>
         )}
@@ -126,7 +136,7 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
   .schedule-card:hover {
     border-color: #d1d1c8;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-    transform: translateY(-1px);
+    transform: translateY(var(--lift-y-subtle));
   }
 
   .schedule-card-media {
