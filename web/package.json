@@ -24,7 +24,16 @@
     "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
     "verify": "npm test && npm run test:build && npm run test:e2e:smoke && npm run test:e2e:compat",
-    "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached"
+    "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached",
+    "build:demo": "DEMO_FORMS=stub astro build && pagefind --site dist",
+    "prebuild": "tsx scripts/make-derivatives.ts",
+    "media:derivatives": "tsx scripts/make-derivatives.ts --force",
+    "prebuild:demo": "tsx scripts/make-derivatives.ts",
+    "data:refresh": "tsx scripts/refresh-catalog.ts && tsx ../scripts/download-media.ts && tsx scripts/make-derivatives.ts",
+    "redirects:gen": "tsx scripts/gen-redirects.ts",
+    "data:refresh:dry": "tsx scripts/refresh-catalog.ts --dry",
+    "test:e2e:visual": "playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile",
+    "test:e2e:visual:update": "playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
@@ -40,6 +49,8 @@
     "eslint-plugin-astro": "^1.3.1",
     "globals": "^16.4.0",
     "pagefind": "^1.5.2",
+    "sharp": "^0.35.3",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.1",
     "vitest": "^4.1.2"

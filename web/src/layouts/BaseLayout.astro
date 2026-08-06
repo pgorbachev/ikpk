@@ -15,6 +15,7 @@ import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
+import { isDemoForms } from '../lib/forms';
 import '../styles/global.css';
 
 const {
@@ -42,6 +43,11 @@ const {
     <MotionScript />
   </head>
   <body class="layout-topnav">
+    {isDemoForms && (
+      <div class="demo-banner" data-demo-banner>
+        Демо-стенд: формы заявки отключены, обращения в CRM не создаются
+      </div>
+    )}
     <TopNav />
     {/* data-pagefind-body: индексируется только контент — шапка/футер с
         одинаковыми ссылками на всех страницах размывали релевантность.
@@ -57,3 +63,15 @@ const {
     <Analytics />
   </body>
 </html>
+
+<style>
+  /* Баннер демо-стенда: только в сборке с DEMO_FORMS */
+  .demo-banner {
+    background: #8a5a00;
+    color: #fff;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+  }
+</style>

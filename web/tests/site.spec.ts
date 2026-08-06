@@ -19,10 +19,22 @@ test.describe('Homepage', () => {
     ).toBeGreaterThan(0);
   });
 
-  test('has newsletter subscription form', async ({ page }) => {
+  // Подписка — ссылка на форму Bitrix24, как на старом сайте, а не форма на
+  // странице: наша прежняя форма-заглушка собирала имя, телефон и почту и
+  // никуда их не отправляла.
+  test('newsletter block links to a working subscription form', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.newsletter-signup')).toBeVisible();
-    await expect(page.locator('.newsletter-signup input[type="email"]')).toBeVisible();
+
+    const cta = page.locator('.newsletter-signup a.newsletter-signup-button');
+    await expect(cta).toBeVisible();
+
+    const href = await cta.getAttribute('href');
+    // в demo-режиме ссылка ведёт на заглушку — в прод-CRM заказчика с демо-стенда
+    // подписки уходить не должны
+    expect(href).toMatch(/bitrix24site\.ru|\/demo-zayavka/);
+
+    await expect(page.locator('.newsletter-signup form')).toHaveCount(0);
   });
 
   test('has footer with correct phone', async ({ page }) => {
@@ -178,7 +190,7 @@ test.describe('Search', () => {
 // ─── Video facade (FR-04, RUTUBE embed) ──────────────────
 test.describe('Video', () => {
   test('playlist facade loads RUTUBE embed on click, accessibly', async ({ page }) => {
-    await page.goto('/video/33/');
+    await page.goto('/video/33');
 
     // до клика — 0 iframe (ленивая загрузка, не бьёт по perf)
     await expect(page.locator('.video-facade iframe')).toHaveCount(0);
@@ -201,11 +213,189 @@ test.describe('Video', () => {
 // ─── Contacts lazy map (FR-08) ───────────────────────────
 test.describe('Contacts map', () => {
   test('Yandex map is injected by JS (not eager) with the right src', async ({ page }) => {
-    await page.goto('/kontakty/');
+    await page.goto('/kontakty');
     await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
     // карта подставляется скриптом (IntersectionObserver), а не статикой
     const iframe = page.locator('.contact-shell-map iframe');
     await expect(iframe).toHaveCount(1);
     await expect(iframe).toHaveAttribute('src', /yandex\.ru\/map-widget/);
+  });
+});
+
+// ─── Верхнее меню: подсказка о подменю ───────────────────────────────────────
+// Регресс-тест к багу: шеврон (▾) был в разметке, но SVG без intrinsic-ширины
+// внутри flex-контейнера сжимался до width:0 — пользователь не видел, у каких
+// пунктов есть подменю, и поведение выглядело случайным. Ловится только реальным
+// браузером: build-гейты layout не считают.
+test.describe('Top navigation affordance', () => {
+  test('items with a dropdown show a visible chevron', async ({ page }) => {
+    await page.goto('/');
+
+    const menu = page.locator('.topnav-menu');
+    // на мобильной раскладке меню скрыто (там drawer) — проверять нечего
+    if (!(await menu.isVisible())) test.skip();
+
+    const withDropdown = page.locator('.topnav-menu > ul > li.has-dropdown');
+    const count = await withDropdown.count();
+    expect(count, 'в меню должны быть пункты с подменю').toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i += 1) {
+      const item = withDropdown.nth(i);
+      const label = (await item.locator('> a').innerText()).trim();
+      const chev = item.locator('.chev');
+      await expect(chev, `у «${label}» нет шеврона в разметке`).toHaveCount(1);
+      const box = await chev.boundingBox();
+      expect(box, `шеврон «${label}» не отрисован`).not.toBeNull();
+      expect(box!.width, `шеврон «${label}» имеет нулевую ширину`).toBeGreaterThan(4);
+      expect(box!.height, `шеврон «${label}» имеет нулевую высоту`).toBeGreaterThan(4);
+    }
+  });
+
+  test('hovering an item with a dropdown reveals its links', async ({ page }) => {
+    await page.goto('/');
+    const menu = page.locator('.topnav-menu');
+    if (!(await menu.isVisible())) test.skip();
+
+    const item = page.locator('.topnav-menu > ul > li.has-dropdown').first();
+    const dropdown = item.locator('.dropdown');
+    await expect(dropdown).not.toBeVisible();
+    await item.hover();
+    await expect(dropdown).toBeVisible();
+    expect(await dropdown.locator('a').count()).toBeGreaterThan(1);
+  });
+});
+
+// Кнопка, которую нельзя прочитать, хуже отсутствия кнопки. Здесь это выходило
+// из конфликта специфичности: `.rich-content a` (0,1,1) перебивает `.btn-primary`
+// (0,1,0), поэтому CTA внутри легаси-контента получал синий текст на зелёном
+// фоне — контраст ~1.08:1. Build-гейты такое не видят: разметка корректна,
+// классы на месте, дефект возникает только в вычисленных стилях.
+test.describe('Contrast of CTA inside rich content', () => {
+  const parse = (c: string) => c.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+  const lum = ([r, g, b]: number[]) => {
+    const f = (v: number) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+
+  test('CTA text is readable on its own background', async ({ page }) => {
+    await page.goto('/oplata');
+
+    const cta = page.locator('.rich-content a.btn').first();
+    await expect(cta).toBeVisible();
+
+    const { color, background } = await cta.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, background: s.backgroundColor };
+    });
+
+    const [l1, l2] = [lum(parse(color)), lum(parse(background))].sort((a, b) => b - a);
+    const ratio = (l1 + 0.05) / (l2 + 0.05);
+    expect(ratio, `контраст текста CTA ${color} на фоне ${background} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// В тёмной теме фон страницы и фон карточки брались из одного токена
+// (--color-light-100), поэтому поверхности не различались: карточка держалась
+// только на рамке. Это видно глазом, но не ловится ни разметочными гейтами,
+// ни axe (контраст текста при этом в норме).
+test.describe('Dark theme surfaces', () => {
+  test('card surface differs from page surface', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+
+    const { pageBg, cardBg } = await page.evaluate(() => {
+      const card = document.querySelector('.card, .institute-card, .segment-card')!;
+      return {
+        pageBg: getComputedStyle(document.body).backgroundColor,
+        cardBg: getComputedStyle(card).backgroundColor,
+      };
+    });
+
+    expect(cardBg, `фон карточки ${cardBg} совпадает с фоном страницы ${pageBg}`).not.toBe(pageBg);
+  });
+});
+
+// ─── Мобильное меню закрывается щелчком вне себя ─────────────────────────────
+// Дефект с телефона: меню открывается, щелчок рядом с ним его не закрывает.
+// Причина не в устройстве — drawer это нативный <details> без JS, а он по
+// щелчку вне себя не закрывается ни в одном браузере. Поэтому проверка нужна
+// и здесь (проект mobile), и в compat.spec.ts, где есть профиль iPhone 14.
+
+/**
+ * Точка, гарантированно ВНЕ открытого меню.
+ *
+ * Координаты наугад не годятся: панель меню — оверлей, и её охват зависит от
+ * вьюпорта. На профилях iPhone 14 и Android Chrome точка (10, верх main + 10)
+ * оказывалась ВНУТРИ панели (`elementFromPoint` → `topnav-drawer`), а на iPhone SE
+ * — вне неё. Тест тогда щёлкал внутрь меню и требовал закрытия, то есть проверял
+ * не то, что заявлено.
+ *
+ * Поэтому точка ищется перебором и проверяется через `elementFromPoint`. Если
+ * такой точки нет вовсе — это «проверить невозможно», а не «дефекта нет»:
+ * возвращаем null, и тест падает с явным сообщением.
+ */
+async function pointOutsideDrawer(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const drawer = document.querySelector('details.topnav-mobile');
+    if (!drawer) return null;
+    const step = 20;
+    // Точка обязана быть НЕинтерактивной. Иначе щелчок уводит на другую
+    // страницу, там <details> закрыт по умолчанию, и тест зеленеет не по той
+    // причине: без исправления он проходил именно так — проверено негативно.
+    const interactive = 'a, button, summary, input, select, textarea, label, [role="button"]';
+    for (let y = innerHeight - step; y > 0; y -= step) {
+      for (let x = step; x < innerWidth; x += step) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || drawer.contains(el)) continue;
+        if (el.closest(interactive)) continue;
+        return { x, y };
+      }
+    }
+    return null;
+  });
+}
+
+test.describe('Мобильное меню', () => {
+  test('щелчок вне меню закрывает его', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response?.status(), 'страница не отдалась — закрывать нечего').toBe(200);
+
+    const drawer = page.locator('details.topnav-mobile');
+    const summary = drawer.locator('> summary');
+    if (!(await summary.isVisible().catch(() => false))) {
+      test.skip(true, 'в этом вьюпорте мобильного меню нет по замыслу');
+    }
+
+    await summary.click();
+    await expect(drawer, 'меню не открылось — дальше проверять нечего').toHaveAttribute('open', '');
+
+    const outside = await pointOutsideDrawer(page);
+    expect(outside, 'не нашлось ни одной точки вне открытого меню — щёлкнуть вне него невозможно').not.toBeNull();
+    const urlBefore = page.url();
+    await page.mouse.click(outside!.x, outside!.y);
+    expect(page.url(), 'щелчок увёл на другую страницу — меню закрылось бы и без исправления').toBe(
+      urlBefore,
+    );
+    await expect(drawer, 'меню осталось открытым после щелчка вне него').not.toHaveAttribute(
+      'open',
+      '',
+    );
+  });
+
+  test('Escape закрывает меню', async ({ page }) => {
+    await page.goto('/');
+    const drawer = page.locator('details.topnav-mobile');
+    const summary = drawer.locator('> summary');
+    if (!(await summary.isVisible().catch(() => false))) {
+      test.skip(true, 'в этом вьюпорте мобильного меню нет по замыслу');
+    }
+
+    await summary.click();
+    await expect(drawer).toHaveAttribute('open', '');
+    await page.keyboard.press('Escape');
+    await expect(drawer, 'меню осталось открытым после Escape').not.toHaveAttribute('open', '');
   });
 });

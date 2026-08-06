@@ -129,7 +129,7 @@ function extractAdditionalHtml(rawHtml: string): string {
 
 const leadText = extractLeadText(courseGroup, seminars);
 const additionalHtml = extractAdditionalHtml(courseGroup.description_html || '');
-const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml) : '';
+const cleanedAdditionalHtml = additionalHtml ? cleanBodyHtml(additionalHtml, Astro.url.pathname) : '';
 
 const schema = {
   '@context': 'https://schema.org',
@@ -143,9 +143,17 @@ const schema = {
   },
   url: `https://ikpk.su/${institute.slug}/${courseGroup.slug}`,
 };
+
+// Те же отступления, что на странице семинара: у части групп курсов seo-полей
+// нет, а пустой <title> недопустим.
+const groupTitle =
+  courseGroup.seo_title?.trim() || `${courseGroup.name} — ${institute.name}`;
+const groupDescription =
+  courseGroup.seo_description?.trim() ||
+  `${courseGroup.name}: программы и семинары ${institute.name}. Расписание, стоимость и запись на обучение.`;
 ---
 
-<BaseLayout title={courseGroup.seo_title} description={courseGroup.seo_description} schema={schema}>
+<BaseLayout title={groupTitle} description={groupDescription} schema={schema}>
   <div class="container">
     <Breadcrumbs
       items={[

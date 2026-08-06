@@ -1,5 +1,6 @@
 ---
 import { formatDate, formatPrice } from '../../lib/data';
+import { registrationHref, isExternalFormHref } from '../../lib/forms';
 import type { ScheduleEntry } from '../../lib/data';
 
 interface Row {
@@ -89,10 +90,10 @@ function formatDurationLabel(entry: ScheduleEntry): string {
           </div>
           <div class="schedule-action">
             <a
-              href={entry.registrationFormLink || '/raspisanie-i-tseny'}
+              href={registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny'}
               class="seminar-register-link"
-              target={entry.registrationFormLink ? '_blank' : undefined}
-              rel={entry.registrationFormLink ? 'noopener noreferrer' : undefined}
+              target={isExternalFormHref(registrationHref(entry.registrationFormLink)) ? '_blank' : undefined}
+              rel={isExternalFormHref(registrationHref(entry.registrationFormLink)) ? 'noopener noreferrer' : undefined}
             >
               Зарегистрироваться
             </a>
