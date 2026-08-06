@@ -106,7 +106,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 
 <script>
   (() => {
-    const d = document.querySelector('details.topnav-mobile');
+    const d = document.querySelector<HTMLDetailsElement>('details.topnav-mobile');
     if (!d) return;
     document.addEventListener('pointerdown', (e) => {
       if (d.open && e.target instanceof Node && !d.contains(e.target)) d.open = false;
