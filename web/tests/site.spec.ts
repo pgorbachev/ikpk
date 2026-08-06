@@ -317,3 +317,85 @@ test.describe('Dark theme surfaces', () => {
     expect(cardBg, `фон карточки ${cardBg} совпадает с фоном страницы ${pageBg}`).not.toBe(pageBg);
   });
 });
+
+// ─── Мобильное меню закрывается щелчком вне себя ─────────────────────────────
+// Дефект с телефона: меню открывается, щелчок рядом с ним его не закрывает.
+// Причина не в устройстве — drawer это нативный <details> без JS, а он по
+// щелчку вне себя не закрывается ни в одном браузере. Поэтому проверка нужна
+// и здесь (проект mobile), и в compat.spec.ts, где есть профиль iPhone 14.
+
+/**
+ * Точка, гарантированно ВНЕ открытого меню.
+ *
+ * Координаты наугад не годятся: панель меню — оверлей, и её охват зависит от
+ * вьюпорта. На профилях iPhone 14 и Android Chrome точка (10, верх main + 10)
+ * оказывалась ВНУТРИ панели (`elementFromPoint` → `topnav-drawer`), а на iPhone SE
+ * — вне неё. Тест тогда щёлкал внутрь меню и требовал закрытия, то есть проверял
+ * не то, что заявлено.
+ *
+ * Поэтому точка ищется перебором и проверяется через `elementFromPoint`. Если
+ * такой точки нет вовсе — это «проверить невозможно», а не «дефекта нет»:
+ * возвращаем null, и тест падает с явным сообщением.
+ */
+async function pointOutsideDrawer(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const drawer = document.querySelector('details.topnav-mobile');
+    if (!drawer) return null;
+    const step = 20;
+    // Точка обязана быть НЕинтерактивной. Иначе щелчок уводит на другую
+    // страницу, там <details> закрыт по умолчанию, и тест зеленеет не по той
+    // причине: без исправления он проходил именно так — проверено негативно.
+    const interactive = 'a, button, summary, input, select, textarea, label, [role="button"]';
+    for (let y = innerHeight - step; y > 0; y -= step) {
+      for (let x = step; x < innerWidth; x += step) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || drawer.contains(el)) continue;
+        if (el.closest(interactive)) continue;
+        return { x, y };
+      }
+    }
+    return null;
+  });
+}
+
+test.describe('Мобильное меню', () => {
+  test('щелчок вне меню закрывает его', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response?.status(), 'страница не отдалась — закрывать нечего').toBe(200);
+
+    const drawer = page.locator('details.topnav-mobile');
+    const summary = drawer.locator('> summary');
+    if (!(await summary.isVisible().catch(() => false))) {
+      test.skip(true, 'в этом вьюпорте мобильного меню нет по замыслу');
+    }
+
+    await summary.click();
+    await expect(drawer, 'меню не открылось — дальше проверять нечего').toHaveAttribute('open', '');
+
+    const outside = await pointOutsideDrawer(page);
+    expect(outside, 'не нашлось ни одной точки вне открытого меню — щёлкнуть вне него невозможно').not.toBeNull();
+    const urlBefore = page.url();
+    await page.mouse.click(outside!.x, outside!.y);
+    expect(page.url(), 'щелчок увёл на другую страницу — меню закрылось бы и без исправления').toBe(
+      urlBefore,
+    );
+    await expect(drawer, 'меню осталось открытым после щелчка вне него').not.toHaveAttribute(
+      'open',
+      '',
+    );
+  });
+
+  test('Escape закрывает меню', async ({ page }) => {
+    await page.goto('/');
+    const drawer = page.locator('details.topnav-mobile');
+    const summary = drawer.locator('> summary');
+    if (!(await summary.isVisible().catch(() => false))) {
+      test.skip(true, 'в этом вьюпорте мобильного меню нет по замыслу');
+    }
+
+    await summary.click();
+    await expect(drawer).toHaveAttribute('open', '');
+    await page.keyboard.press('Escape');
+    await expect(drawer, 'меню осталось открытым после Escape').not.toHaveAttribute('open', '');
+  });
+});

@@ -1,7 +1,24 @@
 ---
 // Верхняя навигация (вариант редизайна B). Все пункты — настоящие <a href>,
 // выпадашки — CSS/details, поэтому ссылки видны краулеру. Мобильное меню —
-// нативный <details> drawer без внешнего JS.
+// нативный <details> drawer; JS добавляет только закрытие внешним щелчком и Escape.
+//
+// Про этот скрипт (пояснение держим ЗДЕСЬ, а не в разметке: HTML-комментарий и
+// комментарии внутри inline-скрипта уезжают в каждую страницу, и на первой же
+// попытке 404.html вырос с 27,6 КБ лимита до 29,2 КБ — гейт веса это поймал):
+//   * дефект пришёл с iPhone 14 Pro, но устройство ни при чём — нативный
+//     <details> не закрывается по внешнему щелчку ни в одном браузере; красный
+//     прогон подтверждён на профилях iPhone 14, Android Chrome и в окне 375×812;
+//   * открытие и закрытие кнопкой остаётся нативным, поэтому без JS меню
+//     работает по-прежнему — теряется только закрытие внешним щелчком;
+//   * скрипт вынесен в общий бандл, а не inline: inline-вариант добавлял 489 Б в
+//     КАЖДУЮ страницу, и боевая 404 из-за этого уходила за свой лимит веса.
+//     Задержка отложенного модуля здесь безобидна в отличие от применения темы:
+//     до его выполнения меню просто закрывается кнопкой, как и без JS;
+//   * pointerdown, а не click: закрываем до того, как щелчок дойдёт до цели,
+//     поэтому ссылка вне меню срабатывает с первого касания;
+//   * Escape возвращает фокус на кнопку меню, иначе он остаётся на исчезнувшем
+//     содержимом.
 import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
 import HeaderTools from './HeaderTools.astro';
 
@@ -50,7 +67,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
       <div class="topnav-tools"><HeaderTools /></div>
       <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Записаться</a>
 
-      <!-- Мобильное меню: нативный details, без внешнего JS -->
+      <!-- Мобильное меню: нативный details; внешний щелчок и Escape закрывает скрипт ниже -->
       <details class="topnav-mobile">
         <summary aria-label="Открыть меню"><span class="burger"></span></summary>
         <div class="topnav-drawer">
@@ -85,6 +102,23 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     </div>
   </div>
 </header>
+
+
+<script>
+  (() => {
+    const d = document.querySelector('details.topnav-mobile');
+    if (!d) return;
+    document.addEventListener('pointerdown', (e) => {
+      if (d.open && e.target instanceof Node && !d.contains(e.target)) d.open = false;
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !d.open) return;
+      d.open = false;
+      const s = d.querySelector('summary');
+      if (s instanceof HTMLElement) s.focus();
+    });
+  })();
+</script>
 
 <style>
   .topnav {
@@ -238,7 +272,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .drawer-theme { justify-content: space-between; }
     .drawer-theme-track {
       position: relative; width: 44px; height: 26px; border-radius: 999px;
-      background: var(--color-gray-300); transition: background 0.15s; flex-shrink: 0;
+      background: var(--color-gray-500); transition: background 0.15s; flex-shrink: 0;
     }
     .drawer-theme-thumb {
       position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
