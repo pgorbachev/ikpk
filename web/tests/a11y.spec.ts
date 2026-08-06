@@ -456,6 +456,10 @@ test.describe('Контраст тумблера темы в обеих тема
           return {
             checked: el.getAttribute('aria-checked'),
             track: getComputedStyle(track).backgroundColor,
+            // Границу контрола может давать не цвет дорожки, а обводка: тёмная
+            // дорожка нужна, чтобы жёлтое солнце читалось, и тогда отделяет её от
+            // фона именно обводка. WCAG важна различимость границы, а не механизм.
+            trackBorder: (getComputedStyle(track).boxShadow.match(/rgb\([^)]+\)/) ?? [null])[0],
             thumb: getComputedStyle(thumb).backgroundColor,
             iconState: icon?.getAttribute('data-state') ?? null,
             // У иконки цвет может быть в background-color или в градиенте.
@@ -471,7 +475,13 @@ test.describe('Контраст тумблера темы в обеих тема
         expect(m.iconState, `${theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
 
         const checks: Array<[string, number]> = [
-          [`дорожка ${m.track} к фону ${m.behind}`, ratio(m.track, m.behind)],
+          [
+            `граница контрола (дорожка ${m.track} либо обводка ${m.trackBorder ?? 'нет'}) к фону ${m.behind}`,
+            Math.max(
+              ratio(m.track, m.behind),
+              m.trackBorder ? ratio(m.trackBorder, m.behind) : 0,
+            ),
+          ],
           [`кружок ${m.thumb} к дорожке ${m.track}`, ratio(m.thumb, m.track)],
           [`иконка ${m.iconState} ${m.iconColor} к дорожке ${m.track}`, ratio(m.iconColor!, m.track)],
         ];

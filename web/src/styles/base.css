@@ -183,16 +183,17 @@ table {
    давала 2.23:1). Кружок остаётся белым, как на старом сайте. */
 :root[data-theme='dark'] .theme-toggle-track,
 :root[data-theme='dark'] .drawer-theme-track {
-  background: #8a918a;
+  /* Дорожка ТЁМНАЯ, а границу контрола обеспечивает обводка. Светлая дорожка
+     заставляла делать солнце тёмным ради контраста — и оно перестало быть солнцем.
+     Замеры к фону #3f413f: обводка 3.96, кружок к дорожке 11.87, солнце 8.23. */
+  background: #2f3a30;
+  box-shadow: inset 0 0 0 1px #9aa39a;
 }
 
 :root[data-theme='dark'] .header-theme-toggle[aria-checked='true'] .theme-toggle-track,
 :root[data-theme='dark'] .drawer-theme[aria-checked='true'] .drawer-theme-track {
-  /* Зелёная дорожка в тёмной теме не проходит: фон под контролом там #3f413f
-     (замерено гейтом, не предположено), и любой оттенок, контрастный к нему, теряет
-     контраст с белым кружком. Оба состояния используют один серый; различие несут
-     иконка и сторона кружка — как на старом сайте, где дорожка тоже не меняла цвет. */
-  background: #8a918a;
+  background: #2f5a33;
+  box-shadow: inset 0 0 0 1px #9aa39a;
 }
 
 .tt-icon {
@@ -212,7 +213,7 @@ table {
 }
 
 :root[data-theme='dark'] .tt-icon[data-state='moon'] {
-  background: radial-gradient(circle at 128% 18%, transparent 58%, #1f231f 59%);
+  background: radial-gradient(circle at 128% 18%, transparent 58%, #fff 59%);
 }
 
 /* Солнце: плотный диск с короткими зубцами. Восемь отдельных лучей на расстоянии
@@ -231,12 +232,12 @@ table {
 
 :root[data-theme='dark'] .tt-icon[data-state='sun'] {
   background:
-    radial-gradient(circle, #2b3a2b 0 44%, transparent 45%),
+    radial-gradient(circle, #ffd166 0 44%, transparent 45%),
     conic-gradient(
-      #2b3a2b 0 7%, transparent 7% 12.5%, #2b3a2b 12.5% 19.5%, transparent 19.5% 25%,
-      #2b3a2b 25% 32%, transparent 32% 37.5%, #2b3a2b 37.5% 44.5%, transparent 44.5% 50%,
-      #2b3a2b 50% 57%, transparent 57% 62.5%, #2b3a2b 62.5% 69.5%, transparent 69.5% 75%,
-      #2b3a2b 75% 82%, transparent 82% 87.5%, #2b3a2b 87.5% 94.5%, transparent 94.5%
+      #ffd166 0 7%, transparent 7% 12.5%, #ffd166 12.5% 19.5%, transparent 19.5% 25%,
+      #ffd166 25% 32%, transparent 32% 37.5%, #ffd166 37.5% 44.5%, transparent 44.5% 50%,
+      #ffd166 50% 57%, transparent 57% 62.5%, #ffd166 62.5% 69.5%, transparent 69.5% 75%,
+      #ffd166 75% 82%, transparent 82% 87.5%, #ffd166 87.5% 94.5%, transparent 94.5%
     );
 }
 
