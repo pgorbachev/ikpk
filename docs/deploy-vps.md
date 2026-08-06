@@ -86,6 +86,31 @@ curl -o /dev/null -sw '%{http_code} %{redirect_url}\n' http://<ip>/kontakty/
 curl -o /dev/null -sw '%{http_code} %{redirect_url}\n' http://<ip>/contacts
 ```
 
+### Одноразовая правка на уже развёрнутом сервере
+
+Деплой отказывается работать, если активный vhost не подключает файл редиректов —
+он проверяет это через `nginx -T` **до** переключения релиза. На сервере, поднятом
+до появления `include`, правку надо внести один раз руками.
+
+**`bootstrap-vps.sh` повторно запускать нельзя:** он пишет vhost целиком, только
+`listen 80`, и снесёт 443-блок с редиректом на https, которые добавил certbot.
+Скрипт теперь сам отказывается перезаписывать существующий конфиг (код выхода 3) и
+подсказывает эту процедуру; обойти можно через `FORCE_VHOST=1`, но тогда сначала
+резервная копия.
+
+```bash
+ssh root@<ip-сервера>
+cp /etc/nginx/sites-available/ikpk.conf /etc/nginx/sites-available/ikpk.conf.bak
+# внутрь блока server { … } добавить строку:
+#   include /var/www/ikpk/shared/nginx-redirects.conf;
+touch /var/www/ikpk/shared/nginx-redirects.conf
+nginx -t && systemctl reload nginx
+```
+
+Если `nginx -t` упал — вернуть конфиг из `.bak` и разобраться, не перезагружая
+nginx: до `reload` старая конфигурация продолжает работать.
+
+
 Опциональные переменные:
 
 ```bash

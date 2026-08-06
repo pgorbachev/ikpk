@@ -38,7 +38,36 @@ mkdir -p "${WEB_ROOT}/releases"
 mkdir -p "${WEB_ROOT}/shared"
 chown -R root:root "${WEB_ROOT}"
 
-cat >"/etc/nginx/sites-available/${SITE_NAME}.conf" <<NGINX
+# Существующий vhost НЕ перезаписываем без явного разрешения.
+#
+# Здесь конфиг пишется целиком, только `listen 80`, а certbot добавляет в этот же
+# файл 443-блок и редирект на https. Повторный bootstrap на боевом хосте вернул бы
+# конфигурацию к HTTP-only и обнулил `server_name`, если забыли DOMAIN. Раньше это
+# происходило молча, а деплой к тому же де-факто отправлял оператора запускать
+# bootstrap повторно — чтобы добрать `include` редиректов.
+VHOST="/etc/nginx/sites-available/${SITE_NAME}.conf"
+if [[ -f "$VHOST" && "${FORCE_VHOST:-}" != "1" ]]; then
+  cat >&2 <<EXISTING
+Конфигурация ${VHOST} уже существует и НЕ будет перезаписана.
+
+Если нужен только include файла редиректов — добавьте строку внутрь блока server:
+  include ${WEB_ROOT}/shared/nginx-redirects.conf;
+затем: nginx -t && systemctl reload nginx
+
+Перезаписать целиком (снесёт правки certbot, сделайте резервную копию):
+  FORCE_VHOST=1 ... bootstrap-vps.sh ${HOST}
+EXISTING
+  mkdir -p "${WEB_ROOT}/shared"
+  touch "${WEB_ROOT}/shared/nginx-redirects.conf"
+  exit 3
+fi
+
+if [[ -f "$VHOST" ]]; then
+  cp "$VHOST" "${VHOST}.bak-$(date +%Y%m%d%H%M%S)"
+  echo "[bootstrap] Резервная копия vhost: ${VHOST}.bak-*"
+fi
+
+cat >"$VHOST" <<NGINX
 server {
   listen 80;
   listen [::]:80;
@@ -73,7 +102,7 @@ NGINX
 
 touch "${WEB_ROOT}/shared/nginx-redirects.conf"
 
-ln -sfn "/etc/nginx/sites-available/${SITE_NAME}.conf" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
+ln -sfn "$VHOST" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
 rm -f /etc/nginx/sites-enabled/default
 
 nginx -t

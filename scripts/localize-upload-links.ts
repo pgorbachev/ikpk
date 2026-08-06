@@ -131,4 +131,15 @@ for (const file of targets) {
 
 console.log(`заменено ссылок: ${replaced}, файлов изменено: ${changedFiles}`);
 if (skipped) console.log(`оставлено как было (тип не определён): ${skipped}`);
+
+// Оставленные ссылки — это адреса, живущие только пока жив старый сайт: после
+// переключения DNS они умрут. Прежде скрипт сообщал их число и завершался нулём,
+// то есть миграция выглядела успешной с недомигрированным контентом.
+if (skipped > 0 && !process.argv.includes('--allow-unresolved')) {
+  console.error(
+    `\nне локализовано ссылок: ${skipped} — они перестанут работать после` +
+      `\nпереключения DNS. Осознанный обход: --allow-unresolved`,
+  );
+  process.exit(1);
+}
 console.log('дальше: npx tsx ../scripts/download-media.ts из web/');

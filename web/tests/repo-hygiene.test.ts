@@ -138,6 +138,57 @@ describe('гигиена репозитория', () => {
     ).toBe(true);
   });
 
+  // Деплой обязан проверять то, что реально уедет на сервер, и отказываться до
+  // необратимых шагов. Проверяем присутствие обеих проверок в исполняемом коде и их
+  // ПОРЯДОК: сверка артефакта и preflight должны стоять раньше переключения релиза.
+  it('деплой сверяет артефакт с режимом и подключение редиректов до переключения релиза', () => {
+    const code = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    // Артефакт: обе стороны, и непустой результат — ноль найденных ссылок это
+    // «проверить не удалось», а не «всё верно».
+    expect(/stub_pages/.test(code) && /prod_pages/.test(code), 'артефакт не сверяется').toBe(true);
+    expect(
+      /stub_pages == 0/.test(code) && /prod_pages == 0/.test(code),
+      'вакуумный результат (ноль ссылок на формы) не считается провалом',
+    ).toBe(true);
+
+    // Preflight по развёрнутой конфигурации, а не по загруженному файлу.
+    expect(/nginx -T/.test(code), 'нет preflight по развёрнутой конфигурации nginx').toBe(true);
+
+    const posArtifact = code.indexOf('stub_pages=');
+    const posPreflight = code.indexOf('nginx -T');
+    const posSwitch = code.indexOf('Switching current symlink');
+    expect(posArtifact, 'сверки артефакта нет').toBeGreaterThan(0);
+    expect(posPreflight, 'preflight отсутствует').toBeGreaterThan(0);
+    expect(posSwitch, 'переключение релиза не найдено').toBeGreaterThan(0);
+    expect(
+      posArtifact < posSwitch && posPreflight < posSwitch,
+      'проверки стоят ПОСЛЕ переключения релиза — отказ уже ничего не спасает',
+    ).toBe(true);
+
+    // Провал health-check — провал деплоя.
+    expect(
+      /Health check ПРОВАЛЕН/.test(code) && /exit 1/.test(code),
+      'провал health-check не роняет деплой',
+    ).toBe(true);
+  });
+
+  // Bootstrap не должен перезаписывать существующий vhost: там правки certbot.
+  it('bootstrap отказывается перезаписывать существующий vhost', () => {
+    const code = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    expect(
+      /-f "\$VHOST"/.test(code) && /exit 3/.test(code),
+      'существующий vhost перезаписывается молча — конфигурация certbot будет снесена',
+    ).toBe(true);
+    expect(/FORCE_VHOST/.test(code), 'нет осознанного обхода для перезаписи').toBe(true);
+  });
+
   // Генераторы не должны сообщать об ошибках и завершаться нулём. Проверяем
   // ПОВЕДЕНИЕ, запуская генератор на негодных данных, а не наличие строки
   // `process.exit(1)` в тексте.

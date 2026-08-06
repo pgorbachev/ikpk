@@ -105,6 +105,77 @@ echo "[deploy] Uploading nginx redirects ($(grep -c '^location' "$REDIRECTS_SRC"
 /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
   "mkdir -p '${WEB_ROOT}/shared' && cat > '${WEB_ROOT}/shared/nginx-redirects.conf'" < "$REDIRECTS_SRC"
 
+# ── Артефакт сверяется с ЗАКАЗАННЫМ режимом, а не с самим собой.
+#
+# Проверка `DEPLOY_MODE` выше сторожит вызов; собрать при этом можно другое:
+# `web/.env` (он в .gitignore, то есть невидим в ревью), экспорт из профиля оболочки
+# или правка `src/lib/forms.ts`. Существующий build-гейт определяет режим ПО
+# артефакту, поэтому «собрано не то, что заказано» он увидеть не может по построению.
+#
+# Смотрим на то, что реально уедет на сервер, и требуем непустой результат: ноль
+# найденных ссылок на формы — это «проверить не удалось», а не «всё верно».
+PROD_FORM_HOST='b24-cbqwqo.bitrix24site.ru'
+stub_pages=$(grep -rl '/demo-zayavka' "$DIST_DIR" 2>/dev/null | wc -l | tr -d ' ')
+prod_pages=$(grep -rl "$PROD_FORM_HOST" "$DIST_DIR" 2>/dev/null | wc -l | tr -d ' ')
+echo "[deploy] Проверка артефакта: страниц с заглушкой ${stub_pages}, с боевым хостом ${prod_pages}"
+
+case "$DEPLOY_MODE" in
+  stand)
+    if (( stub_pages == 0 )); then
+      echo "Собран НЕ стенд: ссылок на /demo-zayavka в сборке нет. Загрузка отменена." >&2
+      echo "Проверьте web/.env и переменные окружения: DEMO_FORMS должен быть задан." >&2
+      exit 1
+    fi
+    if (( prod_pages > 0 )); then
+      echo "В сборке стенда ${prod_pages} страниц с боевым хостом форм ${PROD_FORM_HOST}." >&2
+      echo "Заявки со стенда уйдут в CRM заказчика. Загрузка отменена." >&2
+      exit 1
+    fi
+    ;;
+  prod)
+    if (( prod_pages == 0 )); then
+      echo "Собран НЕ боевой сайт: ссылок на ${PROD_FORM_HOST} в сборке нет." >&2
+      echo "Заявки клиентов уходили бы в никуда. Загрузка отменена." >&2
+      exit 1
+    fi
+    if (( stub_pages > 0 )); then
+      echo "В боевой сборке ${stub_pages} страниц ведут на заглушку /demo-zayavka." >&2
+      echo "Заявки клиентов терялись бы молча. Загрузка отменена." >&2
+      exit 1
+    fi
+    ;;
+esac
+
+# ── Preflight: активный vhost обязан подключать файл редиректов.
+#
+# Загрузка файла в shared/ этого НЕ доказывает: `nginx -t` проходит и без include,
+# и деплой завершался бы успешно при неработающих 265 правилах. На уже развёрнутом
+# сервере include не появляется сам — vhost пишет только bootstrap, а повторно его
+# запускать нельзя: он перезаписывает конфиг целиком и снесёт правки certbot.
+#
+# Проверяем РАЗВЁРНУТУЮ конфигурацию через `nginx -T` (она печатает все включённые
+# файлы) и отказываемся до переключения релиза.
+echo "[deploy] Preflight: подключён ли файл редиректов активным vhost"
+if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+  "nginx -T 2>/dev/null | grep -q 'include .*${WEB_ROOT##*/}.*nginx-redirects.conf\|nginx-redirects.conf'"; then
+  cat >&2 <<PREFLIGHT
+Активный vhost не подключает ${WEB_ROOT}/shared/nginx-redirects.conf — правила
+перенаправления не будут действовать, а деплой выглядел бы успешным.
+
+Одноразовая правка на сервере (bootstrap повторно НЕ запускать — он перезапишет
+vhost и снесёт конфигурацию certbot):
+
+  cp /etc/nginx/sites-available/ikpk.conf /etc/nginx/sites-available/ikpk.conf.bak
+  # внутрь блока server { … } добавить строку:
+  #   include ${WEB_ROOT}/shared/nginx-redirects.conf;
+  touch ${WEB_ROOT}/shared/nginx-redirects.conf
+  nginx -t && systemctl reload nginx
+
+После этого повторите деплой. Резервная копия остаётся в *.bak.
+PREFLIGHT
+  exit 1
+fi
+
 echo "[deploy] Switching current symlink and reloading nginx"
 /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
   "WEB_ROOT='${WEB_ROOT}' RELEASE_ID='${RELEASE_ID}' KEEP_RELEASES='${KEEP_RELEASES}' bash -s" <<'REMOTE'
@@ -128,8 +199,18 @@ if command -v curl >/dev/null 2>&1; then
   if curl -fsS --max-time 10 "http://${HOST}/" >/dev/null; then
     echo "[deploy] Health check OK: http://${HOST}/"
   else
-    echo "[deploy] Warning: health check failed at http://${HOST}/" >&2
+    # Провал health-check — это провал деплоя, а не примечание. Прежде скрипт
+    # печатал Warning и доходил до «Done» с кодом 0: сломанный релиз выглядел
+    # успешным. Symlink уже переключён, поэтому откат — отдельное решение (см.
+    # docs/tech-debt.md), но код выхода обязан быть ненулевым.
+    echo "[deploy] Health check ПРОВАЛЕН: http://${HOST}/ не отвечает" >&2
+    echo "Релиз ${RELEASE_ID} уже активен. Откат: переключить symlink current на" >&2
+    echo "предыдущий каталог в ${WEB_ROOT}/releases и перезагрузить nginx." >&2
+    exit 1
   fi
+else
+  echo "[deploy] curl недоступен — health check НЕ выполнен" >&2
+  exit 1
 fi
 
 echo "[deploy] Done. Active release: ${RELEASE_ID}"

@@ -142,10 +142,16 @@ function* walkSourceFiles(dir: string): Generator<string> {
 }
 
 /** decodeURI с guard: битая %-последовательность не должна ронять весь прогон. */
+// Битые %-последовательности: путь не попадает в набор для скачивания вовсе,
+// поэтому в `failed` он не учитывался и `exit 1` его не покрывал — ассет молча
+// отсутствовал на новом сайте, а миграция выглядела успешной.
+let malformed = 0;
+
 function safeDecode(path: string): string | null {
   try {
     return decodeURI(path);
   } catch {
+    malformed += 1;
     console.warn(`  ! skipping malformed percent-encoding: ${path}`);
     return null;
   }
@@ -292,4 +298,7 @@ console.log(
   `\nDone: ${downloaded} downloaded, ${skipped} already present, ${failed} FAILED.`
 );
 console.log("дальше: npm --prefix ../web run media:derivatives (собирает отдаваемые версии и манифест)");
-if (failed > 0) process.exit(1);
+if (failed > 0 || malformed > 0) {
+  if (malformed > 0) console.error(`путей с битой %-последовательностью: ${malformed}`);
+  process.exit(1);
+}
