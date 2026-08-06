@@ -244,3 +244,90 @@ test.describe('Якоря под шапкой', () => {
     ).toBeGreaterThanOrEqual(header);
   });
 });
+
+// ─── Контраст элементов управления (WCAG 1.4.11, нетекстовый контраст) ──────
+// Тумблер темы был неотличим от шапки: дорожка `--color-gray-300` (#d0d0d0) на
+// белом фоне даёт 1.54:1 при требуемых 3:1, а белый кружок на этой дорожке —
+// столько же. Иконки у контрола нет, поэтому граница дорожки — единственное, чем
+// он вообще обозначен на странице.
+//
+// Измеряем ВЫЧИСЛЕННЫЕ цвета в браузере, а не написание токена в CSS: тот же
+// класс дефекта уже был в проекте, когда гейт сверял литерал цвета и не замечал
+// переопределения темой.
+test.describe('Нетекстовый контраст контролов', () => {
+  const MIN_RATIO = 3;
+
+  const luminance = ([r, g, b]: number[]): number => {
+    const f = (c: number): number => {
+      const v = c / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a: number[], b: number[]): number => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const parse = (color: string): number[] =>
+    (color.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`тумблер темы отделяется от шапки (${theme})`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      const response = await page.goto('/');
+      expect(response?.status(), 'страница не отдалась — измерять контраст не на чем').toBe(200);
+
+      // На узких экранах тумблер убран из бара по замыслу, но парный живёт в
+      // мобильном меню — раскрываем его и мерим ЕГО, а не пропускаем проверку:
+      // пропуск оставил бы контрол мобильной шапки без гейта вовсе.
+      const inBar = await page.locator('#theme-toggle').isVisible().catch(() => false);
+      if (!inBar) {
+        await page.locator('.topnav-mobile > summary').click();
+        await expect(page.locator('.drawer-theme')).toBeVisible();
+      }
+      const scope = inBar ? 'бар' : 'мобильное меню';
+
+      const colors = await page.evaluate((barVisible) => {
+        const prefix = barVisible ? '.theme-toggle' : '.drawer-theme';
+        const track = document.querySelector(`${prefix}-track`) as HTMLElement | null;
+        const thumb = document.querySelector(`${prefix}-thumb`) as HTMLElement | null;
+        if (!track || !thumb) return null;
+        // Фон подложки: ближайший предок с непрозрачным цветом.
+        let node: HTMLElement | null = track.parentElement;
+        let behind = 'rgb(255, 255, 255)';
+        while (node) {
+          const bg = getComputedStyle(node).backgroundColor;
+          if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) {
+            behind = bg;
+            break;
+          }
+          node = node.parentElement;
+        }
+        return {
+          track: getComputedStyle(track).backgroundColor,
+          thumb: getComputedStyle(thumb).backgroundColor,
+          behind,
+        };
+      }, inBar);
+
+      expect(colors, 'разметки тумблера не найдено — проверять нечего').not.toBeNull();
+      const trackToPage = ratio(parse(colors!.track), parse(colors!.behind));
+      const thumbToTrack = ratio(parse(colors!.thumb), parse(colors!.track));
+
+      expect(
+        trackToPage,
+        `${scope}: дорожка ${colors!.track} на фоне ${colors!.behind}: ${trackToPage.toFixed(2)}:1 при требуемых ${MIN_RATIO}:1`,
+      ).toBeGreaterThanOrEqual(MIN_RATIO);
+      expect(
+        thumbToTrack,
+        `${scope}: кружок ${colors!.thumb} на дорожке ${colors!.track}: ${thumbToTrack.toFixed(2)}:1 при требуемых ${MIN_RATIO}:1`,
+      ).toBeGreaterThanOrEqual(MIN_RATIO);
+    });
+  }
+});
