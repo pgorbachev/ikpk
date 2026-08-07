@@ -113,6 +113,38 @@ describe('rendered content quality', () => {
     'www.medshop.ikpk.su', //     хост не отвечает вообще
   ];
 
+  // Дефект: normalizeLegacyControls переписывала любую <button> без класса в
+  // ссылку на /raspisanie-i-tseny. В сборке это дало 4 кнопки на 2 страницах,
+  // ведущие не туда, куда обещает подпись: «Хочу сотрудничать!» (×3 на
+  // /sotrudnichestvo-s-nami) и «Произвести оплату» (на /oplata) вели в прайс.
+  //
+  // Проверяемое свойство: очистка не выдумывает адрес. Если страница не сообщила,
+  // куда ведёт её легаси-кнопка, контрол помечается как неразрешённый — и такой
+  // метки в сборке быть не должно.
+  //
+  // Почему не «один адрес на разные подписи»: такой признак был написан первым и
+  // оказался негодным — он валит законные случаи (одна книга под двумя
+  // формулировками названия, одна группа курсов под именами входящих семинаров).
+  // Он ловил не предмет, а совпадение.
+  it('no unresolved legacy control left in the build', () => {
+    const offenders: string[] = [];
+    let pages = 0;
+    for (const file of walkHtml()) {
+      pages += 1;
+      const html = readFileSync(file, 'utf-8');
+      for (const m of html.matchAll(/data-legacy-cta-unresolved[^>]*>([^<]*)</gi)) {
+        offenders.push(`${file.replace(dist, '')}: «${m[1].trim()}»`);
+      }
+    }
+    // Отсутствие сигнала — не успех: ноль просмотренных страниц значит, что
+    // проверка ничего не измерила.
+    expect(pages, 'в dist не найдено ни одной страницы — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(
+      offenders,
+      `контрол из легаси-контента остался без адреса — страница не сообщила, куда он ведёт:\n${offenders.join('\n')}`
+    ).toEqual([]);
+  });
+
   it('no known-dead external links in the build', () => {
     const offenders: string[] = [];
     for (const file of walkHtml()) {

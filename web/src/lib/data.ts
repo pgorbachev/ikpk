@@ -24,8 +24,8 @@ function panelsFor(path?: string): Record<string, string> | undefined {
  * Чистит легаси-HTML для вывода. `path` — путь страницы: по нему
  * подставляется восстановленный контент свёрнутых секций.
  */
-export function cleanBodyHtml(html: string, path?: string): string {
-  return cleanHtml(html, { panels: panelsFor(path) });
+export function cleanBodyHtml(html: string, path?: string, legacyCtaHref?: string): string {
+  return cleanHtml(html, { panels: panelsFor(path), legacyCtaHref });
 }
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
