@@ -424,8 +424,15 @@ test.describe('Контраст тумблера темы в обеих тема
       if (!inBar) await page.locator('.topnav-mobile > summary').click();
       const toggle = page.locator(inBar ? '#theme-toggle' : '.drawer-theme');
 
-      // Проверяем ОБА состояния контрола: включённое состояние в светлой теме и
-      // выключенное в тёмной тоже достижимы пользователем.
+      // Второй проход переключает тему, а не состояние контрола отдельно от неё:
+      // applyTheme (HeaderTools.astro) ставит data-theme и aria-checked одним
+      // синхронным вызовом, поэтому в устойчивом состоянии существуют только две
+      // комбинации — светлая+выключено и тёмная+включено. Их и меряем.
+      //
+      // Комбинация «тёмная+выключено» устойчиво НЕ достижима: она живёт лишь кадр
+      // между синхронной установкой data-theme в <head> и отработкой скрипта,
+      // который выставит aria-checked. Детерминированного теста на неё здесь нет —
+      // цвет для неё подобран расчётом, и этот долг записан в TD-10.
       for (const pass of ['как есть', 'после переключения'] as const) {
         if (pass === 'после переключения') {
           await toggle.click();
@@ -454,6 +461,9 @@ test.describe('Контраст тумблера темы в обеих тема
 
           const iconStyle = icon ? getComputedStyle(icon) : null;
           return {
+            // Тема НА МОМЕНТ ЗАМЕРА: во втором проходе она противоположна той,
+            // с которой тест стартовал, и подпись обязана называть фактическую.
+            theme: document.documentElement.dataset.theme ?? 'light',
             checked: el.getAttribute('aria-checked'),
             track: getComputedStyle(track).backgroundColor,
             // Границу контрола может давать не цвет дорожки, а обводка: тёмная
@@ -472,7 +482,7 @@ test.describe('Контраст тумблера темы в обеих тема
           };
         });
 
-        expect(m.iconState, `${theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
+        expect(m.iconState, `${m.theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
 
         const checks: Array<[string, number]> = [
           [
@@ -489,7 +499,7 @@ test.describe('Контраст тумблера темы в обеих тема
         for (const [what, value] of checks) {
           expect(
             value,
-            `${theme}, ${pass} (aria-checked=${m.checked}): ${what} — ${value.toFixed(2)}:1 при требуемых ${MIN}:1`,
+            `${m.theme}, ${pass} (aria-checked=${m.checked}): ${what} — ${value.toFixed(2)}:1 при требуемых ${MIN}:1`,
           ).toBeGreaterThanOrEqual(MIN);
         }
       }
