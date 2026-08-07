@@ -7,6 +7,32 @@ import { LEGACY_CTA_ATTR, LEGACY_CTA_UNRESOLVED_ATTR } from '../src/lib/html-cle
 // ─── Качество отрендеренного контента ───────────────────────────────────────
 // Дефекты, которые видит глазами пользователь, но не ловят SEO/медиа-гейты.
 
+/**
+ * Элемент с данным id: открывающий тег и текст внутри. Нужен, чтобы отличить
+ * якорь на живом блоке от якоря на пустышке. Разбор грубый (по вложенности
+ * одноимённых тегов) — этого хватает: цель проверки не парсер, а признак
+ * «под якорем что-то есть».
+ */
+function targetOf(html: string, id: string): { openTag: string; text: string } | null {
+  const m = new RegExp(`<([a-z0-9]+)([^>]*\\sid="${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*)>`, 'i').exec(html);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  if (/^(input|img|br|hr|meta|link)$/.test(tag)) return { openTag: m[0], text: '' };
+  const open = new RegExp(`<${tag}\\b`, 'gi');
+  const close = new RegExp(`</${tag}>`, 'gi');
+  let depth = 1;
+  let pos = m.index + m[0].length;
+  const start = pos;
+  while (depth > 0 && pos < html.length) {
+    open.lastIndex = pos; close.lastIndex = pos;
+    const o = open.exec(html); const c = close.exec(html);
+    if (!c) break;
+    if (o && o.index < c.index) { depth += 1; pos = o.index + o[0].length; }
+    else { depth -= 1; pos = c.index + c[0].length; if (depth === 0) return { openTag: m[0], text: html.slice(start, c.index).replace(/<[^>]*>/g, ' ') }; }
+  }
+  return { openTag: m[0], text: '' };
+}
+
 describe('rendered content quality', () => {
   // Astro 7 сменил дефолт compressHTML на 'jsx': пробелы на границах строк
   // шаблона схлопываются. Из-за этого «Свяжитесь с нами:» склеилось с
@@ -147,6 +173,21 @@ describe('rendered content quality', () => {
           offenders.push(`${where} — ведёт за пределы своей страницы`);
         } else if (!ids.has(href.slice(1))) {
           offenders.push(`${where} — якоря нет на этой странице`);
+        } else {
+          // Существования id мало: второй проход ревью обошёл проверку, перенеся
+          // id на пустой visually-hidden span рядом с заголовком — кнопка вела
+          // «никуда», а гейт молчал, потому что технически якорь был.
+          // Семантику цели машина не проверит, но пустоту и сокрытие — да.
+          const target = targetOf(html, href.slice(1));
+          if (target === null) {
+            offenders.push(`${where} — якорь есть, но элемент под ним не разобран`);
+          } else if (/\baria-hidden="true"/i.test(target.openTag)) {
+            offenders.push(`${where} — якорь на элементе, скрытом от AT (aria-hidden)`);
+          } else if (/(^|;)\s*(display\s*:\s*none|visibility\s*:\s*hidden)/i.test(target.openTag)) {
+            offenders.push(`${where} — якорь на скрытом элементе`);
+          } else if (target.text.replace(/\s+/g, '').length < 20) {
+            offenders.push(`${where} — якорь на пустом элементе (текста ${target.text.replace(/\s+/g,'').length} симв.)`);
+          }
         }
       }
     }
@@ -306,17 +347,27 @@ describe('rendered content quality', () => {
   // Нативная <button> без класса = неоформленный серый контрол браузера. На /oplata
   // такая кнопка «Произвести оплату» пришла из легаси-контента: выглядит
   // чужеродно и вообще ничего не делает (обработчика нет).
-  it('no unstyled native buttons in content', () => {
+  // Признак сменён с «кнопка без класса» на «кнопка не из наших компонентов».
+  // Прежняя формулировка повторяла регулярку самой очистки и была слепа ровно
+  // там же: кнопка с ЛЮБЫМ непустым классом не подпадала ни под нормализацию, ни
+  // под этот гейт — мёртвый контрол в контенте прошёл бы незамеченным. Найдено
+  // вторым проходом ревью.
+  //
+  // Astro метит элементы своих компонентов атрибутом data-astro-cid-*, а разметку
+  // из set:html не метит. Кнопка без этой метки пришла из контента, значит её
+  // обработчик остался на старом сайте и контрол мёртв.
+  it('no raw content-derived buttons in the build', () => {
     const offenders: string[] = [];
     for (const file of walkHtml()) {
       const html = readFileSync(file, 'utf-8');
-      for (const m of html.matchAll(/<button(?![^>]*\bclass=)[^>]*>/gi)) {
+      for (const m of html.matchAll(/<button\s([^>]*)>/gi)) {
+        if (/data-astro-cid-/i.test(m[1])) continue;
         offenders.push(`${file.replace(dist, '')}: ${m[0]}`);
       }
     }
     expect(
       offenders.slice(0, 6),
-      `кнопки без класса (неоформленный нативный контрол):\n${offenders.slice(0, 6).join('\n')}`
+      `мёртвая кнопка из контента (обработчик остался на старом сайте):\n${offenders.slice(0, 6).join('\n')}`
     ).toEqual([]);
   });
 });
