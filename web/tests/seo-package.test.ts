@@ -504,14 +504,36 @@ describe('прототипы: своя подача первого экрана'
     }
     const html = readPage('/preview/editorial/');
     expect(html, 'нет строки-анонса события').toContain('data-event-line');
+    expect(html, 'нет editorial hero').toContain('data-hero="editorial"');
 
-    // Окно фиксированной длины от маркера, а не «до первого закрывающего тега»:
-    // внутри строки есть ссылка, и ленивое сопоставление обрывалось на ней —
-    // цена оставалась за пределами выборки, и тест падал на исправной разметке.
     const at = html.indexOf('data-event-line');
     const line = html.slice(at, at + 900);
     expect(line, 'в анонсе нет города').toMatch(/Санкт-Петербург|Москва|Онлайн|Уточняется|Челны|Новосибирск|Новгород/);
     expect(line, 'в анонсе нет цены или пометки «бесплатно»').toMatch(/₽|Бесплатно/);
+  });
+
+  it('faculty подаёт событие карточкой с преподавателем', () => {
+    if (!allPages().includes('/preview/faculty/')) {
+      expect(readPage('/')).not.toContain('data-demo-banner');
+      return;
+    }
+    const html = readPage('/preview/faculty/');
+    expect(html, 'нет faculty hero').toContain('data-hero="faculty"');
+    expect(html, 'нет карточки события с преподавателем').toContain('data-event-teacher');
+    expect(html, 'faculty не должен повторять строку editorial').not.toContain('data-event-line');
+  });
+
+  it('modular подаёт каталог: picker + сетка дат без строки editorial', () => {
+    if (!allPages().includes('/preview/modular/')) {
+      expect(readPage('/')).not.toContain('data-demo-banner');
+      return;
+    }
+    const html = readPage('/preview/modular/');
+    expect(html, 'нет modular hero').toContain('data-hero="modular"');
+    expect(html, 'нет модуля подбора').toContain('data-modular-picker');
+    expect(html, 'нет сетки дат').toContain('data-upcoming="modular"');
+    expect(html, 'нет траектории ступеней').toContain('data-tracks="modular"');
+    expect(html, 'modular не должен повторять строку editorial').not.toContain('data-event-line');
   });
 
   it('в остальных направлениях строки-анонса нет — подача отличается', () => {
@@ -519,6 +541,19 @@ describe('прототипы: своя подача первого экрана'
       const path = `/preview/${id}/`;
       if (!allPages().includes(path)) continue;
       expect(readPage(path), `${id} повторяет подачу editorial`).not.toContain('data-event-line');
+    }
+  });
+
+  it('у каждого каркаса есть прототип страницы семинара', () => {
+    if (!allPages().includes('/preview/editorial/')) {
+      expect(readPage('/')).not.toContain('data-demo-banner');
+      return;
+    }
+    for (const id of ['editorial', 'faculty', 'modular']) {
+      const path = `/preview/${id}/seminar/`;
+      expect(allPages(), `нет ${path}`).toContain(path);
+      const html = readPage(path);
+      expect(html).toContain(`data-seminar-architecture="${id}"`);
     }
   });
 });

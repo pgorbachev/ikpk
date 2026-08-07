@@ -1,0 +1,78 @@
+---
+/**
+ * Editorial: доказательства доверия как dl без иконок и плашек (§7.2 / §7.1).
+ */
+---
+<section class="trust-dl section" data-trust="editorial">
+  <div class="trust-dl-inner">
+    <h2 class="section-title">На чём держится доверие</h2>
+    <dl class="trust-dl-list">
+      <div>
+        <dt>Лицензия</dt>
+        <dd>Образовательная организация (лицензия на образовательную деятельность)</dd>
+      </div>
+      <div>
+        <dt>Международный реестр</dt>
+        <dd>IAHE — для программ Институтов Апледжера и Барраля</dd>
+      </div>
+      <div>
+        <dt>Документ</dt>
+        <dd>Удостоверение о повышении квалификации гособразца + баллы ЗЕТ</dd>
+      </div>
+      <div>
+        <dt>Институты</dt>
+        <dd>ИКПК · Институт Апледжера · Институт Барраля</dd>
+      </div>
+      <div>
+        <dt>Преподаватели</dt>
+        <dd>29 практикующих специалистов с портретами в каталоге</dd>
+      </div>
+      <div>
+        <dt>Каталог</dt>
+        <dd>126 семинаров · 26 программ · 68 статей</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<style>
+  .trust-dl-inner {
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+  .trust-dl-list {
+    margin: 1.5rem 0 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .trust-dl-list > div {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--border-default);
+  }
+  .trust-dl-list > div:last-child,
+  .trust-dl-list > div:nth-last-child(2) {
+    border-bottom: 1px solid var(--border-default);
+  }
+  .trust-dl-list dt {
+    font-size: var(--font-s);
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .trust-dl-list dd {
+    margin: 0;
+    font-size: var(--font-s);
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  @media (max-width: 700px) {
+    .trust-dl-list { grid-template-columns: 1fr; }
+    .trust-dl-list > div { grid-template-columns: 1fr; gap: 0.25rem; }
+    .trust-dl-list > div:nth-last-child(2) { border-bottom: none; }
+  }
+</style>

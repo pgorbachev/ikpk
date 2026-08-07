@@ -1,0 +1,160 @@
+---
+/**
+ * Modular Education — первый экран.
+ * «Что учить и когда». Без фото (осознанно): сводка числами + модуль подбора.
+ * studio §7.4.
+ */
+import { getCatalogStats } from '../../../lib/home';
+import { getInstitutes } from '../../../lib/data';
+
+const stats = getCatalogStats();
+const institutes = getInstitutes();
+const cities = ['Санкт-Петербург', 'Москва', 'Онлайн', 'Новосибирск'];
+---
+<section class="hero-mo" data-architecture="modular" data-hero="modular">
+  <div class="hero-mo-inner">
+    <div class="hero-mo-top">
+      <div class="hero-mo-copy">
+        <h1 class="hero-mo-title">Программы и расписание обучения</h1>
+        <p class="hero-mo-lead">
+          Выберите институт, город и уровень — откройте подходящие семинары.
+        </p>
+      </div>
+      <dl class="hero-mo-stats" aria-label="Сводка каталога">
+        <div><dt>{stats.seminars}</dt><dd>семинаров</dd></div>
+        <div><dt>{stats.programs}</dt><dd>программ</dd></div>
+        <div><dt>{stats.dates}</dt><dd>дат</dd></div>
+        <div><dt>{stats.cities}</dt><dd>городов</dd></div>
+      </dl>
+    </div>
+
+    <form class="hero-mo-picker" action="/raspisanie-i-tseny" method="get" data-modular-picker>
+      <label>
+        <span>Институт</span>
+        <select name="institute">
+          <option value="">Все институты</option>
+          {institutes.map((i) => (
+            <option value={i.slug}>{i.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Город</span>
+        <select name="city">
+          <option value="">Все города</option>
+          {cities.map((c) => (
+            <option value={c}>{c}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Уровень</span>
+        <select name="level">
+          <option value="">Любой</option>
+          <option value="start">Начинаю</option>
+          <option value="continue">Продолжаю ступень</option>
+          <option value="org">Оплачивает организация</option>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary">Показать</button>
+    </form>
+  </div>
+</section>
+
+<style>
+  .hero-mo {
+    background: var(--surface-page);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .hero-mo-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 1.75rem;
+  }
+  .hero-mo-top {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 2rem;
+    align-items: end;
+    margin-bottom: 1.25rem;
+  }
+  .hero-mo-title {
+    font-size: clamp(1.45rem, 2.8vw, 1.85rem);
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .hero-mo-lead {
+    margin: 0.5rem 0 0;
+    font-size: var(--font-s);
+    color: var(--text-body);
+    max-width: 36rem;
+  }
+  .hero-mo-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin: 0;
+  }
+  .hero-mo-stats div {
+    text-align: right;
+  }
+  .hero-mo-stats dt {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+  .hero-mo-stats dd {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+  .hero-mo-picker {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr auto;
+    gap: 0.75rem;
+    align-items: end;
+    padding: 1rem;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-default);
+  }
+  .hero-mo-picker label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+  .hero-mo-picker select {
+    appearance: none;
+    background: var(--surface-page);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    padding: 0.65rem 0.75rem;
+    font-size: var(--font-s);
+    font-weight: 500;
+    color: var(--text-primary);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  @media (max-width: 900px) {
+    .hero-mo-top { grid-template-columns: 1fr; gap: 1.25rem; }
+    .hero-mo-stats { grid-template-columns: repeat(4, 1fr); }
+    .hero-mo-stats div { text-align: left; }
+    .hero-mo-picker { grid-template-columns: 1fr 1fr; }
+    .hero-mo-picker button { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) {
+    .hero-mo-picker { grid-template-columns: 1fr; }
+    .hero-mo-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>

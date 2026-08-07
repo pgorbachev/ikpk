@@ -1,0 +1,81 @@
+---
+/**
+ * Faculty: ключевые преподаватели — главный блок, 4×2, реальные первые 8 (§7.3).
+ * Не отбор «лучших»: рваность фонов должна быть видна владельцу.
+ */
+import { getTeachers } from '../../../lib/data';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+
+function shortName(full: string): string {
+  return full.split(',')[0].trim();
+}
+function credentials(full: string): string {
+  const idx = full.indexOf(',');
+  return idx >= 0 ? full.slice(idx + 1).trim() : '';
+}
+
+const teachers = getTeachers()
+  .filter((t) => t.photo)
+  .slice(0, 8)
+  .map((t) => ({
+    name: shortName(t.name),
+    credentials: credentials(t.name),
+    photo: t.photo,
+    href: `/${t.institute_legacy_id}/prepodavatel/${t.slug}`,
+    dim: getAssetDimensions(t.photo),
+  }));
+---
+<section id="teachers-featured" class="tf section" data-teachers="faculty">
+  <div class="container">
+    <div class="tf-head">
+      <h2 class="section-title">Преподаватели</h2>
+      <p class="section-sub">Реальные портреты из медиатеки — без отбора «лучших кадров».</p>
+    </div>
+    <div class="tf-grid">
+      {teachers.map((t) => (
+        <a class="tf-card teacher-card" href={t.href}>
+          <img
+            class="tf-photo teacher-photo"
+            src={t.photo}
+            srcset={srcsetFor(t.photo)}
+            sizes="(max-width: 640px) 45vw, 280px"
+            alt={t.name}
+            width={t.dim?.width}
+            height={t.dim?.height}
+            loading="lazy"
+          />
+          <span class="tf-name">{t.name}</span>
+          {t.credentials && <span class="tf-cred">{t.credentials}</span>}
+        </a>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .tf-head { margin-bottom: 1.25rem; }
+  .tf-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+  }
+  .tf-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+  .tf-photo {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: var(--surface-subtle);
+  }
+  .tf-name { font-weight: 650; font-size: var(--font-s); }
+  .tf-cred { font-size: 0.75rem; color: var(--text-muted); line-height: 1.3; }
+
+  @media (max-width: 900px) {
+    .tf-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>

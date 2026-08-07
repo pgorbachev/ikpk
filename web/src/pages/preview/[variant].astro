@@ -1,73 +1,99 @@
 ---
-// Превью-роуты вариантов главной: /preview/b, /preview/c …
+// Превью-роуты вариантов главной: /preview/editorial, /preview/faculty, …
 // noindex, вне sitemap (astro.config фильтрует /preview), вне parity/orphan-гейтов.
-// Живое сравнение вариантов заказчиком до выбора победителя.
 import type { GetStaticPaths } from 'astro';
 import TopNavLayout from '../../layouts/TopNavLayout.astro';
-import { variants, type SectionKey } from '../../lib/variants';
+import { variants, type SectionKey, ARCHITECTURE_IDS } from '../../lib/variants';
 import { isDemoForms } from '../../lib/forms';
 
 import HeroOffer from '../../components/home/sections/HeroOffer.astro';
 import HeroCentered from '../../components/home/sections/HeroCentered.astro';
 import HeroHybrid from '../../components/home/sections/HeroHybrid.astro';
+import HeroEditorial from '../../components/home/sections/HeroEditorial.astro';
+import HeroFaculty from '../../components/home/sections/HeroFaculty.astro';
+import HeroModular from '../../components/home/sections/HeroModular.astro';
 import Advantages from '../../components/home/sections/Advantages.astro';
 import Approach from '../../components/home/sections/Approach.astro';
 import Programs from '../../components/home/sections/Programs.astro';
+import ProgramsCatalog from '../../components/home/sections/ProgramsCatalog.astro';
 import News from '../../components/home/sections/News.astro';
 import Segments from '../../components/home/sections/Segments.astro';
 import UpcomingSeminars from '../../components/home/sections/UpcomingSeminars.astro';
+import UpcomingTable from '../../components/home/sections/UpcomingTable.astro';
+import UpcomingModular from '../../components/home/sections/UpcomingModular.astro';
 import EventLine from '../../components/home/sections/EventLine.astro';
+import EventTeacher from '../../components/home/sections/EventTeacher.astro';
+import PositioningEditorial from '../../components/home/sections/PositioningEditorial.astro';
+import TrustDl from '../../components/home/sections/TrustDl.astro';
+import InstitutesStrips from '../../components/home/sections/InstitutesStrips.astro';
+import AudienceToc from '../../components/home/sections/AudienceToc.astro';
+import AudienceModular from '../../components/home/sections/AudienceModular.astro';
 import Teachers from '../../components/home/sections/Teachers.astro';
+import TeachersFeatured from '../../components/home/sections/TeachersFeatured.astro';
+import TrackPath from '../../components/home/sections/TrackPath.astro';
 import TrustBar from '../../components/home/sections/TrustBar.astro';
 import VideoTestimonials from '../../components/home/sections/VideoTestimonials.astro';
 import LeadMagnet from '../../components/home/sections/LeadMagnet.astro';
 import CtaBand from '../../components/home/sections/CtaBand.astro';
+import CtaEditorial from '../../components/home/sections/CtaEditorial.astro';
 
-// Черновики вариантов нужны на превью-стенде и НЕ нужны в боевой сборке: они
-// публично доступны по прямому адресу, а на старом сайте таких URL нет. noindex
-// защищает от индексации, но не от того, что страницу откроют по ссылке.
-// Режим тот же, что у форм: стенд собирается с DEMO_FORMS.
 export const getStaticPaths: GetStaticPaths = () =>
   isDemoForms ? Object.keys(variants).map((id) => ({ params: { variant: id } })) : [];
 
 const { variant: variantId } = Astro.params;
-// Инвариант: getStaticPaths генерирует только id из реестра, поэтому вариант
-// всегда определён на этапе сборки.
 const variant = variants[variantId as string]!;
+const isArchitecture = (ARCHITECTURE_IDS as readonly string[]).includes(variantId as string);
 
 const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   'hero-offer': HeroOffer,
   'hero-centered': HeroCentered,
   'hero-hybrid': HeroHybrid,
+  'hero-editorial': HeroEditorial,
+  'hero-faculty': HeroFaculty,
+  'hero-modular': HeroModular,
   advantages: Advantages,
   approach: Approach,
   programs: Programs,
+  'programs-catalog': ProgramsCatalog,
   news: News,
   segments: Segments,
   upcoming: UpcomingSeminars,
+  'upcoming-table': UpcomingTable,
+  'upcoming-modular': UpcomingModular,
   'event-line': EventLine,
+  'event-teacher': EventTeacher,
+  'positioning-editorial': PositioningEditorial,
+  'trust-dl': TrustDl,
+  'institutes-strips': InstitutesStrips,
+  'audience-toc': AudienceToc,
+  'audience-modular': AudienceModular,
   teachers: Teachers,
+  'teachers-featured': TeachersFeatured,
+  tracks: TrackPath,
   trust: TrustBar,
   testimonials: VideoTestimonials,
   lead: LeadMagnet,
   cta: CtaBand,
+  'cta-editorial': CtaEditorial,
 };
 ---
 <TopNavLayout title={variant.title} description={variant.description} noindex={true} preloadHero={variant.preloadHero ?? false}>
   <div class="preview-ribbon">
-    Превью варианта «{variant.label}» · noindex · не влияет на текущий сайт
+    Превью «{variant.label}» · noindex
+    {isArchitecture && (
+      <>
+        {' · '}
+        <a href="/preview/hub/">все каркасы</a>
+        {' · '}
+        <a href={`/preview/${variantId}/seminar/`}>страница семинара</a>
+      </>
+    )}
   </div>
   {variant.sections.map((key) => {
     const Section = SECTIONS[key];
     return <Section />;
   })}
 
-  {/* Пометки происхождения изображений — только в прототипе.
-      Без них владелец оценит стоковую картинку как собственную съёмку
-      института и выберет вариант, которого потом не получит. Подлинный
-      фотоактив ИКПК — только портреты преподавателей; изображения
-      институтов, событий и статей — сток и CGI (проверено просмотром
-      файлов). Снимков занятий и залов не существует ни в каком разрешении. */}
   <aside class="provenance-legend" data-provenance-legend>
     <strong>Происхождение изображений на этой странице</strong>
     <ul>
@@ -83,17 +109,12 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   </aside>
 
   <script is:inline>
-    // Разметка происхождения ставится в браузере: картинки приходят из десятка
-    // разных компонентов, и обходить их все ради служебной пометки прототипа
-    // незачем. Скрипт живёт ТОЛЬКО на страницах прототипов.
     (function () {
       const brand = /logo|emblem|icon|\/media\/legacy\//i;
       const portrait = /\/media\/users\/\d+\/images\//;
       document.querySelectorAll('img[src^="/media"], img[src*="/media/_w/"]').forEach(function (img) {
         const src = img.getAttribute('src') || '';
         let kind = brand.test(src) ? 'brand' : portrait.test(src) ? 'authentic' : 'stock';
-        // портретом считаем только то, что выводится как фото преподавателя:
-        // в media/users/** лежат и контентные картинки
         const inTeacherCard = img.closest('[class*="teacher"]') !== null;
         if (kind === 'authentic' && !inTeacherCard) kind = 'stock';
         img.setAttribute('data-provenance', kind);
@@ -103,7 +124,6 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
 </TopNavLayout>
 
 <style>
-  /* ── Пометки происхождения (только прототипы) ───────────────────────────── */
   .provenance-legend {
     position: sticky;
     bottom: 0;
@@ -123,7 +143,6 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
   .pv-stock { background: #c46a1f; }
   .pv-brand { background: #6b7280; }
 
-  /* Рамка на самой картинке: видно происхождение, не наводя курсор */
   :global(img[data-provenance='stock']) { outline: 3px solid #c46a1f; outline-offset: -3px; }
   :global(img[data-provenance='authentic']) { outline: 3px solid #4d9450; outline-offset: -3px; }
   :global(img[data-provenance='brand']) { outline: 2px dashed #6b7280; outline-offset: -2px; }
@@ -132,4 +151,5 @@ const SECTIONS: Record<SectionKey, typeof HeroOffer> = {
     background: #1a1a1a; color: #fff; text-align: center;
     font-size: 0.8rem; padding: 0.4rem 1rem;
   }
+  .preview-ribbon a { color: #abd6ac; }
 </style>

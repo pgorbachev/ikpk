@@ -1,5 +1,5 @@
 // Реестр вариантов главной. Вариант = тонкая композиция (layout + список секций),
-// а не копия страницы. Добавить C/D — дописать запись сюда.
+// а не копия страницы.
 //
 // Секции берутся из src/components/home/sections/*. Заблокированные контентом
 // (trust/testimonials/lead) показываются только в превью с плейсхолдером.
@@ -8,19 +8,33 @@ export type SectionKey =
   | 'hero-offer'
   | 'hero-centered'
   | 'hero-hybrid'
+  | 'hero-editorial'
+  | 'hero-faculty'
+  | 'hero-modular'
   | 'advantages'
   | 'approach'
   | 'programs'
+  | 'programs-catalog'
   | 'news'
   | 'segments'
   | 'upcoming'
-  /** Ближайшее событие строкой-анонсом (редакционная подача, не карточка). */
+  | 'upcoming-table'
+  | 'upcoming-modular'
   | 'event-line'
+  | 'event-teacher'
+  | 'positioning-editorial'
+  | 'trust-dl'
+  | 'institutes-strips'
+  | 'audience-toc'
+  | 'audience-modular'
   | 'teachers'
+  | 'teachers-featured'
+  | 'tracks'
   | 'trust'
   | 'testimonials'
   | 'lead'
-  | 'cta';
+  | 'cta'
+  | 'cta-editorial';
 
 export interface Variant {
   id: string;
@@ -35,18 +49,11 @@ export interface Variant {
 }
 
 export const variants: Record<string, Variant> = {
-  // ── Прототипы каркаса (план 005, раздел 4) ────────────────────────────────
+  // ── Прототипы каркаса (план 005 / studio-references §7) ───────────────────
   //
   // Три направления различаются АРХИТЕКТУРОЙ подачи, а не айдентикой: палитра,
-  // логотип, эмблемы и контент общие. Это три способа собрать один бренд ИКПК.
-  //
-  // На этом шаге архитектура выражена композицией существующих секций: что несёт
-  // первый экран, в каком порядке идут смысловые блоки, где стоят люди и где
-  // система программ. Следующий шаг — собственные секции первого экрана
-  // (строка-анонс события для редакционного, сетка портретов для faculty,
-  // модуль подбора для каталожного), они и разведут направления окончательно.
-  //
-  // Обязательный состав главной закреплён гейтом «прототипы каркаса».
+  // логотип, эмблемы и контент общие. Собственные секции первого экрана и
+  // подачи событий разводят направления окончательно.
   editorial: {
     id: 'editorial',
     label: 'Institutional Editorial — страницу несёт текст',
@@ -54,15 +61,19 @@ export const variants: Record<string, Variant> = {
     title: 'Институт клинической прикладной кинезиологии — ИКПК',
     description:
       'Постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии для врачей. Лицензированная образовательная организация, три института-направления, 29 преподавателей.',
-    // Позиционирование крупным блоком идёт раньше каталога: сначала «кто мы и
-    // почему нам верить», и отвечаем текстом. Преподаватели — атрибуцией ниже.
-    // Событие идёт строкой-анонсом сразу под первым экраном, а блок «Ближайшие
-    // семинары» карточками из этого направления убран: подача не должна
-    // дублироваться, иначе различие направлений размывается.
     sections: [
-      'hero-centered', 'event-line', 'approach', 'advantages',
-      'programs', 'segments', 'news', 'teachers', 'cta',
+      'hero-editorial',
+      'event-line',
+      'positioning-editorial',
+      'trust-dl',
+      'institutes-strips',
+      'audience-toc',
+      'upcoming-table',
+      'teachers',
+      'news',
+      'cta-editorial',
     ],
+    preloadHero: true,
   },
   faculty: {
     id: 'faculty',
@@ -71,12 +82,16 @@ export const variants: Record<string, Variant> = {
     title: 'Обучение у практикующих преподавателей — ИКПК',
     description:
       'Прикладная кинезиология, краниосакральная и висцеральная терапия: 29 преподавателей с медицинским образованием и международными дипломами. Расписание семинаров в Санкт-Петербурге и Москве.',
-    // Люди подняты почти в начало: направление проверяет гипотезу «институт — это
-    // его преподаватели». Практику здесь не заявляем: кадров занятий нет ни
-    // одного (раздел 5 плана), поэтому опора на квалификацию и авторство.
     sections: [
-      'hero-hybrid', 'teachers', 'upcoming', 'segments',
-      'approach', 'programs', 'news', 'cta',
+      'hero-faculty',
+      'event-teacher',
+      'teachers-featured',
+      'programs',
+      'segments',
+      'upcoming',
+      'approach',
+      'news',
+      'cta',
     ],
     preloadHero: true,
   },
@@ -86,12 +101,17 @@ export const variants: Record<string, Variant> = {
     layout: 'topnav',
     title: 'Программы и расписание обучения — ИКПК',
     description:
-      '26 программ, 126 семинаров, ступени от базовых до продвинутых. Расписание с датами, городами и стоимостью, запись на обучение онлайн.',
-    // Каталог впереди: сначала «что учить и когда». Ближайшие даты сразу после
-    // входов в программы, позиционирование — компактным блоком ниже.
+      '126 семинаров, 26 программ, ступени от базовых до продвинутых. Расписание с датами, городами и стоимостью, запись на обучение онлайн.',
     sections: [
-      'hero-offer', 'programs', 'upcoming', 'segments',
-      'teachers', 'advantages', 'approach', 'news', 'cta',
+      'hero-modular',
+      'upcoming-modular',
+      'programs-catalog',
+      'audience-modular',
+      'tracks',
+      'teachers',
+      'advantages',
+      'news',
+      'cta',
     ],
   },
   b: {
@@ -111,22 +131,15 @@ export const variants: Record<string, Variant> = {
     title: 'Обучение прикладной кинезиологии — от первого семинара до практики | ИКПК',
     description:
       'Постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии: практическая отработка на семинарах, практикующие преподаватели.',
-    // Иная композиция: центрированный hero, преподаватели подняты выше
-    // (личность преподавателя — ключевой фактор решения по маркетологу).
     sections: ['hero-centered', 'teachers', 'segments', 'upcoming', 'trust', 'testimonials', 'lead', 'cta'],
   },
   d: {
     id: 'd',
     label: 'D — content-complete: синтез + весь parity-контент (верхнее меню)',
     layout: 'topnav',
-    // Короткий title под основной поисковый интент (рекомендация ревью).
     title: 'Обучение прикладной кинезиологии — ИКПК',
     description:
       'Практико-ориентированное постдипломное обучение прикладной кинезиологии, краниосакральной и висцеральной терапии для врачей, массажистов и реабилитологов. Ближайшие очные семинары в Санкт-Петербурге и Москве.',
-    // Полная главная: гибрид-hero + весь обязательный parity-контент
-    // (преимущества, подход+статистика, институты, новости) + маркетинговые
-    // блоки. Статистика в approach покрывает trust — отдельный trust-плейсхолдер
-    // не нужен. testimonials/lead — заглушки (нет видео/PDF от заказчика).
     sections: [
       'hero-hybrid', 'advantages', 'approach', 'programs',
       'segments', 'upcoming', 'teachers', 'news',
@@ -138,3 +151,7 @@ export const variants: Record<string, Variant> = {
 export function getVariant(id: string): Variant | undefined {
   return variants[id];
 }
+
+/** Три направления каркаса для демо выбора владельца. */
+export const ARCHITECTURE_IDS = ['editorial', 'faculty', 'modular'] as const;
+export type ArchitectureId = (typeof ARCHITECTURE_IDS)[number];

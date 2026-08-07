@@ -1,0 +1,105 @@
+---
+/**
+ * Хаб сравнения трёх каркасов — только в DEMO_FORMS-сборке.
+ * Catch-all как у demo-zayavka: иначе статический index всегда попадёт в prod.
+ */
+import TopNavLayout from '../../../layouts/TopNavLayout.astro';
+import { variants, ARCHITECTURE_IDS } from '../../../lib/variants';
+import { isDemoForms } from '../../../lib/forms';
+
+export const getStaticPaths = () => (isDemoForms ? [{ params: { rest: undefined } }] : []);
+
+const items = ARCHITECTURE_IDS.map((id) => variants[id]);
+---
+<TopNavLayout
+  title="Прототипы каркаса — выбор направления"
+  description="Три архитектуры подачи одного бренда ИКПК: Editorial, Faculty, Modular."
+  noindex={true}
+>
+  <div class="preview-ribbon">Превью · noindex · не влияет на боевой сайт</div>
+  <main class="hub">
+    <h1>Три каркаса — один бренд</h1>
+    <p class="hub-lead">
+      Палитра, логотип и контент общие. Различается архитектура: что несёт первый
+      экран, как поданы события, институты и страница семинара. Оценивайте на
+      ширинах 360 и 1280.
+    </p>
+    <ul class="hub-list">
+      {items.map((v) => (
+        <li>
+          <h2>{v.label}</h2>
+          <p>{v.description}</p>
+          <p class="hub-links">
+            <a href={`/preview/${v.id}/`}>Главная</a>
+            <a href={`/preview/${v.id}/seminar/`}>Семинар</a>
+          </p>
+        </li>
+      ))}
+    </ul>
+    <aside class="provenance-legend" data-provenance-legend>
+      <strong>На страницах каркасов</strong> портреты преподавателей помечены как
+      подлинные; сток и CGI — отдельно. Кадров занятий в медиатеке нет.
+    </aside>
+  </main>
+</TopNavLayout>
+
+<style>
+  .preview-ribbon {
+    background: #1a1a1a; color: #fff; text-align: center;
+    font-size: 0.8rem; padding: 0.4rem 1rem;
+  }
+  .hub {
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+  }
+  .hub h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    letter-spacing: -0.02em;
+  }
+  .hub-lead {
+    margin: 1rem 0 2rem;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: var(--text-body);
+  }
+  .hub-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--border-default);
+  }
+  .hub-list li {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .hub-list h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 650;
+  }
+  .hub-list p {
+    margin: 0.5rem 0 0;
+    font-size: var(--font-s);
+    color: var(--text-body);
+    line-height: 1.45;
+  }
+  .hub-links {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 0.85rem !important;
+  }
+  .hub-links a {
+    font-weight: 600;
+    color: var(--color-accent-700);
+  }
+  .provenance-legend {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-default);
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+</style>

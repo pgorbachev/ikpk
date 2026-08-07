@@ -1,0 +1,137 @@
+---
+/**
+ * Modular: сетка ближайших дат; первая карточка выделена рамкой (§7.4).
+ * Изображения событий не используем — все стоковые.
+ */
+import { getUpcomingSeminars } from '../../../lib/home';
+
+const seminars = getUpcomingSeminars(4);
+---
+
+{seminars.length > 0 && (
+  <section id="upcoming" class="up-mod section" data-upcoming="modular">
+    <div class="container">
+      <div class="up-mod-head">
+        <h2 class="section-title">Ближайшие даты</h2>
+        <a href="/raspisanie-i-tseny" class="up-mod-all">Всё расписание →</a>
+      </div>
+      <div class="up-mod-grid">
+        {seminars.map((s, i) => (
+          <article class:list={['up-mod-card', { featured: i === 0 }]} data-upcoming-card={i === 0 ? 'featured' : undefined}>
+            <div class="up-mod-date" aria-hidden="true">
+              <span class="up-mod-day">{s.dayLabel}</span>
+              <span class="up-mod-month">{s.monthLabel}</span>
+            </div>
+            <span class="up-mod-badge">{s.instituteShort}</span>
+            <h3><a href={s.href}>{s.title}</a></h3>
+            <p class="up-mod-meta">
+              {s.cityName}
+              {s.durationLabel && <> · {s.durationLabel}</>}
+            </p>
+            <div class="up-mod-foot">
+              <span class:list={[{ free: s.isFree }]}>{s.priceLabel}</span>
+              <a href={s.href} class="btn btn-primary">Подробнее</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+)}
+
+<style>
+  .up-mod-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .up-mod-all {
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-accent-700);
+    white-space: nowrap;
+  }
+  .up-mod-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+  .up-mod-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 1.1rem;
+    border: 1px solid var(--border-default);
+    background: var(--surface-page);
+  }
+  .up-mod-card.featured {
+    border-color: var(--border-accent);
+    border-width: 2px;
+  }
+  .up-mod-date {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+  }
+  .up-mod-day {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .up-mod-month {
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .up-mod-badge {
+    align-self: flex-start;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent-700);
+    border: 1px solid var(--border-accent);
+    padding: 0.15rem 0.4rem;
+  }
+  .up-mod-card h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.35;
+    flex: 1;
+  }
+  .up-mod-card h3 a {
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .up-mod-card h3 a:hover { text-decoration: underline; }
+  .up-mod-meta {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .up-mod-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+  }
+  .up-mod-foot span {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .up-mod-foot span.free { color: var(--color-accent-700); }
+
+  @media (max-width: 1100px) {
+    .up-mod-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .up-mod-grid { grid-template-columns: 1fr; }
+  }
+</style>

@@ -1,0 +1,95 @@
+---
+/**
+ * Editorial: ближайшие семинары списком-таблицей без изображений (§7.2).
+ */
+import { getUpcomingSeminars } from '../../../lib/home';
+
+const seminars = getUpcomingSeminars(6);
+---
+
+{seminars.length > 0 && (
+  <section id="upcoming" class="up-table section" data-upcoming="editorial">
+    <div class="up-table-inner">
+      <div class="up-table-head">
+        <h2 class="section-title">Ближайшие семинары</h2>
+        <a href="/raspisanie-i-tseny" class="up-table-all">Всё расписание →</a>
+      </div>
+      <div class="up-table-scroll" role="region" aria-label="Ближайшие семинары">
+        <table class="up-table-grid">
+          <thead>
+            <tr>
+              <th scope="col">Дата</th>
+              <th scope="col">Город</th>
+              <th scope="col">Семинар</th>
+              <th scope="col">Часы</th>
+              <th scope="col">Цена</th>
+            </tr>
+          </thead>
+          <tbody>
+            {seminars.map((s) => (
+              <tr>
+                <td>{s.dateLabel}</td>
+                <td>{s.cityName}</td>
+                <td><a href={s.href}>{s.title}</a></td>
+                <td>{s.durationLabel || '—'}</td>
+                <td>{s.priceLabel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+)}
+
+<style>
+  .up-table-inner {
+    max-width: 64rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+  .up-table-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .up-table-all {
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-accent-700);
+    white-space: nowrap;
+  }
+  .up-table-scroll { overflow-x: auto; }
+  .up-table-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-s);
+  }
+  .up-table-grid th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.65rem 0.75rem 0.65rem 0;
+    border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  .up-table-grid td {
+    padding: 0.85rem 0.75rem 0.85rem 0;
+    border-bottom: 1px solid var(--border-default);
+    color: var(--text-body);
+    vertical-align: top;
+  }
+  .up-table-grid td:first-child {
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .up-table-grid a {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .up-table-grid a:hover { text-decoration: underline; }
+</style>

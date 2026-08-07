@@ -1,0 +1,180 @@
+---
+/**
+ * Прототип страницы семинара для трёх каркасов (§7.6).
+ * Один и тот же семинар с датой — чтобы сравнивать шапки, а не контент.
+ */
+import type { GetStaticPaths } from 'astro';
+import TopNavLayout from '../../../layouts/TopNavLayout.astro';
+import SeminarArchitectureHeader from '../../../components/seminars/SeminarArchitectureHeader.astro';
+import {
+  getInstitutes,
+  getCourseGroups,
+  getSeminars,
+  getScheduleEntries,
+  getTeachers,
+  cleanBodyHtml,
+  stripLegacySeminarTail,
+  formatPrice,
+} from '../../../lib/data';
+import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
+import { registrationHref } from '../../../lib/forms';
+import { isDemoForms } from '../../../lib/forms';
+import { ARCHITECTURE_IDS, variants, type ArchitectureId } from '../../../lib/variants';
+
+export const getStaticPaths: GetStaticPaths = () =>
+  isDemoForms
+    ? ARCHITECTURE_IDS.map((variant) => ({ params: { variant } }))
+    : [];
+
+const { variant: variantId } = Astro.params;
+const architecture = variantId as ArchitectureId;
+const variant = variants[architecture]!;
+
+const institutes = getInstitutes();
+const allCGs = getCourseGroups();
+const allSeminars = getSeminars();
+const allTeachers = getTeachers();
+const today = calendarToday();
+
+// Эталон с датой и преподавателем — один для всех трёх, чтобы сравнивать шапку.
+const entry = getScheduleEntries()
+  .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today) && e.teachers?.length)
+  .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
+
+const seminar = allSeminars.find((s) => s.slug === entry?.seminar.slug) || allSeminars[0];
+const courseGroup = allCGs.find((c) => c.legacy_id === seminar.course_group_legacy_id)!;
+const institute = institutes.find((i) => i.slug === courseGroup.institute_legacy_id)!;
+
+const scheduleRaw = getScheduleEntries().filter(
+  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
+);
+const sorted = [...scheduleRaw].sort(
+  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+);
+
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+function dateRange(startAt: string, endAt: string): string {
+  const s = new Date(startAt);
+  const e = new Date(endAt);
+  const sd = s.getUTCDate();
+  const ed = e.getUTCDate();
+  const sm = MONTHS[s.getUTCMonth()];
+  const em = MONTHS[e.getUTCMonth()];
+  if (!endAt || (sd === ed && sm === em)) return `${sd} ${sm}`;
+  if (sm === em) return `${sd}–${ed} ${em}`;
+  return `${sd} ${sm} – ${ed} ${em}`;
+}
+
+const schedule = sorted.map((e) => {
+  const lead = e.teachers?.[0];
+  const full = lead
+    ? allTeachers.find(
+        (t) =>
+          t.legacy_id === String(lead.id) ||
+          t.slug === String(lead.id) ||
+          t.name.startsWith(lead.fullName.split(',')[0].trim())
+      )
+    : undefined;
+  return {
+    dateLabel: dateRange(e.startAt, e.endAt),
+    cityName: e.city?.name || 'Уточняется',
+    priceLabel: e.isFree ? 'Бесплатно' : formatPrice(e.newPrice),
+    durationLabel: e.duration ? `${e.duration} ч` : '',
+    formHref: registrationHref(e.registrationFormLink) || '/raspisanie-i-tseny',
+    teacher: lead
+      ? {
+          name: lead.fullName.split(',')[0].trim(),
+          photo: full?.photo || null,
+          href: full
+            ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
+            : null,
+        }
+      : undefined,
+  };
+});
+
+const teacherFallback =
+  allTeachers.find((t) => t.institute_legacy_id === institute.slug && t.photo) || null;
+
+const code = seminar.name.match(/^[А-ЯA-Z]+-\d+/i)?.[0] || '';
+const bodyHtml = seminar.description_html
+  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
+  : '';
+---
+<TopNavLayout
+  title={`${seminar.name} — прототип ${variant.label}`}
+  description={seminar.seo_description || variant.description}
+  noindex={true}
+>
+  <div class="preview-ribbon">
+    Семинар · {variant.label} ·
+    <a href={`/preview/${architecture}/`}>главная каркаса</a> ·
+    <a href="/preview/hub/">все каркасы</a>
+  </div>
+
+  <SeminarArchitectureHeader
+    architecture={architecture}
+    seminar={seminar}
+    courseGroup={courseGroup}
+    institute={institute}
+    code={code}
+    schedule={schedule}
+    teacherFallback={teacherFallback}
+  />
+
+  <div class="sem-body container">
+    {bodyHtml ? (
+      <div class="rich-content" set:html={bodyHtml} />
+    ) : (
+      <p class="sem-empty">Описание семинара в данных отсутствует.</p>
+    )}
+  </div>
+
+  <aside class="provenance-legend" data-provenance-legend>
+    <strong>Происхождение изображений</strong>
+    <ul>
+      <li><span class="pv pv-authentic"></span> подлинное фото ИКПК — портреты</li>
+      <li><span class="pv pv-stock"></span> сток / CGI</li>
+      <li><span class="pv pv-brand"></span> знак бренда</li>
+    </ul>
+  </aside>
+
+  <script is:inline>
+    (function () {
+      const brand = /logo|emblem|icon|\/media\/legacy\//i;
+      const portrait = /\/media\/users\/\d+\/images\//;
+      document.querySelectorAll('img[src^="/media"], img[src*="/media/_w/"]').forEach(function (img) {
+        const src = img.getAttribute('src') || '';
+        let kind = brand.test(src) ? 'brand' : portrait.test(src) ? 'authentic' : 'stock';
+        const inTeacher = img.closest('[class*="teacher"], .sem-fa-figure, .sem-mo-teacher') !== null;
+        if (kind === 'authentic' && !inTeacher) kind = 'stock';
+        img.setAttribute('data-provenance', kind);
+      });
+    })();
+  </script>
+</TopNavLayout>
+
+<style>
+  .preview-ribbon {
+    background: #1a1a1a; color: #fff; text-align: center;
+    font-size: 0.8rem; padding: 0.4rem 1rem;
+  }
+  .preview-ribbon a { color: #abd6ac; }
+  .sem-body { padding: 2.5rem 1.25rem 4rem; max-width: 44rem; }
+  .sem-empty { color: var(--text-muted); }
+  .provenance-legend {
+    position: sticky; bottom: 0; z-index: 20;
+    background: var(--surface-inverse); color: var(--text-inverse);
+    padding: 0.75rem 1rem; font-size: var(--font-xs);
+  }
+  .provenance-legend ul {
+    display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0.35rem 0 0; padding: 0;
+  }
+  .pv { width: 0.9rem; height: 0.9rem; border-radius: 2px; display: inline-block; }
+  .pv-authentic { background: #4d9450; }
+  .pv-stock { background: #c46a1f; }
+  .pv-brand { background: #6b7280; }
+  :global(img[data-provenance='stock']) { outline: 3px solid #c46a1f; outline-offset: -3px; }
+  :global(img[data-provenance='authentic']) { outline: 3px solid #4d9450; outline-offset: -3px; }
+  :global(img[data-provenance='brand']) { outline: 2px dashed #6b7280; outline-offset: -2px; }
+</style>
