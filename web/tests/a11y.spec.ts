@@ -427,12 +427,30 @@ test.describe('Контраст тумблера темы в обеих тема
       if (!inBar) await page.locator('.topnav-mobile > summary').click();
       const toggle = page.locator(inBar ? '#theme-toggle' : '.drawer-theme');
 
-      // Проверяем ОБА состояния контрола: включённое состояние в светлой теме и
-      // выключенное в тёмной тоже достижимы пользователем.
+      // Второй проход переключает тему, а не состояние контрола отдельно от неё:
+      // applyTheme (HeaderTools.astro) ставит data-theme и aria-checked одним
+      // синхронным вызовом, поэтому в устойчивом состоянии существуют только две
+      // комбинации — светлая+выключено и тёмная+включено. Их и меряем.
+      //
+      // Комбинация «тёмная+выключено» устойчиво НЕ достижима: она живёт лишь кадр
+      // между синхронной установкой data-theme в <head> и отработкой скрипта,
+      // который выставит aria-checked. Детерминированного теста на неё здесь нет —
+      // цвет для неё подобран расчётом, и этот долг записан в TD-10.
       for (const pass of ['как есть', 'после переключения'] as const) {
         if (pass === 'после переключения') {
           await toggle.click();
-          await page.waitForTimeout(200);
+          // 350 мс, а не 200: у `.topnav` background-color переходит 0.3s
+          // (motion.css, «плавная смена темы»), а у дорожки — 0.15s. При
+          // ожидании 200 мс замер иногда попадает в НЕОСЕВШЕЕ состояние, и гейт
+          // краснеет на исправном коде — независимое ревью воспроизвело это
+          // повторными прогонами (2 падения из 15 и 2 из 20).
+          //
+          // Это НЕ маскировка дефекта: провал контраста во время самой анимации
+          // реален и измерен (до 1.04:1, ниже порога 150 мс), но он про
+          // переходные кадры, а не про состояние контрола — см. TD-10.
+          // Здесь измеряются устойчивые состояния, и ждать надо дольше самого
+          //долгого relevant-перехода.
+          await page.waitForTimeout(350);
         }
 
         const m = await toggle.evaluate((el) => {
@@ -457,6 +475,9 @@ test.describe('Контраст тумблера темы в обеих тема
 
           const iconStyle = icon ? getComputedStyle(icon) : null;
           return {
+            // Тема НА МОМЕНТ ЗАМЕРА: во втором проходе она противоположна той,
+            // с которой тест стартовал, и подпись обязана называть фактическую.
+            theme: document.documentElement.dataset.theme ?? 'light',
             checked: el.getAttribute('aria-checked'),
             track: getComputedStyle(track).backgroundColor,
             // Границу контрола может давать не цвет дорожки, а обводка: тёмная
@@ -475,7 +496,7 @@ test.describe('Контраст тумблера темы в обеих тема
           };
         });
 
-        expect(m.iconState, `${theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
+        expect(m.iconState, `${m.theme}/${pass}: видимой иконки состояния нет`).not.toBeNull();
 
         const checks: Array<[string, number]> = [
           [
@@ -492,7 +513,7 @@ test.describe('Контраст тумблера темы в обеих тема
         for (const [what, value] of checks) {
           expect(
             value,
-            `${theme}, ${pass} (aria-checked=${m.checked}): ${what} — ${value.toFixed(2)}:1 при требуемых ${MIN}:1`,
+            `${m.theme}, ${pass} (aria-checked=${m.checked}): ${what} — ${value.toFixed(2)}:1 при требуемых ${MIN}:1`,
           ).toBeGreaterThanOrEqual(MIN);
         }
       }
