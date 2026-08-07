@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { dist, walkHtml, walkFiles } from './helpers/dist-pages';
+import { LEGACY_CTA_ATTR, LEGACY_CTA_UNRESOLVED_ATTR } from '../src/lib/html-cleaner.js';
 
 // ─── Качество отрендеренного контента ───────────────────────────────────────
 // Дефекты, которые видит глазами пользователь, но не ловят SEO/медиа-гейты.
@@ -118,26 +119,84 @@ describe('rendered content quality', () => {
   // ведущие не туда, куда обещает подпись: «Хочу сотрудничать!» (×3 на
   // /sotrudnichestvo-s-nami) и «Произвести оплату» (на /oplata) вели в прайс.
   //
-  // Проверяемое свойство: очистка не выдумывает адрес. Если страница не сообщила,
-  // куда ведёт её легаси-кнопка, контрол помечается как неразрешённый — и такой
-  // метки в сборке быть не должно.
+  // Первая редакция этих гейтов ПРОВЕРЯЛА МЕХАНИЗМ, А НЕ ПРЕДМЕТ: они требовали,
+  // чтобы очистка не выдумывала адрес, но назначение, которое сообщила страница,
+  // не проверял никто. Независимое ревью показало выполнением, что замена одной
+  // строки в oplata.astro ('#oplata-svyaz' → '/raspisanie-i-tseny') возвращает
+  // дефект дословно и оставляет оба гейта зелёными (44 passed, 14 passed).
+  // Воспроизведено — находка подтвердилась.
   //
-  // Почему не «один адрес на разные подписи»: такой признак был написан первым и
-  // оказался негодным — он валит законные случаи (одна книга под двумя
-  // формулировками названия, одна группа курсов под именами входящих семинаров).
-  // Он ловил не предмет, а совпадение.
+  // Поэтому проверяется само назначение: контрол легаси-кнопки ведёт на якорь
+  // ВНУТРИ той же страницы, и этот якорь существует. Уводить на другую страницу
+  // нельзя — подпись обещает действие, а не переход; семантику адреса машина не
+  // проверит, а вот «свой якорь и он существует» проверит полностью.
+  it('legacy CTA points at an existing anchor on its own page', () => {
+    const offenders: string[] = [];
+    let controls = 0;
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+      for (const a of html.matchAll(
+        new RegExp(`<a\\s([^>]*\\b${LEGACY_CTA_ATTR}\\b[^>]*)>([^<]*)<`, 'gi')
+      )) {
+        controls += 1;
+        const href = a[1].match(/\bhref="([^"]*)"/i)?.[1] ?? '';
+        const label = a[2].trim();
+        const where = `${file.replace(dist, '')}: «${label}» → ${href || '(нет href)'}`;
+        if (!href.startsWith('#')) {
+          offenders.push(`${where} — ведёт за пределы своей страницы`);
+        } else if (!ids.has(href.slice(1))) {
+          offenders.push(`${where} — якоря нет на этой странице`);
+        }
+      }
+    }
+    // Отсутствие сигнала — не успех: ноль контролов значит, что проверка ничего
+    // не измерила. Контролы в сборке есть по построению (легаси-кнопки на
+    // /oplata и /sotrudnichestvo-s-nami), их исчезновение — тоже сигнал.
+    expect(
+      controls,
+      'легаси-контролов в сборке не найдено — проверка ничего не измерила'
+    ).toBeGreaterThan(0);
+    expect(offenders, `легаси-кнопка ведёт не туда:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  // Свойство шире предыдущего и полезно само по себе: внутристраничная ссылка,
+  // ведущая в несуществующий фрагмент, ничего не делает по клику. Ревью нашло
+  // это опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
+  // проверки зелёной.
+  it('every in-page fragment link resolves to an element on that page', () => {
+    const offenders: string[] = [];
+    let links = 0;
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+      for (const a of html.matchAll(/<a\s[^>]*\bhref="#([^"]+)"/gi)) {
+        links += 1;
+        const frag = decodeURIComponent(a[1]);
+        if (!ids.has(frag) && frag !== 'top') {
+          offenders.push(`${file.replace(dist, '')}: #${frag}`);
+        }
+      }
+    }
+    expect(links, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(
+      [...new Set(offenders)].slice(0, 10),
+      `ссылка ведёт в несуществующий фрагмент:\n${[...new Set(offenders)].slice(0, 10).join('\n')}`
+    ).toEqual([]);
+  });
+
   it('no unresolved legacy control left in the build', () => {
     const offenders: string[] = [];
     let pages = 0;
     for (const file of walkHtml()) {
       pages += 1;
       const html = readFileSync(file, 'utf-8');
-      for (const m of html.matchAll(/data-legacy-cta-unresolved[^>]*>([^<]*)</gi)) {
+      for (const m of html.matchAll(
+        new RegExp(`${LEGACY_CTA_UNRESOLVED_ATTR}[^>]*>([^<]*)<`, 'gi')
+      )) {
         offenders.push(`${file.replace(dist, '')}: «${m[1].trim()}»`);
       }
     }
-    // Отсутствие сигнала — не успех: ноль просмотренных страниц значит, что
-    // проверка ничего не измерила.
     expect(pages, 'в dist не найдено ни одной страницы — проверка ничего не измерила').toBeGreaterThan(0);
     expect(
       offenders,

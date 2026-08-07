@@ -556,9 +556,10 @@ function redirectFormLinksInDemo(html: string): string {
  *
  * 1. Нативная <button> без класса (например «Произвести оплату» на /oplata) —
  *    серый браузерный контрол посреди страницы, к тому же МЁРТВЫЙ: на старом
- *    сайте её обрабатывал React, у нас обработчика нет. Пока онлайн-оплата
- *    (FR-08) не подключена, ведём пользователя туда, где сценарий работает —
- *    в расписание, где есть запись через CRM-форму.
+ *    сайте её обрабатывал React, у нас обработчика нет. Пока форма не подключена,
+ *    ведём пользователя на якорь ВНУТРИ ЭТОЙ ЖЕ страницы, который сообщает
+ *    страница (legacyCtaHref) — обычно её блок контактов. Уводить на другую
+ *    страницу нельзя: подпись кнопки обещает действие, а не переход.
  * 2. Аккордеоны, обёрнутые в <ul><li> — у карточек торчат маркеры списка.
  *    Разворачиваем такие обёртки, чтобы маркеры не появлялись ни в одном
  *    браузере (CSS :has() не покрыл бы старый Safari).
@@ -581,8 +582,8 @@ function normalizeLegacyControls(html: string, legacyCtaHref?: string): string {
     /<button(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/button>/gi,
     (_m, label) =>
       legacyCtaHref
-        ? `<a class="btn btn-primary" href="${legacyCtaHref}" data-legacy-cta>${label}</a>`
-        : `<span class="legacy-cta-unresolved" data-legacy-cta-unresolved>${label}</span>`
+        ? `<a class="btn btn-primary" href="${legacyCtaHref}" ${LEGACY_CTA_ATTR}>${label}</a>`
+        : `<span class="legacy-cta-unresolved" ${LEGACY_CTA_UNRESOLVED_ATTR}>${label}</span>`
   );
 
   // 2. <ul>/<li> вокруг аккордеонов — это не список, а layout-обёртка из
@@ -693,6 +694,14 @@ function applyExternalLinkPolicy(html: string): string {
     return tag.replace(/^<a\b/i, `<a rel="${merged}"`);
   });
 }
+
+/**
+ * Атрибуты легаси-контрола. Экспортируются, чтобы гейты не искали магическую
+ * строку: переименование здесь обязано ломать тесты, а не оставлять их
+ * вечнозелёными на маркере, который больше никто не эмитит.
+ */
+export const LEGACY_CTA_ATTR = 'data-legacy-cta';
+export const LEGACY_CTA_UNRESOLVED_ATTR = 'data-legacy-cta-unresolved';
 
 export interface CleanOptions {
   /**
