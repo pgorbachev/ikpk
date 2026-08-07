@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  // По умолчанию Playwright забирает и `*.test.ts` — то есть файлы vitest, которые
+  // лежат в том же каталоге. На них он падает при СБОРЕ, не запустив ни одного теста
+  // («Cannot read properties of undefined (reading 'config')» на первом же `describe`),
+  // поэтому `playwright test` без явного списка файлов не работал вовсе.
+  testMatch: '**/*.spec.ts',
   use: {
     baseURL: 'http://127.0.0.1:4322',
     headless: true,

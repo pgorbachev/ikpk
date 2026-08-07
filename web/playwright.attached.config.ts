@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  // См. комментарий в playwright.config.ts: без этого сбор падает на файлах vitest.
+  testMatch: '**/*.spec.ts',
   timeout: 10000,
   use: {
     baseURL: 'http://127.0.0.1:4322',
