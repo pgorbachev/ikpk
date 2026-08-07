@@ -3,6 +3,9 @@
 //
 // Секции берутся из src/components/home/sections/*. Заблокированные контентом
 // (trust/testimonials/lead) показываются только в превью с плейсхолдером.
+//
+// Preview-роуты собираются только при DEMO_FORMS (build:demo) — иначе черновики
+// утекали бы в прод по прямому URL. noindex + catch-all hub по образцу demo-zayavka.
 
 export type SectionKey =
   | 'hero-offer'

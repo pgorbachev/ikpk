@@ -5,8 +5,10 @@ import {
   getTeachers,
   getSeminars,
   getCourseGroups,
+  getArticles,
   formatPrice,
   type ScheduleEntry,
+  type Teacher,
 } from './data.js';
 import { isCurrentOrFuture } from './schedule-window';
 
@@ -27,21 +29,8 @@ export interface UpcomingSeminar {
   teacherName: string;
   teacherPhoto: string | null;
   teacherHref: string | null;
-}
-
-/** Живые счётчики каталога — для modular-hero и маршрутов, без маркетинговых выдумок. */
-export function getCatalogStats() {
-  const schedule = getScheduleEntries().filter((e) => e.status === 'active');
-  const cities = new Set(
-    schedule.map((e) => e.city?.name).filter((name): name is string => Boolean(name))
-  );
-  return {
-    seminars: getSeminars().length,
-    programs: getCourseGroups().length,
-    dates: schedule.length,
-    cities: cities.size,
-    teachers: getTeachers().filter((t) => t.photo).length,
-  };
+  /** Ссылка на форму записи из расписания (пустая, если в событии её нет). */
+  registrationFormLink: string;
 }
 
 const MONTHS = [
@@ -49,7 +38,18 @@ const MONTHS = [
   'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
 ];
 
-function dateRange(startAt: string, endAt: string): string {
+/** Короткие имена институтов живут в ScheduleEntry.institute.shortname, не в Institute. */
+const SHORT_BY_SLUG: Record<string, string> = {
+  'institut-klinicheskoy-prikladnoy-kineziologii': 'ИКПК',
+  'institut-apledzhera': 'Апледжера',
+  'institut-barralya': 'Барраля',
+};
+
+export function instituteShortBySlug(slug: string): string {
+  return SHORT_BY_SLUG[slug] || slug;
+}
+
+export function formatScheduleDateRange(startAt: string, endAt: string): string {
   const s = new Date(startAt);
   const e = new Date(endAt);
   const sd = s.getUTCDate();
@@ -59,6 +59,48 @@ function dateRange(startAt: string, endAt: string): string {
   if (!endAt || (sd === ed && sm === em)) return `${sd} ${sm}`;
   if (sm === em) return `${sd}–${ed} ${em}`;
   return `${sd} ${sm} – ${ed} ${em}`;
+}
+
+export function findTeacherForScheduleLead(
+  lead: { id: number; fullName: string } | undefined,
+  teachers: Teacher[] = getTeachers()
+): Teacher | undefined {
+  if (!lead) return undefined;
+  // Только стабильные ключи: матчинг по префиксу имени давал ложную атрибуцию.
+  return teachers.find(
+    (t) => t.legacy_id === String(lead.id) || t.slug === String(lead.id)
+  );
+}
+
+/**
+ * Живые счётчики каталога — для modular-hero и маршрутов.
+ * dates — только текущие/будущие (как в getUpcomingSeminars).
+ * cities — населённые пункты без «Онлайн».
+ */
+export function getCatalogStats(now: Date = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const schedule = getScheduleEntries().filter(
+    (e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today)
+  );
+  const cityNames = [
+    ...new Set(
+      schedule
+        .map((e) => e.city?.name)
+        .filter((name): name is string => Boolean(name) && name !== 'Онлайн')
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'ru'));
+  const onlineDates = schedule.filter((e) => e.city?.name === 'Онлайн').length;
+
+  return {
+    seminars: getSeminars().length,
+    programs: getCourseGroups().length,
+    dates: schedule.length,
+    cities: cityNames.length,
+    cityNames,
+    onlineDates,
+    teachers: getTeachers().filter((t) => t.photo).length,
+    articles: getArticles().length,
+  };
 }
 
 /**
@@ -83,23 +125,16 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         ? `/${instituteSlug}/${e.program.slug}/${e.seminar.slug}`
         : '/raspisanie-i-tseny';
       const lead = e.teachers?.[0];
-      const full = lead
-        ? teachers.find(
-            (t) =>
-              t.legacy_id === String(lead.id) ||
-              t.slug === String(lead.id) ||
-              t.name.startsWith(lead.fullName.split(',')[0].trim())
-          )
-        : undefined;
+      const full = findTeacherForScheduleLead(lead, teachers);
       const start = new Date(e.startAt);
       return {
         id: e.id,
         title: e.name,
         href,
         instituteName: e.institute.name,
-        instituteShort: e.institute.shortname || e.institute.name,
+        instituteShort: e.institute.shortname || instituteShortBySlug(instituteSlug || ''),
         cityName: e.city?.name || 'Уточняется',
-        dateLabel: dateRange(e.startAt, e.endAt),
+        dateLabel: formatScheduleDateRange(e.startAt, e.endAt),
         dayLabel: String(start.getUTCDate()),
         monthLabel: MONTHS[start.getUTCMonth()],
         priceLabel: e.isFree ? 'Бесплатно' : formatPrice(e.newPrice),
@@ -110,6 +145,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         teacherHref: full
           ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
           : null,
+        registrationFormLink: e.registrationFormLink || '',
       };
     });
 }

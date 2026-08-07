@@ -6,15 +6,17 @@
  */
 import { CTA_HREF } from '../../../lib/navigation';
 import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+import { getCatalogStats } from '../../../lib/home';
 
 const photo = '/media/users/1/images/1-1727024776370.webp';
 const dim = getAssetDimensions(photo);
 const teacherHref = '/institut-apledzhera/prepodavatel/63';
+const stats = getCatalogStats();
 ---
 <section class="hero-fa" data-architecture="faculty" data-hero="faculty">
   <div class="hero-fa-inner">
     <div class="hero-fa-copy">
-      <p class="hero-fa-eyebrow">29 преподавателей · клиническая практика</p>
+      <p class="hero-fa-eyebrow">{stats.teachers} преподавателей · клиническая практика</p>
       <h1 class="hero-fa-title">
         Учитесь у практикующих преподавателей прикладной кинезиологии
       </h1>

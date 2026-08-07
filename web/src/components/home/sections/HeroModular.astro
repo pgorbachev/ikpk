@@ -3,13 +3,15 @@
  * Modular Education — первый экран.
  * «Что учить и когда». Без фото (осознанно): сводка числами + модуль подбора.
  * studio §7.4.
+ *
+ * Модуль подбора — прототипная заглушка: /raspisanie-i-tseny не читает
+ * searchParams. Помечен явно, чтобы владелец не выбрал каркас по несуществующему UX.
  */
 import { getCatalogStats } from '../../../lib/home';
 import { getInstitutes } from '../../../lib/data';
 
 const stats = getCatalogStats();
 const institutes = getInstitutes();
-const cities = ['Санкт-Петербург', 'Москва', 'Онлайн', 'Новосибирск'];
 ---
 <section class="hero-mo" data-architecture="modular" data-hero="modular">
   <div class="hero-mo-inner">
@@ -17,7 +19,7 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
       <div class="hero-mo-copy">
         <h1 class="hero-mo-title">Программы и расписание обучения</h1>
         <p class="hero-mo-lead">
-          Выберите институт, город и уровень — откройте подходящие семинары.
+          Выберите институт и город — откройте подходящие семинары в расписании.
         </p>
       </div>
       <dl class="hero-mo-stats" aria-label="Сводка каталога">
@@ -29,6 +31,10 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
     </div>
 
     <form class="hero-mo-picker" action="/raspisanie-i-tseny" method="get" data-modular-picker>
+      <p class="hero-mo-stub" role="note">
+        Прототип: фильтры пока не подключены к расписанию — кнопка открывает
+        полный каталог.
+      </p>
       <label>
         <span>Институт</span>
         <select name="institute">
@@ -42,21 +48,13 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
         <span>Город</span>
         <select name="city">
           <option value="">Все города</option>
-          {cities.map((c) => (
+          {stats.cityNames.map((c) => (
             <option value={c}>{c}</option>
           ))}
+          {stats.onlineDates > 0 && <option value="Онлайн">Онлайн</option>}
         </select>
       </label>
-      <label>
-        <span>Уровень</span>
-        <select name="level">
-          <option value="">Любой</option>
-          <option value="start">Начинаю</option>
-          <option value="continue">Продолжаю ступень</option>
-          <option value="org">Оплачивает организация</option>
-        </select>
-      </label>
-      <button type="submit" class="btn btn-primary">Показать</button>
+      <button type="submit" class="btn btn-primary">Открыть расписание</button>
     </form>
   </div>
 </section>
@@ -98,9 +96,7 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
     gap: 0.75rem;
     margin: 0;
   }
-  .hero-mo-stats div {
-    text-align: right;
-  }
+  .hero-mo-stats div { text-align: right; }
   .hero-mo-stats dt {
     font-size: 1.5rem;
     font-weight: 700;
@@ -116,12 +112,18 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
   }
   .hero-mo-picker {
     display: grid;
-    grid-template-columns: 1.2fr 1fr 1fr auto;
+    grid-template-columns: 1.2fr 1fr auto;
     gap: 0.75rem;
     align-items: end;
     padding: 1rem;
     background: var(--surface-subtle);
     border: 1px solid var(--border-default);
+  }
+  .hero-mo-stub {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
   }
   .hero-mo-picker label {
     display: flex;
@@ -132,9 +134,13 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
+    min-width: 0;
   }
   .hero-mo-picker select {
     appearance: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     background: var(--surface-page);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-control);
@@ -148,7 +154,6 @@ const cities = ['Санкт-Петербург', 'Москва', 'Онлайн',
 
   @media (max-width: 900px) {
     .hero-mo-top { grid-template-columns: 1fr; gap: 1.25rem; }
-    .hero-mo-stats { grid-template-columns: repeat(4, 1fr); }
     .hero-mo-stats div { text-align: left; }
     .hero-mo-picker { grid-template-columns: 1fr 1fr; }
     .hero-mo-picker button { grid-column: 1 / -1; }

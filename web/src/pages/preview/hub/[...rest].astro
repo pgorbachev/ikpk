@@ -20,9 +20,9 @@ const items = ARCHITECTURE_IDS.map((id) => variants[id]);
   <main class="hub">
     <h1>Три каркаса — один бренд</h1>
     <p class="hub-lead">
-      Палитра, логотип и контент общие. Различается архитектура: что несёт первый
-      экран, как поданы события, институты и страница семинара. Оценивайте на
-      ширинах 360 и 1280.
+      Палитра, логотип и контент общие. Различается архитектура: первый экран,
+      события, институты, страница семинара (с датой и без) и расписание.
+      Оценивайте на ширинах 360 и 1280.
     </p>
     <ul class="hub-list">
       {items.map((v) => (
@@ -30,8 +30,10 @@ const items = ARCHITECTURE_IDS.map((id) => variants[id]);
           <h2>{v.label}</h2>
           <p>{v.description}</p>
           <p class="hub-links">
-            <a href={`/preview/${v.id}/`}>Главная</a>
-            <a href={`/preview/${v.id}/seminar/`}>Семинар</a>
+            <a href={`/preview/${v.id}`}>Главная</a>
+            <a href={`/preview/${v.id}/seminar`}>Семинар</a>
+            <a href={`/preview/${v.id}/seminar-undated`}>Без дат</a>
+            <a href={`/preview/${v.id}/schedule`}>Расписание</a>
           </p>
         </li>
       ))}

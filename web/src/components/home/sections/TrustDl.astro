@@ -1,7 +1,11 @@
 ---
 /**
  * Editorial: доказательства доверия как dl без иконок и плашек (§7.2 / §7.1).
+ * Числа — только из getCatalogStats(), без литералов рядом с живыми счётчиками.
  */
+import { getCatalogStats } from '../../../lib/home';
+
+const stats = getCatalogStats();
 ---
 <section class="trust-dl section" data-trust="editorial">
   <div class="trust-dl-inner">
@@ -25,11 +29,11 @@
       </div>
       <div>
         <dt>Преподаватели</dt>
-        <dd>29 практикующих специалистов с портретами в каталоге</dd>
+        <dd>{stats.teachers} практикующих специалистов с портретами в каталоге</dd>
       </div>
       <div>
         <dt>Каталог</dt>
-        <dd>126 семинаров · 26 программ · 68 статей</dd>
+        <dd>{stats.seminars} семинаров · {stats.programs} программ · {stats.articles} статей</dd>
       </div>
     </dl>
   </div>

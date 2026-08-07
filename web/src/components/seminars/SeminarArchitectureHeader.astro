@@ -2,9 +2,13 @@
 /**
  * Шапка семинара для прототипов каркаса (§7.6).
  * architecture: editorial | faculty | modular
+ *
+ * Modular: sticky-карточка и тело в одной сетке — иначе sticky ограничен высотой
+ * <header> и не сопровождает текст.
  */
 import type { Seminar, CourseGroup, Institute, Teacher } from '../../lib/data';
 import { getAssetDimensions, srcsetFor } from '../../lib/media';
+import { instituteShortBySlug } from '../../lib/home';
 
 interface ScheduleRow {
   dateLabel: string;
@@ -23,6 +27,8 @@ interface Props {
   code: string;
   schedule: ScheduleRow[];
   teacherFallback?: Teacher | null;
+  /** Для modular: тело внутри сетки со sticky-карточкой (§7.6). */
+  bodyHtml?: string;
 }
 
 const {
@@ -33,10 +39,12 @@ const {
   code,
   schedule,
   teacherFallback = null,
+  bodyHtml = '',
 } = Astro.props;
 
 const next = schedule[0];
 const hasDate = Boolean(next);
+const instituteShort = instituteShortBySlug(institute.slug);
 const teacher =
   next?.teacher ||
   (teacherFallback
@@ -53,6 +61,7 @@ const duration = next?.durationLabel || '';
 const ctaHref = next?.formHref || '/raspisanie-i-tseny';
 ---
 
+{architecture !== 'modular' ? (
 <header class={`sem-hero sem-hero--${architecture}`} data-seminar-architecture={architecture}>
   {architecture === 'editorial' && (
     <div class="sem-ed">
@@ -61,7 +70,7 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
       <p class="sem-ed-inst">{institute.name} · {courseGroup.name}</p>
       {hasDate ? (
         <p class="sem-facts">
-          {next.dateLabel}
+          {next!.dateLabel}
           {city && <> · {city}</>}
           {duration && <> · {duration}</>}
           {price && <> · {price}</>}
@@ -74,7 +83,7 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
         </p>
       ) : (
         <p class="sem-undated" data-undated>
-          Даты следующего набора уточняются
+          Даты следующего набора уточняются{' '}
           <a href="/kontakty">Сообщить, когда откроется набор →</a>
         </p>
       )}
@@ -110,7 +119,7 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
             src={teacher.photo}
             srcset={srcsetFor(teacher.photo)}
             sizes="300px"
-            alt={teacher.name || ''}
+            alt=""
             width={photoDim?.width ?? 300}
             height={photoDim?.height ?? 300}
             class="teacher-photo"
@@ -125,66 +134,87 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
       )}
     </div>
   )}
-
-  {architecture === 'modular' && (
-    <div class="sem-mo">
-      <div class="sem-mo-copy">
-        <div class="sem-mo-badges">
-          {code && <span class="sem-badge">{code}</span>}
-          <span class="sem-badge muted">{institute.shortname || institute.name}</span>
-        </div>
-        <h1>{seminar.name}</h1>
-        <p class="sem-ed-inst">{courseGroup.name}</p>
-        {!hasDate && (
-          <p class="sem-undated" data-undated>
-            <span class="sem-badge">Набор открыт · дата уточняется</span>
-          </p>
-        )}
-      </div>
-      <aside class="sem-mo-card">
-        {hasDate ? (
-          <>
-            <p class="sem-mo-date">{next.dateLabel}</p>
-            <ul class="sem-fa-pills">
-              {city && <li>{city}</li>}
-              {duration && <li>{duration}</li>}
-            </ul>
-          </>
-        ) : (
-          <p class="sem-mo-date soft">Дата уточняется</p>
-        )}
-        {price && <p class="sem-mo-price">{price}</p>}
-        {teacher && (
-          <div class="sem-mo-teacher">
-            {teacher.photo && (
-              <img
-                src={teacher.photo}
-                srcset={srcsetFor(teacher.photo)}
-                sizes="64px"
-                alt=""
-                width="64"
-                height="64"
-                class="teacher-photo"
-                loading="lazy"
-              />
-            )}
-            <span>
-              {teacher.href ? <a href={teacher.href}>{teacher.name}</a> : teacher.name}
-            </span>
-          </div>
-        )}
-        <a class="btn btn-primary" href={ctaHref}>Записаться</a>
-      </aside>
-    </div>
-  )}
 </header>
+) : (
+<section class="sem-mo-page" data-seminar-architecture="modular">
+  <div class="sem-mo">
+    <div class="sem-mo-copy">
+      <div class="sem-mo-badges">
+        {code && <span class="sem-badge">{code}</span>}
+        <span class="sem-badge muted">{instituteShort}</span>
+      </div>
+      <h1>{seminar.name}</h1>
+      <p class="sem-ed-inst">{courseGroup.name}</p>
+      {!hasDate && (
+        <p class="sem-undated" data-undated>
+          <span class="sem-badge">Набор открыт · дата уточняется</span>
+        </p>
+      )}
+      {bodyHtml ? (
+        <div class="sem-mo-body rich-content" set:html={bodyHtml} />
+      ) : (
+        <p class="sem-empty">Описание семинара в данных отсутствует.</p>
+      )}
+      <p class="sem-mo-note">
+        Аккордеон учебного плана по дням — следующий шаг прототипа (§7.6); сейчас
+        тот же rich-content, чтобы сравнить шапку записи.
+      </p>
+    </div>
+    <aside class="sem-mo-card">
+      {hasDate ? (
+        <>
+          <p class="sem-mo-date">{next!.dateLabel}</p>
+          <ul class="sem-fa-pills">
+            {city && <li>{city}</li>}
+            {duration && <li>{duration}</li>}
+          </ul>
+        </>
+      ) : (
+        <p class="sem-mo-date soft">Дата уточняется</p>
+      )}
+      {price && <p class="sem-mo-price">{price}</p>}
+      {teacher && (
+        <div class="sem-mo-teacher">
+          {teacher.photo && (
+            <img
+              src={teacher.photo}
+              srcset={srcsetFor(teacher.photo)}
+              sizes="64px"
+              alt=""
+              width="64"
+              height="64"
+              class="teacher-photo"
+              loading="lazy"
+            />
+          )}
+          <span>
+            {teacher.href ? <a href={teacher.href}>{teacher.name}</a> : teacher.name}
+          </span>
+        </div>
+      )}
+      <a class="btn btn-primary" href={ctaHref}>Записаться</a>
+    </aside>
+  </div>
+</section>
+)}
 
 <style>
   .sem-hero { padding: 2.5rem 0 2rem; border-bottom: 1px solid var(--border-default); }
-  .sem-ed, .sem-fa, .sem-mo {
+  .sem-ed, .sem-fa {
     max-width: 1120px;
     margin: 0 auto;
     padding: 0 1.25rem;
+  }
+  .sem-mo-page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  .sem-mo {
+    display: grid;
+    grid-template-columns: 1.3fr 0.7fr;
+    gap: 1.5rem;
+    align-items: start;
   }
   .sem-code {
     margin: 0 0 0.6rem;
@@ -194,7 +224,7 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  .sem-hero h1 {
+  .sem-hero h1, .sem-mo-copy h1 {
     margin: 0;
     font-size: clamp(1.6rem, 3.5vw, 2.35rem);
     font-weight: 650;
@@ -278,12 +308,6 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
   .sem-fa-figure a { color: var(--text-primary); text-decoration: none; }
   .sem-fa-figure a:hover { text-decoration: underline; }
 
-  .sem-mo {
-    display: grid;
-    grid-template-columns: 1.3fr 0.7fr;
-    gap: 1.5rem;
-    align-items: start;
-  }
   .sem-mo-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
   .sem-badge {
     display: inline-block;
@@ -299,6 +323,14 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
     border-color: var(--border-default);
     color: var(--text-muted);
   }
+  .sem-mo-body { margin-top: 2rem; max-width: 44rem; }
+  .sem-mo-note {
+    margin: 1.5rem 0 0;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    max-width: 44rem;
+  }
+  .sem-empty { color: var(--text-muted); margin-top: 2rem; }
   .sem-mo-card {
     position: sticky;
     top: calc(var(--header-height) + 1rem);

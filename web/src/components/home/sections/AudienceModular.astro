@@ -1,26 +1,27 @@
 ---
 /**
- * Modular: маршруты с числами (§7.4). Числа — из реальных данных, не маркетинг.
+ * Modular: маршруты с приблизительными числами из описаний (§7.4).
+ * Эвристика по тексту — не точная модель предусловий; формулировка это отражает.
  */
 import { getSeminars } from '../../../lib/data';
 
 const all = getSeminars();
-const withPrereq = all.filter((s) =>
+const withPrereqHint = all.filter((s) =>
   /должен быть пройден|обязательн/i.test(`${s.description_text || ''} ${s.description_html || ''}`)
 ).length;
-const withoutPrereq = all.length - withPrereq;
+const withoutPrereqHint = all.length - withPrereqHint;
 
 const routes = [
   {
     title: 'Я начинаю',
-    count: withoutPrereq,
-    unit: 'семинаров без жёстких предусловий',
+    count: withoutPrereqHint,
+    unit: 'семинаров без явного предусловия в описании',
     href: '/raspisanie-i-tseny',
   },
   {
     title: 'Я продолжаю',
-    count: withPrereq,
-    unit: 'семинаров со ступенями',
+    count: withPrereqHint,
+    unit: 'семинаров с намёком на ступень в тексте',
     href: '/institut-klinicheskoy-prikladnoy-kineziologii',
   },
   {

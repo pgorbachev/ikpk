@@ -40,6 +40,9 @@ export default tseslint.config(
       'src/pages/sotrudnichestvo-s-nami.astro',
       'src/pages/statyi/\\[slug\\].astro',
       'src/pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro',
+      'src/pages/preview/\\[variant\\]/seminar.astro',
+      'src/pages/preview/\\[variant\\]/seminar-undated.astro',
+      'src/components/seminars/SeminarArchitectureHeader.astro',
     ],
     rules: {
       'astro/no-set-html-directive': 'off',

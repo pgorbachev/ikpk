@@ -35,7 +35,7 @@ const institutes = getInstitutes().map((inst) => {
             />
           )}
           <h3>{inst.name}</h3>
-          <p><strong>{inst.programs}</strong> программ</p>
+          <p><strong>{inst.programs}</strong> {inst.programs === 1 ? 'программа' : inst.programs > 1 && inst.programs < 5 ? 'программы' : 'программ'}</p>
           <span>Открыть каталог →</span>
         </a>
       ))}

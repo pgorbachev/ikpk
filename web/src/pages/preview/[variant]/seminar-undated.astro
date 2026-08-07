@@ -1,7 +1,7 @@
 ---
 /**
- * Прототип страницы семинара с датой (§7.6) — эталон для сравнения шапок.
- * Ветка без дат — отдельно: /preview/<id>/seminar-undated
+ * Прототип семинара БЕЗ дат (§7.6) — самое частое состояние каталога.
+ * Формулировки undated различаются по направлениям.
  */
 import type { GetStaticPaths } from 'astro';
 import TopNavLayout from '../../../layouts/TopNavLayout.astro';
@@ -14,14 +14,9 @@ import {
   getTeachers,
   cleanBodyHtml,
   stripLegacySeminarTail,
-  formatPrice,
 } from '../../../lib/data';
 import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
-import { registrationHref, isDemoForms } from '../../../lib/forms';
-import {
-  formatScheduleDateRange,
-  findTeacherForScheduleLead,
-} from '../../../lib/home';
+import { isDemoForms } from '../../../lib/forms';
 import { ARCHITECTURE_IDS, variants, type ArchitectureId } from '../../../lib/variants';
 
 export const getStaticPaths: GetStaticPaths = () =>
@@ -39,51 +34,23 @@ const allSeminars = getSeminars();
 const allTeachers = getTeachers();
 const today = calendarToday();
 
-// Эталон с датой и преподавателем — один для всех трёх.
-const entry = getScheduleEntries()
-  .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today) && e.teachers?.length)
-  .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
+const futureSlugs = new Set(
+  getScheduleEntries()
+    .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today))
+    .map((e) => e.seminar.slug)
+);
 
-const seminar = allSeminars.find((s) => s.slug === entry?.seminar.slug) || allSeminars[0];
+const seminar =
+  allSeminars.find((s) => !futureSlugs.has(s.slug)) ||
+  allSeminars.find((s) => /ПК-\d/i.test(s.name)) ||
+  allSeminars[0];
+
 const courseGroup = allCGs.find((c) => c.legacy_id === seminar.course_group_legacy_id)!;
 const institute = institutes.find((i) => i.slug === courseGroup.institute_legacy_id)!;
-
-const scheduleRaw = getScheduleEntries().filter(
-  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
-);
-const sorted = [...scheduleRaw].sort(
-  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-);
-
-// В шапке нужна ближайшая дата; остальной список не передаём.
-const nearest = sorted[0];
-const schedule = nearest
-  ? (() => {
-      const lead = nearest.teachers?.[0];
-      const full = findTeacherForScheduleLead(lead, allTeachers);
-      return [
-        {
-          dateLabel: formatScheduleDateRange(nearest.startAt, nearest.endAt),
-          cityName: nearest.city?.name || 'Уточняется',
-          priceLabel: nearest.isFree ? 'Бесплатно' : formatPrice(nearest.newPrice),
-          durationLabel: nearest.duration ? `${nearest.duration} ч` : '',
-          formHref: registrationHref(nearest.registrationFormLink) || '/raspisanie-i-tseny',
-          teacher: lead
-            ? {
-                name: lead.fullName.split(',')[0].trim(),
-                photo: full?.photo || null,
-                href: full
-                  ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
-                  : null,
-              }
-            : undefined,
-        },
-      ];
-    })()
-  : [];
-
 const teacherFallback =
-  allTeachers.find((t) => t.institute_legacy_id === institute.slug && t.photo) || null;
+  allTeachers.find((t) => t.institute_legacy_id === institute.slug && t.photo) ||
+  allTeachers.find((t) => t.photo) ||
+  null;
 
 const code = seminar.name.match(/^[А-ЯA-Z]+-\d+/i)?.[0] || '';
 const bodyHtml = seminar.description_html
@@ -91,16 +58,15 @@ const bodyHtml = seminar.description_html
   : '';
 ---
 <TopNavLayout
-  title={`${seminar.name} — прототип ${variant.label}`}
+  title={`${seminar.name} — без дат · ${variant.label}`}
   description={seminar.seo_description || variant.description}
   noindex={true}
 >
   <div class="preview-ribbon">
-    Семинар · {variant.label} ·
-    <a href={`/preview/${architecture}`}>главная каркаса</a> ·
-    <a href={`/preview/${architecture}/seminar-undated`}>без дат</a> ·
-    <a href={`/preview/${architecture}/schedule`}>расписание</a> ·
-    <a href="/preview/hub">все каркасы</a>
+    Семинар без дат · {variant.label} ·
+    <a href={`/preview/${architecture}`}>главная</a> ·
+    <a href={`/preview/${architecture}/seminar`}>с датой</a> ·
+    <a href="/preview/hub">хаб</a>
   </div>
 
   <SeminarArchitectureHeader
@@ -109,7 +75,7 @@ const bodyHtml = seminar.description_html
     courseGroup={courseGroup}
     institute={institute}
     code={code}
-    schedule={schedule}
+    schedule={[]}
     teacherFallback={teacherFallback}
     bodyHtml={architecture === 'modular' ? bodyHtml : undefined}
   />

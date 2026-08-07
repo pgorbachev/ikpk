@@ -430,13 +430,20 @@ describe('редиректы легаси-адресов', () => {
   });
 });
 
-// ─── Прототипы каркаса: обязательные блоки главной ──────────────────────────
-// План 005 §4.4 фиксирует состав главной, без которого выбор варианта
-// невозможен: позиционирование, ближайшее событие, доказательства доверия, три
-// института, маршруты аудиторий, семинары, преподаватели, видео, новости, CTA.
-// Гейт проверяет ИМЕННО состав, а не оформление: направления различаются
-// архитектурой подачи, но ни одно не имеет права терять обязательный блок.
-describe('прототипы каркаса', () => {
+// ─── Прототипы каркаса (только DEMO_FORMS / build:demo) ─────────────────────
+// Прод-сборка не содержит /preview — гейты ниже skip'аются, а не «зеленеют»
+// на early-return. Иначе CI с `npm run build` измерял бы вакуум (AGENTS.md).
+// Содержимое проверяется локально/в job с `npm run build:demo`.
+const isDemoBuildForPrototypes = readPage('/').includes('data-demo-banner');
+
+function previewPath(id: string, suffix = ''): string {
+  const bare = `/preview/${id}${suffix}`;
+  return allPages().includes(bare) ? bare : `${bare}/`;
+}
+
+// План 005 §4.4: позиционирование, событие, доверие, институты, аудитории,
+// семинары, преподаватели, видео, новости, CTA. Гейт — состав, не оформление.
+describe.skipIf(!isDemoBuildForPrototypes)('прототипы каркаса', () => {
   const DIRECTIONS = ['editorial', 'faculty', 'modular'];
   const REQUIRED = [
     { name: 'позиционирование (h1)', match: /<h1[^>]*>/ },
@@ -449,35 +456,18 @@ describe('прототипы каркаса', () => {
 
   for (const id of DIRECTIONS) {
     it(`/preview/${id}: обязательные блоки на месте`, () => {
-      const path = `/preview/${id}/`;
-      if (!allPages().includes(path)) {
-        // в боевой сборке черновиков нет — это проверяет отдельный гейт
-        expect(readPage('/')).not.toContain('data-demo-banner');
-        return;
-      }
-      const html = readPage(path);
+      const html = readPage(previewPath(id));
       const missing = REQUIRED.filter(({ match }) => !match.test(html)).map((r) => r.name);
       expect(missing, `в прототипе ${id} нет блоков: ${missing.join(', ')}`).toEqual([]);
     });
   }
 });
 
-// ─── Прототипы честно помечают происхождение изображений ────────────────────
-// Проверено просмотром файлов: подлинный фотоактив ИКПК — только портреты
-// преподавателей. Изображения институтов, событий и статей — сток и CGI
-// (глянцевое спа-фото, силуэт на закате с разорванной цепью, 3D-рендеры).
-//
-// Без пометки владелец оценит стоковую картинку как собственную съёмку и выберет
-// вариант, которого потом не получит. Пометка нужна ТОЛЬКО в прототипах: в
-// боевой сборке это служебная разметка, ей там не место.
-describe('прототипы: происхождение изображений', () => {
+// Подлинный фотоактив — только портреты преподавателей; остальное сток/CGI.
+// Без пометки владелец примет сток за съёмку. В бою служебной разметке не место.
+describe.skipIf(!isDemoBuildForPrototypes)('прототипы: происхождение изображений', () => {
   it('на страницах прототипов есть пометки происхождения', () => {
     const previews = allPages().filter((p) => p.startsWith('/preview/'));
-    if (previews.length === 0) {
-      expect(readPage('/')).not.toContain('data-demo-banner');
-      return;
-    }
-
     const missing = previews.filter((p) => !readPage(p).includes('data-provenance-legend'));
     expect(missing, `в прототипах нет пометок происхождения:\n${missing.join('\n')}`).toEqual([]);
   });
@@ -490,19 +480,10 @@ describe('прототипы: происхождение изображений'
   });
 });
 
-// ─── Редакционное направление: событие строкой, а не карточкой ──────────────
-// Направления должны различаться АРХИТЕКТУРОЙ подачи, а не только порядком
-// секций. Первый различающий элемент: в Institutional Editorial ближайшее
-// событие подаётся строкой-анонсом между линейками (дата · город · семинар ·
-// объём · цена · «Записаться»), а не карточкой с картинкой — карточка тянет за
-// собой изображение, а изображения событий у нас стоковые.
-describe('прототипы: своя подача первого экрана', () => {
+// Направления различаются архитектурой подачи, не порядком секций (§7).
+describe.skipIf(!isDemoBuildForPrototypes)('прототипы: своя подача первого экрана', () => {
   it('editorial подаёт ближайшее событие строкой-анонсом', () => {
-    if (!allPages().includes('/preview/editorial/')) {
-      expect(readPage('/')).not.toContain('data-demo-banner');
-      return;
-    }
-    const html = readPage('/preview/editorial/');
+    const html = readPage(previewPath('editorial'));
     expect(html, 'нет строки-анонса события').toContain('data-event-line');
     expect(html, 'нет editorial hero').toContain('data-hero="editorial"');
 
@@ -513,22 +494,14 @@ describe('прототипы: своя подача первого экрана'
   });
 
   it('faculty подаёт событие карточкой с преподавателем', () => {
-    if (!allPages().includes('/preview/faculty/')) {
-      expect(readPage('/')).not.toContain('data-demo-banner');
-      return;
-    }
-    const html = readPage('/preview/faculty/');
+    const html = readPage(previewPath('faculty'));
     expect(html, 'нет faculty hero').toContain('data-hero="faculty"');
     expect(html, 'нет карточки события с преподавателем').toContain('data-event-teacher');
     expect(html, 'faculty не должен повторять строку editorial').not.toContain('data-event-line');
   });
 
   it('modular подаёт каталог: picker + сетка дат без строки editorial', () => {
-    if (!allPages().includes('/preview/modular/')) {
-      expect(readPage('/')).not.toContain('data-demo-banner');
-      return;
-    }
-    const html = readPage('/preview/modular/');
+    const html = readPage(previewPath('modular'));
     expect(html, 'нет modular hero').toContain('data-hero="modular"');
     expect(html, 'нет модуля подбора').toContain('data-modular-picker');
     expect(html, 'нет сетки дат').toContain('data-upcoming="modular"');
@@ -538,22 +511,23 @@ describe('прототипы: своя подача первого экрана'
 
   it('в остальных направлениях строки-анонса нет — подача отличается', () => {
     for (const id of ['faculty', 'modular']) {
-      const path = `/preview/${id}/`;
-      if (!allPages().includes(path)) continue;
-      expect(readPage(path), `${id} повторяет подачу editorial`).not.toContain('data-event-line');
+      expect(readPage(previewPath(id)), `${id} повторяет подачу editorial`).not.toContain(
+        'data-event-line',
+      );
     }
   });
 
-  it('у каждого каркаса есть прототип страницы семинара', () => {
-    if (!allPages().includes('/preview/editorial/')) {
-      expect(readPage('/')).not.toContain('data-demo-banner');
-      return;
-    }
+  it('у каждого каркаса есть прототипы семинара (с датой и без) и расписания', () => {
     for (const id of ['editorial', 'faculty', 'modular']) {
-      const path = `/preview/${id}/seminar/`;
-      expect(allPages(), `нет ${path}`).toContain(path);
-      const html = readPage(path);
-      expect(html).toContain(`data-seminar-architecture="${id}"`);
+      for (const suffix of ['', '/seminar', '/seminar-undated', '/schedule']) {
+        const path = previewPath(id, suffix);
+        expect(allPages().includes(path), `нет /preview/${id}${suffix}`).toBe(true);
+      }
+      const undatedPath = previewPath(id, '/seminar-undated');
+      const datedPath = previewPath(id, '/seminar');
+      expect(readPage(datedPath)).toContain(`data-seminar-architecture="${id}"`);
+      expect(readPage(undatedPath)).toContain('data-undated');
+      expect(readPage(undatedPath)).toContain(`data-seminar-architecture="${id}"`);
     }
   });
 });
