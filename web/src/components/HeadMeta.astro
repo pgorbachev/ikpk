@@ -18,6 +18,7 @@ const { title, description, ogImage, noindex = false, schema, preloadHero = fals
 const canonicalPath = Astro.url.pathname.replace(/(.)\/+$/, '$1');
 const canonicalURL = new URL(canonicalPath, Astro.site);
 const siteName = 'ИКПК';
+import { serializeJsonLd } from '../lib/json-ld.js';
 ---
 
 <meta charset="utf-8" />
@@ -62,4 +63,4 @@ const siteName = 'ИКПК';
 
 {preloadHero && <link rel="preload" href="/hero-main.svg" as="image" fetchpriority="high" />}
 
-{schema && <script type="application/ld+json" set:html={JSON.stringify(schema)} />}
+{schema && <script type="application/ld+json" set:html={serializeJsonLd(schema)} />}
