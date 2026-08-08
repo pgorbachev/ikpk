@@ -19,6 +19,41 @@
 - [x] 3.2 Unit/build checks for teacher attribution and faculty date
 - [x] 3.3 TD-14 recorded for missing CI `build:demo` job
 - [ ] 3.4 Owner walkthrough of `/preview/hub` on demo build (acceptance)
+- [ ] 3.5 Owner approval of retrospective OpenSpec change `architecture-frame-prototypes`
+- [x] 3.6 Negative verification of teacher and date gates (see below)
+
+### 3.6 Негативные мутации (SHA `fd5173fd1ea446fe009048ad89a1f62c908befd3`)
+
+Отдельный worktree на закоммиченном SHA; после каждой мутации — восстановление
+`git checkout --`; итог: `git status --porcelain` пуст относительно опорного SHA;
+worktree удалён.
+
+**Мутация A — чужой преподаватель**
+
+```bash
+# в web/src/lib/home.ts тело findTeacherForSeminar заменено на:
+#   if (!refs?.length) return undefined;
+#   return teachers.find((t) => t.photo);
+npx vitest run tests/home-teachers.test.ts
+# RED: findTeacherForSeminar > берёт преподавателя из seminar.teachers…
+#      expected 'Пилявский Сергей Орестович' to match /Шадрин/
+
+npm run build:demo && npx vitest run --config vitest.build.config.ts \
+  tests/seo-package.test.ts -t 'undated не приписывает'
+# RED: undated не приписывает чужого преподавателя института
+```
+
+**Мутация B — нет даты в Faculty**
+
+```bash
+# снят <li>{next!.dateLabel}</li> из faculty-ветки SeminarArchitectureHeader.astro
+npm run build:demo && npx vitest run --config vitest.build.config.ts \
+  tests/seo-package.test.ts -t 'faculty с датой'
+# RED: faculty с датой показывает дату в шапке (и только он)
+```
+
+Восстановление после обеих: тесты зелёные; diff к `fd5173f` по отслеживаемым
+файлам пуст.
 
 ## 4. Explicitly deferred (not tasks of this change)
 
