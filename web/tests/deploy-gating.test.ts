@@ -354,14 +354,32 @@ describe('гейт публикации: конфигурация', () => {
     // вершину. Шаг вида `tip=$(...); if [ -z "$tip" ]; then exit 1; fi` формально
     // содержит и обращение к ветке, и `exit`, но ничего не сравнивает — и вернул бы
     // исходное окно, оставив suite зелёным.
+    // Упоминания собранного коммита мало: шаг может объявить его в `env`, проверить на
+    // пустоту и не сравнить ни с чем — тогда окно возвращается при зелёном тесте
+    // (проверено мутацией: удаление сравнения suite не роняло). Поэтому требуется
+    // именно СРАВНЕНИЕ: переменная, в которую приходит собранный SHA, должна стоять
+    // рядом с оператором сравнения в теле шага.
     const BUILT_SHA = /needs\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_-]*sha\b/;
+    const comparesBuiltSha = (s: (typeof job.steps)[number]): boolean => {
+      const carriers = Object.entries(s.env ?? {})
+        .filter(([, v]) => BUILT_SHA.test(String(v)))
+        .map(([k]) => k);
+      if (carriers.length === 0) return false;
+      const body = s.run ?? '';
+      return carriers.some((name) =>
+        new RegExp(
+          `(\\$\\{?${name}\\}?[^\\n]*(!=|==|=~|\\s-ne\\s|\\s-eq\\s))` +
+            `|((!=|==|=~|\\s-ne\\s|\\s-eq\\s)[^\\n]*\\$\\{?${name}\\}?)`,
+        ).test(body),
+      );
+    };
+
     const decisive = job.steps.filter(
       (s) =>
         TIP_LOOKUP.test(s.raw) &&
         /\bmain\b|default_branch/.test(s.raw) &&
         /\bexit\s+[1-9]/.test(s.run ?? '') &&
-        BUILT_SHA.test(s.raw) &&
-        new RegExp(`\\$(?:\\{)?[A-Za-z_][A-Za-z0-9_]*`).test(s.run ?? '') &&
+        comparesBuiltSha(s) &&
         s.index < step.index,
     );
 
