@@ -366,11 +366,23 @@ describe('гейт публикации: конфигурация', () => {
         .map(([k]) => k);
       if (carriers.length === 0) return false;
       const body = s.run ?? '';
-      return carriers.some((name) =>
-        new RegExp(
-          `(\\$\\{?${name}\\}?[^\\n]*(!=|==|=~|\\s-ne\\s|\\s-eq\\s))` +
-            `|((!=|==|=~|\\s-ne\\s|\\s-eq\\s)[^\\n]*\\$\\{?${name}\\}?)`,
-        ).test(body),
+
+      // Переменные, в которые кладут вершину: `tip=$(git ls-remote ...)`, `x=$(gh api ...)`.
+      // Сравнение обязано связать собранный SHA ИМЕННО с ними. Проверять лишь «участвует
+      // в каком-то сравнении» мало: `[ "$SHA" != "$SHA" ]` такому условию удовлетворяет,
+      // а пропускает любую устаревшую выкладку.
+      const tipVars = [...body.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)=\$\(([^)]*)\)/gm)]
+        .filter(([, , cmd]) => TIP_LOOKUP.test(cmd))
+        .map(([, name]) => name);
+      if (tipVars.length === 0) return false;
+
+      const ref = (n: string): string => `\\$\\{?${n}\\}?`;
+      const CMP = '(!=|==|=~|\\s-ne\\s|\\s-eq\\s)';
+      return carriers.some((c) =>
+        tipVars.some((t) =>
+          new RegExp(`${ref(c)}[^\\n]*${CMP}[^\\n]*${ref(t)}`).test(body) ||
+          new RegExp(`${ref(t)}[^\\n]*${CMP}[^\\n]*${ref(c)}`).test(body),
+        ),
       );
     };
 
@@ -407,6 +419,17 @@ describe('гейт публикации: конфигурация', () => {
         'объявленная на уровне workflow затягивает в группу и те прогоны, которые ничего ' +
         'не публикуют',
     ).not.toBeNull();
+
+    // Ограничение платформы, нарушение которого молчаливо: `queue: max` несовместим с
+    // `cancel-in-progress: true` («The combination of `queue: max` and
+    // `cancel-in-progress: true` is not allowed» — схема workflow). Такой файл станет
+    // невалидным, и деплой перестанет ЗАПУСКАТЬСЯ — без красного прогона, потому что
+    // запускать будет нечего. Обычные проверки PR этого не увидят: они деплой не гоняют.
+    expect(
+      !(groupOnJob?.queue === 'max' && groupOnJob?.['cancel-in-progress'] === true),
+      `${wf.file}:${job.key} — queue: max вместе с cancel-in-progress: true запрещены ` +
+        'платформой; workflow станет невалидным, и публикация перестанет запускаться молча',
+    ).toBe(true);
 
     expect(
       groupOnJob?.queue ?? 'single',
@@ -499,10 +522,12 @@ describe('гейт публикации: конфигурация', () => {
     ).toEqual([]);
   });
 
-  // Решение 4 из design.md: dry-run-файл не должен ни получать права Pages, ни
-  // попадать в группу `pages` — там `cancel-in-progress: true`, и он отменял бы
-  // идущую настоящую публикацию. Правило сформулировано общим признаком, а не про
-  // конкретный временный файл: оно продолжает работать и после его удаления.
+  // Решение 4 из design.md. Изначально правило писалось про временный dry-run-файл, но
+  // предмет у него общий: посторонний workflow в группе `pages` занимал бы слот очереди
+  // и вытеснял ожидающую публикацию, а лишние права `pages` расширяли бы поверхность.
+  // Настройки самой группы см. в проверке про решающую сверку: там `cancel-in-progress:
+  // false` и `queue: max`. Правило сформулировано общим признаком, поэтому продолжает
+  // работать и после удаления того файла, ради которого появилось.
   it('права pages и группа pages — только у публикующего workflow', () => {
     const publisher = publishing();
     const offenders = workflows
