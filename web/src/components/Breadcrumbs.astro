@@ -23,6 +23,7 @@ const schema = {
   '@type': 'BreadcrumbList',
   itemListElement: schemaItems,
 };
+import { serializeJsonLd } from '../lib/json-ld.js';
 ---
 
 <nav class="breadcrumbs" aria-label="Хлебные крошки">
@@ -40,7 +41,7 @@ const schema = {
   </ol>
 </nav>
 
-<script type="application/ld+json" set:html={JSON.stringify(schema)} />
+<script type="application/ld+json" set:html={serializeJsonLd(schema)} />
 
 <style>
   .breadcrumbs {

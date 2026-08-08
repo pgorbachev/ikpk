@@ -386,15 +386,27 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
     expect(result).toContain('Regular paragraph with a link');
   });
 
-  it('turns a legacy button into a styled CTA link', () => {
+  // Раньше этот тест закреплял дефект: он требовал, чтобы легаси-кнопка стала
+  // ссылкой на /raspisanie-i-tseny — то есть ровно то поведение, из-за которого
+  // «Хочу сотрудничать!» уводило в прайс на семинары. Тест был зелёным, потому
+  // что проверял намерение автора правила, а не судьбу пользователя.
+  it('legacy button without a page-supplied destination becomes a non-link', () => {
     const result = cleanBodyHtml(input);
     expect(result).not.toContain('button_primary__q1q5a');
-    // A <button> from the scraped content is always dead in a static build:
-    // its React handler is gone. Keeping it would show an unstyled native
-    // control that does nothing, so it becomes a styled CTA instead.
+    // <button> из скрейпа в статической сборке всегда мёртв: обработчика React
+    // больше нет. Оставить его — показать неоформленный контрол, который ничего
+    // не делает; превратить в ссылку неизвестно куда — соврать про назначение.
     expect(result).not.toContain('<button');
-    expect(result).toContain('<a class="btn btn-primary" href="/raspisanie-i-tseny">');
+    expect(result).not.toContain('href="/raspisanie-i-tseny"');
+    expect(result).toContain('data-legacy-cta-unresolved');
     expect(result).toContain('Schedule a meeting');
+  });
+
+  it('legacy button uses the destination the page supplied', () => {
+    const result = cleanBodyHtml(input, { legacyCtaHref: '#kontakty-bloc' });
+    expect(result).toContain('<a class="btn btn-primary" href="#kontakty-bloc" data-legacy-cta>');
+    expect(result).toContain('Schedule a meeting');
+    expect(result).not.toContain('data-legacy-cta-unresolved');
   });
 
   it('strips typography_ classes from h2 and p', () => {
@@ -446,5 +458,43 @@ describe('stripH1 export', () => {
   it('strips h1 tags and is still exported', () => {
     const html = '<h1 class="foo">Title</h1><p>Body</p>';
     expect(stripH1(html)).toBe('<p>Body</p>');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Очистка не выдумывает адрес назначения
+//
+// Дефект: normalizeLegacyControls переписывала ЛЮБУЮ <button> без класса в
+// ссылку на /raspisanie-i-tseny. В сборке это дало четыре кнопки на двух
+// страницах, ведущие не туда, куда обещает подпись: «Хочу сотрудничать!» (×3 на
+// /sotrudnichestvo-s-nami) и «Произвести оплату» (на /oplata) вели в прайс на
+// семинары.
+//
+// Проверка сформулирована как общее свойство, а не как список этих четырёх:
+// адресов на выходе не должно появляться больше, чем было на входе или передано
+// вызывающей стороной. Список подписей отстал бы от предмета молча — пятая
+// кнопка с новым текстом прошла бы зелёной.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('cleanBodyHtml не выдумывает адрес назначения', () => {
+  const hrefs = (html: string): string[] =>
+    [...html.matchAll(/href=(?:"([^"]*)"|'([^']*)')/gi)].map((m) => m[1] ?? m[2]);
+
+  it('кнопка без класса не превращается в ссылку на выдуманный адрес', () => {
+    const input = '<p>Готовы к сотрудничеству?</p><button>Хочу сотрудничать!</button>';
+    const out = cleanBodyHtml(input);
+    expect(
+      hrefs(out),
+      `очистка добавила адрес, которого не было во входе: ${hrefs(out).join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('подпись кнопки сохраняется, что бы с самой кнопкой ни сделали', () => {
+    const out = cleanBodyHtml('<button>Хочу сотрудничать!</button>');
+    expect(out).toContain('Хочу сотрудничать!');
+  });
+
+  it('адреса, которые были во входе, не теряются и не подменяются', () => {
+    const input = '<p><a href="/kontakty">Контакты</a></p><button>Произвести оплату</button>';
+    expect(hrefs(cleanBodyHtml(input))).toEqual(['/kontakty']);
   });
 });

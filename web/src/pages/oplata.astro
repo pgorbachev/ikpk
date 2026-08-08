@@ -15,7 +15,7 @@ const description = page?.seo_description || 'Информация об опла
     <section class="section">
       <h1 class="page-title">Оплата</h1>
 
-      <div class="payment-highlight">
+      <div class="payment-highlight" id="oplata-svyaz">
         <div class="payment-highlight-icon" aria-hidden="true">
           <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
         </div>
@@ -31,7 +31,7 @@ const description = page?.seo_description || 'Информация об опла
       </div>
 
       {page?.body_html ? (
-        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname)} />
+        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz')} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

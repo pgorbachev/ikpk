@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  // По умолчанию Playwright забирает и `*.test.ts` — то есть файлы vitest, которые
+  // лежат в том же каталоге. На них он падает при СБОРЕ, не запустив ни одного теста
+  // («Cannot read properties of undefined (reading 'config')» на первом же `describe`),
+  // поэтому `playwright test` без явного списка файлов не работал вовсе.
+  testMatch: '**/*.spec.ts',
   use: {
     baseURL: 'http://127.0.0.1:4322',
     headless: true,
@@ -59,6 +64,18 @@ export default defineConfig({
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1 --port 4322',
     port: 4322,
-    reuseExistingServer: true,
+    // НЕ переиспользовать чужой сервер. `true` здесь означает: если на 4322 уже
+    // кто-то слушает, Playwright молча подключится к нему — к preview, поднятому
+    // час назад, из другого worktree, над другим `dist`. Прогон тогда зелёный про
+    // код, которого в дереве уже нет, и это неотличимо от настоящего зелёного.
+    //
+    // `!process.env.CI` эту дыру НЕ закрывает: дефект локальный, а там значение
+    // осталось бы `true`. Намеренное подключение к поднятому серверу живёт в
+    // playwright.attached.config.ts, который webServer не поднимает вовсе.
+    //
+    // Границу честно: `false` запрещает подключаться к занятому порту, но свежесть
+    // сборки не гарантирует — при свободном порте поднимется preview над тем
+    // `dist`, что лежит. За свежесть отвечают скрипты (`test:build`, шаг build в CI).
+    reuseExistingServer: false,
   },
 });

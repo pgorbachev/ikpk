@@ -556,20 +556,34 @@ function redirectFormLinksInDemo(html: string): string {
  *
  * 1. Нативная <button> без класса (например «Произвести оплату» на /oplata) —
  *    серый браузерный контрол посреди страницы, к тому же МЁРТВЫЙ: на старом
- *    сайте её обрабатывал React, у нас обработчика нет. Пока онлайн-оплата
- *    (FR-08) не подключена, ведём пользователя туда, где сценарий работает —
- *    в расписание, где есть запись через CRM-форму.
+ *    сайте её обрабатывал React, у нас обработчика нет. Пока форма не подключена,
+ *    ведём пользователя на якорь ВНУТРИ ЭТОЙ ЖЕ страницы, который сообщает
+ *    страница (legacyCtaHref) — обычно её блок контактов. Уводить на другую
+ *    страницу нельзя: подпись кнопки обещает действие, а не переход.
  * 2. Аккордеоны, обёрнутые в <ul><li> — у карточек торчат маркеры списка.
  *    Разворачиваем такие обёртки, чтобы маркеры не появлялись ни в одном
  *    браузере (CSS :has() не покрыл бы старый Safari).
  */
-function normalizeLegacyControls(html: string): string {
+function normalizeLegacyControls(html: string, legacyCtaHref?: string): string {
   let out = html;
 
-  // 1. кнопки без класса → оформленная ссылка на расписание
+  // 1. кнопки без класса → ссылка на адрес, КОТОРЫЙ СООБЩИЛА СТРАНИЦА.
+  //    Раньше здесь стоял жёстко вписанный /raspisanie-i-tseny, и это был дефект:
+  //    правило срабатывает на любой легаси-кнопке, а не только на кнопке оплаты.
+  //    В сборке получилось четыре кнопки на двух страницах, ведущие не туда, куда
+  //    обещает подпись: «Хочу сотрудничать!» (×3) и «Произвести оплату» уводили в
+  //    прайс на семинары.
+  //
+  //    Очистка не знает, куда должна вести кнопка конкретной страницы, и не имеет
+  //    права это придумывать. Не сообщили адрес — контрол помечается как
+  //    неразрешённый, подпись сохраняется, ложной кликабельности не создаётся, а
+  //    build-гейт на такую метку краснеет.
   out = out.replace(
     /<button(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/button>/gi,
-    (_m, label) => `<a class="btn btn-primary" href="/raspisanie-i-tseny">${label}</a>`
+    (_m, label) =>
+      legacyCtaHref
+        ? `<a class="btn btn-primary" href="${legacyCtaHref}" ${LEGACY_CTA_ATTR}>${label}</a>`
+        : `<span class="legacy-cta-unresolved" ${LEGACY_CTA_UNRESOLVED_ATTR}>${label}</span>`
   );
 
   // 2. <ul>/<li> вокруг аккордеонов — это не список, а layout-обёртка из
@@ -681,12 +695,26 @@ function applyExternalLinkPolicy(html: string): string {
   });
 }
 
+/**
+ * Атрибуты легаси-контрола. Экспортируются, чтобы гейты не искали магическую
+ * строку: переименование здесь обязано ломать тесты, а не оставлять их
+ * вечнозелёными на маркере, который больше никто не эмитит.
+ */
+export const LEGACY_CTA_ATTR = 'data-legacy-cta';
+export const LEGACY_CTA_UNRESOLVED_ATTR = 'data-legacy-cta-unresolved';
+
 export interface CleanOptions {
   /**
    * Контент свёрнутых секций, восстановленный с живого сайта
    * (см. web/scripts/recover-collapsibles.mjs), в виде {заголовок: html}.
    */
   panels?: Record<string, string>;
+  /**
+   * Куда ведёт легаси-кнопка этой страницы (например якорь на её же блок
+   * контактов). Не задан — контрол помечается неразрешённым: очистка не
+   * придумывает адрес за страницу, см. normalizeLegacyControls.
+   */
+  legacyCtaHref?: string;
 }
 
 export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
@@ -708,7 +736,7 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
   result = stripH1Tags(result);
   result = cleanOrphanedTags(result);
   result = applyExternalLinkPolicy(result);
-  result = normalizeLegacyControls(result);
+  result = normalizeLegacyControls(result, opts.legacyCtaHref);
   result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
 
