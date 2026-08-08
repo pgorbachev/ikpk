@@ -15,6 +15,12 @@ HOST="$1"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Проверки, у которых есть поведенческие тесты (web/tests/deploy-checks.test.ts).
+# Вынесены в отдельный файл потому, что обе стоят за ssh-вызовами: запуском самого
+# скрипта до них не дойти без реального хоста.
+# shellcheck source=lib/deploy-checks.sh
+source "${SCRIPT_DIR}/lib/deploy-checks.sh"
 WEB_DIR="${WEB_DIR:-${REPO_ROOT}/web}"
 DIST_DIR="${DIST_DIR:-${WEB_DIR}/dist}"
 
@@ -178,8 +184,8 @@ echo "[deploy] Проверка форм: ${form_count} различных ад�
 # Проверяем РАЗВЁРНУТУЮ конфигурацию через `nginx -T` (она печатает все включённые
 # файлы) и отказываемся до переключения релиза.
 echo "[deploy] Preflight: подключён ли файл редиректов активным vhost"
-if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
-  "nginx -T 2>/dev/null | grep -q 'include .*${WEB_ROOT##*/}.*nginx-redirects.conf\|nginx-redirects.conf'"; then
+if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" 'nginx -T 2>/dev/null' \
+  | redirects_include_active; then
   cat >&2 <<PREFLIGHT
 Активный vhost не подключает ${WEB_ROOT}/shared/nginx-redirects.conf — правила
 перенаправления не будут действовать, а деплой выглядел бы успешным.
@@ -218,7 +224,7 @@ systemctl reload nginx
 REMOTE
 
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 10 "http://${HOST}/" >/dev/null; then
+  if health_check "http://${HOST}/"; then
     echo "[deploy] Health check OK: http://${HOST}/"
   else
     # Провал health-check — это провал деплоя, а не примечание. Прежде скрипт
