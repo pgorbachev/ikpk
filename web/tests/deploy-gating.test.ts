@@ -420,6 +420,17 @@ describe('гейт публикации: конфигурация', () => {
         'не публикуют',
     ).not.toBeNull();
 
+    // Ограничение платформы, нарушение которого молчаливо: `queue: max` несовместим с
+    // `cancel-in-progress: true` («The combination of `queue: max` and
+    // `cancel-in-progress: true` is not allowed» — схема workflow). Такой файл станет
+    // невалидным, и деплой перестанет ЗАПУСКАТЬСЯ — без красного прогона, потому что
+    // запускать будет нечего. Обычные проверки PR этого не увидят: они деплой не гоняют.
+    expect(
+      !(groupOnJob?.queue === 'max' && groupOnJob?.['cancel-in-progress'] === true),
+      `${wf.file}:${job.key} — queue: max вместе с cancel-in-progress: true запрещены ` +
+        'платформой; workflow станет невалидным, и публикация перестанет запускаться молча',
+    ).toBe(true);
+
     expect(
       groupOnJob?.queue ?? 'single',
       `${wf.file}:${job.key} — политика очереди '${String(groupOnJob?.queue ?? 'single')}': ` +
