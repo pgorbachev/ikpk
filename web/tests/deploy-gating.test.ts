@@ -51,6 +51,9 @@ import {
 
 const { OWN_REPO, FORK_REPO, TESTED_SHA } = CONTEXT_CONSTANTS;
 
+const asList = (v: unknown): string[] =>
+  Array.isArray(v) ? v.map(String) : typeof v === 'string' ? [v] : [];
+
 /**
  * Имя workflow, на который вешается гейт. Константа взята из самой спеки
  * («гейт вешается только на `Tests`», proposal.md), а не угадана по содержимому:
@@ -427,6 +430,38 @@ describe('гейт публикации: конфигурация', () => {
 
   // Req6, конфигурационная половина: гейт покрывает ровно то, что названо, и не
   // больше. Если бы в условие затесался ещё один workflow, спека молчала бы о нём.
+  // Req1 со стороны ПРЕДПОСЫЛКИ, а не только публикации. Гейт держится на том, что
+  // названный workflow вообще запускается на коммиты основной ветки. Если у него
+  // останется один `pull_request`, или появится фильтр `paths`, событие workflow_run для
+  // коммитов main перестанет приходить — публикация встанет молча, а все проверки выше
+  // останутся зелёными, потому что смотрят только на публикующий файл.
+  it('workflow из гейта запускается на коммиты основной ветки без фильтров путей', () => {
+    const gated = workflowRunTrigger(publishing())?.workflows ?? [];
+    expect(gated, 'гейт не называет ни одного workflow').not.toEqual([]);
+
+    const problems: string[] = [];
+    for (const name of gated) {
+      const wf = workflows.find((w) => w.displayName === name);
+      if (!wf) {
+        problems.push(`в гейте назван '${name}', но workflow с таким именем нет`);
+        continue;
+      }
+      const push = wf.triggers.push as Record<string, unknown> | undefined;
+      if (push === undefined) {
+        problems.push(`${wf.file}: нет триггера push — на коммиты ${DEFAULT_BRANCH} не запустится`);
+        continue;
+      }
+      const branches = asList(push.branches);
+      if (!branches.includes(DEFAULT_BRANCH))
+        problems.push(`${wf.file}: push не покрывает ${DEFAULT_BRANCH} (branches=${JSON.stringify(branches)})`);
+      for (const key of ['paths', 'paths-ignore'])
+        if (push[key] !== undefined)
+          problems.push(`${wf.file}: у push есть ${key} — часть коммитов ${DEFAULT_BRANCH} не запустит прогон, и публикация для них не придёт`);
+    }
+
+    expect(problems, 'предпосылка гейта не выполняется:\n' + problems.join('\n')).toEqual([]);
+  });
+
   it('в условие публикации входит ровно один названный workflow', () => {
     const trigger = workflowRunTrigger(publishing());
     expect(
