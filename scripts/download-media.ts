@@ -28,6 +28,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
+import { resolveLocalPath } from './lib/media-paths.js';
 
 const ROOT = join(import.meta.dirname, '..');
 const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
@@ -194,10 +195,13 @@ let failed = 0;
 
 for (const path of [...paths].sort()) {
   const url = sourceUrlFor(path);
-  const segments = path.split('/').filter(Boolean);
-  const localPath = segments[0] === 'media'
-    ? join(ORIGINALS_DIR, ...segments.slice(1))
-    : join(PUBLIC_DIR, ...segments);
+  // Границу каталога проверяет resolveLocalPath и падает при выходе за неё:
+  // источник этих строк — контент с чужого живого сайта, поэтому попытка
+  // traversal означает скомпрометированные данные, а не один плохой ассет.
+  const localPath = resolveLocalPath(path, {
+    originalsDir: ORIGINALS_DIR,
+    publicDir: PUBLIC_DIR,
+  });
 
   if (!force && existsSync(localPath) && statSync(localPath).size > 0) {
     skipped++;
