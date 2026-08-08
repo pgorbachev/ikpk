@@ -11,8 +11,8 @@ import {
   declaresPagesPermission,
   dispatchContext,
   findPublishStep,
-  isCodeExecStep,
   isCodeFetchStep,
+  riskyStepsInJob,
   jobsOnPathTo,
   loadWorkflows,
   publishingWorkflows,
@@ -455,7 +455,7 @@ describe('гейт публикации: конфигурация', () => {
 
     for (const wf of receivers) {
       for (const job of Object.values(wf.jobs)) {
-        const firstRisky = job.steps.find((s) => isCodeFetchStep(s) || isCodeExecStep(s));
+        const firstRisky = riskyStepsInJob(job)[0];
         if (!firstRisky) continue;
 
         // Вид 1 (предпочтительный): условие джоба само ложно для стороннего источника.
@@ -504,8 +504,9 @@ describe('гейт публикации: конфигурация', () => {
 
     for (const wf of receivers) {
       for (const job of Object.values(wf.jobs)) {
+        const risky = new Set(riskyStepsInJob(job).map((s) => s.index));
         for (const step of job.steps) {
-          if (!isCodeFetchStep(step) && !isCodeExecStep(step)) continue;
+          if (!risky.has(step.index)) continue;
           const conditions = conditionsGuarding(wf, job.key, step);
           if (conditions.every(({ expr }) => canBeTrue(expr, forkCtx)))
             reachable.push(

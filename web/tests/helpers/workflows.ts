@@ -134,6 +134,42 @@ export function isCodeExecStep(step: WorkflowStep): boolean {
   return /\b(npm|npx|yarn|pnpm|astro|vite|tsx|node)\b/.test(step.run ?? '');
 }
 
+/** Локальный action (`uses: ./…`) — это код из checkout'а, а не сторонний пакет. */
+export function isLocalActionStep(step: WorkflowStep): boolean {
+  return /^\.\.?\//.test(step.uses ?? '');
+}
+
+/**
+ * Шаги джоба, которые выгружают или исполняют код репозитория, в порядке следования.
+ *
+ * Позиция шага решает: отдельный шаг не знает, стоит ли он после checkout'а, поэтому
+ * предикат по одному шагу принципиально не может отличить «`run:` до выгрузки» (это
+ * собственный текст workflow из основной ветки) от «`run:` после выгрузки» (это уже
+ * чужой код).
+ */
+export function riskyStepsInJob(job: WorkflowJob): WorkflowStep[] {
+  const risky: WorkflowStep[] = [];
+  let fetched = false;
+  for (const step of job.steps) {
+    if (isCodeFetchStep(step)) {
+      fetched = true;
+      risky.push(step);
+      continue;
+    }
+    // После выгрузки исполнением считается ЛЮБОЙ `run:` и любой локальный action —
+    // общий признак вместо перечня интерпретаторов. Перечень отставал молча:
+    // `bash ./x.sh`, `make`, `./bin/foo` и `curl | sh` под него не подпадали.
+    if (fetched && (step.run !== undefined || isLocalActionStep(step))) {
+      risky.push(step);
+      continue;
+    }
+    // Признак по одному шагу сохранён как дополнительный сигнал: он ловит сборку
+    // в джобе без явного шага выгрузки, то есть строго расширяет покрытие.
+    if (isCodeExecStep(step)) risky.push(step);
+  }
+  return risky;
+}
+
 export function publishingWorkflows(all: Workflow[]): Workflow[] {
   return all.filter((wf) => Object.values(wf.jobs).some((j) => j.steps.some(isPublishStep)));
 }
