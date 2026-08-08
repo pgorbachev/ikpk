@@ -255,7 +255,16 @@ describe('гейт публикации: конфигурация', () => {
 
     const guards = pathJobs.flatMap((j) =>
       j.steps
-        .filter((s) => /head_sha/.test(s.raw) && TIP_LOOKUP.test(s.raw) && /\bmain\b|default_branch/.test(s.raw))
+        // Публикуемый коммит может приходить в шаг не только выражением
+        // `...workflow_run.head_sha`, но и через выход шага или джоба — так его
+        // передают туда, где выражения события уже недоступны. Распознаём ЗНАЧЕНИЕ,
+        // а не одно написание: ссылку на head_sha либо на выход, который его несёт.
+        .filter(
+          (s) =>
+            /head_sha|outputs\.sha\b/.test(s.raw) &&
+            TIP_LOOKUP.test(s.raw) &&
+            /\bmain\b|default_branch/.test(s.raw),
+        )
         .map((s) => ({ job: j, step: s })),
     );
 
@@ -305,14 +314,21 @@ describe('гейт публикации: конфигурация', () => {
 
     // Второй допустимый вид: шаг, который роняет прогон, если ручной запуск сделан
     // не с основной ветки.
-    const guardedByCheck = pathJobs.some((j) =>
-      j.steps.some(
+    // Мало найти текст: `if: false` выключил бы шаг, а перенос его ПОСЛЕ выгрузки
+    // оставил бы окно, в котором чужая ветка уже выгружена. Поэтому условие шага
+    // вычисляется в контексте ручного запуска, а позиция сверяется с первой выгрузкой.
+    const dispatch = dispatchContext();
+    const guardedByCheck = pathJobs.some((j) => {
+      const firstFetch = j.steps.find(isCodeFetchStep);
+      return j.steps.some(
         (s) =>
           /github\.ref|ref_name/.test(s.raw) &&
           /\bmain\b|default_branch/.test(s.raw) &&
-          /\bexit\s+[1-9]/.test(s.run ?? ''),
-      ),
-    );
+          /\bexit\s+[1-9]/.test(s.run ?? '') &&
+          (s.if === undefined || canBeTrue(s.if, dispatch)) &&
+          (firstFetch === undefined || s.index < firstFetch.index),
+      );
+    });
 
     expect(
       pinnedByRef || guardedByCheck,
@@ -320,6 +336,31 @@ describe('гейт публикации: конфигурация', () => {
         'Допустимо одно из двух: ref у выгрузки закреплён за основной веткой, либо ' +
         'шаг роняет прогон при запуске не с основной ветки',
     ).toBe(true);
+  });
+
+  // Сценарий «вершина сдвинулась, пока шла сборка». Ранняя сверка отвечает на вопрос
+  // «стоило ли начинать», а не «можно ли публиковать сейчас»: между ней и выкладкой
+  // проходит сборка. Решающая сверка обязана стоять в ТОМ ЖЕ джобе, что и выкладка, и
+  // раньше неё — иначе остаётся окно, в котором медленная сборка публикуется поверх
+  // свежего коммита.
+  it('актуальность сверяется в джобе публикации, перед самой выкладкой', () => {
+    const { wf, job, step } = publishTarget();
+    const TIP_LOOKUP = /(ls-remote|rev-parse|rev-list|refs\/heads\/|commits\/|branches\/|\/git\/ref)/;
+
+    const decisive = job.steps.filter(
+      (s) =>
+        TIP_LOOKUP.test(s.raw) &&
+        /\bmain\b|default_branch/.test(s.raw) &&
+        /\bexit\s+[1-9]/.test(s.run ?? '') &&
+        s.index < step.index,
+    );
+
+    expect(
+      decisive.map((s) => s.index),
+      `${wf.file}:${job.key} — перед выкладкой нет сверки с вершиной основной ветки. ` +
+        'Сверка в другом джобе не считается: между ней и выкладкой проходит сборка, ' +
+        'и вершина успевает сдвинуться',
+    ).not.toEqual([]);
   });
 
   // Req5, сценарий «проверка происхождения стоит раньше выгрузки». Именно порядок:
@@ -460,6 +501,26 @@ describe('гейт публикации: конфигурация', () => {
     }
 
     expect(problems, 'предпосылка гейта не выполняется:\n' + problems.join('\n')).toEqual([]);
+  });
+
+  // Гейт называет workflow ПО ИМЕНИ, а имя не уникально: второй файл с `name: Tests`
+  // — пустой и быстрый — присылал бы событие о завершении и запускал публикацию без
+  // настоящих тестов. Все остальные проверки при этом остались бы зелёными: они находят
+  // первое совпадение по имени и на второе не смотрят.
+  it('имя workflow из гейта уникально в репозитории', () => {
+    const gated = workflowRunTrigger(publishing())?.workflows ?? [];
+    expect(gated, 'гейт не называет ни одного workflow').not.toEqual([]);
+
+    const problems = gated
+      .map((name) => ({ name, files: workflows.filter((w) => w.displayName === name).map((w) => w.file) }))
+      .filter(({ files }) => files.length !== 1)
+      .map(({ name, files }) =>
+        files.length === 0
+          ? `в гейте назван '${name}', но workflow с таким именем нет`
+          : `имя '${name}' носят несколько файлов: ${files.join(', ')} — публикацию сможет запустить любой из них`,
+      );
+
+    expect(problems, problems.join('\n')).toEqual([]);
   });
 
   it('в условие публикации входит ровно один названный workflow', () => {

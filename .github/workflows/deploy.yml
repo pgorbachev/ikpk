@@ -21,6 +21,10 @@ permissions:
 
 jobs:
   build:
+    outputs:
+      # SHA, содержимое которого собрано. Нужен джобу публикации: он сверит его с
+      # вершиной ветки ещё раз, уже перед самой выкладкой.
+      sha: ${{ steps.target.outputs.sha }}
     # Условие ПО-СОБЫТИЙНОЕ: у `workflow_dispatch` объекта `workflow_run` нет вовсе, и
     # голое `github.event.workflow_run.conclusion == 'success'` было бы для него ложно —
     # то есть молча выключило бы ручную публикацию.
@@ -62,6 +66,17 @@ jobs:
             exit 1
           fi
 
+      - name: Целевой коммит
+        id: target
+        env:
+          TARGET: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [ -z "$TARGET" ]; then
+            echo "::error::не удалось определить публикуемый коммит"
+            exit 1
+          fi
+          echo "sha=$TARGET" >> "$GITHUB_OUTPUT"
+
       # Выгружается ПРОВЕРЕННЫЙ коммит, а не текущая голова ветки: при `workflow_run`
       # GITHUB_SHA и GITHUB_REF указывают на дефолтную ветку, а не на коммит
       # завершившегося прогона, поэтому без явного `ref` связь «проверили то, что
@@ -70,10 +85,12 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Проверенный коммит не устарел
-        if: github.event_name == 'workflow_run'
+      # Ранняя сверка: стоит ли вообще тратить сборку. Она НЕ доказывает, что публиковать
+      # можно — между ней и выкладкой пройдёт сборка, за которую вершина успеет сдвинуться.
+      # Решающая сверка стоит в джобе публикации, внутри группы сериализации.
+      - name: Проверенный коммит ещё вершина (ранняя сверка)
         env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_SHA: ${{ steps.target.outputs.sha }}
         run: |
           tip=$(git ls-remote origin refs/heads/main | cut -f1)
           if [ -z "$tip" ]; then
@@ -138,6 +155,30 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # РЕШАЮЩАЯ сверка: внутри группы сериализации и непосредственно перед выкладкой.
+      # Без неё остаётся окно: A проходит раннюю сверку, пока идёт его сборка приезжает B,
+      # собирается и публикуется быстрее, а затем медленная сборка A выкладывается поверх
+      # свежего B. Порядок выполнения джобов в группе не гарантирован, поэтому вопрос
+      # «актуален ли коммит» задаётся там, где ответ уже нельзя обогнать.
+      - name: Проверенный коммит всё ещё вершина
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          if [ -z "$TARGET_SHA" ]; then
+            echo "::error::сборка не сообщила публикуемый коммит"
+            exit 1
+          fi
+          tip=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ -z "$tip" ]; then
+            echo "::error::не удалось получить вершину main — публиковать вслепую нельзя"
+            exit 1
+          fi
+          if [ "$TARGET_SHA" != "$tip" ]; then
+            echo "::error::собран $TARGET_SHA, вершина main уже $tip; выкладка откатила бы сайт"
+            exit 1
+          fi
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
