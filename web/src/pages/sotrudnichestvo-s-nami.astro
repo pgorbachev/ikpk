@@ -16,12 +16,12 @@ const description = page?.seo_description || 'Информация о сотру
       <h1 class="page-title">Сотрудничество с нами</h1>
 
       {page?.body_html ? (
-        <div class="collab-content rich-content" set:html={cleanBodyHtml(page.body_html)} />
+        <div class="collab-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname, '#sotrudnichestvo-svyaz')} />
       ) : (
         <p class="text-muted">Информация о сотрудничестве будет добавлена позже.</p>
       )}
 
-      <section class="cta-section" aria-label="Контакты для сотрудничества">
+      <section class="cta-section" id="sotrudnichestvo-svyaz" aria-label="Контакты для сотрудничества">
         <h2 class="cta-title">Свяжитесь с нами</h2>
         <p class="cta-text">
           Мы открыты для сотрудничества и рады обсудить любые предложения.
