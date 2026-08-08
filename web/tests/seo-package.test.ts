@@ -3,6 +3,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { gunzipSync } from 'zlib';
 import { join } from 'path';
 import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
+import { getSeminars } from '../src/lib/data.js';
+import { seminarTeacherLabel } from '../src/lib/home.js';
 
 // ─── Этап 3 (план 004): SEO-пакет как вечные CI-гейты ───────────────────────
 
@@ -528,6 +530,44 @@ describe.skipIf(!isDemoBuildForPrototypes)('прототипы: своя под�
       expect(readPage(datedPath)).toContain(`data-seminar-architecture="${id}"`);
       expect(readPage(undatedPath)).toContain('data-undated');
       expect(readPage(undatedPath)).toContain(`data-seminar-architecture="${id}"`);
+    }
+  });
+
+  it('faculty с датой показывает дату в шапке', () => {
+    const html = readPage(previewPath('faculty', '/seminar'));
+    // dateLabel из formatScheduleDateRange: «5 сен» или «12–14 сен»
+    expect(html, 'нет data-атрибута faculty-шапки').toContain('data-seminar-architecture="faculty"');
+    expect(
+      html.match(/sem-fa-pills[\s\S]*?<li[^>]*>\d{1,2}(?:[–-]\d{1,2})?\s+[а-яё]{3}</),
+      'в pill-списке faculty нет даты',
+    ).not.toBeNull();
+  });
+
+  it('undated не приписывает чужого преподавателя института', () => {
+    // Сопоставление только через seminar.teachers — иначе Faculty врёт владельцу.
+    for (const id of ['editorial', 'faculty', 'modular'] as const) {
+      const html = readPage(previewPath(id, '/seminar-undated'));
+      const h1 = html.match(/<h1[^>]*>([^<]+)<\/h1>/)?.[1]?.trim();
+      expect(h1, `${id}: нет h1 семинара`).toBeTruthy();
+      const seminar = getSeminars().find((s) => s.name === h1);
+      expect(seminar, `${id}: семинар «${h1}» не найден в данных`).toBeTruthy();
+      const label = seminarTeacherLabel(seminar!.teachers);
+      const short = label.split(',')[0].trim();
+
+      if (id === 'faculty' || id === 'modular') {
+        if (!short) {
+          expect(html, `${id}: без teachers не должно быть «Ведёт»`).not.toMatch(/Ведёт\s/);
+        } else {
+          expect(html, `${id}: нет имени из seminar.teachers (${short})`).toContain(short);
+        }
+      }
+
+      // Типичная подмена: первый с фото у института при другом ведущем.
+      if (short && !short.includes('Пилявский')) {
+        expect(html, `${id}: чужой Пилявский при ведущем ${short}`).not.toMatch(
+          /Ведёт Пилявский Сергей Орестович/,
+        );
+      }
     }
   });
 });

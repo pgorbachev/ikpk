@@ -82,9 +82,6 @@ const schedule = nearest
     })()
   : [];
 
-const teacherFallback =
-  allTeachers.find((t) => t.institute_legacy_id === institute.slug && t.photo) || null;
-
 const code = seminar.name.match(/^[А-ЯA-Z]+-\d+/i)?.[0] || '';
 const bodyHtml = seminar.description_html
   ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
@@ -110,7 +107,6 @@ const bodyHtml = seminar.description_html
     institute={institute}
     code={code}
     schedule={schedule}
-    teacherFallback={teacherFallback}
     bodyHtml={architecture === 'modular' ? bodyHtml : undefined}
   />
 

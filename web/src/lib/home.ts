@@ -8,6 +8,7 @@ import {
   getArticles,
   formatPrice,
   type ScheduleEntry,
+  type SeminarTeacherRef,
   type Teacher,
 } from './data.js';
 import { isCurrentOrFuture } from './schedule-window';
@@ -39,6 +40,9 @@ const MONTHS = [
 ];
 
 /** Короткие имена институтов живут в ScheduleEntry.institute.shortname, не в Institute. */
+// Фолбэк, когда под рукой нет ScheduleEntry.institute.shortname (страница
+// семинара без даты). Живые короткие имена — в расписании. Четвёртый институт
+// здесь не заведён: функция вернёт сам slug — не выдумывать короткое имя.
 const SHORT_BY_SLUG: Record<string, string> = {
   'institut-klinicheskoy-prikladnoy-kineziologii': 'ИКПК',
   'institut-apledzhera': 'Апледжера',
@@ -70,6 +74,29 @@ export function findTeacherForScheduleLead(
   return teachers.find(
     (t) => t.legacy_id === String(lead.id) || t.slug === String(lead.id)
   );
+}
+
+/** Первый преподаватель семинара из каталога (по order), сопоставленный с Teacher. */
+export function findTeacherForSeminar(
+  refs: SeminarTeacherRef[] | undefined,
+  teachers: Teacher[] = getTeachers()
+): Teacher | undefined {
+  if (!refs?.length) return undefined;
+  const ordered = [...refs].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  for (const ref of ordered) {
+    const hit = teachers.find(
+      (t) => t.legacy_id === String(ref.legacy_id) || t.name === ref.name
+    );
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Имя ведущего из seminar.teachers, даже если карточки Teacher нет. */
+export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): string {
+  if (!refs?.length) return '';
+  const ordered = [...refs].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  return ordered[0]?.name.split(',')[0].trim() || '';
 }
 
 /**

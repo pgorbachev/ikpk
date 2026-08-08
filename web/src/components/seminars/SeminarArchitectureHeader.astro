@@ -27,6 +27,8 @@ interface Props {
   code: string;
   schedule: ScheduleRow[];
   teacherFallback?: Teacher | null;
+  /** Имя из seminar.teachers, если карточки Teacher нет — без выдуманного портрета. */
+  teacherNameOnly?: string;
   /** Для modular: тело внутри сетки со sticky-карточкой (§7.6). */
   bodyHtml?: string;
 }
@@ -39,6 +41,7 @@ const {
   code,
   schedule,
   teacherFallback = null,
+  teacherNameOnly = '',
   bodyHtml = '',
 } = Astro.props;
 
@@ -50,10 +53,14 @@ const teacher =
   (teacherFallback
     ? {
         name: teacherFallback.name.split(',')[0].trim(),
-        photo: teacherFallback.photo,
-        href: `/${teacherFallback.institute_legacy_id}/prepodavatel/${teacherFallback.slug}`,
+        photo: teacherFallback.photo || null,
+        href: teacherFallback.slug
+          ? `/${teacherFallback.institute_legacy_id}/prepodavatel/${teacherFallback.slug}`
+          : null,
       }
-    : null);
+    : teacherNameOnly
+      ? { name: teacherNameOnly, photo: null, href: null }
+      : null);
 const photoDim = teacher?.photo ? getAssetDimensions(teacher.photo) : undefined;
 const price = next?.priceLabel || '';
 const city = next?.cityName || '';
@@ -101,6 +108,7 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
         <p class="sem-ed-inst">{institute.name}</p>
         {hasDate ? (
           <ul class="sem-fa-pills">
+            <li>{next!.dateLabel}</li>
             {city && <li>{city}</li>}
             {duration && <li>{duration}</li>}
             {price && <li>{price}</li>}
