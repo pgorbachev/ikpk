@@ -317,7 +317,10 @@ describe('гейт публикации: конфигурация', () => {
     // Мало найти текст: `if: false` выключил бы шаг, а перенос его ПОСЛЕ выгрузки
     // оставил бы окно, в котором чужая ветка уже выгружена. Поэтому условие шага
     // вычисляется в контексте ручного запуска, а позиция сверяется с первой выгрузкой.
-    const dispatch = dispatchContext();
+    // Контекст здесь — ПОСТОРОННЯЯ ветка (тот же `ctx`, что и для проверки ref). Взять
+    // `dispatchContext()` без аргумента значило бы вычислять условие для main, и тогда
+    // guard вида `... && github.ref_name == 'main'` — который на посторонней ветке как
+    // раз не сработает — считался бы рабочим.
     const guardedByCheck = pathJobs.some((j) => {
       const firstFetch = j.steps.find(isCodeFetchStep);
       return j.steps.some(
@@ -325,7 +328,7 @@ describe('гейт публикации: конфигурация', () => {
           /github\.ref|ref_name/.test(s.raw) &&
           /\bmain\b|default_branch/.test(s.raw) &&
           /\bexit\s+[1-9]/.test(s.run ?? '') &&
-          (s.if === undefined || canBeTrue(s.if, dispatch)) &&
+          (s.if === undefined || canBeTrue(s.if, ctx)) &&
           (firstFetch === undefined || s.index < firstFetch.index),
       );
     });
@@ -347,20 +350,52 @@ describe('гейт публикации: конфигурация', () => {
     const { wf, job, step } = publishTarget();
     const TIP_LOOKUP = /(ls-remote|rev-parse|rev-list|refs\/heads\/|commits\/|branches\/|\/git\/ref)/;
 
+    // Сверка обязана СРАВНИВАТЬ собранный коммит с вершиной, а не просто спрашивать
+    // вершину. Шаг вида `tip=$(...); if [ -z "$tip" ]; then exit 1; fi` формально
+    // содержит и обращение к ветке, и `exit`, но ничего не сравнивает — и вернул бы
+    // исходное окно, оставив suite зелёным.
+    const BUILT_SHA = /needs\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_-]*sha\b/;
     const decisive = job.steps.filter(
       (s) =>
         TIP_LOOKUP.test(s.raw) &&
         /\bmain\b|default_branch/.test(s.raw) &&
         /\bexit\s+[1-9]/.test(s.run ?? '') &&
+        BUILT_SHA.test(s.raw) &&
+        new RegExp(`\\$(?:\\{)?[A-Za-z_][A-Za-z0-9_]*`).test(s.run ?? '') &&
         s.index < step.index,
     );
 
     expect(
       decisive.map((s) => s.index),
-      `${wf.file}:${job.key} — перед выкладкой нет сверки с вершиной основной ветки. ` +
+      `${wf.file}:${job.key} — перед выкладкой нет сверки СОБРАННОГО коммита с вершиной. ` +
         'Сверка в другом джобе не считается: между ней и выкладкой проходит сборка, ' +
-        'и вершина успевает сдвинуться',
+        'и вершина успевает сдвинуться. Обращения к вершине без сравнения с собранным ' +
+        'коммитом тоже недостаточно',
     ).not.toEqual([]);
+
+    // Сериализация обязана быть у ТОГО ЖЕ джоба: группа, объявленная где-то ещё в
+    // workflow, публикацию не сериализует. И политика ожидания должна беречь ожидающих:
+    // при одном pending поздняя устаревшая сборка вытесняет свежую, та отменяется, а
+    // сама устаревшая падает на сверке — сайт остаётся на позапрошлом состоянии.
+    const groupOnJob = ((): Record<string, unknown> | null => {
+      const c = job.concurrency as unknown;
+      if (typeof c === 'string') return { group: c };
+      return c && typeof c === 'object' ? (c as Record<string, unknown>) : null;
+    })();
+
+    expect(
+      groupOnJob && typeof groupOnJob.group === 'string' ? String(groupOnJob.group) : null,
+      `${wf.file}:${job.key} — у джоба публикации нет своей группы сериализации; ` +
+        'объявленная на уровне workflow затягивает в группу и те прогоны, которые ничего ' +
+        'не публикуют',
+    ).not.toBeNull();
+
+    expect(
+      groupOnJob?.queue ?? 'single',
+      `${wf.file}:${job.key} — политика очереди '${String(groupOnJob?.queue ?? 'single')}': ` +
+        'по умолчанию в группе держится один ожидающий прогон, и поздняя устаревшая ' +
+        'сборка вытесняет свежую, после чего падает на сверке — публикация теряется молча',
+    ).toBe('max');
   });
 
   // Req5, сценарий «проверка происхождения стоит раньше выгрузки». Именно порядок:
