@@ -1,0 +1,133 @@
+---
+/**
+ * Clinical Human (Faculty) — первый экран.
+ * Отвечает на «кто вас будет учить». Портрет крупно; без стока занятий
+ * (их нет в медиатеке). Портрет: Шрайнер В. Э. — studio §7.3.
+ */
+import { CTA_HREF } from '../../../lib/navigation';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+import { getCatalogStats } from '../../../lib/home';
+
+const photo = '/media/users/1/images/1-1727024776370.webp';
+const dim = getAssetDimensions(photo);
+const teacherHref = '/institut-apledzhera/prepodavatel/63';
+const stats = getCatalogStats();
+---
+<section class="hero-fa" data-architecture="faculty" data-hero="faculty">
+  <div class="hero-fa-inner">
+    <div class="hero-fa-copy">
+      <p class="hero-fa-eyebrow">{stats.teachers} преподавателей · клиническая практика</p>
+      <h1 class="hero-fa-title">
+        Учитесь у практикующих преподавателей прикладной кинезиологии
+      </h1>
+      <p class="hero-fa-lead">
+        Программы ИКПК, Институтов Апледжера и Барраля ведут врачи с
+        международной сертификацией. Личность преподавателя — половина решения
+        об обучении.
+      </p>
+      <div class="hero-fa-actions">
+        <a href="#teachers-featured" class="btn btn-primary" data-cta="hero">Смотреть преподавателей</a>
+        <a href={CTA_HREF} class="btn btn-outline">Расписание семинаров</a>
+      </div>
+    </div>
+    <figure class="hero-fa-figure">
+      <img
+        src={photo}
+        srcset={srcsetFor(photo)}
+        sizes="(max-width: 860px) 80vw, 432px"
+        alt="Шрайнер Валерий Эдуардович, MD, CST-D"
+        width={dim?.width ?? 1080}
+        height={dim?.height ?? 1080}
+        loading="eager"
+        fetchpriority="high"
+        class="teacher-photo"
+      />
+      <figcaption>
+        <a href={teacherHref}>Шрайнер В. Э.</a>
+        <span>MD, CST-D · ведёт программы краниосакральной терапии</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .hero-fa {
+    background: var(--surface-subtle);
+  }
+  .hero-fa-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 3rem 1.25rem;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 2.5rem;
+    align-items: center;
+  }
+  .hero-fa-eyebrow {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-accent-700);
+    margin: 0 0 0.9rem;
+  }
+  .hero-fa-title {
+    font-size: clamp(1.75rem, 3.6vw, 2.35rem);
+    font-weight: 650;
+    line-height: 1.18;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    margin: 0;
+    max-width: 18ch;
+  }
+  .hero-fa-lead {
+    margin: 1.1rem 0 0;
+    max-width: 34rem;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: var(--text-body);
+  }
+  .hero-fa-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.6rem;
+  }
+  .hero-fa-figure {
+    margin: 0;
+    max-width: 432px;
+    width: 100%;
+    justify-self: center;
+  }
+  .hero-fa-figure img {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    object-position: center 15%;
+    display: block;
+    background: var(--surface-page);
+  }
+  .hero-fa-figure figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-top: 0.65rem;
+    font-size: 0.85rem;
+  }
+  .hero-fa-figure figcaption a {
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .hero-fa-figure figcaption a:hover { text-decoration: underline; }
+  .hero-fa-figure figcaption span { color: var(--text-muted); font-size: 0.8rem; }
+
+  @media (max-width: 860px) {
+    .hero-fa-inner {
+      grid-template-columns: 1fr;
+      gap: 1.75rem;
+    }
+    .hero-fa-title { max-width: none; }
+    .hero-fa-figure { max-width: 320px; }
+  }
+</style>

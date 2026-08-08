@@ -1,0 +1,35 @@
+---
+/**
+ * Editorial CTA — текстовый блок на subtle, одна кнопка (§7.2). Не тёмная полоса.
+ */
+import { CTA_HREF } from '../../../lib/navigation';
+---
+<section class="cta-ed section cta-band" data-cta="editorial">
+  <div class="cta-ed-inner">
+    <h2>Готовы выбрать семинар?</h2>
+    <p>Откройте расписание с датами, городами и стоимостью — или напишите в контакты.</p>
+    <a href={CTA_HREF} class="btn btn-primary" data-cta="band">Записаться на обучение</a>
+  </div>
+</section>
+
+<style>
+  .cta-ed { padding: 3rem 0; }
+  .cta-ed-inner {
+    max-width: 36rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    background: var(--surface-subtle);
+    text-align: left;
+  }
+  .cta-ed h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 650;
+    color: var(--text-primary);
+  }
+  .cta-ed p {
+    margin: 0.75rem 0 1.25rem;
+    color: var(--text-body);
+    line-height: 1.5;
+  }
+</style>

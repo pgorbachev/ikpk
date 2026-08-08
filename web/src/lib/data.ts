@@ -67,6 +67,12 @@ export interface CourseGroup {
   order?: number;
 }
 
+export interface SeminarTeacherRef {
+  legacy_id: number;
+  name: string;
+  order?: number;
+}
+
 export interface Seminar {
   legacy_id: string;
   legacy_url: string;
@@ -78,6 +84,8 @@ export interface Seminar {
   description_html: string;
   description_text: string;
   images: string[];
+  /** Преподаватели семинара из каталога (не «любой с фото у института»). */
+  teachers?: SeminarTeacherRef[];
   // Поля `status` здесь нет намеренно, хотя в данных оно есть. Это СНИМОК на
   // момент импорта: `refresh-catalog.ts` считает его от календаря того дня, и со
   // временем «planned» превращается в ложное «Набор открыт» у семинара, чьи

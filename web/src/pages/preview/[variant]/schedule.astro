@@ -1,0 +1,268 @@
+---
+/**
+ * Прототип расписания по трём каркасам (§7.7 / §7.8).
+ * Упрощённая подача на живых ближайших событиях — чтобы выбор не делали
+ * только по главной.
+ */
+import type { GetStaticPaths } from 'astro';
+import TopNavLayout from '../../../layouts/TopNavLayout.astro';
+import { getUpcomingSeminars } from '../../../lib/home';
+import { isDemoForms } from '../../../lib/forms';
+import { ARCHITECTURE_IDS, variants, type ArchitectureId } from '../../../lib/variants';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+
+export const getStaticPaths: GetStaticPaths = () =>
+  isDemoForms
+    ? ARCHITECTURE_IDS.map((variant) => ({ params: { variant } }))
+    : [];
+
+const { variant: variantId } = Astro.params;
+const architecture = variantId as ArchitectureId;
+const variant = variants[architecture]!;
+const events = getUpcomingSeminars(6);
+
+const byTeacher = new Map<string, typeof events>();
+for (const e of events) {
+  const key = e.teacherName || 'Преподаватель уточняется';
+  const list = byTeacher.get(key) || [];
+  list.push(e);
+  byTeacher.set(key, list);
+}
+---
+<TopNavLayout
+  title={`Расписание — ${variant.label}`}
+  description="Прототип подачи расписания для выбора каркаса"
+  noindex={true}
+>
+  <div class="preview-ribbon">
+    Расписание · {variant.label} ·
+    <a href={`/preview/${architecture}`}>главная</a> ·
+    <a href="/preview/hub">хаб</a>
+  </div>
+
+  <main class="sch" data-schedule-architecture={architecture}>
+    <h1>Расписание и цены</h1>
+    <p class="sch-sub">
+      {architecture === 'editorial' && 'Редакционная подача: одна таблица, хайрлайны, без карточек.'}
+      {architecture === 'faculty' && 'Faculty: группировка по преподавателям, портрет ведущего.'}
+      {architecture === 'modular' && 'Modular: сетка карточек с блоком даты и бейджами.'}
+    </p>
+
+    {architecture === 'editorial' && (
+      <div class="table-scroll" role="region" aria-label="Расписание" tabindex="0">
+        <table class="sch-table">
+          <thead>
+            <tr>
+              <th scope="col">Дата</th>
+              <th scope="col">Город</th>
+              <th scope="col">Семинар</th>
+              <th scope="col">Часы</th>
+              <th scope="col">Цена</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((e) => (
+              <tr>
+                <td>{e.dateLabel}</td>
+                <td>{e.cityName}</td>
+                <td><a href={e.href}>{e.title}</a></td>
+                <td>{e.durationLabel || '—'}</td>
+                <td>{e.priceLabel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {architecture === 'faculty' && (
+      <div class="sch-faculty">
+        {[...byTeacher.entries()].map(([name, list]) => {
+          const photo = list[0]?.teacherPhoto;
+          const dim = photo ? getAssetDimensions(photo) : undefined;
+          return (
+            <section class="sch-teacher-group">
+              <header>
+                {photo && (
+                  <img
+                    src={photo}
+                    srcset={srcsetFor(photo)}
+                    sizes="48px"
+                    alt=""
+                    width={dim?.width ?? 48}
+                    height={dim?.height ?? 48}
+                    class="teacher-photo"
+                    loading="lazy"
+                  />
+                )}
+                <h2>{name}</h2>
+              </header>
+              <ul>
+                {list.map((e) => (
+                  <li>
+                    <span class="sch-date">{e.dateLabel}</span>
+                    <a href={e.href}>{e.title}</a>
+                    <span class="sch-meta">{e.cityName} · {e.priceLabel}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+    )}
+
+    {architecture === 'modular' && (
+      <div class="sch-mod-grid">
+        {events.map((e, i) => (
+          <article class:list={['sch-mod-card', { featured: i === 0 }]}>
+            <div class="sch-mod-date" aria-hidden="true">
+              <span class="day">{e.dayLabel}</span>
+              <span class="month">{e.monthLabel}</span>
+            </div>
+            <span class="sch-badge">{e.instituteShort}</span>
+            <h2><a href={e.href}>{e.title}</a></h2>
+            <p>{e.cityName}{e.durationLabel && <> · {e.durationLabel}</>}</p>
+            <div class="sch-mod-foot">
+              <strong>{e.priceLabel}</strong>
+              <a class="btn btn-primary" href={e.href}>Подробнее</a>
+            </div>
+          </article>
+        ))}
+      </div>
+    )}
+  </main>
+
+  <aside class="provenance-legend" data-provenance-legend>
+    <strong>Происхождение изображений</strong>
+    <ul>
+      <li><span class="pv pv-authentic"></span> подлинное фото — портреты</li>
+      <li><span class="pv pv-stock"></span> сток / CGI</li>
+      <li><span class="pv pv-brand"></span> знак бренда</li>
+    </ul>
+  </aside>
+</TopNavLayout>
+
+<style>
+  .preview-ribbon {
+    background: #1a1a1a; color: #fff; text-align: center;
+    font-size: 0.8rem; padding: 0.4rem 1rem;
+  }
+  .preview-ribbon a {
+    color: #abd6ac;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .sch {
+    max-width: 64rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  .sch h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 3vw, 2rem);
+    letter-spacing: -0.015em;
+  }
+  .sch-sub {
+    margin: 0.75rem 0 1.5rem;
+    color: var(--text-body);
+    font-size: var(--font-s);
+  }
+  .sch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-s);
+  }
+  .sch-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.65rem 0.75rem 0.65rem 0;
+    border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  .sch-table td {
+    padding: 0.85rem 0.75rem 0.85rem 0;
+    border-bottom: 1px solid var(--border-default);
+    vertical-align: top;
+  }
+  .sch-table td:first-child { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+  .sch-table a { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+  .sch-table a:hover { text-decoration: underline; }
+
+  .sch-teacher-group { margin-bottom: 2rem; }
+  .sch-teacher-group header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .sch-teacher-group img {
+    width: 48px; height: 48px; object-fit: cover; border-radius: 4px;
+  }
+  .sch-teacher-group h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 650;
+  }
+  .sch-teacher-group ul { list-style: none; margin: 0; padding: 0; }
+  .sch-teacher-group li {
+    display: grid;
+    grid-template-columns: 6rem 1fr auto;
+    gap: 0.75rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border-default);
+    font-size: var(--font-s);
+    align-items: baseline;
+  }
+  .sch-date { font-weight: 700; color: var(--text-primary); }
+  .sch-meta { color: var(--text-muted); white-space: nowrap; }
+  .sch-teacher-group a { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+
+  .sch-mod-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .sch-mod-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.1rem;
+    border: 1px solid var(--border-default);
+  }
+  .sch-mod-card.featured { border-color: var(--border-accent); border-width: 2px; }
+  .sch-mod-date .day { font-size: 2rem; font-weight: 700; line-height: 1; display: block; }
+  .sch-mod-date .month {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+  }
+  .sch-badge {
+    align-self: flex-start;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--color-accent-700); border: 1px solid var(--border-accent); padding: 0.15rem 0.4rem;
+  }
+  .sch-mod-card h2 { margin: 0; font-size: 0.95rem; font-weight: 650; line-height: 1.35; flex: 1; }
+  .sch-mod-card h2 a { color: var(--text-primary); text-decoration: none; }
+  .sch-mod-card p { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
+  .sch-mod-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.35rem;
+  }
+
+  .provenance-legend {
+    position: sticky; bottom: 0; z-index: 20;
+    background: var(--surface-inverse); color: var(--text-inverse);
+    padding: 0.75rem 1rem; font-size: var(--font-xs);
+  }
+  .provenance-legend ul {
+    display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0.35rem 0 0; padding: 0;
+  }
+  .pv { width: 0.9rem; height: 0.9rem; border-radius: 2px; display: inline-block; }
+  .pv-authentic { background: #4d9450; }
+  .pv-stock { background: #c46a1f; }
+  .pv-brand { background: #6b7280; }
+
+  @media (max-width: 900px) {
+    .sch-mod-grid { grid-template-columns: 1fr; }
+    .sch-teacher-group li { grid-template-columns: 1fr; gap: 0.25rem; }
+  }
+</style>

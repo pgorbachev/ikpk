@@ -1,5 +1,16 @@
 // Хелперы для секций главной (варианты редизайна).
-import { getScheduleEntries, getInstitutes, formatPrice, type ScheduleEntry } from './data.js';
+import {
+  getScheduleEntries,
+  getInstitutes,
+  getTeachers,
+  getSeminars,
+  getCourseGroups,
+  getArticles,
+  formatPrice,
+  type ScheduleEntry,
+  type SeminarTeacherRef,
+  type Teacher,
+} from './data.js';
 import { isCurrentOrFuture } from './schedule-window';
 
 export interface UpcomingSeminar {
@@ -7,10 +18,20 @@ export interface UpcomingSeminar {
   title: string;
   href: string;
   instituteName: string;
+  instituteShort: string;
   cityName: string;
   dateLabel: string;
+  /** День месяца для графического блока даты (modular). */
+  dayLabel: string;
+  monthLabel: string;
   priceLabel: string;
   isFree: boolean;
+  durationLabel: string;
+  teacherName: string;
+  teacherPhoto: string | null;
+  teacherHref: string | null;
+  /** Ссылка на форму записи из расписания (пустая, если в событии её нет). */
+  registrationFormLink: string;
 }
 
 const MONTHS = [
@@ -18,7 +39,21 @@ const MONTHS = [
   'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
 ];
 
-function dateRange(startAt: string, endAt: string): string {
+/** Короткие имена институтов живут в ScheduleEntry.institute.shortname, не в Institute. */
+// Фолбэк, когда под рукой нет ScheduleEntry.institute.shortname (страница
+// семинара без даты). Живые короткие имена — в расписании. Четвёртый институт
+// здесь не заведён: функция вернёт сам slug — не выдумывать короткое имя.
+const SHORT_BY_SLUG: Record<string, string> = {
+  'institut-klinicheskoy-prikladnoy-kineziologii': 'ИКПК',
+  'institut-apledzhera': 'Апледжера',
+  'institut-barralya': 'Барраля',
+};
+
+export function instituteShortBySlug(slug: string): string {
+  return SHORT_BY_SLUG[slug] || slug;
+}
+
+export function formatScheduleDateRange(startAt: string, endAt: string): string {
   const s = new Date(startAt);
   const e = new Date(endAt);
   const sd = s.getUTCDate();
@@ -30,12 +65,78 @@ function dateRange(startAt: string, endAt: string): string {
   return `${sd} ${sm} – ${ed} ${em}`;
 }
 
+export function findTeacherForScheduleLead(
+  lead: { id: number; fullName: string } | undefined,
+  teachers: Teacher[] = getTeachers()
+): Teacher | undefined {
+  if (!lead) return undefined;
+  // Только стабильные ключи: матчинг по префиксу имени давал ложную атрибуцию.
+  return teachers.find(
+    (t) => t.legacy_id === String(lead.id) || t.slug === String(lead.id)
+  );
+}
+
+/** Первый преподаватель семинара из каталога (по order), сопоставленный с Teacher. */
+export function findTeacherForSeminar(
+  refs: SeminarTeacherRef[] | undefined,
+  teachers: Teacher[] = getTeachers()
+): Teacher | undefined {
+  if (!refs?.length) return undefined;
+  const ordered = [...refs].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  for (const ref of ordered) {
+    const hit = teachers.find(
+      (t) => t.legacy_id === String(ref.legacy_id) || t.name === ref.name
+    );
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Имя ведущего из seminar.teachers, даже если карточки Teacher нет. */
+export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): string {
+  if (!refs?.length) return '';
+  const ordered = [...refs].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  return ordered[0]?.name.split(',')[0].trim() || '';
+}
+
+/**
+ * Живые счётчики каталога — для modular-hero и маршрутов.
+ * dates — только текущие/будущие (как в getUpcomingSeminars).
+ * cities — населённые пункты без «Онлайн».
+ */
+export function getCatalogStats(now: Date = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const schedule = getScheduleEntries().filter(
+    (e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today)
+  );
+  const cityNames = [
+    ...new Set(
+      schedule
+        .map((e) => e.city?.name)
+        .filter((name): name is string => Boolean(name) && name !== 'Онлайн')
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'ru'));
+  const onlineDates = schedule.filter((e) => e.city?.name === 'Онлайн').length;
+
+  return {
+    seminars: getSeminars().length,
+    programs: getCourseGroups().length,
+    dates: schedule.length,
+    cities: cityNames.length,
+    cityNames,
+    onlineDates,
+    teachers: getTeachers().filter((t) => t.photo).length,
+    articles: getArticles().length,
+  };
+}
+
 /**
  * Ближайшие активные семинары с назначенной датой, отсортированные по дате.
  * Прошедшие отфильтровываются по дате сборки (как в расписании).
  */
 export function getUpcomingSeminars(limit = 3, now: Date = new Date()): UpcomingSeminar[] {
   const instituteByName = new Map(getInstitutes().map((i) => [i.name, i.slug]));
+  const teachers = getTeachers();
   const today = now.toISOString().slice(0, 10);
 
   return getScheduleEntries()
@@ -50,15 +151,28 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
       const href = instituteSlug
         ? `/${instituteSlug}/${e.program.slug}/${e.seminar.slug}`
         : '/raspisanie-i-tseny';
+      const lead = e.teachers?.[0];
+      const full = findTeacherForScheduleLead(lead, teachers);
+      const start = new Date(e.startAt);
       return {
         id: e.id,
         title: e.name,
         href,
         instituteName: e.institute.name,
+        instituteShort: e.institute.shortname || instituteShortBySlug(instituteSlug || ''),
         cityName: e.city?.name || 'Уточняется',
-        dateLabel: dateRange(e.startAt, e.endAt),
+        dateLabel: formatScheduleDateRange(e.startAt, e.endAt),
+        dayLabel: String(start.getUTCDate()),
+        monthLabel: MONTHS[start.getUTCMonth()],
         priceLabel: e.isFree ? 'Бесплатно' : formatPrice(e.newPrice),
         isFree: e.isFree,
+        durationLabel: e.duration ? `${e.duration} ч` : '',
+        teacherName: lead?.fullName?.split(',')[0].trim() || '',
+        teacherPhoto: full?.photo || null,
+        teacherHref: full
+          ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
+          : null,
+        registrationFormLink: e.registrationFormLink || '',
       };
     });
 }

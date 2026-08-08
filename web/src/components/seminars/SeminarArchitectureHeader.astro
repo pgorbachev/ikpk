@@ -1,0 +1,383 @@
+---
+/**
+ * Шапка семинара для прототипов каркаса (§7.6).
+ * architecture: editorial | faculty | modular
+ *
+ * Modular: sticky-карточка и тело в одной сетке — иначе sticky ограничен высотой
+ * <header> и не сопровождает текст.
+ */
+import type { Seminar, CourseGroup, Institute, Teacher } from '../../lib/data';
+import { getAssetDimensions, srcsetFor } from '../../lib/media';
+import { instituteShortBySlug } from '../../lib/home';
+
+interface ScheduleRow {
+  dateLabel: string;
+  cityName: string;
+  priceLabel: string;
+  durationLabel: string;
+  formHref: string;
+  teacher?: { name: string; photo: string | null; href: string | null };
+}
+
+interface Props {
+  architecture: 'editorial' | 'faculty' | 'modular';
+  seminar: Seminar;
+  courseGroup: CourseGroup;
+  institute: Institute;
+  code: string;
+  schedule: ScheduleRow[];
+  teacherFallback?: Teacher | null;
+  /** Имя из seminar.teachers, если карточки Teacher нет — без выдуманного портрета. */
+  teacherNameOnly?: string;
+  /** Для modular: тело внутри сетки со sticky-карточкой (§7.6). */
+  bodyHtml?: string;
+}
+
+const {
+  architecture,
+  seminar,
+  courseGroup,
+  institute,
+  code,
+  schedule,
+  teacherFallback = null,
+  teacherNameOnly = '',
+  bodyHtml = '',
+} = Astro.props;
+
+const next = schedule[0];
+const hasDate = Boolean(next);
+const instituteShort = instituteShortBySlug(institute.slug);
+const teacher =
+  next?.teacher ||
+  (teacherFallback
+    ? {
+        name: teacherFallback.name.split(',')[0].trim(),
+        photo: teacherFallback.photo || null,
+        href: teacherFallback.slug
+          ? `/${teacherFallback.institute_legacy_id}/prepodavatel/${teacherFallback.slug}`
+          : null,
+      }
+    : teacherNameOnly
+      ? { name: teacherNameOnly, photo: null, href: null }
+      : null);
+const photoDim = teacher?.photo ? getAssetDimensions(teacher.photo) : undefined;
+const price = next?.priceLabel || '';
+const city = next?.cityName || '';
+const duration = next?.durationLabel || '';
+const ctaHref = next?.formHref || '/raspisanie-i-tseny';
+---
+
+{architecture !== 'modular' ? (
+<header class={`sem-hero sem-hero--${architecture}`} data-seminar-architecture={architecture}>
+  {architecture === 'editorial' && (
+    <div class="sem-ed">
+      {code && <p class="sem-code">{code}</p>}
+      <h1>{seminar.name}</h1>
+      <p class="sem-ed-inst">{institute.name} · {courseGroup.name}</p>
+      {hasDate ? (
+        <p class="sem-facts">
+          {next!.dateLabel}
+          {city && <> · {city}</>}
+          {duration && <> · {duration}</>}
+          {price && <> · {price}</>}
+          {teacher?.name && (
+            <>
+              {' · '}
+              {teacher.href ? <a href={teacher.href}>{teacher.name}</a> : teacher.name}
+            </>
+          )}
+        </p>
+      ) : (
+        <p class="sem-undated" data-undated>
+          Даты следующего набора уточняются{' '}
+          <a href="/kontakty">Сообщить, когда откроется набор →</a>
+        </p>
+      )}
+      <p class="sem-ed-cta">
+        <a class="sem-link" href={ctaHref}>Записаться на обучение →</a>
+      </p>
+    </div>
+  )}
+
+  {architecture === 'faculty' && (
+    <div class="sem-fa">
+      <div class="sem-fa-copy">
+        {code && <p class="sem-code">{code}</p>}
+        <h1>{seminar.name}</h1>
+        <p class="sem-ed-inst">{institute.name}</p>
+        {hasDate ? (
+          <ul class="sem-fa-pills">
+            <li>{next!.dateLabel}</li>
+            {city && <li>{city}</li>}
+            {duration && <li>{duration}</li>}
+            {price && <li>{price}</li>}
+          </ul>
+        ) : (
+          <p class="sem-undated" data-undated>
+            {teacher?.name ? `Ведёт ${teacher.name}` : 'Преподаватель уточняется'}
+            {' · '}даты набора уточняются
+          </p>
+        )}
+        <a class="btn btn-primary" href={ctaHref}>Записаться</a>
+      </div>
+      {teacher?.photo && (
+        <figure class="sem-fa-figure">
+          <img
+            src={teacher.photo}
+            srcset={srcsetFor(teacher.photo)}
+            sizes="300px"
+            alt=""
+            width={photoDim?.width ?? 300}
+            height={photoDim?.height ?? 300}
+            class="teacher-photo"
+            loading="eager"
+          />
+          {teacher.name && (
+            <figcaption>
+              {teacher.href ? <a href={teacher.href}>{teacher.name}</a> : teacher.name}
+            </figcaption>
+          )}
+        </figure>
+      )}
+    </div>
+  )}
+</header>
+) : (
+<section class="sem-mo-page" data-seminar-architecture="modular">
+  <div class="sem-mo">
+    <div class="sem-mo-copy">
+      <div class="sem-mo-badges">
+        {code && <span class="sem-badge">{code}</span>}
+        <span class="sem-badge muted">{instituteShort}</span>
+      </div>
+      <h1>{seminar.name}</h1>
+      <p class="sem-ed-inst">{courseGroup.name}</p>
+      {!hasDate && (
+        <p class="sem-undated" data-undated>
+          <span class="sem-badge">Набор открыт · дата уточняется</span>
+        </p>
+      )}
+      {bodyHtml ? (
+        <div class="sem-mo-body rich-content" set:html={bodyHtml} />
+      ) : (
+        <p class="sem-empty">Описание семинара в данных отсутствует.</p>
+      )}
+      <p class="sem-mo-note">
+        Аккордеон учебного плана по дням — следующий шаг прототипа (§7.6); сейчас
+        тот же rich-content, чтобы сравнить шапку записи.
+      </p>
+    </div>
+    <aside class="sem-mo-card">
+      {hasDate ? (
+        <>
+          <p class="sem-mo-date">{next!.dateLabel}</p>
+          <ul class="sem-fa-pills">
+            {city && <li>{city}</li>}
+            {duration && <li>{duration}</li>}
+          </ul>
+        </>
+      ) : (
+        <p class="sem-mo-date soft">Дата уточняется</p>
+      )}
+      {price && <p class="sem-mo-price">{price}</p>}
+      {teacher && (
+        <div class="sem-mo-teacher">
+          {teacher.photo && (
+            <img
+              src={teacher.photo}
+              srcset={srcsetFor(teacher.photo)}
+              sizes="64px"
+              alt=""
+              width="64"
+              height="64"
+              class="teacher-photo"
+              loading="lazy"
+            />
+          )}
+          <span>
+            {teacher.href ? <a href={teacher.href}>{teacher.name}</a> : teacher.name}
+          </span>
+        </div>
+      )}
+      <a class="btn btn-primary" href={ctaHref}>Записаться</a>
+    </aside>
+  </div>
+</section>
+)}
+
+<style>
+  .sem-hero { padding: 2.5rem 0 2rem; border-bottom: 1px solid var(--border-default); }
+  .sem-ed, .sem-fa {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+  }
+  .sem-mo-page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  .sem-mo {
+    display: grid;
+    grid-template-columns: 1.3fr 0.7fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .sem-code {
+    margin: 0 0 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .sem-hero h1, .sem-mo-copy h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 3.5vw, 2.35rem);
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    max-width: 28ch;
+  }
+  .sem-ed-inst {
+    margin: 0.75rem 0 0;
+    font-size: var(--font-s);
+    color: var(--text-muted);
+  }
+  .sem-facts {
+    margin: 1.25rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-default);
+    font-size: var(--font-s);
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+  .sem-facts a { color: var(--text-primary); font-weight: 600; }
+  .sem-undated {
+    margin: 1.25rem 0 0;
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-default);
+    font-size: var(--font-s);
+    color: var(--text-body);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .sem-undated a {
+    font-weight: 600;
+    color: var(--color-accent-700);
+  }
+  .sem-ed-cta { margin: 1.25rem 0 0; }
+  .sem-link {
+    font-weight: 600;
+    color: var(--color-accent-700);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .sem-fa {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  .sem-fa-pills {
+    list-style: none;
+    margin: 1rem 0 1.25rem;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .sem-fa-pills li {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--border-default);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .sem-fa-figure { margin: 0; max-width: 300px; }
+  .sem-fa-figure img {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    display: block;
+    background: var(--surface-subtle);
+  }
+  .sem-fa-figure figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--font-s);
+    font-weight: 600;
+  }
+  .sem-fa-figure a { color: var(--text-primary); text-decoration: none; }
+  .sem-fa-figure a:hover { text-decoration: underline; }
+
+  .sem-mo-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+  .sem-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border-accent);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent-700);
+  }
+  .sem-badge.muted {
+    border-color: var(--border-default);
+    color: var(--text-muted);
+  }
+  .sem-mo-body { margin-top: 2rem; max-width: 44rem; }
+  .sem-mo-note {
+    margin: 1.5rem 0 0;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    max-width: 44rem;
+  }
+  .sem-empty { color: var(--text-muted); margin-top: 2rem; }
+  .sem-mo-card {
+    position: sticky;
+    top: calc(var(--header-height) + 1rem);
+    padding: 1.25rem;
+    border: 1px solid var(--border-default);
+    background: var(--surface-page);
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .sem-mo-date {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sem-mo-date.soft { color: var(--text-muted); font-size: 1rem; }
+  .sem-mo-price {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sem-mo-teacher {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: var(--font-s);
+  }
+  .sem-mo-teacher img {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+  }
+  .sem-mo-teacher a { color: var(--text-primary); font-weight: 600; }
+
+  @media (max-width: 860px) {
+    .sem-fa, .sem-mo { grid-template-columns: 1fr; }
+    .sem-fa-figure { max-width: 240px; }
+    .sem-mo-card { position: static; }
+  }
+</style>

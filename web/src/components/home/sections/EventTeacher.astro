@@ -1,0 +1,144 @@
+---
+/**
+ * Faculty: ближайшее событие карточкой с портретом ведущего (studio §7.3).
+ * Не строка (editorial) и не первая ячейка сетки (modular).
+ */
+import { getUpcomingSeminars } from '../../../lib/home';
+import { registrationHref } from '../../../lib/forms';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+
+const [next] = getUpcomingSeminars(1);
+const dim = next?.teacherPhoto ? getAssetDimensions(next.teacherPhoto) : undefined;
+const ctaHref = next
+  ? registrationHref(next.registrationFormLink) || next.href
+  : '/raspisanie-i-tseny';
+---
+
+{next && (
+  <section class="event-teacher-section" data-event-teacher>
+    <div class="container">
+      <article class="event-teacher">
+        <div class="event-teacher-date">
+          <span class="event-teacher-day">{next.dayLabel}</span>
+          <span class="event-teacher-month">{next.monthLabel}</span>
+        </div>
+        {next.teacherPhoto ? (
+          <img
+            class="event-teacher-photo teacher-photo"
+            src={next.teacherPhoto}
+            srcset={srcsetFor(next.teacherPhoto)}
+            sizes="96px"
+            alt=""
+            width={dim?.width ?? 96}
+            height={dim?.height ?? 96}
+            loading="lazy"
+          />
+        ) : (
+          <div class="event-teacher-photo placeholder" aria-hidden="true"></div>
+        )}
+        <div class="event-teacher-body">
+          <p class="event-teacher-meta">
+            {next.cityName}
+            {next.durationLabel && <> · {next.durationLabel}</>}
+            {' · '}{next.priceLabel}
+          </p>
+          <h2 class="event-teacher-title">
+            <a href={next.href}>{next.title}</a>
+          </h2>
+          {next.teacherName && (
+            <p class="event-teacher-lead">
+              Ведёт{' '}
+              {next.teacherHref ? (
+                <a href={next.teacherHref}>{next.teacherName}</a>
+              ) : (
+                next.teacherName
+              )}
+            </p>
+          )}
+        </div>
+        <a class="btn btn-primary event-teacher-cta" href={ctaHref}>
+          Записаться
+        </a>
+      </article>
+    </div>
+  </section>
+)}
+
+<style>
+  .event-teacher-section { padding: var(--space-block) 0; }
+  .event-teacher {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 1.25rem;
+    align-items: center;
+    padding: 1.25rem 1.4rem;
+    background: var(--surface-page);
+    border: 1px solid var(--border-default);
+  }
+  .event-teacher-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 3.5rem;
+    color: var(--text-primary);
+  }
+  .event-teacher-day {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .event-teacher-month {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+  }
+  .event-teacher-photo {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--surface-subtle);
+  }
+  .event-teacher-photo.placeholder { background: var(--surface-subtle); }
+  .event-teacher-meta {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-accent-700);
+  }
+  .event-teacher-title {
+    margin: 0.35rem 0 0;
+    font-size: 1.1rem;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+  .event-teacher-title a {
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .event-teacher-title a:hover { text-decoration: underline; }
+  .event-teacher-lead {
+    margin: 0.4rem 0 0;
+    font-size: var(--font-s);
+    color: var(--text-body);
+  }
+  .event-teacher-lead a { color: var(--text-primary); font-weight: 600; }
+
+  @media (max-width: 780px) {
+    .event-teacher {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        'date body'
+        'photo body'
+        'cta cta';
+    }
+    .event-teacher-date { grid-area: date; }
+    .event-teacher-photo { grid-area: photo; width: 72px; height: 72px; }
+    .event-teacher-body { grid-area: body; }
+    .event-teacher-cta { grid-area: cta; width: 100%; text-align: center; }
+  }
+</style>

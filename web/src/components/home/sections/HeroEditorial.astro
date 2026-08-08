@@ -1,0 +1,147 @@
+---
+/**
+ * Institutional Editorial — первый экран.
+ * Текст ведёт; один портрет 4:5 справа. Без ✓-списков, chips и inset-hero.
+ * Портрет: Кривинкова А. А. (ровный фон, вписывается без апскейла) — studio §7.2.
+ */
+import { CTA_HREF } from '../../../lib/navigation';
+import { getCatalogStats } from '../../../lib/home';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+
+const photo = '/media/users/1/images/1-1774158766529.webp';
+const dim = getAssetDimensions(photo);
+const stats = getCatalogStats();
+---
+<section class="hero-ed" data-architecture="editorial" data-hero="editorial">
+  <div class="hero-ed-inner">
+    <div class="hero-ed-copy">
+      <p class="hero-ed-brand">Институт клинической прикладной кинезиологии</p>
+      <h1 class="hero-ed-title">
+        Постдипломное обучение<br />
+        прикладной кинезиологии<br />
+        для врачей и специалистов
+      </h1>
+      <p class="hero-ed-lead">
+        Лицензированная образовательная организация. Программы ИКПК, Институтов
+        Апледжера и Барраля — очно в Санкт-Петербурге и Москве.
+      </p>
+      <p class="hero-ed-facts">
+        {stats.programs} программ · {stats.teachers} преподавателей · {stats.seminars} семинаров
+      </p>
+      <div class="hero-ed-actions">
+        <a href={CTA_HREF} class="hero-ed-link" data-cta="hero">Смотреть расписание →</a>
+        <a href="#positioning" class="hero-ed-link muted">Об институте</a>
+      </div>
+    </div>
+    <figure class="hero-ed-figure">
+      <img
+        src={photo}
+        srcset={srcsetFor(photo)}
+        sizes="(max-width: 860px) 70vw, 420px"
+        alt="Кривинкова Анна Анатольевна, преподаватель ИКПК"
+        width={dim?.width ?? 1200}
+        height={dim?.height ?? 1200}
+        loading="eager"
+        fetchpriority="high"
+        class="teacher-photo"
+      />
+      <figcaption>Кривинкова А. А. · преподаватель ИКПК</figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .hero-ed {
+    background: var(--surface-page);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .hero-ed-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 3rem;
+    display: grid;
+    grid-template-columns: 1.45fr 0.7fr;
+    gap: 3rem;
+    align-items: end;
+  }
+  .hero-ed-brand {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    margin: 0 0 1.25rem;
+  }
+  .hero-ed-title {
+    font-size: clamp(2rem, 4.2vw, 2.75rem);
+    font-weight: 620;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .hero-ed-lead {
+    margin: 1.35rem 0 0;
+    max-width: 36rem;
+    font-size: 1.125rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+  }
+  .hero-ed-facts {
+    margin: 1.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-default);
+    font-size: var(--font-s);
+    color: var(--text-muted);
+    letter-spacing: 0.01em;
+  }
+  .hero-ed-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+  .hero-ed-link {
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-accent-700);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .hero-ed-link.muted {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .hero-ed-link.muted:hover { text-decoration: underline; }
+  .hero-ed-figure {
+    margin: 0;
+    max-width: 420px;
+    width: 100%;
+    justify-self: end;
+  }
+  .hero-ed-figure img {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    object-position: center 18%;
+    display: block;
+    background: var(--surface-subtle);
+  }
+  .hero-ed-figure figcaption {
+    margin-top: 0.55rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 860px) {
+    .hero-ed-inner {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      padding: 2.5rem 1.25rem 2rem;
+    }
+    .hero-ed-figure {
+      max-width: 280px;
+      justify-self: start;
+      order: -1;
+    }
+  }
+</style>

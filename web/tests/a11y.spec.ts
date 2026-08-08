@@ -16,7 +16,10 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
     path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej',
   },
   { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme' },
-  // варианты редизайна (верхнее меню) — новый layout + hero-компоненты под гейтом
+  // варианты редизайна b/c/d и architecture-прототипы собираются только при
+  // DEMO_FORMS (build:demo). Job Playwright smoke строит прод → эти пути дают
+  // 404, и тест ниже их пропускает. Прототипы вне a11y-гейта CI; проверка —
+  // локально на демо-сборке.
   { name: 'preview-b', path: '/preview/b' },
   { name: 'preview-c', path: '/preview/c' },
   { name: 'preview-d', path: '/preview/d' },

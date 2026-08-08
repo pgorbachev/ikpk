@@ -399,3 +399,27 @@ total-blocking-time  ожидалось <=200, получено 771
 **Когда актуально:** после первой реальной публикации по новому пути. Найдено независимым
 ревью последствий, merge change'а не блокирует.
 
+---
+
+## TD-14 — Прототипы каркаса не защищены в CI
+
+**Файлы:** `web/tests/seo-package.test.ts` (`describe.skipIf(!isDemoBuildForPrototypes)`),
+`web/tests/a11y.spec.ts`, `.github/workflows/`
+**Метки в коде:** нет
+
+**Проблема:**
+Десять проверок architecture-прототипов (`/preview/{editorial,faculty,modular}` и
+страницы семинара/расписания) обёрнуты в `skipIf`, потому что CI собирает production
+без `DEMO_FORMS` — каталога `dist/preview` нет. Architecture-маршруты также не входят
+в Playwright a11y-прогон. Все GitHub checks зелёные, даже если вся функциональность
+прототипов сломана. Это не вакуумный early-return (тот уже убран), но и не защита.
+
+**Решение (на выбор):**
+1. Job с `npm run build:demo` + `vitest --config vitest.build.config.ts` (и при желании
+   axe по `/preview/*`).
+2. Пока job нет — этот долг остаётся явным; молчаливый skip в CI не считать достаточным.
+
+**Когда актуально:** до мержа любых правок `/preview/*`, либо сразу после решения
+владельца по job. Найдено ревью PR #36.
+
+

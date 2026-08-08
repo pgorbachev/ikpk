@@ -1,0 +1,105 @@
+---
+/**
+ * Modular: траектория ступеней ПК / ФПК — есть только в этом направлении (§7.4).
+ * Порядок — по номеру ступени (не localeCompare), ссылки ведут на расписание.
+ * Предусловия из текста здесь не разбираются — подзаголовок это честно говорит.
+ */
+import { getSeminars } from '../../../lib/data';
+
+function track(prefix: RegExp) {
+  return getSeminars()
+    .filter((s) => prefix.test(s.name))
+    .map((s) => {
+      const code = s.name.match(/^[А-ЯA-Z]+-(\d+)/i);
+      const num = code ? Number(code[1]) : 999;
+      const label = code ? code[0] : s.name.slice(0, 8);
+      return { code: label, name: s.name, num };
+    })
+    .sort((a, b) => a.num - b.num);
+}
+
+const pk = track(/^ПК-\d/);
+const fpk = track(/^ФПК-\d/);
+---
+<section class="tracks section" data-tracks="modular">
+  <div class="container">
+    <h2 class="section-title">Траектория ступеней</h2>
+    <p class="section-sub">
+      Ступени собраны по коду в названии семинара (ПК-1…, ФПК-1…) и отсортированы
+      по номеру. Разбор предусловий из описаний — следующий шаг прототипа.
+    </p>
+
+    <div class="tracks-block">
+      <h3>Прикладная кинезиология</h3>
+      <ol class="tracks-line">
+        {pk.map((s, i) => (
+          <li>
+            {i > 0 && <span class="tracks-arrow" aria-hidden="true">→</span>}
+            <a href="/raspisanie-i-tseny" title={s.name}>{s.code}</a>
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <div class="tracks-block">
+      <h3>Функциональная прикладная кинезиология</h3>
+      <ol class="tracks-line">
+        {fpk.map((s, i) => (
+          <li>
+            {i > 0 && <span class="tracks-arrow" aria-hidden="true">→</span>}
+            <a href="/raspisanie-i-tseny" title={s.name}>{s.code}</a>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </div>
+</section>
+
+<style>
+  .tracks-block { margin-top: 1.5rem; }
+  .tracks-block h3 {
+    margin: 0 0 0.75rem;
+    font-size: var(--font-s);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+  .tracks-line {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .tracks-line li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .tracks-line a {
+    display: inline-block;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--border-default);
+    background: var(--surface-page);
+    font-size: var(--font-s);
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .tracks-line a:hover {
+    border-color: var(--border-accent);
+    color: var(--color-accent-700);
+  }
+  .tracks-arrow {
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .tracks-line { flex-direction: column; align-items: flex-start; }
+    .tracks-arrow { transform: rotate(90deg); }
+  }
+</style>

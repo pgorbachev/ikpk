@@ -1,0 +1,97 @@
+---
+/**
+ * Modular: институты как каталог — эмблема + число программ (§7.4).
+ */
+import { getInstitutes, getCourseGroups } from '../../../lib/data';
+import { getAssetDimensions, srcsetFor } from '../../../lib/media';
+
+const institutes = getInstitutes().map((inst) => {
+  const programs = getCourseGroups(inst.slug).length;
+  const image = inst.images?.[0];
+  return {
+    ...inst,
+    programs,
+    image,
+    dim: image ? getAssetDimensions(image) : undefined,
+  };
+});
+---
+<section class="prog-cat section" data-institutes="modular">
+  <div class="container">
+    <h2 class="section-title">Каталог по институтам</h2>
+    <div class="prog-cat-grid">
+      {institutes.map((inst) => (
+        <a class="prog-cat-card" href={`/${inst.slug}`}>
+          {inst.image && (
+            <img
+              src={inst.image}
+              srcset={srcsetFor(inst.image)}
+              sizes="220px"
+              alt=""
+              width={inst.dim?.width ?? 220}
+              height={inst.dim?.height ?? 100}
+              loading="lazy"
+              class="prog-cat-logo"
+            />
+          )}
+          <h3>{inst.name}</h3>
+          <p><strong>{inst.programs}</strong> {inst.programs === 1 ? 'программа' : inst.programs > 1 && inst.programs < 5 ? 'программы' : 'программ'}</p>
+          <span>Открыть каталог →</span>
+        </a>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .prog-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .prog-cat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.35rem;
+    border: 1px solid var(--border-default);
+    background: var(--surface-page);
+    text-decoration: none;
+    color: inherit;
+  }
+  .prog-cat-logo {
+    height: 56px;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: left center;
+  }
+  .prog-cat-card h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 650;
+    line-height: 1.35;
+    color: var(--text-primary);
+    min-height: 2.7em;
+  }
+  .prog-cat-card p {
+    margin: 0;
+    font-size: var(--font-s);
+    color: var(--text-body);
+  }
+  .prog-cat-card p strong {
+    font-size: 1.35rem;
+    color: var(--text-primary);
+  }
+  .prog-cat-card span {
+    margin-top: auto;
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-accent-700);
+  }
+
+  @media (max-width: 800px) {
+    .prog-cat-grid { grid-template-columns: 1fr; }
+  }
+</style>
