@@ -1,0 +1,71 @@
+# Обновления зависимостей приходят сюда PR'ом, а не красным гейтом у всех сразу.
+#
+# Зачем: за один день гейт `audit:prod` трижды краснел на всех ветках подряд из-за
+# advisory, опубликованных на версии, которые уже стояли в lockfile (js-yaml, postcss,
+# nanoid). Репозиторий при этом не менялся. Каждый раз это выяснялось в момент, когда
+# кому-то нужно было слить готовую работу, и чинилось вручную.
+#
+# Оговорка про lockfile: PR от Dependabot надо смотреть тем же взглядом, что и ручную
+# правку — не потерялись ли платформенные записи (`@emnapi/runtime` и подобные), без
+# которых `npm ci` падает на Linux. Число пакетов в lockfile до и после обязано
+# совпадать, если обновляется одна зависимость. Проверено на себе: `npm audit fix`
+# локальным npm 11 такие записи вырезает.
+version: 2
+
+updates:
+  # ─── Фронтенд: единственный пакет, чьи зависимости уезжают в прод ───────────
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Мелкие подъёмы приходят одной пачкой: десять отдельных PR никто не смотрит,
+      # а несмотренный PR ничем не лучше отсутствующего.
+      web-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ─── CMS ────────────────────────────────────────────────────────────────────
+  # Здесь `audit:prod` намеренно report-only из-за upstream-advisory в Strapi, поэтому
+  # обновления особенно легко не заметить: гейт про них молчит по построению.
+  - package-ecosystem: npm
+    directory: /cms
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      cms-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ─── Скрипты импорта и проверки адресов ─────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      scripts-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ─── Сами workflow ──────────────────────────────────────────────────────────
+  # Actions сейчас закреплены мажорным тегом (`actions/checkout@v4`), то есть
+  # содержимое под тегом может меняться без нашего ведома. Это отдельный долг —
+  # переход на пины по SHA; Dependabot такие пины умеет обновлять и делает переход
+  # посильным, поэтому экосистема заведена заранее.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
