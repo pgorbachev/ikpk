@@ -366,11 +366,23 @@ describe('гейт публикации: конфигурация', () => {
         .map(([k]) => k);
       if (carriers.length === 0) return false;
       const body = s.run ?? '';
-      return carriers.some((name) =>
-        new RegExp(
-          `(\\$\\{?${name}\\}?[^\\n]*(!=|==|=~|\\s-ne\\s|\\s-eq\\s))` +
-            `|((!=|==|=~|\\s-ne\\s|\\s-eq\\s)[^\\n]*\\$\\{?${name}\\}?)`,
-        ).test(body),
+
+      // Переменные, в которые кладут вершину: `tip=$(git ls-remote ...)`, `x=$(gh api ...)`.
+      // Сравнение обязано связать собранный SHA ИМЕННО с ними. Проверять лишь «участвует
+      // в каком-то сравнении» мало: `[ "$SHA" != "$SHA" ]` такому условию удовлетворяет,
+      // а пропускает любую устаревшую выкладку.
+      const tipVars = [...body.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)=\$\(([^)]*)\)/gm)]
+        .filter(([, , cmd]) => TIP_LOOKUP.test(cmd))
+        .map(([, name]) => name);
+      if (tipVars.length === 0) return false;
+
+      const ref = (n: string): string => `\\$\\{?${n}\\}?`;
+      const CMP = '(!=|==|=~|\\s-ne\\s|\\s-eq\\s)';
+      return carriers.some((c) =>
+        tipVars.some((t) =>
+          new RegExp(`${ref(c)}[^\\n]*${CMP}[^\\n]*${ref(t)}`).test(body) ||
+          new RegExp(`${ref(t)}[^\\n]*${CMP}[^\\n]*${ref(c)}`).test(body),
+        ),
       );
     };
 
