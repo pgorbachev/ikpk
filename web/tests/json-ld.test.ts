@@ -130,6 +130,18 @@ describe('проводка JSON-LD в компонентах', () => {
       const mentions = (src.match(/<script\b[^<]*?application\/ld\+json/gi) ?? []).length;
       let parsedHere = 0;
 
+      // Имя функции ничего не гарантирует само по себе: `const serializeJsonLd =
+      // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
+      // на выходе. Поэтому требуется, чтобы идентификатор был ИМПОРТИРОВАН из
+      // центрального модуля и не переопределялся локально.
+      const importsCentral =
+        /import\s*\{[^}]*\bserializeJsonLd\b[^}]*\}\s*from\s*['"][^'"]*lib\/json-ld(\.js)?['"]/.test(
+          src,
+        );
+      const shadowed =
+        /\b(?:const|let|var)\s+serializeJsonLd\b/.test(src) ||
+        /\bfunction\s+serializeJsonLd\b/.test(src);
+
       for (const m of src.matchAll(tagRe)) {
         parsedHere++;
         const tag = m[0];
@@ -142,6 +154,16 @@ describe('проводка JSON-LD в компонентах', () => {
         tags++;
         if (!isWholeSerializeCall(setHtml[1])) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
+        } else if (!importsCentral) {
+          offenders.push(
+            `${file.replace(SRC, 'src')}: serializeJsonLd не импортирован из lib/json-ld — ` +
+              `совпадает только имя, а не функция`,
+          );
+        } else if (shadowed) {
+          offenders.push(
+            `${file.replace(SRC, 'src')}: serializeJsonLd переопределён локально — ` +
+              `импорт есть, но вызывается не он`,
+          );
         }
       }
 
