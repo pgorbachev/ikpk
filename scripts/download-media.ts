@@ -28,6 +28,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
+import { resolveLocalPath } from './lib/media-paths.js';
 
 const ROOT = join(import.meta.dirname, '..');
 const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
@@ -194,10 +195,27 @@ let failed = 0;
 
 for (const path of [...paths].sort()) {
   const url = sourceUrlFor(path);
-  const segments = path.split('/').filter(Boolean);
-  const localPath = segments[0] === 'media'
-    ? join(ORIGINALS_DIR, ...segments.slice(1))
-    : join(PUBLIC_DIR, ...segments);
+  // Границу каталога проверяет resolveLocalPath. Прогон останавливается намеренно:
+  // источник этих строк — контент с чужого живого сайта, и выход за границу означает
+  // скомпрометированные данные, а не один плохой ассет — продолжать запись из такого
+  // набора нельзя. Но остановка обязана быть ЧИТАЕМОЙ: без этого перехвата наружу
+  // летел голый стектрейс, без итоговой сводки и без указания, сколько ассетов
+  // осталось необработанными, — оператор видел бы обрыв на середине без объяснения.
+  let localPath: string;
+  try {
+    localPath = resolveLocalPath(path, {
+      originalsDir: ORIGINALS_DIR,
+      publicDir: PUBLIC_DIR,
+    });
+  } catch (err) {
+    console.error(`\n✗ ОСТАНОВКА: небезопасный путь ассета в данных: ${path}`);
+    console.error(`  ${(err as Error).message}`);
+    console.error(
+      `  Обработано до остановки: ${downloaded} скачано, ${skipped} пропущено, ${failed} с ошибкой.`,
+    );
+    console.error('  Данные скрейпа считаются скомпрометированными — проверьте источник.');
+    process.exit(1);
+  }
 
   if (!force && existsSync(localPath) && statSync(localPath).size > 0) {
     skipped++;

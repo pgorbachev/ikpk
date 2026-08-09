@@ -18,6 +18,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildUploadBody } from "./lib/upload-body.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -219,19 +220,14 @@ async function uploadImage(url: string | null): Promise<number | null> {
       decodeURIComponent(path.basename(new URL(url).pathname)) || "image.jpg";
     const mime = res.headers.get("content-type") || "application/octet-stream";
 
-    // Build multipart/form-data manually to avoid extra deps
-    const boundary = `----IKPKUpload${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const formBuf = Buffer.concat([
-      Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="${fname}"\r\nContent-Type: ${mime}\r\n\r\n`,
-      ),
-      buf,
-      Buffer.from(`\r\n--${boundary}--\r\n`),
-    ]);
+    // Заголовки собирает form-data (см. lib/upload-body.ts): fname берётся из URL
+    // данных скрейпа, и при ручной конкатенации кавычка или CRLF в имени ломали
+    // Content-Disposition запроса, уходящего с полноправным токеном.
+    const { body: formBuf, contentType } = buildUploadBody(buf, fname, mime);
 
     const uploaded = await api<unknown[]>("POST", "/api/upload", undefined, {
       body: formBuf,
-      contentType: `multipart/form-data; boundary=${boundary}`,
+      contentType,
     });
 
     const fileId: number | undefined = Array.isArray(uploaded)
