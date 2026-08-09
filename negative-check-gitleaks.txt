@@ -1,0 +1,6 @@
+NEGATIVE GATE CHECK — синтетические, заведомо нерабочие значения.
+Файл существует только для проверки, что job "Secret scan" краснеет после
+подъёма gitleaks-action v2 -> v3. Ветка удаляется сразу после прогона.
+
+aws_access_key_id = AKIA4T7QZL2XV9MRBK3D
+aws_secret_access_key = wJ8xNq2LmR5tPvY7bK1cE4hG6jD0sA3fU9iO2nZq
