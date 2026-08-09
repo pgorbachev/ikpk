@@ -51,6 +51,33 @@ describe('сериализация JSON-LD', () => {
 
 const SRC = join(import.meta.dirname, '..', 'src');
 
+/**
+ * Является ли выражение ЦЕЛИКОМ вызовом serializeJsonLd(...).
+ *
+ * Проверять текстовое вхождение `serializeJsonLd(` недостаточно: выражение
+ * `true ? JSON.stringify(schema) : serializeJsonLd(schema)` содержит имя функции,
+ * но подставляет сырой JSON. Регулярка `^serializeJsonLd\(.*\)$` тоже мало: под неё
+ * подходит `serializeJsonLd(a) || JSON.stringify(b)` — последняя скобка есть, но
+ * закрывает она не тот вызов. Поэтому ищем скобку, ПАРНУЮ открывающей, и требуем,
+ * чтобы она была последним символом выражения.
+ */
+function isWholeSerializeCall(raw: string): boolean {
+  const expr = raw.trim();
+  const head = /^serializeJsonLd\s*\(/.exec(expr);
+  if (!head) return false;
+
+  let depth = 0;
+  for (let i = head[0].length - 1; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      depth--;
+      if (depth === 0) return i === expr.length - 1;
+    }
+  }
+  return false;
+}
+
 function* astroFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -58,6 +85,27 @@ function* astroFiles(dir: string): Generator<string> {
     else if (full.endsWith('.astro')) yield full;
   }
 }
+
+// Проверка самого предиката: без неё гейт стерёг бы проводку ровно настолько,
+// насколько верна эта функция, а её собственные дыры остались бы невидимыми.
+describe('isWholeSerializeCall — что считается корректной проводкой', () => {
+  it('принимает прямой вызов', () => {
+    expect(isWholeSerializeCall('serializeJsonLd(schema)')).toBe(true);
+    expect(isWholeSerializeCall('  serializeJsonLd( schema )  ')).toBe(true);
+    expect(isWholeSerializeCall('serializeJsonLd({ "@type": f(x) })')).toBe(true);
+  });
+
+  it('отвергает обходы, где имя функции лишь присутствует в тексте', () => {
+    // Ровно случай из ревью: вставляется сырой JSON, а текстовая проверка молчала.
+    expect(isWholeSerializeCall('true ? JSON.stringify(schema) : serializeJsonLd(schema)')).toBe(
+      false,
+    );
+    expect(isWholeSerializeCall('serializeJsonLd(a) || JSON.stringify(b)')).toBe(false);
+    expect(isWholeSerializeCall('JSON.stringify(serializeJsonLd(a))')).toBe(false);
+    expect(isWholeSerializeCall('serializeJsonLd(a) + ""')).toBe(false);
+    expect(isWholeSerializeCall('JSON.stringify(schema)')).toBe(false);
+  });
+});
 
 describe('проводка JSON-LD в компонентах', () => {
   it('каждый script[type=ld+json] с set:html сериализуется через serializeJsonLd', () => {
@@ -92,7 +140,7 @@ describe('проводка JSON-LD в компонентах', () => {
           continue;
         }
         tags++;
-        if (!/\bserializeJsonLd\s*\(/.test(setHtml[1])) {
+        if (!isWholeSerializeCall(setHtml[1])) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
         }
       }
