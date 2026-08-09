@@ -75,6 +75,45 @@ server {
   it('упоминание имени файла в комментарии не считается подключением', async () => {
     expect(await runFn('redirects_include_active', MENTION_ONLY)).not.toBe(0);
   });
+
+  // Формы записи, которые nginx допускает. Ложное «include отсутствует» здесь не
+  // безобидно: оно останавливает ИСПРАВНЫЙ деплой и посылает оператора править
+  // рабочий боевой конфиг руками.
+  it('путь в кавычках распознаётся', async () => {
+    const quoted = `
+server {
+    include "/var/www/ikpk/shared/nginx-redirects.conf";
+}
+`;
+    expect(await runFn('redirects_include_active', quoted)).toBe(0);
+  });
+
+  it('директива не первой в строке распознаётся', async () => {
+    const inline = `
+server { include /etc/nginx/other.conf; include /var/www/ikpk/shared/nginx-redirects.conf; }
+`;
+    expect(await runFn('redirects_include_active', inline)).toBe(0);
+  });
+
+  // Привязка к каталогу сайта. Без аргумента-маркера проверка засчитывала бы файл
+  // редиректов ПОСТОРОННЕГО vhost на том же хосте — старый шаблон такую привязку
+  // имел, и при переписывании она была потеряна.
+  it('файл редиректов чужого сайта не засчитывается', async () => {
+    const foreign = `
+server {
+    server_name other.example;
+    include /var/www/drugoysite/shared/nginx-redirects.conf;
+}
+`;
+    expect(
+      await runFn("redirects_include_active 'ikpk'", foreign),
+      'засчитан include постороннего vhost — проверка не привязана к каталогу сайта',
+    ).not.toBe(0);
+  });
+
+  it('свой файл редиректов с маркером засчитывается', async () => {
+    expect(await runFn("redirects_include_active 'ikpk'", ACTIVE)).toBe(0);
+  });
 });
 
 describe('health_check — фактический ответ сайта', () => {

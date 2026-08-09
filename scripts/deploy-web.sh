@@ -196,7 +196,9 @@ if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" 'nginx -T 2>/dev/null' 
   exit 1
 fi
 
-if ! redirects_include_active <"$nginx_dump"; then
+# Имя каталога сайта передаётся намеренно: без него засчитается файл редиректов
+# любого постороннего vhost на том же хосте.
+if ! redirects_include_active "${WEB_ROOT##*/}" <"$nginx_dump"; then
   cat >&2 <<PREFLIGHT
 Активный vhost не подключает ${WEB_ROOT}/shared/nginx-redirects.conf — правила
 перенаправления не будут действовать, а деплой выглядел бы успешным.
