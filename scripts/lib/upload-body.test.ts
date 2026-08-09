@@ -56,6 +56,27 @@ describe('buildUploadBody — враждебное имя не ломает за
     expect((cd.match(/"/g) ?? []).length, `кавычки не экранированы: ${cd}`).toBe(4);
   });
 
+  // `form-data` экранирует ИМЯ, но не тип: значение приходит из заголовка чужого
+  // сервера, поэтому закрываем тот же класс и со стороны типа.
+  it('враждебный content-type не попадает в заголовок дословно', () => {
+    const { body } = buildUploadBody(
+      Buffer.from('x'),
+      'photo.webp',
+      'image/png\r\nX-Injected: 1',
+    );
+    const lines = headerLines(body);
+    expect(
+      lines.some((l) => /^X-Injected:/i.test(l)),
+      `инъекция через content-type прошла:\n${headerBlock(body)}`,
+    ).toBe(false);
+    expect(lines).toHaveLength(2);
+  });
+
+  it('обычный content-type сохраняется, параметры отбрасываются', () => {
+    const { body } = buildUploadBody(Buffer.from('x'), 'a.webp', 'image/webp; charset=utf-8');
+    expect(headerBlock(body)).toContain('Content-Type: image/webp');
+  });
+
   it('тело запроса не содержит лишней границы, собранной из имени', () => {
     const { body, contentType } = buildUploadBody(
       Buffer.from('x'),

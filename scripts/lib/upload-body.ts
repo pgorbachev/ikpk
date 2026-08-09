@@ -10,6 +10,22 @@ export interface UploadBody {
   contentType: string;
 }
 
+/**
+ * MIME-тип, пригодный для подстановки в заголовок.
+ *
+ * `form-data` экранирует только имя файла, а `contentType` подставляет дословно —
+ * то есть остаточная поверхность того же класса, что закрывал фикс имени. Значение
+ * приходит из заголовка чужого сервера. Сегодня CRLF туда не пролезет (HTTP-клиент
+ * не отдаёт заголовки с сырыми переводами строк), поэтому это не живой дефект, а
+ * закрытие класса: берём только то, что похоже на MIME, иначе безопасный дефолт.
+ */
+function safeMime(mime: string): string {
+  const value = mime.split(';')[0].trim();
+  return /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(value)
+    ? value
+    : 'application/octet-stream';
+}
+
 export function buildUploadBody(buf: Buffer, filename: string, mime: string): UploadBody {
   // Заголовок собирает form-data, а не конкатенация строк: имя приходит из URL
   // данных скрейпа и после decodeURIComponent может содержать `"`, CR и LF.
@@ -19,7 +35,7 @@ export function buildUploadBody(buf: Buffer, filename: string, mime: string): Up
   // (проверено на установленной версии) и при этом не уничтожает кириллицу,
   // в отличие от наивной очистки вида `[^\w.-]` → `_`.
   const form = new FormData();
-  form.append('files', buf, { filename, contentType: mime });
+  form.append('files', buf, { filename, contentType: safeMime(mime) });
   return {
     body: form.getBuffer(),
     contentType: `multipart/form-data; boundary=${form.getBoundary()}`,
