@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { serializeJsonLd } from '../src/lib/json-ld.js';
 
 // JSON-LD уезжает в страницу через `set:html` внутрь <script type="application/ld+json">
@@ -50,6 +50,27 @@ describe('сериализация JSON-LD', () => {
 // Поэтому проводка стережётся здесь, по исходникам.
 
 const SRC = join(import.meta.dirname, '..', 'src');
+/** Единственный модуль, чей serializeJsonLd считается доверенным. */
+const CENTRAL_JSON_LD = join(SRC, 'lib', 'json-ld');
+
+/**
+ * Импортирован ли `serializeJsonLd` именно из центрального модуля.
+ *
+ * Сравнивать СУФФИКС пути недостаточно: под `[^'"]*lib/json-ld` подходит и
+ * `./unsafe/lib/json-ld.js`, то есть посторонний модуль, экспортирующий что угодно
+ * под тем же именем. Поэтому путь разрешается относительно самого файла и
+ * сверяется целиком.
+ */
+function importsCentralJsonLd(file: string, src: string): boolean {
+  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (!/\bserializeJsonLd\b/.test(m[1])) continue;
+    const spec = m[2];
+    // Только относительные пути: голый пакет — заведомо не наш модуль.
+    if (!spec.startsWith('.')) continue;
+    if (resolve(dirname(file), spec).replace(/\.(js|ts)$/, '') === CENTRAL_JSON_LD) return true;
+  }
+  return false;
+}
 
 /**
  * Является ли выражение ЦЕЛИКОМ вызовом serializeJsonLd(...).
@@ -134,10 +155,7 @@ describe('проводка JSON-LD в компонентах', () => {
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
       // на выходе. Поэтому требуется, чтобы идентификатор был ИМПОРТИРОВАН из
       // центрального модуля и не переопределялся локально.
-      const importsCentral =
-        /import\s*\{[^}]*\bserializeJsonLd\b[^}]*\}\s*from\s*['"][^'"]*lib\/json-ld(\.js)?['"]/.test(
-          src,
-        );
+      const importsCentral = importsCentralJsonLd(file, src);
       const shadowed =
         /\b(?:const|let|var)\s+serializeJsonLd\b/.test(src) ||
         /\bfunction\s+serializeJsonLd\b/.test(src);
