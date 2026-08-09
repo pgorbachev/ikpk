@@ -101,19 +101,28 @@ function analyzeSerializeBinding(
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const clause = node.importClause;
       const spec = node.moduleSpecifier.text;
-      // Импорт по умолчанию: `import serializeJsonLd from '…'`.
-      if (clause?.name?.text === NAME) importedFrom.push(asModule(spec));
+      // Формы, вводящие локальное имя, но НЕ дающие центральную функцию, помечаются
+      // так, чтобы никогда не совпасть с модулем: доверенным считается ровно
+      // `import { serializeJsonLd } from '<центральный>'`. Иначе `{ unsafeJsonLd as
+      // serializeJsonLd }` из того же модуля прошёл бы проверку — локальное имя верное,
+      // а функция чужая.
+      if (clause?.name?.text === NAME) {
+        importedFrom.push(`${asModule(spec)} (импорт по умолчанию, а не named export)`);
+      }
       const bindings = clause?.namedBindings;
       if (bindings && ts.isNamedImports(bindings)) {
-        // Значение имеет ЛОКАЛЬНОЕ имя: у `{ x as serializeJsonLd }` это `x as` → NAME,
-        // а у `{ serializeJsonLd as other }` локального связывания с NAME нет вовсе.
         for (const el of bindings.elements) {
-          if (el.name.text === NAME) importedFrom.push(asModule(spec));
+          if (el.name.text !== NAME) continue; // локального связывания с NAME нет
+          const exported = el.propertyName?.text ?? el.name.text;
+          importedFrom.push(
+            exported === NAME
+              ? asModule(spec)
+              : `${asModule(spec)} (экспорт ${exported} под именем ${NAME})`,
+          );
         }
       }
-      // `import * as serializeJsonLd from '…'` — тоже связывание этого имени.
       if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === NAME) {
-        importedFrom.push(asModule(spec));
+        importedFrom.push(`${asModule(spec)} (namespace-импорт, а не named export)`);
       }
       return;
     }
@@ -139,28 +148,33 @@ function analyzeSerializeBinding(
 /**
  * Является ли выражение ЦЕЛИКОМ вызовом serializeJsonLd(...).
  *
- * Проверять текстовое вхождение `serializeJsonLd(` недостаточно: выражение
- * `true ? JSON.stringify(schema) : serializeJsonLd(schema)` содержит имя функции,
- * но подставляет сырой JSON. Регулярка `^serializeJsonLd\(.*\)$` тоже мало: под неё
- * подходит `serializeJsonLd(a) || JSON.stringify(b)` — последняя скобка есть, но
- * закрывает она не тот вызов. Поэтому ищем скобку, ПАРНУЮ открывающей, и требуем,
- * чтобы она была последним символом выражения.
+ * Разбор парсером, а не подсчётом скобок: счётчик считает синтаксисом и те скобки,
+ * что стоят внутри СТРОК, поэтому выражение
+ * `serializeJsonLd("(") && (JSON.stringify({ ...schema, marker: ")" }))`
+ * он принимал за один вызов, хотя значение даёт голый JSON.stringify.
+ *
+ * Требование: корень выражения — вызов, а вызываемое — идентификатор
+ * `serializeJsonLd`. Нераспознанное выражение считается нарушением, а не
+ * «сомнением в пользу кода».
  */
 function isWholeSerializeCall(raw: string): boolean {
-  const expr = raw.trim();
-  const head = /^serializeJsonLd\s*\(/.exec(expr);
-  if (!head) return false;
+  const sf = ts.createSourceFile(
+    'expr.ts',
+    `const __probe = (${raw});`,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  // Синтаксическая ошибка означает, что выражение вырезано неверно либо написано
+  // неверно; в обоих случаях утверждать о нём нечего.
+  if ((sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics?.length) return false;
 
-  let depth = 0;
-  for (let i = head[0].length - 1; i < expr.length; i++) {
-    const ch = expr[i];
-    if (ch === '(') depth++;
-    else if (ch === ')') {
-      depth--;
-      if (depth === 0) return i === expr.length - 1;
-    }
-  }
-  return false;
+  const statement = sf.statements[0];
+  if (!statement || !ts.isVariableStatement(statement)) return false;
+  let expr = statement.declarationList.declarations[0]?.initializer;
+  while (expr && ts.isParenthesizedExpression(expr)) expr = expr.expression;
+  if (!expr || !ts.isCallExpression(expr)) return false;
+  return ts.isIdentifier(expr.expression) && expr.expression.text === 'serializeJsonLd';
 }
 
 function* astroFiles(dir: string): Generator<string> {
@@ -189,6 +203,21 @@ describe('isWholeSerializeCall — что считается корректно�
     expect(isWholeSerializeCall('JSON.stringify(serializeJsonLd(a))')).toBe(false);
     expect(isWholeSerializeCall('serializeJsonLd(a) + ""')).toBe(false);
     expect(isWholeSerializeCall('JSON.stringify(schema)')).toBe(false);
+  });
+
+  // Подсчёт скобок считал синтаксисом и те, что стоят внутри строк, поэтому такое
+  // выражение принималось за один вызов, хотя значение даёт голый JSON.stringify.
+  it('скобки внутри строк не путаются с синтаксисом', () => {
+    expect(
+      isWholeSerializeCall('serializeJsonLd("(") && (JSON.stringify({ ...schema, marker: ")" }))'),
+    ).toBe(false);
+    expect(isWholeSerializeCall('serializeJsonLd({ text: ")" })')).toBe(true);
+    expect(isWholeSerializeCall('serializeJsonLd(a /* ) */)')).toBe(true);
+  });
+
+  it('нераспознанное выражение не считается корректной проводкой', () => {
+    expect(isWholeSerializeCall('serializeJsonLd(')).toBe(false);
+    expect(isWholeSerializeCall('')).toBe(false);
   });
 });
 
