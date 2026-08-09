@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import ts from 'typescript';
 import { serializeJsonLd } from '../src/lib/json-ld.js';
 
 // JSON-LD уезжает в страницу через `set:html` внутрь <script type="application/ld+json">
@@ -53,38 +54,86 @@ const SRC = join(import.meta.dirname, '..', 'src');
 /** Единственный модуль, чей serializeJsonLd считается доверенным. */
 const CENTRAL_JSON_LD = join(SRC, 'lib', 'json-ld');
 
+/** Frontmatter компонента Astro — код между первой парой `---`. */
+function frontmatterOf(src: string): string {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(src);
+  return m ? m[1] : '';
+}
+
 /**
- * Модули, вводящие в файле ЛОКАЛЬНОЕ имя `serializeJsonLd`.
+ * Откуда в компоненте берётся имя `serializeJsonLd` и не объявлено ли оно локально.
  *
- * Смотреть на «есть ли импорт, упоминающий serializeJsonLd» недостаточно: импорт
- * `{ serializeJsonLd as trustedButUnused }` из центрального модуля упоминает имя, но
- * локального связывания с ним не создаёт — а настоящее имя может прийти из
- * постороннего модуля соседней строкой. Значение имеет только то, ОТКУДА взято имя,
- * которое реально вызывается.
- *
- * Учитываются обе формы, вводящие имя: `{ x as serializeJsonLd }` / `{ serializeJsonLd }`
- * и импорт по умолчанию `import serializeJsonLd from '…'`.
+ * Разбор НАСТОЯЩИМ парсером, а не регулярками, и это вывод из опыта: набор регулярок
+ * обходили пять раз подряд — суффиксом пути, неиспользуемым алиасом, импортом внутри
+ * комментария, объявлением через деструктуризацию. Каждая заплата закрывала ровно
+ * названный случай и оставляла следующий. Парсер снимает весь класс: комментарии он
+ * не считает кодом, а связывания видит все, независимо от формы записи.
  */
-function bindingSourcesForSerialize(file: string, src: string): string[] {
+function analyzeSerializeBinding(
+  file: string,
+  src: string,
+): { importedFrom: string[]; declaredLocally: boolean } {
+  const NAME = 'serializeJsonLd';
+  const sf = ts.createSourceFile(
+    'frontmatter.ts',
+    frontmatterOf(src),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const importedFrom: string[] = [];
+  let declaredLocally = false;
+
   const asModule = (spec: string): string =>
     spec.startsWith('.')
       ? resolve(dirname(file), spec).replace(/\.(js|ts)$/, '')
       : `пакет:${spec}`;
-  const sources: string[] = [];
 
-  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
-    for (const part of m[1].split(',')) {
-      const entry = part.trim();
-      if (!entry) continue;
-      const aliased = /^(\S+)\s+as\s+(\S+)$/.exec(entry);
-      const localName = aliased ? aliased[2] : entry;
-      if (localName === 'serializeJsonLd') sources.push(asModule(m[2]));
+  /** Вводит ли схема связывания (в т. ч. деструктуризация) имя NAME. */
+  const bindsName = (name: ts.BindingName): boolean => {
+    if (ts.isIdentifier(name)) return name.text === NAME;
+    return name.elements.some(
+      (el) => ts.isBindingElement(el) && bindsName(el.name),
+    );
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const spec = node.moduleSpecifier.text;
+      // Импорт по умолчанию: `import serializeJsonLd from '…'`.
+      if (clause?.name?.text === NAME) importedFrom.push(asModule(spec));
+      const bindings = clause?.namedBindings;
+      if (bindings && ts.isNamedImports(bindings)) {
+        // Значение имеет ЛОКАЛЬНОЕ имя: у `{ x as serializeJsonLd }` это `x as` → NAME,
+        // а у `{ serializeJsonLd as other }` локального связывания с NAME нет вовсе.
+        for (const el of bindings.elements) {
+          if (el.name.text === NAME) importedFrom.push(asModule(spec));
+        }
+      }
+      // `import * as serializeJsonLd from '…'` — тоже связывание этого имени.
+      if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === NAME) {
+        importedFrom.push(asModule(spec));
+      }
+      return;
     }
-  }
-  for (const m of src.matchAll(/import\s+serializeJsonLd\s+from\s*['"]([^'"]+)['"]/g)) {
-    sources.push(asModule(m[1]));
-  }
-  return sources;
+    if (
+      (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+      bindsName(node.name)
+    ) {
+      declaredLocally = true;
+    }
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name?.text === NAME
+    ) {
+      declaredLocally = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sf, visit);
+
+  return { importedFrom, declaredLocally };
 }
 
 /**
@@ -170,14 +219,14 @@ describe('проводка JSON-LD в компонентах', () => {
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
       // на выходе. Значение имеет ЛОКАЛЬНОЕ СВЯЗЫВАНИЕ: откуда взято именно то имя,
       // которое вызывается.
-      const bindings = bindingSourcesForSerialize(file, src);
+      const { importedFrom: bindings, declaredLocally: shadowed } = analyzeSerializeBinding(
+        file,
+        src,
+      );
       const importsCentral = bindings.length === 1 && bindings[0] === CENTRAL_JSON_LD;
       // Несколько источников одного имени — файл невалиден, но что именно вызовется,
       // по тексту решать нельзя; это «не смогла проверить», а не «нарушений нет».
       const competingBindings = bindings.length > 1;
-      const shadowed =
-        /\b(?:const|let|var)\s+serializeJsonLd\b/.test(src) ||
-        /\bfunction\s+serializeJsonLd\b/.test(src);
 
       for (const m of src.matchAll(tagRe)) {
         parsedHere++;
