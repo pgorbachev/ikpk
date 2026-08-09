@@ -140,8 +140,14 @@ describe('JSON-LD validation', () => {
     let blocks = 0;
     for (const f of walkHtml()) {
       const html = readFileSync(f, 'utf-8');
+      // Тег ищется по общему признаку: произвольные атрибуты и любые кавычки.
+      // Точная строка `<script type="application/ld+json">` пропустила бы блок с
+      // `id`/`data-*` или одинарными кавычками — гейт остался бы зелёным за счёт
+      // остальных блоков, а страж непустоты этого не заметил бы. Соседний гейт по
+      // исходникам (json-ld.test.ts) описывает предмет именно так, и два гейта над
+      // одним предметом обязаны описывать его одинаково.
       for (const m of html.matchAll(
-        /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi
+        /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
       )) {
         blocks++;
         // Любой `<` внутри значения обязан быть экранирован в <: именно из него

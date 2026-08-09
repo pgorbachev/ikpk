@@ -65,20 +65,50 @@ describe('проводка JSON-LD в компонентах', () => {
     // известных компонентов: новый компонент попадёт под правило сам.
     const tagRe = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>/gi;
     const offenders: string[] = [];
+    const unparsed: string[] = [];
     let tags = 0;
 
     for (const file of astroFiles(SRC)) {
       const src = readFileSync(file, 'utf-8');
+      // Сколько раз тип вообще встречается в файле — независимо от того, смог ли
+      // разбор построить из этого тег. Расхождение с числом разобранных тегов
+      // означает «не смогла проверить», и это обязано быть провалом, а не тишиной:
+      // `[^>]*` обрывает тег на первом `>` внутри выражения (`{items.map(i => f(i))}`),
+      // и такой тег иначе уходил бы из-под проверки молча.
+      // Считаем не любое упоминание типа (оно бывает и в комментарии — тогда гейт
+      // краснел бы напрасно), а именно теги script с этим типом: до типа не должно
+      // встретиться `<`, то есть мы всё ещё внутри того же тега. Такой счёт не
+      // спотыкается о `>` внутри выражения, в отличие от разбора тега целиком.
+      const mentions = (src.match(/<script\b[^<]*?application\/ld\+json/gi) ?? []).length;
+      let parsedHere = 0;
+
       for (const m of src.matchAll(tagRe)) {
+        parsedHere++;
         const tag = m[0];
-        const setHtml = /set:html=\{([^}]*)\}/.exec(tag);
-        if (!setHtml) continue; // без set:html подставлять нечего
+        const setHtml = /set:html=\{([\s\S]*)\}/.exec(tag);
+        if (!/\bset:html=/.test(tag)) continue; // без set:html подставлять нечего
+        if (!setHtml) {
+          unparsed.push(`${file.replace(SRC, 'src')}: не разобран set:html в ${tag.trim()}`);
+          continue;
+        }
         tags++;
         if (!/\bserializeJsonLd\s*\(/.test(setHtml[1])) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
         }
       }
+
+      if (parsedHere !== mentions) {
+        unparsed.push(
+          `${file.replace(SRC, 'src')}: упоминаний типа ${mentions}, разобранных тегов ${parsedHere}`,
+        );
+      }
     }
+
+    expect(
+      unparsed,
+      'теги JSON-LD, которые не удалось разобрать, — это «не смогла проверить», ' +
+        'а не «нарушений нет»:\n' + unparsed.join('\n'),
+    ).toEqual([]);
 
     // «Проверять нечего» — провал проверки, а не успех: если разметка изменится и
     // регулярка перестанет находить теги, гейт обязан сказать об этом вслух.
