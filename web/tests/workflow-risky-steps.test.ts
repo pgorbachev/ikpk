@@ -93,6 +93,31 @@ describe('riskyStepsInJob — исполнение после выгрузки �
   });
 });
 
+describe('riskyStepsInJob — джоб-вызов reusable workflow', () => {
+  // У такого джоба ШАГОВ НЕТ вовсе: весь код внутри вызванного workflow. Пока модель
+  // хранила только `steps`, он давал пустой список и молча проходил обе проверки
+  // происхождения — приёмник `workflow_run` без guard'а был для гейта невидим.
+  it('вызов локального reusable workflow считается исполнением кода', () => {
+    const j = { key: 'call', needs: [], steps: [], uses: './.github/workflows/build.yml' } as
+      unknown as WorkflowJob;
+    expect(
+      riskyStepsInJob(j).length,
+      'джоб без шагов, вызывающий reusable workflow, не опознан как исполняющий код',
+    ).toBe(1);
+  });
+
+  it('вызов стороннего reusable workflow тоже считается исполнением', () => {
+    const j = { key: 'call', needs: [], steps: [], uses: 'other/repo/.github/workflows/x.yml@v1' } as
+      unknown as WorkflowJob;
+    expect(riskyStepsInJob(j).length).toBe(1);
+  });
+
+  it('обычный джоб без job-level uses не получает лишнего шага', () => {
+    const j = job([step(0, CHECKOUT)]);
+    expect(riskyStepsInJob(j).map((s) => s.uses)).toEqual(['actions/checkout@v4']);
+  });
+});
+
 describe('riskyStepsInJob — исключений нет ни для одного шага', () => {
   // Прежде шаг, похожий на проверку происхождения, исключался целиком. Это само было
   // дырой: сверка и исполнение чужого кода умещаются в ОДНУ команду, и тогда шаг

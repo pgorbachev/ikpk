@@ -503,9 +503,10 @@ describe('гейт публикации: конфигурация', () => {
 
     for (const wf of receivers) {
       for (const job of Object.values(wf.jobs)) {
-        const risky = new Set(riskyStepsInJob(job).map((s) => s.index));
-        for (const step of job.steps) {
-          if (!risky.has(step.index)) continue;
+        // Обходим именно опасные шаги, а не `job.steps`: у джоба, вызывающего
+        // reusable workflow, шагов нет вовсе, и обход по `job.steps` пропускал бы
+        // такой джоб целиком.
+        for (const step of riskyStepsInJob(job)) {
           const conditions = conditionsGuarding(wf, job.key, step);
           if (conditions.every(({ expr }) => canBeTrue(expr, forkCtx)))
             reachable.push(

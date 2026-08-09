@@ -28,6 +28,8 @@ export interface WorkflowJob {
   if?: string;
   needs: string[];
   steps: WorkflowStep[];
+  /** Вызов reusable workflow: у такого джоба нет ни одного шага, весь код — внутри него. */
+  uses?: string;
   permissions?: unknown;
   concurrency?: unknown;
   environment?: unknown;
@@ -101,6 +103,7 @@ export function loadWorkflows(): Workflow[] {
         if: job.if === undefined ? undefined : String(job.if),
         needs: asStringList(job.needs),
         steps,
+        uses: typeof job.uses === 'string' ? job.uses : undefined,
         permissions: job.permissions,
         concurrency: job.concurrency,
         environment: job.environment,
@@ -141,7 +144,21 @@ export function isCodeFetchStep(step: WorkflowStep): boolean {
  * джоба или его зависимости по `needs`), а не шагом внутри него.
  */
 export function riskyStepsInJob(job: WorkflowJob): WorkflowStep[] {
-  return job.steps.filter((step) => step.run !== undefined || step.uses !== undefined);
+  const steps = job.steps.filter((step) => step.run !== undefined || step.uses !== undefined);
+  if (job.uses === undefined) return steps;
+
+  // Джоб, вызывающий reusable workflow, ШАГОВ НЕ ИМЕЕТ вовсе: весь код лежит внутри
+  // вызванного workflow. Пока модель хранила только `steps`, такой джоб давал пустой
+  // список опасных шагов и молча проходил обе проверки происхождения — то есть
+  // приёмник `workflow_run` без guard'а, вызывающий reusable workflow, был для гейта
+  // невидим. Сам вызов и есть исполнение кода.
+  const call: WorkflowStep = {
+    index: 0,
+    name: `вызов reusable workflow ${job.uses}`,
+    uses: job.uses,
+    raw: JSON.stringify({ uses: job.uses }),
+  };
+  return [call, ...steps];
 }
 
 export function publishingWorkflows(all: Workflow[]): Workflow[] {
