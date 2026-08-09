@@ -13,8 +13,23 @@ fi
 
 HOST="$1"
 
+# Адрес САЙТА отделён от ssh-цели намеренно. Это разные вещи, и совпадают они
+# только сейчас, пока стенд отвечает по IP без TLS: runbook зовёт скрипт с
+# `<ip-сервера>`, но после появления домена запрос по IP уводит редиректом на
+# домен (health-check отвергнет смену хоста) либо упирается в сертификат,
+# выписанный на домен. Проверка при этом идёт ПОСЛЕ переключения релиза, то есть
+# ошибка стоила бы ложного «деплой провален» на исправной выкладке.
+SITE_URL_EXPLICIT="${SITE_URL:-}"
+SITE_URL="${SITE_URL:-http://${HOST}/}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Проверки, у которых есть поведенческие тесты (web/tests/deploy-checks.test.ts).
+# Вынесены в отдельный файл потому, что обе стоят за ssh-вызовами: запуском самого
+# скрипта до них не дойти без реального хоста.
+# shellcheck source=lib/deploy-checks.sh
+source "${SCRIPT_DIR}/lib/deploy-checks.sh"
 WEB_DIR="${WEB_DIR:-${REPO_ROOT}/web}"
 DIST_DIR="${DIST_DIR:-${WEB_DIR}/dist}"
 
@@ -178,8 +193,21 @@ echo "[deploy] Проверка форм: ${form_count} различных ад�
 # Проверяем РАЗВЁРНУТУЮ конфигурацию через `nginx -T` (она печатает все включённые
 # файлы) и отказываемся до переключения релиза.
 echo "[deploy] Preflight: подключён ли файл редиректов активным vhost"
-if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
-  "nginx -T 2>/dev/null | grep -q 'include .*${WEB_ROOT##*/}.*nginx-redirects.conf\|nginx-redirects.conf'"; then
+# Вывод ssh кладётся в файл, а не идёт в конвейер: под `pipefail` статус конвейера —
+# код САМОЙ ПРАВОЙ упавшей команды, то есть grep'а. Код ssh (255 при обрыве связи)
+# терялся бы, и оператор на транзиентном сбое сети получил бы диагноз «vhost не
+# подключает редиректы» с инструкцией править исправный боевой конфиг руками.
+nginx_dump="$(mktemp)"
+trap 'rm -f "$nginx_dump"' EXIT
+if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" 'nginx -T 2>/dev/null' >"$nginx_dump"; then
+  echo "[deploy] Preflight ПРОВАЛЕН: не удалось получить конфигурацию nginx по ssh с ${HOST}." >&2
+  echo "Это сбой связи или доступа, а НЕ признак отсутствующего include." >&2
+  exit 1
+fi
+
+# Имя каталога сайта передаётся намеренно: без него засчитается файл редиректов
+# любого постороннего vhost на том же хосте.
+if ! redirects_include_active "${WEB_ROOT##*/}" <"$nginx_dump"; then
   cat >&2 <<PREFLIGHT
 Активный vhost не подключает ${WEB_ROOT}/shared/nginx-redirects.conf — правила
 перенаправления не будут действовать, а деплой выглядел бы успешным.
@@ -218,14 +246,20 @@ systemctl reload nginx
 REMOTE
 
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 10 "http://${HOST}/" >/dev/null; then
-    echo "[deploy] Health check OK: http://${HOST}/"
+  if health_check "$SITE_URL"; then
+    echo "[deploy] Health check OK: ${SITE_URL}"
   else
     # Провал health-check — это провал деплоя, а не примечание. Прежде скрипт
     # печатал Warning и доходил до «Done» с кодом 0: сломанный релиз выглядел
     # успешным. Symlink уже переключён, поэтому откат — отдельное решение (см.
     # docs/tech-debt.md), но код выхода обязан быть ненулевым.
-    echo "[deploy] Health check ПРОВАЛЕН: http://${HOST}/ не отвечает" >&2
+    echo "[deploy] Health check ПРОВАЛЕН: ${SITE_URL} не отвечает как ожидалось" >&2
+    if [ -z "${SITE_URL_EXPLICIT:-}" ]; then
+      echo "Адрес проверки собран из ssh-хоста и может быть не адресом сайта: после" >&2
+      echo "появления домена и TLS запрос по IP уводит редиректом на домен (проверка" >&2
+      echo "отвергнет смену хоста) либо упирается в сертификат, выписанный на домен." >&2
+      echo "Задайте адрес сайта явно: SITE_URL=https://<домен>/ ./scripts/deploy-web.sh <ip>" >&2
+    fi
     echo "Релиз ${RELEASE_ID} уже активен. Откат: переключить symlink current на" >&2
     echo "предыдущий каталог в ${WEB_ROOT}/releases и перезагрузить nginx." >&2
     exit 1
