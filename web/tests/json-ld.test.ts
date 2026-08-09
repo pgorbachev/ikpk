@@ -54,22 +54,37 @@ const SRC = join(import.meta.dirname, '..', 'src');
 const CENTRAL_JSON_LD = join(SRC, 'lib', 'json-ld');
 
 /**
- * Импортирован ли `serializeJsonLd` именно из центрального модуля.
+ * Модули, вводящие в файле ЛОКАЛЬНОЕ имя `serializeJsonLd`.
  *
- * Сравнивать СУФФИКС пути недостаточно: под `[^'"]*lib/json-ld` подходит и
- * `./unsafe/lib/json-ld.js`, то есть посторонний модуль, экспортирующий что угодно
- * под тем же именем. Поэтому путь разрешается относительно самого файла и
- * сверяется целиком.
+ * Смотреть на «есть ли импорт, упоминающий serializeJsonLd» недостаточно: импорт
+ * `{ serializeJsonLd as trustedButUnused }` из центрального модуля упоминает имя, но
+ * локального связывания с ним не создаёт — а настоящее имя может прийти из
+ * постороннего модуля соседней строкой. Значение имеет только то, ОТКУДА взято имя,
+ * которое реально вызывается.
+ *
+ * Учитываются обе формы, вводящие имя: `{ x as serializeJsonLd }` / `{ serializeJsonLd }`
+ * и импорт по умолчанию `import serializeJsonLd from '…'`.
  */
-function importsCentralJsonLd(file: string, src: string): boolean {
+function bindingSourcesForSerialize(file: string, src: string): string[] {
+  const asModule = (spec: string): string =>
+    spec.startsWith('.')
+      ? resolve(dirname(file), spec).replace(/\.(js|ts)$/, '')
+      : `пакет:${spec}`;
+  const sources: string[] = [];
+
   for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
-    if (!/\bserializeJsonLd\b/.test(m[1])) continue;
-    const spec = m[2];
-    // Только относительные пути: голый пакет — заведомо не наш модуль.
-    if (!spec.startsWith('.')) continue;
-    if (resolve(dirname(file), spec).replace(/\.(js|ts)$/, '') === CENTRAL_JSON_LD) return true;
+    for (const part of m[1].split(',')) {
+      const entry = part.trim();
+      if (!entry) continue;
+      const aliased = /^(\S+)\s+as\s+(\S+)$/.exec(entry);
+      const localName = aliased ? aliased[2] : entry;
+      if (localName === 'serializeJsonLd') sources.push(asModule(m[2]));
+    }
   }
-  return false;
+  for (const m of src.matchAll(/import\s+serializeJsonLd\s+from\s*['"]([^'"]+)['"]/g)) {
+    sources.push(asModule(m[1]));
+  }
+  return sources;
 }
 
 /**
@@ -153,9 +168,13 @@ describe('проводка JSON-LD в компонентах', () => {
 
       // Имя функции ничего не гарантирует само по себе: `const serializeJsonLd =
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
-      // на выходе. Поэтому требуется, чтобы идентификатор был ИМПОРТИРОВАН из
-      // центрального модуля и не переопределялся локально.
-      const importsCentral = importsCentralJsonLd(file, src);
+      // на выходе. Значение имеет ЛОКАЛЬНОЕ СВЯЗЫВАНИЕ: откуда взято именно то имя,
+      // которое вызывается.
+      const bindings = bindingSourcesForSerialize(file, src);
+      const importsCentral = bindings.length === 1 && bindings[0] === CENTRAL_JSON_LD;
+      // Несколько источников одного имени — файл невалиден, но что именно вызовется,
+      // по тексту решать нельзя; это «не смогла проверить», а не «нарушений нет».
+      const competingBindings = bindings.length > 1;
       const shadowed =
         /\b(?:const|let|var)\s+serializeJsonLd\b/.test(src) ||
         /\bfunction\s+serializeJsonLd\b/.test(src);
@@ -172,9 +191,16 @@ describe('проводка JSON-LD в компонентах', () => {
         tags++;
         if (!isWholeSerializeCall(setHtml[1])) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
+        } else if (competingBindings) {
+          offenders.push(
+            `${file.replace(SRC, 'src')}: имя serializeJsonLd вводится несколькими импортами ` +
+              `(${bindings.map((b) => b.replace(SRC, 'src')).join(', ')}) — какой из них ` +
+              `вызывается, по тексту не определить`,
+          );
         } else if (!importsCentral) {
           offenders.push(
-            `${file.replace(SRC, 'src')}: serializeJsonLd не импортирован из lib/json-ld — ` +
+            `${file.replace(SRC, 'src')}: локальное имя serializeJsonLd взято не из ` +
+              `lib/json-ld${bindings.length ? ` (а из ${bindings[0].replace(SRC, 'src')})` : ' (импорта нет вовсе)'} — ` +
               `совпадает только имя, а не функция`,
           );
         } else if (shadowed) {
