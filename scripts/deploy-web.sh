@@ -13,6 +13,15 @@ fi
 
 HOST="$1"
 
+# Адрес САЙТА отделён от ssh-цели намеренно. Это разные вещи, и совпадают они
+# только сейчас, пока стенд отвечает по IP без TLS: runbook зовёт скрипт с
+# `<ip-сервера>`, но после появления домена запрос по IP уводит редиректом на
+# домен (health-check отвергнет смену хоста) либо упирается в сертификат,
+# выписанный на домен. Проверка при этом идёт ПОСЛЕ переключения релиза, то есть
+# ошибка стоила бы ложного «деплой провален» на исправной выкладке.
+SITE_URL_EXPLICIT="${SITE_URL:-}"
+SITE_URL="${SITE_URL:-http://${HOST}/}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -237,14 +246,20 @@ systemctl reload nginx
 REMOTE
 
 if command -v curl >/dev/null 2>&1; then
-  if health_check "http://${HOST}/"; then
-    echo "[deploy] Health check OK: http://${HOST}/"
+  if health_check "$SITE_URL"; then
+    echo "[deploy] Health check OK: ${SITE_URL}"
   else
     # Провал health-check — это провал деплоя, а не примечание. Прежде скрипт
     # печатал Warning и доходил до «Done» с кодом 0: сломанный релиз выглядел
     # успешным. Symlink уже переключён, поэтому откат — отдельное решение (см.
     # docs/tech-debt.md), но код выхода обязан быть ненулевым.
-    echo "[deploy] Health check ПРОВАЛЕН: http://${HOST}/ не отвечает" >&2
+    echo "[deploy] Health check ПРОВАЛЕН: ${SITE_URL} не отвечает как ожидалось" >&2
+    if [ -z "${SITE_URL_EXPLICIT:-}" ]; then
+      echo "Адрес проверки собран из ssh-хоста и может быть не адресом сайта: после" >&2
+      echo "появления домена и TLS запрос по IP уводит редиректом на домен (проверка" >&2
+      echo "отвергнет смену хоста) либо упирается в сертификат, выписанный на домен." >&2
+      echo "Задайте адрес сайта явно: SITE_URL=https://<домен>/ ./scripts/deploy-web.sh <ip>" >&2
+    fi
     echo "Релиз ${RELEASE_ID} уже активен. Откат: переключить symlink current на" >&2
     echo "предыдущий каталог в ${WEB_ROOT}/releases и перезагрузить nginx." >&2
     exit 1
