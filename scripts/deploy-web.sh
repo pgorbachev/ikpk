@@ -184,8 +184,19 @@ echo "[deploy] Проверка форм: ${form_count} различных ад�
 # Проверяем РАЗВЁРНУТУЮ конфигурацию через `nginx -T` (она печатает все включённые
 # файлы) и отказываемся до переключения релиза.
 echo "[deploy] Preflight: подключён ли файл редиректов активным vhost"
-if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" 'nginx -T 2>/dev/null' \
-  | redirects_include_active; then
+# Вывод ssh кладётся в файл, а не идёт в конвейер: под `pipefail` статус конвейера —
+# код САМОЙ ПРАВОЙ упавшей команды, то есть grep'а. Код ssh (255 при обрыве связи)
+# терялся бы, и оператор на транзиентном сбое сети получил бы диагноз «vhost не
+# подключает редиректы» с инструкцией править исправный боевой конфиг руками.
+nginx_dump="$(mktemp)"
+trap 'rm -f "$nginx_dump"' EXIT
+if ! /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" 'nginx -T 2>/dev/null' >"$nginx_dump"; then
+  echo "[deploy] Preflight ПРОВАЛЕН: не удалось получить конфигурацию nginx по ssh с ${HOST}." >&2
+  echo "Это сбой связи или доступа, а НЕ признак отсутствующего include." >&2
+  exit 1
+fi
+
+if ! redirects_include_active <"$nginx_dump"; then
   cat >&2 <<PREFLIGHT
 Активный vhost не подключает ${WEB_ROOT}/shared/nginx-redirects.conf — правила
 перенаправления не будут действовать, а деплой выглядел бы успешным.

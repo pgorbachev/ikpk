@@ -79,15 +79,36 @@ server {
 
 describe('health_check — фактический ответ сайта', () => {
   let server: Server;
+  let other: Server;
   let port = 0;
+  let otherPort = 0;
   // Что отдавать: меняется от теста к тесту.
-  let mode: 'ok' | 'redirect' | 'error' = 'ok';
+  let mode: 'ok' | 'redirect' | 'error' | 'redirect-same-host' = 'ok';
 
   beforeAll(async () => {
+    // Второй сервер — ЖИВОЙ и отдаёт 200. Прежняя версия теста редиректила на
+    // `example.invalid`, который не резолвится, поэтому «редирект отвергнут»
+    // получалось из-за недостижимости адреса, а не из-за проверки. Проверено
+    // запуском: с живым чужим хостом старая функция возвращала 0.
+    other = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<!doctype html><title>совсем другой сайт</title>');
+    });
+    await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
+    otherPort = (other.address() as { port: number }).port;
+
     server = createServer((req, res) => {
       if (mode === 'redirect') {
-        // Ровно то, что появится на сервере после certbot: 80 → 443.
-        res.writeHead(301, { Location: 'https://example.invalid/' });
+        // Чужой хост, отвечающий 200: localhost и 127.0.0.1 — разные имена хоста.
+        res.writeHead(301, { Location: `http://localhost:${otherPort}/` });
+        res.end();
+        return;
+      }
+      // Штатный случай: редирект в пределах своего хоста (аналог 80 → 443).
+      // Редиректим только корень, иначе цель редиректа вернула бы 301 на себя же
+      // и curl упёрся бы в петлю — тест падал бы, ничего не проверив.
+      if (mode === 'redirect-same-host' && req.url === '/') {
+        res.writeHead(301, { Location: `http://127.0.0.1:${port}/landing` });
         res.end();
         return;
       }
@@ -105,6 +126,7 @@ describe('health_check — фактический ответ сайта', () => 
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => other.close(() => resolve()));
   });
 
   it('отвечающий сайт проходит проверку', async () => {
@@ -112,12 +134,24 @@ describe('health_check — фактический ответ сайта', () => 
     expect(await runFn(`health_check http://127.0.0.1:${port}/`)).toBe(0);
   });
 
-  it('редирект НЕ считается успешной проверкой', async () => {
+  // Ключевой тест: чужой хост ЖИВОЙ и отдаёт 200, поэтому красное берётся из самой
+  // проверки, а не из недостижимости адреса.
+  it('редирект на чужой хост, отдающий 200, НЕ считается успешной проверкой', async () => {
     mode = 'redirect';
     expect(
       await runFn(`health_check http://127.0.0.1:${port}/`),
-      '301 принят за рабочий сайт: проверка вышла с нулём, ни разу не открыв страницу',
+      'проверка засчитала 200, полученный с другого сайта, куда увёл редирект',
     ).not.toBe(0);
+  });
+
+  // Обратная сторона: штатный редирект в пределах своего хоста (80 → 443) обязан
+  // проходить, иначе проверка сломает деплой сразу после появления certbot.
+  it('редирект в пределах своего хоста проходит', async () => {
+    mode = 'redirect-same-host';
+    expect(
+      await runFn(`health_check http://127.0.0.1:${port}/`),
+      'штатный редирект на своём же хосте отвергнут — проверка сломает деплой после certbot',
+    ).toBe(0);
   });
 
   it('ошибка сервера роняет проверку', async () => {

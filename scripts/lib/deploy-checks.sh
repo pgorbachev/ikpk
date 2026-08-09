@@ -19,20 +19,40 @@ redirects_include_active() {
   grep -Eq '^[[:space:]]*include[[:space:]]+[^;#]*nginx-redirects\.conf[[:space:]]*;'
 }
 
+# Хост из URL, без схемы, порта и пути.
+url_host() {
+  local rest="${1#*://}"
+  rest="${rest%%/*}"
+  rest="${rest%%\?*}"
+  printf '%s' "${rest%%:*}"
+}
+
 # Отвечает ли сайт по адресу: редирект проходится осознанно, на конечной странице
-# требуется 200.
+# требуется 200 И тот же хост, что запрашивали.
 #
 # Прежняя проверка `curl -fsS` без `-L` выходила с нулём на 3xx: `-f` роняет только
 # на кодах ≥400. После появления 80→443 (certbot) она печатала бы «Health check OK»,
 # ни разу не открыв сайт.
+#
+# Хост сверяется намеренно, и это не перестраховка: без сверки проверка засчитывает
+# 200, полученный СОВСЕМ С ДРУГОГО САЙТА, куда увёл редирект. Проверено запуском —
+# при `301 → чужой хост, отдающий 200` функция возвращала 0. Порт и схему не
+# сравниваем: штатный 80→443 меняет именно их.
 health_check() {
-  local url="$1" code
-  code="$(curl -sS -L -o /dev/null --max-time 10 -w '%{http_code}' "$url" 2>/dev/null)" || {
+  local url="$1" out code effective
+  out="$(curl -sS -L -o /dev/null --max-time 10 -w '%{http_code} %{url_effective}' "$url" 2>/dev/null)" || {
     echo "health_check: запрос к ${url} не выполнен" >&2
     return 1
   }
+  code="${out%% *}"
+  effective="${out#* }"
+
   if [ "$code" != "200" ]; then
     echo "health_check: ${url} вернул ${code}, ожидался 200" >&2
+    return 1
+  fi
+  if [ "$(url_host "$effective")" != "$(url_host "$url")" ]; then
+    echo "health_check: редирект увёл на чужой хост — запрошен ${url}, отвечал ${effective}" >&2
     return 1
   fi
 }
