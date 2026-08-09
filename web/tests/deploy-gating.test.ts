@@ -458,11 +458,15 @@ describe('гейт публикации: конфигурация', () => {
         const firstRisky = riskyStepsInJob(job)[0];
         if (!firstRisky) continue;
 
-        // Вид 1 (предпочтительный): условие джоба само ложно для стороннего источника.
-        const jobIf = job.if;
-        const guardedByJobIf =
-          jobIf !== undefined && isAlwaysFalse(jobIf, forkCtx) && canBeTrue(jobIf, ownCtx);
-        if (guardedByJobIf) continue;
+        // Вид 1 (предпочтительный): условие ложно для стороннего источника. Берётся
+        // ВСЯ цепочка по `needs`, а не только собственный `if` джоба: джоб публикации
+        // защищён тем, что его зависимость не выполнится на чужом прогоне, и по
+        // собственному условию он выглядел бы незащищённым.
+        const chain = conditionsGuarding(wf, job.key);
+        const guardedByConditions =
+          chain.some(({ expr }) => isAlwaysFalse(expr, forkCtx)) &&
+          chain.every(({ expr }) => canBeTrue(expr, ownCtx));
+        if (guardedByConditions) continue;
 
         // Вид 2: первый шаг сверяет происхождение и роняет джоб.
         const guardStep = job.steps.find(

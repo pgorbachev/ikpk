@@ -129,16 +129,6 @@ export function isCodeFetchStep(step: WorkflowStep): boolean {
   return /\b(git\s+clone|git\s+fetch|gh\s+repo\s+clone)\b/.test(step.run ?? '');
 }
 
-/** Шаги, исполняющие выгруженный код: установка зависимостей, сборка, тесты. */
-export function isCodeExecStep(step: WorkflowStep): boolean {
-  return /\b(npm|npx|yarn|pnpm|astro|vite|tsx|node)\b/.test(step.run ?? '');
-}
-
-/** Локальный action (`uses: ./…`) — это код из checkout'а, а не сторонний пакет. */
-export function isLocalActionStep(step: WorkflowStep): boolean {
-  return /^\.\.?\//.test(step.uses ?? '');
-}
-
 /**
  * Шаги джоба, которые выгружают или исполняют код репозитория, в порядке следования.
  *
@@ -147,27 +137,29 @@ export function isLocalActionStep(step: WorkflowStep): boolean {
  * собственный текст workflow из основной ветки) от «`run:` после выгрузки» (это уже
  * чужой код).
  */
+/**
+ * Шаг, проверяющий происхождение прогона и роняющий джоб на чужом источнике.
+ * Только он вправе выполняться до того, как происхождение установлено.
+ */
+export function isProvenanceGuardStep(step: WorkflowStep): boolean {
+  return /head_repository/.test(step.raw) && /\bexit\s+[1-9]/.test(step.run ?? '');
+}
+
 export function riskyStepsInJob(job: WorkflowJob): WorkflowStep[] {
-  const risky: WorkflowStep[] = [];
-  let fetched = false;
-  for (const step of job.steps) {
-    if (isCodeFetchStep(step)) {
-      fetched = true;
-      risky.push(step);
-      continue;
-    }
-    // После выгрузки исполнением считается ЛЮБОЙ `run:` и любой локальный action —
-    // общий признак вместо перечня интерпретаторов. Перечень отставал молча:
-    // `bash ./x.sh`, `make`, `./bin/foo` и `curl | sh` под него не подпадали.
-    if (fetched && (step.run !== undefined || isLocalActionStep(step))) {
-      risky.push(step);
-      continue;
-    }
-    // Признак по одному шагу сохранён как дополнительный сигнал: он ловит сборку
-    // в джобе без явного шага выгрузки, то есть строго расширяет покрытие.
-    if (isCodeExecStep(step)) risky.push(step);
-  }
-  return risky;
+  // Никаких списков команд и интерпретаторов. Прежняя редакция считала опасным
+  // произвольный `run:` только ПОСЛЕ распознанного шага выгрузки, а список выгрузки
+  // ограничивался checkout/download-artifact/git — поэтому связка вида
+  // `curl "$URL" | tar -x` и следом `bash ./payload.sh` ДО checkout не попадала ни
+  // под него, ни под прежний перечень `npm|node|…`, то есть чужой код исполнялся
+  // невидимо для гейта.
+  //
+  // Правило вместо перечня: в приёмнике `workflow_run` джоб получает права записи
+  // сразу, поэтому опасен ЛЮБОЙ шаг, кроме самой проверки происхождения. Список
+  // того, чем именно качают и исполняют, больше не ведётся и отставать не может.
+  return job.steps.filter(
+    (step) =>
+      !isProvenanceGuardStep(step) && (step.run !== undefined || step.uses !== undefined),
+  );
 }
 
 export function publishingWorkflows(all: Workflow[]): Workflow[] {
