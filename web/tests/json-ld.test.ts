@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import ts from 'typescript';
+import { parse as parseAstro } from '@astrojs/compiler';
 import { serializeJsonLd } from '../src/lib/json-ld.js';
 
 // JSON-LD уезжает в страницу через `set:html` внутрь <script type="application/ld+json">
@@ -49,6 +50,19 @@ describe('сериализация JSON-LD', () => {
 // (77 passed до мутации и 77 после), потому что в текущих данных символа `<` нет
 // вовсе — гейт по payload вечнозелёный ровно до появления враждебной строки.
 // Поэтому проводка стережётся здесь, по исходникам.
+
+/** Узел AST Astro в объёме, который нужен этой проверке. */
+interface AstroAttribute {
+  name: string;
+  kind: string;
+  value: string;
+}
+interface AstroNode {
+  type: string;
+  name?: string;
+  attributes?: AstroAttribute[];
+  children?: AstroNode[];
+}
 
 const SRC = join(import.meta.dirname, '..', 'src');
 /** Единственный модуль, чей serializeJsonLd считается доверенным. */
@@ -177,131 +191,67 @@ function isWholeSerializeCall(raw: string): boolean {
   return ts.isIdentifier(expr.expression) && expr.expression.text === 'serializeJsonLd';
 }
 
-/**
- * Открывающий тег целиком, начиная с позиции `<`.
- *
- * Регулярка `<script[^>]*>` здесь непригодна: она обрывает тег на первом `>`, даже
- * если тот стоит ВНУТРИ выражения атрибута (`data-probe={1 > 0}`). Усечённый кусок
- * не содержит `set:html`, и тег молча уходил из-под проверки. Поэтому читаем
- * посимвольно, отслеживая строки и вложенность `{…}`, и закрываем тег только на том
- * `>`, что стоит вне строки и вне выражения.
- *
- * `null` означает «тег не закрыт» — это «не смогла проверить», а не «нарушений нет».
- */
-function readOpeningTag(src: string, start: number): string | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = start; i < src.length; i++) {
-    const ch = src[i];
-    if (quote) {
-      if (ch === '\\') i++;
-      else if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
-    else if (ch === '{') depth++;
-    else if (ch === '}') depth--;
-    else if (ch === '>' && depth === 0) return src.slice(start, i + 1);
-  }
-  return null;
-}
-
-/** Содержимое `{…}`, начиная с позиции открывающей скобки, с учётом строк. */
-function readBracedExpression(text: string, open: number): string | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = open; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === '\\') i++;
-      else if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
-    else if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) return text.slice(open + 1, i);
-    }
-  }
-  return null;
-}
-
-export interface TagAttribute {
-  name: string;
-  /** Содержимое значения: текст строки либо выражение внутри `{…}`. */
-  value: string | null;
-  kind: 'quoted' | 'braced' | 'bare' | 'boolean';
+/** Использование JSON-LD в компоненте: выражение из `set:html` либо причина отказа. */
+interface JsonLdUsage {
+  expr: string | null;
+  /** Почему разобрать не удалось; null — разобрано. */
+  problem: string | null;
+  raw: string;
 }
 
 /**
- * Атрибуты открывающего тега как СИНТАКСИС, а не по точной форме записи.
+ * Теги `script[type=application/ld+json]` компонента через ПАРСЕР ASTRO.
  *
- * Регулярка `type=["']…["']` не совпадает с `type = "…"`, хотя для Astro это одно и
- * то же: пробелы вокруг `=` допустимы. Тег с такой записью выпадал из проверки
- * целиком. Здесь имя, `=` и значение читаются по отдельности, поэтому пробелы,
- * переводы строк и вид кавычек значения не имеют.
+ * Самодельный сканер здесь не годится, и это проверено дважды: он не знал про
+ * JS-комментарии внутри выражений (`data-probe={/* } *\/ 1 > 0}` уводил глубину скобок
+ * в ноль, и тег обрывался на операторе `>`), а до того — про пробелы вокруг `=`.
+ * Тот же класс дали бы шаблонные строки и regex-литералы. Парсер Astro знает лексику
+ * своего языка целиком, поэтому вопрос закрывается не следующей заплатой.
  *
- * `null` — тег содержит spread/shorthand (`{...attrs}`): состав атрибутов из текста
- * не определить, и это «не смогла проверить», а не «нарушений нет».
+ * Fail-closed: значение `type`, заданное выражением, и spread-атрибуты означают, что
+ * тип определить нельзя, — это отказ, а не «значит, не JSON-LD».
  */
-function parseTagAttributes(tag: string): TagAttribute[] | null {
-  const attrs: TagAttribute[] = [];
-  // Пропускаем имя элемента.
-  let i = /^<\s*[A-Za-z][^\s/>]*/.exec(tag)?.[0].length ?? 1;
-  const isSpace = (c: string): boolean => /\s/.test(c);
+async function collectJsonLdUsages(src: string): Promise<JsonLdUsage[]> {
+  const { ast } = await parseAstro(src);
+  const usages: JsonLdUsage[] = [];
 
-  while (i < tag.length) {
-    while (i < tag.length && isSpace(tag[i])) i++;
-    if (i >= tag.length || tag[i] === '>' || (tag[i] === '/' && tag[i + 1] === '>')) break;
+  const walk = (node: AstroNode): void => {
+    if (node.type === 'element' && node.name === 'script') {
+      const attrs = node.attributes ?? [];
+      const raw = `<script ${attrs.map((a) => `${a.name}=${a.kind}`).join(' ')}>`;
 
-    // Spread или shorthand: `{...attrs}`, `{title}` — состав атрибутов неизвестен.
-    if (tag[i] === '{') return null;
-
-    const nameStart = i;
-    while (i < tag.length && !isSpace(tag[i]) && tag[i] !== '=' && tag[i] !== '>' && tag[i] !== '/')
-      i++;
-    const name = tag.slice(nameStart, i);
-    if (!name) break;
-
-    const afterName = i;
-    while (i < tag.length && isSpace(tag[i])) i++;
-    if (tag[i] !== '=') {
-      // Булев атрибут: значения нет, позиция возвращается к концу имени.
-      attrs.push({ name, value: null, kind: 'boolean' });
-      i = afterName;
-      continue;
+      if (attrs.some((a) => a.kind === 'spread' || a.kind === 'shorthand')) {
+        usages.push({ expr: null, problem: 'состав атрибутов задан spread’ом', raw });
+      } else {
+        const type = attrs.find((a) => a.name.toLowerCase() === 'type');
+        if (type) {
+          if (type.kind !== 'quoted') {
+            // Динамический тип: определить, JSON-LD это или нет, статически нельзя.
+            usages.push({
+              expr: null,
+              problem: `значение type задано не строкой (${type.kind}) — тип не определить`,
+              raw,
+            });
+          } else if (
+            // Регистр в MIME незначим, параметры после `;` к типу не относятся.
+            type.value.split(';')[0].trim().toLowerCase() === 'application/ld+json'
+          ) {
+            const setHtml = attrs.find((a) => a.name.toLowerCase() === 'set:html');
+            if (setHtml) {
+              usages.push(
+                setHtml.kind === 'expression'
+                  ? { expr: setHtml.value, problem: null, raw }
+                  : { expr: null, problem: `set:html задан не выражением (${setHtml.kind})`, raw },
+              );
+            }
+          }
+        }
+      }
     }
-    i++; // '='
-    while (i < tag.length && isSpace(tag[i])) i++;
-
-    const ch = tag[i];
-    if (ch === '"' || ch === "'") {
-      const end = tag.indexOf(ch, i + 1);
-      if (end < 0) return null;
-      attrs.push({ name, value: tag.slice(i + 1, end), kind: 'quoted' });
-      i = end + 1;
-    } else if (ch === '{') {
-      const expr = readBracedExpression(tag, i);
-      if (expr === null) return null;
-      attrs.push({ name, value: expr, kind: 'braced' });
-      i += expr.length + 2;
-    } else {
-      const start = i;
-      while (i < tag.length && !isSpace(tag[i]) && tag[i] !== '>') i++;
-      attrs.push({ name, value: tag.slice(start, i), kind: 'bare' });
-    }
-  }
-  return attrs;
-}
-
-/** Все открывающие теги `<script …>` файла, в порядке следования. */
-function scriptTags(src: string): { tag: string | null; at: number }[] {
-  const found: { tag: string | null; at: number }[] = [];
-  for (const m of src.matchAll(/<script\b/gi)) {
-    found.push({ tag: readOpeningTag(src, m.index), at: m.index });
-  }
-  return found;
+    for (const child of node.children ?? []) walk(child);
+  };
+  walk(ast as AstroNode);
+  return usages;
 }
 
 function* astroFiles(dir: string): Generator<string> {
@@ -350,83 +300,79 @@ describe('isWholeSerializeCall — что считается корректно�
 
 // Разбор тега — предмет отдельных проверок: именно на нём гейт обходили последним,
 // и обход был невидим, потому что усечённый тег просто не содержал set:html.
-describe('readOpeningTag — границы тега', () => {
-  it('`>` внутри выражения атрибута не закрывает тег', () => {
-    const src = '<script type="application/ld+json" data-probe={1 > 0} set:html={f(x)} />';
-    expect(readOpeningTag(src, 0)).toBe(src);
-  });
 
-  it('`>` внутри строкового атрибута не закрывает тег', () => {
-    const src = '<script data-t="a > b" set:html={f(x)} />';
-    expect(readOpeningTag(src, 0)).toBe(src);
-  });
-
-  it('вложенные фигурные скобки не обрывают тег', () => {
-    const src = '<script set:html={f({ a: { b: 1 } })} />';
-    expect(readOpeningTag(src, 0)).toBe(src);
-  });
-
-  it('незакрытый тег — это null, а не молчаливый пропуск', () => {
-    expect(readOpeningTag('<script set:html={f(x)}', 0)).toBeNull();
-  });
-});
-
-describe('readBracedExpression — границы выражения', () => {
-  it('закрывающая скобка внутри строки не завершает выражение', () => {
-    expect(readBracedExpression('{f("}")}', 0)).toBe('f("}")');
-  });
-
-  it('вложенные объекты читаются целиком', () => {
-    expect(readBracedExpression('{f({ a: 1 })}', 0)).toBe('f({ a: 1 })');
-  });
-
-  it('незакрытое выражение — null', () => {
-    expect(readBracedExpression('{f(x)', 0)).toBeNull();
-  });
-});
 
 // Атрибуты — последнее место, где разбор был по точной форме записи. Именно на нём
 // гейт обошли пробелами вокруг `=`, поэтому формы записи проверяются отдельно.
-describe('parseTagAttributes — формы записи атрибутов', () => {
-  const find = (tag: string, name: string): TagAttribute | undefined =>
-    (parseTagAttributes(tag) ?? []).find((a) => a.name === name);
 
-  it('пробелы вокруг `=` не меняют смысла', () => {
-    for (const tag of [
-      '<script type="application/ld+json" />',
-      '<script type = "application/ld+json" />',
-      '<script\n  type\n  =\n  "application/ld+json"\n/>',
-    ]) {
-      expect(find(tag, 'type')?.value, tag).toBe('application/ld+json');
+// Извлечение тегов — место, где гейт обходили чаще всего. Формы записи проверяются
+// здесь напрямую, чтобы не зависеть от того, какие компоненты сейчас в репозитории.
+describe('collectJsonLdUsages — какие теги попадают под правило', () => {
+  const wrap = (tag: string): string => `---\nconst schema = {};\n---\n${tag}\n`;
+
+  it('обычный тег даёт выражение set:html', async () => {
+    const u = await collectJsonLdUsages(
+      wrap('<script type="application/ld+json" set:html={f(schema)} />'),
+    );
+    expect(u).toHaveLength(1);
+    expect(u[0].expr).toBe('f(schema)');
+  });
+
+  it('регистр MIME и параметры после `;` значения не имеют', async () => {
+    for (const type of ['Application/LD+JSON', 'application/ld+json; charset=utf-8']) {
+      const u = await collectJsonLdUsages(wrap(`<script type="${type}" set:html={f(schema)} />`));
+      expect(u.map((x) => x.expr), type).toEqual(['f(schema)']);
     }
   });
 
-  it('одинарные кавычки равноправны', () => {
-    expect(find("<script type='application/ld+json' />", 'type')?.value).toBe(
-      'application/ld+json',
+  // Fail-closed: раньше нераспознанный тип означал «значит, не JSON-LD», и тег
+  // выпадал из проверки молча.
+  it('тип, заданный выражением, — отказ, а не «не JSON-LD»', async () => {
+    const u = await collectJsonLdUsages(
+      wrap("<script type={'application/ld+json'} set:html={JSON.stringify(schema)} />"),
     );
+    expect(u).toHaveLength(1);
+    expect(u[0].problem).toMatch(/тип не определить/);
   });
 
-  it('выражение атрибута читается как выражение', () => {
-    const a = find('<script set:html = {f({ a: 1 })} />', 'set:html');
-    expect(a?.kind).toBe('braced');
-    expect(a?.value).toBe('f({ a: 1 })');
+  it('spread-атрибуты — отказ', async () => {
+    const u = await collectJsonLdUsages(wrap('<script type="application/ld+json" {...attrs} />'));
+    expect(u[0]?.problem).toMatch(/spread/);
   });
 
-  it('булев атрибут не съедает следующий', () => {
-    const attrs = parseTagAttributes('<script defer set:html={f(x)} />') ?? [];
-    expect(attrs.map((a) => a.name)).toEqual(['defer', 'set:html']);
+  it('set:html строкой, а не выражением, — отказ', async () => {
+    const u = await collectJsonLdUsages(
+      wrap('<script type="application/ld+json" set:html="сырая строка" />'),
+    );
+    expect(u[0]?.problem).toMatch(/не выражением/);
   });
 
-  // Состав атрибутов, заданный spread'ом, из текста не определить — это «не смогла
-  // проверить». Закрыто на упреждение: обход того же класса, что и пробелы.
-  it('spread-атрибуты делают состав неопределимым', () => {
-    expect(parseTagAttributes('<script type="application/ld+json" {...attrs} />')).toBeNull();
+  // Самодельный сканер считал `}` из комментария синтаксисом, ронял глубину и обрывал
+  // тег на операторе `>`; следующий за ним set:html выпадал из проверки.
+  it('скобка внутри JS-комментария не рвёт тег', async () => {
+    const u = await collectJsonLdUsages(
+      wrap(
+        '<script type="application/ld+json" data-probe={/* } */ 1 > 0} set:html={f(schema)} />',
+      ),
+    );
+    expect(u.map((x) => x.expr)).toEqual(['f(schema)']);
+  });
+
+  it('`>` внутри выражения атрибута не рвёт тег', async () => {
+    const u = await collectJsonLdUsages(
+      wrap('<script type="application/ld+json" data-probe={1 > 0} set:html={f(schema)} />'),
+    );
+    expect(u.map((x) => x.expr)).toEqual(['f(schema)']);
+  });
+
+  it('скрипты без типа JSON-LD не попадают под правило', async () => {
+    const u = await collectJsonLdUsages(wrap('<script>console.log(1)</script>'));
+    expect(u).toEqual([]);
   });
 });
 
 describe('проводка JSON-LD в компонентах', () => {
-  it('каждый script[type=ld+json] с set:html сериализуется через serializeJsonLd', () => {
+  it('каждый script[type=ld+json] с set:html сериализуется через serializeJsonLd', async () => {
     // Ищем по общему признаку — любой тег с типом ld+json, — а не по списку
     // известных компонентов: новый компонент попадёт под правило сам.
     const offenders: string[] = [];
@@ -435,6 +381,11 @@ describe('проводка JSON-LD в компонентах', () => {
 
     for (const file of astroFiles(SRC)) {
       const src = readFileSync(file, 'utf-8');
+      // Разбор Astro — WASM и стоит заметно; файл без подстроки `<script` не может
+      // содержать элемент script вовсе, поэтому пропуск таких файлов гейт не
+      // ослабляет. Именно подстрока, а не «ld+json»: тип бывает задан выражением, и
+      // фильтр по типу вернул бы обход, который этот гейт как раз и закрывает.
+      if (!/<script/i.test(src)) continue;
       // Имя функции ничего не гарантирует само по себе: `const serializeJsonLd =
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
       // на выходе. Значение имеет ЛОКАЛЬНОЕ СВЯЗЫВАНИЕ: откуда взято именно то имя,
@@ -448,36 +399,13 @@ describe('проводка JSON-LD в компонентах', () => {
       // по тексту решать нельзя; это «не смогла проверить», а не «нарушений нет».
       const competingBindings = bindings.length > 1;
 
-      for (const { tag, at } of scriptTags(src)) {
-        // Незакрытый тег — «не смогла проверить». Раньше на его месте молчал
-        // регулярочный разбор: он обрывал тег на `>` внутри выражения атрибута.
-        if (tag === null) {
-          unparsed.push(
-            `${file.replace(SRC, 'src')}: не удалось прочитать тег script на позиции ${at}`,
-          );
+      for (const usage of await collectJsonLdUsages(src)) {
+        if (usage.problem !== null) {
+          unparsed.push(`${file.replace(SRC, 'src')}: ${usage.problem} — ${usage.raw}`);
           continue;
         }
-        const attrs = parseTagAttributes(tag);
-        // Атрибуты заданы spread'ом или тег не разобрался — состав неизвестен.
-        if (attrs === null) {
-          unparsed.push(
-            `${file.replace(SRC, 'src')}: состав атрибутов не определить в ${tag.trim()}`,
-          );
-          continue;
-        }
-        const typeAttr = attrs.find((a) => a.name.toLowerCase() === 'type');
-        if (typeAttr?.value?.trim() !== 'application/ld+json') continue;
-
-        const setHtmlAttr = attrs.find((a) => a.name.toLowerCase() === 'set:html');
-        if (!setHtmlAttr) continue; // без set:html подставлять нечего
-        if (setHtmlAttr.kind !== 'braced' || setHtmlAttr.value === null) {
-          // `set:html="строка"` — не выражение, значит и не вызов сериализатора.
-          offenders.push(
-            `${file.replace(SRC, 'src')}: set:html задан не выражением — ${tag.trim()}`,
-          );
-          continue;
-        }
-        const expr = setHtmlAttr.value;
+        const expr = usage.expr as string;
+        const tag = usage.raw;
         tags++;
         if (!isWholeSerializeCall(expr)) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
