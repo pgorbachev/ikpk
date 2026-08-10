@@ -227,6 +227,74 @@ function readBracedExpression(text: string, open: number): string | null {
   return null;
 }
 
+export interface TagAttribute {
+  name: string;
+  /** Содержимое значения: текст строки либо выражение внутри `{…}`. */
+  value: string | null;
+  kind: 'quoted' | 'braced' | 'bare' | 'boolean';
+}
+
+/**
+ * Атрибуты открывающего тега как СИНТАКСИС, а не по точной форме записи.
+ *
+ * Регулярка `type=["']…["']` не совпадает с `type = "…"`, хотя для Astro это одно и
+ * то же: пробелы вокруг `=` допустимы. Тег с такой записью выпадал из проверки
+ * целиком. Здесь имя, `=` и значение читаются по отдельности, поэтому пробелы,
+ * переводы строк и вид кавычек значения не имеют.
+ *
+ * `null` — тег содержит spread/shorthand (`{...attrs}`): состав атрибутов из текста
+ * не определить, и это «не смогла проверить», а не «нарушений нет».
+ */
+function parseTagAttributes(tag: string): TagAttribute[] | null {
+  const attrs: TagAttribute[] = [];
+  // Пропускаем имя элемента.
+  let i = /^<\s*[A-Za-z][^\s/>]*/.exec(tag)?.[0].length ?? 1;
+  const isSpace = (c: string): boolean => /\s/.test(c);
+
+  while (i < tag.length) {
+    while (i < tag.length && isSpace(tag[i])) i++;
+    if (i >= tag.length || tag[i] === '>' || (tag[i] === '/' && tag[i + 1] === '>')) break;
+
+    // Spread или shorthand: `{...attrs}`, `{title}` — состав атрибутов неизвестен.
+    if (tag[i] === '{') return null;
+
+    const nameStart = i;
+    while (i < tag.length && !isSpace(tag[i]) && tag[i] !== '=' && tag[i] !== '>' && tag[i] !== '/')
+      i++;
+    const name = tag.slice(nameStart, i);
+    if (!name) break;
+
+    const afterName = i;
+    while (i < tag.length && isSpace(tag[i])) i++;
+    if (tag[i] !== '=') {
+      // Булев атрибут: значения нет, позиция возвращается к концу имени.
+      attrs.push({ name, value: null, kind: 'boolean' });
+      i = afterName;
+      continue;
+    }
+    i++; // '='
+    while (i < tag.length && isSpace(tag[i])) i++;
+
+    const ch = tag[i];
+    if (ch === '"' || ch === "'") {
+      const end = tag.indexOf(ch, i + 1);
+      if (end < 0) return null;
+      attrs.push({ name, value: tag.slice(i + 1, end), kind: 'quoted' });
+      i = end + 1;
+    } else if (ch === '{') {
+      const expr = readBracedExpression(tag, i);
+      if (expr === null) return null;
+      attrs.push({ name, value: expr, kind: 'braced' });
+      i += expr.length + 2;
+    } else {
+      const start = i;
+      while (i < tag.length && !isSpace(tag[i]) && tag[i] !== '>') i++;
+      attrs.push({ name, value: tag.slice(start, i), kind: 'bare' });
+    }
+  }
+  return attrs;
+}
+
 /** Все открывающие теги `<script …>` файла, в порядке следования. */
 function scriptTags(src: string): { tag: string | null; at: number }[] {
   const found: { tag: string | null; at: number }[] = [];
@@ -317,6 +385,46 @@ describe('readBracedExpression — границы выражения', () => {
   });
 });
 
+// Атрибуты — последнее место, где разбор был по точной форме записи. Именно на нём
+// гейт обошли пробелами вокруг `=`, поэтому формы записи проверяются отдельно.
+describe('parseTagAttributes — формы записи атрибутов', () => {
+  const find = (tag: string, name: string): TagAttribute | undefined =>
+    (parseTagAttributes(tag) ?? []).find((a) => a.name === name);
+
+  it('пробелы вокруг `=` не меняют смысла', () => {
+    for (const tag of [
+      '<script type="application/ld+json" />',
+      '<script type = "application/ld+json" />',
+      '<script\n  type\n  =\n  "application/ld+json"\n/>',
+    ]) {
+      expect(find(tag, 'type')?.value, tag).toBe('application/ld+json');
+    }
+  });
+
+  it('одинарные кавычки равноправны', () => {
+    expect(find("<script type='application/ld+json' />", 'type')?.value).toBe(
+      'application/ld+json',
+    );
+  });
+
+  it('выражение атрибута читается как выражение', () => {
+    const a = find('<script set:html = {f({ a: 1 })} />', 'set:html');
+    expect(a?.kind).toBe('braced');
+    expect(a?.value).toBe('f({ a: 1 })');
+  });
+
+  it('булев атрибут не съедает следующий', () => {
+    const attrs = parseTagAttributes('<script defer set:html={f(x)} />') ?? [];
+    expect(attrs.map((a) => a.name)).toEqual(['defer', 'set:html']);
+  });
+
+  // Состав атрибутов, заданный spread'ом, из текста не определить — это «не смогла
+  // проверить». Закрыто на упреждение: обход того же класса, что и пробелы.
+  it('spread-атрибуты делают состав неопределимым', () => {
+    expect(parseTagAttributes('<script type="application/ld+json" {...attrs} />')).toBeNull();
+  });
+});
+
 describe('проводка JSON-LD в компонентах', () => {
   it('каждый script[type=ld+json] с set:html сериализуется через serializeJsonLd', () => {
     // Ищем по общему признаку — любой тег с типом ld+json, — а не по списку
@@ -349,16 +457,27 @@ describe('проводка JSON-LD в компонентах', () => {
           );
           continue;
         }
-        if (!/type=["']application\/ld\+json["']/i.test(tag)) continue;
-
-        const setHtmlAt = tag.search(/\bset:html=/);
-        if (setHtmlAt < 0) continue; // без set:html подставлять нечего
-        const brace = tag.indexOf('{', setHtmlAt);
-        const expr = brace < 0 ? null : readBracedExpression(tag, brace);
-        if (expr === null) {
-          unparsed.push(`${file.replace(SRC, 'src')}: не разобран set:html в ${tag.trim()}`);
+        const attrs = parseTagAttributes(tag);
+        // Атрибуты заданы spread'ом или тег не разобрался — состав неизвестен.
+        if (attrs === null) {
+          unparsed.push(
+            `${file.replace(SRC, 'src')}: состав атрибутов не определить в ${tag.trim()}`,
+          );
           continue;
         }
+        const typeAttr = attrs.find((a) => a.name.toLowerCase() === 'type');
+        if (typeAttr?.value?.trim() !== 'application/ld+json') continue;
+
+        const setHtmlAttr = attrs.find((a) => a.name.toLowerCase() === 'set:html');
+        if (!setHtmlAttr) continue; // без set:html подставлять нечего
+        if (setHtmlAttr.kind !== 'braced' || setHtmlAttr.value === null) {
+          // `set:html="строка"` — не выражение, значит и не вызов сериализатора.
+          offenders.push(
+            `${file.replace(SRC, 'src')}: set:html задан не выражением — ${tag.trim()}`,
+          );
+          continue;
+        }
+        const expr = setHtmlAttr.value;
         tags++;
         if (!isWholeSerializeCall(expr)) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
@@ -384,19 +503,21 @@ describe('проводка JSON-LD в компонентах', () => {
 
     }
 
-    expect(
-      unparsed,
-      'теги JSON-LD, которые не удалось разобрать, — это «не смогла проверить», ' +
-        'а не «нарушений нет»:\n' + unparsed.join('\n'),
-    ).toEqual([]);
-
     // «Проверять нечего» — провал проверки, а не успех: если разметка изменится и
-    // регулярка перестанет находить теги, гейт обязан сказать об этом вслух.
+    // разбор перестанет находить теги, гейт обязан сказать об этом вслух.
     expect(tags, 'в src не найдено ни одного script[type=ld+json] с set:html').toBeGreaterThan(0);
+
+    // Обе категории проверяются ОДНИМ утверждением: раздельные проверки скрывали
+    // друг друга — первый неразобранный тег ронял прогон, и список нарушений в отчёт
+    // уже не попадал. При разборе красного гейта это стоило бы лишнего круга.
+    const problems = [
+      ...unparsed.map((p) => `[не смогла проверить] ${p}`),
+      ...offenders.map((p) => `[нарушение] ${p}`),
+    ];
     expect(
-      offenders,
-      'JSON-LD вставляется мимо serializeJsonLd — экранирование закрывающего тега теряется:\n' +
-        offenders.join('\n'),
+      problems,
+      'JSON-LD вставляется мимо serializeJsonLd либо разобрать разметку не удалось:\n' +
+        problems.join('\n'),
     ).toEqual([]);
   });
 });
