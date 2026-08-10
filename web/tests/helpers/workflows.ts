@@ -76,7 +76,9 @@ export function loadWorkflows(): Workflow[] {
     try {
       doc = asRecord(parse(raw));
     } catch (err) {
-      throw new Error(`${file} не разбирается как YAML: ${(err as Error).message}`);
+      throw new Error(`${file} не разбирается как YAML: ${(err as Error).message}`, {
+        cause: err,
+      });
     }
     // В YAML 1.1 голый `on` — булево true. Парсер работает по 1.2 и оставляет строку,
     // но ключ `true` обрабатываем тоже: иначе смена парсера молча обнулит проверки.

@@ -17,7 +17,9 @@ function ignored(path: string): boolean {
     // выдавать за «не игнорируется»: это разница между «дефектов нет» и «я не
     // смогла проверить».
     if (code === 1) return false;
-    throw new Error(`git check-ignore завершился с кодом ${code} на пути ${path}`);
+    throw new Error(`git check-ignore завершился с кодом ${code} на пути ${path}`, {
+      cause: err,
+    });
   }
 }
 
