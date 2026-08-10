@@ -57,7 +57,9 @@ describe('resolveLocalPath — выход за границу каталога �
       '/media/../../web/public/index.html',
     ];
     for (const path of hostile) {
-      let result: string | null = null;
+      // Без инициализатора намеренно: единственный путь до `expect` — успешно
+      // завершённый `try`, а начальное значение из него не читается никогда.
+      let result: string | null;
       try {
         result = resolveLocalPath(path, DIRS);
       } catch {

@@ -107,14 +107,19 @@ async function fetchRemote(path: string): Promise<PageSnapshot> {
         };
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error(`Timed out fetching ${ORIGINAL}${path} after ${REMOTE_FETCH_TIMEOUT_MS}ms.`);
+          throw new Error(
+            `Timed out fetching ${ORIGINAL}${path} after ${REMOTE_FETCH_TIMEOUT_MS}ms.`,
+            { cause: error },
+          );
         }
 
         if (error instanceof Error) {
-          throw new Error(`Failed to fetch ${ORIGINAL}${path}: ${error.message}`);
+          throw new Error(`Failed to fetch ${ORIGINAL}${path}: ${error.message}`, {
+            cause: error,
+          });
         }
 
-        throw new Error(`Failed to fetch ${ORIGINAL}${path}.`);
+        throw new Error(`Failed to fetch ${ORIGINAL}${path}.`, { cause: error });
       } finally {
         clearTimeout(timeout);
       }
