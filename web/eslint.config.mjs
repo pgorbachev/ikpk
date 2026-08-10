@@ -23,9 +23,18 @@ export default tseslint.config(
       'astro/no-set-html-directive': 'error',
     },
   },
-  // Reviewed set:html uses: JSON.stringify is XSS-safe; all others go through
-  // cleanBodyHtml(). Inline eslint-disable is not supported by astro-eslint-parser
-  // for template directives, so we suppress per-file here.
+  // Проверенные места set:html. Прежняя формулировка здесь — «JSON.stringify is
+  // XSS-safe» — НЕВЕРНА и породила дефект: stringify экранирует кавычки JSON, но
+  // не последовательность `</script>`, которая закрывала тег прямо внутри значения
+  // (исправлено в 4afb326). Как есть на самом деле:
+  //   — JSON-LD идёт через serializeJsonLd() (экранирует каждый `<`), и это
+  //     стережёт гейт по исходникам в web/tests/json-ld.test.ts;
+  //   — остальное идёт через cleanBodyHtml(), который является НОРМАЛИЗАТОРОМ,
+  //     а не санитайзером: он не удаляет <script>, on*-атрибуты и javascript:-URL.
+  //     Инвариант «в set:html не попадает исполняемый код» пока не выражен нигде —
+  //     это находка B1 аудита 2026-08-08, и allowlist ниже её не закрывает.
+  // Inline eslint-disable is not supported by astro-eslint-parser for template
+  // directives, so we suppress per-file here.
   {
     files: [
       'src/components/Breadcrumbs.astro',
