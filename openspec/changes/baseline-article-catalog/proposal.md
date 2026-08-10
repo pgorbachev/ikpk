@@ -17,12 +17,20 @@ Baseline фиксирует **принятый контракт каталога
 Фиксируется явно, иначе через неделю неясно, что описано.
 
 - **Revision кода:** `feat/demo-mode-and-hero-photo@542151b` («feat(preview): редакционная
-  подача события…»), опубликована как `origin/feat/demo-mode-and-hero-photo`. В `main`
-  этого кода нет: там отсутствуют `web/tests/content-quality.test.ts`, визуальные эталоны,
-  `web/scripts/gen-redirects.ts` и `deploy/nginx-redirects.conf`.
+  подача события…»). На момент снятия baseline в `main` этого кода не было: там отсутствовали
+  `web/tests/content-quality.test.ts`, визуальные эталоны, `web/scripts/gen-redirects.ts` и
+  `deploy/nginx-redirects.conf`.
 - **Рабочая ветка baseline:** `542151b` + процессные коммиты `main` (`291c6b2`, `4e8ab6a`,
   `2420a6d`) — иначе `openspec/` и `./bin/openspec` в ветке кода отсутствуют, и
   characterization-тесты негде запустить рядом со спекой.
+- **База PR (изменилось после снятия baseline):** ветка кода опубликована в `main` squash'ем
+  `587e5232f72d843530901fd5bf268a915e0387ac`, и baseline перенесён на
+  `main@e26b4fee15d94c5fa4072714d055459cb37edfa8` — как именно, описано в `design.md`,
+  Решение 1а. Исследуемым revision остаётся `542151b`: подменять его задним числом нельзя.
+  Код каталога между `542151b` и `e26b4fee` побайтово совпадает (пустой
+  `git diff … -- web/src/pages/statyi/ web/src/components/ArticleCard.astro
+  web/src/components/articles/`), а прогон характеризации на новой базе перепроверен —
+  22/22 и 7/7 зелёные.
 - **Сборка, по которой снимались измерения:** `npm run build` из `web/` на этой ветке;
   268 страниц, `web/dist/statyi/index.html` = 184 320 байт, 68 каталогов статей в
   `web/dist/statyi/`.
@@ -79,22 +87,33 @@ Baseline фиксирует **принятый контракт каталога
 
 ## Impact
 
-- **Код:** не меняется. Затронуты только `openspec/changes/baseline-article-catalog/**`,
-  два новых тестовых файла и `web/vitest.build.config.ts` (новый dist-зависимый тест
-  надо включить в набор — иначе он не запустится ни локально, ни в CI).
+- **Продуктовый код не меняется.** Затронуты `openspec/changes/baseline-article-catalog/**`,
+  два новых тестовых файла, `web/vitest.build.config.ts` и `web/vitest.config.ts` (новый
+  dist-зависимый тест надо включить в один набор и исключить из другого — иначе он не
+  запустится ни локально, ни в CI) и проводка браузерного набора: скрипт
+  `test:e2e:catalog` в `web/package.json` плюс шаг в job `e2e-smoke` файла
+  `.github/workflows/test.yml`.
 - **Описываемые файлы:** `web/src/pages/statyi/index.astro`,
   `web/src/pages/statyi/[slug].astro`, `web/src/components/ArticleCard.astro`,
   `web/src/components/articles/ArticleFilterBar.astro`, `web/src/lib/data.ts`
   (`getArticles`), `web/src/components/HeadMeta.astro` (`canonical`),
   `web/src/pages/sitemap.astro`, `web/astro.config.mjs` (`@astrojs/sitemap`),
   `deploy/nginx-redirects.conf`, `discovery/entities/articles.json`.
-- **Существующие гейты, которые уже держат часть контракта:**
-  `web/tests/seo-package.test.ts` (сироты, JSON-LD, уникальность `title`, непустые
-  `title`/`description`, `sitemap`, цели редиректов), `web/tests/content-quality.test.ts`
-  (адреса без завершающего слэша), `web/tests/parity-audit.spec.ts` (`/statyi`:
-  пагинация, элементы управления), `web/tests/a11y.spec.ts`,
-  `web/tests/visual-baseline.spec.ts` (эталоны `articles-desktop`, `articles-mobile`).
-  Baseline на них ссылается и не дублирует их без нужды.
+- **Существующие гейты, которые уже держат часть контракта** — и различение «держит» от
+  «лежит в репозитории», без которого список вводил бы в заблуждение:
+  - запускаются в CI (`Tests`): `web/tests/seo-package.test.ts` (сироты, JSON-LD,
+    уникальность `title`, непустые `title`/`description`, `sitemap`, цели редиректов),
+    `web/tests/content-quality.test.ts` (адреса без завершающего слэша) — оба через
+    `npm run test:build`; `web/tests/a11y.spec.ts` — через `npm run test:e2e:a11y`;
+  - **не запускаются ничем:** `web/tests/parity-audit.spec.ts` (`/statyi`: пагинация,
+    элементы управления) — ни скрипта, ни шага workflow; `web/tests/visual-baseline.spec.ts`
+    (эталоны `articles-desktop`, `articles-mobile`) — скрипт `test:e2e:visual` есть, вызова
+    в CI нет. Первая редакция перечисляла их наравне с остальными; это исправлено —
+    контракт они не держат.
+
+  Baseline на запускаемые гейты ссылается и не дублирует их без нужды. Свой браузерный набор
+  подключён к `Tests` в этом же change (`design.md`, Решение 3а): иначе он повторил бы ту же
+  болезнь.
 - **Долг:** ничего не закрывает и не заводит нового. TD-1, TD-2, TD-3 из
   `docs/tech-debt.md` перечислены как known deviations с адресом исправления —
   change `article-list-pagination`.
