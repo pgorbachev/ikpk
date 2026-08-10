@@ -81,7 +81,7 @@ jobs:
       # GITHUB_SHA и GITHUB_REF указывают на дефолтную ветку, а не на коммит
       # завершившегося прогона, поэтому без явного `ref` связь «проверили то, что
       # публикуем» теряется.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
