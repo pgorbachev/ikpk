@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,6 +38,32 @@ jobs:
       - name: Run build tests (dist checks)
         run: npm run test:build
 
+  # Тесты пакета scripts/ гоняются отдельным джобом: у него свой package.json и свой
+  # lockfile, а джоб выше целиком работает в web/. Без этого джоба новые тесты
+  # оказались бы вне CI — ровно тот случай осиротевших тестов, который описан в
+  # docs/test-audit-2026-08-07.md (находка 1): файл в репозитории есть, а результат
+  # его прогона никто не видит.
+  scripts-unit:
+    name: Scripts unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
@@ -47,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

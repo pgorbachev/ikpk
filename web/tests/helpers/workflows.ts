@@ -28,6 +28,8 @@ export interface WorkflowJob {
   if?: string;
   needs: string[];
   steps: WorkflowStep[];
+  /** Вызов reusable workflow: у такого джоба нет ни одного шага, весь код — внутри него. */
+  uses?: string;
   permissions?: unknown;
   concurrency?: unknown;
   environment?: unknown;
@@ -101,6 +103,7 @@ export function loadWorkflows(): Workflow[] {
         if: job.if === undefined ? undefined : String(job.if),
         needs: asStringList(job.needs),
         steps,
+        uses: typeof job.uses === 'string' ? job.uses : undefined,
         permissions: job.permissions,
         concurrency: job.concurrency,
         environment: job.environment,
@@ -129,9 +132,33 @@ export function isCodeFetchStep(step: WorkflowStep): boolean {
   return /\b(git\s+clone|git\s+fetch|gh\s+repo\s+clone)\b/.test(step.run ?? '');
 }
 
-/** Шаги, исполняющие выгруженный код: установка зависимостей, сборка, тесты. */
-export function isCodeExecStep(step: WorkflowStep): boolean {
-  return /\b(npm|npx|yarn|pnpm|astro|vite|tsx|node)\b/.test(step.run ?? '');
+/**
+ * Шаги джоба, которые выполняются с правами, выданными джобу.
+ *
+ * Исключений НЕТ ни для одного шага, в том числе для проверки происхождения.
+ * Исключение по тексту шага само было дырой: шаг вида
+ * `curl … | bash` и следом `test "$HEAD_REPO" = … || exit 1` содержит признаки
+ * guard'а, поэтому целиком уходил из-под проверки, хотя чужой код в нём исполняется
+ * ДО сверки. Разбирать порядок команд внутри произвольного shell — заведомо
+ * ненадёжно, поэтому происхождение обязано проверяться на уровне джоба (`if` самого
+ * джоба или его зависимости по `needs`), а не шагом внутри него.
+ */
+export function riskyStepsInJob(job: WorkflowJob): WorkflowStep[] {
+  const steps = job.steps.filter((step) => step.run !== undefined || step.uses !== undefined);
+  if (job.uses === undefined) return steps;
+
+  // Джоб, вызывающий reusable workflow, ШАГОВ НЕ ИМЕЕТ вовсе: весь код лежит внутри
+  // вызванного workflow. Пока модель хранила только `steps`, такой джоб давал пустой
+  // список опасных шагов и молча проходил обе проверки происхождения — то есть
+  // приёмник `workflow_run` без guard'а, вызывающий reusable workflow, был для гейта
+  // невидим. Сам вызов и есть исполнение кода.
+  const call: WorkflowStep = {
+    index: 0,
+    name: `вызов reusable workflow ${job.uses}`,
+    uses: job.uses,
+    raw: JSON.stringify({ uses: job.uses }),
+  };
+  return [call, ...steps];
 }
 
 export function publishingWorkflows(all: Workflow[]): Workflow[] {

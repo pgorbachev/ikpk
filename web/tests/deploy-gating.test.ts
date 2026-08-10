@@ -11,8 +11,8 @@ import {
   declaresPagesPermission,
   dispatchContext,
   findPublishStep,
-  isCodeExecStep,
   isCodeFetchStep,
+  riskyStepsInJob,
   jobsOnPathTo,
   loadWorkflows,
   publishingWorkflows,
@@ -455,30 +455,29 @@ describe('гейт публикации: конфигурация', () => {
 
     for (const wf of receivers) {
       for (const job of Object.values(wf.jobs)) {
-        const firstRisky = job.steps.find((s) => isCodeFetchStep(s) || isCodeExecStep(s));
+        const firstRisky = riskyStepsInJob(job)[0];
         if (!firstRisky) continue;
 
-        // Вид 1 (предпочтительный): условие джоба само ложно для стороннего источника.
-        const jobIf = job.if;
-        const guardedByJobIf =
-          jobIf !== undefined && isAlwaysFalse(jobIf, forkCtx) && canBeTrue(jobIf, ownCtx);
-        if (guardedByJobIf) continue;
-
-        // Вид 2: первый шаг сверяет происхождение и роняет джоб.
-        const guardStep = job.steps.find(
-          (s) =>
-            /head_repository/.test(s.raw) &&
-            /\bexit\s+[1-9]/.test(s.run ?? '') &&
-            (s.if === undefined || canBeTrue(s.if, forkCtx)),
-        );
-        if (guardStep && guardStep.index < firstRisky.index) continue;
+        // Единственный принимаемый вид защиты — условие на уровне джоба, ложное для
+        // стороннего источника. Берётся ВСЯ цепочка по `needs`: джоб публикации
+        // защищён тем, что его зависимость не выполнится на чужом прогоне, и по
+        // собственному условию выглядел бы незащищённым.
+        //
+        // Прежде принимался и второй вид — шаг, сверяющий происхождение раньше
+        // опасных шагов. От него пришлось отказаться: определить такой шаг можно было
+        // только по его тексту, а шаг вида `curl … | bash` со сверкой в той же команде
+        // получал признаки guard'а и уходил из-под проверки целиком, хотя чужой код в
+        // нём исполняется ДО сверки. Разбирать порядок команд внутри произвольного
+        // shell надёжно нельзя, поэтому вид со шагом убран, а не залатан.
+        const chain = conditionsGuarding(wf, job.key);
+        const guardedByConditions =
+          chain.some(({ expr }) => isAlwaysFalse(expr, forkCtx)) &&
+          chain.every(({ expr }) => canBeTrue(expr, ownCtx));
+        if (guardedByConditions) continue;
 
         problems.push(
-          `${wf.file}:${job.key} — ${
-            guardStep
-              ? `проверка происхождения стоит шагом ${guardStep.index}, после выгрузки/сборки (шаг ${firstRisky.index})`
-              : `проверки происхождения нет, а шаг ${firstRisky.index} уже выгружает или исполняет код`
-          }`,
+          `${wf.file}:${job.key} — происхождение не проверено условием джоба или его ` +
+            `зависимости по needs, а шаг ${firstRisky.index} уже выполняется с правами джоба`,
         );
       }
     }
@@ -504,8 +503,10 @@ describe('гейт публикации: конфигурация', () => {
 
     for (const wf of receivers) {
       for (const job of Object.values(wf.jobs)) {
-        for (const step of job.steps) {
-          if (!isCodeFetchStep(step) && !isCodeExecStep(step)) continue;
+        // Обходим именно опасные шаги, а не `job.steps`: у джоба, вызывающего
+        // reusable workflow, шагов нет вовсе, и обход по `job.steps` пропускал бы
+        // такой джоб целиком.
+        for (const step of riskyStepsInJob(job)) {
           const conditions = conditionsGuarding(wf, job.key, step);
           if (conditions.every(({ expr }) => canBeTrue(expr, forkCtx)))
             reachable.push(
