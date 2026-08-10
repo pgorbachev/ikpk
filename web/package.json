@@ -17,9 +17,9 @@
     "test:build": "npm run build && vitest run --config vitest.build.config.ts",
     "test:build:remote": "npm run build && PARITY_REMOTE=1 PARITY_REMOTE_STRICT=1 vitest run --config vitest.build.config.ts",
     "test:e2e": "npm run test:e2e:smoke && npm run test:e2e:a11y",
-    "test:e2e:smoke": "playwright test tests/site.spec.ts --project=desktop --project=mobile",
-    "test:e2e:a11y": "playwright test tests/a11y.spec.ts --project=desktop --project=mobile",
-    "test:e2e:compat": "playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
+    "test:e2e:smoke": "node tests/helpers/preview-reset.mjs && playwright test tests/site.spec.ts --project=desktop --project=mobile",
+    "test:e2e:a11y": "node tests/helpers/preview-reset.mjs && playwright test tests/a11y.spec.ts --project=desktop --project=mobile",
+    "test:e2e:compat": "node tests/helpers/preview-reset.mjs && playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:e2e:smoke:attached": "playwright test tests/site.spec.ts --config=playwright.attached.config.ts --project=desktop --project=mobile",
     "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
@@ -32,8 +32,8 @@
     "data:refresh": "tsx scripts/refresh-catalog.ts && tsx ../scripts/download-media.ts && tsx scripts/make-derivatives.ts",
     "redirects:gen": "tsx scripts/gen-redirects.ts",
     "data:refresh:dry": "tsx scripts/refresh-catalog.ts --dry",
-    "test:e2e:visual": "playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile",
-    "test:e2e:visual:update": "playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots"
+    "test:e2e:visual": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile",
+    "test:e2e:visual:update": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
