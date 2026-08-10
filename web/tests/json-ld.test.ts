@@ -216,6 +216,18 @@ async function collectJsonLdUsages(src: string): Promise<JsonLdUsage[]> {
   const usages: JsonLdUsage[] = [];
 
   const walk = (node: AstroNode): void => {
+    // Тег, заданный переменной (`const T = 'script'; <T set:html={…} />`), парсер
+    // относит к `component`. Какой элемент он отрендерит, статически не определить —
+    // значит нельзя утверждать и что это НЕ script[type=ld+json]. Fail-closed: отказ.
+    // Прежняя редакция смотрела только на literal-элементы, и такой тег обходил гейт
+    // целиком, вместе с сырым JSON.stringify.
+    if (node.type === 'component' && (node.attributes ?? []).some((a) => a.name === 'set:html')) {
+      usages.push({
+        expr: null,
+        problem: `set:html на теге <${node.name ?? '?'}>, заданном не литералом — какой элемент отрендерится, определить нельзя`,
+        raw: `<${node.name ?? '?'} set:html=…>`,
+      });
+    }
     if (node.type === 'element' && node.name === 'script') {
       const attrs = node.attributes ?? [];
       const raw = `<script ${attrs.map((a) => `${a.name}=${a.kind}`).join(' ')}>`;
@@ -365,6 +377,27 @@ describe('collectJsonLdUsages — какие теги попадают под п
     expect(u.map((x) => x.expr)).toEqual(['f(schema)']);
   });
 
+  // Тег, заданный переменной, парсер относит к `component`: какой элемент он
+  // отрендерит, статически неизвестно. Раньше такой тег не попадал ни под предфильтр
+  // по `<script`, ни под обход literal-элементов и обходил гейт целиком.
+  it('тег, заданный не литералом, — отказ', async () => {
+    const u = await collectJsonLdUsages(
+      '---\nconst T = "script";\nconst schema = {};\n---\n' +
+        '<T type="application/ld+json" set:html={JSON.stringify(schema)} />\n',
+    );
+    expect(u).toHaveLength(1);
+    expect(u[0].problem).toMatch(/не литералом/);
+  });
+
+  it('set:html на обычном элементе (не script) под это правило не подпадает', async () => {
+    // Тело страницы через cleanBodyHtml — предмет другого инварианта (B1 аудита),
+    // и этот гейт обязан его не трогать: иначе он краснел бы на 15 законных местах.
+    const u = await collectJsonLdUsages(
+      '---\nconst html = "";\n---\n<div set:html={html}></div>\n',
+    );
+    expect(u).toEqual([]);
+  });
+
   it('скрипты без типа JSON-LD не попадают под правило', async () => {
     const u = await collectJsonLdUsages(wrap('<script>console.log(1)</script>'));
     expect(u).toEqual([]);
@@ -381,11 +414,13 @@ describe('проводка JSON-LD в компонентах', () => {
 
     for (const file of astroFiles(SRC)) {
       const src = readFileSync(file, 'utf-8');
-      // Разбор Astro — WASM и стоит заметно; файл без подстроки `<script` не может
-      // содержать элемент script вовсе, поэтому пропуск таких файлов гейт не
-      // ослабляет. Именно подстрока, а не «ld+json»: тип бывает задан выражением, и
-      // фильтр по типу вернул бы обход, который этот гейт как раз и закрывает.
-      if (!/<script/i.test(src)) continue;
+      // Разбор Astro — WASM и стоит заметно, но предфильтр обязан быть шире тега
+      // `<script`: тег бывает задан переменной (`<JsonLdTag set:html={…} />`), и по
+      // подстроке `<script` такой файл не находится вовсе — именно так гейт и
+      // обходили. Берём файлы, где есть либо тег script, либо сама директива
+      // `set:html`; без обоих подстрок вставить JSON-LD этим способом невозможно.
+      // Фильтр по «ld+json» был бы неверен: тип бывает задан выражением.
+      if (!/<script|set:html/i.test(src)) continue;
       // Имя функции ничего не гарантирует само по себе: `const serializeJsonLd =
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
       // на выходе. Значение имеет ЛОКАЛЬНОЕ СВЯЗЫВАНИЕ: откуда взято именно то имя,
