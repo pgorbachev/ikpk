@@ -177,6 +177,65 @@ function isWholeSerializeCall(raw: string): boolean {
   return ts.isIdentifier(expr.expression) && expr.expression.text === 'serializeJsonLd';
 }
 
+/**
+ * Открывающий тег целиком, начиная с позиции `<`.
+ *
+ * Регулярка `<script[^>]*>` здесь непригодна: она обрывает тег на первом `>`, даже
+ * если тот стоит ВНУТРИ выражения атрибута (`data-probe={1 > 0}`). Усечённый кусок
+ * не содержит `set:html`, и тег молча уходил из-под проверки. Поэтому читаем
+ * посимвольно, отслеживая строки и вложенность `{…}`, и закрываем тег только на том
+ * `>`, что стоит вне строки и вне выражения.
+ *
+ * `null` означает «тег не закрыт» — это «не смогла проверить», а не «нарушений нет».
+ */
+function readOpeningTag(src: string, start: number): string | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = start; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+    else if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    else if (ch === '>' && depth === 0) return src.slice(start, i + 1);
+  }
+  return null;
+}
+
+/** Содержимое `{…}`, начиная с позиции открывающей скобки, с учётом строк. */
+function readBracedExpression(text: string, open: number): string | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/** Все открывающие теги `<script …>` файла, в порядке следования. */
+function scriptTags(src: string): { tag: string | null; at: number }[] {
+  const found: { tag: string | null; at: number }[] = [];
+  for (const m of src.matchAll(/<script\b/gi)) {
+    found.push({ tag: readOpeningTag(src, m.index), at: m.index });
+  }
+  return found;
+}
+
 function* astroFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -221,29 +280,53 @@ describe('isWholeSerializeCall — что считается корректно�
   });
 });
 
+// Разбор тега — предмет отдельных проверок: именно на нём гейт обходили последним,
+// и обход был невидим, потому что усечённый тег просто не содержал set:html.
+describe('readOpeningTag — границы тега', () => {
+  it('`>` внутри выражения атрибута не закрывает тег', () => {
+    const src = '<script type="application/ld+json" data-probe={1 > 0} set:html={f(x)} />';
+    expect(readOpeningTag(src, 0)).toBe(src);
+  });
+
+  it('`>` внутри строкового атрибута не закрывает тег', () => {
+    const src = '<script data-t="a > b" set:html={f(x)} />';
+    expect(readOpeningTag(src, 0)).toBe(src);
+  });
+
+  it('вложенные фигурные скобки не обрывают тег', () => {
+    const src = '<script set:html={f({ a: { b: 1 } })} />';
+    expect(readOpeningTag(src, 0)).toBe(src);
+  });
+
+  it('незакрытый тег — это null, а не молчаливый пропуск', () => {
+    expect(readOpeningTag('<script set:html={f(x)}', 0)).toBeNull();
+  });
+});
+
+describe('readBracedExpression — границы выражения', () => {
+  it('закрывающая скобка внутри строки не завершает выражение', () => {
+    expect(readBracedExpression('{f("}")}', 0)).toBe('f("}")');
+  });
+
+  it('вложенные объекты читаются целиком', () => {
+    expect(readBracedExpression('{f({ a: 1 })}', 0)).toBe('f({ a: 1 })');
+  });
+
+  it('незакрытое выражение — null', () => {
+    expect(readBracedExpression('{f(x)', 0)).toBeNull();
+  });
+});
+
 describe('проводка JSON-LD в компонентах', () => {
   it('каждый script[type=ld+json] с set:html сериализуется через serializeJsonLd', () => {
     // Ищем по общему признаку — любой тег с типом ld+json, — а не по списку
     // известных компонентов: новый компонент попадёт под правило сам.
-    const tagRe = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>/gi;
     const offenders: string[] = [];
     const unparsed: string[] = [];
     let tags = 0;
 
     for (const file of astroFiles(SRC)) {
       const src = readFileSync(file, 'utf-8');
-      // Сколько раз тип вообще встречается в файле — независимо от того, смог ли
-      // разбор построить из этого тег. Расхождение с числом разобранных тегов
-      // означает «не смогла проверить», и это обязано быть провалом, а не тишиной:
-      // `[^>]*` обрывает тег на первом `>` внутри выражения (`{items.map(i => f(i))}`),
-      // и такой тег иначе уходил бы из-под проверки молча.
-      // Считаем не любое упоминание типа (оно бывает и в комментарии — тогда гейт
-      // краснел бы напрасно), а именно теги script с этим типом: до типа не должно
-      // встретиться `<`, то есть мы всё ещё внутри того же тега. Такой счёт не
-      // спотыкается о `>` внутри выражения, в отличие от разбора тега целиком.
-      const mentions = (src.match(/<script\b[^<]*?application\/ld\+json/gi) ?? []).length;
-      let parsedHere = 0;
-
       // Имя функции ничего не гарантирует само по себе: `const serializeJsonLd =
       // JSON.stringify` в начале компонента даёт вызов с тем же именем и сырой JSON
       // на выходе. Значение имеет ЛОКАЛЬНОЕ СВЯЗЫВАНИЕ: откуда взято именно то имя,
@@ -257,17 +340,27 @@ describe('проводка JSON-LD в компонентах', () => {
       // по тексту решать нельзя; это «не смогла проверить», а не «нарушений нет».
       const competingBindings = bindings.length > 1;
 
-      for (const m of src.matchAll(tagRe)) {
-        parsedHere++;
-        const tag = m[0];
-        const setHtml = /set:html=\{([\s\S]*)\}/.exec(tag);
-        if (!/\bset:html=/.test(tag)) continue; // без set:html подставлять нечего
-        if (!setHtml) {
+      for (const { tag, at } of scriptTags(src)) {
+        // Незакрытый тег — «не смогла проверить». Раньше на его месте молчал
+        // регулярочный разбор: он обрывал тег на `>` внутри выражения атрибута.
+        if (tag === null) {
+          unparsed.push(
+            `${file.replace(SRC, 'src')}: не удалось прочитать тег script на позиции ${at}`,
+          );
+          continue;
+        }
+        if (!/type=["']application\/ld\+json["']/i.test(tag)) continue;
+
+        const setHtmlAt = tag.search(/\bset:html=/);
+        if (setHtmlAt < 0) continue; // без set:html подставлять нечего
+        const brace = tag.indexOf('{', setHtmlAt);
+        const expr = brace < 0 ? null : readBracedExpression(tag, brace);
+        if (expr === null) {
           unparsed.push(`${file.replace(SRC, 'src')}: не разобран set:html в ${tag.trim()}`);
           continue;
         }
         tags++;
-        if (!isWholeSerializeCall(setHtml[1])) {
+        if (!isWholeSerializeCall(expr)) {
           offenders.push(`${file.replace(SRC, 'src')}: ${tag.trim()}`);
         } else if (competingBindings) {
           offenders.push(
@@ -289,11 +382,6 @@ describe('проводка JSON-LD в компонентах', () => {
         }
       }
 
-      if (parsedHere !== mentions) {
-        unparsed.push(
-          `${file.replace(SRC, 'src')}: упоминаний типа ${mentions}, разобранных тегов ${parsedHere}`,
-        );
-      }
     }
 
     expect(
