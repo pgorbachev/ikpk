@@ -352,7 +352,7 @@ interface SyntheticEntry {
   title: string;
 }
 
-function syntheticMarkup(entries: SyntheticEntry[], monthKeys: string[]): string {
+function syntheticMarkup(entries: SyntheticEntry[], monthKeys: string[], withMonthControl = true): string {
   const options = monthKeys.map((key) => `<option value="${key}">${key} (${entries.filter((e) => e.months.includes(key)).length})</option>`).join('');
   const cities = [...new Set(entries.map((entry) => entry.city).filter(Boolean))];
   const items = entries
@@ -367,7 +367,7 @@ function syntheticMarkup(entries: SyntheticEntry[], monthKeys: string[]): string
   return `
     <div class="schedule-toolbar">
       <label>Поиск<input type="search" data-schedule-search /></label>
-      <label>Месяц<select data-schedule-filter="month" disabled><option value="">Не выбрано</option>${options}</select></label>
+      ${withMonthControl ? `<label>Месяц<select data-schedule-filter="month" disabled><option value="">Не выбрано</option>${options}</select></label>` : ''}
       <label>Институт<select data-schedule-filter="institute"><option value="">Не выбрано</option></select></label>
       <label>Программа<select data-schedule-filter="program" disabled><option value="">Не выбрано</option></select></label>
       <label>Место<select data-schedule-filter="city"><option value="">Не выбрано</option>${cities
@@ -380,13 +380,18 @@ function syntheticMarkup(entries: SyntheticEntry[], monthKeys: string[]): string
   `;
 }
 
-async function mountSynthetic(page: Page, entries: SyntheticEntry[], monthKeys: string[]): Promise<void> {
+async function mountSynthetic(
+  page: Page,
+  entries: SyntheticEntry[],
+  monthKeys: string[],
+  withMonthControl = true,
+): Promise<void> {
   const response = await page.goto(PAGE);
   expect(response?.status(), `${PAGE}: страница не отдалась — скрипт поднимать нечем`).toBe(200);
 
   await page.evaluate((markup) => {
     document.body.innerHTML = markup;
-  }, syntheticMarkup(entries, monthKeys));
+  }, syntheticMarkup(entries, monthKeys, withMonthControl));
   await page.addScriptTag({ content: controlsScriptText() });
   await expect(page.locator(`${ITEM}:not([hidden])`).first()).toBeVisible();
 }
@@ -455,5 +460,30 @@ test.describe('синтетический набор', () => {
     await page.locator(CITY).selectOption('');
     await page.locator(SEARCH).fill('онлайн');
     expect((await shown(page)).map((entry) => entry.title), 'поиск перестал работать').toEqual(['Онлайн раз']);
+  });
+
+  test('отсутствие контрола месяца не уносит с собой остальные фильтры', async ({ page }) => {
+    // Спека: «скрипт SHALL NOT терять остальные фильтры из-за отсутствия одного».
+    // Сегодня ранний выход проверяет четыре контрола, и добавление пятого в то же
+    // условие сделало бы отсутствие месяца выключателем поиска, института,
+    // программы и города. В разметке контрол есть всегда (это проверяет гейт по
+    // dist), поэтому случай воспроизводится только синтетическим набором.
+    await mountSynthetic(
+      page,
+      [
+        { months: ['2026-11'], city: 'moskva', title: 'Москва раз' },
+        { months: ['2026-12'], city: 'onlayn', title: 'Онлайн раз' },
+      ],
+      ['2026-11', '2026-12'],
+      false,
+    );
+
+    await expect(page.locator(MONTH)).toHaveCount(0);
+
+    await page.locator(CITY).selectOption('moskva');
+    expect(
+      (await shown(page)).map((entry) => entry.title),
+      'без контрола месяца скрипт отказался работать целиком',
+    ).toEqual(['Москва раз']);
   });
 });
