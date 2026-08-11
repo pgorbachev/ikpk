@@ -94,6 +94,13 @@ jobs:
       - name: Run accessibility tests (axe-core)
         run: npm run test:e2e:a11y
 
+      # Характеризационные проверки каталога статей. Отдельным шагом, а не внутри
+      # smoke: у smoke свой предмет, и слияние наборов скрыло бы, что именно упало.
+      # Только desktop: предмет — охват поиска и сортировки, он от ширины окна не
+      # зависит, а раскладка в области каталога не описана вовсе.
+      - name: Run article catalog characterization tests
+        run: npm run test:e2e:catalog
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7

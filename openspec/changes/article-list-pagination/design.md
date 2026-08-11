@@ -1,6 +1,8 @@
 ## Context
 
-Мотивация — в `proposal.md`, требования — в `specs/article-list-pagination/spec.md`.
+Мотивация — в `proposal.md`, требования — в `specs/article-catalog/spec.md`: дельта
+прикладывается к основной спеке `article-catalog`, появившейся из baseline'а той же области,
+а не заводит собственную capability (обоснование — в `proposal.md`, «Capabilities»).
 Здесь только то, что определяет способ реализации.
 
 Ограничения, из которых всё вытекает:
