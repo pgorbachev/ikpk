@@ -33,6 +33,9 @@ export interface WorkflowJob {
   permissions?: unknown;
   concurrency?: unknown;
   environment?: unknown;
+  /** `continue-on-error` джоба: при `true` его провал не делает прогон неуспешным,
+   *  то есть проверка внутри такого джоба гейтом не является. */
+  continueOnError?: unknown;
 }
 
 export interface Workflow {
@@ -109,6 +112,7 @@ export function loadWorkflows(): Workflow[] {
         permissions: job.permissions,
         concurrency: job.concurrency,
         environment: job.environment,
+        continueOnError: job['continue-on-error'],
       };
     }
     return {
