@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { pathToFileURL } from 'url';
 
 // Правила репозитория, которые ломаются молча и потому нуждаются в гейте.
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -277,6 +278,45 @@ describe('гигиена репозитория', () => {
       /collapsible_targets\.json/.test(code),
       'скрипт не берёт список адресов из репозитория',
     ).toBe(true);
+  });
+
+  // Тест с особым предметом (собранный вывод) живёт в ДВУХ списках: он исключён из
+  // основного прогона и включён в специализированный. Забыть один из двух легко, и оба
+  // исхода тихие: файл, исключённый и никуда не добавленный, не выполняется НИГДЕ, а файл,
+  // добавленный без исключения, ещё и запускается основным прогоном без своего предмета.
+  //
+  // Проверяется точным равенством множеств, а не сопоставлением шаблонов: во всех трёх
+  // конфигурациях перечислены конкретные файлы, поэтому равенство и есть инвариант.
+  // Существование файлов проверяется отдельно — опечатка в имени согласована в обоих
+  // списках и равенство прошла бы, выбирая при этом ноль файлов.
+  it('тесты с особым предметом вписаны и в исключения основного прогона, и в свой конфиг', async () => {
+    const load = async (file: string): Promise<{ include: string[]; exclude: string[] }> => {
+      const abs = join(ROOT, 'web', file);
+      expect(existsSync(abs), `нет конфигурации ${file}`).toBe(true);
+      const mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
+      const test = (mod.default as { test?: { include?: unknown; exclude?: unknown } })?.test;
+      const list = (v: unknown): string[] =>
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+      return { include: list(test?.include), exclude: list(test?.exclude) };
+    };
+
+    const base = await load('vitest.config.ts');
+    const specialised = [
+      ...(await load('vitest.build.config.ts')).include,
+      ...(await load('vitest.demo.config.ts')).include,
+    ];
+
+    expect(specialised, 'ни один специализированный конфиг ничего не выбирает').not.toEqual([]);
+    expect(
+      [...base.exclude].sort(),
+      'списки разошлись: файл исключён из основного прогона и не добавлен в специализированный ' +
+        '(или наоборот) — он не выполняется нигде либо выполняется без своего предмета',
+    ).toEqual([...specialised].sort());
+
+    const missing = specialised.filter((f) => !existsSync(join(ROOT, 'web', f)));
+    expect(missing, `в конфигурации перечислены несуществующие файлы:\n${missing.join('\n')}`).toEqual(
+      [],
+    );
   });
 
   // Стенд отдаётся с публичного адреса и содержит те же тексты, что боевой сайт. Пока

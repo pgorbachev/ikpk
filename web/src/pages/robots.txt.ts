@@ -1,7 +1,6 @@
 import type { APIRoute } from 'astro';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { isDemoForms } from '../lib/forms';
+import prodRobots from '../robots-prod.txt?raw';
 
 /**
  * `robots.txt` зависит от режима сборки.
@@ -38,8 +37,10 @@ export const GET: APIRoute = () => {
     );
   }
 
-  // Путь от корня пакета: сборка запускается из `web/` (и локально, и в CI, где у джоба
-  // задан working-directory: web).
-  const prod = readFileSync(join(process.cwd(), 'src', 'robots-prod.txt'), 'utf-8');
-  return new Response(prod, plainText);
+  // Файл втягивается СБОРЩИКОМ (`?raw`), а не читается с диска в момент рендера.
+  // Так путь не зависит ни от рабочего каталога, ни от того, куда Vite положит чанк:
+  // маршрут бандлится в `dist/.prerender/chunks/`, поэтому и `process.cwd()`, и
+  // `new URL(..., import.meta.url)` здесь — ловушки (второе проверено: сборка падает
+  // с ENOENT на `dist/.prerender/robots-prod.txt`).
+  return new Response(prodRobots, plainText);
 };
