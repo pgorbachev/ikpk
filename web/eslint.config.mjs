@@ -7,6 +7,10 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      // Вывод демо-сборки — такой же сгенерированный артефакт, как dist/. Без этой
+      // строки eslint шёл в собранный бандл и в индекс Pagefind: 1061 ошибка на коде,
+      // который мы не писали.
+      'dist-demo/**',
       '.astro/**',
       'node_modules/**',
       'playwright-report/**',

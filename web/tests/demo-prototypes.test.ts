@@ -7,11 +7,11 @@ import { seminarTeacherLabel } from '../src/lib/home.js';
  * Прототипы каркаса подачи (`/preview/{editorial,faculty,modular}`) — предмет ДЕМО-вывода.
  *
  * Переехали сюда из `tests/seo-package.test.ts`, где были обёрнуты в
- * `describe.skipIf(!isDemoBuildForPrototypes)`: тот файл читает боевой `dist`, а прототипы
+ * `describe.skipIf(!isDemoBuildForPrototypes)`: тот файл читает боевой `dist/`, а прототипы
  * существуют только в демо-сборке, поэтому в CI (`npm run build` → `test:build`) все
  * проверки уходили в skip. Это и есть TD-14 («Прототипы каркаса не защищены в CI»).
  *
- * После разведения выводов (`dist` / `dist-demo`) условие стало ненужным: этот файл
+ * После разведения выводов (`dist/` / `dist-demo`) условие стало ненужным: этот файл
  * запускается конфигурацией `vitest.demo.config.ts` строго по собранному демо-выводу, где
  * прототипы есть всегда. Отсутствие вывода роняет прогон (см. `demoPages`), а не пропускает
  * его, поэтому `skipIf` не вернулся под другим именем.

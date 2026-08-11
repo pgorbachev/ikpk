@@ -21,8 +21,15 @@ export default defineConfig({
   site: 'https://ikpk.su',
   integrations: [
     sitemap({
-      // /preview/* — noindex-черновики вариантов, вне карты сайта
-      filter: (page) => !page.includes('/sitemap') && !page.includes('/preview/'),
+      // Вне карты сайта:
+      // - /preview/* — noindex-черновики вариантов;
+      // - /demo-zayavka — заглушка форм демо-стенда, существует только в сборке с
+      //   DEMO_FORMS и помечена noindex. Приглашать краулера на noindex-страницу
+      //   значит тратить его бюджет и подавать противоречивые сигналы.
+      filter: (page) =>
+        !page.includes('/sitemap') &&
+        !page.includes('/preview/') &&
+        !page.includes('/demo-zayavka'),
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;

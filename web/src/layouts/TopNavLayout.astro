@@ -55,7 +55,8 @@ const {
       <slot />
     </main>
     <Footer />
-    <Analytics />
+    {/* Только боевая сборка — см. пояснение в BaseLayout.astro */}
+    {!isDemoForms && <Analytics />}
   </body>
 </html>
 
