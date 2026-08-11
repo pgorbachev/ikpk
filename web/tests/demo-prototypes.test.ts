@@ -45,19 +45,25 @@ function previewPath(id: string, suffix = ''): string {
 // семинары, преподаватели, видео, новости, CTA. Гейт — состав, не оформление.
 describe('прототипы каркаса', () => {
   const DIRECTIONS = ['editorial', 'faculty', 'modular'];
-  const REQUIRED = [
+  // Блок ближайших семинаров — четвёртое место с той же зависимостью от горизонта
+  // снапшота, что и блоки анонсов ниже: без будущих событий его нечем наполнить, и он
+  // исчезает. Держать его в безусловно обязательных значило бы оставить мину под
+  // публикацией ровно там, где она уже обезврежена рядом. Найдено измерением: сдвиг
+  // снапшота на пять лет назад ронял эти три проверки даже после починки блоков анонсов.
+  const ALWAYS = [
     { name: 'позиционирование (h1)', match: /<h1[^>]*>/ },
-    { name: 'ближайшие семинары', match: /Ближайшие семинары|upcoming/i },
     { name: 'три института', match: /Институт Апледжера/ },
     { name: 'преподаватели', match: /teacher-card|Преподаватели/i },
     { name: 'итоговый CTA', match: /cta-band|Записаться/i },
     { name: 'футер с контактами', match: /646-54-50/ },
   ];
+  const UPCOMING_BLOCK = { name: 'ближайшие семинары', match: /Ближайшие семинары|upcoming/i };
 
   for (const id of DIRECTIONS) {
     it(`/preview/${id}: обязательные блоки на месте`, () => {
       const html = readDemoPage(previewPath(id));
-      const missing = REQUIRED.filter(({ match }) => !match.test(html)).map((r) => r.name);
+      const required = hasUpcoming ? [...ALWAYS, UPCOMING_BLOCK] : ALWAYS;
+      const missing = required.filter(({ match }) => !match.test(html)).map((r) => r.name);
       expect(missing, `в прототипе ${id} нет блоков: ${missing.join(', ')}`).toEqual([]);
     });
   }
