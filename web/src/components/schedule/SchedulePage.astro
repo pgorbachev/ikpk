@@ -3,6 +3,7 @@ import ScheduleControlsScript from './ScheduleControlsScript.astro';
 import ScheduleFilters from './ScheduleFilters.astro';
 import ScheduleListing from './ScheduleListing.astro';
 import SchedulePageHeader from './SchedulePageHeader.astro';
+import type { MonthOption } from '../../lib/schedule-months';
 
 interface Option {
   label: string;
@@ -25,6 +26,7 @@ interface Card {
   imageUrl: string;
   instituteName: string;
   instituteSlug: string;
+  months: string[];
   priceLabel: string;
   programName: string;
   programSlug: string;
@@ -41,16 +43,17 @@ interface Props {
   cards: Card[];
   cities: string[];
   institutes: Option[];
+  months: MonthOption[];
   programs: ProgramOption[];
   title: string;
 }
 
-const { cards, cities, institutes, programs, title } = Astro.props as Props;
+const { cards, cities, institutes, months, programs, title } = Astro.props as Props;
 ---
 
 <section class="section schedule-section">
   <SchedulePageHeader title={title} />
-  <ScheduleFilters institutes={institutes} programs={programs} cities={cities} />
+  <ScheduleFilters institutes={institutes} programs={programs} cities={cities} months={months} />
   <ScheduleListing cards={cards} />
   <ScheduleControlsScript />
 </section>

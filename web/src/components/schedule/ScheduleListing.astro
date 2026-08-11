@@ -11,6 +11,7 @@ interface Card {
   imageUrl: string;
   instituteName: string;
   instituteSlug: string;
+  months: string[];
   priceLabel: string;
   programName: string;
   programSlug: string;
@@ -39,6 +40,13 @@ const { cards } = Astro.props as Props;
       data-program={card.programSlug}
       data-city={card.citySlug}
       data-search={card.searchIndex}
+      {/*
+        Ключи месяцев через пробел: сравнение идёт по ЦЕЛОМУ токену, а не по подстроке.
+        Подстроковое совпадение верно лишь случайно — из-за фиксированной ширины ключа;
+        при первом расширении формата (неделя, квартал) `2026-1` начало бы находить
+        карточки `2026-10` и `2026-11`, и обнаружил бы это посетитель, а не проверка.
+      */}
+      data-months={card.months.join(' ')}
     >
       <ScheduleEventCard
         title={card.title}

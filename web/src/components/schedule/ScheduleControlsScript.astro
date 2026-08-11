@@ -1,10 +1,11 @@
-<script is:inline>
+<script is:inline data-schedule-controls>
   (() => {
     const pageSize = 25;
     const search = document.querySelector('[data-schedule-search]');
     const institute = document.querySelector('[data-schedule-filter="institute"]');
     const program = document.querySelector('[data-schedule-filter="program"]');
     const city = document.querySelector('[data-schedule-filter="city"]');
+    const month = document.querySelector('[data-schedule-filter="month"]');
     const items = Array.from(document.querySelectorAll('[data-schedule-item]'));
     const pagination = document.querySelector('[data-schedule-pagination]');
     const empty = document.querySelector('[data-schedule-empty]');
@@ -18,6 +19,20 @@
       || !(empty instanceof HTMLElement)
     ) {
       return;
+    }
+
+    // Месяц НАМЕРЕННО не в условии выше. Ранний выход гасит все фильтры сразу, и
+    // добавление пятого контрола в ту же проверку сделало бы отсутствие месяца
+    // выключателем поиска, института, программы и города. В разметке контрол есть
+    // всегда, но отвечать за это условием раннего выхода нельзя.
+    const hasMonth = month instanceof HTMLSelectElement;
+
+    // Включается только когда есть что предложить: пустой список оставляет контрол
+    // выключенным, но не убирает его. Пункт с пустым значением не считается месяцем.
+    const monthOffered = hasMonth
+      && Array.from(month.options).some((option) => option.value !== '');
+    if (monthOffered) {
+      month.disabled = false;
     }
 
     const allProgramOptions = Array.from(program.options).map((option) => ({
@@ -52,12 +67,19 @@
 
     const getFilteredItems = () => {
       const term = search.value.trim().toLowerCase();
+      const selectedMonth = hasMonth ? month.value : '';
       return items.filter((item) => {
         const matchesInstitute = !institute.value || item.dataset.institute === institute.value;
         const matchesProgram = !program.value || item.dataset.program === program.value;
         const matchesCity = !city.value || item.dataset.city === city.value;
         const matchesSearch = !term || (item.dataset.search || '').includes(term);
-        return matchesInstitute && matchesProgram && matchesCity && matchesSearch;
+        // Сравнение по ЦЕЛОМУ токену, а не подстрокой: `includes` на строке признака
+        // нашёл бы «2026-1» внутри «2026-10» и «2026-11». Сегодня это не стреляет
+        // только потому, что ключ всегда ровно YYYY-MM, — то есть верно по
+        // случайности формата, а не по устройству.
+        const matchesMonth = !selectedMonth
+          || (item.dataset.months || '').split(' ').indexOf(selectedMonth) !== -1;
+        return matchesInstitute && matchesProgram && matchesCity && matchesSearch && matchesMonth;
       });
     };
 
@@ -160,6 +182,16 @@
       currentPage = 1;
       applyFilters();
     });
+    // Сброс на первую страницу обязателен: без него зажим номера страницы оставил бы
+    // посетителя на странице, которой в суженной выдаче больше нет. На реальных данных
+    // это ненаблюдаемо — самый населённый месяц укладывается в одну страницу, — поэтому
+    // сценарий проверяется синтетическим набором, а не браузерным тестом по данным.
+    if (hasMonth) {
+      month.addEventListener('change', () => {
+        currentPage = 1;
+        applyFilters();
+      });
+    }
 
     updateProgramOptions();
     applyFilters();
