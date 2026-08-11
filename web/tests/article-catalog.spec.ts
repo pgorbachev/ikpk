@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ─── Characterization-тесты: клиентское поведение каталога статей ────────────
-// Спецификация: openspec/changes/baseline-article-catalog/specs/article-catalog/spec.md
+// Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline
+// заархивирован; путь в changes/ больше не существует).
 // Revision, с которого снят baseline: feat/demo-mode-and-hero-photo@542151b.
 //
 // Здесь проверяется ровно то, что не видно в собранном HTML: охват поиска и

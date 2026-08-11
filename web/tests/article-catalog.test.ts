@@ -4,7 +4,8 @@ import { join } from 'path';
 import { dist, allPages, readPage } from './helpers/dist-pages';
 
 // ─── Characterization-тесты: каталог статей ──────────────────────────────────
-// Спецификация: openspec/changes/baseline-article-catalog/specs/article-catalog/spec.md
+// Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline
+// заархивирован; путь в changes/ больше не существует).
 // Revision, с которого снят baseline: feat/demo-mode-and-hero-photo@542151b.
 //
 // Тесты ЗЕЛЁНЫЕ по замыслу: они фиксируют уже принятое поведение, а не требуют
@@ -58,7 +59,10 @@ describe('каталог статей: источник данных', () => {
   it('обязательные поля заполнены у каждой записи', () => {
     const broken: string[] = [];
     for (const a of articles) {
-      for (const field of ['slug', 'title', 'body_html', 'seo_title', 'seo_description'] as const) {
+      // `image` здесь не для полноты списка: разметка `Article` обязана нести
+      // непустой `image`, а шаблон эмитит поле условно ([slug].astro:62), то есть
+      // запись без картинки прошла бы эту проверку и уронила проверку разметки.
+      for (const field of ['slug', 'title', 'body_html', 'seo_title', 'seo_description', 'image'] as const) {
         if (!String(a[field] ?? '').trim()) broken.push(`${a.slug || '<без slug>'}: пустое ${field}`);
       }
     }
@@ -451,14 +455,27 @@ describe('каталог статей: разметка страницы ста�
 });
 
 describe('каталог статей: связь между статьями', () => {
-  /** Ссылки блока «Другие статьи» в боковой колонке страницы статьи. */
+  /**
+   * Различные другие статьи, предлагаемые страницей статьи, — по ВСЕЙ странице.
+   *
+   * Раньше считалось только по `<aside … article-sidebar>`, и это измеряло одну из
+   * двух отрисовок: блоков «Другие статьи» на странице два и питаются они одним
+   * `relatedArticles` ([slug].astro:119 и :141). Предмет требования — набор
+   * различных статей, а не число блоков, поэтому и считать надо набор.
+   *
+   * Замерено на этой сборке: по всей странице и по объединению двух блоков наборы
+   * совпадают на всех 68 страницах (максимум 4), ссылок на саму себя нет ни одной.
+   * Названная граница: если статью когда-нибудь свяжут ссылкой из текста другой,
+   * это будет законный контент, а проверка сочтёт его пятой «другой статьёй». Тогда
+   * чинить надо не число, а предмет — отделять предлагаемую навигацию от ссылок в
+   * теле статьи; пока такого контента в каталоге нет.
+   */
   const relatedOf = (slug: string): string[] => {
     const html = readPage(articlePagePath(slug));
-    const aside = html.match(/<aside[^>]*article-sidebar[\s\S]*?<\/aside>/)?.[0] ?? '';
-    return [...new Set([...aside.matchAll(/href="\/statyi\/([^"]+)"/g)].map((m) => m[1]))];
+    return [...new Set([...html.matchAll(/href="\/statyi\/([^"]+)"/g)].map((m) => m[1]))];
   };
 
-  it('до четырёх ссылок на существующие статьи, без самой статьи', () => {
+  it('до четырёх различных других статей на странице, без самой статьи', () => {
     const known = new Set(articles.map((a) => a.slug));
     const problems: string[] = [];
     let withBlock = 0;
