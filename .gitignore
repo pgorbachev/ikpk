@@ -9,6 +9,9 @@ cms/build/
 cms/.cache/
 cms/.tmp/
 web/dist/
+# Вывод демо-сборки — отдельный каталог, чтобы проверки боевого и демо-вывода не
+# получали на вход чужой предмет (change deploy-gated-on-tests, решение 6).
+web/dist-demo/
 web/.astro/
 
 # Environment

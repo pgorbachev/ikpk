@@ -11,6 +11,10 @@ export default defineConfig({
       'tests/media-migration.test.ts',
       'tests/content-quality.test.ts',
       'tests/seo-package.test.ts',
+      // Предмет — вывод ДЕМО-сборки, конфигурация vitest.demo.config.ts
+      // (запускается через npm run test:demo, который его сначала собирает).
+      'tests/demo-output.test.ts',
+      'tests/demo-prototypes.test.ts',
     ],
   },
 });

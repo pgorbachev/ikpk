@@ -1,20 +1,12 @@
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
+import { walkFiles } from './walk';
 
 /** Общие хелперы обхода собранного dist/ для build-гейтов. */
 
 export const dist = join(import.meta.dirname, '..', '..', 'dist');
 
-export function* walkFiles(dir: string, exts: string[]): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      yield* walkFiles(full, exts);
-    } else if (exts.some((e) => name.endsWith(e))) {
-      yield full;
-    }
-  }
-}
+export { walkFiles };
 
 export function* walkHtml(dir: string = dist): Generator<string> {
   yield* walkFiles(dir, ['.html']);

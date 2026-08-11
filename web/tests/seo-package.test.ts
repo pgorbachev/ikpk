@@ -3,8 +3,6 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { gunzipSync } from 'zlib';
 import { join } from 'path';
 import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
-import { getSeminars } from '../src/lib/data.js';
-import { seminarTeacherLabel } from '../src/lib/home.js';
 
 // ─── Этап 3 (план 004): SEO-пакет как вечные CI-гейты ───────────────────────
 
@@ -375,6 +373,19 @@ describe('404 and sitemap', () => {
     expect(robots).toContain('Clean-param:');
     expect(robots).not.toContain('Disallow: /_astro/');
   });
+
+  // Симметрия к запрету обхода на стенде: `robots.txt` теперь генерируется маршрутом по
+  // режиму сборки, поэтому ошибка в условии закрыла бы от индексации БОЕВОЙ сайт целиком —
+  // отказ, который снаружи выглядит как «сайт просто пропал из выдачи». Проверка отвечает
+  // на обратный вопрос к демо-гейту: здесь обход обязан быть разрешён.
+  it('robots.txt боевой сборки не запрещает обход', () => {
+    const robots = readFileSync(join(dist, 'robots.txt'), 'utf-8');
+    expect(
+      robots,
+      `боевой robots.txt запрещает обход целиком — сайт закрыт от поисковиков:\n${robots}`,
+    ).not.toMatch(/^\s*Disallow:\s*\/\s*$/m);
+    expect(robots, 'боевой robots.txt не разрешает обход явно').toMatch(/^\s*Allow:\s*\/\s*$/m);
+  });
 });
 
 // ─── Заголовок и описание есть у КАЖДОЙ страницы ────────────────────────────
@@ -481,145 +492,5 @@ describe('редиректы легаси-адресов', () => {
       broken.slice(0, 10),
       `редиректов в никуда: ${broken.length}\n${broken.slice(0, 10).join('\n')}`,
     ).toEqual([]);
-  });
-});
-
-// ─── Прототипы каркаса (только DEMO_FORMS / build:demo) ─────────────────────
-// Прод-сборка не содержит /preview — гейты ниже skip'аются, а не «зеленеют»
-// на early-return. Иначе CI с `npm run build` измерял бы вакуум (AGENTS.md).
-// Содержимое проверяется локально/в job с `npm run build:demo`.
-const isDemoBuildForPrototypes = readPage('/').includes('data-demo-banner');
-
-function previewPath(id: string, suffix = ''): string {
-  const bare = `/preview/${id}${suffix}`;
-  return allPages().includes(bare) ? bare : `${bare}/`;
-}
-
-// План 005 §4.4: позиционирование, событие, доверие, институты, аудитории,
-// семинары, преподаватели, видео, новости, CTA. Гейт — состав, не оформление.
-describe.skipIf(!isDemoBuildForPrototypes)('прототипы каркаса', () => {
-  const DIRECTIONS = ['editorial', 'faculty', 'modular'];
-  const REQUIRED = [
-    { name: 'позиционирование (h1)', match: /<h1[^>]*>/ },
-    { name: 'ближайшие семинары', match: /Ближайшие семинары|upcoming/i },
-    { name: 'три института', match: /Институт Апледжера/ },
-    { name: 'преподаватели', match: /teacher-card|Преподаватели/i },
-    { name: 'итоговый CTA', match: /cta-band|Записаться/i },
-    { name: 'футер с контактами', match: /646-54-50/ },
-  ];
-
-  for (const id of DIRECTIONS) {
-    it(`/preview/${id}: обязательные блоки на месте`, () => {
-      const html = readPage(previewPath(id));
-      const missing = REQUIRED.filter(({ match }) => !match.test(html)).map((r) => r.name);
-      expect(missing, `в прототипе ${id} нет блоков: ${missing.join(', ')}`).toEqual([]);
-    });
-  }
-});
-
-// Подлинный фотоактив — только портреты преподавателей; остальное сток/CGI.
-// Без пометки владелец примет сток за съёмку. В бою служебной разметке не место.
-describe.skipIf(!isDemoBuildForPrototypes)('прототипы: происхождение изображений', () => {
-  it('на страницах прототипов есть пометки происхождения', () => {
-    const previews = allPages().filter((p) => p.startsWith('/preview/'));
-    const missing = previews.filter((p) => !readPage(p).includes('data-provenance-legend'));
-    expect(missing, `в прототипах нет пометок происхождения:\n${missing.join('\n')}`).toEqual([]);
-  });
-
-  it('служебная пометка не попадает в боевые страницы', () => {
-    const leaked = allPages()
-      .filter((p) => !p.startsWith('/preview/'))
-      .filter((p) => readPage(p).includes('data-provenance-legend'));
-    expect(leaked.slice(0, 5), `пометка прототипа на боевой странице:\n${leaked.slice(0, 5).join('\n')}`).toEqual([]);
-  });
-});
-
-// Направления различаются архитектурой подачи, не порядком секций (§7).
-describe.skipIf(!isDemoBuildForPrototypes)('прототипы: своя подача первого экрана', () => {
-  it('editorial подаёт ближайшее событие строкой-анонсом', () => {
-    const html = readPage(previewPath('editorial'));
-    expect(html, 'нет строки-анонса события').toContain('data-event-line');
-    expect(html, 'нет editorial hero').toContain('data-hero="editorial"');
-
-    const at = html.indexOf('data-event-line');
-    const line = html.slice(at, at + 900);
-    expect(line, 'в анонсе нет города').toMatch(/Санкт-Петербург|Москва|Онлайн|Уточняется|Челны|Новосибирск|Новгород/);
-    expect(line, 'в анонсе нет цены или пометки «бесплатно»').toMatch(/₽|Бесплатно/);
-  });
-
-  it('faculty подаёт событие карточкой с преподавателем', () => {
-    const html = readPage(previewPath('faculty'));
-    expect(html, 'нет faculty hero').toContain('data-hero="faculty"');
-    expect(html, 'нет карточки события с преподавателем').toContain('data-event-teacher');
-    expect(html, 'faculty не должен повторять строку editorial').not.toContain('data-event-line');
-  });
-
-  it('modular подаёт каталог: picker + сетка дат без строки editorial', () => {
-    const html = readPage(previewPath('modular'));
-    expect(html, 'нет modular hero').toContain('data-hero="modular"');
-    expect(html, 'нет модуля подбора').toContain('data-modular-picker');
-    expect(html, 'нет сетки дат').toContain('data-upcoming="modular"');
-    expect(html, 'нет траектории ступеней').toContain('data-tracks="modular"');
-    expect(html, 'modular не должен повторять строку editorial').not.toContain('data-event-line');
-  });
-
-  it('в остальных направлениях строки-анонса нет — подача отличается', () => {
-    for (const id of ['faculty', 'modular']) {
-      expect(readPage(previewPath(id)), `${id} повторяет подачу editorial`).not.toContain(
-        'data-event-line',
-      );
-    }
-  });
-
-  it('у каждого каркаса есть прототипы семинара (с датой и без) и расписания', () => {
-    for (const id of ['editorial', 'faculty', 'modular']) {
-      for (const suffix of ['', '/seminar', '/seminar-undated', '/schedule']) {
-        const path = previewPath(id, suffix);
-        expect(allPages().includes(path), `нет /preview/${id}${suffix}`).toBe(true);
-      }
-      const undatedPath = previewPath(id, '/seminar-undated');
-      const datedPath = previewPath(id, '/seminar');
-      expect(readPage(datedPath)).toContain(`data-seminar-architecture="${id}"`);
-      expect(readPage(undatedPath)).toContain('data-undated');
-      expect(readPage(undatedPath)).toContain(`data-seminar-architecture="${id}"`);
-    }
-  });
-
-  it('faculty с датой показывает дату в шапке', () => {
-    const html = readPage(previewPath('faculty', '/seminar'));
-    // dateLabel из formatScheduleDateRange: «5 сен» или «12–14 сен»
-    expect(html, 'нет data-атрибута faculty-шапки').toContain('data-seminar-architecture="faculty"');
-    expect(
-      html.match(/sem-fa-pills[\s\S]*?<li[^>]*>\d{1,2}(?:[–-]\d{1,2})?\s+[а-яё]{3}</),
-      'в pill-списке faculty нет даты',
-    ).not.toBeNull();
-  });
-
-  it('undated не приписывает чужого преподавателя института', () => {
-    // Сопоставление только через seminar.teachers — иначе Faculty врёт владельцу.
-    for (const id of ['editorial', 'faculty', 'modular'] as const) {
-      const html = readPage(previewPath(id, '/seminar-undated'));
-      const h1 = html.match(/<h1[^>]*>([^<]+)<\/h1>/)?.[1]?.trim();
-      expect(h1, `${id}: нет h1 семинара`).toBeTruthy();
-      const seminar = getSeminars().find((s) => s.name === h1);
-      expect(seminar, `${id}: семинар «${h1}» не найден в данных`).toBeTruthy();
-      const label = seminarTeacherLabel(seminar!.teachers);
-      const short = label.split(',')[0].trim();
-
-      if (id === 'faculty' || id === 'modular') {
-        if (!short) {
-          expect(html, `${id}: без teachers не должно быть «Ведёт»`).not.toMatch(/Ведёт\s/);
-        } else {
-          expect(html, `${id}: нет имени из seminar.teachers (${short})`).toContain(short);
-        }
-      }
-
-      // Типичная подмена: первый с фото у института при другом ведущем.
-      if (short && !short.includes('Пилявский')) {
-        expect(html, `${id}: чужой Пилявский при ведущем ${short}`).not.toMatch(
-          /Ведёт Пилявский Сергей Орестович/,
-        );
-      }
-    }
   });
 });

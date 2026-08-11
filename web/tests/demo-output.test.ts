@@ -1,0 +1,132 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+import { demoDist, demoPagePath, demoPages, readDemoFile } from './helpers/demo-dist';
+
+/**
+ * Гигиена вывода ДЕМО-сборки (`dist-demo`).
+ *
+ * Предмет этого файла — только демо-вывод. Боевой каталог здесь не читается сознательно:
+ * спека deploy-gating требует, чтобы проверка получала на вход ровно тот вывод, про
+ * который написана. Симметричные утверждения про боевой вывод («счётчики ЕСТЬ», «robots
+ * разрешает обход») живут в проверках с предметом `dist` — `tests/perf-a11y.test.ts`
+ * (блок `Analytics`) и `tests/seo-package.test.ts`. Разнесены не для удобства: проверка
+ * «счётчиков нет», получив боевой вывод, прошла бы мимо предмета, и наоборот.
+ *
+ * Отсутствие вывода не является успехом: перечисление страниц (`demoPages`) падает на
+ * пустом каталоге, поэтому пустой предмет роняет весь файл, а не проходит тихо.
+ */
+
+let pages: string[];
+let sources: Map<string, string>;
+
+beforeAll(() => {
+  pages = demoPages();
+  sources = new Map(pages.map((f) => [demoPagePath(f), readDemoFile(demoPagePath(f))]));
+});
+
+describe('демо-вывод: материал на месте', () => {
+  // Сторож против вырождения всех проверок ниже: они утверждают ОТСУТСТВИЕ (счётчиков,
+  // адреса в карте, разрешения обхода). Отсутствие тривиально верно для пустых файлов,
+  // поэтому сначала доказывается, что читаются настоящие собранные страницы.
+  it('в выводе есть собранные страницы сайта', () => {
+    expect(pages.length, `в '${demoDist}' нет html-страниц`).toBeGreaterThan(50);
+
+    const real = [...sources.values()].filter((html) => /<html[^>]*lang="ru"/.test(html));
+    expect(
+      real.length,
+      'ни одна страница демо-вывода не похожа на собранную страницу сайта — ' +
+        'проверки отсутствия ниже были бы тривиально зелёными',
+    ).toBeGreaterThan(50);
+  });
+
+  // Заглушка форм — причина существования демо-режима. Если её в выводе нет, то и
+  // проверка «её нет в карте сайта» ничего не значит.
+  it('страница-заглушка форм собрана', () => {
+    expect(
+      [...sources.keys()].filter((p) => p.includes('/demo-zayavka')),
+      'в демо-выводе нет страницы /demo-zayavka — режим демо-форм не собрался',
+    ).not.toEqual([]);
+  });
+});
+
+describe('демо-вывод: аналитика выключена (1а)', () => {
+  // Счётчики на стенде пишут в боевые Метрику и Mail.ru: показ заказчику попадает в
+  // статистику живого сайта, а цели и вебвизор собирают демонстрационные клики.
+  //
+  // Проверяются признаки из самого компонента `src/components/Analytics.astro`: id
+  // счётчиков, домены загрузки и очередь Mail.ru. Не имя компонента и не имя флага —
+  // они переименуемы, а вывод остаётся с трекингом.
+  const markers: [string, RegExp][] = [
+    ['id Яндекс.Метрики', /\b39506315\b/],
+    ['домен Яндекс.Метрики', /mc\.yandex\.ru/],
+    ['id Mail.ru top', /\b3752684\b/],
+    ['домен Mail.ru top', /top-fwz1\.mail\.ru/],
+    ['очередь Mail.ru', /_tmr/],
+  ];
+
+  for (const [what, re] of markers) {
+    it(`в демо-выводе нет: ${what}`, () => {
+      const hits = [...sources.entries()]
+        .filter(([, html]) => re.test(html))
+        .map(([path]) => path);
+      expect(
+        hits.slice(0, 10),
+        `${what} (${re}) присутствует в демо-выводе на ${hits.length} страницах — ` +
+          'стенд пишет в боевую аналитику заказчика',
+      ).toEqual([]);
+    });
+  }
+});
+
+describe('демо-вывод: служебные адреса вне карты сайта (1б)', () => {
+  const sitemapFiles = ['sitemap-index.xml', 'sitemap-0.xml'];
+
+  it('карта сайта собрана и не пуста', () => {
+    for (const file of sitemapFiles) {
+      const xml = readDemoFile(file);
+      expect(xml.length, `${file} пуст`).toBeGreaterThan(0);
+      expect(xml, `${file} не похож на карту сайта`).toContain('<?xml');
+    }
+    expect(
+      (readDemoFile('sitemap-0.xml').match(/<loc>/g) ?? []).length,
+      'в карте сайта нет ни одного адреса — проверка отсутствия служебного адреса ' +
+        'была бы тривиально зелёной',
+    ).toBeGreaterThan(50);
+  });
+
+  // Заглушка помечена noindex и существует только в демо-сборке. В карте сайта её быть
+  // не должно: карта — это приглашение к обходу, и приглашать на noindex-страницу значит
+  // тратить краулинговый бюджет и подавать противоречивые сигналы.
+  it('/demo-zayavka не попадает в карту сайта', () => {
+    const offenders = sitemapFiles
+      .map((file) => ({ file, xml: readDemoFile(file) }))
+      .filter(({ xml }) => xml.includes('/demo-zayavka'))
+      .map(({ file }) => file);
+    expect(
+      offenders,
+      'адрес /demo-zayavka присутствует в карте сайта демо-сборки, хотя страница ' +
+        'помечена noindex',
+    ).toEqual([]);
+  });
+});
+
+describe('демо-вывод: стенд закрыт от индексации (1д)', () => {
+  // Стенд отдаётся с публичного адреса и содержит те же тексты, что боевой сайт: без
+  // запрета обхода он конкурирует с ikpk.su в выдаче как дубль.
+  it('robots.txt запрещает обход целиком', () => {
+    const robots = readDemoFile('robots.txt');
+    expect(robots, 'robots.txt демо-вывода не запрещает обход').toMatch(
+      /^\s*Disallow:\s*\/\s*$/m,
+    );
+    expect(
+      /^\s*Allow:\s*\/\s*$/m.test(robots),
+      `robots.txt демо-вывода разрешает обход:\n${robots}`,
+    ).toBe(false);
+  });
+
+  it('robots.txt не приглашает индексировать карту сайта стенда', () => {
+    expect(
+      readDemoFile('robots.txt'),
+      'robots.txt стенда объявляет Sitemap — приглашение обойти демо-вывод',
+    ).not.toMatch(/^\s*Sitemap:/m);
+  });
+});
