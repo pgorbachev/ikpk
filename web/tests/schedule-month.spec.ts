@@ -290,6 +290,42 @@ test.describe('контрол месяца доступен', () => {
     ).toBe(true);
   });
 
+  // НОВАЯ ИНФРАСТРУКТУРА, объявляется вслух: это первый в проекте прогон с
+  // отключённым JavaScript (`javaScriptEnabled` до сих пор не встречался нигде).
+  // Она нужна именно здесь и только здесь: включение контрола скриптом происходит
+  // по ходу разбора документа, поэтому измерение в обычном браузерном тесте
+  // наблюдает уже конечное состояние и сдвига раскладки увидеть не может ни при
+  // каком дефекте. Второй контекст даёт состояние «до включения» честно.
+  test('включение контрола не сдвигает раскладку', async ({ page, browser }) => {
+    const measure = async (target: Page): Promise<{ control: unknown; first: unknown }> => {
+      const box = async (selector: string): Promise<unknown> => {
+        const rect = await target.locator(selector).first().boundingBox();
+        expect(rect, `${selector}: элемент не найден — измерять нечего`).not.toBeNull();
+        return {
+          x: Math.round(rect!.x),
+          y: Math.round(rect!.y),
+          width: Math.round(rect!.width),
+          height: Math.round(rect!.height),
+        };
+      };
+      return { control: await box(MONTH), first: await box(ITEM) };
+    };
+
+    const withoutJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 720 } });
+    const staticPage = await withoutJs.newPage();
+    const response = await staticPage.goto(PAGE);
+    expect(response?.status(), `${PAGE}: страница не отдалась без JavaScript — измерять нечего`).toBe(200);
+    await expect(staticPage.locator(MONTH), 'без JavaScript контрол месяца выглядит рабочим').toBeDisabled();
+    const before = await measure(staticPage);
+    await withoutJs.close();
+
+    await openSchedule(page);
+    const after = await measure(page);
+
+    expect(after.control, 'включение контрола изменило метрики его бокса').toEqual(before.control);
+    expect(after.first, 'включение контрола сдвинуло первую запись списка').toEqual(before.first);
+  });
+
   test('на экране 375 CSS-пикселей контрол виден, работает и не создаёт переполнения', async ({ page }) => {
     // Обычный кегль намеренно: проверка переполнения при удвоенном кегле на этой
     // странице помечена `fixme` по TD-5 и на новом дефекте не покраснеет.
@@ -437,6 +473,34 @@ test.describe('синтетический набор', () => {
 
     await page.locator(MONTH).selectOption('2026-1');
     expect((await shown(page)).map((entry) => entry.title)).toEqual(['Короткий ключ']);
+  });
+
+  test('событие на три месяца находится в каждом из них', async ({ page }) => {
+    // В данных самое длинное событие — 4 дня, поэтому случай проверяется только
+    // синтетически. Ключей у такого события три, и выбор ЛЮБОГО из них обязан его
+    // показывать: спека требует именно это, а не только «ключей три».
+    await mountSynthetic(
+      page,
+      [
+        { months: ['2026-11', '2026-12', '2027-01'], title: 'Долгий курс' },
+        { months: ['2026-11'], title: 'Только ноябрь' },
+      ],
+      ['2026-11', '2026-12', '2027-01'],
+    );
+
+    for (const key of ['2026-11', '2026-12', '2027-01']) {
+      await page.locator(MONTH).selectOption(key);
+      expect(
+        (await shown(page)).map((entry) => entry.title),
+        `при выборе ${key} долгое событие пропало из выдачи`,
+      ).toContain('Долгий курс');
+    }
+
+    await page.locator(MONTH).selectOption('2026-12');
+    expect(
+      (await shown(page)).map((entry) => entry.title),
+      'в декабре показана запись, которой там нет',
+    ).toEqual(['Долгий курс']);
   });
 
   test('пустой список месяцев оставляет контрол выключенным и не гасит остальные фильтры', async ({ page }) => {
