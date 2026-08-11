@@ -114,7 +114,7 @@ describe('прототипы: происхождение изображений'
  * Остаточная связь названа честно: сборка вызывает `getUpcomingSeminars()` в момент
  * сборки, а тест — в момент прогона. Разойтись они могут только на событии, истекающем
  * между сборкой и проверкой (в CI это секунды). Известное отклонение записано в
- * `docs/tech-debt.md`.
+ * `docs/tech-debt.md` (TD-17).
  */
 const upcoming = getUpcomingSeminars(1);
 const hasUpcoming = upcoming.length > 0;

@@ -566,7 +566,7 @@ Playwright не пытался собрать заодно файлы vitest (`*
 
 ---
 
-## TD-16. Проверки прототипов зависят от горизонта снапшота данных
+## TD-17. Проверки прототипов зависят от горизонта снапшота данных
 
 **Дата записи:** 2026-08-11. **Файлы:** `web/tests/demo-prototypes.test.ts`,
 `web/src/components/home/sections/{EventLine,EventTeacher,UpcomingModular}.astro`,
