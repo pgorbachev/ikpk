@@ -30,6 +30,16 @@ Thumbs.db
 .mcp.json
 .playwright-mcp/
 
+# Внутренние worktree агентов (`git worktree add .claude/worktrees/…`).
+# Каталог рабочий, а не артефакт: он висел в `git status` как untracked и
+# попадал в выводы поиска по репозиторию — то есть grep находил ВТОРУЮ копию
+# дерева и отвечал про неё. Игнорируем только `worktrees/`, а не `.claude/`
+# целиком: там же лежит закоммиченная интеграция OpenSpec
+# (`.claude/commands/opsx/**`, `.claude/skills/**` — 12 файлов), и правило на
+# весь каталог заставляло бы `git add` отказывать без `-f`. Та же причина, что
+# у `.codex/` ниже.
+.claude/worktrees/
+
 # Strapi uploads (local dev)
 cms/public/uploads/
 
