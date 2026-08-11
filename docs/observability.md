@@ -19,6 +19,8 @@
 | Strapi response time | Monitoring probe | Per check | 30 days |
 | Build duration | CI/CD logs (GitHub Actions) | Per build | Unlimited |
 | Build success/failure | CI/CD logs | Per build | Unlimited |
+| Payment service (`api.ikpk.su`) process status | systemd (`change/online-payment-flow`) | Continuous | 90 days |
+| Payment service refused to start (fail-closed: missing `RECEIPT_ENABLED`, corrupted idempotency store) | systemd log | Per event | Unlimited |
 
 ### Performance
 
@@ -136,6 +138,7 @@ jobs:
 | Homepage unreachable for ≥ 2 minutes | UptimeRobot | Email + Telegram | Check CDN status, DNS, deploy status |
 | 5xx rate > 1% for ≥ 5 minutes | CDN analytics alert | Email | Check CDN logs, redeploy if needed |
 | Strapi API unreachable for ≥ 5 minutes | UptimeRobot | Email + Telegram | Check VPS/cloud, restart Strapi |
+| Payment service (`api.ikpk.su`) refused to start or is down | systemd + UptimeRobot | Email + Telegram | Read fail-closed reason in log (`RECEIPT_ENABLED` unset, corrupted idempotency store — `openspec/changes/online-payment-flow/design.md`, Решения 2г/4а) before restarting; a silent restart with a stale/empty store defeats idempotency |
 
 ### Warning (investigate within 24 hours)
 
