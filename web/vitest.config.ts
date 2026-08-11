@@ -15,6 +15,7 @@ export default defineConfig({
       // (запускается через npm run test:demo, который его сначала собирает).
       'tests/demo-output.test.ts',
       'tests/demo-prototypes.test.ts',
+      'tests/schedule-month-dist.test.ts',
     ],
   },
 });

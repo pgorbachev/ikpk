@@ -9,6 +9,7 @@ export default defineConfig({
       'tests/media-migration.test.ts',
       'tests/content-quality.test.ts',
       'tests/seo-package.test.ts',
+      'tests/schedule-month-dist.test.ts',
     ],
   },
 });
