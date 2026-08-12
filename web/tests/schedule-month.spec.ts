@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scheduleSupplements } from '../src/lib/schedule-supplements';
 import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
+// Псевдоним, а не прямое имя: параметр `monthKeys` уже занят в `syntheticMarkup` и
+// `mountSynthetic`, и тень над импортом читалась бы как одно и то же.
+import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
 
 // ─── Браузерные проверки фильтра расписания по месяцу ────────────────────────
 // Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md
@@ -264,6 +267,8 @@ test.describe('месяц и остальное управление', () => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
+    // Требование закрывает синтетический сценарий `@month-pagination-return`; здесь —
+    // характеризация живого набора, и от хода времени она зависеть не должна.
     // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, — тем же приёмом и по
     // той же причине, что в `@month-supplement`: предмет «страниц больше одной»
     // исчезает от хода времени, а не от дефекта. Живых записей на 2026-08-12 — 64; окно
@@ -326,6 +331,9 @@ test.describe('месяц и остальное управление', () => {
       }))
       .find((candidate) => candidate.entry && months.includes(candidate.key));
 
+    // Требование закрывает синтетический сценарий `@month-supplement-synthetic`; здесь —
+    // характеризация живого набора, и от хода времени она зависеть не должна.
+    //
     // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, и обе ветки —
     // настоящие проверки.
     //
@@ -664,5 +672,79 @@ test.describe('синтетический набор', () => {
       (await shown(page)).map((entry) => entry.title),
       'без контрола месяца скрипт отказался работать целиком',
     ).toEqual(['Москва раз']);
+  });
+
+  test('пагинация скрывается выбором месяца и возвращается сбросом @month-pagination-return', async ({ page }) => {
+    // Требование «выбор месяца убирает пагинацию, сброс её возвращает» закрывается ЗДЕСЬ,
+    // а не проверкой по реальным данным: та требует больше 25 живых записей, а их число
+    // убывает от хода времени — на 2026-11-24 живых остаётся ровно 25, и предмет исчезает
+    // (TD-21). Здесь набор задаётся сам, поэтому от календаря сценарий не зависит вовсе.
+    // Рассуждение спеки про сброс страницы («на реальных данных ненаблюдаемо ⇒ фикстуры»)
+    // относится к половине «возвращается» дословно.
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      months: ['2026-11'],
+      title: `Ноябрь ${String(i + 1).padStart(2, '0')}`,
+    }));
+    const few = Array.from({ length: 3 }, (_, i) => ({ months: ['2026-12'], title: `Декабрь ${i + 1}` }));
+    await mountSynthetic(page, [...many, ...few], ['2026-11', '2026-12']);
+
+    // 33 записи при 25 на странице — две страницы, пагинация обязана быть.
+    await expect(page.locator(PAGINATION), 'при 33 записях пагинации нет').toBeVisible();
+
+    await page.locator(MONTH).selectOption('2026-12');
+    expect((await shown(page)).length, 'в декабре не три записи — набор смонтирован не так').toBe(3);
+    await expect(page.locator(PAGINATION), 'три записи, а пагинация осталась').toBeHidden();
+
+    await page.locator(MONTH).selectOption('');
+    expect((await shown(page)).length, 'после сброса видно не страницу записей').toBe(PAGE_SIZE);
+    await expect(page.locator(PAGINATION), 'сброс месяца не вернул пагинацию').toBeVisible();
+  });
+
+  test('заплатка достижима выбором своего месяца независимо от календаря @month-supplement-synthetic', async ({ page }) => {
+    // Требование «заплатка доступна через фильтр своего месяца» закрывается ЗДЕСЬ.
+    // Почему не проверкой по реальным данным: обе заплатки однодневные (2026-10-01 и
+    // 2026-10-08), и после 2026-10-08 окно актуальности законно уводит их со страницы —
+    // предмет исчезает от хода времени, и `@month-supplement` остаётся
+    // характеризационной проверкой живого набора, а не носителем требования (TD-20).
+    //
+    // Заплатка здесь НЕ придуманная: имя и даты берутся из `scheduleSupplements`, а
+    // ключи месяцев — из того же `monthKeys`, которым их считает сборка. Опорная дата
+    // задаётся первым днём самой заплатки, поэтому от календаря вывод не зависит.
+    expect(scheduleSupplements.length, 'заплаток в источнике нет — проверять было нечего')
+      .toBeGreaterThan(0);
+
+    for (const supplement of scheduleSupplements) {
+      const reference = (supplement.startAt ?? '').slice(0, 10);
+      const keys = monthKeysOf(supplement, reference);
+      expect(keys.length, `у заплатки «${supplement.name}» нет ключей месяца на ${reference}`)
+        .toBeGreaterThan(0);
+
+      const own = keys[0];
+      const other = own === '2027-01' ? '2027-02' : '2027-01';
+      const neighbour = `Обычная запись ${own}`;
+      await mountSynthetic(
+        page,
+        [
+          { months: keys, title: supplement.name },
+          { months: [own], title: neighbour },
+          { months: [other], title: `Обычная запись ${other}` },
+        ],
+        [own, other],
+      );
+
+      await page.locator(MONTH).selectOption(own);
+      const inOwn = (await shown(page)).map((entry) => entry.title);
+      expect(inOwn, `заплатка «${supplement.name}» не попала в выдачу своего месяца ${own}`)
+        .toContain(supplement.name);
+      expect(inOwn, `в месяце ${own} нет обычных записей — сценарий проверяет не то`).toContain(neighbour);
+
+      // Вторая половина: в чужом месяце заплатки быть не должно. Без неё сценарий был бы
+      // зелен и при фильтре, который не фильтрует вовсе.
+      await page.locator(MONTH).selectOption(other);
+      expect(
+        (await shown(page)).map((entry) => entry.title),
+        `заплатка «${supplement.name}» показана в чужом месяце ${other}`,
+      ).not.toContain(supplement.name);
+    }
   });
 });

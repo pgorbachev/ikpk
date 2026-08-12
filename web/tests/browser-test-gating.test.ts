@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
 import { loadWorkflows, publishingWorkflows, workflowRunTrigger, type Workflow } from './helpers/workflows';
+import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 
 // ─── Мета-гейт: браузерная проверка обязана исполняться в гейте публикации ────
 // Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md,
@@ -62,7 +63,9 @@ const MONTH_MARKERS = ['data-schedule-filter="month"', 'data-months'];
 
 /**
  * Метки браузерных сценариев фильтра месяца — объявление, с которым сверяется
- * СОБРАННЫЙ набор тестов.
+ * СОБРАННЫЙ набор тестов. Сам список лежит в `helpers/month-tags.ts`, потому что с ним
+ * сверяются ДВА гейта: этот (сбор) и `scripts/check-month-run.ts` (прогон). Две копии
+ * разошлись бы, и «объявлено» перестало бы быть одним фактом.
  *
  * Метка, а не название теста: названия переписывают при правке формулировок, и сверка
  * по ним краснела бы от переименования, то есть от работы, которая ничего не ломает.
@@ -71,32 +74,13 @@ const MONTH_MARKERS = ['data-schedule-filter="month"', 'data-months'];
  * Сверка СИММЕТРИЧНА: объявленная метка без теста и собранная метка без объявления
  * роняют гейт одинаково. Асимметричная сверка сделала бы «сценарий переименовали»
  * неотличимым от «сценарий потеряли».
+ *
+ * Граница этой сверки названа вслух: пропуск ВО ВРЕМЯ ПРОГОНА (`test.skip(true, …)` в
+ * теле) она увидеть не может — в собранном перечне такой тест выглядит как
+ * `expectedStatus: "passed"` без аннотаций. Ловится он только сверкой с прогоном, и
+ * потому вторая сверка живёт рядом с прогоном, а не здесь. Сам список и нормализация
+ * метки импортированы из `helpers/month-tags.ts` выше.
  */
-const EXPECTED_MONTH_TAGS = [
-  '@month-narrow',
-  '@month-city',
-  '@month-search-order',
-  '@month-empty-state',
-  '@month-url-stable',
-  '@month-cascade',
-  '@month-pagination',
-  '@month-supplement',
-  '@month-a11y-focus',
-  '@month-no-layout-shift',
-  '@month-mobile',
-  '@month-page-reset',
-  '@month-whole-key',
-  '@month-three-months',
-  '@month-empty-list',
-  '@month-missing-control',
-];
-
-/**
- * Playwright 1.62.1 кладёт метку в `tags` БЕЗ ведущей `@` (`@month-narrow` в имени →
- * `"month-narrow"` в перечне). Проверено прогоном; сверка, сравнивающая объявление с
- * полем напрямую, была бы красной по причине, не имеющей отношения к предмету.
- */
-const normalizeTag = (tag: string): string => tag.replace(/^@/, '');
 
 /** Workflow, успех которых требуется для публикации сайта. */
 function gatingWorkflows(all: Workflow[]): Workflow[] {
