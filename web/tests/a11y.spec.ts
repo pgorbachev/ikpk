@@ -155,12 +155,22 @@ test.describe('Видимый фокус', () => {
 
   for (const { path, selectors } of TARGETS) {
     test(`${path}: поля управления получают видимый фокус`, async ({ page }) => {
-      await page.goto(path);
+      // Код ответа утверждается: `page.goto` на несуществующем адресе отдаёт 404, где
+      // полей нет вовсе, — и проверка прошла бы по пустому списку.
+      const response = await page.goto(path);
+      expect(response?.status(), `${path} отдал не 200 — измерять фокус не на чем`).toBe(200);
 
       const invisible: string[] = [];
+      // Селектор, не нашедший предмета, — это «не смогла проверить», а не «дефектов нет».
+      // Прежняя редакция здесь делала `continue`, и при опечатках во всех трёх селекторах
+      // расписания проверялось НОЛЬ полей при зелёном прогоне (проверено мутацией).
+      const notFound: string[] = [];
       for (const selector of selectors) {
         const el = page.locator(selector).first();
-        if (!(await el.count())) continue;
+        if (!(await el.count())) {
+          notFound.push(`${path} ${selector}`);
+          continue;
+        }
 
         await el.focus();
         const info = await el.evaluate((node) => {
@@ -187,6 +197,10 @@ test.describe('Видимый фокус', () => {
         }
       }
 
+      expect(
+        notFound,
+        `эти селекторы не нашли ни одного поля — проверять было нечего:\n${notFound.join('\n')}`,
+      ).toEqual([]);
       expect(
         invisible,
         `поле в фокусе без видимого индикатора:\n${invisible.join('\n')}`,

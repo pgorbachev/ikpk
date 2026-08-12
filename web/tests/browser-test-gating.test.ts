@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
 import { loadWorkflows, publishingWorkflows, workflowRunTrigger, type Workflow } from './helpers/workflows';
@@ -140,7 +140,7 @@ function executedSpecFiles(all: Workflow[]): Set<string> {
       found.add(match[1].replace(/^tests\//, ''));
     }
     for (const match of command.matchAll(/npm\s+(?:run\s+)?([\w:-]+)/g)) {
-      const name = match[1] === 'test' ? 'test' : match[1];
+      const name = match[1];
       if (seen.has(name) || scripts[name] === undefined) continue;
       seen.add(name);
       expand(scripts[name]);
@@ -151,8 +151,27 @@ function executedSpecFiles(all: Workflow[]): Set<string> {
   return found;
 }
 
+/**
+ * Обход РЕКУРСИВНЫЙ, потому что предмет требования — «каждый файл браузерных проверок в
+ * репозитории», а плоский `readdirSync` перечислял частный случай. Playwright берёт
+ * `testDir: './tests'` с `testMatch: '**\/*.spec.ts'`, то есть подкаталоги тоже: файл-сирота
+ * в `tests/schedule-extra/` исполнялся бы наравне с корневым, а гейт его не видел
+ * (измерено на одном файле: в подкаталоге 6 passed, в корне 1 failed).
+ *
+ * Имена возвращаются путями ОТНОСИТЕЛЬНО `tests/` через `/` — в той же форме, в которой их
+ * даёт `executedSpecFiles` (там снимается префикс `tests/`), чтобы сверка обоих множеств
+ * шла в одной мере.
+ */
+function* walkSpecFiles(dir: string, prefix = ''): Generator<string> {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) yield* walkSpecFiles(full, `${prefix}${name}/`);
+    else if (name.endsWith('.spec.ts')) yield `${prefix}${name}`;
+  }
+}
+
 const specFiles = (): string[] => {
-  const files = readdirSync(TESTS_DIR).filter((name) => name.endsWith('.spec.ts'));
+  const files = [...walkSpecFiles(TESTS_DIR)];
   expect(files.length, `в ${TESTS_DIR} нет ни одного *.spec.ts — проверять нечего`).toBeGreaterThan(0);
   return files;
 };
@@ -224,11 +243,16 @@ function collectTests(all: Workflow[]): CollectedTest[] {
     // `--list` перечисляет тесты и НЕ поднимает `webServer` из playwright.config.ts
     // (проверено прогоном: ни одного слушающего порта до и после, сборки dist нет
     // вовсе). Поэтому сбор идёт подпроцессом отсюда и сайт при этом не собирается.
+    // `PLAYWRIGHT_JSON_OUTPUT_NAME` из окружения снимается: он есть в
+    // `npm run test:e2e:schedule`, и при нём JSON-репортёр пишет в ФАЙЛ, а не в stdout —
+    // разбор упал бы «вывод не разбирается как JSON» на исправном коде.
+    const { PLAYWRIGHT_JSON_OUTPUT_NAME: _ignored, ...env } = process.env;
     const run = spawnSync(PLAYWRIGHT_BIN, ['test', ...args, '--list', '--reporter=json'], {
       cwd: WEB_DIR,
       encoding: 'utf-8',
       timeout: 120_000,
       maxBuffer: 32 * 1024 * 1024,
+      env,
     });
 
     // Три исхода различаются по СОДЕРЖИМОМУ, а не по коду выхода: при несовпавшем
@@ -327,6 +351,8 @@ describe('браузерные проверки и гейт публикации
   });
 
   it('под каждую объявленную метку в собранном наборе есть выполняемый тест', () => {
+    // Пустое объявление — провал, а не успех: сверка с пустым списком меток проходит всегда.
+    expect(EXPECTED_MONTH_TAGS.length, 'объявленных меток месяца ноль — сверять нечего').toBeGreaterThan(0);
     const collected = collectTests(loadWorkflows());
     const live = new Set(
       collected.filter((test) => test.skipKind === undefined).flatMap((test) => test.tags),
