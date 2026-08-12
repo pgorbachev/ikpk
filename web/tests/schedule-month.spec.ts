@@ -86,6 +86,40 @@ async function offeredMonths(page: Page): Promise<string[]> {
 /** Записи выбранного месяца по признаку карточки — ожидание для выдачи. */
 const inMonth = (entries: Entry[], key: string): Entry[] => entries.filter((entry) => entry.months.includes(key));
 
+/** Запись снапшота в объёме, нужном для окна актуальности и склейки с заплатками. */
+interface SnapshotEntry {
+  status?: string;
+  startAt?: string;
+  endAt?: string;
+  seminar?: { slug?: string };
+}
+
+/**
+ * Сколько записей живо на дату `today` по ДАННЫМ и окну актуальности — то есть
+ * сколько их обязано быть на странице.
+ *
+ * Зачем второй счёт, если число записей видно на странице: ветка `@month-pagination`
+ * выбирается по странице, и она обязана отличать «записей мало законно, события
+ * прошли» от «записи потеряли». Первое видно только сверкой с данными.
+ *
+ * Почему снапшот читается напрямую, а не через `src/lib/data.ts`: тот модуль тянет
+ * `import.meta.env` (через `html-cleaner` → `forms`), которого в прогоне Playwright
+ * нет вовсе — импорт падает на `forms.ts:22`. Окно и склейка с заплатками берутся из
+ * тех же модулей, что у страницы (`schedule-window`, `schedule-supplements`), поэтому
+ * расходиться со сборкой может только правило склейки — и на этом ветка покраснеет,
+ * а не промолчит.
+ */
+function liveEntryCount(today: string): number {
+  const file = join(import.meta.dirname, '..', '..', 'discovery', 'entities', 'schedule_entries.json');
+  const base = JSON.parse(readFileSync(file, 'utf-8')) as SnapshotEntry[];
+  expect(base.length, `${file}: снапшот расписания пуст — считать нечего`).toBeGreaterThan(0);
+
+  const key = (entry: SnapshotEntry): string => `${entry.seminar?.slug}:${entry.startAt}`;
+  const known = new Set(base.map(key));
+  const all = [...base, ...(scheduleSupplements as SnapshotEntry[]).filter((entry) => !known.has(key(entry)))];
+  return all.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today)).length;
+}
+
 test.describe('выбор месяца сужает выдачу', () => {
   test('показаны только записи выбранного месяца @month-narrow', async ({ page }) => {
     const entries = await openSchedule(page);
@@ -109,19 +143,37 @@ test.describe('выбор месяца сужает выдачу', () => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
-    // Пара «месяц + город» подбирается по фактическим признакам страницы.
-    const pair = months
-      .flatMap((key) => inMonth(entries, key).map((entry) => ({ key, city: entry.city })))
-      .find(({ key, city }) => city && inMonth(entries, key).some((entry) => entry.city === city));
-    expect(pair, 'на странице нет пары «месяц + город» — проверять было нечего').toBeDefined();
+    // Пара «месяц + город» подбирается по фактическим признакам страницы, и
+    // предпочитается та, где пересечение СТРОГО меньше каждого из двух множеств.
+    // Прежняя редакция брала любую пару и проверяла, что в этом месяце есть запись с
+    // этим городом, — условие, ложным быть не способное: пара из такой записи и
+    // построена. Отбор без строгости пропускал бы случай, когда второй фильтр
+    // проигнорирован целиком: если весь месяц в одном городе, выдача «месяц» и выдача
+    // «месяц + город» совпадают, и подмена неотличима.
+    const candidates = months.flatMap((key) => [
+      ...new Set(inMonth(entries, key).map((entry) => entry.city).filter(Boolean)),
+    ].map((city) => ({ key, city })));
+    expect(candidates.length, 'ни у одной записи страницы нет города — пересечение проверять нечем')
+      .toBeGreaterThan(0);
 
-    const expected = inMonth(entries, pair!.key).filter((entry) => entry.city === pair!.city);
-    await page.locator(MONTH).selectOption(pair!.key);
-    await page.locator(CITY).selectOption(pair!.city);
+    const narrowing = candidates.find(({ key, city }) => {
+      const both = inMonth(entries, key).filter((entry) => entry.city === city).length;
+      const byCity = entries.filter((entry) => entry.city === city).length;
+      return both < inMonth(entries, key).length && both < byCity;
+    });
+    // Если строгой пары нет (в каждом месяце один город и каждый город в одном месяце),
+    // берётся любая: проверка пересечения остаётся верной, просто слабее. Падать из-за
+    // состава данных нельзя — по мере прохождения событий записей становится меньше, и
+    // строгих пар может не остаться на исправном коде.
+    const pair = narrowing ?? candidates[0];
+
+    const expected = inMonth(entries, pair.key).filter((entry) => entry.city === pair.city);
+    await page.locator(MONTH).selectOption(pair.key);
+    await page.locator(CITY).selectOption(pair.city);
 
     const visible = await shown(page);
     expect(visible.length).toBe(Math.min(expected.length, PAGE_SIZE));
-    const alien = visible.filter((entry) => !entry.months.includes(pair!.key) || entry.city !== pair!.city);
+    const alien = visible.filter((entry) => !entry.months.includes(pair.key) || entry.city !== pair.city);
     expect(alien.map((e) => e.title), 'выдача не является пересечением месяца и города').toEqual([]);
   });
 
@@ -212,8 +264,41 @@ test.describe('месяц и остальное управление', () => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
-    expect(entries.length, `без фильтров записей ${entries.length} — страница одна, скрывать нечего`)
-      .toBeGreaterThan(PAGE_SIZE);
+    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, — тем же приёмом и по
+    // той же причине, что в `@month-supplement`: предмет «страниц больше одной»
+    // исчезает от хода времени, а не от дефекта. Живых записей на 2026-08-12 — 64; окно
+    // актуальности убирает их по мере прохождения событий, и на 2026-11-24 живых
+    // остаётся ровно 25, то есть требование «больше 25» перестало бы выполняться на
+    // исправном коде — внутри единственного прогона, который держит публикацию (TD-21).
+    // Падать нельзя: ложное красное в гейте публикации дороже ложного зелёного. `skip`
+    // нельзя тоже: помеченный тест в собранном наборе виден, но выполняемым не
+    // считается, и мета-гейт покраснел бы по метке `@month-pagination`.
+    if (entries.length <= PAGE_SIZE) {
+      // Страница одна, скрывать нечего — но ветка не пустая, а утверждает наблюдаемое с
+      // двух сторон. Первое: столько записей и должно быть по данным; если по снапшоту и
+      // окну живых больше страницы, значит записи потеряны, и ветка краснеет. Второе:
+      // при одной странице пагинации не должно быть ни до выбора месяца, ни после, ни
+      // после сброса — это ловит обратный дефект, «пагинация показана всегда».
+      const today = calendarToday();
+      const live = liveEntryCount(today);
+      expect(
+        live,
+        `на странице записей ${entries.length}, не больше страницы, а по снапшоту и окну актуальности на ${today} живых ${live} — записи потеряны`,
+      ).toBeLessThanOrEqual(PAGE_SIZE);
+
+      await expect(page.locator(PAGINATION), 'при одной странице пагинация показана').toBeHidden();
+
+      const single = months.find((key) => inMonth(entries, key).length > 0);
+      expect(single, 'ни в одном предложенном месяце нет записей — контрол расходится с выдачей')
+        .toBeDefined();
+      await page.locator(MONTH).selectOption(single!);
+      await expect(page.locator(PAGINATION), 'выбор месяца создал пагинацию из одной страницы').toBeHidden();
+
+      await page.locator(MONTH).selectOption('');
+      await expect(page.locator(PAGINATION), 'сброс месяца создал пагинацию из одной страницы').toBeHidden();
+      return;
+    }
+
     await expect(page.locator(PAGINATION)).toBeVisible();
 
     const key = months.find((m) => inMonth(entries, m).length > 0 && inMonth(entries, m).length <= PAGE_SIZE);
