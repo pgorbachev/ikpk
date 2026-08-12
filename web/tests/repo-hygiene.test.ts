@@ -321,6 +321,10 @@ describe('гигиена репозитория', () => {
     const specialised = [
       ...(await load('vitest.build.config.ts')).include,
       ...(await load('vitest.demo.config.ts')).include,
+      // Рендер компонента через Astro Container API: своя конфигурация нужна из-за
+      // vite-плагина Astro, поэтому файл живёт в тех же двух списках, что и остальные
+      // тесты с особым предметом.
+      ...(await load('vitest.render.config.ts')).include,
     ];
 
     expect(specialised, 'ни один специализированный конфиг ничего не выбирает').not.toEqual([]);

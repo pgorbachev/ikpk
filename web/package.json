@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "astro check",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:render",
     "test:build": "npm run build && vitest run --config vitest.build.config.ts",
     "test:build:remote": "npm run build && PARITY_REMOTE=1 PARITY_REMOTE_STRICT=1 vitest run --config vitest.build.config.ts",
     "test:e2e": "npm run test:e2e:smoke && npm run test:e2e:a11y",
@@ -37,7 +37,8 @@
     "data:refresh:dry": "tsx scripts/refresh-catalog.ts --dry",
     "test:e2e:visual": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile",
     "test:e2e:visual:update": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots",
-    "check:month-run": "tsx scripts/check-month-run.ts"
+    "check:month-run": "tsx scripts/check-month-run.ts",
+    "test:render": "vitest run --config vitest.render.config.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
