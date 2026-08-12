@@ -35,6 +35,7 @@ export const EXPECTED_MONTH_TAGS = [
   '@month-pagination-return',
   '@month-supplement',
   '@month-supplement-synthetic',
+  '@month-city-synthetic',
   '@month-a11y-focus',
   '@month-no-layout-shift',
   '@month-mobile',

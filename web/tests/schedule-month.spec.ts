@@ -95,15 +95,17 @@ interface SnapshotEntry {
   startAt?: string;
   endAt?: string;
   seminar?: { slug?: string };
+  city?: { name?: string } | null;
 }
 
 /**
- * Сколько записей живо на дату `today` по ДАННЫМ и окну актуальности — то есть
- * сколько их обязано быть на странице.
+ * Живые записи расписания по ДАННЫМ на дату `today`: склейка снапшота с заплатками,
+ * пропущенная через то же окно актуальности, что и страница.
  *
- * Зачем второй счёт, если число записей видно на странице: ветка `@month-pagination`
- * выбирается по странице, и она обязана отличать «записей мало законно, события
- * прошли» от «записи потеряли». Первое видно только сверкой с данными.
+ * Зачем второй счёт, если содержимое страницы видно глазами: ветки `@month-pagination`
+ * и `@month-city` выбираются по странице, и они обязаны отличать «предмета мало
+ * законно, события прошли» от «предмет потеряли». Первое видно только сверкой с
+ * данными.
  *
  * Почему снапшот читается напрямую, а не через `src/lib/data.ts`: тот модуль тянет
  * `import.meta.env` (через `html-cleaner` → `forms`), которого в прогоне Playwright
@@ -112,7 +114,7 @@ interface SnapshotEntry {
  * расходиться со сборкой может только правило склейки — и на этом ветка покраснеет,
  * а не промолчит.
  */
-function liveEntryCount(today: string): number {
+function liveSnapshotEntries(today: string): SnapshotEntry[] {
   const file = join(import.meta.dirname, '..', '..', 'discovery', 'entities', 'schedule_entries.json');
   const base = JSON.parse(readFileSync(file, 'utf-8')) as SnapshotEntry[];
   expect(base.length, `${file}: снапшот расписания пуст — считать нечего`).toBeGreaterThan(0);
@@ -120,8 +122,46 @@ function liveEntryCount(today: string): number {
   const key = (entry: SnapshotEntry): string => `${entry.seminar?.slug}:${entry.startAt}`;
   const known = new Set(base.map(key));
   const all = [...base, ...(scheduleSupplements as SnapshotEntry[]).filter((entry) => !known.has(key(entry)))];
-  return all.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today)).length;
+  return all.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today));
 }
+
+/** Сколько записей обязано быть на странице на дату `today`. */
+const liveEntryCount = (today: string): number => liveSnapshotEntries(today).length;
+
+/**
+ * Есть ли по ДАННЫМ на дату `today` СТРОГАЯ пара «месяц + город» — такая, где
+ * пересечение меньше и множества месяца, и множества города.
+ *
+ * Это счёт для ветки «предмета нет» в `@month-city`: страница может лишиться строгой
+ * пары законно (события прошли) и от дефекта (записи потеряны, признак города
+ * испорчен). Различает эти два случая только сверка с данными.
+ *
+ * Города здесь группируются по ИМЕНИ, а страница — по слагу
+ * (`slugify` в `raspisanie-i-tseny.astro`; модуля у неё нет, и копировать функцию сюда
+ * значило бы завести второй носитель правила). Группировки совпадают, пока слаги
+ * различны и город есть у каждой записи; на сегодняшних данных это так (6 имён → 6
+ * слагов, записей без города 0), но проверка на это НЕ полагается: ветка сверяет число
+ * групп на странице с числом имён в данных и краснеет при расхождении.
+ */
+function strictPairInData(today: string): boolean {
+  const entries = liveSnapshotEntries(today).map((entry) => ({
+    months: monthKeysOf(entry, today),
+    city: entry.city?.name ?? '',
+  }));
+  const months = [...new Set(entries.flatMap((entry) => entry.months))];
+  return months.some((key) => {
+    const inKey = entries.filter((entry) => entry.months.includes(key));
+    return [...new Set(inKey.map((entry) => entry.city).filter(Boolean))].some((city) => {
+      const both = inKey.filter((entry) => entry.city === city).length;
+      const byCity = entries.filter((entry) => entry.city === city).length;
+      return both < inKey.length && both < byCity;
+    });
+  });
+}
+
+/** Города живых записей по ДАННЫМ на дату `today` — по имени, см. `strictPairInData`. */
+const liveCityNames = (today: string): Set<string> =>
+  new Set(liveSnapshotEntries(today).map((entry) => entry.city?.name ?? '').filter(Boolean));
 
 test.describe('выбор месяца сужает выдачу', () => {
   test('показаны только записи выбранного месяца @month-narrow', async ({ page }) => {
@@ -164,20 +204,73 @@ test.describe('выбор месяца сужает выдачу', () => {
       const byCity = entries.filter((entry) => entry.city === city).length;
       return both < inMonth(entries, key).length && both < byCity;
     });
-    // Если строгой пары нет (в каждом месяце один город и каждый город в одном месяце),
-    // берётся любая: проверка пересечения остаётся верной, просто слабее. Падать из-за
-    // состава данных нельзя — по мере прохождения событий записей становится меньше, и
-    // строгих пар может не остаться на исправном коде.
-    const pair = narrowing ?? candidates[0];
 
-    const expected = inMonth(entries, pair.key).filter((entry) => entry.city === pair.city);
-    await page.locator(MONTH).selectOption(pair.key);
-    await page.locator(CITY).selectOption(pair.city);
+    /** Выдача при выбранной паре есть в точности пересечение месяца и города. */
+    const assertIntersection = async (pair: { key: string; city: string }): Promise<void> => {
+      const expected = inMonth(entries, pair.key).filter((entry) => entry.city === pair.city);
+      await page.locator(MONTH).selectOption(pair.key);
+      await page.locator(CITY).selectOption(pair.city);
 
-    const visible = await shown(page);
-    expect(visible.length).toBe(Math.min(expected.length, PAGE_SIZE));
-    const alien = visible.filter((entry) => !entry.months.includes(pair.key) || entry.city !== pair.city);
-    expect(alien.map((e) => e.title), 'выдача не является пересечением месяца и города').toEqual([]);
+      const visible = await shown(page);
+      expect(visible.length).toBe(Math.min(expected.length, PAGE_SIZE));
+      const alien = visible.filter((entry) => !entry.months.includes(pair.key) || entry.city !== pair.city);
+      expect(alien.map((e) => e.title), 'выдача не является пересечением месяца и города').toEqual([]);
+    };
+
+    // Требование закрывает синтетический сценарий `@month-city-synthetic`; здесь —
+    // характеризация живого набора, и от хода времени она зависеть не должна.
+    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, — тем же приёмом и по
+    // той же причине, что в `@month-supplement` и `@month-pagination`.
+    //
+    // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2027-05-24. Вычислена, а не оценена: склейка снапшота
+    // `discovery/entities/schedule_entries.json` с `scheduleSupplements` по ключу
+    // `slug:startAt`, затем `status === 'active'` и `isCurrentOrFuture`, затем
+    // `monthKeys` — те же модули, которыми пользуется сборка, — перебором календарных
+    // дат. Строгая пара есть по 2027-05-23 включительно (живых 6: май — 2 записи в
+    // Петербурге и 1 в Москве); с 2027-05-24 живых 4, и в каждом живом месяце остаётся
+    // ровно один город, то есть строгой пары нет ни одной. Срок и лечение — в TD-25.
+    // Падать нельзя: ложное красное в гейте публикации дороже ложного зелёного. `skip`
+    // нельзя тоже: помеченный тест в собранном наборе виден, но выполняемым не
+    // считается, и мета-гейт покраснел бы по метке `@month-city`.
+    if (narrowing === undefined) {
+      // Строгой пары на странице нет. Это законно, только если её нет и по данным; если
+      // по данным она есть, значит записи потеряны или испорчен признак города — и тогда
+      // ветка краснеет.
+      const today = calendarToday();
+      expect(
+        strictPairInData(today),
+        `на странице нет пары «месяц + город» с пересечением строго меньше каждого из двух множеств, а по снапшоту и окну актуальности на ${today} такая пара есть — записи потеряны`,
+      ).toBe(false);
+
+      // Счёт выше группирует города по имени, страница — по слагу. Ветка не полагается
+      // на совпадение группировок, а проверяет его: разойдись они — счёт был бы не о том
+      // предмете, и «строгой пары нет по данным» ничего бы не значило.
+      const pageCities = new Set(entries.map((entry) => entry.city).filter(Boolean));
+      const dataCities = liveCityNames(today);
+      expect(
+        pageCities.size,
+        `городов на странице ${pageCities.size}, а по данным на ${today} их ${dataCities.size} — счёт строгих пар считает не тот предмет`,
+      ).toBe(dataCities.size);
+
+      // Остаток требования, наблюдаемый и без строгой пары. Пересечение слабее (при
+      // вырожденной паре оно совпадает с выдачей месяца), но ложным быть способно —
+      // выключенный фильтр месяца показал бы записи чужих месяцев. Вторая половина
+      // смотрит на город отдельно: он обязан сужать выдачу и без месяца.
+      const degenerate = candidates[0];
+      await assertIntersection(degenerate);
+
+      await page.locator(MONTH).selectOption('');
+      const cityOnly = (await shown(page)).map((entry) => entry.title).sort();
+      const expectedCity = entries
+        .filter((entry) => entry.city === degenerate.city)
+        .slice(0, PAGE_SIZE)
+        .map((entry) => entry.title)
+        .sort();
+      expect(cityOnly, `город ${degenerate.city} перестал сужать выдачу`).toEqual(expectedCity);
+      return;
+    }
+
+    await assertIntersection(narrowing);
   });
 
   test('месяц и поиск дают один набор в любом порядке @month-search-order', async ({ page }) => {
@@ -716,6 +809,49 @@ test.describe('синтетический набор', () => {
     await page.locator(MONTH).selectOption('');
     expect((await shown(page)).length, 'после сброса видно не страницу записей').toBe(PAGE_SIZE);
     await expect(page.locator(PAGINATION), 'сброс месяца не вернул пагинацию').toBeVisible();
+  });
+
+  test('месяц вместе с городом даёт пересечение независимо от календаря @month-city-synthetic', async ({ page }) => {
+    // Требование «выбор месяца складывается с городом» закрывается ЗДЕСЬ.
+    // Почему не проверкой по реальным данным: там нужна пара «месяц + город», у которой
+    // пересечение строго меньше и множества месяца, и множества города. С 2027-05-24
+    // такой пары не остаётся — в каждом живом месяце будет ровно один город (TD-25). На
+    // вырожденной паре выдача «месяц + город» совпадает с выдачей «месяц», и проверка
+    // зелена даже при полностью выключенном фильтре города. Здесь набор задаётся сам,
+    // поэтому от календаря вывод не зависит вовсе.
+    await mountSynthetic(
+      page,
+      [
+        { months: ['2026-11'], city: 'moskva', title: 'Ноябрь Москва раз' },
+        { months: ['2026-11'], city: 'moskva', title: 'Ноябрь Москва два' },
+        { months: ['2026-11'], city: 'onlayn', title: 'Ноябрь Онлайн' },
+        { months: ['2026-12'], city: 'moskva', title: 'Декабрь Москва' },
+        { months: ['2026-12'], city: 'onlayn', title: 'Декабрь Онлайн' },
+      ],
+      ['2026-11', '2026-12'],
+    );
+
+    // Набор построен строгим: в ноябре 3 записи, в Москве 3, на пересечении 2. Поэтому
+    // он различает четыре поведения, из которых на вырожденных данных неразличимы три:
+    // фильтров нет вовсе (5), работает только месяц (3), только город (3), оба (2).
+    const both = ['Ноябрь Москва два', 'Ноябрь Москва раз'];
+
+    await page.locator(MONTH).selectOption('2026-11');
+    await page.locator(CITY).selectOption('moskva');
+    expect(
+      (await shown(page)).map((entry) => entry.title).sort(),
+      'выдача не является пересечением месяца и города',
+    ).toEqual(both);
+
+    // Порядок задания условий результата не меняет — то же требование говорит и это.
+    await page.locator(MONTH).selectOption('');
+    await page.locator(CITY).selectOption('');
+    await page.locator(CITY).selectOption('moskva');
+    await page.locator(MONTH).selectOption('2026-11');
+    expect(
+      (await shown(page)).map((entry) => entry.title).sort(),
+      'результат зависит от порядка, в котором заданы месяц и город',
+    ).toEqual(both);
   });
 
   test('заплатка достижима выбором своего месяца независимо от календаря @month-supplement-synthetic', async ({ page }) => {
