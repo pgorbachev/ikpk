@@ -69,24 +69,50 @@ function readJsonl(file) {
   const lines = raw.split('\n').filter((l) => l.length > 0);
   const out = [];
   let broken = 0;
-  for (const line of lines) {
+  let lastBroken = false;
+  lines.forEach((line, i) => {
     try {
       out.push(JSON.parse(line));
     } catch {
       broken += 1;
+      lastBroken = i === lines.length - 1;
     }
-  }
-  return { entries: out, broken, total: lines.length };
+  });
+  // Недописанная ПОСЛЕДНЯЯ строка — это идущая прямо сейчас запись живой сессии, а не
+  // повреждение: транскрипт пишется построчно, и файл можно прочитать посреди строки.
+  // Любая другая битая строка — потеря данных, о которой нельзя молчать.
+  const partialTail = broken === 1 && lastBroken;
+  return { entries: out, broken, total: lines.length, partialTail };
 }
 
 // Один шаг модели: сколько токенов он прочитал, записал и выдал.
+//
+// ОДИН ответ модели лежит в транскрипте НЕСКОЛЬКИМИ строками — по строке на блок
+// содержимого (`thinking`, `text`, каждый `tool_use`), и в каждой строке копия одного и
+// того же `usage`. Проверено на `db3e9ed9`: 1526 строк с `usage` против 885 ответов, до
+// шести строк на ответ, и во всех 435 групп `usage` побайтово одинаков. Считать строками
+// значит завышать и вызовы, и расход примерно вдвое, а вместе с ними среднее и признак
+// долгоживущего агента. Поэтому `usage` учитывается один раз на идентификатор ответа.
+//
+// Ключ — `message.id`, при его отсутствии `requestId`. Если нет ни того, ни другого,
+// строка считается отдельным ответом (уникальный ключ): молча слить два ответа хуже, чем
+// не слить один, — и число таких строк возвращается наружу, а не проглатывается.
 function steps(entries) {
   const out = [];
+  const seen = new Set();
+  let unkeyed = 0;
   for (const e of entries) {
     const u = e && e.type === 'assistant' && e.message && e.message.usage;
     if (!u) continue;
     const model = String((e.message.model || '?')).replace(/^claude-/, '');
     if (model === '<synthetic>') continue; // не запрос к модели: сообщение самой оболочки
+    let key = e.message.id || e.requestId;
+    if (!key) {
+      unkeyed += 1;
+      key = `без-идентификатора:${unkeyed}`;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
     const read = u.cache_read_input_tokens || 0;
     const write = u.cache_creation_input_tokens || 0;
     const input = u.input_tokens || 0;
@@ -102,7 +128,7 @@ function steps(entries) {
       weighted: read * W.read + write * W.write + input * W.input + output * W.output,
     });
   }
-  return out;
+  return { steps: out, unkeyed };
 }
 
 function summarize(name, st) {
@@ -195,17 +221,31 @@ function main() {
   if (match.length > 1) die(`префикс «${arg}» подходит нескольким сессиям: ${match.join(', ')}`);
 
   const id = match[0].replace(/\.jsonl$/, '');
-  const mainFile = path.join(dir, match[0]);
-  const parsed = readJsonl(mainFile);
-  const mainSteps = steps(parsed.entries);
+
+  // Проверка полноты одна для всех транскриптов: у главного и у субагентов формат один,
+  // и две отдельные ветки разошлись бы — у субагентов её и не было.
+  const flaws = [];
+  const notes = [];
+  const measure = (file, who) => {
+    const parsed = readJsonl(file);
+    const { steps: st, unkeyed } = steps(parsed.entries);
+    if (parsed.partialTail) {
+      notes.push(`${who}: последняя строка недописана — сессия пишется прямо сейчас`);
+    } else if (parsed.broken > 0) {
+      flaws.push(
+        `${who}: ${parsed.broken} из ${parsed.total} строк не разобраны` +
+          (st.length === 0 ? ' — исполнитель в отчёт не попал вовсе' : ', числа неполны'),
+      );
+    }
+    if (unkeyed > 0) {
+      flaws.push(`${who}: ${unkeyed} строк без идентификатора ответа, расход может быть завышен`);
+    }
+    return st;
+  };
+
+  const mainSteps = measure(path.join(dir, match[0]), 'главный цикл');
   if (mainSteps.length === 0) {
     die(`в транскрипте ${id} нет ни одного вызова модели — измерять нечего`);
-  }
-  if (parsed.broken > parsed.total * 0.05) {
-    process.stderr.write(
-      `session-cost: внимание — ${parsed.broken} из ${parsed.total} строк не разобраны, ` +
-        'числа ниже неполны\n',
-    );
   }
 
   const rows = [summarize('(главный цикл)', mainSteps)];
@@ -218,9 +258,10 @@ function main() {
     const files = fs.readdirSync(subDir).filter((f) => f.endsWith('.jsonl'));
     if (files.length === 0) subNote = 'каталог субагентов пуст';
     for (const f of files) {
-      const st = steps(readJsonl(path.join(subDir, f)).entries);
+      const name = agentName(subDir, f);
+      const st = measure(path.join(subDir, f), name);
       if (st.length === 0) continue;
-      rows.push(summarize(agentName(subDir, f), st));
+      rows.push(summarize(name, st));
     }
   }
 
@@ -260,7 +301,13 @@ function main() {
       `Расход (взвешенно, прокси по отношениям цен): ${m(total.weighted)}; ` +
       `субагенты ${total.weighted ? Math.round((agentW / total.weighted) * 100) : 0}%\n`,
   );
+  process.stdout.write(
+    `Ответы модели считаны по идентификатору: один ответ — одна строка отчёта, ` +
+      'сколько бы записей он ни занимал в транскрипте.\n',
+  );
   if (subNote) process.stdout.write(`Примечание: ${subNote}\n`);
+  for (const n of notes) process.stdout.write(`Примечание: ${n}\n`);
+  for (const f of flaws) process.stdout.write(`НЕПОЛНО: ${f}\n`);
 
   const bad = [rows[0], ...all].filter(overCtx);
   const long = all.filter((r) => longLived(r, true));
@@ -289,7 +336,17 @@ function main() {
       'Агента закрыть финальным отчётом и переоткрыть работу с чистым контекстом; ' +
         'сессию — сжать или разрезать по шву работы.\n',
     );
+    // Превышение — положительная находка: она верна и при неполных данных.
     process.exit(1);
+  }
+  if (flaws.length > 0) {
+    // «Никто не превысил» на неполных данных — это «не смогла измерить», а не успех:
+    // недосчитанный или вовсе пропущенный исполнитель мог быть как раз за порогом.
+    process.stdout.write(
+      '\nЗа порогом никого не видно, но измерение неполно (см. НЕПОЛНО выше) — ' +
+        'утверждать, что все в пределах, нельзя.\n',
+    );
+    process.exit(2);
   }
   process.stdout.write('\nВсе исполнители в пределах порога по контексту.\n');
   process.exit(0);
