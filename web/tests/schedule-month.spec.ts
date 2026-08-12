@@ -86,7 +86,7 @@ async function offeredMonths(page: Page): Promise<string[]> {
 const inMonth = (entries: Entry[], key: string): Entry[] => entries.filter((entry) => entry.months.includes(key));
 
 test.describe('выбор месяца сужает выдачу', () => {
-  test('показаны только записи выбранного месяца', async ({ page }) => {
+  test('показаны только записи выбранного месяца @month-narrow', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
     // Берём самый населённый из предложенных: на нём видно и сужение, и что
@@ -104,7 +104,7 @@ test.describe('выбор месяца сужает выдачу', () => {
       .toEqual([]);
   });
 
-  test('месяц вместе с городом даёт пересечение', async ({ page }) => {
+  test('месяц вместе с городом даёт пересечение @month-city', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
@@ -124,7 +124,7 @@ test.describe('выбор месяца сужает выдачу', () => {
     expect(alien.map((e) => e.title), 'выдача не является пересечением месяца и города').toEqual([]);
   });
 
-  test('месяц и поиск дают один набор в любом порядке', async ({ page }) => {
+  test('месяц и поиск дают один набор в любом порядке @month-search-order', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
     const key = months.reduce((best, m) => (inMonth(entries, m).length > inMonth(entries, best).length ? m : best));
@@ -150,7 +150,7 @@ test.describe('выбор месяца сужает выдачу', () => {
     expect(monthFirst).toEqual(searchFirst);
   });
 
-  test('сочетание без записей показывает пустое состояние', async ({ page }) => {
+  test('сочетание без записей показывает пустое состояние @month-empty-state', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
     const cities = [...new Set(entries.map((entry) => entry.city).filter(Boolean))];
@@ -167,7 +167,7 @@ test.describe('выбор месяца сужает выдачу', () => {
     expect((await shown(page)).length).toBe(0);
   });
 
-  test('адрес страницы от выбора месяца не меняется', async ({ page }) => {
+  test('адрес страницы от выбора месяца не меняется @month-url-stable', async ({ page }) => {
     await openSchedule(page);
     const before = page.url();
     const months = await offeredMonths(page);
@@ -177,7 +177,7 @@ test.describe('выбор месяца сужает выдачу', () => {
 });
 
 test.describe('месяц и остальное управление', () => {
-  test('выбор института после месяца ограничивает программы и не меняет список месяцев', async ({ page }) => {
+  test('выбор института после месяца ограничивает программы и не меняет список месяцев @month-cascade', async ({ page }) => {
     const entries = await openSchedule(page);
     const monthsBefore = await offeredMonths(page);
 
@@ -207,7 +207,7 @@ test.describe('месяц и остальное управление', () => {
     expect(await offeredMonths(page), 'список месяцев пересчитался под институт').toEqual(monthsBefore);
   });
 
-  test('пагинация исчезает при выборе месяца и возвращается при сбросе', async ({ page }) => {
+  test('пагинация исчезает при выборе месяца и возвращается при сбросе @month-pagination', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
@@ -225,7 +225,7 @@ test.describe('месяц и остальное управление', () => {
     await expect(page.locator(PAGINATION)).toBeVisible();
   });
 
-  test('запись-заплатка достижима выбором своего месяца', async ({ page }) => {
+  test('запись-заплатка достижима выбором своего месяца @month-supplement', async ({ page }) => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
@@ -265,7 +265,7 @@ test.describe('месяц и остальное управление', () => {
 });
 
 test.describe('контрол месяца доступен', () => {
-  test('у контрола есть доступное имя и видимый индикатор фокуса', async ({ page }) => {
+  test('у контрола есть доступное имя и видимый индикатор фокуса @month-a11y-focus', async ({ page }) => {
     await openSchedule(page);
     const control = page.locator(MONTH);
 
@@ -296,7 +296,7 @@ test.describe('контрол месяца доступен', () => {
   // по ходу разбора документа, поэтому измерение в обычном браузерном тесте
   // наблюдает уже конечное состояние и сдвига раскладки увидеть не может ни при
   // каком дефекте. Второй контекст даёт состояние «до включения» честно.
-  test('включение контрола не сдвигает раскладку', async ({ page, browser }) => {
+  test('включение контрола не сдвигает раскладку @month-no-layout-shift', async ({ page, browser }) => {
     const measure = async (target: Page): Promise<{ control: unknown; first: unknown }> => {
       const box = async (selector: string): Promise<unknown> => {
         const rect = await target.locator(selector).first().boundingBox();
@@ -326,7 +326,7 @@ test.describe('контрол месяца доступен', () => {
     expect(after.first, 'включение контрола сдвинуло первую запись списка').toEqual(before.first);
   });
 
-  test('на экране 375 CSS-пикселей контрол виден, работает и не создаёт переполнения', async ({ page }) => {
+  test('на экране 375 CSS-пикселей контрол виден, работает и не создаёт переполнения @month-mobile', async ({ page }) => {
     // Обычный кегль намеренно: проверка переполнения при удвоенном кегле на этой
     // странице помечена `fixme` по TD-5 и на новом дефекте не покраснеет.
     await page.setViewportSize({ width: 375, height: 812 });
@@ -433,7 +433,7 @@ async function mountSynthetic(
 }
 
 test.describe('синтетический набор', () => {
-  test('смена месяца возвращает на первую страницу', async ({ page }) => {
+  test('смена месяца возвращает на первую страницу @month-page-reset', async ({ page }) => {
     const many = Array.from({ length: 30 }, (_, i) => ({
       months: ['2026-11'],
       title: `Ноябрь ${String(i + 1).padStart(2, '0')}`,
@@ -456,7 +456,7 @@ test.describe('синтетический набор', () => {
     expect(visible[0].title).toBe('Ноябрь 01');
   });
 
-  test('сравнение идёт по целому ключу, а не по подстроке', async ({ page }) => {
+  test('сравнение идёт по целому ключу, а не по подстроке @month-whole-key', async ({ page }) => {
     // Ключ `2026-1` — подстрока ключей `2026-10` и `2026-11`. На реальных данных
     // такого не бывает (ключ всегда ровно YYYY-MM), поэтому `includes` там верен
     // ПО СЛУЧАЙНОСТИ формата. Первое расширение ключа (неделя, квартал) сделало бы
@@ -475,7 +475,7 @@ test.describe('синтетический набор', () => {
     expect((await shown(page)).map((entry) => entry.title)).toEqual(['Короткий ключ']);
   });
 
-  test('событие на три месяца находится в каждом из них', async ({ page }) => {
+  test('событие на три месяца находится в каждом из них @month-three-months', async ({ page }) => {
     // В данных самое длинное событие — 4 дня, поэтому случай проверяется только
     // синтетически. Ключей у такого события три, и выбор ЛЮБОГО из них обязан его
     // показывать: спека требует именно это, а не только «ключей три».
@@ -503,7 +503,7 @@ test.describe('синтетический набор', () => {
     ).toEqual(['Долгий курс']);
   });
 
-  test('пустой список месяцев оставляет контрол выключенным и не гасит остальные фильтры', async ({ page }) => {
+  test('пустой список месяцев оставляет контрол выключенным и не гасит остальные фильтры @month-empty-list', async ({ page }) => {
     // Ранний выход скрипта при отсутствии одного контрола гасит ВСЕ фильтры, поэтому
     // отсутствие элемента не может быть способом выразить «месяцев нет».
     await mountSynthetic(
@@ -526,7 +526,7 @@ test.describe('синтетический набор', () => {
     expect((await shown(page)).map((entry) => entry.title), 'поиск перестал работать').toEqual(['Онлайн раз']);
   });
 
-  test('отсутствие контрола месяца не уносит с собой остальные фильтры', async ({ page }) => {
+  test('отсутствие контрола месяца не уносит с собой остальные фильтры @month-missing-control', async ({ page }) => {
     // Спека: «скрипт SHALL NOT терять остальные фильтры из-за отсутствия одного».
     // Сегодня ранний выход проверяет четыре контрола, и добавление пятого в то же
     // условие сделало бы отсутствие месяца выключателем поиска, института,
