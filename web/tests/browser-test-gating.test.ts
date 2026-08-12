@@ -236,12 +236,35 @@ function collectTests(all: Workflow[]): CollectedTest[] {
       timeout: 120_000,
       maxBuffer: 32 * 1024 * 1024,
     });
-    expect(
-      run.status,
-      `сбор набора не удался (playwright test ${args.join(' ')} --list): ${run.stderr || run.stdout}`,
-    ).toBe(0);
 
-    const report = JSON.parse(run.stdout) as { suites?: unknown[] };
+    // Три исхода различаются по СОДЕРЖИМОМУ, а не по коду выхода: при несовпавшем
+    // фильтре playwright отдаёт код 1 с корректным JSON и пустым `suites`, при
+    // ошибке разбора аргументов — код 1 и текст вместо JSON. Проверка только по коду
+    // выхода свалила бы «перечень пуст» и «сбор сломан» в одно сообщение, а разница
+    // между ними — это ровно разница между «проверять было нечего» и «инструмент не
+    // запустился».
+    const call = `playwright test ${args.join(' ')} --list`;
+    let report: { suites?: unknown[]; errors?: unknown[] };
+    try {
+      report = JSON.parse(run.stdout) as { suites?: unknown[]; errors?: unknown[] };
+    } catch {
+      throw new Error(
+        `сбор набора не запустился (${call}), код ${run.status}, вывод не разбирается как JSON:\n${(run.stderr || run.stdout).slice(0, 400)}`,
+      );
+    }
+    expect(
+      report.errors ?? [],
+      `сбор набора сообщил об ошибках (${call}): ${JSON.stringify(report.errors).slice(0, 400)}`,
+    ).toEqual([]);
+    // Подстраховка, а НЕ та проверка, которая ловит пустой перечень сегодня: в
+    // playwright 1.62.1 нулевой результат приходит как `errors: ["No tests found"]`,
+    // то есть падает условие выше — проверено мутацией с несовпадающим `--grep`.
+    // Ветка остаётся на случай версии, которая отдаст пустой список без ошибки;
+    // выдавать её за действующий страж было бы неправдой.
+    expect(
+      (report.suites ?? []).length,
+      `вызов «${call}» собрал ноль тестов — перечень пуст, сверять не с чем`,
+    ).toBeGreaterThan(0);
     const visit = (suites: unknown[] | undefined, file: string): void => {
       for (const raw of suites ?? []) {
         const suite = raw as { file?: string; specs?: unknown[]; suites?: unknown[] };
