@@ -1,248 +1,271 @@
 ## Context
 
 На базовом состоянии `origin/main@2d48e84db36c013fabcbbe9ba389e1f4debca639`
-rich HTML проходит через `web/src/lib/html-cleaner.ts`, после чего вставляется в Astro
-через `set:html`. Cleaner исправляет legacy-разметку и добавляет продуктовые обёртки,
-но не является границей доверия. В коде есть 13 не-JSON-LD sink-ов и два отдельных
-JSON-LD sink-а, защищённых `serializeJsonLd()`.
+legacy rich HTML нормализуется в `web/src/lib/html-cleaner.ts` и попадает в Astro через
+raw sink. Машинный инвентарь на этом SHA находит 13 не-JSON-LD sink-ов и два JSON-LD
+sink-а под `serializeJsonLd()`; числа являются свидетельством baseline, а не вечной
+константой — реализация хранит и проверяет реестр.
 
-Текущий Git-снимок данных проверяется вместе с кодом: в нём не найдено активных payload,
-а единственный iframe — существующий RUTUBE player. Этот факт позволяет сохранить
-текущий контент без миграции данных, но не является достаточной защитой для повторного
-импорта или будущей CMS. Мотивация и контракт описаны в `proposal.md` и
-`specs/rich-content-safety/spec.md`.
+Текущий контент имеет три особенности, которые первоначальный design не учёл:
+
+- `injectImgDimensions()` создаёт responsive candidates
+  `/media/_w/<width>/<path>`, которых нет отдельными ключами manifest, но width указан у
+  base asset и файл создаётся `make-derivatives.ts`;
+- две фактически собранные rich-content страницы содержат 65 content-origin inline SVG
+  (PDF-иконки и институтские иллюстрации), а source-only selectors, включая
+  `video_playlists[*].description_html`, содержат дополнительные legacy UI SVG/styles;
+  поэтому mapping применяется к полному source-corpus, а не только к этим 65 узлам;
+- единственный RUTUBE iframe и внешний `ikpk.su/api/upload/file/...` находятся в source
+  fields, которые текущий course-group extractor не выводит. Сам локальный файл
+  `0acd713c-...webp` и manifest entry уже существуют; не выполнена именно замена URL в
+  `course_groups.json`.
+
+Поэтому проверка только `dist`, только текста или только manifest keys дала бы ложную
+совместимость. Нормативный контракт находится в `specs/rich-content-safety/spec.md`.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- сделать типизированную, fail-closed границу между нормализованным контентом и
-  `set:html`;
-- выразить политику безопасности одной конфигурацией, пригодной и для unit-тестов, и
-  для проверки итоговой сборки;
-- сохранить семантику текущего каталога и отдельно, предсказуемо ужесточить RUTUBE
-  iframe;
-- автоматически обнаруживать новый sink, обход политики и регрессию в собранном HTML.
+- дать каждому source fragment из нормативного selector list одну fail-closed границу и terminal defence in
+  depth непосредственно у raw sink;
+- выразить runtime policy и независимый test oracle из одной нормативной spec, но не из
+  одного программного объекта;
+- сохранить текущую текстовую, медиа-, accessibility- и визуальную семантику через
+  явные миграции до запрета inline SVG/style;
+- не допустить vacuous green при пропаже marker-а, обходе отмеченной области или
+  ошибочном расширении runtime allowlist.
 
 **Non-Goals:**
 
-- CSP, TLS, доступ к demo/preview и прочие заголовки раздачи — это отдельный change,
-  который должен быть согласован с активным `serving-cache-headers`;
-- роли и permissions Strapi, доверие к importer-у и его SSRF-защита;
-- проверка URL в типизированных полях карточек, кнопок и metadata, которые не приходят
-  из rich HTML;
-- изменение контракта JSON-LD или замена `serializeJsonLd()`;
-- исправление всех эвристик legacy-нормализатора, если они не влияют на безопасность
-  границы.
+- CSP, TLS, доступ к demo/preview и security headers — отдельный change после
+  `serving-cache-headers`;
+- роли/permissions Strapi, доверие к importer-у и SSRF ingestion path;
+- URL в типизированных карточках, кнопках и metadata вне rich HTML;
+- JSON-LD contract и `serializeJsonLd()`;
+- enforcement аварийного rollback после подключения CMS. Это контракт deploy system,
+  а не renderer-а; его надо описать в отдельном deployment-security change с объективным
+  enforcement point. Здесь остаётся только безопасный renderer artifact.
 
 ## Decisions
 
-### 1. Санитизация выполняется последней серверной стадией
+### 1. Pipeline имеет два trust mode и runtime-authenticated результат
 
-До нормализации `cleanBodyHtml()` выполняет ресурсный preflight, а после всех
-преобразований результат проходит через поддерживаемый серверный allowlist-санитайзер
-(предпочтительно `sanitize-html`) и только затем получает
-экспортируемый opaque/branded type `SafeRichHtml`; brand-symbol и единственная функция,
-которая создаёт значение этого типа, остаются приватными внутри policy-модуля. Source
-gate отдельно запрещает `as SafeRichHtml` за пределами этого модуля. Пакет и его
-зафиксированная версия выбираются при реализации после проверки совместимости с текущим
-Node и lockfile audit.
+`cleanBodyHtml(raw, context)` выполняет:
 
-Санитайзер стоит последним, потому что legacy-нормализатор сам создаёт теги и атрибуты:
-санитизация только входа не защищает от дефекта последующего преобразования. Кроме того,
-`RichContent.astro` **повторно санитизирует** значение непосредственно в том же модуле и
-выражении, которое передаёт его в `set:html`. Идемпотентность делает этот defence-in-depth
-проход детерминированным, а поддельный brand через `as`/`any` не превращается в доверие.
-Ошибка инициализации или обработки пробрасывается в сборку; возврат исходной строки
-запрещён.
+1. byte limit и tolerant parse для node/depth limits;
+2. удаление reserved markers/classes из недоверенного входа;
+3. legacy-нормализацию и безопасные content migrations;
+4. allowlist-санитизацию;
+5. возврат объекта `SafeRichHtml`, содержащего HTML и непубличный runtime token.
 
-Ресурсный preflight ограничивает один вход 2 097 152 байтами, 50 000 parsed nodes и
-глубиной 256; результат также ограничен 2 097 152 байтами. Порог выбран с запасом над
-максимумом текущего каталога — 514 009 байт на базовом SHA. Ошибка содержит тип и ID
-материала, но не выводит его HTML. Byte-limit срабатывает до regex-нормализатора;
-структурные лимиты — после линейного tolerant parse и до legacy-преобразований.
+Одного TypeScript brand недостаточно: `as` и `any` обходят compile-time гарантию, а
+строка не несёт runtime provenance. Поэтому factory и token остаются приватными, а тип
+объекта экспортируется для prop-а. Source gate запрещает внешнее конструирование/cast.
 
-Альтернативы:
+`RichContent.astro` принимает объект, проверяет token и всегда вызывает terminal
+sanitizer в том же выражении, которое отдаёт строку `set:html`:
 
-- собственные regex-фильтры отвергнуты: HTML, сущности, URL и browser parsing создают
-  слишком много способов обхода;
-- DOMPurify с JSDOM отвергнут как более тяжёлая DOM-среда для build-time задачи, пока
-  политика не требует browser DOM;
-- санитизация только в CMS/importer отвергнута: она оставляет несколько источников с
-  разными гарантиями и не защищает текущий снимок.
+- authenticated output mode сохраняет только структурно валидные системные markers;
+- untrusted mode для строки/подделки сначала удаляет reserved markers, затем применяет
+  ту же security matrix;
+- оба mode применяют resource limits и не возвращают raw fallback.
 
-### 2. Один компонент владеет не-JSON-LD sink-ом
+Terminal sanitizer обязан быть побайтово идемпотентным внутри одного mode. Полный legacy
+pipeline не объявляется идемпотентным: он добавляет продуктовые обёртки и не должен
+использоваться как доказательство terminal policy.
 
-Добавляется `RichContent.astro`: он принимает `SafeRichHtml`, обязательно повторяет
-санитизацию, ставит стабильный маркер `data-safe-rich-content` и только после этого
-вызывает `set:html`. Все 13 текущих потребителей
-переносятся на него. Проверка AST исходников разрешает `set:html` только в этом компоненте
-и в `web/src/components/HeadMeta.astro` и `web/src/components/Breadcrumbs.astro`, где
-выражение обязано проходить через `serializeJsonLd()`. Gate переиспользует существующий
-Astro-AST collector и invariant из `web/tests/json-ld.test.ts`, а не создаёт более слабую
-проверку только по whitelist путей.
+Поддерживаемый серверный allowlist sanitizer (предпочтительно `sanitize-html`) выбран
+вместо regex-фильтра. Конкретная версия фиксируется после проверки Node compatibility,
+maintenance, provenance и всех advisory parser subtree. DOMPurify+JSDOM остаётся более
+тяжёлой альтернативой, если выбранный parser не позволит безопасно реализовать limits и
+tree transforms. Выбранный pipeline обязан восстанавливать malformed input в пределах
+лимитов по browser-conformant HTML tree-construction semantics; синтаксическая
+malformed-разметка сама по себе не является разрешённой причиной build failure.
 
-Сочетание opaque type и source gate выбрано вместо соглашения об именах функций:
-TypeScript ловит случайную передачу обычной строки, а gate ловит Astro-шаблоны и новый
-sink до того, как он попадёт в output scan. Маркер компонента даёт parsed-output gate
-точную область и не смешивает rich content с собственными inline-скриптами приложения.
+### 2. Resource limits стоят до legacy regex-проходов
 
-Гейт инвентаризирует не только Astro `set:html`, но и `is:raw`, непустые присваивания
-`innerHTML`/`outerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`,
-`Range.createContextualFragment`, HTML-режим `DOMParser`, `srcdoc` и browser API
-`setHTMLUnsafe`. Существующие присваивания пустого строкового литерала `innerHTML = ''`
-разрешаются как точное исключение; непустое или вычисляемое значение запрещено.
+Вход ограничен 2 MiB, 50 000 узлами и глубиной 256; выход — 2 MiB. Максимальный текущий
+source fragment на baseline равен 514 009 байтам, поэтому byte limit имеет почти
+четырёхкратный запас. Сначала проверяются bytes, затем один линейный tolerant parse,
+после чего запускаются существующие regex/циклы. Ошибка содержит source type/id, но не
+HTML и не потенциальный secret из контента.
 
-### 3. Allowlist закрыт и соответствует фактической семантике контента
+Альтернатива «санитизировать последней стадией без preflight» отвергнута: hostile input
+может исчерпать CPU/память раньше границы.
 
-Базовый список элементов:
+### 3. Characterization разделён на source и rendered corpora
 
-- структура: `p`, `br`, `hr`, `h2`–`h6`, `div`, `span`, `section`, `article`, `aside`,
-  `address`;
-- списки и раскрытие: `ul`, `ol`, `li`, `dl`, `dt`, `dd`, `details`, `summary`;
-- форматирование: `strong`, `b`, `em`, `i`, `u`, `s`, `sup`, `sub`, `code`, `pre`,
-  `blockquote`;
-- медиа, ссылки и время: `a`, `img`, `figure`, `figcaption`, `time`;
-- таблицы: `table`, `caption`, `colgroup`, `col`, `thead`, `tbody`, `tfoot`, `tr`, `th`,
-  `td`;
-- `iframe` обрабатывается отдельным правилом RUTUBE и не входит в общий allowlist.
+До test-only сессии утверждается закрытый selector list из spec. Независимый discovery
+обходит все entity JSON и CMS schema: suffix `_html`, parsed element node либо CMS
+attribute `type: "richtext"` означает HTML-bearing field; значение/attribute вне selector
+list и selector без registry entry — ошибка даже при пустой CMS-базе.
+Это явно включает source-only `video_playlists[*].description_html`, а не выводит
+полноту из списка текущих routes. Для каждого source фиксируются type, stable ID, JSON
+path и fingerprint. Отдельный rendered registry фиксирует каждый
+`data-safe-rich-content="<sink-id>"` по production/demo path.
 
-Общие разрешённые атрибуты ограничены `id`, `class`, `title`, валидным `lang` и
-`dir="ltr|rtl|auto"`. Accessibility-исключения закрыты: `aria-label` разрешён на
-`a`, `img`, `figure`, `table` и `.table-scroll`; `aria-labelledby`/`aria-describedby` —
-на `section`, `article`, `aside`, `details`, `figure`, `table`; `role="region"` — только
-на `.table-scroll`. Для `a` разрешены `href`, `target`, `rel`; для
-`img` — `src`, `srcset`, `sizes`, `alt`, `width`, `height`, `loading`, `decoding`; для
-таблиц — `colspan`, `rowspan`, `scope`, `headers`; для `details` — `open`; для `time` —
-синтаксически валидный `datetime`.
+Source fingerprint включает текст и порядок блоков, headings, lists, tables,
+`time[datetime]`, link/image targets, responsive candidates, details, inert checkboxes,
+system markers, RUTUBE и SVG/style migration mapping. Rendered fingerprint дополнительно
+сохраняет marker inventory и visual evidence. Сравнение не зависит от порядка обычных
+HTML-атрибутов.
 
-Исключения для атрибутов, детерминированно созданных cleaner-ом, перечислены закрыто:
-`tabindex="0"` только на `.table-scroll`, `data-wrapped` только на `table`,
-`data-legacy-cta` и `data-legacy-cta-unresolved` только на элементах, которые создаёт
-`normalizeLegacyControls()`. Эти атрибуты входят в characterization и idempotence
-fixtures. Другие `data-*`, `tabindex`, `style`, `contenteditable`, `srcdoc`, `formaction`,
-XML/XLink и все `on*` запрещены.
+Этим закрываются две разные ошибки: source-only RUTUBE нельзя доказать через `dist`, а
+layout/style loss нельзя доказать только по тексту source.
 
-Активные запрещённые элементы (`script`, `style`, `object`, `embed`, `svg`, `math`,
-`template`, `base`, `meta`, `link`) удаляются вместе с поддеревом. Неизвестный неактивный
-контейнер разворачивается с сохранением безопасных детей. Это не позволяет тексту внутри
-`script` повторно интерпретироваться как HTML и одновременно сохраняет авторский текст
-из безвредной legacy-обёртки.
+### 4. Inline SVG и style мигрируются до terminal policy
 
-Альтернатива с разрешением произвольных классов и атрибутов «для совместимости»
-отвергнута: она превращает allowlist в denylist и усложняет доказательство политики.
-Классы оставлены, поскольку существующий CSS-контракт зависит от них; новое исключение
-для атрибута требует отдельного тестового fixture.
+Inline SVG остаётся запрещённым active subtree: SVG имеет собственные URL/animation/
+event поверхности, и «безопасный SVG subset» резко расширил бы policy. Нормативный
+mapping из spec детерминирован: SVG-only link получает точный текст/accessibility label,
+остальной legacy UI SVG удаляется как decorative. Для styles сохраняются только точные
+`text-align`, `font-size` и `color` families из mapping; остальные layout/UI declarations
+не являются принятым контентным контрактом и удаляются.
 
-### 4. URL разбираются по типу атрибута
+До RED-тестов генератор создаёт reviewable manifest со строкой на каждый SVG и mapped
+declaration: selector, stable entity ID/JSON path, исходный context/value, точный
+replacement class/text, accessible name и route либо `source-only`. Gate сравнивает
+manifest с независимым discovery и падает при пропуске. Тестовая сессия только потребляет
+утверждённый manifest и не выбирает product mapping. Computed-style assertions и снимки
+проверяют каждое сохраняемое style family на фактически собранных routes.
 
-Перед проверкой значение декодируется как HTML, очищается от управляющих символов и
-разбирается URL parser-ом с фиксированным HTTPS base. Принимаются root-relative и обычные
-path-relative формы (`/`, `./`, `../`, `lesson/page`, `?`, `#`), если до разбора у них
-нет схемы и они остаются на фиксированном base origin. Protocol-relative `//host`
-отвергаются.
+### 5. Closed matrix сохраняет только инертные legacy controls
 
-- `a[href]`: относительные адреса, `http:`, `https:`, `mailto:`, `tel:`;
-- `img[src]` и каждый кандидат `img[srcset]`: только root-relative `/media/**`, который
-  существует в media manifest; внешние и обычные path-relative изображения запрещены;
-- credentials запрещены для сетевых URL; CR/LF запрещены во всех значениях;
-- при одном невалидном кандидате удаляется весь `srcset`, а не только подозрительная
-  часть.
+Tag/attribute matrix нормативно перечислена в spec. В дополнение к прежнему списку
+сохраняются `label` и только `input[type=checkbox]`: checkbox получает `disabled`, может
+сохранить `checked`, но теряет `name`, `value`, `form*` и handlers. Это согласует новый
+security contract с принятым fixture `html-cleaner.test.ts`, не оставляя submit-capable
+control.
 
-Для ссылок сохраняется только `target="_blank"`; другие target удаляются. `rel`
-канонизируется по токенам `nofollow`, `noopener`, `noreferrer`, `sponsored`, `ugc`,
-`opener` всегда удаляется, а `_blank` всегда получает `noopener noreferrer`.
+Существующий test внешнего Yandex image меняет смысл: direct `cleanBodyHtml()` больше не
+обязан сохранять remote URL, потому что security boundary теперь живёт внутри helper-а.
+Fixture локализуется до вызова либо ожидает безопасное удаление. Тестовая сессия должна
+изменить это ожидание явно со ссылкой на spec, а не молча расширять allowlist.
 
-Проверка выполняется transform hook-ом поверх санитайзера, а не только его списком
-schemes. Parsed-output gate намеренно не импортирует эту функцию или allowlist: он имеет
-собственный минимальный denylist, независимо разбирает URL/iframe и тем самым ловит
-ошибочное расширение общей policy.
+### 6. Reserved markers очищаются до нормализации
 
-### 5. RUTUBE нормализуется в фиксированный capability
+Финальная строка не хранит происхождение, поэтому требование «атрибут создан конкретной
+функцией» действительно непроверяемо одним terminal sanitizer. Вместо этого:
 
-Iframe сохраняется только для URL без credentials, query и fragment, с origin
-`https://rutube.ru` на стандартном порту и path
-`^/play/embed/[A-Za-z0-9_-]+/$`. Выходной iframe строится заново и не наследует
-авторские разрешения:
+- untrusted pre-pass удаляет `data-wrapped`, оба `data-legacy-cta*` и reserved class
+  tokens;
+- нормализатор может создать их заново;
+- authenticated output mode проверяет точную структурную форму;
+- untrusted terminal mode снова удаляет markers из подделки.
 
-- `sandbox="allow-scripts allow-same-origin allow-presentation"`;
-- `allow="autoplay; encrypted-media; fullscreen; picture-in-picture"`;
-- `referrerpolicy="no-referrer"`, `loading="lazy"`;
-- фиксированный непустой `title="Видео RUTUBE"` и `allowfullscreen`;
-- канонический `src`; дочернее содержимое iframe удаляется.
+Так idempotent re-sanitization authenticated output не уничтожает законные markers, а
+CMS не может их отчеканить. Для table wrapper проверяется непосредственная структура;
+для resolved CTA — `a` с fragment href; для unresolved — `span` без href.
 
-`allow-same-origin` вместе с `allow-scripts` ослабляет sandbox, но выбран для
-совместимости стороннего player-а. Риск ограничен точным origin/path, разными origin
-player-а и сайта и отсутствием авторского управления разрешениями. Любое последующее
-изменение набора permissions требует изменения capability и повторной стендовой проверки.
+Активный `online-payment-flow` не меняет `normalizeLegacyControls()` — его proposal
+говорит это явно. Пересечение ограничено `oplata.astro` и сохранением существующего CTA
+contract при миграции sink-а.
 
-Сохранение произвольных video-hosts или query-параметров отвергнуто: в текущем каталоге
-их нет, а каждый новый origin является отдельным доверием и должен пройти review.
+### 7. Local media различает base assets и derivatives
 
-### 6. Проверяется композиция, а не только helper
+Для `img[src]` base path обязан быть manifest key под `/media/**`. Candidate
+`/media/_w/<width>/<path>` разрешён только в `srcset`, если:
 
-Набор обязательных проверок состоит из четырёх уровней:
+1. из path однозначно восстанавливается base `/media/<path>`;
+2. width — положительное целое и есть в `manifest[base].widths`;
+3. derivative file создан и существует в build input/output.
 
-1. unit-матрица payload-ов, URL, атрибутов, RUTUBE и идемпотентности;
-2. source AST/TypeScript gate для полного реестра raw-HTML sinks и brand casts;
-3. component render test, который передаёт hostile и поддельно branded fixtures через
-   реальный cleaner и
-   `RichContent.astro`;
-4. parsed-output scan production- и demo-сборок по `data-safe-rich-content`, с адресом
-   файла/страницы в ошибке.
+External, protocol-relative, forbidden-scheme и malformed image URL удаляются; один
+плохой candidate удаляет весь `srcset`. Отсутствующий локальный base/derivative — другая
+категория: это broken internal invariant, и она валит build с source ID. Таким образом
+один input больше не имеет одновременно THEN «strip» и THEN «fail».
 
-Characterization текущего каталога сравнивает структурный fingerprint до и после:
-нормализованный текст, заголовки, списки, таблицы, безопасные link/image targets,
-`details` и RUTUBE. Сравнение не привязывается к косметическому порядку атрибутов.
-До снятия финального fingerprint текущий внешний
-`https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304` переносится через
-существующий media pipeline в `/media/**`; старый production не становится runtime-
-зависимостью.
+Локальный asset `0acd713c-...webp` уже скачан и внесён в manifest; миграция состоит в
+замене оставшегося remote URL в `course_groups.json` на существующий `/media/uploads/...`.
 
-Тестовая сессия отдельно демонстрирует RED на ещё не реализованной границе и негативно
-проверяет каждый новый gate контролируемой мутацией. Это защищает от «зелёного» теста,
-который не достигает sink-а.
+### 8. RUTUBE строится заново как один ограниченный capability
+
+URL разбирается через `URL` и сверяется по точному origin/path, без credentials,
+query/fragment и нестандартного порта. Attrs не сливаются с author input, а строятся
+заново по точным значениям spec. `allow-same-origin` вместе с `allow-scripts` —
+осознанный trade-off для совместимости player-а; изменение permissions требует spec
+update и повторной стендовой проверки.
+
+### 9. Source gate обеспечивает singleton sink, а output gate — независимый oracle
+
+Невозможно статически обещать обнаружение любого будущего API или произвольного
+динамического свойства. Поэтому source gate имеет честную ограниченную область:
+
+- Astro AST collector разрешает production `set:html` только в `RichContent.astro` и
+  точных JSON-LD sinks `HeadMeta.astro`/`Breadcrumbs.astro`, делегированных существующему
+  invariant; он также запрещает `is:raw` и literal/expression/spread-варианты `srcdoc`;
+- TypeScript AST collector проверяет перечисленные DOM raw sinks и SafeRichHtml casts;
+- изменение registry, HTML-rendering dependency или parser config требует security
+  fixture/review, а не опирается на фразу «или любой другой sink».
+
+Built-output verification имеет четыре независимых слоя и разбирает целую страницу
+browser-conformant oracle-ом, независимым от runtime sanitizer parser-а (`parse5`, если
+runtime использует htmlparser2; иначе DOM реального браузера):
+
+1. test-owned полная closed matrix, скопированная из spec и не импортирующая runtime
+   policy/URL validator; test-only build page проводит через boundary каталог hostile
+   matrix-complement fixtures, чтобы oracle измерял фактический output, а не отсутствие
+   payload в текущих данных;
+2. expected registry `sink-id → production/demo paths/counts`: ноль областей,
+   пропавший marker или sink-id — ошибка;
+3. уникальные hostile canary tokens ищутся по всему `dist` и `dist-demo`, включая зоны
+   вне marker-а;
+4. whole-document hazard scanner независимо от marker-ов отвергает event attributes,
+   `srcdoc`, XML/XLink URL, forbidden schemes и неинвентаризированные `script`, `style`,
+   `iframe`, `object`, `embed`, `base`, refresh-meta, stylesheet-link либо executable
+   SVG/MathML descendants. Допустимые template/bundler outputs сверяются с test-owned
+   source registry по route, count/placement, inline body либо asset identity и
+   security-relevant attrs; registry коммитится с тестами и никогда не обучается на
+   проверяемом `dist` того же прогона.
+
+Негативные мутации обязательны как минимум для runtime allowlist extension при включённом
+hostile build fixture, удаления marker-а, вывода canary вне отмеченного subtree,
+parser-differential mXSS и динамического неизвестного sink-а с другим активным payload.
+Минимальный denylist отвергнут: он не может доказать закрытый allowlist и даёт
+common-mode/vacuous failure.
+
+### 10. Пересечения с активными changes
+
+Код `architecture-frame-prototypes`, включая preview sink-и, уже находится на базовом
+SHA и входит в baseline registry; условного «если приземлится» больше нет.
+`online-payment-flow` пересекается через `oplata.astro`, но не меняет cleaner. Выбранный
+sanitizer dependency и его проверки согласуются с `dependency-update-gates` перед merge.
+Security headers/CSP не пересекаются с renderer code и остаются отдельным change.
 
 ## Risks / Trade-offs
 
-- [Легитимный legacy-атрибут будет удалён] → characterization инвентаризирует отличие;
-  исключение добавляется только вместе с минимальным fixture и обоснованием.
-- [RUTUBE player перестанет работать из-за sandbox/referrer policy] → отдельный render-
-  fixture и стендовая проверка player-а до merge; расширение capability требует review.
-- [Новая зависимость сама содержит уязвимость] → фиксированная версия/integrity в
-  lockfile, review каждого advisory во всём parser subtree независимо от severity,
-  проверка provenance/maintenance и отсутствие runtime-доставки в browser bundle.
-- [Opaque type будет обойдён cast-ом или `any`] → терминальная повторная санитизация в
-  компоненте, source gate и независимый parsed-output scan дают три уровня защиты.
-- [Двойной проход меняет HTML] → побайтовая проверка идемпотентности является частью
-  обязательного контракта.
-- [Output scan ошибочно проверит собственный JS приложения] → анализируются только
-  поддеревья `data-safe-rich-content`, а не весь HTML как строка.
+- [Миграция SVG/style изменит текущий вид] → source mapping, computed-style assertions и
+  сохранённые screenshots на каждой затронутой странице.
+- [Responsive images будут ошибочно удалены] → base/derivative fixtures и проверка
+  каждого manifest width против реального файла.
+- [Runtime token будет подделан] → module-private Symbol, untrusted terminal mode,
+  source cast gate и hostile component fixture.
+- [Новая sanitizer/parser зависимость уязвима] → exact version/integrity, maintenance/
+  provenance review и разбор каждого advisory независимо от severity.
+- [Test oracle разойдётся с runtime policy] → это намеренная независимость; изменение
+  нормативной spec требует явной синхронной правки обеих реализаций и negative mutation.
+- [Появится принципиально новый raw API] → source collector не обещает распознать любой
+  синтаксис, но whole-document hazard scanner независимо ловит активный результат;
+  dependency/config diff review и расширение source registry остаются обязательными.
 
 ## Migration Plan
 
-1. На точном базовом SHA сохранить реестр sink-ов и структурный fingerprint текущего
-   каталога.
-2. Перед test-only сессией повторно сверить активные `architecture-frame-prototypes` и
-   `online-payment-flow`: первый меняет три preview sink-а, второй — `oplata.astro` и
-   `normalizeLegacyControls()`. Если один из них приземлился первым, rebase выполняется
-   до фиксации baseline; второй change затем обновляется относительно нового
-   `RichContent` contract. Пересекающиеся версии не сливаются без повторного sink-
-   инвентаря, build-гейтов и строгой OpenSpec-валидации.
-3. В отдельной чистой сессии и worktree написать тесты по spec, предъявить RED и
-   негативную проверку гейтов; production-код не менять.
-4. Другой исполнитель добавляет политику, тип и компонент, затем мигрирует все текущие
-   не-JSON-LD sink-и.
-5. Выполнить unit/component тесты, обе сборки, parsed-output scan, typecheck/lint и
-   dependency audit; отдельно открыть текущее RUTUBE video на тестовом стенде.
-6. Провести два независимых code review, устранить подтверждённые находки и повторить
-   гейты.
-7. Выпустить вместе с новым сайтом; локальная миграция одного внешнего изображения
-   входит в этот релиз, отдельный backfill не требуется.
+1. На точном базовом SHA зафиксировать source registry, raw-sink registry и rendered
+   marker inventory; отдельно сохранить SVG/style/media migrations и fingerprints.
+2. В отдельной чистой test-only сессии написать/обновить только тесты, предъявить RED и
+   каждую предусмотренную негативную мутацию.
+3. Другой исполнитель сначала выполняет content migrations, затем добавляет limits,
+   policy, runtime-authenticated object и центральный sink, после чего мигрирует весь
+   текущий registry потребителей.
+4. Выполнить unit/component tests, production/demo builds, independent output oracle,
+   typecheck/lint/audit и ручную RUTUBE-проверку с сохранённым свидетельством.
+5. Провести два независимых code review, исправить подтверждённые находки, повторить
+   negative verification и все гейты.
+6. Согласовать пересечения `online-payment-flow`/`dependency-update-gates`, получить
+   приёмку владельца и только затем архивировать change.
 
-До подключения недоверенного источника rollback возможен на проверенный Git-снимок. После
-подключения CMS или автоматического импорта появляется необратимая migration boundary:
-rollback на любой artifact без capability `rich-content-safety` запрещён. Допустимы
-последний известный sanitizer-enabled artifact, безопасная maintenance page или
-roll-forward. Одновременно останавливаются ingestion/rebuild, проверяется опубликованный
-output и очищаются server/CDN caches; одного отключения feed недостаточно.
+Operational rollback после будущего подключения CMS не является требованием этой
+capability. До такого подключения отдельный deployment-security change должен назвать
+реальный enforcement point, проверку и evidence; документация без гейта не считается
+выполнением renderer spec.

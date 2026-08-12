@@ -1,43 +1,51 @@
-## 1. Зафиксировать baseline
+## 1. Зафиксировать три baseline-реестра и миграции
 
-- [ ] 1.1 В test-only worktree на SHA `2d48e84db36c013fabcbbe9ba389e1f4debca639` сохранить машинно проверяемый реестр всех `set:html`, отдельно классифицировав rich-content и JSON-LD sink-и.
-- [ ] 1.2 Построить структурный fingerprint всего текущего rich HTML: текст, заголовки, списки, таблицы, `time[datetime]`, безопасные ссылки и изображения, `details`, RUTUBE и сгенерированные `tabindex`/`data-*` маркеры; сохранить fixture/ожидания рядом с тестами.
-- [ ] 1.3 Повторно сверить пересекающиеся `architecture-frame-prototypes` и `online-payment-flow`; если один из них приземлился, rebase-нуть baseline до написания тестов и обновить реестр sink-ов.
-- [ ] 1.4 Зафиксировать current known deviation `https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304`, перенести asset через существующий media pipeline в `/media/**` и доказать его наличие в manifest до финального characterization.
+- [ ] 1.1 До test-only сессии на SHA `2d48e84db36c013fabcbbe9ba389e1f4debca639` построить машинный source registry по точному selector list spec; независимым обходом всех entity JSON/CMS schema падать на `_html`/parsed-element/`type: richtext` field вне списка и на selector без registry entry, явно включая `video_playlists[*].description_html` и пустые CMS richtext attributes.
+- [ ] 1.2 Сохранить raw-sink registry из Astro/TypeScript AST и rendered registry `sink-id → production/demo paths/counts`; JSON-LD классифицировать отдельно под существующим `serializeJsonLd()` invariant.
+- [ ] 1.3 Построить source fingerprint и rendered fingerprint: текст/порядок блоков, headings, lists, tables, `time[datetime]`, links, base/derived images, `details`, inert checkbox/label, system markers, RUTUBE, SVG/style mappings и marker inventory.
+- [ ] 1.4 До RED-тестов сгенерировать и отревьюить migration manifest по закрытому mapping spec: для каждого SVG/mapped declaration сохранить selector, stable entity ID/JSON path, исходный context/value, точный replacement class/text, accessible name и route либо `source-only`; gate обязан доказать полноту против независимого discovery.
+- [ ] 1.5 Зафиксировать, что локальный `/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp` и manifest entry уже существуют, а known deviation — только remote URL в `course_groups.json`.
+- [ ] 1.6 Сверить пересечения: preview sink-и `architecture-frame-prototypes` уже входят в base; `online-payment-flow` пересекается через `oplata.astro`, но не меняет `normalizeLegacyControls()`; dependency review согласовать с `dependency-update-gates`.
 
-## 2. Написать тесты в отдельной чистой сессии до реализации
+## 2. Написать и предъявить RED-тесты в отдельной чистой сессии
 
-- [ ] 2.1 Добавить unit-тесты политики для разрешённых элементов/атрибутов, `time[datetime]`, точных системных `tabindex`/`data-*`, удаления активных поддеревьев, `on*`, `style`, `srcdoc`, XML/XLink и неизвестных контейнеров.
-- [ ] 2.2 Добавить параметризованную матрицу URL: регистр, HTML-сущности, управляющие символы, credentials/query confusion, protocol-relative URL, разрешённые `a`/`img` назначения и fail-closed `srcset`.
-- [ ] 2.3 Добавить тесты нормализации `target`/`rel`, точного RUTUBE origin/path и фиксированных iframe permissions, включая похожие hostname, порт, credentials, query и попытку ослабить sandbox.
-- [ ] 2.4 Добавить oversized/deep/wide/malformed fixtures для лимитов 2 MiB, 50 000 nodes, depth 256 и безопасного сообщения об ошибке с ID материала.
-- [ ] 2.5 Добавить тест идемпотентности и characterization-тест текущего каталога по fingerprint из 1.2.
-- [ ] 2.6 Расширить source collector на Astro и TypeScript: разрешить `set:html` только центральному компоненту, запретить `is:raw`, непустой/вычисляемый `innerHTML`/`outerHTML`, `insertAdjacentHTML`, `document.write`, `createContextualFragment`, HTML `DOMParser`, `srcdoc`, `setHTMLUnsafe` и внешние `as SafeRichHtml`; четыре существующих `innerHTML = ''` оставить точными исключениями, а JSON-LD — под существующим invariant.
-- [ ] 2.7 Добавить component render test, который проводит hostile fixture и поддельный brand через реальный cleaner и обязательную повторную санитизацию центрального компонента до итогового HTML.
-- [ ] 2.8 Добавить независимый parsed-output gate для `dist` и `dist-demo`: не импортировать runtime allowlist/URL validator, разбирать только `data-safe-rich-content`, сообщать путь страницы и нарушение.
-- [ ] 2.9 Предъявить RED-прогон новых тестов на неизменённом production-коде и для каждого нового gate показать контролируемую негативную мутацию, включая непустой `innerHTML` и ошибочное расширение общей policy.
+- [ ] 2.1 Для каждого scenario spec добавить автоматический тест либо явную причину ручной проверки и формат evidence; отдельно доказать coverage source-only RUTUBE и каждого field из нормативного selector list.
+- [ ] 2.2 Добавить unit-матрицу closed tags/attributes: active discard-with-content, recursive sanitize+unwrap для inert unknown wrappers, `on*`, `style`, XML/XLink, `time`, inert checkbox/label и точные structural system markers.
+- [ ] 2.3 Добавить reserved-marker fixtures: поддельные markers/classes удаляются в untrusted mode, authenticated output сохраняет только table-wrapper, resolved CTA и unresolved CTA forms.
+- [ ] 2.4 Добавить URL/media fixtures: entities/control chars, credentials confusion, anchor schemes, base manifest assets, разрешённые `/media/_w/<width>/**` derivatives, mixed/external `srcset`, forbidden image src и отдельный build failure для missing local asset.
+- [ ] 2.5 Добавить точные тесты `target`/`rel` и RUTUBE origin/path/permissions, включая похожие hosts, port, credentials, query/fragment и author sandbox override.
+- [ ] 2.6 Добавить oversized/deep/wide fixtures для 2 MiB, 50 000 nodes, depth 256, а также malformed fixture с единственным ожидаемым browser-conformant recovered+sanitized DOM и безопасное сообщение resource error с source type/ID без исходного HTML.
+- [ ] 2.7 Расширить source collector: разрешать Astro `set:html` только в singleton `RichContent.astro` и точных JSON-LD `HeadMeta.astro`/`Breadcrumbs.astro`, запретить остальные `set:html`, `is:raw` и literal/expression/spread `srcdoc`; в TypeScript сверять raw-sink registry, четыре точных `innerHTML = ''`, запрещать внешние SafeRichHtml casts/construction и не заявлять catch-all неизвестного синтаксиса.
+- [ ] 2.8 Добавить component render tests для authenticated результата, обычной строки, поддельного runtime token и hostile payload непосредственно перед `set:html`.
+- [ ] 2.9 Добавить test-owned полный oracle closed matrix без импортов runtime policy/URL validator и с browser-conformant parser-ом, независимым от runtime parser-а; test-only page покрывает matrix-complement, misnested, foreign-content и entity mXSS, marker inventory падает при нуле, пропавшем sink-id или path.
+- [ ] 2.10 Добавить whole-dist canary scan `dist` и `dist-demo`, который находит уникальные hostile tokens в любой области страницы, включая output вне `data-safe-rich-content`.
+- [ ] 2.11 Добавить test-owned source registry допустимого template/bundler executable output и whole-document hazard scanner всех production/demo HTML; scanner отвергает глобальные `on*`, `srcdoc`, XML/XLink URL, forbidden schemes и неинвентаризированные `script`/`style`/iframe/object/embed/base/refresh-meta/stylesheet-link/executable SVG-MathML descendants, а registry не генерируется из текущего `dist`.
+- [ ] 2.12 Явно согласовать существующие `html-cleaner.test.ts`: сохранить label/checkbox как disabled inert control, а remote-image fixture локализовать до boundary либо изменить ожидание на безопасное удаление; предъявить RED относительно нового contract.
+- [ ] 2.13 Предъявить контролируемые негативные мутации: зарегистрированный внешний `set:html`, Astro `srcdoc` в literal/expression/spread формах, runtime allowlist extension, parser differential, удаление marker-а, canary вне marker-а, неизвестный динамический sink с отличным активным payload, поддельный token, missing derivative и сохранённый system marker; затем вернуть production-код неизменённым.
 
 ## 3. Реализовать границу безопасности другим исполнителем
 
-- [ ] 3.1 Выбрать совместимую поддерживаемую версию серверного allowlist-санитайзера; проверить maintenance/provenance и каждый advisory во всём parser subtree независимо от severity, зафиксировать version/integrity в `web/package-lock.json` и согласовать обновления с `dependency-update-gates`.
-- [ ] 3.2 Реализовать preflight-лимиты и единую закрытую политику элементов, атрибутов и URL, удаление активных поддеревьев, fail-closed ошибки с типом/ID материала и opaque `SafeRichHtml` как последнюю стадию `cleanBodyHtml()`.
-- [ ] 3.3 Реализовать детерминированный transform для ссылок, изображений, `srcset`, `target="_blank"` и фиксированного RUTUBE capability.
-- [ ] 3.4 Добавить `RichContent.astro`, принимающий `SafeRichHtml`, обязательно повторно санитизирующий его в sink-е, владеющий не-JSON-LD `set:html` и ставящий `data-safe-rich-content`.
-- [ ] 3.5 Перевести все 13 текущих не-JSON-LD sink-ов на `RichContent.astro`, передать каждому стабильные тип/ID материала и сохранить CSS-классы, test selectors и layout; JSON-LD оставить под `serializeJsonLd()`.
-- [ ] 3.6 Подключить source и parsed-output gates к обязательным локальным/CI-командам для production- и demo-сборки.
+- [ ] 3.1 Выполнить content migrations: переписать known remote image URL на существующий local asset, заменить content-origin inline SVG по mapping и перенести визуально значимые inline styles в конечные локальные classes.
+- [ ] 3.2 Выбрать maintained server-side sanitizer/parser, проверить Node compatibility, maintenance/provenance и каждый advisory subtree, зафиксировать exact version/integrity в `web/package-lock.json`.
+- [ ] 3.3 Реализовать byte/node/depth/output limits и source-aware ошибки до legacy regex-проходов.
+- [ ] 3.4 Реализовать untrusted pre-scrub, closed matrix, URL/media transforms и два terminal trust mode; `SafeRichHtml` сделать runtime-authenticated объектом с module-private token/factory.
+- [ ] 3.5 Реализовать base/derivative media validation, точную RUTUBE reconstruction, target/rel normalization и idempotence terminal sanitizer для каждого trust mode.
+- [ ] 3.6 Добавить `RichContent.astro`, проверяющий runtime token, повторно санитизирующий непосредственно у `set:html` и ставящий стабильный `data-safe-rich-content="<sink-id>"`.
+- [ ] 3.7 Перевести каждый consumer из актуального raw-sink registry на центральный компонент с stable sink/source IDs, сохранив CSS hooks, test selectors и layout; JSON-LD оставить под `serializeJsonLd()`.
+- [ ] 3.8 Подключить source registry gate, independent browser-conformant output oracle, marker inventory, whole-dist canary и whole-document hazard scanner к обязательным production/demo local и CI checks.
 
 ## 4. Проверить поставку
 
 - [ ] 4.1 Добиться зелёного `npm test`, `npm run typecheck`, `npm run lint`, `npm run test:build` и `npm run test:demo` в `web/`.
-- [ ] 4.2 Выполнить `npm run audit:prod`, отдельно разобрать все advisory sanitizer/parser subtree с risk acceptance только по явному решению владельца и подтвердить, что санитайзер не попал в browser bundle.
-- [ ] 4.3 Сравнить fingerprint текущего каталога и вручную проверить существующий RUTUBE player на изолированном тестовом стенде; сохранить URL/вывод/снимок как свидетельство.
-- [ ] 4.4 Повторить негативную верификацию: временно обойти границу и отдельно разрешить hostile payload, убедившись, что обязательные проверки падают; затем вернуть мутации и повторить зелёный прогон.
+- [ ] 4.2 Выполнить `npm run audit:prod`, разобрать все advisory sanitizer/parser subtree с risk acceptance только по явному решению владельца и подтвердить отсутствие sanitizer-а в browser bundle.
+- [ ] 4.3 Сравнить source/rendered fingerprints, подтвердить полноту marker inventory и сохранить screenshots/computed-style evidence для каждой SVG/style migration page.
+- [ ] 4.4 Вручную проверить source-only RUTUBE fixture на изолированном стенде с точными sandbox/allow/referrer attributes; сохранить URL, вывод и screenshot.
+- [ ] 4.5 Повторить все негативные мутации 2.13 на реализации, доказать ожидаемые падения, вернуть мутации и повторить полный зелёный прогон.
 
 ## 5. Независимое ревью и приёмка
 
-- [ ] 5.1 Провести независимое security review соответствия реализации каждому requirement/scenario и исправить подтверждённые находки.
-- [ ] 5.2 Провести независимое review полноты миграции sink-ов, совместимости текущего контента и CI-гейтов; исправить подтверждённые находки.
-- [ ] 5.3 После исправлений повторить все гейты раздела 4 и зафиксировать точный SHA проверенной реализации.
-- [ ] 5.4 Повторно сверить активные пересекающиеся changes, обновить их артефакты/реализацию относительно нового sink-контракта и проверить их строгую применимость.
-- [ ] 5.5 Обновить runbook: после подключения CMS/import разрешать только sanitizer-enabled rollback, maintenance page или roll-forward с остановкой ingestion, проверкой output и очисткой caches.
-- [ ] 5.6 После приёмки владельцем архивировать change и проверить перенос `rich-content-safety` в main specs.
+- [ ] 5.1 Провести независимое security review соответствия реализации каждому requirement/scenario, включая trust modes, media derivatives, whole-dist canary и whole-document hazard scanner; исправить подтверждённые находки.
+- [ ] 5.2 Провести независимое compatibility review source/rendered corpora, SVG/style migrations, существующих cleaner-тестов и полноты sink registry; исправить подтверждённые находки.
+- [ ] 5.3 После исправлений повторить раздел 4 и зафиксировать точный SHA проверенной реализации и evidence paths.
+- [ ] 5.4 Обновить пересекающиеся active changes относительно нового sink contract и доказать строгую применимость их delta specs.
+- [ ] 5.5 После приёмки владельцем архивировать change и проверить перенос `rich-content-safety` в main specs.

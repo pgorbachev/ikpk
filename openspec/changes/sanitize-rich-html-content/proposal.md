@@ -18,14 +18,20 @@ event-handler атрибуты, опасные URL-схемы и произво�
 - Сохраняется единственный намеренный embed — HTTPS-player RUTUBE на утверждённом
   hostname с фиксированными sandbox/referrer permissions, которые автор не может
   ослабить.
-- Source- и built-output гейты запрещают новому `set:html` обходить санитайзер и
-  подтверждают, что hostile fixture не переживает реальную сборку.
-- До изменения фиксируется текущий легитимный rich-content output; затем проверяется,
-  что новый санитайзер удаляет payload, но не теряет текущие заголовки, абзацы, списки,
-  таблицы, ссылки, локальные изображения, `details` и разрешённый RUTUBE embed.
-- Единственное текущее внешнее изображение внутри rich HTML переносится в локальное
-  media storage до включения правила «только self-hosted images»; новые внешние
-  изображения блокируются.
+- Source discovery сверяет точный baseline selector list со всеми entity JSON и каждым
+  CMS `type: richtext` attribute, включая пустые поля;
+  singleton central sink и два точных JSON-LD исключения проверяются AST-гейтом.
+  Независимые browser-conformant built-output гейты запрещают vacuous green, ищут hostile
+  canary и любой неинвентаризированный активный output во всём production/demo document.
+- До изменения раздельно фиксируются source-corpus (включая поля, которые текущий route
+  extractor не выводит) и rendered-corpus. Characterization сохраняет структуру,
+  доступность, media, responsive derivatives и визуально значимое оформление.
+- Текущие content-origin inline SVG и inline styles мигрируются по закрытому mapping в
+  spec; детерминированный manifest с entity ID/JSON path и точной заменой проходит review
+  до RED-тестов.
+- Единственный текущий внешний image URL переписывается на уже существующий локальный
+  asset; новые внешние изображения удаляются, а отсутствующий локальный asset валит
+  сборку.
 - **BREAKING (контракт контента):** неподдерживаемые теги, атрибуты, embeds и URL-схемы
   больше не рендерятся, даже если они присутствуют в импортированном или CMS-контенте.
 
@@ -42,16 +48,16 @@ event-handler атрибуты, опасные URL-схемы и произво�
 
 ## Impact
 
-- `web/src/lib/html-cleaner.ts` и wrapper в `web/src/lib/data.ts` становятся единой
-  границей доверия rich content.
-- Покрываются все не-JSON-LD потребители `set:html` в `web/src/pages/` и
-  `web/src/components/`; JSON-LD остаётся под существующим контрактом
-  `serializeJsonLd()`.
+- `web/src/lib/html-cleaner.ts`, wrapper в `web/src/lib/data.ts` и центральный
+  `RichContent` sink образуют единую границу доверия rich content.
+- Покрывается машинный реестр не-JSON-LD raw sinks в `web/src/pages/` и
+  `web/src/components/`; JSON-LD остаётся под `serializeJsonLd()`.
 - `web/package.json` и `web/package-lock.json` получают поддерживаемый серверный HTML-
   санитайзер и типы, если выбранный пакет их не содержит.
-- `discovery/entities/course_groups.json` и media manifest получают локальную замену
-  текущего `https://ikpk.su/api/upload/file/...`; удалённый старый сайт не остаётся
-  runtime-зависимостью нового.
+- `discovery/entities/course_groups.json` получает ссылку на уже существующий локальный
+  `/media/uploads/0acd713c-...webp`; media manifest не требует нового entry.
+- Текущие fragments с inline SVG/style и связанный CSS/media output получают явную
+  миграцию, подтверждённую source/rendered fingerprints и visual evidence.
 - Unit-тесты проверяют политику и устойчивость к мутациям; build-тесты анализируют
   фактически сгенерированные страницы, а не только возврат helper-а.
 - Import scripts и Strapi permissions остаются отдельными security changes: эта работа
