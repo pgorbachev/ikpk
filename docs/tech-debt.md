@@ -837,7 +837,7 @@ change `schedule-month-filter` (PR #102).
 
 ---
 
-## TD-20 — Текст `bootstrap-vps.sh` и живой vhost на стенде расходятся после ручной правки
+## TD-22 — Текст `bootstrap-vps.sh` и живой vhost на стенде расходятся после ручной правки
 
 **Дата записи:** 2026-08-12. **Файлы:** `scripts/bootstrap-vps.sh` (heredoc `NGINX`),
 живой `/etc/nginx/sites-available/ikpk.conf` на стенде `193.124.115.99`.

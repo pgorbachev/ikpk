@@ -889,15 +889,38 @@ describe('раздача: кеш-политика и сжатие в текст�
   // Сценарий «Правил перенаправления пока нет» (tasks.md 2.12): механизм — файл создаётся
   // ДО nginx -t, потому что include одного отсутствующего файла есть ошибка конфигурации,
   // а пустой include законен. Закрывается мутацией 4.18 (перенести touch после nginx -t).
+  //
+  // ПРАВЛЕНО (найдено сессией реализации serving-cache-headers, tasks.md 4.18): предмет
+  // сценария — порядок ВНУТРИ пути записи свежего vhost (после того, как heredoc NGINX
+  // записан). В скрипте есть ВТОРОЙ, не связанный с этим путём touch того же файла — в
+  // ветке раннего выхода «vhost уже существует» (`exit 3`, до открытия heredoc'а NGINX
+  // вообще). Прежняя версия искала обе позиции по ВСЕМУ файлу: `.search()` находил
+  // ПЕРВОЕ совпадение touch, а это неизменно был touch раннего выхода — он текстово
+  // всегда стоит раньше nginx -t независимо от положения настоящего touch, поэтому
+  // мутация 4.18 (переставить настоящий touch после nginx -t) эту проверку не красила —
+  // проверка существовала, но гейтом не была. Обе позиции теперь ищутся только в тексте
+  // ПОСЛЕ закрывающего разделителя heredoc'а — единственном месте, где сценарий применим.
   it('[GREEN-BY-DESIGN] файл правил перенаправления создаётся до nginx -t', () => {
-    const script = readFileSync(join(ROOT, BOOTSTRAP_REL), 'utf-8')
+    const lines = readFileSync(join(ROOT, BOOTSTRAP_REL), 'utf-8')
       .split('\n')
-      .filter((l) => !l.trimStart().startsWith('#'))
-      .join('\n');
-    const touch = script.search(/touch\s+"?\$\{?WEB_ROOT\}?[^"\n]*nginx-redirects\.conf/);
-    const test = script.search(/^\s*nginx -t\s*$/m);
-    expect(touch, 'скрипт не создаёт файл правил перенаправления').toBeGreaterThan(-1);
-    expect(test, 'скрипт не проверяет конфигурацию через nginx -t').toBeGreaterThan(-1);
+      .filter((l) => !l.trimStart().startsWith('#'));
+    const heredocClose = lines.findIndex((l) => l.trim() === HEREDOC);
+    expect(
+      heredocClose,
+      `не найден закрывающий разделитель heredoc'а ${HEREDOC} — предмет сценария (порядок ` +
+        'внутри пути записи свежего vhost) искать не в чём',
+    ).toBeGreaterThan(-1);
+    const afterHeredoc = lines.slice(heredocClose + 1).join('\n');
+    const touch = afterHeredoc.search(/touch\s+"?\$\{?WEB_ROOT\}?[^"\n]*nginx-redirects\.conf/);
+    const test = afterHeredoc.search(/^\s*nginx -t\s*$/m);
+    expect(
+      touch,
+      'после heredoc\'а скрипт не создаёт файл правил перенаправления',
+    ).toBeGreaterThan(-1);
+    expect(
+      test,
+      'после heredoc\'а скрипт не проверяет конфигурацию через nginx -t',
+    ).toBeGreaterThan(-1);
     expect(
       touch < test,
       'файл правил создаётся ПОСЛЕ nginx -t: include одного отсутствующего файла — ошибка ' +
