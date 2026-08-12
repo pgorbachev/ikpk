@@ -122,6 +122,29 @@ nginx -t && systemctl reload nginx
 Если `nginx -t` упал — вернуть конфиг из `.bak` и разобраться, не перезагружая
 nginx: до `reload` старая конфигурация продолжает работать.
 
+**После change `serving-cache-headers` (кеш-заголовки и сжатие) сюда добавляются и
+директивы политики раздачи**, а не только `include` редиректов — иначе следующий, кто
+пройдёт по этой процедуре, оставит сервер, поднятый до появления политики, без кеша и
+сжатия, и ничто это не покажет: проверка текста `scripts/bootstrap-vps.sh` живой vhost
+не видит. Полный актуальный текст — сам heredoc `NGINX` в `scripts/bootstrap-vps.sh`
+(`70-176` на момент архивирования этого change); переносится он целиком, а не отдельными
+строками, чтобы не разойтись с проверяемым текстом:
+
+```bash
+ssh root@<ip-сервера>
+cp /etc/nginx/sites-available/ikpk.conf /etc/nginx/sites-available/ikpk.conf.bak
+# внутрь блока server { … } перед location / добавить серверное умолчание кеша,
+# правила по классам адресов (/_astro/, данные поиска, /fonts/, favicon.*,
+# sitemap*.xml) и gzip-директивы — текстом из heredoc'а NGINX в
+# scripts/bootstrap-vps.sh (раздел "Кеш-политика страниц" и "Сжатие задаётся").
+nginx -t && systemctl reload nginx
+```
+
+Свидетельство `curl -sS -D-` до и после — по каждому классу адресов
+(`openspec/changes/serving-cache-headers/tasks.md`, раздел 5). Именованное
+ограничение: живой vhost правится руками и после этого расходится с текстом
+`scripts/bootstrap-vps.sh` — этот дрейф ничем не гейтится (`docs/tech-debt.md`).
+
 
 Опциональные переменные:
 
