@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scheduleSupplements } from '../src/lib/schedule-supplements';
+import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
 
 // ─── Браузерные проверки фильтра расписания по месяцу ────────────────────────
 // Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md
@@ -239,26 +240,55 @@ test.describe('месяц и остальное управление', () => {
         entry: entries.find((entry) => entry.title === supplement.name),
       }))
       .find((candidate) => candidate.entry && months.includes(candidate.key));
-    expect(
-      present,
-      'ни одна заплатка не показана на странице (окно актуальности их уже отсекло) — проверять было нечего',
-    ).toBeDefined();
 
-    const together = inMonth(entries, present!.key);
+    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, и обе ветки —
+    // настоящие проверки.
+    //
+    // Почему не «падать, если заплаток нет». Обе заплатки однодневные, 2026-10-01 и
+    // 2026-10-08; после 2026-10-08 окно актуальности законно уберёт обе, предмет
+    // исчезнет от хода времени, а не от дефекта — и проверка начала бы стабильно
+    // краснеть ВНУТРИ единственного прогона, который держит публикацию. Ложное
+    // красное в гейте публикации дороже ложного зелёного (AGENTS.md), поэтому
+    // «проверять было нечего» здесь не тот выход.
+    //
+    // Почему не `skip`. Помеченный тест в собранном наборе виден, но выполняемым не
+    // считается, и мета-гейт покраснел бы по метке `@month-supplement`. Два гейта
+    // поймали бы друг друга.
+    if (present === undefined) {
+      // Заплаток на странице нет. Это законно, только если окно их отсекло; если хотя
+      // бы одна ещё в окне, значит её потеряли — и тогда ветка краснеет.
+      const today = calendarToday();
+      const stillInWindow = scheduleSupplements
+        .filter((supplement) => isCurrentOrFuture(supplement, today))
+        .map((supplement) => supplement.name);
+      expect(
+        stillInWindow,
+        `заплатки в окне актуальности на ${today}, но на странице их нет — запись потеряна:\n${stillInWindow.join('\n')}`,
+      ).toEqual([]);
+
+      const titles = new Set(entries.map((entry) => entry.title));
+      expect(
+        scheduleSupplements.filter((supplement) => titles.has(supplement.name)).map((s) => s.name),
+        'заплатка на странице есть, но её месяц не предложен контролом — она недостижима выбором',
+      ).toEqual([]);
+      return;
+    }
+
+    const together = inMonth(entries, present.key);
     expect(
       together.length,
-      `месяц ${present!.key} не укладывается в одну страницу (${together.length}) — заплатка может лежать на второй`,
+      `месяц ${present.key} не укладывается в одну страницу (${together.length}) — заплатка может лежать на второй`,
     ).toBeLessThanOrEqual(PAGE_SIZE);
 
-    await page.locator(MONTH).selectOption(present!.key);
+    await page.locator(MONTH).selectOption(present.key);
 
     const visible = await shown(page);
     expect(
       visible.map((entry) => entry.title),
-      `заплатка «${present!.title}» не попала в выдачу месяца ${present!.key}`,
-    ).toContain(present!.title);
+      `заплатка «${present.title}» не попала в выдачу месяца ${present.key}`,
+    ).toContain(present.title);
     expect(
-      visible.filter((entry) => entry.title !== present!.title).length,
+      visible.filter((entry) => entry.title !== present.title).length,
       'в месяце заплатки нет обычных записей — сценарий проверяет не то',
     ).toBeGreaterThan(0);
   });
