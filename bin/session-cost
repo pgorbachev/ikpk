@@ -1,0 +1,298 @@
+#!/usr/bin/env node
+// Считает расход контекста по сессии Claude Code и по каждому её субагенту.
+//
+// Зачем: AGENTS.md, раздел «Масштаб исполнителя», задаёт количественный стоп-порог —
+// агент старше ~150 вызовов или с контекстом больше 200 К закрывается отчётом. На глаз
+// такой порог не соблюдается: контекст субагента не показывается нигде и несжимаем, так
+// что перерасход виден только постфактум. Этот скрипт делает порог измеримым.
+//
+// Источник данных — транскрипты Claude Code в ~/.claude/projects/<slug>/. Сессии Codex
+// здесь не видны: он пишет историю в своём формате и своём каталоге. Это ограничение, а
+// не полнота — для Codex порог остаётся на внимании исполнителя.
+//
+// Коды выхода различают три исхода, а не два:
+//   0 — все исполнители в пределах порога
+//   1 — порог превышен хотя бы одним
+//   2 — измерить не удалось (нет каталога, нет сессии, нет вызовов, транскрипт не читается)
+//
+// Использование:
+//   ./bin/session-cost                          список сессий проекта
+//   ./bin/session-cost <id или префикс>         отчёт по сессии
+//   ./bin/session-cost … --project <путь>       транскрипты не текущего каталога, а
+//                                               указанного: из worktree сессия основного
+//                                               каталога иначе не находится, потому что
+//                                               каталог транскриптов заводится по cwd
+
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Порог по контексту — жёсткий: перерасход уже происходит, каждый следующий шаг платит
+// весь префикс. Порог по числу вызовов — не приговор, а повод проверить, не расползся ли
+// предмет: агент с 500 вызовами при контексте 120 К стоит дёшево и закрывать его незачем.
+// Поэтому пометки разные и на код выхода влияет только контекст.
+const MAX_CALLS = 150;
+const MAX_CTX = 200_000; // токены
+
+// Веса — отношения цен токенов (запись кэша 1,25×, чтение кэша 0,1×, вывод 5× от входа).
+// Это ПРОКСИ для сравнения исполнителей между собой, а не учёт пятичасового лимита: как
+// именно вендор считает лимит, из транскрипта не проверить. Отношения одинаковы для всех
+// моделей, поэтому сравнение внутри одной модели корректно, а между Opus и Sonnet
+// недооценивает Opus — для этого рядом печатается разбивка по моделям.
+const W = { read: 0.1, write: 1.25, input: 1, output: 5 };
+
+function die(msg) {
+  process.stderr.write(`session-cost: ${msg}\n`);
+  process.exit(2);
+}
+
+function projectDir(root) {
+  const slug = path.resolve(root).replace(/\//g, '-');
+  const dir = path.join(os.homedir(), '.claude', 'projects', slug);
+  if (!fs.existsSync(dir)) {
+    die(`нет каталога транскриптов для ${path.resolve(root)}\n  ожидался ${dir}\n` +
+        '  запускать из корня репозитория, тем же пользователем, что вёл сессию,\n' +
+        '  либо указать каталог сессии: --project <путь>');
+  }
+  return dir;
+}
+
+function readJsonl(file) {
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    die(`не читается ${file}: ${err.message}`);
+  }
+  const lines = raw.split('\n').filter((l) => l.length > 0);
+  const out = [];
+  let broken = 0;
+  for (const line of lines) {
+    try {
+      out.push(JSON.parse(line));
+    } catch {
+      broken += 1;
+    }
+  }
+  return { entries: out, broken, total: lines.length };
+}
+
+// Один шаг модели: сколько токенов он прочитал, записал и выдал.
+function steps(entries) {
+  const out = [];
+  for (const e of entries) {
+    const u = e && e.type === 'assistant' && e.message && e.message.usage;
+    if (!u) continue;
+    const model = String((e.message.model || '?')).replace(/^claude-/, '');
+    if (model === '<synthetic>') continue; // не запрос к модели: сообщение самой оболочки
+    const read = u.cache_read_input_tokens || 0;
+    const write = u.cache_creation_input_tokens || 0;
+    const input = u.input_tokens || 0;
+    const output = u.output_tokens || 0;
+    out.push({
+      at: e.timestamp || '',
+      model,
+      read,
+      write,
+      input,
+      output,
+      ctx: read + write + input,
+      weighted: read * W.read + write * W.write + input * W.input + output * W.output,
+    });
+  }
+  return out;
+}
+
+function summarize(name, st) {
+  const sum = (k) => st.reduce((a, s) => a + s[k], 0);
+  const models = {};
+  for (const s of st) models[s.model] = (models[s.model] || 0) + 1;
+  return {
+    name,
+    calls: st.length,
+    read: sum('read'),
+    write: sum('write'),
+    output: sum('output'),
+    weighted: sum('weighted'),
+    ctxAvg: st.length ? Math.round(sum('ctx') / st.length) : 0,
+    ctxMax: st.reduce((a, s) => Math.max(a, s.ctx), 0),
+    models: Object.entries(models)
+      .sort((a, b) => b[1] - a[1])
+      .map(([m, n]) => `${m}:${n}`)
+      .join(' '),
+  };
+}
+
+const k = (n) => `${Math.round(n / 1000)}K`;
+const m = (n) => `${(n / 1e6).toFixed(1)}M`;
+
+// «1 вызов», «2 вызова», «5 вызовов» — числа в отчёте читает человек.
+function calls(n) {
+  const d = n % 10;
+  const dd = n % 100;
+  if (dd >= 11 && dd <= 14) return `${n} вызовов`;
+  if (d === 1) return `${n} вызов`;
+  if (d >= 2 && d <= 4) return `${n} вызова`;
+  return `${n} вызовов`;
+}
+
+// Имя агента берётся из его meta.json: в имени файла оно склеено с префиксом и хешем
+// (`agent-aspec-payment-2-<хеш>.jsonl`), и разбирать его строкой — гадание.
+function agentName(subDir, file) {
+  const meta = path.join(subDir, file.replace(/\.jsonl$/, '.meta.json'));
+  if (fs.existsSync(meta)) {
+    try {
+      const m = JSON.parse(fs.readFileSync(meta, 'utf8'));
+      if (m && typeof m.name === 'string' && m.name) return m.name;
+    } catch {
+      /* повреждённый meta — падать из-за имени незачем, ниже запасной вариант */
+    }
+  }
+  return file.replace(/^agent-/, '').replace(/\.jsonl$/, '');
+}
+
+function listSessions(dir) {
+  const rows = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.jsonl'))
+    .map((f) => {
+      const st = fs.statSync(path.join(dir, f));
+      return { id: f.replace(/\.jsonl$/, ''), size: st.size, mtime: st.mtime };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+  if (rows.length === 0) die(`в ${dir} нет ни одного транскрипта`);
+  process.stdout.write(`Сессии проекта (${dir}):\n\n`);
+  for (const r of rows) {
+    process.stdout.write(
+      `  ${r.id}  ${r.mtime.toISOString().slice(0, 16).replace('T', ' ')}  ` +
+        `${(r.size / 1024 / 1024).toFixed(1).padStart(6)} МБ\n`,
+    );
+  }
+  process.stdout.write('\nОтчёт по сессии: ./bin/session-cost <id или префикс>\n');
+  // Список — не измерение: порог не проверен, поэтому это не успех.
+  process.exit(2);
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  const pi = argv.indexOf('--project');
+  let root = process.cwd();
+  if (pi !== -1) {
+    if (!argv[pi + 1]) die('--project без значения');
+    root = argv[pi + 1];
+    argv.splice(pi, 2);
+  }
+  const arg = argv[0];
+  const dir = projectDir(root);
+  if (!arg || arg === '--list') listSessions(dir);
+
+  const match = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.jsonl') && f.startsWith(arg));
+  if (match.length === 0) die(`сессия «${arg}» не найдена в ${dir}`);
+  if (match.length > 1) die(`префикс «${arg}» подходит нескольким сессиям: ${match.join(', ')}`);
+
+  const id = match[0].replace(/\.jsonl$/, '');
+  const mainFile = path.join(dir, match[0]);
+  const parsed = readJsonl(mainFile);
+  const mainSteps = steps(parsed.entries);
+  if (mainSteps.length === 0) {
+    die(`в транскрипте ${id} нет ни одного вызова модели — измерять нечего`);
+  }
+  if (parsed.broken > parsed.total * 0.05) {
+    process.stderr.write(
+      `session-cost: внимание — ${parsed.broken} из ${parsed.total} строк не разобраны, ` +
+        'числа ниже неполны\n',
+    );
+  }
+
+  const rows = [summarize('(главный цикл)', mainSteps)];
+
+  const subDir = path.join(dir, id, 'subagents');
+  let subNote = '';
+  if (!fs.existsSync(subDir)) {
+    subNote = 'каталог субагентов отсутствует — субагентов в сессии не было';
+  } else {
+    const files = fs.readdirSync(subDir).filter((f) => f.endsWith('.jsonl'));
+    if (files.length === 0) subNote = 'каталог субагентов пуст';
+    for (const f of files) {
+      const st = steps(readJsonl(path.join(subDir, f)).entries);
+      if (st.length === 0) continue;
+      rows.push(summarize(agentName(subDir, f), st));
+    }
+  }
+
+  const all = rows.slice(1).sort((a, b) => b.weighted - a.weighted);
+  const total = rows.reduce(
+    (a, r) => ({
+      calls: a.calls + r.calls,
+      read: a.read + r.read,
+      write: a.write + r.write,
+      output: a.output + r.output,
+      weighted: a.weighted + r.weighted,
+    }),
+    { calls: 0, read: 0, write: 0, output: 0, weighted: 0 },
+  );
+
+  const overCtx = (r) => r.ctxMax > MAX_CTX;
+  const longLived = (r, isAgent) => isAgent && !overCtx(r) && r.calls > MAX_CALLS;
+
+  process.stdout.write(`Сессия ${id}\n\n`);
+  process.stdout.write(
+    'исполнитель                          вызовов  контекст ср/макс   расход  модели\n',
+  );
+  const line = (r, isAgent) => {
+    const flag = overCtx(r) ? ' ⚠' : longLived(r, isAgent) ? ' ·' : '  ';
+    process.stdout.write(
+      `${flag}${r.name.slice(0, 34).padEnd(35)} ${String(r.calls).padStart(6)}  ` +
+        `${k(r.ctxAvg).padStart(6)}/${k(r.ctxMax).padEnd(6)} ${m(r.weighted).padStart(7)}  ${r.models}\n`,
+    );
+  };
+  line(rows[0], false);
+  for (const r of all) line(r, true);
+
+  const agentW = all.reduce((a, r) => a + r.weighted, 0);
+  process.stdout.write(
+    `\nВсего: ${calls(total.calls)}; чтение кэша ${m(total.read)}, запись ${m(total.write)}, ` +
+      `вывод ${m(total.output)}\n` +
+      `Расход (взвешенно, прокси по отношениям цен): ${m(total.weighted)}; ` +
+      `субагенты ${total.weighted ? Math.round((agentW / total.weighted) * 100) : 0}%\n`,
+  );
+  if (subNote) process.stdout.write(`Примечание: ${subNote}\n`);
+
+  const bad = [rows[0], ...all].filter(overCtx);
+  const long = all.filter((r) => longLived(r, true));
+
+  if (long.length > 0) {
+    process.stdout.write(
+      `\n· Долгоживущие при контексте в норме (больше ${MAX_CALLS} вызовов) — проверить, ` +
+        'не расползся ли предмет:\n',
+    );
+    for (const r of long) {
+      process.stdout.write(`  ${r.name} — ${calls(r.calls)}, контекст ${k(r.ctxMax)}\n`);
+    }
+  }
+  if (bad.length > 0) {
+    process.stdout.write(
+      `\n⚠ Контекст выше ${k(MAX_CTX)} — перерасход уже идёт, см. AGENTS.md ` +
+        '«Масштаб исполнителя»:\n',
+    );
+    for (const r of bad) {
+      process.stdout.write(
+        `  ${r.name} — контекст ${k(r.ctxMax)} при ${calls(r.calls)}, ` +
+          `цена шага около ${k(r.ctxMax * W.read)} взвешенных\n`,
+      );
+    }
+    process.stdout.write(
+      'Агента закрыть финальным отчётом и переоткрыть работу с чистым контекстом; ' +
+        'сессию — сжать или разрезать по шву работы.\n',
+    );
+    process.exit(1);
+  }
+  process.stdout.write('\nВсе исполнители в пределах порога по контексту.\n');
+  process.exit(0);
+}
+
+main();
