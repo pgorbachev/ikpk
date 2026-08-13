@@ -159,6 +159,20 @@ function collectTsRawSinksFromSource(file: string, sourceText: string, scriptKin
   const sf = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, scriptKind);
   const found: TsSinkRecord[] = [];
   const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
+      for (const el of node.importClause.namedBindings.elements) {
+        const imported = (el.propertyName ?? el.name).getText(sf);
+        if (imported !== 'authenticate') continue;
+        const loc = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+        found.push({
+          file,
+          kind: 'SafeRichHtml-factory',
+          text: node.getText(sf),
+          locator: `${file}:L${loc.line + 1}:C${loc.character + 1}:authenticate`,
+          allowedEmptyClear: false,
+        });
+      }
+    }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
       const left = node.left.getText(sf);
       if (/\.(innerHTML|outerHTML)$/.test(left)) {
@@ -246,10 +260,19 @@ export function collectTsSinksFromSource(
   return collectTsRawSinksFromSource(file, sourceText, scriptKind);
 }
 
+function scriptKindForFile(name: string): ts.ScriptKind | null {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.d.ts')) return null;
+  if (lower.endsWith('.tsx')) return ts.ScriptKind.TSX;
+  if (lower.endsWith('.ts')) return ts.ScriptKind.TS;
+  if (lower.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (lower.endsWith('.mjs') || lower.endsWith('.cjs') || lower.endsWith('.js')) return ts.ScriptKind.JS;
+  return null;
+}
+
 export function collectTsSinks(srcRoot = WEB_SRC): TsSinkRecord[] {
   const found: TsSinkRecord[] = [];
-  for (const file of walkFiles(srcRoot, ['.ts', '.astro'])) {
-    if (file.endsWith('.d.ts')) continue;
+  for (const file of walkFiles(srcRoot, ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.astro'])) {
     const rel = relative(srcRoot, file).replaceAll('\\', '/');
     const src = readFileSync(file, 'utf-8');
     if (file.endsWith('.astro')) {
@@ -258,9 +281,11 @@ export function collectTsSinks(srcRoot = WEB_SRC): TsSinkRecord[] {
       for (const block of scripts) {
         found.push(...collectTsRawSinksFromSource(rel, block[1], ts.ScriptKind.TS));
       }
-    } else {
-      found.push(...collectTsRawSinksFromSource(rel, src, ts.ScriptKind.TS));
+      continue;
     }
+    const kind = scriptKindForFile(file);
+    if (kind == null) continue;
+    found.push(...collectTsRawSinksFromSource(rel, src, kind));
   }
   found.sort((a, b) => a.locator.localeCompare(b.locator));
   return found;

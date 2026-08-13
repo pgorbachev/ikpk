@@ -102,7 +102,7 @@ const articleSchema = {
         </PageHeader>
 
         <div class="article-body rich-content">
-          <RichContent html={cleanBodyHtml(article.body_html)} sinkId="article-body" />
+          <RichContent html={cleanBodyHtml(article.body_html, { type: 'article', id: article.slug })} sinkId="article-body" />
         </div>
       </article>
 

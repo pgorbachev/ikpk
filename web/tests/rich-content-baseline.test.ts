@@ -9,6 +9,7 @@ import {
   matchJsonSelector,
 } from './helpers/rich-content-safety/source-discovery.js';
 import { fingerprintHtml } from './helpers/rich-content-safety/fingerprint.js';
+import { buildFingerprintComparison, unexplainedLosses } from './helpers/rich-content-safety/compare-fingerprints.js';
 import { assertManifestComplete, buildMigrationManifest } from './helpers/rich-content-safety/migration.js';
 import {
   ALLOWED_EMPTY_INNERHTML,
@@ -308,6 +309,26 @@ describe('rich-content baseline: rendered fingerprints текущего cleaner-
       if (fp.markers.some((m) => /table-scroll|data-wrapped/.test(m))) withMarkers += 1;
     }
     expect(withMarkers).toBe(htmlHits.length);
+  });
+
+  it('source fingerprints не теряют безопасную структуру после pipeline', () => {
+    const report = buildFingerprintComparison();
+    expect(report.records, 'пустой source corpus — vacuous').toBeGreaterThan(0);
+    const lost = unexplainedLosses(report);
+    expect(
+      lost,
+      lost.slice(0, 15).map((row) => `${row.selectorId} ${row.entityId}: ${row.error ?? row.losses.join(',')}`).join('\n'),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('evidence fingerprint-comparison содержит per-source rows', () => {
+    const evidence = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'web', 'tests', 'fixtures', 'rich-content-safety', 'evidence', 'fingerprint-comparison.json'), 'utf-8'),
+    ) as { comparisons?: unknown[]; records?: number; withLosses?: number };
+    expect(Array.isArray(evidence.comparisons), 'нет per-source comparisons').toBe(true);
+    expect(evidence.comparisons!.length, 'vacuous evidence').toBeGreaterThan(0);
+    expect(evidence.comparisons!.length).toBe(fingerprints.length);
+    expect(evidence.withLosses).toBe(0);
   });
 });
 

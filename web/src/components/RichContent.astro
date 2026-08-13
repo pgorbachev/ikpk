@@ -2,13 +2,19 @@
 import { isSafeRichHtml, terminalSanitize, type SafeRichHtml } from '../lib/html-cleaner';
 
 interface Props {
-  html: SafeRichHtml;
+  html: SafeRichHtml | string | { html?: unknown };
   sinkId: string;
 }
 
 const { html, sinkId } = Astro.props;
-if (!isSafeRichHtml(html)) {
-  throw new Error(`RichContent: unauthenticated input for sink ${sinkId}`);
-}
+const authenticated = isSafeRichHtml(html);
+const raw = authenticated
+  ? html.html
+  : typeof html === 'string'
+    ? html
+    : html && typeof html === 'object' && typeof html.html === 'string'
+      ? html.html
+      : '';
+const mode = authenticated ? 'authenticated' : 'untrusted';
 ---
-<div data-safe-rich-content={sinkId} set:html={terminalSanitize(html.html, 'authenticated')}></div>
+<div data-safe-rich-content={sinkId} set:html={terminalSanitize(raw, mode)}></div>

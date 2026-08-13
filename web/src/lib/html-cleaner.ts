@@ -19,16 +19,32 @@
 import { injectImgDimensions } from './media.js';
 import { registrationHref, isDemoForms } from './forms.js';
 import {
-  authenticate,
-  isSafeRichHtml,
   sanitizeUntrustedTree,
   terminalSanitize,
-  type SafeRichHtml,
   type SanitizeContext,
 } from './rich-html-sanitize.js';
 
-export { isSafeRichHtml, terminalSanitize };
-export type { SafeRichHtml };
+export { terminalSanitize };
+
+const AUTHENTICATED = new WeakSet<object>();
+const AUTHENTICATED_HTML = new WeakMap<object, string>();
+
+export interface SafeRichHtml {
+  readonly html: string;
+}
+
+function authenticate(html: string): SafeRichHtml {
+  const out = Object.freeze({ html });
+  AUTHENTICATED.add(out);
+  AUTHENTICATED_HTML.set(out, html);
+  return out;
+}
+
+export function isSafeRichHtml(value: unknown): value is SafeRichHtml {
+  if (!value || typeof value !== 'object' || !AUTHENTICATED.has(value)) return false;
+  const record = value as { html?: unknown };
+  return typeof record.html === 'string' && AUTHENTICATED_HTML.get(value) === record.html;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities

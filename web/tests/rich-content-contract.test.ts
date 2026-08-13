@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
@@ -24,9 +26,11 @@ import {
   assertSingletonSinkContract,
   collectAstroSinks,
   collectAstroSinksFromSource,
+  collectTsSinks,
   collectTsSinksFromSource,
   FUTURE_SINGLETON,
 } from './helpers/rich-content-safety/ast-sinks.js';
+import { assertCleanGitWorktree } from './helpers/rich-content-safety/git-clean.js';
 import { overlappingParserEngines, assertCommittedLockfileNodes } from './helpers/rich-content-safety/lockfile-graph.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 
@@ -45,10 +49,27 @@ describe('rich-content contract: authenticated SafeRichHtml', () => {
   it('поддельный объект и обычная строка не считаются результатом cleaner-а', async () => {
     const mod = await import('../src/lib/html-cleaner.js');
     expect(mod).toHaveProperty('isSafeRichHtml');
+    expect(mod).not.toHaveProperty('authenticate');
     const isSafe = (mod as unknown as { isSafeRichHtml?: (v: unknown) => boolean }).isSafeRichHtml;
     expect(typeof isSafe).toBe('function');
     expect(isSafe!('<p>x</p>')).toBe(false);
     expect(isSafe!({ html: '<p>x</p>', token: 'forged' })).toBe(false);
+  });
+
+  it('symbol extraction и мутация html не дают authenticated объект', async () => {
+    const sanitizer = await import('../src/lib/rich-html-sanitize.js');
+    expect(sanitizer).not.toHaveProperty('authenticate');
+    const real = cleanBodyHtml('<p>ok</p>');
+    const symbols = Object.getOwnPropertySymbols(real);
+    const forged: { html: string; [k: symbol]: unknown } = { html: '<div data-safe-rich-content="x" class="table-scroll">pwn</div>' };
+    for (const sym of symbols) forged[sym] = true;
+    const { isSafeRichHtml } = await import('../src/lib/html-cleaner.js');
+    expect(isSafeRichHtml(forged)).toBe(false);
+    expect(() => {
+      (real as { html: string }).html = '<script>alert(1)</script>';
+    }).toThrow();
+    expect(isSafeRichHtml(real)).toBe(true);
+    expect(htmlOf(real)).not.toContain('<script');
   });
 });
 
@@ -194,6 +215,31 @@ describe('rich-content contract: URL и media', () => {
         '<img src="/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp" srcset="https://evil.test/x.webp 480w, /media/_w/480/uploads/missing-derivative.webp 480w" alt="">',
       ),
     ).toThrow();
+  });
+
+  it('broken-local srcset валит сборку без src', () => {
+    expect(() =>
+      cleanBodyHtml(
+        '<img srcset="/media/_w/480/uploads/missing-derivative.webp 480w" alt="">',
+        { sourceType: 'article', sourceId: 'srcset-no-src' },
+      ),
+    ).toThrow(/broken-local|тип=article|ID=srcset-no-src/);
+  });
+
+  it('broken-local srcset валит сборку при внешнем src', () => {
+    expect(() =>
+      cleanBodyHtml(
+        '<img src="https://evil.test/x.webp" srcset="/media/_w/480/uploads/missing-derivative.webp 480w" alt="">',
+        { sourceType: 'news', sourceId: 'srcset-external-src' },
+      ),
+    ).toThrow(/broken-local|тип=news|ID=srcset-external-src/);
+  });
+
+  it('переносит mapped color class на сохранённый img', () => {
+    const result = out(`<img src="${LOCAL_UPLOAD_WEBP}" alt="" style="color:transparent">`);
+    expect(result).toMatch(/rc-color-10e9f560/);
+    expect(result).not.toMatch(/\sstyle=/i);
+    expect(result).toContain(LOCAL_UPLOAD_WEBP);
   });
 
   it('неканонический локальный src валит сборку', () => {
@@ -405,7 +451,7 @@ describe('rich-content contract: source collector ловит запрещённ�
     expect(errors.some((e) => /srcdoc/.test(e))).toBe(true);
   });
 
-  it('ловит внешний SafeRichHtml cast и construction', () => {
+  it('ловит внешний SafeRichHtml cast, construction и import factory', () => {
     const casts = collectTsSinksFromSource(
       'lib/forged.ts',
       'const a = { html: "<p>x</p>" } as SafeRichHtml;\nconst b = new SafeRichHtml("<p>x</p>");\n',
@@ -413,6 +459,12 @@ describe('rich-content contract: source collector ловит запрещённ�
     );
     expect(casts.some((s) => s.kind === 'SafeRichHtml-cast')).toBe(true);
     expect(casts.some((s) => s.kind === 'SafeRichHtml-construct')).toBe(true);
+    const factory = collectTsSinksFromSource(
+      'lib/forged-auth.ts',
+      "import { authenticate } from './rich-html-sanitize.js';\n",
+      ts.ScriptKind.TS,
+    );
+    expect(factory.some((s) => s.kind === 'SafeRichHtml-factory')).toBe(true);
   });
 
   it('не заявляет catch-all: computed innerHTML не ловится collector-ом', () => {
@@ -422,6 +474,39 @@ describe('rich-content contract: source collector ловит запрещённ�
       ts.ScriptKind.TS,
     );
     expect(sinks.filter((s) => s.kind === 'innerHTML')).toEqual([]);
+  });
+
+  it('сканирует innerHTML и document.write в js/mjs/jsx/tsx', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rc-sinks-'));
+    try {
+      writeFileSync(join(root, 'evil.mjs'), 'el.innerHTML = html;\n');
+      writeFileSync(join(root, 'evil.jsx'), 'node.innerHTML = payload;\n');
+      writeFileSync(join(root, 'evil.tsx'), 'document.write(x);\n');
+      writeFileSync(join(root, 'evil.js'), 'target.outerHTML = html;\n');
+      const sinks = collectTsSinks(root);
+      expect(sinks.some((s) => s.file === 'evil.mjs' && s.kind === 'innerHTML')).toBe(true);
+      expect(sinks.some((s) => s.file === 'evil.jsx' && s.kind === 'innerHTML')).toBe(true);
+      expect(sinks.some((s) => s.file === 'evil.tsx' && /write/.test(s.kind))).toBe(true);
+      expect(sinks.some((s) => s.file === 'evil.js' && s.kind === 'outerHTML')).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('rich-content contract: generator dirty worktree', () => {
+  it('assertCleanGitWorktree падает на грязном дереве', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rc-git-'));
+    try {
+      const git = (args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf-8' });
+      git(['init']);
+      git(['-c', 'user.email=t@t.test', '-c', 'user.name=t', 'commit', '--allow-empty', '-m', 'init']);
+      expect(assertCleanGitWorktree('test', root)).toMatch(/^[0-9a-f]{40}$/);
+      writeFileSync(join(root, 'dirty.txt'), 'x');
+      expect(() => assertCleanGitWorktree('test', root)).toThrow(/dirty worktree/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

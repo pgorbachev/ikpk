@@ -1,6 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import {
   CHARACTERIZATION_SHA,
   ENTITIES_DIR,
@@ -9,7 +8,6 @@ import {
   LOCAL_UPLOAD_WEBP,
   MEDIA_MANIFEST,
   KNOWN_REMOTE_UPLOAD,
-  REPO_ROOT,
 } from './paths.js';
 import { discoverSources, buildSourceRegistry, matchJsonSelector } from './source-discovery.js';
 import { fingerprintHtml } from './fingerprint.js';
@@ -20,13 +18,10 @@ import {
   collectExecutableSourceSlots,
 } from './ast-sinks.js';
 import { loadLockfile, subtreeLockfileNodes } from './lockfile-graph.js';
+import { assertCleanGitWorktree } from './git-clean.js';
 
 function loadEntity<T>(name: string): T {
   return JSON.parse(readFileSync(join(ENTITIES_DIR, name), 'utf-8')) as T;
-}
-
-function gitHead(): string {
-  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
 }
 
 function writeJson(name: string, value: unknown): void {
@@ -35,7 +30,7 @@ function writeJson(name: string, value: unknown): void {
 }
 
 export async function generateBaselineArtifacts(): Promise<void> {
-  const sha = gitHead();
+  const sha = assertCleanGitWorktree('generate-baseline');
   const discovered = discoverSources();
   const sourceRegistry = buildSourceRegistry(discovered, sha);
 

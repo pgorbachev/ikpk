@@ -22,15 +22,23 @@ function panelsFor(path?: string): Record<string, string> | undefined {
 }
 
 /**
- * Чистит легаси-HTML для вывода. `path` — путь страницы: по нему
- * подставляется восстановленный контент свёрнутых секций.
+ * Чистит легаси-HTML для вывода. Второй аргумент — путь страницы (для
+ * restored collapsible panels) либо стабильный source `{ type, id }`.
  */
-export function cleanBodyHtml(html: string, path?: string, legacyCtaHref?: string): SafeRichHtml {
+export function cleanBodyHtml(
+  html: string,
+  pathOrSource?: string | { type: string; id: string; path?: string },
+  legacyCtaHref?: string,
+): SafeRichHtml {
+  const source = typeof pathOrSource === 'object' && pathOrSource
+    ? pathOrSource
+    : { type: 'page', id: pathOrSource ?? 'unknown', path: pathOrSource };
+  const path = source.path ?? (typeof pathOrSource === 'string' ? pathOrSource : undefined);
   return cleanHtml(html, {
     panels: panelsFor(path),
     legacyCtaHref,
-    sourceType: 'page',
-    sourceId: path ?? 'unknown',
+    sourceType: source.type,
+    sourceId: source.id,
   });
 }
 

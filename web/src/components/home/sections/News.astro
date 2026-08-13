@@ -30,7 +30,7 @@ const news = getNews();
                 className="news-card"
               >
                 <div class="news-card-desc text-small">
-                  <RichContent html={cleanBodyHtml(item.description)} sinkId="news-description" />
+                  <RichContent html={cleanBodyHtml(item.description, { type: 'news', id: String(item.id) })} sinkId="news-description" />
                 </div>
               </MediaCard>
             ))}

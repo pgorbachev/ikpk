@@ -29,7 +29,7 @@ const description = 'Актуальные акции и скидки на обу
                 <span class="badge">{promo.type === 'SHOP' ? 'Магазин' : 'Институт'}</span>
                 <h3 class="promo-title">{promo.name}</h3>
                 <div class="text-small">
-                  <RichContent html={cleanBodyHtml(promo.description)} sinkId="promo-description" />
+                  <RichContent html={cleanBodyHtml(promo.description, { type: 'promotion', id: String(promo.id) })} sinkId="promo-description" />
                 </div>
                 {promo.link && (
                   <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">

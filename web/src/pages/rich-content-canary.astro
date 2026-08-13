@@ -26,6 +26,6 @@ const payload = [
 <BaseLayout title="rich-content canary" noindex>
   <p data-canary-control>{CONTROL}</p>
   <div class="rich-content">
-    <RichContent html={cleanBodyHtml(payload)} sinkId="canary-body" />
+    <RichContent html={cleanBodyHtml(payload, { sourceType: 'canary', sourceId: 'canary-body' })} sinkId="canary-body" />
   </div>
 </BaseLayout>

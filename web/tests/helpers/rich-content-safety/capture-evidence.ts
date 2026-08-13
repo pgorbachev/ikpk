@@ -8,6 +8,8 @@ import { extname, join } from 'node:path';
 import { chromium } from 'playwright';
 import { FIXTURES_DIR, WEB_ROOT } from './paths.js';
 import { exactRutubeIframe } from './closed-matrix.js';
+import { buildFingerprintComparison } from './compare-fingerprints.js';
+import { fingerprintHtml } from './fingerprint.js';
 
 const EVIDENCE = join(FIXTURES_DIR, 'evidence');
 const TYPES: Record<string, string> = {
@@ -129,6 +131,18 @@ function fingerprintSummary(): void {
   };
   const dist = join(WEB_ROOT, 'dist');
   const markerCounts: Record<string, number> = {};
+  const renderedRows: Array<{
+    route: string;
+    sinkId: string;
+    headings: number;
+    lists: number;
+    tables: number;
+    links: number;
+    images: number;
+    details: number;
+    checkboxes: number;
+    rutube: number;
+  }> = [];
   let remainingSvgInRich = 0;
   let remainingInlineStyleInRich = 0;
   if (existsSync(dist)) {
@@ -148,18 +162,40 @@ function fingerprintSummary(): void {
       for (const m of html.matchAll(/data-safe-rich-content="([^"]+)"/g)) {
         markerCounts[m[1]] = (markerCounts[m[1]] ?? 0) + 1;
       }
-      for (const block of html.matchAll(/data-safe-rich-content="[^"]+"[^>]*>([\s\S]*?)<\/div>/g)) {
-        if (/<svg[\s>]/i.test(block[1])) remainingSvgInRich += 1;
-        if (/\sstyle="/i.test(block[1])) remainingInlineStyleInRich += 1;
+      for (const block of html.matchAll(/data-safe-rich-content="([^"]+)"[^>]*>([\s\S]*?)<\/div>/g)) {
+        if (/<svg[\s>]/i.test(block[2])) remainingSvgInRich += 1;
+        if (/\sstyle="/i.test(block[2])) remainingInlineStyleInRich += 1;
+        const fp = fingerprintHtml(block[2], {
+          jsonPath: file,
+          selectorId: block[1],
+          entityId: htmlFileRoute(file),
+        });
+        renderedRows.push({
+          route: htmlFileRoute(file),
+          sinkId: block[1],
+          headings: fp.headings.length,
+          lists: fp.lists.length,
+          tables: fp.tables.length,
+          links: fp.links.length,
+          images: fp.images.length,
+          details: fp.details.length,
+          checkboxes: fp.checkboxes.length,
+          rutube: fp.rutube.length,
+        });
       }
     }
   }
+  const comparison = buildFingerprintComparison();
   writeFileSync(
     join(EVIDENCE, 'fingerprint-comparison.json'),
     `${JSON.stringify({
       generatedAt: new Date().toISOString(),
-      automatedComparison: 'web/tests/rich-content-baseline.test.ts — cleaner сохраняет headings/tables/markers',
-      source: {
+      compared: comparison.compared,
+      records: comparison.records,
+      withLosses: comparison.withLosses,
+      withErrors: comparison.withErrors,
+      comparisons: comparison.comparisons,
+      sourceAggregates: {
         records: fingerprints.length,
         withHeadings: fingerprints.filter((f) => f.headings.length > 0).length,
         withTables: fingerprints.filter((f) => f.tables.length > 0).length,
@@ -170,10 +206,18 @@ function fingerprintSummary(): void {
         rendered.sinks.map((s) => [s.id, { count: s.production.count, paths: s.production.paths.length }]),
       ),
       distMarkers: markerCounts,
+      renderedFingerprints: renderedRows,
       remainingSvgInRichRoots: remainingSvgInRich,
       remainingInlineStyleInRichRoots: remainingInlineStyleInRich,
     }, null, 2)}\n`,
   );
+}
+
+function htmlFileRoute(file: string): string {
+  const dist = join(WEB_ROOT, 'dist');
+  const rel = file.slice(dist.length).replace(/\\/g, '/');
+  if (rel === '/index.html') return '/';
+  return rel.replace(/\/index\.html$/, '') || rel;
 }
 
 async function main(): Promise<void> {

@@ -4,7 +4,6 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { walkFiles } from '../walk.js';
 import {
   collectOccurrences,
@@ -14,12 +13,9 @@ import {
   stripMarkedRegions,
   type OccurrenceRule,
 } from './hazard-scan.js';
-import { FIXTURES_DIR, REPO_ROOT, WEB_ROOT } from './paths.js';
+import { FIXTURES_DIR, WEB_ROOT } from './paths.js';
 import type { ExecutableSlot } from './ast-sinks.js';
-
-function gitHead(): string {
-  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
-}
+import { assertCleanGitWorktree } from './git-clean.js';
 
 function loadSlots(): ExecutableSlot[] {
   return JSON.parse(
@@ -115,6 +111,7 @@ export function writeOccurrenceRegistry(occurrences: OccurrenceRule[], extra: {
 }
 
 function main(): void {
+  const sha = assertCleanGitWorktree('generate-occurrences');
   const dist = join(WEB_ROOT, 'dist');
   const demo = join(WEB_ROOT, 'dist-demo');
   const slots = loadSlots();
@@ -149,7 +146,7 @@ function main(): void {
     const right = `${b.route}\t${b.slotId}\t${b.placement}`;
     return left.localeCompare(right);
   });
-  writeOccurrenceRegistry(occurrences, { generatedFromSha: gitHead(), distRoots: roots.map((r) => r.path) });
+  writeOccurrenceRegistry(occurrences, { generatedFromSha: sha, distRoots: roots.map((r) => r.path) });
   console.log(`wrote ${occurrences.length} occurrence rules from ${roots.map((r) => r.path).join(', ')}`);
 }
 

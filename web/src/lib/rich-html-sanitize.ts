@@ -1,6 +1,7 @@
 /**
  * Fail-closed rich-HTML sanitizer: parse5 tree-construction, closed allowlist,
- * two terminal trust modes, runtime-authenticated SafeRichHtml.
+ * two terminal trust modes. Runtime authentication of SafeRichHtml lives in
+ * html-cleaner.ts (module-private WeakSet, not an exported factory).
  *
  * Test oracle MUST NOT import this module. Chromium oracle uses Playwright DOMParser.
  */
@@ -83,16 +84,6 @@ const FONT: Record<string, string> = {
   'var(--font-size-s)': 'rc-font-s',
 };
 
-const TOKEN = Symbol('SafeRichHtml');
-
-export interface SafeRichHtml {
-  readonly html: string;
-}
-
-interface AuthenticatedHtml extends SafeRichHtml {
-  readonly [TOKEN]: true;
-}
-
 export type TrustMode = 'untrusted' | 'authenticated';
 
 export interface SanitizeContext {
@@ -111,20 +102,6 @@ function fail(ctx: SanitizeContext, reason: string): never {
   throw new RichHtmlResourceError(
     `Недопустимый rich HTML (${reason}) для тип=${ctx.sourceType} ID=${ctx.sourceId}`,
   );
-}
-
-export function isSafeRichHtml(value: unknown): value is SafeRichHtml {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && (value as AuthenticatedHtml)[TOKEN] === true
-    && typeof (value as { html?: unknown }).html === 'string',
-  );
-}
-
-function authenticate(html: string): SafeRichHtml {
-  const out: AuthenticatedHtml = { html, [TOKEN]: true };
-  return out;
 }
 
 function tagName(el: Element): string {
@@ -638,8 +615,14 @@ function rebuildIframe(el: Element, src: string): void {
   ]);
 }
 
-function sanitizeImg(el: Element, ctx: SanitizeContext): Attribute[] | null {
+function sanitizeImg(el: Element, ctx: SanitizeContext, mode: TrustMode): Attribute[] | null {
   const attrs = attrMap(el);
+  const srcset = attrs.get('srcset');
+  let srcsetKept: string | undefined;
+  if (srcset) {
+    const verdict = classifySrcset(srcset, ctx);
+    if (verdict.verdict === 'keep' && verdict.kept) srcsetKept = verdict.kept;
+  }
   let src = rewriteKnownRemote(attrs.get('src') ?? '');
   if (!src || forbiddenUrl(src)) return null;
   const raw = rawCanonical(src);
@@ -661,11 +644,7 @@ function sanitizeImg(el: Element, ctx: SanitizeContext): Attribute[] | null {
   if (!mediaFileExists(raw)) fail(ctx, 'отсутствует local asset');
   src = raw;
   const out: Attribute[] = [{ name: 'src', value: src }];
-  const srcset = attrs.get('srcset');
-  if (srcset) {
-    const verdict = classifySrcset(srcset, ctx);
-    if (verdict.verdict === 'keep' && verdict.kept) out.push({ name: 'srcset', value: verdict.kept });
-  }
+  if (srcsetKept) out.push({ name: 'srcset', value: srcsetKept });
   const sizes = attrs.get('sizes');
   if (sizes) out.push({ name: 'sizes', value: sizes });
   if (attrs.has('alt')) out.push({ name: 'alt', value: attrs.get('alt') ?? '' });
@@ -673,7 +652,7 @@ function sanitizeImg(el: Element, ctx: SanitizeContext): Attribute[] | null {
   const height = attrs.get('height');
   if (width && INT_RE.test(width)) out.push({ name: 'width', value: width });
   else if (entry.width) out.push({ name: 'width', value: String(entry.width) });
-  if (height && INT_RE.test(height)) out.push({ name: 'height', value: height });
+  if (height && INT_RE.test(height)) out.push({ name: 'height', value: String(entry.height) });
   else if (entry.height) out.push({ name: 'height', value: String(entry.height) });
   const loading = attrs.get('loading');
   if (loading === 'lazy' || loading === 'eager') out.push({ name: 'loading', value: loading });
@@ -681,6 +660,7 @@ function sanitizeImg(el: Element, ctx: SanitizeContext): Attribute[] | null {
   if (decoding === 'async' || decoding === 'sync' || decoding === 'auto') {
     out.push({ name: 'decoding', value: decoding });
   }
+  copyGlobal(attrs, out, el, mode);
   const aria = attrs.get('aria-label');
   if (aria) out.push({ name: 'aria-label', value: aria });
   return out;
@@ -750,7 +730,7 @@ function filterAttrs(el: Element, mode: TrustMode, ctx: SanitizeContext): void {
     return;
   }
   if (tag === 'img') {
-    const next = sanitizeImg(el, ctx);
+    const next = sanitizeImg(el, ctx, mode);
     if (!next) T.detachNode(el);
     else setAttrs(el, next);
     return;
@@ -946,5 +926,3 @@ export function sanitizeUntrustedTree(html: string, ctx: SanitizeContext): strin
   preScrub(tree);
   return serialize(tree);
 }
-
-export { authenticate };
