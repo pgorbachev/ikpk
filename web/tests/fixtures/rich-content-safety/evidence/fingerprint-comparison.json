@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-08-13T20:15:01.346Z",
+  "automatedComparison": "web/tests/rich-content-baseline.test.ts — cleaner сохраняет headings/tables/markers",
+  "source": {
+    "records": 870,
+    "withHeadings": 235,
+    "withTables": 6,
+    "withRutube": 1,
+    "withSvg": 117
+  },
+  "renderedRegistryProduction": {
+    "article-body": {
+      "count": 68,
+      "paths": 68
+    },
+    "institute-extra": {
+      "count": 3,
+      "paths": 3
+    },
+    "course-group-extra": {
+      "count": 1,
+      "paths": 1
+    },
+    "seminar-body": {
+      "count": 121,
+      "paths": 121
+    },
+    "teacher-bio": {
+      "count": 29,
+      "paths": 29
+    },
+    "static-page-oplata": {
+      "count": 1,
+      "paths": 1
+    },
+    "static-page-sotrudnichestvo": {
+      "count": 1,
+      "paths": 1
+    },
+    "static-page-svedeniya": {
+      "count": 1,
+      "paths": 1
+    },
+    "promo-description": {
+      "count": 4,
+      "paths": 1
+    },
+    "news-description": {
+      "count": 4,
+      "paths": 1
+    },
+    "preview-seminar-body": {
+      "count": 0,
+      "paths": 0
+    },
+    "preview-seminar-undated-body": {
+      "count": 0,
+      "paths": 0
+    },
+    "seminar-architecture-header": {
+      "count": 0,
+      "paths": 0
+    },
+    "canary-body": {
+      "count": 1,
+      "paths": 1
+    }
+  },
+  "distMarkers": {
+    "promo-description": 4,
+    "news-description": 4,
+    "seminar-body": 121,
+    "institute-extra": 3,
+    "course-group-extra": 1,
+    "teacher-bio": 29,
+    "static-page-oplata": 1,
+    "canary-body": 1,
+    "static-page-sotrudnichestvo": 1,
+    "article-body": 68,
+    "static-page-svedeniya": 1
+  },
+  "remainingSvgInRichRoots": 0,
+  "remainingInlineStyleInRichRoots": 0
+}

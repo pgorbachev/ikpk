@@ -232,7 +232,10 @@ function buildRenderedRegistry(data: {
       {
         id: 'news-description',
         production: { paths: ['/'], count: data.newsCount },
-        demo: { paths: ['/', ...previewArchitectures.map((id) => `/preview/${id}`)], count: data.newsCount },
+        demo: {
+          paths: ['/', ...previewArchitectures.map((id) => `/preview/${id}`), '/preview/d'],
+          count: data.newsCount * (1 + previewArchitectures.length + 1),
+        },
       },
       {
         id: 'preview-seminar-body',

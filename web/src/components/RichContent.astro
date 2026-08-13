@@ -1,0 +1,14 @@
+---
+import { isSafeRichHtml, terminalSanitize, type SafeRichHtml } from '../lib/html-cleaner';
+
+interface Props {
+  html: SafeRichHtml;
+  sinkId: string;
+}
+
+const { html, sinkId } = Astro.props;
+if (!isSafeRichHtml(html)) {
+  throw new Error(`RichContent: unauthenticated input for sink ${sinkId}`);
+}
+---
+<div data-safe-rich-content={sinkId} set:html={terminalSanitize(html.html, 'authenticated')}></div>

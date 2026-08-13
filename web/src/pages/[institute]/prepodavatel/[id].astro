@@ -2,6 +2,7 @@
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
 import { getInstitutes, getTeachers, excerpt, cleanBodyHtml } from '../../../lib/data';
+import RichContent from '../../../components/RichContent.astro';
 import type { Institute, Teacher } from '../../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -54,7 +55,9 @@ const { teacher, institute } = Astro.props as {
       </div>
 
       {teacher.bio_html ? (
-        <div class="teacher-bio rich-content" set:html={cleanBodyHtml(teacher.bio_html)} />
+        <div class="teacher-bio rich-content">
+          <RichContent html={cleanBodyHtml(teacher.bio_html)} sinkId="teacher-bio" />
+        </div>
       ) : teacher.bio_text && (
         <div class="teacher-bio rich-content">
           <h2>О преподавателе</h2>

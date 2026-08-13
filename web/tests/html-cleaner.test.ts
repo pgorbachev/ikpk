@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { cleanBodyHtml, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+import { cleanBodyHtml as cleanRaw, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+import { htmlOf } from './helpers/rich-content-safety/html-of.js';
+
+function cleanBodyHtml(
+  html: string,
+  opts?: Parameters<typeof cleanRaw>[1],
+): string {
+  return htmlOf(cleanRaw(html, opts));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture 1 – Article page
@@ -415,7 +423,8 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
 
   it('legacy button uses the destination the page supplied', () => {
     const result = cleanBodyHtml(input, { legacyCtaHref: '#kontakty-bloc' });
-    expect(result).toContain('<a class="btn btn-primary" href="#kontakty-bloc" data-legacy-cta>');
+    expect(result).toMatch(/<a\b[^>]*href="#kontakty-bloc"[^>]*data-legacy-cta/);
+    expect(result).toMatch(/class="[^"]*btn btn-primary/);
     expect(result).toContain('Schedule a meeting');
     expect(result).not.toContain('data-legacy-cta-unresolved');
   });

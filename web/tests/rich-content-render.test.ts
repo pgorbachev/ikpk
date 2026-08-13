@@ -54,7 +54,7 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
   });
 
   it('повторно санитизирует hostile html authenticated объекта у set:html', async () => {
-    const authenticated = cleanBodyHtml(`<p>${CANARY_HOSTILE_TOKEN}</p><script>alert(1)</script>`);
+    const authenticated = cleanBodyHtml(`<p data-canary-hostile="${CANARY_HOSTILE_TOKEN}">ok</p><script>${CANARY_HOSTILE_TOKEN}</script>`);
     expect(authenticated).not.toBeTypeOf('string');
     expect(htmlOf(authenticated).toLowerCase()).not.toContain('<script');
     expect(htmlOf(authenticated)).not.toContain(CANARY_HOSTILE_TOKEN);

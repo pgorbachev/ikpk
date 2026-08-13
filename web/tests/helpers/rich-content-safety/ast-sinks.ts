@@ -322,6 +322,20 @@ export async function collectExecutableSourceSlots(srcRoot = WEB_SRC): Promise<E
         identity,
       });
     });
+    const cssImports = [...src.matchAll(/^import\s+['"]([^'"]+\.css)['"]/gm)];
+    for (const [index, match] of cssImports.entries()) {
+      const href = match[1];
+      const locator = `${rel}:css-import:${index}:${href}`;
+      const identity = `link|href=quoted:${href}|rel=quoted:stylesheet`;
+      slots.push({
+        slotId: `src:${locator}`,
+        file: rel,
+        nodeKind: 'css-import',
+        locator,
+        fingerprint: createHash('sha256').update(`${locator}\n${identity}`).digest('hex'),
+        identity,
+      });
+    }
   }
   slots.sort((a, b) => a.slotId.localeCompare(b.slotId));
   return slots;

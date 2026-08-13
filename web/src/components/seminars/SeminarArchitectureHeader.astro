@@ -6,7 +6,9 @@
  * Modular: sticky-карточка и тело в одной сетке — иначе sticky ограничен высотой
  * <header> и не сопровождает текст.
  */
-import type { Seminar, CourseGroup, Institute, Teacher } from '../../lib/data';
+import type { Seminar, CourseGroup, Institute, Teacher, SafeRichHtml } from '../../lib/data';
+import { isSafeRichHtml } from '../../lib/data';
+import RichContent from '../RichContent.astro';
 import { getAssetDimensions, srcsetFor } from '../../lib/media';
 import { instituteShortBySlug } from '../../lib/home';
 
@@ -30,7 +32,7 @@ interface Props {
   /** Имя из seminar.teachers, если карточки Teacher нет — без выдуманного портрета. */
   teacherNameOnly?: string;
   /** Для modular: тело внутри сетки со sticky-карточкой (§7.6). */
-  bodyHtml?: string;
+  bodyHtml?: SafeRichHtml | '';
 }
 
 const {
@@ -158,8 +160,10 @@ const ctaHref = next?.formHref || '/raspisanie-i-tseny';
           <span class="sem-badge">Набор открыт · дата уточняется</span>
         </p>
       )}
-      {bodyHtml ? (
-        <div class="sem-mo-body rich-content" set:html={bodyHtml} />
+      {isSafeRichHtml(bodyHtml) ? (
+        <div class="sem-mo-body rich-content">
+          <RichContent html={bodyHtml} sinkId="seminar-architecture-header" />
+        </div>
       ) : (
         <p class="sem-empty">Описание семинара в данных отсутствует.</p>
       )}

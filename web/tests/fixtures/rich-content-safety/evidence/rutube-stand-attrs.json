@@ -1,0 +1,11 @@
+{
+  "src": "https://rutube.ru/play/embed/4a1e6023bd7a3716d8ff56bf98c96e97/",
+  "sandbox": "allow-scripts allow-same-origin allow-presentation",
+  "allow": "autoplay; encrypted-media; fullscreen; picture-in-picture",
+  "referrerpolicy": "no-referrer",
+  "loading": "lazy",
+  "title": "Видео RUTUBE",
+  "allowfullscreen": true,
+  "iframeCount": 1,
+  "reconstructed": "<iframe src=\"https://rutube.ru/play/embed/4a1e6023bd7a3716d8ff56bf98c96e97/\" sandbox=\"allow-scripts allow-same-origin allow-presentation\" allow=\"autoplay; encrypted-media; fullscreen; picture-in-picture\" referrerpolicy=\"no-referrer\" loading=\"lazy\" title=\"Видео RUTUBE\" allowfullscreen></iframe>"
+}

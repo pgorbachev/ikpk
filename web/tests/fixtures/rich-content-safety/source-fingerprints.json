@@ -24055,8 +24055,8 @@
     "jsonPath": "course_groups.json$[1][\"description_html\"]",
     "selectorId": "course_groups[*].description_html",
     "entityId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
-    "byteLength": 1416,
-    "sha256": "7bdc3e156d6e2b62bb2e50d4028310ab9005e4f42ec267e98663a73ddb3fda57",
+    "byteLength": 1404,
+    "sha256": "743e0dc6667941e886053453ce54ba9030a3345f50812688f66fffc7d8777624",
     "textHash": "71d21ee6f5f0183ad184f1d679ad6f25762c4ffb983c25ed61c636379bb3160b",
     "headings": [],
     "lists": [],
@@ -24065,7 +24065,7 @@
     "links": [],
     "images": [
       {
-        "src": "https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304",
+        "src": "/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp",
         "srcset": "",
         "alt": "",
         "width": "",

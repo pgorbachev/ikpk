@@ -70,7 +70,9 @@ describe('rich-content contract: Chromium DOMParser oracle', () => {
 
   it('entity-encoded mXSS не оставляет активный img onerror', async () => {
     const parsed = await harness.parse(htmlOf(cleanBodyHtml(HOSTILE.entityMxss)));
-    expect(parsed.serialized).not.toMatch(/onerror/i);
+    // Spec: падать на активном результате, не на подстроке в инертном тексте.
+    // `&lt;img src=x onerror=alert(1)&gt;` — текст, не атрибут.
+    expect(parsed.serialized).not.toMatch(/<[a-z][^>]*\sonerror\b/i);
     expect(parsed.tagNames).not.toContain('script');
   });
 

@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { cleanBodyHtml } from '../lib/html-cleaner.js';
+import RichContent from '../components/RichContent.astro';
 
 /**
  * Test-only canary. Не в sitemap (astro.config filter), noindex.
@@ -24,5 +25,7 @@ const payload = [
 
 <BaseLayout title="rich-content canary" noindex>
   <p data-canary-control>{CONTROL}</p>
-  <div class="rich-content" set:html={cleanBodyHtml(payload)} />
+  <div class="rich-content">
+    <RichContent html={cleanBodyHtml(payload)} sinkId="canary-body" />
+  </div>
 </BaseLayout>

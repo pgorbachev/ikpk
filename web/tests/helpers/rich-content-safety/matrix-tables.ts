@@ -83,8 +83,11 @@ export const PROVENANCE_CASES: ProvenanceCase[] = [
   },
   {
     tag: 'style',
-    html: '<style>a{}</style><style>b{}</style>',
-    sources: ['style|body:from-output-0', 'style|body:from-output-1'],
+    html: '<style type="text/css">a{}</style><style type="text/plain">b{}</style>',
+    sources: [
+      'style|type=quoted:text/css',
+      'style|type=quoted:text/plain',
+    ],
   },
   {
     tag: 'iframe',

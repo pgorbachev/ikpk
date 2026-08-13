@@ -44,7 +44,7 @@ describe('rich-content contract: whole-document hazard scan (production dist)', 
       expect(parsed.mainFrameUrl).toMatch(/^about:blank/);
       const recovered = parsed.serialized;
       errors.push(
-        ...matchOccurrences(recovered, route, occ.occurrences, sourceSlots, { ignoreMarkedRegions: true }),
+        ...matchOccurrences(recovered, route, occ.occurrences, sourceSlots, { ignoreMarkedRegions: true, build: 'production' }),
       );
       for (const hit of unmarkedDocumentHazards(recovered)) {
         errors.push(`${route}: ${hit.reason} на <${hit.tag} ${hit.attr}>`);

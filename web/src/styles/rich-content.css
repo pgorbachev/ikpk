@@ -140,3 +140,31 @@
 .table-scroll > table {
   margin: 0;
 }
+
+/* Mapped legacy inline styles (rich-content-safety migration). */
+.rich-content .rc-align-center { text-align: center; }
+.rich-content .rc-align-right { text-align: right; }
+.rich-content .rc-font-14 { font-size: 14px; }
+.rich-content .rc-font-18 { font-size: 18px; }
+.rich-content .rc-font-20 { font-size: 20px; }
+.rich-content .rc-font-22 { font-size: 22px; }
+.rich-content .rc-font-inherit { font-size: inherit; }
+.rich-content .rc-font-s { font-size: var(--font-size-s); }
+.rich-content .rc-display-flex { display: flex; }
+.rich-content .rc-flex-column { flex-direction: column; }
+.rich-content .rc-gap-24 { gap: 24px; }
+.rich-content .rc-ml-15 { margin-left: 15px; }
+.rich-content .rc-color-10e9f560 { color: transparent; }
+.rich-content .rc-color-f3ba9e71 { color: var(--color-text-secondary); }
+.rich-content .rc-color-026163fa { color: rgb(0, 0, 0); }
+.rich-content .rc-color-39bc7da5 { color: rgb(52, 54, 61); }
+.rich-content .rc-color-000ec74f { color: rgb(43, 43, 43); }
+.rich-content .rc-color-f70b776d { color: #1A1A1A; }
+.rich-content .rc-color-132f29d5 { color: var(--color-text-subdued); }
+.rich-content .rc-color-d1cab08b { color: rgb(15, 17, 21); }
+.rich-content .rc-color-7bf7d220 { color: rgb(64, 64, 64); }
+.rich-content .rc-color-8a04dbcc { color: currentColor; }
+.rich-content .rc-color-c9e20002 { color: var(--color-bg-pagination-secondary); }
+.rich-content .rc-color-b5347eb4 { color: var(--color-bg-primary-active); }
+.rich-content .rc-color-cfd2b060 { color: var(--color-info-500); }
+.rich-content .rc-color-ce4d5ff2 { color: rgb(44, 45, 46); }

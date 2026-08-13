@@ -18,6 +18,17 @@
 
 import { injectImgDimensions } from './media.js';
 import { registrationHref, isDemoForms } from './forms.js';
+import {
+  authenticate,
+  isSafeRichHtml,
+  sanitizeUntrustedTree,
+  terminalSanitize,
+  type SafeRichHtml,
+  type SanitizeContext,
+} from './rich-html-sanitize.js';
+
+export { isSafeRichHtml, terminalSanitize };
+export type { SafeRichHtml };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -715,12 +726,27 @@ export interface CleanOptions {
    * придумывает адрес за страницу, см. normalizeLegacyControls.
    */
   legacyCtaHref?: string;
+  sourceType?: string;
+  sourceId?: string;
 }
 
-export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
-  if (!html) return html;
+const KNOWN_REMOTE_UPLOAD =
+  'https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304';
+const LOCAL_UPLOAD_WEBP = '/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp';
 
-  let result = html;
+function rewriteKnownRemoteUpload(html: string): string {
+  return html.split(KNOWN_REMOTE_UPLOAD).join(LOCAL_UPLOAD_WEBP);
+}
+
+export function cleanBodyHtml(html: string, opts: CleanOptions = {}): SafeRichHtml {
+  const ctx: SanitizeContext = {
+    sourceType: opts.sourceType ?? 'fragment',
+    sourceId: opts.sourceId ?? 'unknown',
+  };
+  if (!html) return authenticate('');
+
+  let result = sanitizeUntrustedTree(html, ctx);
+  result = rewriteKnownRemoteUpload(result);
   // Локализация URL бакета живёт в единственной точке — data.ts loadJson
   // (весь raw JSON до парсинга); здесь только размеры <img> из манифеста.
   result = injectImgDimensions(result);
@@ -739,8 +765,9 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
   result = normalizeLegacyControls(result, opts.legacyCtaHref);
   result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
+  result = terminalSanitize(result, 'authenticated', ctx);
 
-  return result;
+  return authenticate(result);
 }
 
 /**
