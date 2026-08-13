@@ -1,0 +1,7 @@
+{
+  "status": "source-inventory-only",
+  "generatedFrom": "source AST; dist occurrences заполняются maintainer-командой на reviewed SHA",
+  "ciMustNotRegenerate": true,
+  "note": "CI читает committed registry и никогда не перезаписывает его из текущего dist. Пустые occurrences — текущий baseline до sanitizer/RichContent; dist-гейт обязан краснеть, пока правила не заполнены.",
+  "occurrences": []
+}

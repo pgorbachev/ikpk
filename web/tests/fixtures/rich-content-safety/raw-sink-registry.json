@@ -1,0 +1,226 @@
+{
+  "astro": [
+    {
+      "id": "json-ld-breadcrumbs",
+      "classification": "json-ld",
+      "file": "components/Breadcrumbs.astro",
+      "nodeKind": "element",
+      "elementName": "script",
+      "attribute": "set:html",
+      "expression": "serializeJsonLd(schema)",
+      "attrKind": "expression",
+      "locator": "components/Breadcrumbs.astro:L44:C1:element:script:set:html",
+      "fingerprint": "components/Breadcrumbs.astro:L44:C1:element:script:set:html"
+    },
+    {
+      "id": "json-ld-head-meta",
+      "classification": "json-ld",
+      "file": "components/HeadMeta.astro",
+      "nodeKind": "element",
+      "elementName": "script",
+      "attribute": "set:html",
+      "expression": "serializeJsonLd(schema)",
+      "attrKind": "expression",
+      "locator": "components/HeadMeta.astro:L66:C12:element:script:set:html",
+      "fingerprint": "components/HeadMeta.astro:L66:C12:element:script:set:html"
+    },
+    {
+      "id": "news-description",
+      "classification": "rich-html",
+      "file": "components/home/sections/News.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(item.description)",
+      "attrKind": "expression",
+      "locator": "components/home/sections/News.astro:L31:C17:element:div:set:html",
+      "fingerprint": "components/home/sections/News.astro:L31:C17:element:div:set:html"
+    },
+    {
+      "id": "seminar-architecture-header",
+      "classification": "rich-html",
+      "file": "components/seminars/SeminarArchitectureHeader.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "bodyHtml",
+      "attrKind": "expression",
+      "locator": "components/seminars/SeminarArchitectureHeader.astro:L162:C9:element:div:set:html",
+      "fingerprint": "components/seminars/SeminarArchitectureHeader.astro:L162:C9:element:div:set:html"
+    },
+    {
+      "id": "institute-extra",
+      "classification": "rich-html",
+      "file": "pages/[institute].astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanedAdditionalHtml",
+      "attrKind": "expression",
+      "locator": "pages/[institute].astro:L212:C9:element:div:set:html",
+      "fingerprint": "pages/[institute].astro:L212:C9:element:div:set:html"
+    },
+    {
+      "id": "course-group-extra",
+      "classification": "rich-html",
+      "file": "pages/[institute]/[courseGroup].astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanedAdditionalHtml",
+      "attrKind": "expression",
+      "locator": "pages/[institute]/[courseGroup].astro:L185:C9:element:div:set:html",
+      "fingerprint": "pages/[institute]/[courseGroup].astro:L185:C9:element:div:set:html"
+    },
+    {
+      "id": "seminar-body",
+      "classification": "rich-html",
+      "file": "pages/[institute]/[courseGroup]/[seminar].astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "seminarBodyHtml",
+      "attrKind": "expression",
+      "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L160:C9:element:div:set:html",
+      "fingerprint": "pages/[institute]/[courseGroup]/[seminar].astro:L160:C9:element:div:set:html"
+    },
+    {
+      "id": "teacher-bio",
+      "classification": "rich-html",
+      "file": "pages/[institute]/prepodavatel/[id].astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(teacher.bio_html)",
+      "attrKind": "expression",
+      "locator": "pages/[institute]/prepodavatel/[id].astro:L57:C9:element:div:set:html",
+      "fingerprint": "pages/[institute]/prepodavatel/[id].astro:L57:C9:element:div:set:html"
+    },
+    {
+      "id": "promo-description",
+      "classification": "rich-html",
+      "file": "pages/aktsii-i-skidki.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(promo.description)",
+      "attrKind": "expression",
+      "locator": "pages/aktsii-i-skidki.astro:L30:C17:element:div:set:html",
+      "fingerprint": "pages/aktsii-i-skidki.astro:L30:C17:element:div:set:html"
+    },
+    {
+      "id": "static-page-oplata",
+      "classification": "rich-html",
+      "file": "pages/oplata.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz')",
+      "attrKind": "expression",
+      "locator": "pages/oplata.astro:L34:C9:element:div:set:html",
+      "fingerprint": "pages/oplata.astro:L34:C9:element:div:set:html"
+    },
+    {
+      "id": "preview-seminar-undated-body",
+      "classification": "rich-html",
+      "file": "pages/preview/[variant]/seminar-undated.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "bodyHtml",
+      "attrKind": "expression",
+      "locator": "pages/preview/[variant]/seminar-undated.astro:L87:C9:element:div:set:html",
+      "fingerprint": "pages/preview/[variant]/seminar-undated.astro:L87:C9:element:div:set:html"
+    },
+    {
+      "id": "preview-seminar-body",
+      "classification": "rich-html",
+      "file": "pages/preview/[variant]/seminar.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "bodyHtml",
+      "attrKind": "expression",
+      "locator": "pages/preview/[variant]/seminar.astro:L116:C9:element:div:set:html",
+      "fingerprint": "pages/preview/[variant]/seminar.astro:L116:C9:element:div:set:html"
+    },
+    {
+      "id": "canary-body",
+      "classification": "rich-html",
+      "file": "pages/rich-content-canary.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(payload)",
+      "attrKind": "expression",
+      "locator": "pages/rich-content-canary.astro:L27:C3:element:div:set:html",
+      "fingerprint": "pages/rich-content-canary.astro:L27:C3:element:div:set:html"
+    },
+    {
+      "id": "static-page-sotrudnichestvo",
+      "classification": "rich-html",
+      "file": "pages/sotrudnichestvo-s-nami.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(page.body_html, Astro.url.pathname, '#sotrudnichestvo-svyaz')",
+      "attrKind": "expression",
+      "locator": "pages/sotrudnichestvo-s-nami.astro:L19:C9:element:div:set:html",
+      "fingerprint": "pages/sotrudnichestvo-s-nami.astro:L19:C9:element:div:set:html"
+    },
+    {
+      "id": "article-body",
+      "classification": "rich-html",
+      "file": "pages/statyi/[slug].astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(article.body_html)",
+      "attrKind": "expression",
+      "locator": "pages/statyi/[slug].astro:L103:C9:element:div:set:html",
+      "fingerprint": "pages/statyi/[slug].astro:L103:C9:element:div:set:html"
+    },
+    {
+      "id": "static-page-svedeniya",
+      "classification": "rich-html",
+      "file": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(page.body_html, Astro.url.pathname)",
+      "attrKind": "expression",
+      "locator": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L24:C9:element:div:set:html",
+      "fingerprint": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L24:C9:element:div:set:html"
+    }
+  ],
+  "typescript": [
+    {
+      "file": "components/schedule/ScheduleControlsScript.astro",
+      "kind": "innerHTML",
+      "text": "program.innerHTML = ''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L49:C7:program.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "components/schedule/ScheduleControlsScript.astro",
+      "kind": "innerHTML",
+      "text": "pagination.innerHTML = ''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L87:C7:pagination.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "pages/statyi/index.astro",
+      "kind": "innerHTML",
+      "text": "pagination.innerHTML = ''",
+      "locator": "pages/statyi/index.astro:L274:C7:pagination.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "pages/statyi/index.astro",
+      "kind": "innerHTML",
+      "text": "grid.innerHTML = ''",
+      "locator": "pages/statyi/index.astro:L336:C7:grid.innerHTML=''",
+      "allowedEmptyClear": true
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { cleanBodyHtml } from '../lib/html-cleaner.js';
+
+/**
+ * Test-only canary. Не в sitemap (astro.config filter), noindex.
+ * Имя файла без ведущего `_`: Astro не генерирует маршруты из `_*.astro`.
+ * Control token — инертный текст вне sink-а.
+ * Hostile token только внутри discard-with-content / forbidden attr,
+ * чтобы корректный sanitizer удалил его вместе с активной разметкой.
+ */
+const CONTROL = 'rc-fixture-control-9f3c2e1a';
+const HOSTILE = 'rc-hostile-canary-7b41d0ee';
+const payload = [
+  `<p contenteditable="true" data-canary-hostile="${HOSTILE}">visible-safe-text</p>`,
+  `<script>${HOSTILE}</script>`,
+  `<img src=x onerror="${HOSTILE}">`,
+  `<svg><desc>${HOSTILE}</desc></svg>`,
+  '<iframe src="https://evil.test"></iframe>',
+  '<meta http-equiv="refresh" content="0;url=https://evil.test">',
+  '<object data="https://evil.test/x.pdf"></object>',
+].join('');
+---
+
+<BaseLayout title="rich-content canary" noindex>
+  <p data-canary-control>{CONTROL}</p>
+  <div class="rich-content" set:html={cleanBodyHtml(payload)} />
+</BaseLayout>

@@ -10,6 +10,8 @@ export default defineConfig({
       'tests/content-quality.test.ts',
       'tests/seo-package.test.ts',
       'tests/schedule-month-dist.test.ts',
+      'tests/rich-content-canary.build.test.ts',
+      'tests/rich-content-hazard.build.test.ts',
     ],
   },
 });

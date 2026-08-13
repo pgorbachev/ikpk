@@ -1,0 +1,278 @@
+{
+  "change": "sanitize-rich-html-content",
+  "spec": "openspec/changes/sanitize-rich-html-content/specs/rich-content-safety/spec.md",
+  "scenarios": [
+    {
+      "requirement": "Единая граница безопасного rich HTML",
+      "scenario": "Контент из любого поддерживаемого источника",
+      "test": "web/tests/rich-content-contract.test.ts / singleton sink AST; web/tests/rich-content-canary.build.test.ts / marker inventory"
+    },
+    {
+      "requirement": "Единая граница безопасного rich HTML",
+      "scenario": "Новый raw-HTML sink известного синтаксического класса",
+      "test": "web/tests/rich-content-contract.test.ts / source collector srcdoc literal/expression/spread; SafeRichHtml cast; web/tests/rich-content-baseline.test.ts / raw-sink registry"
+    },
+    {
+      "requirement": "Единая граница безопасного rich HTML",
+      "scenario": "Поддельный безопасный результат",
+      "test": "web/tests/rich-content-contract.test.ts / поддельный объект; web/tests/rich-content-render.test.ts"
+    },
+    {
+      "requirement": "Единая граница безопасного rich HTML",
+      "scenario": "Сбой санитизации",
+      "test": "web/tests/rich-content-contract.test.ts / limits"
+    },
+    {
+      "requirement": "Исполняемая разметка не переживает границу",
+      "scenario": "Скрипт с маскирующимся текстом",
+      "test": "web/tests/rich-content-contract.test.ts / script с маскирующимся текстом; web/tests/rich-content-oracle.test.ts"
+    },
+    {
+      "requirement": "Исполняемая разметка не переживает границу",
+      "scenario": "Активная вложенная разметка",
+      "test": "web/tests/rich-content-contract.test.ts / активный %s удаляется; oracle foreign content"
+    },
+    {
+      "requirement": "Исполняемая разметка не переживает границу",
+      "scenario": "Событие или inline style на разрешённом элементе",
+      "test": "web/tests/rich-content-contract.test.ts / on* и style снимаются"
+    },
+    {
+      "requirement": "Исполняемая разметка не переживает границу",
+      "scenario": "Неподдерживаемый инертный wrapper",
+      "test": "web/tests/rich-content-contract.test.ts / инертный неизвестный wrapper"
+    },
+    {
+      "requirement": "Source- и rendered-corpus проверяются раздельно",
+      "scenario": "Текущий source-corpus",
+      "test": "web/tests/rich-content-baseline.test.ts / fingerprints"
+    },
+    {
+      "requirement": "Source- и rendered-corpus проверяются раздельно",
+      "scenario": "Текущий rendered-corpus",
+      "test": "web/tests/rich-content-baseline.test.ts / rendered registry; web/tests/rich-content-canary.build.test.ts / marker inventory"
+    },
+    {
+      "requirement": "Source- и rendered-corpus проверяются раздельно",
+      "scenario": "Текущее source-only видео",
+      "test": "web/tests/rich-content-baseline.test.ts / source-only RUTUBE; web/tests/rich-content-contract.test.ts / точный RUTUBE iframe"
+    },
+    {
+      "requirement": "Source- и rendered-corpus проверяются раздельно",
+      "scenario": "Source-only video playlist",
+      "test": "web/tests/rich-content-baseline.test.ts / video_playlists в registry"
+    },
+    {
+      "requirement": "Текущая видимая семантика мигрируется до запрета активной разметки",
+      "scenario": "PDF-иконки и институтские иллюстрации",
+      "test": "web/tests/rich-content-baseline.test.ts / migration manifest SVG rows"
+    },
+    {
+      "requirement": "Текущая видимая семантика мигрируется до запрета активной разметки",
+      "scenario": "Текущее видимое оформление",
+      "test": "web/tests/rich-content-baseline.test.ts / mapped style classes включая payment flex",
+      "manual": "computed-style/screenshots после реализации миграции (tasks 4.3)"
+    },
+    {
+      "requirement": "Текущая видимая семантика мигрируется до запрета активной разметки",
+      "scenario": "Migration manifest неполон",
+      "test": "web/tests/rich-content-baseline.test.ts / удалённая строка валит completeness"
+    },
+    {
+      "requirement": "Allowlist является закрытым нормативным контрактом",
+      "scenario": "Checkbox вне удалённой формы",
+      "test": "web/tests/html-cleaner.test.ts / forces checkbox disabled; web/tests/rich-content-contract.test.ts / checkbox inert"
+    },
+    {
+      "requirement": "Allowlist является закрытым нормативным контрактом",
+      "scenario": "Попытка расширить матрицу конфигурацией",
+      "test": "web/tests/rich-content-oracle.test.ts / matrix-complement; web/tests/rich-content-contract.test.ts / closed matrix"
+    },
+    {
+      "requirement": "Allowlist является закрытым нормативным контрактом",
+      "scenario": "RUTUBE входит в закрытую матрицу",
+      "test": "web/tests/rich-content-contract.test.ts / точный RUTUBE iframe"
+    },
+    {
+      "requirement": "Allowlist является закрытым нормативным контрактом",
+      "scenario": "Test selector принадлежит шаблону",
+      "test": "web/tests/rich-content-render.test.ts / data-testid не в sanitized root"
+    },
+    {
+      "requirement": "Системные маркеры защищены от подделки",
+      "scenario": "Поддельный legacy CTA",
+      "test": "web/tests/rich-content-contract.test.ts / поддельные markers удаляются"
+    },
+    {
+      "requirement": "Системные маркеры защищены от подделки",
+      "scenario": "Утверждённые структурные формы",
+      "test": "web/tests/rich-content-contract.test.ts / поддельные markers; authenticated mode table-wrapper/CTA"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Обфусцированный javascript URL",
+      "test": "web/tests/rich-content-contract.test.ts / обфусцированный javascript URL"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Responsive derivative cleaner-а",
+      "test": "web/tests/rich-content-contract.test.ts / канонический srcset"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Смешанный или внешний srcset",
+      "test": "web/tests/rich-content-contract.test.ts / mixed external + missing local"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Внешний и отсутствующий derivative в одном srcset",
+      "test": "web/tests/rich-content-contract.test.ts / mixed external + missing local derivative"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Descriptor не соответствует derivative width",
+      "test": "web/tests/rich-content-contract.test.ts / descriptor mismatch"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Повторный или неподдерживаемый descriptor",
+      "test": "web/tests/rich-content-contract.test.ts / URL и media (srcset strip cases via mixed/external)"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Внешний image src",
+      "test": "web/tests/html-cleaner.test.ts / remote image; web/tests/rich-content-contract.test.ts / внешний img src"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Неканонический локальный image src",
+      "test": "web/tests/rich-content-contract.test.ts / неканонический локальный src"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Отсутствующий локальный asset",
+      "test": "web/tests/rich-content-contract.test.ts / mixed missing derivative / PDF-as-img"
+    },
+    {
+      "requirement": "URL проверяются по разобранной схеме",
+      "scenario": "Документ из media manifest используется как img",
+      "test": "web/tests/rich-content-contract.test.ts / PDF manifest entry как img"
+    },
+    {
+      "requirement": "Новый таб не получает opener",
+      "scenario": "Ссылка в новом табе",
+      "test": "web/tests/rich-content-contract.test.ts / _blank канонизирует rel"
+    },
+    {
+      "requirement": "RUTUBE является единственным разрешённым iframe",
+      "scenario": "Похожий hostname или ослабление sandbox",
+      "test": "web/tests/rich-content-contract.test.ts / похожий или ослабленный RUTUBE"
+    },
+    {
+      "requirement": "Недоверенный контент ограничен по ресурсам",
+      "scenario": "Большой или глубоко вложенный payload",
+      "test": "web/tests/rich-content-contract.test.ts / limits"
+    },
+    {
+      "requirement": "Недоверенный контент ограничен по ресурсам",
+      "scenario": "Восстанавливаемая malformed-разметка в пределах лимитов",
+      "test": "web/tests/rich-content-contract.test.ts / malformed-recovered.json единственный expected DOM; web/tests/rich-content-oracle.test.ts / misnested"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Повторная terminal-санитизация",
+      "test": "web/tests/rich-content-contract.test.ts / sanitize(sanitize(x)) === sanitize(x) в каждом trust mode"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Runtime allowlist ошибочно расширен",
+      "test": "web/tests/rich-content-hazard.test.ts / closed matrix contenteditable; web/tests/rich-content-hazard.build.test.ts / marked regions; web/tests/rich-content-oracle.test.ts / matrix-complement"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Маркер областей удалён",
+      "test": "web/tests/rich-content-canary.build.test.ts / marker inventory"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Canary оказывается вне отмеченной области",
+      "test": "web/tests/rich-content-canary.build.test.ts / hostile canary во всём dist"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Test-only fixture не попал в сборку",
+      "test": "web/tests/rich-content-canary.build.test.ts / canary path; web/tests/rich-content-canary.demo.test.ts"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Parser differential",
+      "test": "web/tests/rich-content-oracle.test.ts / misnested и foreign / entity mXSS"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Самоудаляющийся script остаётся видим scanner-у",
+      "test": "web/tests/rich-content-oracle.test.ts / self-removing script"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Output пытается навигировать или загрузить resource",
+      "test": "web/tests/rich-content-oracle.test.ts / refresh/iframe/object/stylesheet/subresource"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Oracle разделяет parser engine с runtime",
+      "test": "web/tests/rich-content-contract.test.ts / runtime sanitizer зарегистрирован, lockfileNodes fail-closed"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Неизвестный sink выводит другой активный payload",
+      "test": "web/tests/rich-content-hazard.test.ts / occurrence matcher duplicate identity; web/tests/rich-content-hazard.build.test.ts"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Разрешённый исполняемый вывод шаблона изменился",
+      "test": "web/tests/rich-content-baseline.test.ts / executable slots one-to-one"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Разрешённый script продублирован неизвестным sink-ом",
+      "test": "web/tests/rich-content-hazard.test.ts / occurrence matcher extra node with same tag; web/tests/rich-content-baseline.test.ts / assertSourceSlotsMatch extra node"
+    },
+    {
+      "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
+      "scenario": "Разрешённый source slot заменён с тем же output",
+      "test": "web/tests/rich-content-baseline.test.ts / замена зарегистрированного source node"
+    },
+    {
+      "requirement": "Зависимости границы безопасности обновляются только вручную",
+      "scenario": "Прямой подъём sanitizer-а",
+      "test": "web/tests/rich-content-contract.test.ts / runtime sanitizer зарегистрирован, lockfileNodes fail-closed"
+    },
+    {
+      "requirement": "Зависимости границы безопасности обновляются только вручную",
+      "scenario": "Транзитивный parser изменён другим подъёмом",
+      "test": "web/tests/rich-content-contract.test.ts / пустые lockfileNodes не принимаются как baseline; oracle lockfileNodes совпадают с живым subtree"
+    },
+    {
+      "requirement": "Зависимости границы безопасности обновляются только вручную",
+      "scenario": "Реестр зависимостей отсутствует или устарел",
+      "test": "web/tests/rich-content-contract.test.ts / runtime sanitizer зарегистрирован"
+    }
+  ],
+  "manualOnly": [
+    {
+      "scenario": "Живой RUTUBE player: sandbox/allow/referrer на изолированном стенде",
+      "why": "Oracle намеренно abort-ит сеть и запрещает goto; фактическое воспроизведение плеера нельзя доказать инертным DOMParser.",
+      "command": "После реализации: открыть source-only fixture страницу с точным iframe https://rutube.ru/play/embed/4a1e6023bd7a3716d8ff56bf98c96e97/ и сохранить screenshot sandbox/allow/referrerpolicy.",
+      "expected": "iframe с системными permissions, плеер загружается, иных iframe нет",
+      "evidence": "web/tests/fixtures/rich-content-safety/manual-rutube.md — заполняется на шаге 4.4 реализации"
+    },
+    {
+      "scenario": "Visual/computed-style evidence SVG/style migration включая /oplata",
+      "why": "Скриншоты и computed style — приёмка реализации миграции (tasks 4.3), не RED-контракт sanitizer-а.",
+      "command": "После content migration: npm run test:e2e:visual на /oplata и страницах с SVG-иконками",
+      "expected": "layout /oplata и accessible names ссылок сохранены",
+      "evidence": "сохраняется исполнителем реализации"
+    }
+  ]
+}

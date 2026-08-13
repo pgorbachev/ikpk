@@ -55,9 +55,12 @@ describe('Fixture 1: Article HTML', () => {
     expect(result).toContain('<p>20 янв., 2025</p>');
   });
 
-  it('preserves the image untouched (локализация URL живёт в data.ts loadJson)', () => {
+  it('preserves the image locally or removes remote src на security boundary (spec rich-content-safety: внешний image src)', () => {
     const result = cleanBodyHtml(input);
-    expect(result).toContain('ikpk-image/photo.webp');
+    // До sanitizer remote Yandex URL переживал cleaner (локализация была в data.ts).
+    // Новый контракт удаляет внешний img src на границе helper-а.
+    expect(result).not.toContain('storage.yandexcloud.net');
+    expect(result).not.toContain('ikpk-image/photo.webp');
   });
 
   it('removes h1 tags', () => {
@@ -378,6 +381,14 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
     expect(result).toContain('Accept terms');
     expect(result).toContain('<input');
     expect(result).toContain('type="checkbox"');
+  });
+
+  it('forces checkbox disabled and strips name/value (spec rich-content-safety)', () => {
+    const result = cleanBodyHtml(input);
+    expect(result).toMatch(/type=["']checkbox["']/i);
+    expect(result).toMatch(/\bdisabled\b/i);
+    expect(result).not.toContain('name="terms"');
+    expect(result).not.toMatch(/\bvalue=/i);
   });
 
   it('preserves links and paragraphs', () => {

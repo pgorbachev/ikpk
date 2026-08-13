@@ -15,10 +15,15 @@ export default defineConfig({
       // (запускается через npm run test:demo, который его сначала собирает).
       'tests/demo-output.test.ts',
       'tests/demo-prototypes.test.ts',
+      'tests/rich-content-canary.demo.test.ts',
+      'tests/rich-content-hazard.demo.test.ts',
       'tests/schedule-month-dist.test.ts',
+      'tests/rich-content-canary.build.test.ts',
+      'tests/rich-content-hazard.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
+      'tests/rich-content-render.test.ts',
     ],
   },
 });
