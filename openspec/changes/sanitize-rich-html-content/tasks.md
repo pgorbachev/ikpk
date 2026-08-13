@@ -41,7 +41,7 @@
 - [x] 4.2 Выполнить `npm run audit:prod`, разобрать все advisory sanitizer/parser subtree с risk acceptance только по явному решению владельца, подтвердить отсутствие sanitizer-а в browser bundle и доказать полноту machine security registry относительно direct/transitive lockfile subtree.
 - [x] 4.3 Сравнить source/rendered fingerprints, подтвердить полноту marker inventory и сохранить screenshots/computed-style evidence для каждой SVG/style migration page, включая layout `/oplata`.
 - [x] 4.4 Вручную проверить source-only RUTUBE fixture на изолированном стенде с точными sandbox/allow/referrer attributes; сохранить URL, вывод и screenshot.
-- [ ] 4.5 Повторить все негативные мутации 1.7 и 2.13 на реализации, доказать ожидаемые падения, вернуть мутации и повторить полный зелёный прогон.
+- [x] 4.5 Повторить все негативные мутации 1.7 и 2.13 на реализации, доказать ожидаемые падения, вернуть мутации и повторить полный зелёный прогон.
 
 ## 5. Независимое ревью и приёмка
 
