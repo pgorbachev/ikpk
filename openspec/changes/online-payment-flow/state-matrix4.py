@@ -26,6 +26,9 @@
     недействителен»; истечение — частный случай недействительности, проверяется задачей
     3.10a-3b(11), не этой матрицей.
 
+Версия 8 (ревью r9 / m2): истёкшая незавершённая + подтверждённая с неизвестной версией
+ключа даёт CREATE, не VERIF и не DUP. Невидимая подтверждённая поиск не занимает.
+
 Версия 7 (ревью r8 / B1): истёкшая незавершённая не отменяет поиск среди подтверждённых.
 Приоритет незавершённой — только у живой блокировки; старше 14 суток от создания —
 совпадения нет, дальше подтверждённые младше 14 суток от подтверждения.
@@ -151,6 +154,15 @@ expired_then_dup = sum(
 print("комбинаций: истёкшая незавершённая + живая подтверждённая → DUP:", expired_then_dup)
 assert expired_then_dup > 0, "истёкшая незавершённая не должна отменять поиск подтверждённых"
 
+expired_invisible_cf = sum(
+    1 for c, o, b in rows
+    if not c["found_by_request_id"] and c["fp_nonterminal"] and c["nt_key_known"]
+    and not c["m_age_lt14d"] and c["fp_confirmed_lt14d"] and not c["cf_key_known"]
+    and o == CREATE
+)
+print("комбинаций: истёкшая незавершённая + подтверждённая неизвестного ключа → CREATE:", expired_invisible_cf)
+assert expired_invisible_cf > 0, "истёкшая незавершённая + невидимая подтверждённая должна давать CREATE"
+
 def _live_nt(c):
     return c["fp_nonterminal"] and c["nt_key_known"] and c["m_age_lt14d"]
 
@@ -190,10 +202,15 @@ checks = [
      and c["nt_key_known"] and not c["m_age_lt14d"]
      and c["fp_confirmed_lt14d"] and c["cf_key_known"]
      and ((not c["valid_token"] and o != DUP) or (c["valid_token"] and o != CREATE))),
-    ("R7b истёкшая незавершённая без живой подтверждённой — новая попытка",
+    ("R7b истёкшая незавершённая без подтверждённой младше 14 суток — новая попытка",
      lambda c, o: not c["found_by_request_id"] and c["fp_nonterminal"]
      and c["nt_key_known"] and not c["m_age_lt14d"]
      and not c["fp_confirmed_lt14d"] and o != CREATE),
+    ("R11 истёкшая незавершённая + подтверждённая неизвестного ключа — CREATE, не VERIF и не DUP",
+     lambda c, o: not c["found_by_request_id"] and c["fp_nonterminal"]
+     and c["nt_key_known"] and not c["m_age_lt14d"]
+     and c["fp_confirmed_lt14d"] and not c["cf_key_known"]
+     and o != CREATE),
 ]
 failed = False
 for label, bad in checks:
