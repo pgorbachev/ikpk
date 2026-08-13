@@ -1,4 +1,6 @@
 ---
+import { monthLabel, type MonthOption } from '../../lib/schedule-months';
+
 interface Option {
   label: string;
   value: string;
@@ -14,9 +16,33 @@ interface Props {
   institutes: Option[];
   programs: ProgramOption[];
   cities: string[];
+  months: MonthOption[];
 }
 
-const { institutes, programs, cities } = Astro.props as Props;
+const { institutes, programs, cities, months } = Astro.props as Props;
+
+// Месяц — второй элемент панели, сразу после поиска (мокап B, решение владельца).
+//
+// Приезжает `disabled` и включается скриптом, как список программ: без JavaScript
+// посетитель не должен получить элемент, который выглядит рабочим и ничего не делает.
+// Включение меняет только `disabled`, а он не влияет ни на одну метрику бокса, — поэтому
+// раскладка от включения не сдвигается.
+//
+// Контрол присутствует ВСЕГДА, даже когда предлагать нечего: скрипт управления
+// отказывается работать целиком, если не находит своих элементов, и исчезающий контрол
+// отключил бы вместе с собой поиск, институт, программу и город. Пустой список оставляет
+// его выключенным, но не убирает.
+//
+// Группировка по году — решение владельца по мокапу B. Она ВИЗУАЛЬНАЯ: на состав
+// списка месяцев и на поведение фильтра не влияет, значения пунктов те же самые
+// ключи. Порядок групп следует порядку месяцев, который уже возрастающий.
+const monthsByYear = months.reduce<{ year: string; options: MonthOption[] }[]>((groups, month) => {
+  const year = month.key.slice(0, 4);
+  const last = groups[groups.length - 1];
+  if (last && last.year === year) last.options.push(month);
+  else groups.push({ year, options: [month] });
+  return groups;
+}, []);
 ---
 
 <div class="schedule-toolbar" data-testid="schedule-toolbar">
@@ -29,6 +55,20 @@ const { institutes, programs, cities } = Astro.props as Props;
       data-testid="schedule-search"
       data-schedule-search
     />
+  </label>
+
+  <label class="schedule-field">
+    <span class="schedule-field-label">Месяц</span>
+    <select class="schedule-select" data-testid="schedule-filter-month" data-schedule-filter="month" disabled>
+      <option value="">Не выбрано</option>
+      {monthsByYear.map((group) => (
+        <optgroup label={group.year}>
+          {group.options.map((month) => (
+            <option value={month.key}>{monthLabel(month.key, month.count)}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   </label>
 
   <label class="schedule-field">
@@ -63,9 +103,31 @@ const { institutes, programs, cities } = Astro.props as Props;
 </div>
 
 <style>
+  /*
+    Пять полей вместо четырёх: панель стала двухрядной (мокап B). Три колонки, а не
+    пять, выбраны по измерению на мокапах, а не на глаз: в пятиколоночном варианте под
+    текст остаётся 132px, а самой длинной подписи с числом нужно 144px — то есть
+    подпись обрезалась бы. Вдобавок пять колонок сузили бы три существующих фильтра до
+    132px и начали обрезать «Набережные Челны», которое сегодня влезает.
+
+    Двухрядная панель сдвигает список событий вниз, поэтому визуальные эталоны
+    `schedule-desktop` и `schedule-mobile` со страницей расходятся. В этой работе они
+    НЕ перегенерированы — решение владельца от 2026-08-12: снимки платформенные, ни
+    один workflow их не проверяет, а перегенерация здесь поглотила бы постороннее
+    расхождение, **причина которого не установлена** и к фильтру месяца отношения не
+    имеет. Расхождение записано долгом TD-19 в `docs/tech-debt.md`.
+
+    Прежняя редакция этого комментария называла причиной переключатель темы в шапке.
+    Атрибуция опровергнута тремя фактами и снята: все 12 эталонов записаны тем же
+    коммитом, что тронул шапку (значит снимки и шапка уехали вместе); тёмная тема
+    включается только через клиентское хранилище, `colorScheme` не задан ни в одной
+    конфигурации прогона, поэтому снимки всегда светлые; шапка присутствует на всех
+    шести страницах набора, а расходится один эталон. До перегенерации надо сначала
+    определить, что составляет постороннюю часть, — вплоть до вывода, что её нет.
+  */
   .schedule-toolbar {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
     gap: 0.75rem;
     align-items: end;
     margin-bottom: 1rem;
