@@ -8,11 +8,19 @@ import {
   unmarkedDocumentHazards,
   extractMarkedRegions,
   stripMarkedRegions,
+  OCCURRENCE_TAGS,
+  OCCURRENCE_PROVENANCE,
 } from './helpers/rich-content-safety/hazard-scan.js';
 import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
 import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
 import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
+import {
+  SRC_SRCSET_CASES,
+  CONSTRAINED_VALUE_CASES,
+  PROVENANCE_CASES,
+  MATRIX_OPTS,
+} from './helpers/rich-content-safety/matrix-tables.js';
 
 function slots(ids: { slotId: string; identity: string }[]) {
   return ids;
@@ -252,5 +260,48 @@ describe('rich-content: whole-document hazard scanner', () => {
     expect(stripped).not.toContain('inner');
     const occ = matchOccurrences(html, '/x', [], [], { ignoreMarkedRegions: true });
     expect(occ.some((e) => /iframe/.test(e))).toBe(false);
+  });
+});
+
+describe('oracle invariants: src/srcset matrix', () => {
+  it.each(SRC_SRCSET_CASES)('$id accept=$accept', ({ html, accept }) => {
+    const errors = validateClosedMatrixHtml(html, MATRIX_OPTS);
+    if (accept) expect(errors, errors.join('\n')).toEqual([]);
+    else expect(errors.length, `${html}\n${errors.join('\n')}`).toBeGreaterThan(0);
+  });
+});
+
+describe('oracle invariants: constrained value matrix', () => {
+  it.each(CONSTRAINED_VALUE_CASES)('$id accept=$accept', ({ html, accept }) => {
+    const errors = validateClosedMatrixHtml(html, MATRIX_OPTS);
+    if (accept) expect(errors, errors.join('\n')).toEqual([]);
+    else expect(errors.length, `${html}\n${errors.join('\n')}`).toBeGreaterThan(0);
+  });
+});
+
+describe('oracle invariants: occurrence provenance', () => {
+  it('каждый OCCURRENCE_TAGS имеет явное правило и case', () => {
+    expect(Object.keys(OCCURRENCE_PROVENANCE).sort()).toEqual([...OCCURRENCE_TAGS].sort());
+    expect(PROVENANCE_CASES.map((c) => c.tag).sort()).toEqual([...OCCURRENCE_TAGS].sort());
+  });
+
+  it.each(PROVENANCE_CASES)('$tag source→output не пересекается с соседним slot', ({ html, sources }) => {
+    const found = collectOccurrences(html);
+    expect(found, html).toHaveLength(2);
+    const resolved = sources.map((source, i) => (source.includes('from-output') ? found[i].identity : source));
+    const sourceSlots = [
+      { slotId: 'src:a', identity: resolved[0] },
+      { slotId: 'src:b', identity: resolved[1] },
+    ];
+    expect(
+      matchOccurrences(html, '/x', [
+        { slotId: 'src:a', route: '/x', placement: found[0].placement, identity: found[0].identity, count: 1 },
+        { slotId: 'src:b', route: '/x', placement: found[1].placement, identity: found[1].identity, count: 1 },
+      ], sourceSlots),
+    ).toEqual([]);
+    const crossed = matchOccurrences(html, '/x', [
+      { slotId: 'src:b', route: '/x', placement: found[0].placement, identity: found[0].identity, count: 1 },
+    ], sourceSlots);
+    expect(crossed.some((e) => /не проецируется|source body/.test(e))).toBe(true);
   });
 });

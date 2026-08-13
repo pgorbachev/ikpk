@@ -55,6 +55,34 @@ export const OCCURRENCE_TAGS = [
   'template',
 ] as const;
 
+export type OccurrenceTag = (typeof OCCURRENCE_TAGS)[number];
+
+export interface ProvenanceRule {
+  /** Hash inner content в output identity (script/style). */
+  body: boolean;
+  /**
+   * Security-relevant / identifying attrs after projection.
+   * `*` — все projected non-directive attrs (svg/template).
+   */
+  attrs: readonly string[] | '*';
+}
+
+/** Явное правило source identity → output identity на каждый OCCURRENCE_TAGS. */
+export const OCCURRENCE_PROVENANCE: Record<OccurrenceTag, ProvenanceRule> = {
+  script: { body: true, attrs: ['src', 'type', 'integrity'] },
+  style: { body: true, attrs: ['src', 'type'] },
+  iframe: { body: false, attrs: ['src', 'srcdoc', 'sandbox', 'allow', 'referrerpolicy', 'name', 'title'] },
+  object: { body: false, attrs: ['data', 'type', 'codebase', 'classid'] },
+  embed: { body: false, attrs: ['src', 'type'] },
+  frame: { body: false, attrs: ['src', 'srcdoc', 'name'] },
+  frameset: { body: false, attrs: ['cols', 'rows'] },
+  base: { body: false, attrs: ['href', 'target'] },
+  link: { body: false, attrs: ['href', 'rel', 'as', 'type', 'integrity'] },
+  svg: { body: false, attrs: '*' },
+  math: { body: false, attrs: ['xmlns', 'display'] },
+  template: { body: false, attrs: '*' },
+};
+
 function stripControls(value: string): string {
   let out = '';
   for (let i = 0; i < value.length; i += 1) {
@@ -186,7 +214,8 @@ export function occurrenceIdentity(tag: OpenTag, inner: string): string {
     .map(([k, v]) => `${k}=${v}`)
     .sort();
   const parts = [tag.name, ...attrs];
-  if (tag.name === 'script' || tag.name === 'style') {
+  const rule = OCCURRENCE_PROVENANCE[tag.name as OccurrenceTag];
+  if (rule?.body) {
     parts.push(`body:${sha16(inner)}`);
   }
   return parts.join('|');
@@ -263,16 +292,23 @@ export function provenanceError(sourceIdentity: string, outputIdentity: string):
   if (source.tag !== output.tag) {
     return `tag=${source.tag} ≠ output ${output.tag}`;
   }
-  if (source.body !== output.body) {
+  const rule = OCCURRENCE_PROVENANCE[source.tag as OccurrenceTag];
+  if (!rule) return `нет provenance rule для ${source.tag}`;
+  if (rule.body && source.body !== output.body) {
     return `source body identity ${source.body ?? '∅'} ≠ output ${output.body ?? '∅'}`;
   }
-  for (const [name, value] of source.staticAttrs) {
-    if (output.staticAttrs.get(name) !== value) {
-      return `attr ${name}=${value} ≠ output ${output.staticAttrs.get(name) ?? '∅'}`;
+  const names = rule.attrs === '*'
+    ? new Set([...source.staticAttrs.keys(), ...source.dynamicNames, ...output.staticAttrs.keys(), ...output.dynamicNames])
+    : new Set(rule.attrs);
+  for (const name of names) {
+    const srcVal = source.staticAttrs.get(name);
+    const outVal = output.staticAttrs.get(name);
+    const srcDyn = source.dynamicNames.has(name);
+    const outDyn = output.dynamicNames.has(name);
+    if (srcVal !== undefined && srcVal !== outVal) {
+      return `attr ${name}=${srcVal} ≠ output ${outVal ?? '∅'}`;
     }
-  }
-  for (const name of source.dynamicNames) {
-    if (!output.staticAttrs.has(name) && !output.dynamicNames.has(name)) {
+    if (srcDyn && outVal === undefined && !outDyn) {
       return `dynamic attr ${name} отсутствует в output identity`;
     }
   }

@@ -441,6 +441,9 @@ export function validateClosedMatrixHtml(html: string, opts?: MatrixValidateOpts
       if (name === 'datetime' && !isValidDatetime(value)) {
         errors.push('matrix: невалидный datetime');
       }
+      if ((name === 'open' || name === 'checked' || name === 'allowfullscreen' || name === 'disabled') && !hasBoolean(tag.attrs, name)) {
+        errors.push(`matrix: ${name} только boolean true`);
+      }
       if (name === 'loading' && tag.name === 'img' && value !== 'lazy' && value !== 'eager') {
         errors.push('matrix: img[loading] только lazy|eager');
       }
