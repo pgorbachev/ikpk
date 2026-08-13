@@ -8,7 +8,10 @@
     "packages": [
       "playwright"
     ],
-    "lockfileNodes": []
+    "lockfileNodes": [
+      "node_modules/playwright",
+      "node_modules/playwright-core"
+    ]
   },
-  "note": "Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет."
+  "note": "Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет. Oracle lockfileNodes — fail-closed снимок текущего playwright subtree."
 }

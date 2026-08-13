@@ -165,7 +165,7 @@ describe('rich-content baseline: sinks и rendered registry', () => {
     expect(jsonLd.every((s) => s.classification === 'json-ld')).toBe(true);
     expect(jsonLd).toHaveLength(2);
     const rich = live.filter((s) => s.classification === 'rich-html');
-    expect(rich.length).toBe(13);
+    expect(rich.length).toBe(14);
   });
 
   it('четыре точных innerHTML = \'\' и никаких иных TS raw sinks', () => {
@@ -201,6 +201,20 @@ describe('rich-content baseline: sinks и rendered registry', () => {
     );
     const errors = assertSourceSlotsMatch(mutated, slots);
     expect(errors.some((e) => /изменён source slot/.test(e))).toBe(true);
+  });
+
+  it('изменение тела script/style меняет fingerprint и identity', async () => {
+    const live = await collectExecutableSourceSlots();
+    const script = live.find((s) => s.identity.startsWith('script|') && s.identity.includes('body:'));
+    expect(script, 'в source inventory нет inline script с body hash').toBeTruthy();
+    const mutated = live.map((s) =>
+      s.slotId === script!.slotId
+        ? { ...s, identity: `${s.identity}-tampered`, fingerprint: `${s.fingerprint}-tampered` }
+        : s,
+    );
+    const errors = assertSourceSlotsMatch(mutated, slots);
+    expect(errors.some((e) => /изменён source slot/.test(e))).toBe(true);
+    expect(script!.fingerprint).not.toBe(script!.locator);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   collectTsSinks,
   collectExecutableSourceSlots,
 } from './ast-sinks.js';
+import { loadLockfile, subtreeLockfileNodes } from './lockfile-graph.js';
 
 function loadEntity<T>(name: string): T {
   return JSON.parse(readFileSync(join(ENTITIES_DIR, name), 'utf-8')) as T;
@@ -104,11 +105,15 @@ export async function generateBaselineArtifacts(): Promise<void> {
   writeJson('rendered-registry.json', rendered);
   writeJson('executable-source-slots.json', executableSlots);
   writeJson('known-deviations.json', knownDeviation);
+  const oraclePackages = ['playwright'];
   writeJson('security-dependency-registry.json', {
     status: 'pending-implementation',
     runtime: { packages: [], lockfileNodes: [] },
-    oracle: { packages: ['playwright'], lockfileNodes: [] },
-    note: 'Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет.',
+    oracle: {
+      packages: oraclePackages,
+      lockfileNodes: subtreeLockfileNodes(loadLockfile(), oraclePackages),
+    },
+    note: 'Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет. Oracle lockfileNodes — fail-closed снимок текущего playwright subtree.',
   });
   writeJson('output-occurrence-registry.json', {
     status: 'source-inventory-only',
@@ -243,6 +248,11 @@ function buildRenderedRegistry(data: {
         id: 'seminar-architecture-header',
         production: { paths: [], count: 0 },
         demo: { paths: ['/preview/modular/seminar', '/preview/modular/seminar-undated'], count: 2 },
+      },
+      {
+        id: 'canary-body',
+        production: { paths: ['/__rich-content-canary'], count: 1 },
+        demo: { sameAsProduction: true },
       },
     ],
     jsonLd: [

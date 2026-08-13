@@ -181,7 +181,7 @@
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
       "scenario": "Повторная terminal-санитизация",
-      "test": "web/tests/rich-content-contract.test.ts / authenticated SafeRichHtml (идемпотентность после появления API)"
+      "test": "web/tests/rich-content-contract.test.ts / sanitize(sanitize(x)) === sanitize(x) в каждом trust mode"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
@@ -221,12 +221,12 @@
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
       "scenario": "Oracle разделяет parser engine с runtime",
-      "test": "web/tests/rich-content-contract.test.ts / security dependency registry"
+      "test": "web/tests/rich-content-contract.test.ts / runtime sanitizer зарегистрирован, lockfileNodes fail-closed"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
       "scenario": "Неизвестный sink выводит другой активный payload",
-      "test": "web/tests/rich-content-canary.build.test.ts / hostile canary + marker inventory"
+      "test": "web/tests/rich-content-hazard.test.ts / occurrence matcher duplicate identity; web/tests/rich-content-hazard.build.test.ts"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
@@ -236,7 +236,7 @@
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
       "scenario": "Разрешённый script продублирован неизвестным sink-ом",
-      "test": "web/tests/rich-content-baseline.test.ts / assertSourceSlotsMatch extra node"
+      "test": "web/tests/rich-content-hazard.test.ts / occurrence matcher extra node with same tag; web/tests/rich-content-baseline.test.ts / assertSourceSlotsMatch extra node"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
@@ -246,12 +246,12 @@
     {
       "requirement": "Зависимости границы безопасности обновляются только вручную",
       "scenario": "Прямой подъём sanitizer-а",
-      "test": "web/tests/rich-content-contract.test.ts / security dependency registry contract"
+      "test": "web/tests/rich-content-contract.test.ts / runtime sanitizer зарегистрирован, lockfileNodes fail-closed"
     },
     {
       "requirement": "Зависимости границы безопасности обновляются только вручную",
       "scenario": "Транзитивный parser изменён другим подъёмом",
-      "test": "web/tests/rich-content-contract.test.ts / security dependency registry"
+      "test": "web/tests/rich-content-contract.test.ts / пустые lockfileNodes не принимаются как baseline; oracle lockfileNodes совпадают с живым subtree"
     },
     {
       "requirement": "Зависимости границы безопасности обновляются только вручную",

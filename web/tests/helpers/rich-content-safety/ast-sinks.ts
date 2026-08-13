@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { relative, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import { parse as parseAstro } from '@astrojs/compiler';
 import { WEB_SRC } from './paths.js';
@@ -129,6 +130,7 @@ function sinkIdFor(file: string, attr: string, expr: string): string {
   if (file === 'components/seminars/SeminarArchitectureHeader.astro') {
     return 'seminar-architecture-header';
   }
+  if (file === 'pages/__rich-content-canary.astro') return 'canary-body';
   if (file === 'components/RichContent.astro') return 'rich-content-singleton';
   return `${file}:${attr}:${expr.slice(0, 40)}`;
 }
@@ -280,6 +282,11 @@ export interface ExecutableSlot {
   identity: string;
 }
 
+function nodeText(node: AstroNode): string {
+  if (typeof node.value === 'string') return node.value;
+  return (node.children ?? []).map(nodeText).join('');
+}
+
 export async function collectExecutableSourceSlots(srcRoot = WEB_SRC): Promise<ExecutableSlot[]> {
   const slots: ExecutableSlot[] = [];
   for (const file of walkFiles(srcRoot, ['.astro'])) {
@@ -296,16 +303,22 @@ export async function collectExecutableSourceSlots(srcRoot = WEB_SRC): Promise<E
       const type = attrs.find((a) => a.name.toLowerCase() === 'type')?.value ?? '';
       if (name === 'script' && type.split(';')[0].trim().toLowerCase() === 'application/ld+json') return;
       const locator = `${rel}:${locOf(node)}:${name}`;
+      const body = name === 'script' || name === 'style' ? nodeText(node) : '';
+      const bodyHash = body ? createHash('sha256').update(body).digest('hex').slice(0, 16) : '';
       const identity = [
         name,
         ...attrs.map((a) => `${a.name}=${a.kind}:${a.value}`).sort(),
-      ].join('|');
+        bodyHash ? `body:${bodyHash}` : '',
+      ]
+        .filter(Boolean)
+        .join('|');
+      const fingerprint = createHash('sha256').update(`${locator}\n${identity}\n${body}`).digest('hex');
       slots.push({
         slotId: `src:${locator}`,
         file: rel,
         nodeKind: node.type,
         locator,
-        fingerprint: locator,
+        fingerprint,
         identity,
       });
     });
@@ -324,8 +337,8 @@ export function assertSourceSlotsMatch(live: ExecutableSlot[], committed: Execut
       errors.push(`пропал source slot ${slot.slotId}`);
       continue;
     }
-    if (found.nodeKind !== slot.nodeKind || found.locator !== slot.locator || found.identity !== slot.identity) {
-      errors.push(`изменён source slot ${slot.slotId}: ${found.nodeKind}/${found.locator} vs ${slot.nodeKind}/${slot.locator}`);
+    if (found.nodeKind !== slot.nodeKind || found.locator !== slot.locator || found.identity !== slot.identity || found.fingerprint !== slot.fingerprint) {
+      errors.push(`изменён source slot ${slot.slotId}: ${found.nodeKind}/${found.locator}/${found.fingerprint} vs ${slot.nodeKind}/${slot.locator}/${slot.fingerprint}`);
     }
   }
   for (const slot of live) {

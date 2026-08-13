@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { WEB_SRC } from './helpers/rich-content-safety/paths.js';
 import { CANARY_HOSTILE_TOKEN } from './helpers/rich-content-safety/closed-matrix.js';
 import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
+import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 
 const RICH_CONTENT = join(WEB_SRC, 'components', 'RichContent.astro');
+
+async function loadRichContent(): Promise<{ default: unknown }> {
+  expect(existsSync(RICH_CONTENT)).toBe(true);
+  const spec: string = pathToFileURL(RICH_CONTENT).href;
+  return import(spec) as Promise<{ default: unknown }>;
+}
 
 describe('rich-content contract: RichContent.astro terminal sink', () => {
   it('существует singleton компонент', () => {
@@ -14,12 +22,11 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
   });
 
   it('принимает authenticated SafeRichHtml и ставит sink marker', async () => {
-    expect(existsSync(RICH_CONTENT)).toBe(true);
     const authenticated = cleanBodyHtml('<p>ok</p>');
     expect(authenticated).not.toBeTypeOf('string');
-    const mod = await import('../src/components/RichContent.astro');
+    const mod = await loadRichContent();
     const container = await AstroContainer.create();
-    const html = await container.renderToString(mod.default, {
+    const html = await container.renderToString(mod.default as never, {
       props: { html: authenticated, sinkId: 'article-body' },
     });
     expect(html).toContain('data-safe-rich-content="article-body"');
@@ -27,36 +34,34 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
   });
 
   it('отклоняет обычную строку перед set:html', async () => {
-    expect(existsSync(RICH_CONTENT)).toBe(true);
-    const mod = await import('../src/components/RichContent.astro');
+    const mod = await loadRichContent();
     const container = await AstroContainer.create();
     await expect(
-      container.renderToString(mod.default, {
+      container.renderToString(mod.default as never, {
         props: { html: '<p>plain</p>', sinkId: 'article-body' },
       }),
     ).rejects.toThrow();
   });
 
   it('отклоняет поддельный runtime token', async () => {
-    expect(existsSync(RICH_CONTENT)).toBe(true);
-    const mod = await import('../src/components/RichContent.astro');
+    const mod = await loadRichContent();
     const container = await AstroContainer.create();
     await expect(
-      container.renderToString(mod.default, {
+      container.renderToString(mod.default as never, {
         props: { html: { html: '<p>forged</p>', token: 'forged' }, sinkId: 'article-body' },
       }),
     ).rejects.toThrow();
   });
 
-  it('санитизирует hostile payload непосредственно у set:html', async () => {
-    expect(existsSync(RICH_CONTENT)).toBe(true);
-    const mod = await import('../src/components/RichContent.astro');
+  it('повторно санитизирует hostile html authenticated объекта у set:html', async () => {
+    const authenticated = cleanBodyHtml(`<p>${CANARY_HOSTILE_TOKEN}</p><script>alert(1)</script>`);
+    expect(authenticated).not.toBeTypeOf('string');
+    expect(htmlOf(authenticated).toLowerCase()).not.toContain('<script');
+    expect(htmlOf(authenticated)).not.toContain(CANARY_HOSTILE_TOKEN);
+    const mod = await loadRichContent();
     const container = await AstroContainer.create();
-    const html = await container.renderToString(mod.default, {
-      props: {
-        html: `<p>${CANARY_HOSTILE_TOKEN}</p><script>alert(1)</script>`,
-        sinkId: 'article-body',
-      },
+    const html = await container.renderToString(mod.default as never, {
+      props: { html: authenticated, sinkId: 'article-body' },
     });
     expect(html).toContain('data-safe-rich-content="article-body"');
     expect(html.toLowerCase()).not.toContain('<script');
@@ -64,14 +69,12 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
   });
 
   it('data-testid course-group-extra-content не попадает в sanitized root', async () => {
-    expect(existsSync(RICH_CONTENT)).toBe(true);
-    const mod = await import('../src/components/RichContent.astro');
+    const authenticated = cleanBodyHtml('<p>x</p>');
+    expect(authenticated).not.toBeTypeOf('string');
+    const mod = await loadRichContent();
     const container = await AstroContainer.create();
-    const html = await container.renderToString(mod.default, {
-      props: {
-        html: '<p>x</p>',
-        sinkId: 'course-group-extra',
-      },
+    const html = await container.renderToString(mod.default as never, {
+      props: { html: authenticated, sinkId: 'course-group-extra' },
     });
     const marked = html.match(/data-safe-rich-content="course-group-extra"[\s\S]*$/);
     expect(marked?.[0] ?? html).not.toContain('data-testid="course-group-extra-content"');

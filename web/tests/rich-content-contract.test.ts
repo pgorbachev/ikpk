@@ -27,7 +27,7 @@ import {
   collectTsSinksFromSource,
   FUTURE_SINGLETON,
 } from './helpers/rich-content-safety/ast-sinks.js';
-import { overlappingParserEngines } from './helpers/rich-content-safety/lockfile-graph.js';
+import { overlappingParserEngines, assertCommittedLockfileNodes } from './helpers/rich-content-safety/lockfile-graph.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 
 function out(html: string): string {
@@ -45,9 +45,10 @@ describe('rich-content contract: authenticated SafeRichHtml', () => {
   it('поддельный объект и обычная строка не считаются результатом cleaner-а', async () => {
     const mod = await import('../src/lib/html-cleaner.js');
     expect(mod).toHaveProperty('isSafeRichHtml');
-    const isSafe = (mod as { isSafeRichHtml: (v: unknown) => boolean }).isSafeRichHtml;
-    expect(isSafe('<p>x</p>')).toBe(false);
-    expect(isSafe({ html: '<p>x</p>', token: 'forged' })).toBe(false);
+    const isSafe = (mod as unknown as { isSafeRichHtml?: (v: unknown) => boolean }).isSafeRichHtml;
+    expect(typeof isSafe).toBe('function');
+    expect(isSafe!('<p>x</p>')).toBe(false);
+    expect(isSafe!({ html: '<p>x</p>', token: 'forged' })).toBe(false);
   });
 });
 
@@ -425,15 +426,43 @@ describe('rich-content contract: source collector ловит запрещённ�
 });
 
 describe('rich-content contract: security dependency registry', () => {
-  it('runtime sanitizer зарегистрирован и не делит parser engine с oracle', () => {
-    const registry = loadFixture<{ runtime: { packages: string[] }; oracle: { packages: string[] } }>(
-      'security-dependency-registry.json',
-    );
+  const registry = loadFixture<{
+    runtime: { packages: string[]; lockfileNodes: string[] };
+    oracle: { packages: string[]; lockfileNodes: string[] };
+  }>('security-dependency-registry.json');
+
+  it('пустые lockfileNodes не принимаются как baseline из текущего lockfile', () => {
+    const errors = assertCommittedLockfileNodes([], ['playwright']);
+    expect(errors.some((e) => /пусты/.test(e))).toBe(true);
+  });
+
+  it('oracle lockfileNodes совпадают с живым playwright subtree', () => {
+    expect(registry.oracle.packages).toContain('playwright');
+    const oracleNodes = assertCommittedLockfileNodes(registry.oracle.lockfileNodes, registry.oracle.packages);
+    expect(oracleNodes, oracleNodes.join('\n')).toEqual([]);
+  });
+
+  it('runtime sanitizer зарегистрирован, lockfileNodes fail-closed и не делит parser engine с oracle', () => {
     expect(registry.runtime.packages.length, 'sanitizer package не выбран').toBeGreaterThan(0);
     const overlap = overlappingParserEngines(registry.runtime.packages, registry.oracle.packages);
     expect(overlap).toEqual([]);
     expect(registry.runtime.packages.some((p) => PARSER_PACKAGES_RE.test(p))).toBe(true);
-    expect(registry.oracle.packages).toContain('playwright');
+    const runtimeNodes = assertCommittedLockfileNodes(registry.runtime.lockfileNodes, registry.runtime.packages);
+    expect(runtimeNodes, runtimeNodes.join('\n')).toEqual([]);
+  });
+});
+
+describe('rich-content contract: идемпотентность terminal sanitizer', () => {
+  it('sanitize(sanitize(x)) === sanitize(x) в каждом trust mode', async () => {
+    const mod = (await import('../src/lib/html-cleaner.js')) as Record<string, unknown>;
+    expect(typeof mod.terminalSanitize).toBe('function');
+    const terminal = mod.terminalSanitize as (html: string, mode: 'untrusted' | 'authenticated') => unknown;
+    const sample = '<p>ok</p><table><tr><td>ячейка</td></tr></table>';
+    for (const mode of ['untrusted', 'authenticated'] as const) {
+      const once = htmlOf(terminal(sample, mode));
+      const twice = htmlOf(terminal(once, mode));
+      expect(twice, mode).toBe(once);
+    }
   });
 });
 

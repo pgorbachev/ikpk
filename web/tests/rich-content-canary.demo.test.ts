@@ -26,6 +26,6 @@ describe('rich-content contract: whole-dist canary (demo)', () => {
     expect(canary, `нет canary path ${CANARY_PATH} в dist-demo`).toBeTruthy();
     const html = readFileSync(canary!, 'utf-8');
     expect(html.split(CANARY_CONTROL_TOKEN).length - 1).toBe(1);
-    expect(html).toMatch(/data-safe-rich-content="/);
+    expect(html).toMatch(/data-safe-rich-content="canary-body"/);
   });
 });

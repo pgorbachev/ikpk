@@ -384,6 +384,16 @@
         ],
         "count": 2
       }
+    },
+    {
+      "id": "canary-body",
+      "production": {
+        "paths": ["/__rich-content-canary"],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
     }
   ],
   "jsonLd": [
