@@ -228,6 +228,15 @@ Built-output verification имеет четыре независимых сло�
 JSDOM runtime, ни при parse5 transform; dependency-graph assertion доказывает отсутствие
 общего прямого или транзитивного parser engine:
 
+Недоверенный document никогда не загружается как страница. Playwright заранее открывает
+контролируемый `about:blank`, ставит перехват с abort для каждого navigation/subresource
+request и передаёт точные bytes в нативный Chromium
+`DOMParser.parseFromString(..., "text/html")`. Возвращённый inert `Document` не
+присоединяется к live DOM: его scripts/handlers/refresh не исполняются, main-frame URL не
+меняется. Каждая request attempt синхронно abort-ится; ошибка — request, который interceptor
+разрешил продолжить/завершить, либо изменение URL. `page.goto()`,
+`page.setContent()`, `document.write()` и live `innerHTML` для проверяемых bytes запрещены.
+
 1. test-owned полная closed matrix, скопированная из spec и не импортирующая runtime
    policy/URL validator; test-only build page проводит через boundary каталог hostile
    matrix-complement fixtures, чтобы oracle измерял фактический output, а не отсутствие
@@ -244,20 +253,29 @@ JSDOM runtime, ни при parse5 transform; dependency-graph assertion дока
    или active foreign-content resource; это обобщение включает `frame`/`frameset`, а не
    только заранее названные теги.
 
+Source provenance проверяется отдельно от output. Source AST inventory хранит для каждого
+executable-producing slot точный template/config path, node kind, structural locator/
+fingerprint и ожидаемую identity; CI требует one-to-one соответствие committed slots и
+поддерживаемых AST nodes. Output occurrence ссылается на slot ID, но не притворяется, что
+DOM способен доказать свой source. Поэтому замена разрешённого node неизвестным mechanism
+падает на missing/changed AST slot, даже если route, placement, count и identity не
+изменились.
+
 Executable registry дедуплицирует identity многочисленных `script`/`style` как global
 body hash либо external asset identity с security attrs, но не использует identity set
 как разрешение. Каждый occurrence привязан к stable source slot/template path, route
 pattern, placement относительно stable anchor, identity и допустимому count на document;
 элемент обязан совпасть ровно с одним rule. Поэтому дубликат разрешённого script из
 неизвестного sink-а падает, хотя identity set не меняется. Для редких high-risk elements
-те же route/count/placement обязательны. Явно запускаемый generator строит candidate manifest в чистом worktree
-из назначенного reviewed source SHA; reviewer сверяет source diff и manifest diff до
-commit. Обычный CI только читает committed registry и никогда не перезаписывает его из
-текущего `dist`.
+те же route/count/placement обязательны. Явно запускаемый generator строит candidate
+manifest из source AST inventory и built output в чистом worktree из назначенного
+reviewed source SHA; reviewer сверяет source diff и manifest diff до commit. Обычный CI
+только читает committed registry и никогда не перезаписывает его из текущего `dist`.
 
 Негативные мутации обязательны как минимум для runtime allowlist extension при включённом
 hostile build fixture, удаления marker-а, вывода canary вне отмеченного subtree,
-пропажи fixture-control, parser-differential mXSS, динамического неизвестного sink-а с
+пропажи fixture-control, parser-differential mXSS, self-removing script, refresh/resource
+attempt, замены source slot при неизменном output, динамического неизвестного sink-а с
 другим активным payload, discovery zero-match/unlisted field и пропавшей migration row.
 Минимальный denylist отвергнут: он не может доказать закрытый allowlist и даёт
 common-mode/vacuous failure.

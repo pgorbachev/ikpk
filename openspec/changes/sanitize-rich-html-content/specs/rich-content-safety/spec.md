@@ -373,6 +373,14 @@ path/token, дубликат или отсутствие соответству�
 браузера. Он SHALL NOT использовать прямо или транзитивно тот же parser engine, что
 runtime sanitizer: при runtime на JSDOM либо parse5 oracle обязан использовать browser
 DOM, а dependency-graph gate SHALL падать при общем parser engine.
+Oracle SHALL передавать точные built-document bytes только в нативный
+`DOMParser.parseFromString(..., "text/html")` внутри заранее загруженного контролируемого
+`about:blank` Chromium harness. Недоверенные bytes SHALL NOT передаваться в `goto`,
+`setContent`, `document.write`, live-document `innerHTML` либо присоединяться к живому DOM.
+До разбора context SHALL перехватывать и запрещать все navigation/subresource requests;
+каждая попытка SHALL быть abort до доступа к сети. Любой request, разрешённый к
+продолжению/завершению, либо изменение main-frame URL SHALL завершать gate ошибкой.
+Скрипты, event handlers и refresh navigation parsed document SHALL NOT исполняться до scanner-а.
 Независимый whole-document hazard gate SHALL вне rich-content областей отвергать `on*`,
 `srcdoc`, XML/XLink URL и запрещённые URL-схемы, а также любой элемент, browser semantics
 которого создаёт nested browsing context либо загружает/исполняет script, style, document
@@ -380,6 +388,15 @@ DOM, а dependency-graph gate SHALL падать при общем parser engine
 `iframe`, `frame`, `frameset`, `object`, `embed`, `base`, refresh-meta, stylesheet-link и
 исполняемые SVG/MathML descendants. Такой output допускается только по утверждённому
 test-owned реестру вывода шаблонов.
+
+Отдельный source-occurrence registry SHALL связывать каждый stable source slot с точным
+template/config path, AST node kind, детерминированным structural locator/fingerprint и
+ожидаемой output identity. Source AST gate SHALL доказывать, что каждый зарегистрированный
+slot существует ровно один раз и не был удалён, заменён либо изменён; каждый обнаруженный
+поддерживаемый executable-producing source node SHALL принадлежать ровно одному slot.
+Built-output occurrence rule SHALL ссылаться на этот slot ID. Таким образом provenance
+source slot доказывается source gate, а route/placement/count — независимым output gate;
+одинаковый итоговый DOM сам по себе SHALL NOT считаться доказательством происхождения.
 
 Для `script`/`style` реестр MAY дедуплицировать identity как глобальный body hash либо
 external asset identity с security-relevant атрибутами, но SHALL отдельно описывать
@@ -389,9 +406,10 @@ placement относительно stable anchor, identity и допустимы
 identity в другом slot, placement или сверх count SHALL считаться неизвестным активным
 output. Для редких high-risk элементов — nested browsing contexts,
 `object`/`embed`/`base`, refresh-meta и stylesheet-link — реестр SHALL также фиксировать
-route, count и placement. CI SHALL только сравнивать output с committed registry. Обновление выполняется
-явно запускаемым tool в чистом worktree из назначенного reviewed source SHA: tool строит
-candidate manifest, а изменение source и manifest проходит review до commit; registry
+route, count и placement. CI SHALL только сравнивать source AST и output с committed
+registry. Обновление выполняется явно запускаемым tool в чистом worktree из назначенного
+reviewed source SHA: tool строит candidate manifest из source AST inventory и built
+output, а изменение source и manifest проходит review до commit; registry
 SHALL NOT обновляться либо приниматься из проверяемого CI `dist` в том же прогоне.
 
 #### Scenario: Повторная terminal-санитизация
@@ -426,6 +444,17 @@ SHALL NOT обновляться либо приниматься из прове
 - **THEN** oracle проверяет фактическое browser DOM-дерево и падает на активном либо
   отсутствующем в закрытой матрице результате
 
+#### Scenario: Самоудаляющийся script остаётся видим scanner-у
+- **WHEN** built document содержит script, который при исполнении удалил бы собственный
+  element до hazard scan
+- **THEN** inert browser parse не исполняет script, scanner видит element и отвергает его
+
+#### Scenario: Output пытается навигировать или загрузить resource
+- **WHEN** built document содержит refresh-meta, iframe, object, stylesheet либо иной
+  subresource/navigation trigger
+- **THEN** parsed document не навигирует и не достигает сети; scanner отвергает element,
+  network instrumentation подтверждает abort каждой попытки и ноль продолженных requests
+
 #### Scenario: Oracle разделяет parser engine с runtime
 - **WHEN** dependency graph output oracle прямо или транзитивно приводит к parser engine,
   который использует runtime sanitizer
@@ -448,6 +477,12 @@ SHALL NOT обновляться либо приниматься из прове
 - **WHEN** неизвестный sink повторно выводит уже зарегистрированный body hash либо asset
   identity вне разрешённого source slot, placement или сверх count
 - **THEN** whole-document hazard gate падает, хотя глобальный набор identities не изменился
+
+#### Scenario: Разрешённый source slot заменён с тем же output
+- **WHEN** зарегистрированный executable-producing AST node удалён либо заменён другим
+  source mechanism, который сохраняет ту же identity, route, placement и count в output
+- **THEN** source AST provenance gate падает на отсутствующем или изменённом slot, хотя
+  built-output registry продолжает совпадать
 
 ### Requirement: Зависимости границы безопасности обновляются только вручную
 

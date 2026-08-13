@@ -24,10 +24,12 @@ event-handler атрибуты, опасные URL-схемы и произво�
 - Source discovery сверяет точный baseline selector list со всеми entity JSON и каждым
   CMS `type: richtext` attribute, включая пустые поля;
   singleton central sink и два точных JSON-LD исключения проверяются AST-гейтом.
-  Независимые built-output гейты на DOM реального браузера запрещают vacuous green, ищут hostile
-  canary и любой неинвентаризированный активный output во всём production/demo document.
-- Runtime и output oracle не могут делить parser engine даже транзитивно; разрешённый
-  executable output привязан к source slot, route, placement и count, а не только к hash.
+  Независимые built-output гейты разбирают bytes инертным DOM реального браузера без
+  исполнения, навигации и сети; они запрещают vacuous green и ищут любой
+  неинвентаризированный активный output во всём production/demo document.
+- Runtime и output oracle не могут делить parser engine даже транзитивно. Source AST gate
+  доказывает provenance каждого executable slot, а output gate отдельно проверяет route,
+  placement и count; одного совпавшего hash либо DOM недостаточно.
 - До изменения раздельно фиксируются source-corpus (включая поля, которые текущий route
   extractor не выводит) и rendered-corpus. Characterization сохраняет структуру,
   доступность, media, responsive derivatives и визуально значимое оформление.
