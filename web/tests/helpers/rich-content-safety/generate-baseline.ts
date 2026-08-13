@@ -251,7 +251,7 @@ function buildRenderedRegistry(data: {
       },
       {
         id: 'canary-body',
-        production: { paths: ['/__rich-content-canary'], count: 1 },
+        production: { paths: ['/rich-content-canary'], count: 1 },
         demo: { sameAsProduction: true },
       },
     ],

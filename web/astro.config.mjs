@@ -30,7 +30,7 @@ export default defineConfig({
         !page.includes('/sitemap') &&
         !page.includes('/preview/') &&
         !page.includes('/demo-zayavka') &&
-        !page.includes('/__rich-content-canary'),
+        !page.includes('/rich-content-canary'),
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;

@@ -16,6 +16,14 @@
     "identity": "style|body:41e2f79c74dae82c"
   },
   {
+    "slotId": "src:components/articles/ArticleFilterBar.astro:L22:C7:svg",
+    "file": "components/articles/ArticleFilterBar.astro",
+    "nodeKind": "element",
+    "locator": "components/articles/ArticleFilterBar.astro:L22:C7:svg",
+    "fingerprint": "1e290607aa255e9740d8c14bbfc3692ea9291d85a3cdd580e89e47478aafd6ee",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 12 12"
+  },
+  {
     "slotId": "src:components/articles/ArticleFilterBar.astro:L36:C1:style",
     "file": "components/articles/ArticleFilterBar.astro",
     "nodeKind": "element",
@@ -30,6 +38,14 @@
     "locator": "components/Breadcrumbs.astro:L46:C1:style",
     "fingerprint": "572ab90dcc880642985c31045a26a62f29f01f713708167f01e2a8ff740844d4",
     "identity": "style|body:8ab61f23308a314e"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L108:C9:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L108:C9:svg",
+    "fingerprint": "2d5528c769af0f29595cf7fceb86aca02076d3c7a1336609f171e5dc760a55b7",
+    "identity": "svg|height=quoted:34|viewBox=quoted:0 0 24 24|width=quoted:34"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L119:C5:iframe",
@@ -54,6 +70,62 @@
     "locator": "components/contacts/ContactShell.astro:L155:C1:style",
     "fingerprint": "ab1f482f6cbec483bac04db7bc8526b290ca068200e097f41579b8b00ae3621f",
     "identity": "style|body:f72251632731db5b"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L38:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L38:C11:svg",
+    "fingerprint": "9713c65fb6448c6171e0254763b3fef70b9dfcbf3d0d81e47a1b00146a7065e6",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L46:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L46:C11:svg",
+    "fingerprint": "ed9ae86af03c8ea1a0a5c58e982712da3abb11d9a7ef4b3b91718ac24df761e9",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L54:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L54:C11:svg",
+    "fingerprint": "03939e452ef3c97ca123e8a54385d65013d1c6c89e17e488110fe90fabcd363d",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L60:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L60:C11:svg",
+    "fingerprint": "a25a64e9b6d4ede4bdfcac3155a5a92453eecec7ab8ac8e0a41bf0d9dfbf8ba8",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L70:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L70:C11:svg",
+    "fingerprint": "e0e18f618cbe4e31a89faa7f6382e378735ef62ecac2d13cca5523ee9b770e3e",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L80:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L80:C11:svg",
+    "fingerprint": "b6b90d4c0fdbd8c09b2bff77f5204fea052e98977820be819edf22ca21443181",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L86:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L86:C11:svg",
+    "fingerprint": "17494f8716b9dea0f0db0ae0520b5fb366623bbe333a554cb77cbf9c06abf617",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
     "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
@@ -262,6 +334,22 @@
     "locator": "components/home/sections/News.astro:L129:C1:script",
     "fingerprint": "5d9f4d202f6486ed51b654b7259d1e2de4482705370e2d1a9130e98d7037bdb4",
     "identity": "script|body:7edde442e5505427"
+  },
+  {
+    "slotId": "src:components/home/sections/News.astro:L14:C11:svg",
+    "file": "components/home/sections/News.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/News.astro:L14:C11:svg",
+    "fingerprint": "f9a15758a1981e58f14da3677b3b34f3d77e07ac714e6c25139e59c8e3309e36",
+    "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
+  },
+  {
+    "slotId": "src:components/home/sections/News.astro:L37:C11:svg",
+    "file": "components/home/sections/News.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/News.astro:L37:C11:svg",
+    "fingerprint": "f67baf5b83893de42d96270db24928dccf3db040e73f05baa8109a254f923a39",
+    "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
     "slotId": "src:components/home/sections/News.astro:L46:C1:style",
@@ -504,6 +592,14 @@
     "identity": "script|body:4202828ce0481227"
   },
   {
+    "slotId": "src:components/topnav/HeaderTools.astro:L15:C5:svg",
+    "file": "components/topnav/HeaderTools.astro",
+    "nodeKind": "element",
+    "locator": "components/topnav/HeaderTools.astro:L15:C5:svg",
+    "fingerprint": "4cf01ddd6525601323b30aa300d5a8ac1ee313e42a7508887a29274358758fe4",
+    "identity": "svg|class=quoted:control-icon|fill=quoted:none|stroke-width=quoted:1.5|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24"
+  },
+  {
     "slotId": "src:components/topnav/HeaderTools.astro:L39:C1:style",
     "file": "components/topnav/HeaderTools.astro",
     "nodeKind": "element",
@@ -534,6 +630,22 @@
     "locator": "components/topnav/TopNav.astro:L123:C1:style",
     "fingerprint": "6afe00433288a461f58d5a40238ba96eafd4c44e2f152e19c75bd08040720cd7",
     "identity": "style|body:94c500b5873bca8d"
+  },
+  {
+    "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
+    "file": "components/topnav/TopNav.astro",
+    "nodeKind": "element",
+    "locator": "components/topnav/TopNav.astro:L46:C17:svg",
+    "fingerprint": "65b75f1bc7c916ee817a98060207987b4215ca569c9e39f3ee9d233611e4c99e",
+    "identity": "svg|aria-hidden=quoted:true|class=quoted:chev|viewBox=quoted:0 0 12 12"
+  },
+  {
+    "slotId": "src:components/topnav/TopNav.astro:L90:C15:svg",
+    "file": "components/topnav/TopNav.astro",
+    "nodeKind": "element",
+    "locator": "components/topnav/TopNav.astro:L90:C15:svg",
+    "fingerprint": "97dbdc9f13f1305038533df12cfb3d93994cbf09c18a6e6bac8de1f33c67d9c4",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:18|stroke-width=quoted:1.6|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:18"
   },
   {
     "slotId": "src:components/ui/AsideCard.astro:L40:C1:style",
@@ -574,6 +686,14 @@
     "locator": "components/ui/PageHeader.astro:L18:C1:style",
     "fingerprint": "569eeb4718dfb8eb5b5c78536561c2c7bf7d638b216c2f9ea109f5d36f01c97b",
     "identity": "style|body:3c6d4f8135323ccd"
+  },
+  {
+    "slotId": "src:components/video/VideoFacade.astro:L15:C7:svg",
+    "file": "components/video/VideoFacade.astro",
+    "nodeKind": "element",
+    "locator": "components/video/VideoFacade.astro:L15:C7:svg",
+    "fingerprint": "4576e0cccc910161b1dc49f53b79c866350542f83007df3fa9fae9d774994b68",
+    "identity": "svg|height=quoted:48|viewBox=quoted:0 0 68 48|width=quoted:68"
   },
   {
     "slotId": "src:components/video/VideoFacade.astro:L21:C1:style",
@@ -672,6 +792,14 @@
     "identity": "style|body:e301e6bb69eb1046"
   },
   {
+    "slotId": "src:pages/oplata.astro:L20:C11:svg",
+    "file": "pages/oplata.astro",
+    "nodeKind": "element",
+    "locator": "pages/oplata.astro:L20:C11:svg",
+    "fingerprint": "66cc635d8bd32aef2768f01f5264c16675e091f6356b282b996ad1e8516fbbef",
+    "identity": "svg|fill=quoted:none|height=quoted:24|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:24"
+  },
+  {
     "slotId": "src:pages/oplata.astro:L42:C1:style",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
@@ -752,6 +880,22 @@
     "identity": "style|body:a5a70f423abc1970"
   },
   {
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L31:C13:svg",
+    "file": "pages/sotrudnichestvo-s-nami.astro",
+    "nodeKind": "element",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L31:C13:svg",
+    "fingerprint": "3e5e514d65e1ef0e142a48951386e1e6c2629440169b2b39ae248f1e6cd14014",
+    "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
+  },
+  {
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
+    "file": "pages/sotrudnichestvo-s-nami.astro",
+    "nodeKind": "element",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
+    "fingerprint": "54ffe11571d22069fb2e0e19e0cb9c15b669b5a56ac7f1a9ad32ee3802f05d91",
+    "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
+  },
+  {
     "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L45:C1:style",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
@@ -766,6 +910,14 @@
     "locator": "pages/statyi/[slug].astro:L153:C1:style",
     "fingerprint": "813518ee766bacc7e08088b4d3ca70747ae6457d549138dfa28ea7d1346fdb76",
     "identity": "style|body:ca3b9642dc9938fe"
+  },
+  {
+    "slotId": "src:pages/statyi/index.astro:L119:C17:template",
+    "file": "pages/statyi/index.astro",
+    "nodeKind": "element",
+    "locator": "pages/statyi/index.astro:L119:C17:template",
+    "fingerprint": "8d92213858b4fbdf4fccb49dd543639fc59cd5781b882a64fd1789d0f608619a",
+    "identity": "template|data-article-card=empty:|data-body=expression:(article.body_text || '').slice(0, 300).toLowerCase()|data-page=expression:pageNo|data-published-at=expression:article.published_at || ''|data-title=expression:article.title.toLowerCase()"
   },
   {
     "slotId": "src:pages/statyi/index.astro:L139:C1:style",
@@ -798,6 +950,14 @@
     "locator": "pages/video/[slug].astro:L63:C1:style",
     "fingerprint": "fa3f22d64073efa3fae7a7036f361589af317943e911aef35dcadc36b033864c",
     "identity": "style|body:2b475e9303b7743f"
+  },
+  {
+    "slotId": "src:pages/video/index.astro:L39:C19:svg",
+    "file": "pages/video/index.astro",
+    "nodeKind": "element",
+    "locator": "pages/video/index.astro:L39:C19:svg",
+    "fingerprint": "87fe83ffed6b6724695a5b670fcc0db1c920c054deb36cd22c2e81384a268fa1",
+    "identity": "svg|height=quoted:26|viewBox=quoted:0 0 24 24|width=quoted:26"
   },
   {
     "slotId": "src:pages/video/index.astro:L60:C1:style",

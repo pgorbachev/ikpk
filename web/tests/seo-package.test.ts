@@ -301,8 +301,8 @@ describe('404 and sitemap', () => {
 
   it('rich-content canary is noindex and excluded from sitemap', () => {
     const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
-    expect(xml.includes('__rich-content-canary'), 'canary must NOT be in sitemap').toBe(false);
-    const html = readPage('/__rich-content-canary');
+    expect(xml.includes('rich-content-canary'), 'canary must NOT be in sitemap').toBe(false);
+    const html = readPage('/rich-content-canary');
     expect(html).toContain('noindex');
     expect(html).toContain('rc-fixture-control-9f3c2e1a');
   });

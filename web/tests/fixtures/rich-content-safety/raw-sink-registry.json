@@ -49,18 +49,6 @@
       "fingerprint": "components/seminars/SeminarArchitectureHeader.astro:L162:C9:element:div:set:html"
     },
     {
-      "id": "canary-body",
-      "classification": "rich-html",
-      "file": "pages/__rich-content-canary.astro",
-      "nodeKind": "element",
-      "elementName": "div",
-      "attribute": "set:html",
-      "expression": "cleanBodyHtml(payload)",
-      "attrKind": "expression",
-      "locator": "pages/__rich-content-canary.astro:L26:C3:element:div:set:html",
-      "fingerprint": "pages/__rich-content-canary.astro:L26:C3:element:div:set:html"
-    },
-    {
       "id": "institute-extra",
       "classification": "rich-html",
       "file": "pages/[institute].astro",
@@ -155,6 +143,18 @@
       "attrKind": "expression",
       "locator": "pages/preview/[variant]/seminar.astro:L116:C9:element:div:set:html",
       "fingerprint": "pages/preview/[variant]/seminar.astro:L116:C9:element:div:set:html"
+    },
+    {
+      "id": "canary-body",
+      "classification": "rich-html",
+      "file": "pages/rich-content-canary.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "cleanBodyHtml(payload)",
+      "attrKind": "expression",
+      "locator": "pages/rich-content-canary.astro:L27:C3:element:div:set:html",
+      "fingerprint": "pages/rich-content-canary.astro:L27:C3:element:div:set:html"
     },
     {
       "id": "static-page-sotrudnichestvo",

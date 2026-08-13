@@ -31,7 +31,7 @@ export const BYTE_LIMIT = 2_097_152;
 export const NODE_LIMIT = 50_000;
 export const DEPTH_LIMIT = 256;
 
-export const CANARY_PATH = '/__rich-content-canary';
+export const CANARY_PATH = '/rich-content-canary';
 export const CANARY_CONTROL_TOKEN = 'rc-fixture-control-9f3c2e1a';
 export const CANARY_HOSTILE_TOKEN = 'rc-hostile-canary-7b41d0ee';
 

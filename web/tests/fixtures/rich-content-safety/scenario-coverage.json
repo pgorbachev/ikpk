@@ -186,7 +186,7 @@
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",
       "scenario": "Runtime allowlist ошибочно расширен",
-      "test": "web/tests/rich-content-oracle.test.ts / matrix-complement"
+      "test": "web/tests/rich-content-hazard.test.ts / closed matrix contenteditable; web/tests/rich-content-hazard.build.test.ts / marked regions; web/tests/rich-content-oracle.test.ts / matrix-complement"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",

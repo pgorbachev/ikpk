@@ -8,6 +8,10 @@ import {
   CANARY_PATH,
 } from './helpers/rich-content-safety/closed-matrix.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
+import {
+  collectMarkerInventoryErrors,
+  type RenderedSink,
+} from './helpers/rich-content-safety/marker-inventory.js';
 
 function pageFile(path: string): string {
   return path === '/' ? join(dist, 'index.html') : join(dist, path.replace(/^\//, ''), 'index.html');
@@ -38,31 +42,11 @@ describe('rich-content contract: whole-dist canary (production)', () => {
 
 describe('rich-content contract: marker inventory (production)', () => {
   it('каждая ожидаемая область имеет data-safe-rich-content, count совпадает', () => {
-    const rendered = loadFixture<{ sinks: { id: string; production: { paths: string[]; count: number } }[] }>(
-      'rendered-registry.json',
-    );
-    const missing: string[] = [];
-    for (const sink of rendered.sinks) {
-      if (sink.production.count === 0) {
-        expect(sink.production.paths, sink.id).toEqual([]);
-        continue;
-      }
-      let markers = 0;
-      for (const path of sink.production.paths) {
-        const page = pageFile(path);
-        if (!existsSync(page)) {
-          missing.push(`${sink.id} ${path} (нет файла)`);
-          continue;
-        }
-        const html = readFileSync(page, 'utf-8');
-        const count = html.split(`data-safe-rich-content="${sink.id}"`).length - 1;
-        if (count === 0) missing.push(`${sink.id} ${path}`);
-        markers += count;
-      }
-      if (markers !== sink.production.count) {
-        missing.push(`${sink.id} count: registry=${sink.production.count} live=${markers}`);
-      }
-    }
+    const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
+    const missing = collectMarkerInventoryErrors(rendered.sinks, 'production', (path) => {
+      const file = pageFile(path);
+      return { exists: existsSync(file), html: existsSync(file) ? readFileSync(file, 'utf-8') : '' };
+    });
     expect(missing, missing.join('\n')).toEqual([]);
   });
 });

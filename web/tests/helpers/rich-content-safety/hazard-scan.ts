@@ -50,6 +50,9 @@ export const OCCURRENCE_TAGS = [
   'frameset',
   'base',
   'link',
+  'svg',
+  'math',
+  'template',
 ] as const;
 
 function stripControls(value: string): string {
@@ -126,11 +129,27 @@ function isExactRutube(src: string): boolean {
   return /^https:\/\/rutube\.ru\/play\/embed\/[A-Za-z0-9_-]+\/$/.test(src);
 }
 
-function stripMarkedRegions(html: string): string {
+export function stripMarkedRegions(html: string): string {
   return html.replace(
     /<([a-z0-9]+)([^>]*\bdata-safe-rich-content=)[\s\S]*?<\/\1>/gi,
     '',
   );
+}
+
+export interface MarkedRegion {
+  sinkId: string;
+  outer: string;
+}
+
+export function extractMarkedRegions(html: string): MarkedRegion[] {
+  const regions: MarkedRegion[] = [];
+  for (const tag of iterateTags(html)) {
+    const sinkId = tag.attrs['data-safe-rich-content'];
+    if (!sinkId) continue;
+    const end = elementEnd(html, tag);
+    regions.push({ sinkId, outer: html.slice(tag.start, end) });
+  }
+  return regions;
 }
 
 function safeDecode(value: string): string {
@@ -193,29 +212,48 @@ function nearestPrecedingId(html: string, before: number): string | null {
 }
 
 /**
- * Сопоставляет найденные executable-узлы правилам по slotId-ссылке, полной identity,
- * placement и count. Неиспользованные правила маршрута и лишние узлы — ошибки.
+ * Сопоставляет найденные executable-узлы правилам по существующему slotId,
+ * полной identity, точному placement и count. Неиспользованные правила маршрута
+ * и лишние узлы — ошибки. placement="*" запрещён.
  */
 export function matchOccurrences(
   html: string,
   route: string,
   rules: OccurrenceRule[],
+  sourceSlots: { slotId: string; identity: string }[],
+  opts?: { ignoreMarkedRegions?: boolean },
 ): string[] {
   const errors: string[] = [];
-  const found = collectOccurrences(html);
+  const subject = opts?.ignoreMarkedRegions ? stripMarkedRegions(html) : html;
+  const found = collectOccurrences(subject);
   const used = new Set<number>();
   const routeRules = rules.filter((r) => r.route === route);
+  const slotsById = new Map(sourceSlots.map((s) => [s.slotId, s]));
 
   for (const rule of routeRules) {
+    if (rule.placement === '*') {
+      errors.push(`${route}: rule ${rule.slotId} placement="*" запрещён, нужен точный anchor`);
+      continue;
+    }
+    const slot = slotsById.get(rule.slotId);
+    if (!slot) {
+      errors.push(`${route}: rule ${rule.slotId} нет в committed source-slot registry`);
+      continue;
+    }
+    const sourceTag = slot.identity.split('|')[0];
+    const ruleTag = rule.identity.split('|')[0];
+    if (sourceTag && ruleTag && sourceTag !== ruleTag) {
+      errors.push(`${route}: rule ${rule.slotId} source identity tag=${sourceTag} ≠ output ${ruleTag}`);
+    }
     const matches: number[] = [];
     for (let i = 0; i < found.length; i += 1) {
       if (used.has(i)) continue;
       const node = found[i];
       if (node.identity !== rule.identity) continue;
-      if (rule.placement !== '*' && node.placement !== rule.placement) continue;
+      if (node.placement !== rule.placement) continue;
       matches.push(i);
     }
-    if (matches.length !== rule.count) {
+    if (matches.length < rule.count) {
       errors.push(
         `${route}: rule ${rule.slotId} identity=${rule.identity.slice(0, 60)} placement=${rule.placement} ожидал count=${rule.count}, получил ${matches.length}`,
       );

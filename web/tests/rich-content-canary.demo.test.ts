@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { demoDist, demoPagePath, demoPages } from './helpers/demo-dist';
 import {
   CANARY_CONTROL_TOKEN,
   CANARY_HOSTILE_TOKEN,
   CANARY_PATH,
 } from './helpers/rich-content-safety/closed-matrix.js';
+import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
+import {
+  collectMarkerInventoryErrors,
+  type RenderedSink,
+} from './helpers/rich-content-safety/marker-inventory.js';
+
+function demoFile(path: string): string {
+  return path === '/' ? join(demoDist, 'index.html') : join(demoDist, path.replace(/^\//, ''), 'index.html');
+}
 
 describe('rich-content contract: whole-dist canary (demo)', () => {
   it('hostile canary отсутствует во всём dist-demo', () => {
@@ -21,11 +31,21 @@ describe('rich-content contract: whole-dist canary (demo)', () => {
   });
 
   it('demo test-only path содержит ровно один control token и sink marker', () => {
-    const pages = demoPages();
-    const canary = pages.find((f) => demoPagePath(f).includes(`${CANARY_PATH}/`) || demoPagePath(f) === `${CANARY_PATH}/index.html` || demoPagePath(f) === `${CANARY_PATH}index.html`);
-    expect(canary, `нет canary path ${CANARY_PATH} в dist-demo`).toBeTruthy();
-    const html = readFileSync(canary!, 'utf-8');
+    const page = demoFile(CANARY_PATH);
+    expect(existsSync(page), `нет canary path ${CANARY_PATH} в dist-demo`).toBe(true);
+    const html = readFileSync(page, 'utf-8');
     expect(html.split(CANARY_CONTROL_TOKEN).length - 1).toBe(1);
     expect(html).toMatch(/data-safe-rich-content="canary-body"/);
+  });
+});
+
+describe('rich-content contract: marker inventory (demo)', () => {
+  it('каждая demo-область rendered-registry имеет data-safe-rich-content, count совпадает', () => {
+    const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
+    const missing = collectMarkerInventoryErrors(rendered.sinks, 'demo', (path) => {
+      const file = demoFile(path);
+      return { exists: existsSync(file), html: existsSync(file) ? readFileSync(file, 'utf-8') : '' };
+    });
+    expect(missing, missing.join('\n')).toEqual([]);
   });
 });

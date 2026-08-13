@@ -56,7 +56,7 @@ export default tseslint.config(
       'src/pages/preview/\\[variant\\]/seminar.astro',
       'src/pages/preview/\\[variant\\]/seminar-undated.astro',
       'src/components/seminars/SeminarArchitectureHeader.astro',
-      'src/pages/__rich-content-canary.astro',
+      'src/pages/rich-content-canary.astro',
     ],
     rules: {
       'astro/no-set-html-directive': 'off',

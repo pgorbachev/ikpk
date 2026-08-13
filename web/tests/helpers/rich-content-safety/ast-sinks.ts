@@ -130,7 +130,7 @@ function sinkIdFor(file: string, attr: string, expr: string): string {
   if (file === 'components/seminars/SeminarArchitectureHeader.astro') {
     return 'seminar-architecture-header';
   }
-  if (file === 'pages/__rich-content-canary.astro') return 'canary-body';
+  if (file === 'pages/rich-content-canary.astro') return 'canary-body';
   if (file === 'components/RichContent.astro') return 'rich-content-singleton';
   return `${file}:${attr}:${expr.slice(0, 40)}`;
 }
@@ -296,7 +296,7 @@ export async function collectExecutableSourceSlots(srcRoot = WEB_SRC): Promise<E
     walkAstro(ast as AstroNode, (node) => {
       if (node.type !== 'element') return;
       const name = (node.name ?? '').toLowerCase();
-      if (!['script', 'style', 'iframe', 'object', 'embed', 'frame', 'frameset', 'base', 'link'].includes(name)) {
+      if (!['script', 'style', 'iframe', 'object', 'embed', 'frame', 'frameset', 'base', 'link', 'svg', 'math', 'template'].includes(name)) {
         return;
       }
       const attrs = node.attributes ?? [];
