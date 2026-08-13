@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "63414688d6e98516c3c25eb5676298d9bf6e7bb7",
+  "generatedFromSha": "038cf96875fe7a454c53d35e59d5f6b401871015",
   "distRoots": [
     "/Users/pgorbachev/projects/private/ikpk-sanitize-rich-html-impl/web/dist",
     "/Users/pgorbachev/projects/private/ikpk-sanitize-rich-html-impl/web/dist-demo"
