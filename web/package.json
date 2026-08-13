@@ -13,13 +13,14 @@
     "lint": "eslint .",
     "typecheck": "astro check",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:render",
     "test:build": "npm run build && vitest run --config vitest.build.config.ts",
     "test:build:remote": "npm run build && PARITY_REMOTE=1 PARITY_REMOTE_STRICT=1 vitest run --config vitest.build.config.ts",
     "test:e2e": "npm run test:e2e:smoke && npm run test:e2e:a11y",
     "test:e2e:smoke": "node tests/helpers/preview-reset.mjs && playwright test tests/site.spec.ts --project=desktop --project=mobile",
     "test:e2e:a11y": "node tests/helpers/preview-reset.mjs && playwright test tests/a11y.spec.ts --project=desktop --project=mobile",
     "test:e2e:catalog": "node tests/helpers/preview-reset.mjs && playwright test tests/article-catalog.spec.ts --project=desktop",
+    "test:e2e:schedule": "node tests/helpers/preview-reset.mjs && rm -f test-results/schedule-month-run.json && PLAYWRIGHT_JSON_OUTPUT_NAME=test-results/schedule-month-run.json playwright test tests/schedule-month.spec.ts --project=desktop && npm run check:month-run",
     "test:e2e:compat": "node tests/helpers/preview-reset.mjs && playwright test tests/compat.spec.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
     "test:e2e:smoke:attached": "playwright test tests/site.spec.ts --config=playwright.attached.config.ts --project=desktop --project=mobile",
     "test:e2e:compat:attached": "playwright test tests/compat.spec.ts --config=playwright.attached.config.ts --project=compat-chrome-desktop --project=compat-firefox-desktop --project=compat-safari-desktop --project=compat-ios-iphone-se --project=compat-ios-iphone-14 --project=compat-ios-ipad --project=compat-android-chrome",
@@ -35,7 +36,9 @@
     "redirects:gen": "tsx scripts/gen-redirects.ts",
     "data:refresh:dry": "tsx scripts/refresh-catalog.ts --dry",
     "test:e2e:visual": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile",
-    "test:e2e:visual:update": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots"
+    "test:e2e:visual:update": "node tests/helpers/preview-reset.mjs && playwright test tests/visual-baseline.spec.ts --project=desktop --project=mobile --update-snapshots",
+    "check:month-run": "tsx scripts/check-month-run.ts",
+    "test:render": "vitest run --config vitest.render.config.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",

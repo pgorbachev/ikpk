@@ -113,6 +113,13 @@ jobs:
       - name: Run article catalog characterization tests
         run: npm run test:e2e:catalog
 
+      # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
+      # останавливает только `Tests`, а проверка, положенная в файл, который не
+      # запускает ни один workflow, зелена ровно потому, что её никто не выполняет.
+      # Мобильный сценарий задаёт свой viewport внутри теста, поэтому проект один.
+      - name: Run schedule month filter tests
+        run: npm run test:e2e:schedule
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
