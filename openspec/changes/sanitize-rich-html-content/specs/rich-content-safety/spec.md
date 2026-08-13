@@ -9,7 +9,9 @@
 
 Система SHALL пропускать каждый не-JSON-LD HTML-фрагмент, вставляемый без экранирования,
 через один fail-closed конвейер нормализации и санитизации. Последняя санитизация SHALL
-выполняться в центральном rich-content sink непосредственно перед рендером.
+выполняться в центральном rich-content sink непосредственно перед рендером. Добавление
+ещё одного не-JSON-LD raw sink SHALL считаться изменением capability; одной записи в
+реестре недостаточно.
 
 #### Scenario: Контент из любого поддерживаемого источника
 - **WHEN** страница получает rich HTML из текущего JSON-снимка, восстановленной панели,
@@ -21,9 +23,7 @@
   `RichContent.astro` и двух JSON-LD sinks `HeadMeta.astro`/`Breadcrumbs.astro`, `is:raw`, непустой
   `innerHTML`/`outerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`,
   `createContextualFragment`, HTML-режим `DOMParser`, `srcdoc` или `setHTMLUnsafe`
-- **THEN** обязательный source gate завершается ошибкой до публикации; добавление ещё
-  одного не-JSON-LD raw sink требует изменения этой capability, а записи в реестре
-  недостаточно
+- **THEN** обязательный source gate завершается ошибкой до публикации
 
 #### Scenario: Поддельный безопасный результат
 - **WHEN** обычная строка или поддельный объект передаётся в центральный sink через cast,
@@ -114,7 +114,10 @@ mapping ко всем baseline selectors. Inline SVG удаляется как �
 `font-size:14px|18px|20px|22px|inherit|var(--font-size-s)` — в
 `rc-font-14|18|20|22|inherit|s`; значения `color` — в generated конечные классы
 `rc-color-<stable-id>`, каждый из которых хранит точное утверждённое CSS value; для
-rendered routes дополнительно фиксируется baseline computed value.
+rendered routes дополнительно фиксируется baseline computed value. Текущие декларации
+payment content `display:flex`, `flex-direction:column`, `gap:24px` и `margin-left:15px`
+переносятся соответственно в `rc-display-flex`, `rc-flex-column`, `rc-gap-24` и
+`rc-ml-15`; это сохраняет измеренный layout `/oplata`.
 Остальные inline declarations удаляются как legacy layout/UI implementation, не
 являющаяся контентным контрактом. Manifest SHALL содержать source selector, stable
 entity ID/JSON path, исходную декларацию или SVG context, точный replacement class/text,
@@ -126,8 +129,9 @@ accessible name и route (либо `source-only`); его строки выво�
 - **THEN** после миграции назначение ссылки и точный текстовый/accessibility эквивалент
   по mapping сохраняются без inline SVG
 
-#### Scenario: Текущее текстовое оформление
-- **WHEN** текущий rendered-corpus использует inline `text-align`, `font-size` или `color`
+#### Scenario: Текущее видимое оформление
+- **WHEN** текущий rendered-corpus использует mapped inline declaration, включая
+  `text-align`, `font-size`, `color` и payment flex/spacing declarations
 - **THEN** computed presentation сохраняется через конечные локальные классы и
   проверяется fingerprint плюс visual evidence на страницах с каждым семейством стилей
 
@@ -163,7 +167,17 @@ accessible name и route (либо `source-only`); его строки выво�
 - `aria-label` — только на `a`, `img`, `figure`, `table` и `.table-scroll`;
   `aria-labelledby`/`aria-describedby` — только на `section`, `article`, `aside`,
   `details`, `figure`, `table`; `role="region"` и `tabindex="0"` — только на
-  `.table-scroll`.
+  `.table-scroll`;
+- системные markers входят в ту же закрытую матрицу: `data-wrapped` — только на `table`
+  внутри непосредственного `.table-scroll[role="region"][tabindex="0"]`;
+  `data-legacy-cta` — только на `a` с локальным fragment `href`;
+  `data-legacy-cta-unresolved` — только на `span` без `href`;
+  `data-safe-rich-content="<sink-id>"` — только на root wrapper центрального sink-а, где
+  `<sink-id>` присутствует в ожидаемом rendered registry; reserved class token
+  `.table-scroll` — только на `div[role="region"][tabindex="0"]`, непосредственно
+  содержащем `table[data-wrapped]`; `.legacy-cta-unresolved` — только на
+  `span[data-legacy-cta-unresolved]` без `href`. Эти формы SHALL присутствовать и в
+  независимой полной копии output matrix.
 
 Любой не перечисленный атрибут SHALL быть удалён, а ограниченное значение SHALL
 валидироваться. Независимый output gate SHALL держать собственную полную копию матрицы,
@@ -181,8 +195,9 @@ accessible name и route (либо `source-only`); его строки выво�
 ### Requirement: Системные маркеры защищены от подделки
 
 До legacy-нормализации система SHALL удалять из недоверенного входа reserved markers
-`data-wrapped`, `data-legacy-cta`, `data-legacy-cta-unresolved` и reserved class tokens
-`.table-scroll`, `.legacy-cta-unresolved`. После нормализации sanitizer SHALL принимать
+`data-wrapped`, `data-legacy-cta`, `data-legacy-cta-unresolved`,
+`data-safe-rich-content` и reserved class tokens `.table-scroll`,
+`.legacy-cta-unresolved`. После нормализации sanitizer SHALL принимать
 маркеры только в утверждённых структурных формах; terminal re-sanitization SHALL
 различать runtime-authenticated pipeline output и обычный вход.
 
@@ -228,6 +243,12 @@ base manifest key, `<width>` присутствует в его `widths`, а п�
 - **WHEN** `img[src]` указывает на HTTP(S)-host, protocol-relative host или запрещённую
   схему
 - **THEN** `img` удаляется безопасно, а исходный URL не попадает в output
+
+#### Scenario: Неканонический локальный image src
+- **WHEN** `img[src]` содержит root-relative либо path-relative адрес вне base manifest
+  keys, включая `/images/**`, `../**` и derivative `/media/_w/**` вместо base asset
+- **THEN** сборка завершается ошибкой с типом и ID материала и не публикует неоднозначную
+  либо битую локальную ссылку
 
 #### Scenario: Отсутствующий локальный asset
 - **WHEN** base `/media/**` отсутствует в manifest либо утверждённый derivative не
@@ -288,15 +309,27 @@ raw sinks с машинным реестром. Parsed-output gate SHALL нез�
 закрытую матрицу, сверять фактический реестр `data-safe-rich-content` областей с ожидаемым
 реестром production/demo routes и завершаться ошибкой при нуле либо пропаже областей.
 Отдельный canary gate SHALL искать hostile canary tokens во всём `dist` и `dist-demo`, а
-не только внутри отмеченных поддеревьев. Output oracle SHALL разбирать целый собранный
-документ browser-conformant parser-ом, независимым от runtime sanitizer parser-а.
+не только внутри отмеченных поддеревьев. В каждой из двух сборок того же прогона он SHALL
+найти ровно один неопасный fixture-control token на ожидаемом test-only path; отсутствие
+path/token, дубликат или отсутствие соответствующего sink marker SHALL завершать гейт
+ошибкой. Output oracle SHALL разбирать целый собранный документ browser-conformant
+parser-ом, независимым от runtime sanitizer parser-а.
 Независимый whole-document hazard gate SHALL вне rich-content областей отвергать `on*`,
-`srcdoc`, XML/XLink URL, запрещённые URL-схемы, а также `script`, `style`, `iframe`,
-`object`, `embed`, `base`, refresh-meta, stylesheet-link и исполняемые SVG/MathML
-descendants, которые не соответствуют утверждённому source-owned реестру вывода шаблонов. Реестр
-SHALL храниться в тестах, SHALL NOT строиться из проверяемого `dist` в том же прогоне и
-SHALL учитывать route, ожидаемое количество/placement, inline body либо asset identity и
-security-relevant атрибуты разрешённого элемента.
+`srcdoc`, XML/XLink URL и запрещённые URL-схемы, а также любой элемент, browser semantics
+которого создаёт nested browsing context либо загружает/исполняет script, style, document
+или active foreign-content resource. Сюда входят, но не ограничиваются, `script`, `style`,
+`iframe`, `frame`, `frameset`, `object`, `embed`, `base`, refresh-meta, stylesheet-link и
+исполняемые SVG/MathML descendants. Такой output допускается только по утверждённому
+test-owned реестру вывода шаблонов.
+
+Для `script`/`style` реестр SHALL хранить глобальный набор уникальных body hashes либо
+внешних asset identities и security-relevant атрибутов без route/count pinning. Для
+редких high-risk элементов — nested browsing contexts, `object`/`embed`/`base`,
+refresh-meta и stylesheet-link — он SHALL дополнительно фиксировать route, count и
+placement. CI SHALL только сравнивать output с committed registry. Обновление выполняется
+явно запускаемым tool в чистом worktree из назначенного reviewed source SHA: tool строит
+candidate manifest, а изменение source и manifest проходит review до commit; registry
+SHALL NOT обновляться либо приниматься из проверяемого CI `dist` в том же прогоне.
 
 #### Scenario: Повторная terminal-санитизация
 - **WHEN** уже санитизированная HTML-строка проходит terminal sanitizer второй раз в том
@@ -318,6 +351,11 @@ security-relevant атрибуты разрешённого элемента.
 - **WHEN** контролируемый raw sink выводит hostile canary вне `data-safe-rich-content`
 - **THEN** whole-dist canary gate находит token и завершает проверку ошибкой с адресом
   страницы
+
+#### Scenario: Test-only fixture не попал в сборку
+- **WHEN** ожидаемый test-only path, его уникальный fixture-control token или его sink
+  marker отсутствует в проверяемом output
+- **THEN** canary gate завершается ошибкой, даже если hostile tokens также отсутствуют
 
 #### Scenario: Parser differential
 - **WHEN** misnested, foreign-content или entity-encoded mXSS fixture получает разное

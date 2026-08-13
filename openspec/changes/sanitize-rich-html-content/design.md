@@ -75,13 +75,15 @@ Terminal sanitizer обязан быть побайтово идемпотент
 pipeline не объявляется идемпотентным: он добавляет продуктовые обёртки и не должен
 использоваться как доказательство terminal policy.
 
-Поддерживаемый серверный allowlist sanitizer (предпочтительно `sanitize-html`) выбран
-вместо regex-фильтра. Конкретная версия фиксируется после проверки Node compatibility,
-maintenance, provenance и всех advisory parser subtree. DOMPurify+JSDOM остаётся более
-тяжёлой альтернативой, если выбранный parser не позволит безопасно реализовать limits и
-tree transforms. Выбранный pipeline обязан восстанавливать malformed input в пределах
-лимитов по browser-conformant HTML tree-construction semantics; синтаксическая
-malformed-разметка сама по себе не является разрешённой причиной build failure.
+Package selection начинается с browser-conformant HTML tree construction: runtime parser
+обязан проходить foster-parenting, active-formatting, foreign-content и entity fixtures
+из spec. Поэтому `sanitize-html`/htmlparser2 не является предпочтительным и исключается,
+если не получает browser-conformant tree извне. Предпочтительный кандидат — maintained
+DOMPurify+JSDOM stack; допустима parse5-based tree transform с эквивалентной закрытой
+policy, если независимый output oracle использует другой browser-conformant engine.
+Конкретные версии фиксируются после проверки Node compatibility, maintenance,
+provenance, limits и всех advisory parser subtree. Синтаксическая malformed-разметка в
+пределах лимитов сама по себе не является разрешённой причиной build failure.
 
 ### 2. Resource limits стоят до legacy regex-проходов
 
@@ -119,15 +121,18 @@ layout/style loss нельзя доказать только по тексту s
 Inline SVG остаётся запрещённым active subtree: SVG имеет собственные URL/animation/
 event поверхности, и «безопасный SVG subset» резко расширил бы policy. Нормативный
 mapping из spec детерминирован: SVG-only link получает точный текст/accessibility label,
-остальной legacy UI SVG удаляется как decorative. Для styles сохраняются только точные
-`text-align`, `font-size` и `color` families из mapping; остальные layout/UI declarations
-не являются принятым контентным контрактом и удаляются.
+остальной legacy UI SVG удаляется как decorative. Для styles сохраняются точные
+`text-align`, `font-size` и `color` families, а также текущие payment declarations
+`display:flex`, `flex-direction:column`, `gap:24px`, `margin-left:15px` из mapping.
+Остальные layout/UI declarations не являются принятым контентным контрактом и удаляются.
 
-До RED-тестов генератор создаёт reviewable manifest со строкой на каждый SVG и mapped
+В начале отдельной чистой test-only сессии, до sanitizer RED-тестов, генератор создаёт
+reviewable manifest со строкой на каждый SVG и mapped
 declaration: selector, stable entity ID/JSON path, исходный context/value, точный
 replacement class/text, accessible name и route либо `source-only`. Gate сравнивает
-manifest с независимым discovery и падает при пропуске. Тестовая сессия только потребляет
-утверждённый manifest и не выбирает product mapping. Computed-style assertions и снимки
+manifest с независимым discovery и падает при пропуске. Та же сессия получает product
+mapping только из утверждённой spec, сохраняет negative-verification evidence, затем
+использует reviewed manifest как test fixture. Computed-style assertions и снимки
 проверяют каждое сохраняемое style family на фактически собранных routes.
 
 ### 5. Closed matrix сохраняет только инертные legacy controls
@@ -148,8 +153,8 @@ Fixture локализуется до вызова либо ожидает бе�
 Финальная строка не хранит происхождение, поэтому требование «атрибут создан конкретной
 функцией» действительно непроверяемо одним terminal sanitizer. Вместо этого:
 
-- untrusted pre-pass удаляет `data-wrapped`, оба `data-legacy-cta*` и reserved class
-  tokens;
+- untrusted pre-pass удаляет `data-wrapped`, оба `data-legacy-cta*`,
+  `data-safe-rich-content` и reserved class tokens;
 - нормализатор может создать их заново;
 - authenticated output mode проверяет точную структурную форму;
 - untrusted terminal mode снова удаляет markers из подделки.
@@ -157,6 +162,9 @@ Fixture локализуется до вызова либо ожидает бе�
 Так idempotent re-sanitization authenticated output не уничтожает законные markers, а
 CMS не может их отчеканить. Для table wrapper проверяется непосредственная структура;
 для resolved CTA — `a` с fragment href; для unresolved — `span` без href.
+`data-safe-rich-content` разрешается только на root wrapper центрального компонента со
+значением из expected rendered registry. Эти формы являются частью полной normative
+matrix и её независимой test-owned копии, а не неявными исключениями.
 
 Активный `online-payment-flow` не меняет `normalizeLegacyControls()` — его proposal
 говорит это явно. Пересечение ограничено `oplata.astro` и сохранением существующего CTA
@@ -173,8 +181,10 @@ contract при миграции sink-а.
 
 External, protocol-relative, forbidden-scheme и malformed image URL удаляются; один
 плохой candidate удаляет весь `srcset`. Отсутствующий локальный base/derivative — другая
-категория: это broken internal invariant, и она валит build с source ID. Таким образом
-один input больше не имеет одновременно THEN «strip» и THEN «fail».
+категория: это broken internal invariant, и она валит build с source ID. Любой локальный
+`img[src]` вне canonical manifest base keys — включая `/images/**`, path-relative URL и
+derivative в `src` — относится к fail-build, а не strip. Таким образом каждый input
+попадает ровно в одну outcome-категорию.
 
 Локальный asset `0acd713c-...webp` уже скачан и внесён в manifest; миграция состоит в
 замене оставшегося remote URL в `course_groups.json` на существующий `/media/uploads/...`.
@@ -201,7 +211,8 @@ update и повторной стендовой проверки.
 
 Built-output verification имеет четыре независимых слоя и разбирает целую страницу
 browser-conformant oracle-ом, независимым от runtime sanitizer parser-а (`parse5`, если
-runtime использует htmlparser2; иначе DOM реального браузера):
+runtime использует JSDOM; DOM реального браузера, если runtime transform использует
+parse5):
 
 1. test-owned полная closed matrix, скопированная из spec и не импортирующая runtime
    policy/URL validator; test-only build page проводит через boundary каталог hostile
@@ -210,18 +221,28 @@ runtime использует htmlparser2; иначе DOM реального бр
 2. expected registry `sink-id → production/demo paths/counts`: ноль областей,
    пропавший marker или sink-id — ошибка;
 3. уникальные hostile canary tokens ищутся по всему `dist` и `dist-demo`, включая зоны
-   вне marker-а;
+   вне marker-а; тот же прогон обязан в каждой сборке найти ровно один inert
+   fixture-control token и ожидаемый sink marker на точном test-only path, иначе это
+   vacuous failure;
 4. whole-document hazard scanner независимо от marker-ов отвергает event attributes,
-   `srcdoc`, XML/XLink URL, forbidden schemes и неинвентаризированные `script`, `style`,
-   `iframe`, `object`, `embed`, `base`, refresh-meta, stylesheet-link либо executable
-   SVG/MathML descendants. Допустимые template/bundler outputs сверяются с test-owned
-   source registry по route, count/placement, inline body либо asset identity и
-   security-relevant attrs; registry коммитится с тестами и никогда не обучается на
-   проверяемом `dist` того же прогона.
+   `srcdoc`, XML/XLink URL, forbidden schemes и любой неинвентаризированный element,
+   создающий nested browsing context либо загружающий/исполняющий script, style, document
+   или active foreign-content resource; это обобщение включает `frame`/`frameset`, а не
+   только заранее названные теги.
+
+Executable registry разделён по стоимости изменения. Для многочисленных `script`/`style`
+он хранит глобальные unique body hashes либо external asset identities и security attrs,
+не дублируя их по 269 routes. Route/count/placement фиксируются только для редких
+high-risk elements: nested browsing contexts, `object`/`embed`/`base`, refresh-meta и
+stylesheet-link. Явно запускаемый generator строит candidate manifest в чистом worktree
+из назначенного reviewed source SHA; reviewer сверяет source diff и manifest diff до
+commit. Обычный CI только читает committed registry и никогда не перезаписывает его из
+текущего `dist`.
 
 Негативные мутации обязательны как минимум для runtime allowlist extension при включённом
 hostile build fixture, удаления marker-а, вывода canary вне отмеченного subtree,
-parser-differential mXSS и динамического неизвестного sink-а с другим активным payload.
+пропажи fixture-control, parser-differential mXSS, динамического неизвестного sink-а с
+другим активным payload, discovery zero-match/unlisted field и пропавшей migration row.
 Минимальный denylist отвергнут: он не может доказать закрытый allowlist и даёт
 common-mode/vacuous failure.
 

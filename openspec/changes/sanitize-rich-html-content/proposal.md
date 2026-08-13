@@ -9,12 +9,13 @@ event-handler атрибуты, опасные URL-схемы и произво�
 
 ## What Changes
 
-- Добавляется одна fail-closed граница санитизации после legacy-нормализации и до любой
-  вставки rich HTML через `set:html`.
+- Добавляется один fail-closed pipeline: resource limits и reserved-marker pre-scrub до
+  legacy-нормализации, allowlist-санитизация после неё и terminal re-sanitization в
+  singleton `RichContent.astro` непосредственно у `set:html`.
 - Вводится явный allowlist элементов, атрибутов и URL-схем: неподдерживаемая разметка
   удаляется, а безопасный текст по возможности сохраняется.
 - Блокируется исполняемый контент: scripts, активные embed-теги, inline event handlers,
-  `srcdoc`, небезопасные стили, `javascript:` и активные `data:` URL.
+  `srcdoc`, небезопасные стили, `javascript:` и любые `data:` URL в rich content.
 - Сохраняется единственный намеренный embed — HTTPS-player RUTUBE на утверждённом
   hostname с фиксированными sandbox/referrer permissions, которые автор не может
   ослабить.
