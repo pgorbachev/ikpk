@@ -7,8 +7,9 @@ import {
   collectOccurrences,
   unmarkedDocumentHazards,
   extractMarkedRegions,
+  stripMarkedRegions,
 } from './helpers/rich-content-safety/hazard-scan.js';
-import { exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
+import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
 
 function slots(ids: { slotId: string; identity: string }[]) {
@@ -123,15 +124,45 @@ describe('rich-content: whole-document hazard scanner', () => {
       { slotId: 'src:beta', route: '/x', placement: found[1].placement, identity: found[1].identity, count: 1 },
     ], source);
     expect(ok).toEqual([]);
+
+    const crossed = matchOccurrences(html, '/x', [
+      { slotId: 'src:beta', route: '/x', placement: found[0].placement, identity: found[0].identity, count: 1 },
+    ], source);
+    expect(crossed.some((e) => /source body identity/.test(e))).toBe(true);
   });
 
-  it('closed matrix отвергает contenteditable и произвольный data-* внутри marked region', () => {
+  it('closed matrix отвергает contenteditable, data-*, incomplete iframe, checkbox, dir/lang, javascript URL и поддельные маркеры', () => {
+    const known = { knownSinkIds: ['article-body'] };
     const html = '<div data-safe-rich-content="article-body"><p contenteditable="true" data-evil="x">ok</p></div>';
     const regions = extractMarkedRegions(html);
     expect(regions).toHaveLength(1);
-    const errors = validateClosedMatrixHtml(regions[0].outer);
+    const errors = validateClosedMatrixHtml(regions[0].outer, known);
     expect(errors.some((e) => /contenteditable/.test(e))).toBe(true);
     expect(errors.some((e) => /data-evil/.test(e))).toBe(true);
-    expect(validateClosedMatrixHtml('<p>ok</p>')).toEqual([]);
+    expect(validateClosedMatrixHtml('<p>ok</p>', known)).toEqual([]);
+    expect(validateClosedMatrixHtml(exactRutubeIframe(), known)).toEqual([]);
+    expect(validateClosedMatrixHtml(AUTHENTICATED_FORMS.tableWrapper, known)).toEqual([]);
+    expect(validateClosedMatrixHtml(AUTHENTICATED_FORMS.resolvedCta, known)).toEqual([]);
+    expect(validateClosedMatrixHtml(AUTHENTICATED_FORMS.unresolvedCta, known)).toEqual([]);
+
+    const srcOnly = '<iframe src="https://rutube.ru/play/embed/4a1e6023bd7a3716d8ff56bf98c96e97/"></iframe>';
+    expect(validateClosedMatrixHtml(srcOnly, known).some((e) => /обязательного/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<input type="checkbox">', known).some((e) => /disabled/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<p dir="sideways">x</p>', known).some((e) => /dir/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<p lang="1">x</p>', known).some((e) => /lang/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<a href="javascript:alert(1)">x</a>', known).some((e) => /URL/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<div data-safe-rich-content="forged">x</div>', known).some((e) => /sink-id/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<table data-wrapped><tr><td>x</td></tr></table>', known).some((e) => /data-wrapped/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<div class="table-scroll">x</div>', known).some((e) => /table-scroll/.test(e))).toBe(true);
+  });
+
+  it('stripMarkedRegions не оставляет вложенный RUTUBE после внутреннего div', () => {
+    const html = `<div data-safe-rich-content="article-body"><div class="wrap">inner</div>${exactRutubeIframe()}</div><p>after</p>`;
+    const stripped = stripMarkedRegions(html);
+    expect(stripped).toContain('after');
+    expect(stripped).not.toContain('iframe');
+    expect(stripped).not.toContain('inner');
+    const occ = matchOccurrences(html, '/x', [], [], { ignoreMarkedRegions: true });
+    expect(occ.some((e) => /iframe/.test(e))).toBe(false);
   });
 });

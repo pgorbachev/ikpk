@@ -31,6 +31,8 @@ describe('rich-content contract: whole-document hazard scan (demo dist)', () => 
     }>('output-occurrence-registry.json');
     expect(occ.occurrences.length, 'occurrence rules пусты').toBeGreaterThan(0);
     const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+    const rendered = loadFixture<{ sinks: { id: string }[] }>('rendered-registry.json');
+    const knownSinkIds = rendered.sinks.map((s) => s.id);
 
     const errors: string[] = [];
     for (const file of pages) {
@@ -45,7 +47,7 @@ describe('rich-content contract: whole-document hazard scan (demo dist)', () => 
         errors.push(`${route}: ${hit.reason} на <${hit.tag}>`);
       }
       for (const region of extractMarkedRegions(parsed.serialized)) {
-        for (const err of validateClosedMatrixHtml(region.outer)) {
+        for (const err of validateClosedMatrixHtml(region.outer, { knownSinkIds })) {
           errors.push(`${route} [${region.sinkId}]: ${err}`);
         }
       }

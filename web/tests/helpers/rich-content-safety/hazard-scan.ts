@@ -130,10 +130,18 @@ function isExactRutube(src: string): boolean {
 }
 
 export function stripMarkedRegions(html: string): string {
-  return html.replace(
-    /<([a-z0-9]+)([^>]*\bdata-safe-rich-content=)[\s\S]*?<\/\1>/gi,
-    '',
-  );
+  const ranges: [number, number][] = [];
+  for (const tag of iterateTags(html)) {
+    if (!tag.attrs['data-safe-rich-content']) continue;
+    const end = elementEnd(html, tag);
+    const nested = ranges.some(([start, close]) => tag.start >= start && end <= close);
+    if (nested) continue;
+    ranges.push([tag.start, end]);
+  }
+  ranges.sort((a, b) => b[0] - a[0]);
+  let out = html;
+  for (const [start, end] of ranges) out = `${out.slice(0, start)}${out.slice(end)}`;
+  return out;
 }
 
 export interface MarkedRegion {
@@ -203,6 +211,11 @@ export function collectOccurrences(html: string): FoundOccurrence[] {
   return found;
 }
 
+function identityBody(identity: string): string | null {
+  const part = identity.split('|').find((p) => p.startsWith('body:'));
+  return part ?? null;
+}
+
 function nearestPrecedingId(html: string, before: number): string | null {
   let last: string | null = null;
   for (const tag of iterateTags(html.slice(0, before))) {
@@ -244,6 +257,13 @@ export function matchOccurrences(
     const ruleTag = rule.identity.split('|')[0];
     if (sourceTag && ruleTag && sourceTag !== ruleTag) {
       errors.push(`${route}: rule ${rule.slotId} source identity tag=${sourceTag} ≠ output ${ruleTag}`);
+      continue;
+    }
+    const sourceBody = identityBody(slot.identity);
+    const ruleBody = identityBody(rule.identity);
+    if (sourceBody !== ruleBody) {
+      errors.push(`${route}: rule ${rule.slotId} source body identity ${sourceBody ?? '∅'} ≠ output ${ruleBody ?? '∅'}`);
+      continue;
     }
     const matches: number[] = [];
     for (let i = 0; i < found.length; i += 1) {

@@ -32,6 +32,8 @@ describe('rich-content contract: whole-document hazard scan (production dist)', 
     }>('output-occurrence-registry.json');
     expect(occ.occurrences.length, 'occurrence rules пусты — CI не должен зеленеть вхолостую').toBeGreaterThan(0);
     const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+    const rendered = loadFixture<{ sinks: { id: string }[] }>('rendered-registry.json');
+    const knownSinkIds = rendered.sinks.map((s) => s.id);
 
     const errors: string[] = [];
     for (const file of files) {
@@ -48,7 +50,7 @@ describe('rich-content contract: whole-document hazard scan (production dist)', 
         errors.push(`${route}: ${hit.reason} на <${hit.tag} ${hit.attr}>`);
       }
       for (const region of extractMarkedRegions(recovered)) {
-        for (const err of validateClosedMatrixHtml(region.outer)) {
+        for (const err of validateClosedMatrixHtml(region.outer, { knownSinkIds })) {
           errors.push(`${route} [${region.sinkId}]: ${err}`);
         }
       }
