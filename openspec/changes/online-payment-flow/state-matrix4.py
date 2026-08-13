@@ -26,6 +26,10 @@
     недействителен»; истечение — частный случай недействительности, проверяется задачей
     3.10a-3b(11), не этой матрицей.
 
+Версия 7 (ревью r8 / B1): истёкшая незавершённая не отменяет поиск среди подтверждённых.
+Приоритет незавершённой — только у живой блокировки; старше 14 суток от создания —
+совпадения нет, дальше подтверждённые младше 14 суток от подтверждения.
+
 Версия 6 (ревью r7 / B2): видимость ключа незавершённой и подтверждённой записей —
 раздельные оси. Незавершённая с неизвестной версией невидима и не отменяет поиск среди
 подтверждённых: комбинация «незавершённая невидима + подтверждённая младше 14 суток с
@@ -66,14 +70,14 @@ def dispatch(c):
             return EXISTING, "5-existing"
         return (RETRY, "5-continue") if c["within_dedup"] else (VERIF, "5-beyond-window")
 
-    # шаг 1а: сначала незавершённые совпадения, затем подтверждённые (блокер 3 ревью 9ab7e7e)
+    # шаг 1а: сначала живые незавершённые совпадения, затем подтверждённые (блокер 3 / r8 B1)
     # fp_nonterminal и fp_confirmed_lt14d независимы: одно содержимое может совпасть с обеими.
     # Видимость ключа двух поисков тоже независима (r7 B2): неизвестная версия незавершённой
-    # не делает невидимой подтверждённую.
-    if c["fp_nonterminal"] and c["nt_key_known"]:
-        if not c["m_age_lt14d"]:
-            return CREATE, "1a-nonterminal-block-expired"
-        return VERIF, "1a-nonterminal-match"                      # приоритет над подтверждённым
+    # не делает невидимой подтверждённую. Истёкшая незавершённая живой не является (r8 B1)
+    # и поиск среди подтверждённых не отменяет.
+    if c["fp_nonterminal"] and c["nt_key_known"] and c["m_age_lt14d"]:
+        return VERIF, "1a-nonterminal-match"                      # приоритет только у живой блокировки
+    # истёкшая незавершённая — не совпадение; дальше поиск подтверждённых
     if c["fp_confirmed_lt14d"]:
         if not c["cf_key_known"]:
             return CREATE, "1a-dup-invisible-key"
@@ -84,6 +88,8 @@ def dispatch(c):
         return CREATE, "1a-canceled"
     if c["fp_nonterminal"] and not c["nt_key_known"]:
         return CREATE, "1a-nonterminal-invisible-key"
+    if c["fp_nonterminal"] and c["nt_key_known"] and not c["m_age_lt14d"]:
+        return CREATE, "1a-nonterminal-block-expired"
     return CREATE, "2-fresh"
 
 
@@ -136,16 +142,28 @@ split_keys = sum(
 print("комбинаций: незавершённая невидима + подтверждённая видима → DUP:", split_keys)
 assert split_keys > 0, "раздельные ключи двух поисков непредставимы или не дают DUP"
 
+expired_then_dup = sum(
+    1 for c, o, b in rows
+    if not c["found_by_request_id"] and c["fp_nonterminal"] and c["nt_key_known"]
+    and not c["m_age_lt14d"] and c["fp_confirmed_lt14d"] and c["cf_key_known"]
+    and not c["valid_token"] and o == DUP
+)
+print("комбинаций: истёкшая незавершённая + живая подтверждённая → DUP:", expired_then_dup)
+assert expired_then_dup > 0, "истёкшая незавершённая не должна отменять поиск подтверждённых"
+
+def _live_nt(c):
+    return c["fp_nonterminal"] and c["nt_key_known"] and c["m_age_lt14d"]
+
 checks = [
     ("R1 живое незавершённое совпадение не даёт платежа",
      lambda c, o: not c["found_by_request_id"] and c["fp_nonterminal"]
      and c["nt_key_known"] and c["m_age_lt14d"] and o == CREATE),
     ("R2 дубль после успешной оплаты только по действительному токену",
-     lambda c, o: not c["found_by_request_id"] and not c["fp_nonterminal"]
+     lambda c, o: not c["found_by_request_id"] and not _live_nt(c)
      and c["fp_confirmed_lt14d"]
      and c["cf_key_known"] and o == CREATE and not c["valid_token"]),
     ("R8 подтверждённая запись известной версии всегда даёт вопрос или создание по токену",
-     lambda c, o: not c["found_by_request_id"] and not c["fp_nonterminal"]
+     lambda c, o: not c["found_by_request_id"] and not _live_nt(c)
      and c["fp_confirmed_lt14d"]
      and c["cf_key_known"] and o not in (DUP, CREATE)),
     ("R9 при совпадении с обеими живыми — исход VERIF, не DUP и не CREATE",
@@ -167,9 +185,15 @@ checks = [
      lambda c, o: o == CONFLICT_409 and not (c["found_by_request_id"] and c["status"] == "canceled")),
     ("R6 повтор к оператору только без paymentId и в окне 24 ч",
      lambda c, o: o == RETRY and (c["has_payment_id"] or not c["within_dedup"])),
-    ("R7 блокировка по отпечатку истекает ровно по возрасту записи",
+    ("R7 истёкшая незавершённая не отменяет живую подтверждённую",
      lambda c, o: not c["found_by_request_id"] and c["fp_nonterminal"]
-     and c["nt_key_known"] and not c["m_age_lt14d"] and o != CREATE),
+     and c["nt_key_known"] and not c["m_age_lt14d"]
+     and c["fp_confirmed_lt14d"] and c["cf_key_known"]
+     and ((not c["valid_token"] and o != DUP) or (c["valid_token"] and o != CREATE))),
+    ("R7b истёкшая незавершённая без живой подтверждённой — новая попытка",
+     lambda c, o: not c["found_by_request_id"] and c["fp_nonterminal"]
+     and c["nt_key_known"] and not c["m_age_lt14d"]
+     and not c["fp_confirmed_lt14d"] and o != CREATE),
 ]
 failed = False
 for label, bad in checks:
