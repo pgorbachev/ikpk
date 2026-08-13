@@ -251,7 +251,36 @@ export interface ProjectedIdentity {
   body: string | null;
   staticAttrs: Map<string, string>;
   dynamicNames: Set<string>;
+  /** `name → "expression:mapSrc"` / `"template:..."`. */
+  dynamicAttrs: Map<string, string>;
 }
+
+const SECURITY_URL_ATTRS = new Set([
+  'href',
+  'src',
+  'srcdoc',
+  'srcset',
+  'data',
+  'poster',
+  'action',
+  'formaction',
+  'cite',
+]);
+
+export const MAP_IFRAME_SRC = `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent('Санкт-Петербург, Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н')}&z=16`;
+export const TEST_MAP_B_SRC = 'https://yandex.ru/map-widget/v1/?text=other&z=1';
+
+export type DynamicAttrProjection = { exact: string } | { pattern: RegExp };
+
+/**
+ * Test-owned source-slot → output projection для security-relevant dynamic attrs.
+ * Отсутствие записи — fail-closed, а не «достаточно присутствия атрибута».
+ */
+export const DYNAMIC_ATTR_PROJECTION: Record<string, DynamicAttrProjection> = {
+  'src=expression:mapSrc': { exact: MAP_IFRAME_SRC },
+  'src=expression:testMapB': { exact: TEST_MAP_B_SRC },
+  'href=expression:canonicalURL.href': { pattern: /^https:\/\/ikpk\.su(?:\/.*)?$/ },
+};
 
 /**
  * Test-owned проекция source AST identity (`name=kind:value`) и output identity
@@ -263,6 +292,7 @@ export function projectIdentity(identity: string): ProjectedIdentity {
   let body: string | null = null;
   const staticAttrs = new Map<string, string>();
   const dynamicNames = new Set<string>();
+  const dynamicAttrs = new Map<string, string>();
   for (const part of parts.slice(1)) {
     if (part.startsWith('body:')) {
       body = part;
@@ -277,13 +307,34 @@ export function projectIdentity(identity: string): ProjectedIdentity {
     const kind = colon === -1 ? '' : rest.slice(0, colon);
     if (AST_ATTR_KIND.test(kind)) {
       const value = rest.slice(colon + 1);
-      if (kind === 'expression' || kind === 'template') dynamicNames.add(name);
-      else staticAttrs.set(name, value);
+      if (kind === 'expression' || kind === 'template') {
+        dynamicNames.add(name);
+        dynamicAttrs.set(name, `${kind}:${value}`);
+      } else {
+        staticAttrs.set(name, value);
+      }
     } else {
       staticAttrs.set(name, rest);
     }
   }
-  return { tag, body, staticAttrs, dynamicNames };
+  return { tag, body, staticAttrs, dynamicNames, dynamicAttrs };
+}
+
+function projectionError(name: string, sourceKey: string, outVal: string | undefined): string | null {
+  const projection = DYNAMIC_ATTR_PROJECTION[sourceKey];
+  if (!projection) {
+    return `dynamic attr ${name} (${sourceKey}) без test-owned projection`;
+  }
+  if (outVal === undefined) {
+    return `dynamic attr ${name} отсутствует в output identity`;
+  }
+  if ('exact' in projection && outVal !== projection.exact) {
+    return `dynamic attr ${name} output ${outVal} ≠ projected ${projection.exact}`;
+  }
+  if ('pattern' in projection && !projection.pattern.test(outVal)) {
+    return `dynamic attr ${name} output ${outVal} не проходит projection constraint`;
+  }
+  return null;
 }
 
 export function provenanceError(sourceIdentity: string, outputIdentity: string): string | null {
@@ -307,6 +358,12 @@ export function provenanceError(sourceIdentity: string, outputIdentity: string):
     const outDyn = output.dynamicNames.has(name);
     if (srcVal !== undefined && srcVal !== outVal) {
       return `attr ${name}=${srcVal} ≠ output ${outVal ?? '∅'}`;
+    }
+    if (srcDyn && SECURITY_URL_ATTRS.has(name)) {
+      const sourceKey = `${name}=${source.dynamicAttrs.get(name)}`;
+      const mismatch = projectionError(name, sourceKey, outVal);
+      if (mismatch) return mismatch;
+      continue;
     }
     if (srcDyn && outVal === undefined && !outDyn) {
       return `dynamic attr ${name} отсутствует в output identity`;

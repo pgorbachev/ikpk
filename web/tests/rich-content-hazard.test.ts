@@ -10,6 +10,9 @@ import {
   stripMarkedRegions,
   OCCURRENCE_TAGS,
   OCCURRENCE_PROVENANCE,
+  provenanceError,
+  MAP_IFRAME_SRC,
+  TEST_MAP_B_SRC,
 } from './helpers/rich-content-safety/hazard-scan.js';
 import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
@@ -155,20 +158,28 @@ describe('rich-content: whole-document hazard scanner', () => {
     ], svgAst);
     expect(svgCrossed.some((e) => /viewbox/i.test(e))).toBe(true);
 
-    const frames = '<iframe src="https://maps.example/a" title="Карта ИКПК"></iframe><iframe src="https://rutube.ru/play/embed/abc/" title="Видео RUTUBE"></iframe>';
+    const frames = `<iframe src="${MAP_IFRAME_SRC}" title="Карта ИКПК"></iframe><iframe src="${TEST_MAP_B_SRC}" title="Карта ИКПК"></iframe>`;
     const frameFound = collectOccurrences(frames);
     const frameAst = slots([
       { slotId: 'src:map', identity: 'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК' },
-      { slotId: 'src:rutube', identity: 'iframe|src=quoted:https://rutube.ru/play/embed/abc/|title=quoted:Видео RUTUBE' },
+      { slotId: 'src:map-b', identity: 'iframe|src=expression:testMapB|title=quoted:Карта ИКПК' },
     ]);
     expect(matchOccurrences(frames, '/x', [
       { slotId: 'src:map', route: '/x', placement: frameFound[0].placement, identity: frameFound[0].identity, count: 1 },
-      { slotId: 'src:rutube', route: '/x', placement: frameFound[1].placement, identity: frameFound[1].identity, count: 1 },
+      { slotId: 'src:map-b', route: '/x', placement: frameFound[1].placement, identity: frameFound[1].identity, count: 1 },
     ], frameAst)).toEqual([]);
     const frameCrossed = matchOccurrences(frames, '/x', [
       { slotId: 'src:map', route: '/x', placement: frameFound[1].placement, identity: frameFound[1].identity, count: 1 },
     ], frameAst);
-    expect(frameCrossed.some((e) => /title=/.test(e) || /не проецируется/.test(e))).toBe(true);
+    expect(frameCrossed.some((e) => /projected|не проецируется/.test(e))).toBe(true);
+    expect(provenanceError(
+      'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК',
+      'iframe|src=https://evil.test/pwn|title=Карта ИКПК',
+    )).toMatch(/projected/);
+    expect(provenanceError(
+      'iframe|src=expression:unknownSrc|title=quoted:Карта ИКПК',
+      `iframe|src=${MAP_IFRAME_SRC}|title=Карта ИКПК`,
+    )).toMatch(/без test-owned projection/);
   });
 
   it('closed matrix отвергает contenteditable, data-*, incomplete iframe, checkbox, dir/lang, javascript URL и поддельные маркеры', () => {

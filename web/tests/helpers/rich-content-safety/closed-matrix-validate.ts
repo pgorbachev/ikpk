@@ -148,47 +148,68 @@ function decodeEntities(value: string): string {
   return value.replace(/&amp;/g, '&').replace(/&#0*(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
 
-function prepareUrl(value: string): string {
-  let decoded = stripControls(decodeEntities(value)).trim();
+const ORACLE_BASE = 'https://oracle.test/page';
+const MEDIA_SRC_RE = /^\/media\/(?!_w\/).+\.(webp|png|jpg|jpeg)$/i;
+
+function rawCanonical(value: string): string {
+  return stripControls(decodeEntities(value)).trim();
+}
+
+function percentDecode(value: string): string {
   try {
-    decoded = decodeURIComponent(decoded);
+    return decodeURIComponent(value);
   } catch {
-    /* malformed percent-encoding */
+    return value;
   }
-  return decoded;
+}
+
+/** Chromium special-URL: U+005C REVERSE SOLIDUS трактуется как U+002F SOLIDUS. */
+function specialUrl(value: string): string {
+  return rawCanonical(value).replace(/\\/g, '/');
 }
 
 function compactLower(value: string): string {
   return value.toLowerCase().replace(/\s+/g, '');
 }
 
+function schemeProbe(value: string): string {
+  return compactLower(percentDecode(specialUrl(value)));
+}
+
+function parseBrowserUrl(value: string): URL | null {
+  const special = specialUrl(value);
+  if (!special) return null;
+  try {
+    return new URL(special, ORACLE_BASE);
+  } catch {
+    return null;
+  }
+}
+
 function forbiddenUrl(value: string): boolean {
-  const lower = compactLower(prepareUrl(value));
-  if (lower.startsWith('//')) return true;
-  return FORBIDDEN_URL_SCHEMES.some((scheme) => lower.startsWith(scheme));
+  const probe = schemeProbe(value);
+  if (probe.startsWith('//')) return true;
+  return FORBIDDEN_URL_SCHEMES.some((scheme) => probe.startsWith(scheme));
 }
 
 function isAllowedHref(value: string): boolean {
-  const prepared = prepareUrl(value);
-  if (!prepared) return false;
-  const lower = compactLower(prepared);
-  if (lower.startsWith('//')) return false;
-  if (FORBIDDEN_URL_SCHEMES.some((scheme) => lower.startsWith(scheme))) return false;
-  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(prepared);
+  const special = specialUrl(value);
+  if (!special) return false;
+  if (forbiddenUrl(value)) return false;
+  const probe = schemeProbe(value);
+  const schemeMatch = /^([a-z][a-z0-9+.-]*):/.exec(probe);
   if (schemeMatch) {
-    const scheme = schemeMatch[1].toLowerCase();
+    const scheme = schemeMatch[1];
     if (!HREF_SCHEMES.has(scheme)) return false;
     if (scheme === 'http' || scheme === 'https') {
-      try {
-        const parsed = new URL(prepared);
-        if (parsed.username || parsed.password) return false;
-      } catch {
-        return false;
-      }
+      const parsed = parseBrowserUrl(value);
+      if (!parsed || parsed.username || parsed.password) return false;
     }
     return true;
   }
-  return true;
+  const parsed = parseBrowserUrl(value);
+  if (!parsed) return false;
+  return parsed.origin === new URL(ORACLE_BASE).origin;
 }
 
 function loadDefaultManifest(): Record<string, MediaManifestEntry> {
@@ -222,17 +243,26 @@ function checkImgSrc(
   manifest: Record<string, MediaManifestEntry>,
   fileExists: (urlPath: string) => boolean,
 ): void {
-  const path = prepareUrl(src);
-  if (!path.startsWith('/media/') || path.startsWith('/media/_w/') || !RASTER_MEDIA_EXT_RE.test(path)) {
+  if (forbiddenUrl(src)) {
     errors.push('matrix: img[src] только существующий raster /media/**');
     return;
   }
-  const entry = manifest[path];
+  const raw = rawCanonical(src);
+  if (!MEDIA_SRC_RE.test(raw) || !RASTER_MEDIA_EXT_RE.test(raw)) {
+    errors.push('matrix: img[src] только существующий raster /media/**');
+    return;
+  }
+  const parsed = parseBrowserUrl(src);
+  if (!parsed || parsed.origin !== new URL(ORACLE_BASE).origin || parsed.pathname !== raw) {
+    errors.push('matrix: img[src] только существующий raster /media/**');
+    return;
+  }
+  const entry = manifest[raw];
   if (!isRasterManifestEntry(entry)) {
     errors.push('matrix: img[src] нет raster-записи media manifest');
     return;
   }
-  if (!fileExists(path)) errors.push('matrix: img[src] отсутствует local asset');
+  if (!fileExists(raw)) errors.push('matrix: img[src] отсутствует local asset');
 }
 
 function checkSrcset(
@@ -325,6 +355,58 @@ function validDateString(raw: string): boolean {
   return year !== null && month !== null && validCalendarDate(year, month, match[3]);
 }
 
+/** ISO weeks in year: 53 iff Jan 1 is Thursday, or Wednesday of a leap year. */
+function isoWeeksInYear(year: number): number {
+  const p = (y: number) => (y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400)) % 7;
+  return p(year) === 4 || p(year - 1) === 3 ? 53 : 52;
+}
+
+function isWs(char: string): boolean {
+  return char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f';
+}
+
+/** HTML valid duration string: ISO `P[nD]T[nH][nM][nS]` (без Y/months) или `4h 18m 3s`. */
+function isValidDuration(value: string): boolean {
+  if (/^P/.test(value)) {
+    return /^P(?!$)(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(?:\.\d{1,3})?S)?)?$/.test(value);
+  }
+  let pos = 0;
+  const seen = new Set<string>();
+  const skipWs = () => {
+    while (pos < value.length && isWs(value[pos])) pos += 1;
+  };
+  skipWs();
+  if (pos >= value.length) return false;
+  let components = 0;
+  while (pos < value.length) {
+    skipWs();
+    if (pos >= value.length) break;
+    const numStart = pos;
+    while (pos < value.length && value[pos] >= '0' && value[pos] <= '9') pos += 1;
+    if (pos === numStart) return false;
+    if (value[pos] === '.') {
+      pos += 1;
+      const fracStart = pos;
+      while (pos < value.length && value[pos] >= '0' && value[pos] <= '9') pos += 1;
+      if (pos - fracStart < 1 || pos - fracStart > 3) return false;
+      skipWs();
+      if (pos >= value.length || value[pos].toLowerCase() !== 's' || seen.has('s')) return false;
+      seen.add('s');
+      pos += 1;
+      components += 1;
+      continue;
+    }
+    skipWs();
+    if (pos >= value.length) return false;
+    const unit = value[pos].toLowerCase();
+    if (!'wdhms'.includes(unit) || seen.has(unit)) return false;
+    seen.add(unit);
+    pos += 1;
+    components += 1;
+  }
+  return components > 0;
+}
+
 /** HTML datetime productions без Date.parse: year/month/date/time/week/offset/duration. */
 function isValidDatetime(value: string): boolean {
   if (!value) return false;
@@ -341,14 +423,14 @@ function isValidDatetime(value: string): boolean {
   const week = /^(\d{4,})-W(\d{2})$/.exec(value);
   if (week && yearNumber(week[1]) !== null) {
     const number = Number(week[2]);
-    return number >= 1 && number <= 53;
+    return number >= 1 && number <= isoWeeksInYear(Number(week[1]));
   }
   const local = /^(\d{4,}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?$/.exec(value);
   if (local) {
     return validDateString(local[1]) && validTimeString(local[2]) && (!local[3] || validTimeZoneOffset(local[3]));
   }
   if (value === 'Z' || validTimeZoneOffset(value)) return true;
-  return /^P(?!\s)(?=.)(\d+Y)?(\d+M)?(\d+D)?(T(?=.)(\d+H)?(\d+M)?(\d+(?:\.\d+)?S)?)?$/.test(value);
+  return isValidDuration(value);
 }
 
 export function validateClosedMatrixHtml(html: string, opts?: MatrixValidateOpts): string[] {

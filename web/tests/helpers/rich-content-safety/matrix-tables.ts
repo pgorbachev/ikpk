@@ -3,7 +3,7 @@
  * Не импортирует runtime policy.
  */
 import { AUTHENTICATED_FORMS, EXACT_RUTUBE_SRC, RUTUBE_IFRAME_ATTRS, exactRutubeIframe } from './closed-matrix.js';
-import type { OccurrenceTag } from './hazard-scan.js';
+import { MAP_IFRAME_SRC, TEST_MAP_B_SRC, type OccurrenceTag } from './hazard-scan.js';
 import { LOCAL_UPLOAD_WEBP } from './paths.js';
 
 export const MATRIX_SINK = { knownSinkIds: ['article-body'] as string[] };
@@ -42,6 +42,8 @@ export const SRC_SRCSET_CASES: HtmlCase[] = [
   { id: 'img-src-vbscript', html: img('vbscript:msg'), accept: false },
   { id: 'img-src-file', html: img('file:///etc/passwd'), accept: false },
   { id: 'img-src-protocol-relative', html: img('//evil.test/x.webp'), accept: false },
+  { id: 'img-src-percent-encoded-media', html: img(`%2Fmedia%2Fuploads%2F${BASE.slice('/media/uploads/'.length)}`), accept: false },
+  { id: 'a-href-backslash-protocol-relative', html: '<a href="\\\\evil.test/x">x</a>', accept: false },
   { id: 'img-src-images', html: img('/images/foo.webp'), accept: false },
   { id: 'img-src-dotdot', html: img('../media/uploads/x.webp'), accept: false },
   { id: 'img-src-derivative-as-base', html: img(DERIV_480), accept: false },
@@ -86,10 +88,10 @@ export const PROVENANCE_CASES: ProvenanceCase[] = [
   },
   {
     tag: 'iframe',
-    html: '<iframe src="https://maps.example/a" title="Карта ИКПК"></iframe><iframe src="https://rutube.ru/play/embed/abc/" title="Видео RUTUBE"></iframe>',
+    html: `<iframe src="${MAP_IFRAME_SRC}" title="Карта ИКПК"></iframe><iframe src="${TEST_MAP_B_SRC}" title="Карта ИКПК"></iframe>`,
     sources: [
       'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК',
-      'iframe|src=quoted:https://rutube.ru/play/embed/abc/|title=quoted:Видео RUTUBE',
+      'iframe|src=expression:testMapB|title=quoted:Карта ИКПК',
     ],
   },
   {
@@ -187,6 +189,8 @@ export const CONSTRAINED_VALUE_CASES: HtmlCase[] = [
   { id: 'datetime-local', html: '<time datetime="2023-08-13T14:30">x</time>', accept: true },
   { id: 'datetime-yearless', html: '<time datetime="11-18">x</time>', accept: true },
   { id: 'datetime-week', html: '<time datetime="2023-W32">x</time>', accept: true },
+  { id: 'datetime-week-2021-W53', html: '<time datetime="2021-W53">x</time>', accept: false },
+  { id: 'datetime-duration-html', html: '<time datetime="4h 18m 3s">x</time>', accept: true },
   { id: 'datetime-impossible-day', html: '<time datetime="2023-02-31">x</time>', accept: false },
   { id: 'datetime-bad-month', html: '<time datetime="2023-13">x</time>', accept: false },
   { id: 'datetime-bad-time', html: '<time datetime="24:30">x</time>', accept: false },
