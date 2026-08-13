@@ -342,12 +342,12 @@ function validTimeString(raw: string): boolean {
 
 function validTimeZoneOffset(raw: string): boolean {
   if (raw === 'Z') return true;
-  const match = /^[+-](\d{2}):?(\d{2})$/.exec(raw);
+  const match = /^([+-])(\d{2}):?(\d{2})$/.exec(raw);
   if (!match) return false;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
   if (hours > 23 || minutes > 59) return false;
-  return hours !== 0 || minutes !== 0;
+  return match[1] !== '-' || hours !== 0 || minutes !== 0;
 }
 
 function validDateString(raw: string): boolean {

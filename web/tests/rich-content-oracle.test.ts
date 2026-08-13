@@ -111,4 +111,16 @@ describe('rich-content contract: Chromium DOMParser oracle', () => {
       found[0].identity,
     )).toBeNull();
   });
+
+  it('double-encoded ampersand не проходит mapSrc projection', async () => {
+    const html = `<iframe src="${MAP_IFRAME_SRC.replace('&z=16', '&amp;amp;z=16')}" title="Карта ИКПК"></iframe>`;
+    const parsed = await harness.parse(html);
+    expect(parsed.serialized).toMatch(/&amp;amp;z=16/);
+    const found = collectOccurrences(parsed.serialized);
+    expect(found).toHaveLength(1);
+    expect(provenanceError(
+      'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК',
+      found[0].identity,
+    )).toMatch(/≠ projected/);
+  });
 });
