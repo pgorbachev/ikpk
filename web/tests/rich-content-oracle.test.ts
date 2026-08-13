@@ -1,0 +1,78 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
+import { htmlOf } from './helpers/rich-content-safety/html-of.js';
+import { openOracleHarness, type OracleHarness } from './helpers/rich-content-safety/chromium-oracle.js';
+import { DISCARD_WITH_CONTENT } from './helpers/rich-content-safety/closed-matrix.js';
+
+const HOSTILE = {
+  selfRemoving: '<script>document.currentScript.remove();alert(1)</script><p>after</p>',
+  refresh: '<meta http-equiv="refresh" content="0;url=https://evil.test">',
+  iframe: '<iframe src="https://evil.test"></iframe>',
+  object: '<object data="https://evil.test/x.pdf"></object>',
+  stylesheet: '<link rel="stylesheet" href="https://evil.test/x.css">',
+  subresource: '<img src="https://evil.test/pixel.png">',
+  misnested: '<b><i>x</b></i>',
+  foreign: '<svg><script>alert(1)</script></svg>',
+  mxss: '<img src=x onerror="alert(1)">',
+  entityMxss: '&lt;img src=x onerror=alert(1)&gt;<noscript><p title="</noscript><img src=x onerror=alert(1)>">',
+};
+
+describe('rich-content contract: Chromium DOMParser oracle', () => {
+  let harness: OracleHarness;
+
+  beforeAll(async () => {
+    harness = await openOracleHarness();
+  }, 30_000);
+
+  afterAll(async () => {
+    await harness?.close();
+  });
+
+  it('разбирает bytes через DOMParser на about:blank без сети и навигации', async () => {
+    const parsed = await harness.parse('<p>hello</p>');
+    expect(parsed.mainFrameUrl).toMatch(/^about:blank/);
+    expect(parsed.continuedRequests).toEqual([]);
+    expect(parsed.html).toContain('hello');
+  });
+
+  it('self-removing script виден scanner-у и отвергается после sanitizer', async () => {
+    const sanitized = htmlOf(cleanBodyHtml(HOSTILE.selfRemoving));
+    const parsed = await harness.parse(sanitized);
+    expect(parsed.tagNames).not.toContain('script');
+    expect(parsed.continuedRequests).toEqual([]);
+  });
+
+  it('refresh/iframe/object/stylesheet/subresource abort и отвергаются', async () => {
+    for (const html of [HOSTILE.refresh, HOSTILE.iframe, HOSTILE.object, HOSTILE.stylesheet, HOSTILE.subresource]) {
+      const sanitized = htmlOf(cleanBodyHtml(html));
+      const parsed = await harness.parse(sanitized);
+      expect(parsed.continuedRequests, html).toEqual([]);
+      expect(parsed.mainFrameUrl).toMatch(/^about:blank/);
+      expect(parsed.tagNames).not.toContain('iframe');
+      expect(parsed.tagNames).not.toContain('object');
+      expect(parsed.tagNames).not.toContain('meta');
+      expect(sanitized).not.toMatch(/evil\.test/);
+    }
+  });
+
+  it('misnested и foreign content проверяются по browser DOM', async () => {
+    const mis = await harness.parse(htmlOf(cleanBodyHtml(HOSTILE.misnested)));
+    expect(mis.tagNames).not.toContain('script');
+    const foreign = await harness.parse(htmlOf(cleanBodyHtml(HOSTILE.foreign)));
+    expect(foreign.tagNames).not.toContain('svg');
+    expect(foreign.tagNames).not.toContain('script');
+  });
+
+  it('entity-encoded mXSS не оставляет активный img onerror', async () => {
+    const parsed = await harness.parse(htmlOf(cleanBodyHtml(HOSTILE.entityMxss)));
+    expect(parsed.serialized).not.toMatch(/onerror/i);
+    expect(parsed.tagNames).not.toContain('script');
+  });
+
+  it('matrix-complement не проходит oracle', async () => {
+    for (const tag of DISCARD_WITH_CONTENT) {
+      const parsed = await harness.parse(htmlOf(cleanBodyHtml(`<${tag}>payload</${tag}>`)));
+      expect(parsed.tagNames, tag).not.toContain(tag);
+    }
+  });
+});

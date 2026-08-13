@@ -1,0 +1,14 @@
+{
+  "status": "pending-implementation",
+  "runtime": {
+    "packages": [],
+    "lockfileNodes": []
+  },
+  "oracle": {
+    "packages": [
+      "playwright"
+    ],
+    "lockfileNodes": []
+  },
+  "note": "Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет."
+}
