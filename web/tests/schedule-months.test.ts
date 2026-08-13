@@ -5,7 +5,7 @@ import { isCurrentOrFuture } from '../src/lib/schedule-window';
 import { monthKeys, monthLabel, monthOptions } from '../src/lib/schedule-months';
 
 // ─── Тесты по спеке schedule-month-filter, до реализации ─────────────────────
-// Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md
+// Спецификация: openspec/specs/schedule-month-filter/spec.md
 // Требования: «Месяц записи выводится на сервере», «Событие принадлежит каждому
 // месяцу, в котором оно идёт», «Предлагаются только те месяцы, в которых что-то
 // есть», «Подпись месяца — вывод чистой функции», «Клиентский код не выводит время».

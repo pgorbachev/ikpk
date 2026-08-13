@@ -6,7 +6,7 @@ import { loadWorkflows, publishingWorkflows, workflowRunTrigger, type Workflow }
 import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 
 // ─── Мета-гейт: браузерная проверка обязана исполняться в гейте публикации ────
-// Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md,
+// Спецификация: openspec/specs/schedule-month-filter/spec.md,
 // требование «Проверка месяца обязана исполняться в гейте публикации».
 //
 // Тест ЗЕЛЁНЫЙ по замыслу ([GREEN-BY-DESIGN] в tasks.md, 2.19): он фиксирует

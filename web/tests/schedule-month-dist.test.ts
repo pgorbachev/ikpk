@@ -4,7 +4,7 @@ import { join } from 'path';
 import { dist, readPage } from './helpers/dist-pages';
 
 // ─── Гейт по собранному dist: месяц доставляется разметкой ────────────────────
-// Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md
+// Спецификация: openspec/specs/schedule-month-filter/spec.md
 // Требования: «Месяц записи выводится на сервере и доставляется признаком карточки»,
 // «Событие принадлежит каждому месяцу, в котором оно идёт», «Предлагаются только те
 // месяцы, в которых что-то есть», «Контрол месяца не обещает того, чего не делает»,

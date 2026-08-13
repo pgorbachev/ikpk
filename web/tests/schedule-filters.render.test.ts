@@ -4,7 +4,7 @@ import ScheduleFilters from '../src/components/schedule/ScheduleFilters.astro';
 import type { MonthOption } from '../src/lib/schedule-months';
 
 // ─── Рендер шаблона панели фильтров при данных, которых в снапшоте не бывает ───
-// Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md,
+// Спецификация: openspec/specs/schedule-month-filter/spec.md,
 // требование «Контрол месяца не обещает того, чего не делает» (пустой список оставляет
 // контрол выключенным, но НЕ убирает его из разметки).
 //

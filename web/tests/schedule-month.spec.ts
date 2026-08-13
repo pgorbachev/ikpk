@@ -8,7 +8,7 @@ import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
 import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
 
 // ─── Браузерные проверки фильтра расписания по месяцу ────────────────────────
-// Спецификация: openspec/changes/schedule-month-filter/specs/schedule-month-filter/spec.md
+// Спецификация: openspec/specs/schedule-month-filter/spec.md
 // Требования: «Выбор месяца складывается с остальными фильтрами и с пагинацией»,
 // «Контрол месяца не обещает того, чего не делает», «Месяц записи выводится на
 // сервере» (сценарий про заплатки), «Проверка месяца обязана исполняться в гейте
