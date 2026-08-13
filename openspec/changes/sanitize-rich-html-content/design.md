@@ -80,7 +80,10 @@ Package selection начинается с browser-conformant HTML tree construct
 из spec. Поэтому `sanitize-html`/htmlparser2 не является предпочтительным и исключается,
 если не получает browser-conformant tree извне. Предпочтительный кандидат — maintained
 DOMPurify+JSDOM stack; допустима parse5-based tree transform с эквивалентной закрытой
-policy, если независимый output oracle использует другой browser-conformant engine.
+policy. В обоих случаях независимый output oracle использует фактический DOM Chromium
+через Playwright: JSDOM транзитивно использует parse5, поэтому пара JSDOM/parse5 не даёт
+независимости. Отдельный dependency-graph gate запрещает общий прямой или транзитивный
+parser engine между runtime и oracle.
 Конкретные версии фиксируются после проверки Node compatibility, maintenance,
 provenance, limits и всех advisory parser subtree. Синтаксическая malformed-разметка в
 пределах лимитов сама по себе не является разрешённой причиной build failure.
@@ -143,6 +146,12 @@ Tag/attribute matrix нормативно перечислена в spec. В д�
 security contract с принятым fixture `html-cleaner.test.ts`, не оставляя submit-capable
 control.
 
+Template-owned hooks не пропускаются через policy. В частности,
+`data-testid="course-group-extra-content"` переносится/остаётся на внешнем wrapper
+course-group template, который окружает центральный component; root
+`data-safe-rich-content` и санитизированное поддерево не получают общего разрешения
+`data-testid` либо произвольных `data-*`.
+
 Существующий test внешнего Yandex image меняет смысл: direct `cleanBodyHtml()` больше не
 обязан сохранять remote URL, потому что security boundary теперь живёт внутри helper-а.
 Fixture локализуется до вызова либо ожидает безопасное удаление. Тестовая сессия должна
@@ -172,16 +181,21 @@ contract при миграции sink-а.
 
 ### 7. Local media различает base assets и derivatives
 
-Для `img[src]` base path обязан быть manifest key под `/media/**`. Candidate
-`/media/_w/<width>/<path>` разрешён только в `srcset`, если:
+Для `img[src]` base path обязан быть manifest key под `/media/**` с raster-расширением
+`webp|png|jpg|jpeg` и положительными `width`/`height`; PDF и пустые document entries из
+того же manifest не являются изображениями. Candidate `/media/_w/<width>/<path>
+<width>w` разрешён только в `srcset`, если:
 
 1. из path однозначно восстанавливается base `/media/<path>`;
 2. width — положительное целое и есть в `manifest[base].widths`;
-3. derivative file создан и существует в build input/output.
+3. descriptor точно совпадает с width в URL, candidates не повторяют URL/width;
+4. derivative file создан и существует в build input/output.
 
-External, protocol-relative, forbidden-scheme и malformed image URL удаляются; один
-плохой candidate удаляет весь `srcset`. Отсутствующий локальный base/derivative — другая
-категория: это broken internal invariant, и она валит build с source ID. Любой локальный
+Outcome выбирается после классификации всех candidates. Любой broken-local candidate —
+missing/noncanonical base или derivative, document/invalid dimensions, width вне manifest
+либо несовпавший descriptor — имеет приоритет и валит build даже рядом с внешним
+candidate. Только если broken-local нет, external, protocol-relative, forbidden-scheme,
+malformed, `x`/missing/mixed descriptor или duplicate удаляет весь `srcset`. Любой локальный
 `img[src]` вне canonical manifest base keys — включая `/images/**`, path-relative URL и
 derivative в `src` — относится к fail-build, а не strip. Таким образом каждый input
 попадает ровно в одну outcome-категорию.
@@ -210,9 +224,9 @@ update и повторной стендовой проверки.
   fixture/review, а не опирается на фразу «или любой другой sink».
 
 Built-output verification имеет четыре независимых слоя и разбирает целую страницу
-browser-conformant oracle-ом, независимым от runtime sanitizer parser-а (`parse5`, если
-runtime использует JSDOM; DOM реального браузера, если runtime transform использует
-parse5):
+фактическим DOM Chromium через Playwright. Он не использует JSDOM/parse5 как oracle ни при
+JSDOM runtime, ни при parse5 transform; dependency-graph assertion доказывает отсутствие
+общего прямого или транзитивного parser engine:
 
 1. test-owned полная closed matrix, скопированная из spec и не импортирующая runtime
    policy/URL validator; test-only build page проводит через boundary каталог hostile
@@ -230,11 +244,13 @@ parse5):
    или active foreign-content resource; это обобщение включает `frame`/`frameset`, а не
    только заранее названные теги.
 
-Executable registry разделён по стоимости изменения. Для многочисленных `script`/`style`
-он хранит глобальные unique body hashes либо external asset identities и security attrs,
-не дублируя их по 269 routes. Route/count/placement фиксируются только для редких
-high-risk elements: nested browsing contexts, `object`/`embed`/`base`, refresh-meta и
-stylesheet-link. Явно запускаемый generator строит candidate manifest в чистом worktree
+Executable registry дедуплицирует identity многочисленных `script`/`style` как global
+body hash либо external asset identity с security attrs, но не использует identity set
+как разрешение. Каждый occurrence привязан к stable source slot/template path, route
+pattern, placement относительно stable anchor, identity и допустимому count на document;
+элемент обязан совпасть ровно с одним rule. Поэтому дубликат разрешённого script из
+неизвестного sink-а падает, хотя identity set не меняется. Для редких high-risk elements
+те же route/count/placement обязательны. Явно запускаемый generator строит candidate manifest в чистом worktree
 из назначенного reviewed source SHA; reviewer сверяет source diff и manifest diff до
 commit. Обычный CI только читает committed registry и никогда не перезаписывает его из
 текущего `dist`.
@@ -252,6 +268,9 @@ common-mode/vacuous failure.
 SHA и входит в baseline registry; условного «если приземлится» больше нет.
 `online-payment-flow` пересекается через `oplata.astro`, но не меняет cleaner. Выбранный
 sanitizer dependency и его проверки согласуются с `dependency-update-gates` перед merge.
+С `dependabot-auto-merge` пересечение нормативное: machine registry фиксирует sanitizer,
+DOM/parser stack, browser-oracle tooling и транзитивные parser lockfile nodes; изменение
+любого из них является deny-only override поверх разрешающей таблицы и остаётся ручным.
 Security headers/CSP не пересекаются с renderer code и остаются отдельным change.
 
 ## Risks / Trade-offs
@@ -263,7 +282,8 @@ Security headers/CSP не пересекаются с renderer code и оста�
 - [Runtime token будет подделан] → module-private Symbol, untrusted terminal mode,
   source cast gate и hostile component fixture.
 - [Новая sanitizer/parser зависимость уязвима] → exact version/integrity, maintenance/
-  provenance review и разбор каждого advisory независимо от severity.
+  provenance review, разбор каждого advisory независимо от severity и fail-closed
+  security registry, исключающий direct/transitive subtree из Dependabot auto-merge.
 - [Test oracle разойдётся с runtime policy] → это намеренная независимость; изменение
   нормативной spec требует явной синхронной правки обеих реализаций и negative mutation.
 - [Появится принципиально новый raw API] → source collector не обещает распознать любой
@@ -283,8 +303,8 @@ Security headers/CSP не пересекаются с renderer code и оста�
    typecheck/lint/audit и ручную RUTUBE-проверку с сохранённым свидетельством.
 5. Провести два независимых code review, исправить подтверждённые находки, повторить
    negative verification и все гейты.
-6. Согласовать пересечения `online-payment-flow`/`dependency-update-gates`, получить
-   приёмку владельца и только затем архивировать change.
+6. Согласовать пересечения `online-payment-flow`/`dependency-update-gates`/
+   `dependabot-auto-merge`, получить приёмку владельца и только затем архивировать change.
 
 Operational rollback после будущего подключения CMS не является требованием этой
 capability. До такого подключения отдельный deployment-security change должен назвать

@@ -19,11 +19,13 @@
 ### Класс автоматически сливаемых обновлений
 
 Право задаётся таблицей `экосистема × пакет × тип подъёма` и работает fail closed:
-отсутствие совпадения означает ручной путь.
+отсутствие совпадения означает ручной путь. Для `web` совпадение необходимо, но не
+достаточно: machine registry границы rich-content safety задаёт deny-only исключение для
+sanitizer/DOM/parser/browser-oracle packages и их транзитивных lockfile nodes.
 
 | Экосистема | Пакет | Тип подъёма | Авто-слияние |
 |---|---|---|---|
-| npm | `web` | patch, minor | **да** |
+| npm | `web` | patch, minor | **да**, кроме security registry |
 | npm | `scripts` | patch, minor | **да** |
 | `github-actions` | — | patch, minor | **да** |
 | любая | — | major | нет |
@@ -43,6 +45,12 @@ HTML, а `tsx` — раннер для скриптов, которые не р�
 `scripts` покрыты обязательным контуром, `cms` исполняется в рантайме и им не покрыт вовсе.
 Для `scripts` это опирается на внесение `Scripts unit tests` в обязательные — задача 6.2 в
 `dependency-update-gates`; до неё строка `scripts` необеспечена.
+
+Security-boundary override не пытается выдать право по lockfile diff: первичное
+разрешение по-прежнему приходит только из Dependabot metadata и таблицы. Он может лишь
+отозвать его, если metadata называет зарегистрированный package или diff меняет
+зарегистрированный direct/transitive node. Отсутствующий либо несогласованный registry
+оставляет npm PR пакета `web` ручным.
 
 ### Условия слияния
 
@@ -82,6 +90,8 @@ HTML, а `tsx` — раннер для скриптов, которые не р�
 ## Impact
 
 - `.github/workflows/` — новый workflow авто-слияния.
+- Machine security dependency registry из `sanitize-rich-html-content` — deny-only input
+  классификации `web`; его direct/transitive subtree обновляется только вручную.
 - Настройки репозитория — требуется включить `allow_auto_merge` (сейчас выключено:
   `enablePullRequestAutoMerge` отвечает «Auto merge is not allowed for this repository»).
 - **Механизм продвижения последовательности.** Включается `strict`, но одного его мало: он

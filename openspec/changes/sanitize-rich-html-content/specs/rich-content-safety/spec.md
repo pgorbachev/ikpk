@@ -159,6 +159,11 @@ accessible name и route (либо `source-only`); его строки выво�
   `noreferrer`, `sponsored`, `ugc`;
 - на `img` — `src`, `srcset`, `sizes`, `alt`, положительные целые `width`/`height`,
   `loading` из `lazy|eager`, `decoding` из `async|sync|auto`;
+- на условном RUTUBE `iframe` — только `src`, точно реконструированные
+  `sandbox="allow-scripts allow-same-origin allow-presentation"`,
+  `allow="autoplay; encrypted-media; fullscreen; picture-in-picture"`,
+  `referrerpolicy="no-referrer"`, `loading="lazy"`, `title="Видео RUTUBE"` и boolean
+  `allowfullscreen`; допустимое значение `src` определено требованием RUTUBE ниже;
 - на `label` — `for`; на `input` — принудительные `type="checkbox"` и `disabled`, плюс
   boolean `checked`; любой другой `input` удаляется с сохранением безопасного текста;
 - на `th`/`td` — положительные целые `colspan`/`rowspan`, `scope` из
@@ -183,6 +188,11 @@ accessible name и route (либо `source-only`); его строки выво�
 валидироваться. Независимый output gate SHALL держать собственную полную копию матрицы,
 не импортируя runtime policy.
 
+Атрибуты шаблона, включая test selectors, SHALL находиться на template-owned wrapper вне
+root `data-safe-rich-content` и санитизированного поддерева. В частности, существующий
+`data-testid="course-group-extra-content"` SHALL сохранять прежнюю семантику на внешнем
+wrapper страницы course group; он не расширяет allowlist `data-*` rich content.
+
 #### Scenario: Checkbox вне удалённой формы
 - **WHEN** безопасный `label` содержит `input type="checkbox"` вне legacy-формы
 - **THEN** label и checked-state сохраняются, checkbox принудительно становится disabled,
@@ -191,6 +201,17 @@ accessible name и route (либо `source-only`); его строки выво�
 #### Scenario: Попытка расширить матрицу конфигурацией
 - **WHEN** runtime policy разрешает новый элемент, атрибут или значение без изменения spec
 - **THEN** независимый parsed-output gate завершается ошибкой
+
+#### Scenario: RUTUBE входит в закрытую матрицу
+- **WHEN** разрешённый RUTUBE iframe проходит runtime policy и независимый output oracle
+- **THEN** обе реализации допускают ровно перечисленные iframe-атрибуты и значения, а
+  произвольный атрибут либо ослабленное значение приводит к падению проверки
+
+#### Scenario: Test selector принадлежит шаблону
+- **WHEN** course-group page рендерит дополнительный rich content
+- **THEN** `data-testid="course-group-extra-content"` остаётся на внешнем template-owned
+  wrapper, а root `data-safe-rich-content` и его descendants не получают произвольный
+  `data-testid`
 
 ### Requirement: Системные маркеры защищены от подделки
 
@@ -217,12 +238,26 @@ accessible name и route (либо `source-only`); его строки выво�
 
 Система SHALL принимать в `a[href]` root-relative, path-relative, query/fragment URL и
 схемы `http`, `https`, `mailto`, `tel`. В `img[src]` SHALL приниматься только существующий
-base asset `/media/**`, представленный ключом media manifest. В `img[srcset]` SHALL также
-приниматься derivative `/media/_w/<width>/<path>`, только если он обратимо соответствует
-base manifest key, `<width>` присутствует в его `widths`, а производный файл существует.
+raster base asset `/media/**` с расширением `webp|png|jpg|jpeg`, представленный ключом
+media manifest с положительными целыми `width` и `height`. Manifest entry документа,
+включая PDF, SHALL NOT считаться изображением. В `img[srcset]` SHALL приниматься только
+уникальные candidates точной формы `/media/_w/<width>/<path> <width>w`: derivative URL
+обратимо соответствует допустимому raster base manifest key, URL width присутствует в
+его `widths`, descriptor побайтово равен этому URL width, а производный файл существует.
+Descriptor `x`, отсутствующий descriptor, смешанные типы descriptor, повтор URL либо
+width и иная форма candidate не поддерживаются.
 Проверка SHALL выполняться после декодирования сущностей, удаления управляющих символов и
 разбора URL. `javascript`, `vbscript`, `file`, `data` и protocol-relative `//host` SHALL
 быть запрещены.
+
+Классификация `srcset` SHALL иметь один приоритетный результат. Если хотя бы один
+local-looking candidate нарушает внутренний локальный инвариант — имеет неканонический
+path, недопустимый base type/dimensions, отсутствующий base/derivative, width вне
+manifest либо descriptor, не совпадающий с width в URL, — сборка SHALL завершаться
+ошибкой независимо от других candidates. Только при отсутствии broken-local candidate
+внешний, protocol-relative, forbidden-scheme, malformed, unsupported-descriptor или
+duplicate candidate SHALL приводить к удалению всего `srcset` с сохранением безопасного
+`src`.
 
 #### Scenario: Обфусцированный javascript URL
 - **WHEN** URL кодирует или разделяет управляющими символами запрещённую схему, меняет
@@ -231,12 +266,28 @@ base manifest key, `<width>` присутствует в его `widths`, а п�
 
 #### Scenario: Responsive derivative cleaner-а
 - **WHEN** cleaner создаёт `/media/_w/<width>/<path>` из base asset и manifest width
-- **THEN** кандидат `srcset` сохраняется и проверяется по base manifest entry и наличию
-  производного файла
+- **THEN** кандидат с точным descriptor `<width>w` сохраняется и проверяется по raster
+  base manifest entry, его dimensions и наличию производного файла
 
 #### Scenario: Смешанный или внешний srcset
 - **WHEN** хотя бы один кандидат `srcset` внешний, protocol-relative, использует
-  запрещённую схему либо не разбирается
+  запрещённую схему, не разбирается либо имеет неподдерживаемый descriptor, и ни один
+  candidate не является broken-local
+- **THEN** весь `srcset` удаляется, а безопасный `src`, если он есть, сохраняется
+
+#### Scenario: Внешний и отсутствующий derivative в одном srcset
+- **WHEN** один candidate внешний, а другой указывает на отсутствующий локальный
+  derivative либо base
+- **THEN** broken-local имеет приоритет и сборка завершается ошибкой с типом и ID
+  материала, а не только удаляет `srcset`
+
+#### Scenario: Descriptor не соответствует derivative width
+- **WHEN** candidate имеет URL `/media/_w/480/photo.webp`, но descriptor `2400w`
+- **THEN** сборка завершается ошибкой как при broken-local invariant
+
+#### Scenario: Повторный или неподдерживаемый descriptor
+- **WHEN** `srcset` без broken-local candidates использует `x`, пропускает descriptor,
+  смешивает типы либо повторяет URL/width
 - **THEN** весь `srcset` удаляется, а безопасный `src`, если он есть, сохраняется
 
 #### Scenario: Внешний image src
@@ -254,6 +305,12 @@ base manifest key, `<width>` присутствует в его `widths`, а п�
 - **WHEN** base `/media/**` отсутствует в manifest либо утверждённый derivative не
   существует
 - **THEN** сборка завершается ошибкой с типом и ID материала и не публикует битую ссылку
+
+#### Scenario: Документ из media manifest используется как img
+- **WHEN** `img[src]` указывает на существующий PDF entry media manifest либо entry без
+  положительных raster dimensions
+- **THEN** сборка завершается ошибкой с типом и ID материала; документ допускается только
+  как ссылка, но не как изображение
 
 ### Requirement: Новый таб не получает opener
 
@@ -312,8 +369,10 @@ raw sinks с машинным реестром. Parsed-output gate SHALL нез�
 не только внутри отмеченных поддеревьев. В каждой из двух сборок того же прогона он SHALL
 найти ровно один неопасный fixture-control token на ожидаемом test-only path; отсутствие
 path/token, дубликат или отсутствие соответствующего sink marker SHALL завершать гейт
-ошибкой. Output oracle SHALL разбирать целый собранный документ browser-conformant
-parser-ом, независимым от runtime sanitizer parser-а.
+ошибкой. Output oracle SHALL разбирать целый собранный документ фактическим DOM реального
+браузера. Он SHALL NOT использовать прямо или транзитивно тот же parser engine, что
+runtime sanitizer: при runtime на JSDOM либо parse5 oracle обязан использовать browser
+DOM, а dependency-graph gate SHALL падать при общем parser engine.
 Независимый whole-document hazard gate SHALL вне rich-content областей отвергать `on*`,
 `srcdoc`, XML/XLink URL и запрещённые URL-схемы, а также любой элемент, browser semantics
 которого создаёт nested browsing context либо загружает/исполняет script, style, document
@@ -322,11 +381,15 @@ parser-ом, независимым от runtime sanitizer parser-а.
 исполняемые SVG/MathML descendants. Такой output допускается только по утверждённому
 test-owned реестру вывода шаблонов.
 
-Для `script`/`style` реестр SHALL хранить глобальный набор уникальных body hashes либо
-внешних asset identities и security-relevant атрибутов без route/count pinning. Для
-редких high-risk элементов — nested browsing contexts, `object`/`embed`/`base`,
-refresh-meta и stylesheet-link — он SHALL дополнительно фиксировать route, count и
-placement. CI SHALL только сравнивать output с committed registry. Обновление выполняется
+Для `script`/`style` реестр MAY дедуплицировать identity как глобальный body hash либо
+external asset identity с security-relevant атрибутами, но SHALL отдельно описывать
+каждое разрешённое появление: stable source slot/template path, route pattern, точное
+placement относительно stable anchor, identity и допустимый count на документ. Каждый
+фактический элемент SHALL совпадать ровно с одним occurrence rule; повтор разрешённой
+identity в другом slot, placement или сверх count SHALL считаться неизвестным активным
+output. Для редких high-risk элементов — nested browsing contexts,
+`object`/`embed`/`base`, refresh-meta и stylesheet-link — реестр SHALL также фиксировать
+route, count и placement. CI SHALL только сравнивать output с committed registry. Обновление выполняется
 явно запускаемым tool в чистом worktree из назначенного reviewed source SHA: tool строит
 candidate manifest, а изменение source и manifest проходит review до commit; registry
 SHALL NOT обновляться либо приниматься из проверяемого CI `dist` в том же прогоне.
@@ -363,6 +426,11 @@ SHALL NOT обновляться либо приниматься из прове
 - **THEN** oracle проверяет фактическое browser DOM-дерево и падает на активном либо
   отсутствующем в закрытой матрице результате
 
+#### Scenario: Oracle разделяет parser engine с runtime
+- **WHEN** dependency graph output oracle прямо или транзитивно приводит к parser engine,
+  который использует runtime sanitizer
+- **THEN** gate завершается ошибкой до принятия результатов output oracle
+
 #### Scenario: Неизвестный sink выводит другой активный payload
 - **WHEN** не распознанный source collector-ом sink выводит вне отмеченной области
   активный элемент, event handler, `srcdoc`, XML/XLink URL или запрещённую URL-схему без
@@ -375,3 +443,35 @@ SHALL NOT обновляться либо приниматься из прове
   source-owned реестра
 - **THEN** whole-document hazard gate падает до осознанного review и обновления реестра,
   а не принимает текущий `dist` как новый baseline автоматически
+
+#### Scenario: Разрешённый script продублирован неизвестным sink-ом
+- **WHEN** неизвестный sink повторно выводит уже зарегистрированный body hash либо asset
+  identity вне разрешённого source slot, placement или сверх count
+- **THEN** whole-document hazard gate падает, хотя глобальный набор identities не изменился
+
+### Requirement: Зависимости границы безопасности обновляются только вручную
+
+Система SHALL хранить машинный реестр выбранного runtime sanitizer, DOM/parser stack,
+browser-oracle tooling и всех транзитивных parser nodes из lockfile, образующих границу
+rich-content safety. Реестр SHALL содержать точные package identities и lockfile node
+selectors; отсутствие, нечитаемость либо расхождение реестра с выбранным subtree SHALL
+завершать security gate ошибкой. Любой Dependabot PR, который прямо называет
+зарегистрированный package либо меняет зарегистрированный direct/transitive lockfile
+node, SHALL оставаться на ручном пути независимо от patch/minor-класса. Review SHALL
+содержать evidence maintenance/provenance и разбор всех advisory subtree независимо от
+severity.
+
+#### Scenario: Прямой подъём sanitizer-а
+- **WHEN** Dependabot поднимает patch/minor зарегистрированного sanitizer либо runtime DOM
+  package
+- **THEN** PR не получает автоматическое слияние и требует security review evidence
+
+#### Scenario: Транзитивный parser изменён другим подъёмом
+- **WHEN** metadata Dependabot называет иной package, но lockfile diff меняет
+  зарегистрированный транзитивный parser node
+- **THEN** deny-only security override оставляет PR на ручном пути
+
+#### Scenario: Реестр зависимостей отсутствует или устарел
+- **WHEN** gate не может прочитать реестр либо его package/node selectors не совпадают с
+  фактическим runtime/oracle subtree
+- **THEN** проверка работает fail closed и автоматически сливаемый `web` PR не допускается

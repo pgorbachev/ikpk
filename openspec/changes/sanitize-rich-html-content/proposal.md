@@ -19,11 +19,15 @@ event-handler атрибуты, опасные URL-схемы и произво�
 - Сохраняется единственный намеренный embed — HTTPS-player RUTUBE на утверждённом
   hostname с фиксированными sandbox/referrer permissions, которые автор не может
   ослабить.
+- Media policy допускает в `img` только raster manifest entries с dimensions и строгий
+  canonical `srcset`; broken-local candidate имеет приоритет над strip внешнего input.
 - Source discovery сверяет точный baseline selector list со всеми entity JSON и каждым
   CMS `type: richtext` attribute, включая пустые поля;
   singleton central sink и два точных JSON-LD исключения проверяются AST-гейтом.
-  Независимые browser-conformant built-output гейты запрещают vacuous green, ищут hostile
+  Независимые built-output гейты на DOM реального браузера запрещают vacuous green, ищут hostile
   canary и любой неинвентаризированный активный output во всём production/demo document.
+- Runtime и output oracle не могут делить parser engine даже транзитивно; разрешённый
+  executable output привязан к source slot, route, placement и count, а не только к hash.
 - До изменения раздельно фиксируются source-corpus (включая поля, которые текущий route
   extractor не выводит) и rendered-corpus. Characterization сохраняет структуру,
   доступность, media, responsive derivatives и визуально значимое оформление.
@@ -61,6 +65,8 @@ event-handler атрибуты, опасные URL-схемы и произво�
   миграцию, подтверждённую source/rendered fingerprints и visual evidence.
 - Unit-тесты проверяют политику и устойчивость к мутациям; build-тесты анализируют
   фактически сгенерированные страницы, а не только возврат helper-а.
+- Sanitizer/DOM/parser/browser-oracle dependencies и их транзитивный parser subtree
+  попадают в машинный security registry и исключаются из автоматического Dependabot merge.
 - Import scripts и Strapi permissions остаются отдельными security changes: эта работа
   делает их будущий HTML безопасным на границе рендера, но не превращает ingestion path
   в доверенный.
