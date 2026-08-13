@@ -7,6 +7,7 @@ import {
   CANARY_HOSTILE_TOKEN,
   CANARY_PATH,
 } from './helpers/rich-content-safety/closed-matrix.js';
+import { htmlFileRoute } from './helpers/rich-content-safety/hazard-scan.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 import {
   collectMarkerInventoryErrors,
@@ -41,12 +42,16 @@ describe('rich-content contract: whole-dist canary (production)', () => {
 });
 
 describe('rich-content contract: marker inventory (production)', () => {
-  it('каждая ожидаемая область имеет data-safe-rich-content, count совпадает', () => {
+  it('каждая ожидаемая область имеет data-safe-rich-content, count совпадает, лишних route нет', () => {
+    expect(existsSync(dist), 'dist не собран').toBe(true);
+    const files = [...walkHtml()];
+    expect(files.length, 'dist без html — vacuous green').toBeGreaterThan(10);
+    const pages = files.map((file) => ({
+      route: htmlFileRoute(file, dist),
+      html: readFileSync(file, 'utf-8'),
+    }));
     const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
-    const missing = collectMarkerInventoryErrors(rendered.sinks, 'production', (path) => {
-      const file = pageFile(path);
-      return { exists: existsSync(file), html: existsSync(file) ? readFileSync(file, 'utf-8') : '' };
-    });
+    const missing = collectMarkerInventoryErrors(rendered.sinks, 'production', pages);
     expect(missing, missing.join('\n')).toEqual([]);
   });
 });

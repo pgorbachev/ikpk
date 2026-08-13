@@ -85,6 +85,9 @@ export function scanHtmlForHazards(html: string, opts?: { ignoreMarkedRegions?: 
       if (name === 'srcdoc') {
         hits.push({ tag: tag.name, attr: name, value, reason: 'srcdoc' });
       }
+      if (name === 'contenteditable') {
+        hits.push({ tag: tag.name, attr: name, value, reason: 'contenteditable' });
+      }
       if (name.startsWith('on')) {
         hits.push({ tag: tag.name, attr: name, value, reason: 'event-handler' });
       }
@@ -301,6 +304,7 @@ export function unmarkedDocumentHazards(html: string): HazardHit[] {
   return scanHtmlForHazards(html, { ignoreMarkedRegions: true }).filter((h) => {
     if (h.reason === 'refresh-meta') return true;
     if (h.reason === 'event-handler' || h.reason === 'srcdoc' || h.reason === 'xml-xlink') return true;
+    if (h.reason === 'contenteditable') return true;
     if (h.reason.startsWith('forbidden-scheme') || h.reason === 'protocol-relative') return true;
     if (h.reason === 'executable-or-nested:frame' || h.reason === 'executable-or-nested:frameset') return true;
     if (h.reason === 'executable-or-nested:object' || h.reason === 'executable-or-nested:embed') return true;

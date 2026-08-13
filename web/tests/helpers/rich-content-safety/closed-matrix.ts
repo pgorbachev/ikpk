@@ -92,6 +92,12 @@ export const NESTED_BROWSING_HAZARDS = ['frame', 'frameset', 'object', 'embed', 
 
 export const FORBIDDEN_URL_SCHEMES = ['javascript:', 'vbscript:', 'file:', 'data:'] as const;
 
+/** Allowlist `a[href]` после разбора схемы. Не denylist. */
+export const ALLOWED_HREF_SCHEMES = ['http', 'https', 'mailto', 'tel'] as const;
+
+export const RASTER_MEDIA_EXT_RE = /\.(webp|png|jpg|jpeg)$/i;
+export const SRCSET_CANDIDATE_RE = /^(\/media\/_w\/(\d+)\/\S+) (\d+)w$/;
+
 /**
  * Единственный ожидаемый recovered+sanitized DOM для malformed fixture.
  * Recovered tree — HTML5 (Chromium DOMParser); sanitizer удаляет script.

@@ -11,6 +11,8 @@ import {
 } from './helpers/rich-content-safety/hazard-scan.js';
 import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
+import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
+import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
 
 function slots(ids: { slotId: string; identity: string }[]) {
   return ids;
@@ -151,9 +153,54 @@ describe('rich-content: whole-document hazard scanner', () => {
     expect(validateClosedMatrixHtml('<p dir="sideways">x</p>', known).some((e) => /dir/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<p lang="1">x</p>', known).some((e) => /lang/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<a href="javascript:alert(1)">x</a>', known).some((e) => /URL/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<a href="ftp://evil.test">x</a>', known).some((e) => /URL/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<img src="https://evil.test/x.webp" alt="">', known).some((e) => /img\[src\]/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<img src="/media/uploads/00000000-0000-0000-0000-000000000000.webp" alt="">', known).some((e) => /img\[src\]/.test(e))).toBe(true);
+    expect(
+      validateClosedMatrixHtml(
+        `<img src="${LOCAL_UPLOAD_WEBP}" srcset="/media/_w/480/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp 2400w" alt="">`,
+        { ...known, mediaFileExists: () => true },
+      ).some((e) => /descriptor/.test(e)),
+    ).toBe(true);
+    expect(validateClosedMatrixHtml(`<img src="${LOCAL_UPLOAD_WEBP}" alt="фото">`, known)).toEqual([]);
     expect(validateClosedMatrixHtml('<div data-safe-rich-content="forged">x</div>', known).some((e) => /sink-id/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<table data-wrapped><tr><td>x</td></tr></table>', known).some((e) => /data-wrapped/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<div class="table-scroll">x</div>', known).some((e) => /table-scroll/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<p lang="">x</p>', known).some((e) => /lang/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<img src="/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp" width="" alt="">', known).some((e) => /width/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<time datetime="not-a-date">x</time>', known).some((e) => /datetime/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<div role="button">x</div>', known).some((e) => /role/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<a href="/x" target="_blank">x</a>', known).some((e) => /noopener noreferrer/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<a href="/x" target="_blank" rel="noopener noreferrer">x</a>', known)).toEqual([]);
+  });
+
+  it('sink marker только на root wrapper; вложенный p и внешний contenteditable ловятся', () => {
+    const known = { knownSinkIds: ['article-body'] };
+    const nested = '<div contenteditable="true"><p data-safe-rich-content="article-body">ok</p></div>';
+    const matrix = validateClosedMatrixHtml(nested, known);
+    expect(matrix.some((e) => /root wrapper/.test(e))).toBe(true);
+    expect(unmarkedDocumentHazards(nested).some((h) => h.reason === 'contenteditable')).toBe(true);
+    expect(validateClosedMatrixHtml('<div data-safe-rich-content="article-body"><p>ok</p></div>', known)).toEqual([]);
+  });
+
+  it('marker inventory видит известный sink-id на незарегистрированном route', () => {
+    const sinks = [
+      {
+        id: 'article-body',
+        production: { paths: ['/statyi/foo'], count: 1 },
+        demo: { sameAsProduction: true },
+      },
+    ];
+    const extra = collectMarkerInventoryErrors(sinks, 'production', [
+      { route: '/statyi/foo', html: '<div data-safe-rich-content="article-body">x</div>' },
+      { route: '/oplata', html: '<div data-safe-rich-content="article-body">y</div>' },
+    ]);
+    expect(extra.some((e) => /extra article-body на \/oplata/.test(e))).toBe(true);
+    const ok = collectMarkerInventoryErrors(sinks, 'production', [
+      { route: '/statyi/foo', html: '<div data-safe-rich-content="article-body">x</div>' },
+      { route: '/oplata', html: '<p>нет sink</p>' },
+    ]);
+    expect(ok).toEqual([]);
   });
 
   it('stripMarkedRegions не оставляет вложенный RUTUBE после внутреннего div', () => {

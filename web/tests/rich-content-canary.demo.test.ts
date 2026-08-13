@@ -7,6 +7,7 @@ import {
   CANARY_HOSTILE_TOKEN,
   CANARY_PATH,
 } from './helpers/rich-content-safety/closed-matrix.js';
+import { htmlFileRoute } from './helpers/rich-content-safety/hazard-scan.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 import {
   collectMarkerInventoryErrors,
@@ -40,12 +41,14 @@ describe('rich-content contract: whole-dist canary (demo)', () => {
 });
 
 describe('rich-content contract: marker inventory (demo)', () => {
-  it('каждая demo-область rendered-registry имеет data-safe-rich-content, count совпадает', () => {
+  it('каждая demo-область rendered-registry имеет data-safe-rich-content, count совпадает, лишних route нет', () => {
+    const files = demoPages();
+    const pages = files.map((file) => ({
+      route: htmlFileRoute(file, demoDist),
+      html: readFileSync(file, 'utf-8'),
+    }));
     const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
-    const missing = collectMarkerInventoryErrors(rendered.sinks, 'demo', (path) => {
-      const file = demoFile(path);
-      return { exists: existsSync(file), html: existsSync(file) ? readFileSync(file, 'utf-8') : '' };
-    });
+    const missing = collectMarkerInventoryErrors(rendered.sinks, 'demo', pages);
     expect(missing, missing.join('\n')).toEqual([]);
   });
 });
