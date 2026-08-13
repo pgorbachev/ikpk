@@ -56,7 +56,7 @@ export function parseOpenTag(html: string, start: number): OpenTag | null {
     }
     const attrName = attr[1].toLowerCase();
     const attrValue = attr[3] ?? attr[4] ?? attr[5] ?? '';
-    attrs[attrName] = attrValue;
+    attrs[attrName] = decodeBasicEntities(attrValue);
     i += attr[0].length;
   }
   return { name, attrs, start, end: html.length, selfClosing: VOID.has(name) };

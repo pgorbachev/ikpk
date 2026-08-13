@@ -3,7 +3,7 @@
  * это test-owned обход фактического HTML документа.
  */
 import { createHash } from 'node:crypto';
-import { elementEnd, iterateTags, type OpenTag } from './html-scan.js';
+import { decodeBasicEntities, elementEnd, iterateTags, type OpenTag } from './html-scan.js';
 import {
   FORBIDDEN_URL_SCHEMES,
   NESTED_BROWSING_HAZARDS,
@@ -328,10 +328,11 @@ function projectionError(name: string, sourceKey: string, outVal: string | undef
   if (outVal === undefined) {
     return `dynamic attr ${name} отсутствует в output identity`;
   }
-  if ('exact' in projection && outVal !== projection.exact) {
+  const actual = decodeBasicEntities(outVal);
+  if ('exact' in projection && actual !== decodeBasicEntities(projection.exact)) {
     return `dynamic attr ${name} output ${outVal} ≠ projected ${projection.exact}`;
   }
-  if ('pattern' in projection && !projection.pattern.test(outVal)) {
+  if ('pattern' in projection && !projection.pattern.test(actual)) {
     return `dynamic attr ${name} output ${outVal} не проходит projection constraint`;
   }
   return null;

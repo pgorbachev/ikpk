@@ -93,7 +93,7 @@ function allowedNames(tag: string): Set<string> {
 function hasBoolean(attrs: Record<string, string>, name: string): boolean {
   if (!(name in attrs)) return false;
   const v = attrs[name].toLowerCase();
-  return v === '' || v === name || v === 'true';
+  return v === '' || v === name;
 }
 
 function classTokens(attrs: Record<string, string>): Set<string> {
@@ -344,7 +344,10 @@ function validTimeZoneOffset(raw: string): boolean {
   if (raw === 'Z') return true;
   const match = /^[+-](\d{2}):?(\d{2})$/.exec(raw);
   if (!match) return false;
-  return Number(match[1]) <= 23 && Number(match[2]) <= 59;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return false;
+  return hours !== 0 || minutes !== 0;
 }
 
 function validDateString(raw: string): boolean {
@@ -414,7 +417,7 @@ function isValidDatetime(value: string): boolean {
   const month = /^(\d{4,})-(\d{2})$/.exec(value);
   if (month) return yearNumber(month[1]) !== null && monthNumber(month[2]) !== null;
   if (validDateString(value)) return true;
-  const yearless = /^(\d{2})-(\d{2})$/.exec(value);
+  const yearless = /^(?:--)?(\d{2})-(\d{2})$/.exec(value);
   if (yearless) {
     const monthNum = monthNumber(yearless[1]);
     return monthNum !== null && validCalendarDate(4, monthNum, yearless[2]);
@@ -524,7 +527,7 @@ export function validateClosedMatrixHtml(html: string, opts?: MatrixValidateOpts
         errors.push('matrix: невалидный datetime');
       }
       if ((name === 'open' || name === 'checked' || name === 'allowfullscreen' || name === 'disabled') && !hasBoolean(tag.attrs, name)) {
-        errors.push(`matrix: ${name} только boolean true`);
+        errors.push(`matrix: ${name} только пустое значение или имя атрибута`);
       }
       if (name === 'loading' && tag.name === 'img' && value !== 'lazy' && value !== 'eager') {
         errors.push('matrix: img[loading] только lazy|eager');

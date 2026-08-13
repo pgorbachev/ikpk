@@ -3,6 +3,11 @@ import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 import { openOracleHarness, type OracleHarness } from './helpers/rich-content-safety/chromium-oracle.js';
 import { DISCARD_WITH_CONTENT, AUTHENTICATED_FORMS, exactRutubeIframe, EXACT_RUTUBE_SRC, RUTUBE_IFRAME_ATTRS } from './helpers/rich-content-safety/closed-matrix.js';
+import {
+  collectOccurrences,
+  MAP_IFRAME_SRC,
+  provenanceError,
+} from './helpers/rich-content-safety/hazard-scan.js';
 
 const HOSTILE = {
   selfRemoving: '<script>document.currentScript.remove();alert(1)</script><p>after</p>',
@@ -94,5 +99,16 @@ describe('rich-content contract: Chromium DOMParser oracle', () => {
     expect(parsed.html).toContain(`sandbox="${RUTUBE_IFRAME_ATTRS.sandbox}"`);
     expect(parsed.html).toContain(`allow="${RUTUBE_IFRAME_ATTRS.allow}"`);
     expect(parsed.html).toContain(`referrerpolicy="${RUTUBE_IFRAME_ATTRS.referrerpolicy}"`);
+  });
+
+  it('mapSrc projection совпадает с Chromium-сериализованным iframe src', async () => {
+    const parsed = await harness.parse(`<iframe src="${MAP_IFRAME_SRC}" title="Карта ИКПК"></iframe>`);
+    expect(parsed.serialized).toMatch(/&amp;z=16/);
+    const found = collectOccurrences(parsed.serialized);
+    expect(found).toHaveLength(1);
+    expect(provenanceError(
+      'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК',
+      found[0].identity,
+    )).toBeNull();
   });
 });
