@@ -27,7 +27,6 @@ const URL_ATTRS = new Set(['href', 'src', 'poster', 'action', 'formaction', 'cit
 const DIR_VALUES = new Set(['ltr', 'rtl', 'auto']);
 const LANG_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const INT_RE = /^[1-9]\d*$/;
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 const HREF_SCHEMES = new Set<string>(ALLOWED_HREF_SCHEMES);
 const MARKER_WRAPPER = 'div';
 
@@ -255,7 +254,7 @@ function checkSrcset(
       errors.push('matrix: srcset candidate не /media/_w/<width>/<path> <width>w');
       continue;
     }
-    const [, url, urlWidth, , descriptorWidth] = match;
+    const [, url, urlWidth, descriptorWidth] = match;
     if (urlWidth !== descriptorWidth) {
       errors.push('matrix: srcset descriptor не совпадает с width в URL');
       continue;
@@ -276,10 +275,80 @@ function checkSrcset(
   }
 }
 
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function daysInMonth(year: number, month: number): number {
+  return [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+}
+
+function yearNumber(raw: string): number | null {
+  if (!/^\d{4,}$/.test(raw)) return null;
+  const year = Number(raw);
+  return year >= 1 ? year : null;
+}
+
+function monthNumber(raw: string): number | null {
+  if (!/^\d{2}$/.test(raw)) return null;
+  const month = Number(raw);
+  return month >= 1 && month <= 12 ? month : null;
+}
+
+function validCalendarDate(year: number, month: number, dayRaw: string): boolean {
+  if (!/^\d{2}$/.test(dayRaw)) return false;
+  const day = Number(dayRaw);
+  return day >= 1 && day <= daysInMonth(year, month);
+}
+
+function validTimeString(raw: string): boolean {
+  const match = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/.exec(raw);
+  if (!match) return false;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = match[3] === undefined ? 0 : Number(match[3]);
+  return hour <= 23 && minute <= 59 && second <= 59;
+}
+
+function validTimeZoneOffset(raw: string): boolean {
+  if (raw === 'Z') return true;
+  const match = /^[+-](\d{2}):?(\d{2})$/.exec(raw);
+  if (!match) return false;
+  return Number(match[1]) <= 23 && Number(match[2]) <= 59;
+}
+
+function validDateString(raw: string): boolean {
+  const match = /^(\d{4,})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!match) return false;
+  const year = yearNumber(match[1]);
+  const month = monthNumber(match[2]);
+  return year !== null && month !== null && validCalendarDate(year, month, match[3]);
+}
+
+/** HTML datetime productions без Date.parse: year/month/date/time/week/offset/duration. */
 function isValidDatetime(value: string): boolean {
-  if (!DATETIME_RE.test(value)) return false;
-  const parsed = Date.parse(value.length === 10 ? `${value}T00:00:00Z` : value);
-  return !Number.isNaN(parsed);
+  if (!value) return false;
+  if (yearNumber(value) !== null) return true;
+  const month = /^(\d{4,})-(\d{2})$/.exec(value);
+  if (month) return yearNumber(month[1]) !== null && monthNumber(month[2]) !== null;
+  if (validDateString(value)) return true;
+  const yearless = /^(\d{2})-(\d{2})$/.exec(value);
+  if (yearless) {
+    const monthNum = monthNumber(yearless[1]);
+    return monthNum !== null && validCalendarDate(4, monthNum, yearless[2]);
+  }
+  if (validTimeString(value)) return true;
+  const week = /^(\d{4,})-W(\d{2})$/.exec(value);
+  if (week && yearNumber(week[1]) !== null) {
+    const number = Number(week[2]);
+    return number >= 1 && number <= 53;
+  }
+  const local = /^(\d{4,}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?$/.exec(value);
+  if (local) {
+    return validDateString(local[1]) && validTimeString(local[2]) && (!local[3] || validTimeZoneOffset(local[3]));
+  }
+  if (value === 'Z' || validTimeZoneOffset(value)) return true;
+  return /^P(?!\s)(?=.)(\d+Y)?(\d+M)?(\d+D)?(T(?=.)(\d+H)?(\d+M)?(\d+(?:\.\d+)?S)?)?$/.test(value);
 }
 
 export function validateClosedMatrixHtml(html: string, opts?: MatrixValidateOpts): string[] {

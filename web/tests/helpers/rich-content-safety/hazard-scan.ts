@@ -214,9 +214,69 @@ export function collectOccurrences(html: string): FoundOccurrence[] {
   return found;
 }
 
-function identityBody(identity: string): string | null {
-  const part = identity.split('|').find((p) => p.startsWith('body:'));
-  return part ?? null;
+const AST_ATTR_KIND = /^(quoted|empty|expression|template|shorthand)$/;
+const ASTRO_DIRECTIVE = /^(is|set|define|client|class|style|animate):/;
+
+export interface ProjectedIdentity {
+  tag: string;
+  body: string | null;
+  staticAttrs: Map<string, string>;
+  dynamicNames: Set<string>;
+}
+
+/**
+ * Test-owned проекция source AST identity (`name=kind:value`) и output identity
+ * (`name=value`) в сравнимые tag/body/security-relevant attrs.
+ */
+export function projectIdentity(identity: string): ProjectedIdentity {
+  const parts = identity.split('|');
+  const tag = parts[0] ?? '';
+  let body: string | null = null;
+  const staticAttrs = new Map<string, string>();
+  const dynamicNames = new Set<string>();
+  for (const part of parts.slice(1)) {
+    if (part.startsWith('body:')) {
+      body = part;
+      continue;
+    }
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const name = part.slice(0, eq).toLowerCase();
+    if (ASTRO_DIRECTIVE.test(name)) continue;
+    const rest = part.slice(eq + 1);
+    const colon = rest.indexOf(':');
+    const kind = colon === -1 ? '' : rest.slice(0, colon);
+    if (AST_ATTR_KIND.test(kind)) {
+      const value = rest.slice(colon + 1);
+      if (kind === 'expression' || kind === 'template') dynamicNames.add(name);
+      else staticAttrs.set(name, value);
+    } else {
+      staticAttrs.set(name, rest);
+    }
+  }
+  return { tag, body, staticAttrs, dynamicNames };
+}
+
+export function provenanceError(sourceIdentity: string, outputIdentity: string): string | null {
+  const source = projectIdentity(sourceIdentity);
+  const output = projectIdentity(outputIdentity);
+  if (source.tag !== output.tag) {
+    return `tag=${source.tag} ≠ output ${output.tag}`;
+  }
+  if (source.body !== output.body) {
+    return `source body identity ${source.body ?? '∅'} ≠ output ${output.body ?? '∅'}`;
+  }
+  for (const [name, value] of source.staticAttrs) {
+    if (output.staticAttrs.get(name) !== value) {
+      return `attr ${name}=${value} ≠ output ${output.staticAttrs.get(name) ?? '∅'}`;
+    }
+  }
+  for (const name of source.dynamicNames) {
+    if (!output.staticAttrs.has(name) && !output.dynamicNames.has(name)) {
+      return `dynamic attr ${name} отсутствует в output identity`;
+    }
+  }
+  return null;
 }
 
 function nearestPrecedingId(html: string, before: number): string | null {
@@ -256,16 +316,9 @@ export function matchOccurrences(
       errors.push(`${route}: rule ${rule.slotId} нет в committed source-slot registry`);
       continue;
     }
-    const sourceTag = slot.identity.split('|')[0];
-    const ruleTag = rule.identity.split('|')[0];
-    if (sourceTag && ruleTag && sourceTag !== ruleTag) {
-      errors.push(`${route}: rule ${rule.slotId} source identity tag=${sourceTag} ≠ output ${ruleTag}`);
-      continue;
-    }
-    const sourceBody = identityBody(slot.identity);
-    const ruleBody = identityBody(rule.identity);
-    if (sourceBody !== ruleBody) {
-      errors.push(`${route}: rule ${rule.slotId} source body identity ${sourceBody ?? '∅'} ≠ output ${ruleBody ?? '∅'}`);
+    const mismatch = provenanceError(slot.identity, rule.identity);
+    if (mismatch) {
+      errors.push(`${route}: rule ${rule.slotId} source identity не проецируется в output: ${mismatch}`);
       continue;
     }
     const matches: number[] = [];

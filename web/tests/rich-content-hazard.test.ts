@@ -131,6 +131,36 @@ describe('rich-content: whole-document hazard scanner', () => {
       { slotId: 'src:beta', route: '/x', placement: found[0].placement, identity: found[0].identity, count: 1 },
     ], source);
     expect(crossed.some((e) => /source body identity/.test(e))).toBe(true);
+
+    const svgs = '<svg fill="none" viewBox="0 0 12 12"></svg><svg fill="none" viewBox="0 0 24 24"></svg>';
+    const svgFound = collectOccurrences(svgs);
+    const svgAst = slots([
+      { slotId: 'src:svg-12', identity: 'svg|fill=quoted:none|viewBox=quoted:0 0 12 12' },
+      { slotId: 'src:svg-24', identity: 'svg|fill=quoted:none|viewBox=quoted:0 0 24 24' },
+    ]);
+    expect(matchOccurrences(svgs, '/x', [
+      { slotId: 'src:svg-12', route: '/x', placement: svgFound[0].placement, identity: svgFound[0].identity, count: 1 },
+      { slotId: 'src:svg-24', route: '/x', placement: svgFound[1].placement, identity: svgFound[1].identity, count: 1 },
+    ], svgAst)).toEqual([]);
+    const svgCrossed = matchOccurrences(svgs, '/x', [
+      { slotId: 'src:svg-24', route: '/x', placement: svgFound[0].placement, identity: svgFound[0].identity, count: 1 },
+    ], svgAst);
+    expect(svgCrossed.some((e) => /viewbox/i.test(e))).toBe(true);
+
+    const frames = '<iframe src="https://maps.example/a" title="Карта ИКПК"></iframe><iframe src="https://rutube.ru/play/embed/abc/" title="Видео RUTUBE"></iframe>';
+    const frameFound = collectOccurrences(frames);
+    const frameAst = slots([
+      { slotId: 'src:map', identity: 'iframe|src=expression:mapSrc|title=quoted:Карта ИКПК' },
+      { slotId: 'src:rutube', identity: 'iframe|src=quoted:https://rutube.ru/play/embed/abc/|title=quoted:Видео RUTUBE' },
+    ]);
+    expect(matchOccurrences(frames, '/x', [
+      { slotId: 'src:map', route: '/x', placement: frameFound[0].placement, identity: frameFound[0].identity, count: 1 },
+      { slotId: 'src:rutube', route: '/x', placement: frameFound[1].placement, identity: frameFound[1].identity, count: 1 },
+    ], frameAst)).toEqual([]);
+    const frameCrossed = matchOccurrences(frames, '/x', [
+      { slotId: 'src:map', route: '/x', placement: frameFound[1].placement, identity: frameFound[1].identity, count: 1 },
+    ], frameAst);
+    expect(frameCrossed.some((e) => /title=/.test(e) || /не проецируется/.test(e))).toBe(true);
   });
 
   it('closed matrix отвергает contenteditable, data-*, incomplete iframe, checkbox, dir/lang, javascript URL и поддельные маркеры', () => {
@@ -162,6 +192,12 @@ describe('rich-content: whole-document hazard scanner', () => {
         { ...known, mediaFileExists: () => true },
       ).some((e) => /descriptor/.test(e)),
     ).toBe(true);
+    expect(
+      validateClosedMatrixHtml(
+        `<img src="${LOCAL_UPLOAD_WEBP}" srcset="/media/_w/480/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp 480w" alt="">`,
+        { ...known, mediaFileExists: () => true },
+      ),
+    ).toEqual([]);
     expect(validateClosedMatrixHtml(`<img src="${LOCAL_UPLOAD_WEBP}" alt="фото">`, known)).toEqual([]);
     expect(validateClosedMatrixHtml('<div data-safe-rich-content="forged">x</div>', known).some((e) => /sink-id/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<table data-wrapped><tr><td>x</td></tr></table>', known).some((e) => /data-wrapped/.test(e))).toBe(true);
@@ -169,6 +205,11 @@ describe('rich-content: whole-document hazard scanner', () => {
     expect(validateClosedMatrixHtml('<p lang="">x</p>', known).some((e) => /lang/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<img src="/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp" width="" alt="">', known).some((e) => /width/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<time datetime="not-a-date">x</time>', known).some((e) => /datetime/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<time datetime="2023-02-31">x</time>', known).some((e) => /datetime/.test(e))).toBe(true);
+    expect(validateClosedMatrixHtml('<time datetime="2023">x</time>', known)).toEqual([]);
+    expect(validateClosedMatrixHtml('<time datetime="2023-08">x</time>', known)).toEqual([]);
+    expect(validateClosedMatrixHtml('<time datetime="14:30">x</time>', known)).toEqual([]);
+    expect(validateClosedMatrixHtml('<time datetime="2020-01-15">x</time>', known)).toEqual([]);
     expect(validateClosedMatrixHtml('<div role="button">x</div>', known).some((e) => /role/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<a href="/x" target="_blank">x</a>', known).some((e) => /noopener noreferrer/.test(e))).toBe(true);
     expect(validateClosedMatrixHtml('<a href="/x" target="_blank" rel="noopener noreferrer">x</a>', known)).toEqual([]);
