@@ -21,6 +21,7 @@ export interface SinkRecord {
   elementName: string;
   attribute: string;
   expression: string;
+  attrKind?: string;
   locator: string;
   fingerprint: string;
 }
@@ -45,39 +46,67 @@ function walkAstro(node: AstroNode, visit: (n: AstroNode) => void): void {
   for (const child of node.children ?? []) walkAstro(child, visit);
 }
 
+export async function collectAstroSinksFromSource(rel: string, src: string): Promise<SinkRecord[]> {
+  const sinks: SinkRecord[] = [];
+  const { ast } = await parseAstro(src);
+  walkAstro(ast as AstroNode, (node) => {
+    const attrs = node.attributes ?? [];
+    for (const attr of attrs) {
+      const name = attr.name.toLowerCase();
+      const onIframe = (node.name ?? '').toLowerCase() === 'iframe';
+      const spreadSrcdoc =
+        attr.kind === 'spread' && (onIframe || /srcdoc/i.test(attr.value) || /srcdoc/i.test(attr.name));
+      const attrName = spreadSrcdoc ? 'srcdoc' : name;
+      if (attrName === 'set:html' || attrName === 'is:raw' || attrName === 'srcdoc') {
+        const classification =
+          rel === 'components/HeadMeta.astro' || rel === 'components/Breadcrumbs.astro'
+            ? 'json-ld'
+            : 'rich-html';
+        const locator = `${rel}:${locOf(node)}:${node.type}:${node.name ?? ''}:${attrName}`;
+        sinks.push({
+          id: sinkIdFor(rel, attrName, attr.value),
+          classification,
+          file: rel,
+          nodeKind: node.type,
+          elementName: node.name ?? '',
+          attribute: attrName,
+          expression: attr.value,
+          attrKind: attr.kind,
+          locator,
+          fingerprint: locator,
+        });
+      }
+    }
+  });
+  return sinks;
+}
+
 export async function collectAstroSinks(srcRoot = WEB_SRC): Promise<SinkRecord[]> {
   const sinks: SinkRecord[] = [];
   for (const file of walkFiles(srcRoot, ['.astro'])) {
     const src = readFileSync(file, 'utf-8');
-    const { ast } = await parseAstro(src);
     const rel = relative(srcRoot, file).replaceAll('\\', '/');
-    walkAstro(ast as AstroNode, (node) => {
-      const attrs = node.attributes ?? [];
-      for (const attr of attrs) {
-        const name = attr.name.toLowerCase();
-        if (name === 'set:html' || name === 'is:raw' || name === 'srcdoc') {
-          const classification =
-            rel === 'components/HeadMeta.astro' || rel === 'components/Breadcrumbs.astro'
-              ? 'json-ld'
-              : 'rich-html';
-          const locator = `${rel}:${locOf(node)}:${node.type}:${node.name ?? ''}:${name}`;
-          sinks.push({
-            id: sinkIdFor(rel, name, attr.value),
-            classification,
-            file: rel,
-            nodeKind: node.type,
-            elementName: node.name ?? '',
-            attribute: name,
-            expression: attr.value,
-            locator,
-            fingerprint: locator,
-          });
-        }
-      }
-    });
+    sinks.push(...(await collectAstroSinksFromSource(rel, src)));
   }
   sinks.sort((a, b) => a.locator.localeCompare(b.locator));
   return sinks;
+}
+
+export const JSON_LD_FILES = new Set(['components/HeadMeta.astro', 'components/Breadcrumbs.astro']);
+export const FUTURE_SINGLETON = 'components/RichContent.astro';
+
+export function assertSingletonSinkContract(sinks: SinkRecord[]): string[] {
+  const errors: string[] = [];
+  for (const sink of sinks) {
+    if (sink.attribute === 'is:raw' || sink.attribute === 'srcdoc') {
+      errors.push(`запрещённый ${sink.attribute} (${sink.locator})`);
+      continue;
+    }
+    if (sink.attribute !== 'set:html') continue;
+    if (sink.file === FUTURE_SINGLETON || JSON_LD_FILES.has(sink.file)) continue;
+    errors.push(`set:html вне singleton/JSON-LD: ${sink.file}`);
+  }
+  return errors;
 }
 
 function sinkIdFor(file: string, attr: string, expr: string): string {
@@ -181,10 +210,38 @@ function collectTsRawSinksFromSource(file: string, sourceText: string, scriptKin
         allowedEmptyClear: false,
       });
     }
+    if (ts.isSatisfiesExpression?.(node) && /SafeRichHtml/.test(node.type.getText(sf))) {
+      const loc = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+      found.push({
+        file,
+        kind: 'SafeRichHtml-satisfies',
+        text: node.getText(sf),
+        locator: `${file}:L${loc.line + 1}:C${loc.character + 1}:satisfies`,
+        allowedEmptyClear: false,
+      });
+    }
+    if (ts.isNewExpression(node) && /SafeRichHtml/.test(node.expression.getText(sf))) {
+      const loc = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+      found.push({
+        file,
+        kind: 'SafeRichHtml-construct',
+        text: node.getText(sf),
+        locator: `${file}:L${loc.line + 1}:C${loc.character + 1}:new`,
+        allowedEmptyClear: false,
+      });
+    }
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(sf, visit);
   return found;
+}
+
+export function collectTsSinksFromSource(
+  file: string,
+  sourceText: string,
+  scriptKind: ts.ScriptKind = ts.ScriptKind.TS,
+): TsSinkRecord[] {
+  return collectTsRawSinksFromSource(file, sourceText, scriptKind);
 }
 
 export function collectTsSinks(srcRoot = WEB_SRC): TsSinkRecord[] {
@@ -276,6 +333,3 @@ export function assertSourceSlotsMatch(live: ExecutableSlot[], committed: Execut
   }
   return errors;
 }
-
-export const JSON_LD_FILES = new Set(['components/HeadMeta.astro', 'components/Breadcrumbs.astro']);
-export const FUTURE_SINGLETON = 'components/RichContent.astro';

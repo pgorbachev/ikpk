@@ -43,3 +43,60 @@ export const RESERVED_ATTRS = [
 ] as const;
 
 export const RESERVED_CLASSES = ['table-scroll', 'legacy-cta-unresolved'] as const;
+
+/** Утверждённые structural forms authenticated mode (spec: системные маркеры). */
+export const AUTHENTICATED_FORMS = {
+  tableWrapper:
+    '<div class="table-scroll" role="region" tabindex="0"><table data-wrapped><tbody><tr><td>ячейка</td></tr></tbody></table></div>',
+  resolvedCta: '<a href="#oplata-svyaz" data-legacy-cta>Произвести оплату</a>',
+  unresolvedCta: '<span class="legacy-cta-unresolved" data-legacy-cta-unresolved>Хочу сотрудничать!</span>',
+} as const;
+
+/** Полная отдельная iframe-строка test-owned matrix. Не импортирует runtime. */
+export const RUTUBE_IFRAME_ALLOWED_ATTRS = [
+  'src',
+  'sandbox',
+  'allow',
+  'referrerpolicy',
+  'loading',
+  'title',
+  'allowfullscreen',
+] as const;
+
+export const RUTUBE_IFRAME_FORBIDDEN_ATTRS = [
+  'srcdoc',
+  'name',
+  'width',
+  'height',
+  'align',
+  'allowpaymentrequest',
+  'csp',
+  'fetchpriority',
+  'importance',
+  'scrolling',
+  'frameborder',
+  'longdesc',
+  'marginwidth',
+  'marginheight',
+  'onload',
+  'onerror',
+] as const;
+
+export const EXACT_RUTUBE_SRC = 'https://rutube.ru/play/embed/4a1e6023bd7a3716d8ff56bf98c96e97/';
+
+export function exactRutubeIframe(): string {
+  return `<iframe src="${EXACT_RUTUBE_SRC}" sandbox="${RUTUBE_IFRAME_ATTRS.sandbox}" allow="${RUTUBE_IFRAME_ATTRS.allow}" referrerpolicy="${RUTUBE_IFRAME_ATTRS.referrerpolicy}" loading="${RUTUBE_IFRAME_ATTRS.loading}" title="${RUTUBE_IFRAME_ATTRS.title}" allowfullscreen></iframe>`;
+}
+
+export const NESTED_BROWSING_HAZARDS = ['frame', 'frameset', 'object', 'embed', 'iframe'] as const;
+
+export const FORBIDDEN_URL_SCHEMES = ['javascript:', 'vbscript:', 'file:', 'data:'] as const;
+
+/**
+ * Единственный ожидаемый recovered+sanitized DOM для malformed fixture.
+ * Recovered tree — HTML5 (Chromium DOMParser); sanitizer удаляет script.
+ */
+export const MALFORMED_INPUT = '<b><i>misnested</b></i><p>ok<script>alert(1)</script>';
+export const MALFORMED_EXPECTED_SANITIZED = '<b><i>misnested</i></b><p>ok</p>';
+
+export const PARSER_PACKAGES_RE = /parse5|jsdom|htmlparser2|dompurify|sanitize-html|linkedom|cheerio|node-html-parser/i;

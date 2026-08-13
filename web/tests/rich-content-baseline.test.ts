@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHARACTERIZATION_SHA, ENTITIES_DIR, LOCAL_UPLOAD_ORIGINAL, LOCAL_UPLOAD_WEBP, KNOWN_REMOTE_UPLOAD, MEDIA_MANIFEST } from './helpers/rich-content-safety/paths.js';
+import { CHARACTERIZATION_SHA, ENTITIES_DIR, LOCAL_UPLOAD_ORIGINAL, LOCAL_UPLOAD_WEBP, KNOWN_REMOTE_UPLOAD, MEDIA_MANIFEST, REPO_ROOT } from './helpers/rich-content-safety/paths.js';
 import {
   assertDiscoveryMatchesRegistry,
   buildSourceRegistry,
@@ -226,7 +226,99 @@ describe('rich-content baseline: пересечения', () => {
     expect(files).toContain('components/seminars/SeminarArchitectureHeader.astro');
   });
 
+  it('online-payment-flow пересекается через oplata.astro и не меняет normalizeLegacyControls', () => {
+    const proposal = readFileSync(
+      join(REPO_ROOT, 'openspec', 'changes', 'online-payment-flow', 'proposal.md'),
+      'utf-8',
+    );
+    expect(proposal).toMatch(/normalizeLegacyControls[`\s]*не меняется/);
+    expect(proposal).toMatch(/oplata\.astro/);
+    const cleaner = readFileSync(join(REPO_ROOT, 'web', 'src', 'lib', 'html-cleaner.ts'), 'utf-8');
+    expect(cleaner).toMatch(/function normalizeLegacyControls/);
+    const oplata = readFileSync(join(REPO_ROOT, 'web', 'src', 'pages', 'oplata.astro'), 'utf-8');
+    expect(oplata).toContain('cleanBodyHtml');
+    expect(oplata).toContain('#oplata-svyaz');
+  });
+
+  it('security-registry override — deny-only в dependabot-auto-merge, согласование с dependency-update-gates', () => {
+    const autoMerge = readFileSync(
+      join(REPO_ROOT, 'openspec', 'changes', 'dependabot-auto-merge', 'proposal.md'),
+      'utf-8',
+    );
+    expect(autoMerge).toMatch(/deny-only/);
+    expect(autoMerge).toMatch(/security registry|security dependency registry/i);
+    const gates = readFileSync(
+      join(REPO_ROOT, 'openspec', 'changes', 'dependency-update-gates', 'proposal.md'),
+      'utf-8',
+    );
+    expect(gates.length).toBeGreaterThan(0);
+    const registry = loadFixture<{ runtime: { packages: string[] }; oracle: { packages: string[] } }>(
+      'security-dependency-registry.json',
+    );
+    expect(registry.oracle.packages).toContain('playwright');
+  });
+
   it('characterization SHA зафиксирован', () => {
     expect(CHARACTERIZATION_SHA).toBe('2d48e84db36c013fabcbbe9ba389e1f4debca639');
+  });
+});
+
+describe('rich-content baseline: rendered fingerprints текущего cleaner-вывода', () => {
+  it('cleaner сохраняет headings/tables/markers на корпусе, который реально рендерится', async () => {
+    const { cleanBodyHtml } = await import('../src/lib/html-cleaner.js');
+    const { htmlOf } = await import('./helpers/rich-content-safety/html-of.js');
+    const discovered = discoverSources();
+    const htmlHits = discovered.htmlBearing.filter((h) => matchJsonSelector(h) && h.value.includes('<table'));
+    expect(htmlHits.length, 'в корпусе нет table — vacuous').toBeGreaterThan(0);
+    let withMarkers = 0;
+    for (const hit of htmlHits) {
+      const cleaned = htmlOf(cleanBodyHtml(hit.value));
+      const fp = fingerprintHtml(cleaned, {
+        jsonPath: `${hit.file}${hit.jsonPath}`,
+        selectorId: matchJsonSelector(hit)!.id,
+        entityId: hit.entityId,
+      });
+      expect(fp.tables.length, hit.jsonPath).toBeGreaterThan(0);
+      if (fp.markers.some((m) => /table-scroll|data-wrapped/.test(m))) withMarkers += 1;
+    }
+    expect(withMarkers).toBe(htmlHits.length);
+  });
+});
+
+describe('rich-content baseline: occurrence registry и generator isolation', () => {
+  it('committed occurrence registry ссылается на source slots и не содержит dist-правил до maintainer SHA', () => {
+    const occ = loadFixture<{
+      ciMustNotRegenerate: boolean;
+      occurrences: unknown[];
+    }>('output-occurrence-registry.json');
+    expect(occ.ciMustNotRegenerate).toBe(true);
+    expect(occ.occurrences).toEqual([]);
+    expect(slots.length).toBeGreaterThan(0);
+  });
+
+  it('CI workflows и npm scripts не вызывают generate-baseline как side effect', () => {
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'web', 'package.json'), 'utf-8')) as {
+      scripts: Record<string, string>;
+    };
+    for (const [name, cmd] of Object.entries(pkg.scripts)) {
+      expect(cmd, name).not.toMatch(/generate-baseline/);
+    }
+    const workflowsDir = join(REPO_ROOT, '.github', 'workflows');
+    expect(existsSync(workflowsDir), 'нет .github/workflows — нечем проверить isolation').toBe(true);
+    for (const file of readdirSync(workflowsDir)) {
+      const text = readFileSync(join(workflowsDir, file), 'utf-8');
+      expect(text, file).not.toMatch(/generate-baseline/);
+    }
+  });
+
+  it('дубликат approved script с тем же identity и другим locator валит provenance', async () => {
+    const live = await collectExecutableSourceSlots();
+    const extra = {
+      ...live[0],
+      slotId: `${live[0].slotId}:duplicate`,
+      locator: `${live[0].locator}:duplicate`,
+    };
+    const errors = assertSourceSlotsMatch([...live, extra], slots);
+    expect(errors.some((e) => /незарегистрированный source node/.test(e))).toBe(true);
   });
 });

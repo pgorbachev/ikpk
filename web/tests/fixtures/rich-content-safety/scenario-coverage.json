@@ -10,7 +10,7 @@
     {
       "requirement": "Единая граница безопасного rich HTML",
       "scenario": "Новый raw-HTML sink известного синтаксического класса",
-      "test": "web/tests/rich-content-contract.test.ts / production set:html только в RichContent.astro"
+      "test": "web/tests/rich-content-contract.test.ts / source collector srcdoc literal/expression/spread; SafeRichHtml cast; web/tests/rich-content-baseline.test.ts / raw-sink registry"
     },
     {
       "requirement": "Единая граница безопасного rich HTML",
@@ -106,7 +106,7 @@
     {
       "requirement": "Системные маркеры защищены от подделки",
       "scenario": "Утверждённые структурные формы",
-      "test": "web/tests/html-cleaner.test.ts / legacy CTA markers (характеризация текущего нормализатора); RED: authenticated mode в contract"
+      "test": "web/tests/rich-content-contract.test.ts / поддельные markers; authenticated mode table-wrapper/CTA"
     },
     {
       "requirement": "URL проверяются по разобранной схеме",
@@ -176,7 +176,7 @@
     {
       "requirement": "Недоверенный контент ограничен по ресурсам",
       "scenario": "Восстанавливаемая malformed-разметка в пределах лимитов",
-      "test": "web/tests/rich-content-contract.test.ts / malformed HTML; web/tests/rich-content-oracle.test.ts / misnested"
+      "test": "web/tests/rich-content-contract.test.ts / malformed-recovered.json единственный expected DOM; web/tests/rich-content-oracle.test.ts / misnested"
     },
     {
       "requirement": "Гейты не дают vacuous green и независимы от runtime policy",

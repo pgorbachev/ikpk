@@ -110,6 +110,13 @@ export async function generateBaselineArtifacts(): Promise<void> {
     oracle: { packages: ['playwright'], lockfileNodes: [] },
     note: 'Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет.',
   });
+  writeJson('output-occurrence-registry.json', {
+    status: 'source-inventory-only',
+    generatedFrom: 'source AST; dist occurrences заполняются maintainer-командой на reviewed SHA',
+    ciMustNotRegenerate: true,
+    slotIds: executableSlots.map((s) => s.slotId),
+    occurrences: [] as { slotId: string; route: string; placement: string; identity: string; count: number }[],
+  });
 }
 
 function extractAdditionalHtml(rawHtml: string): string {

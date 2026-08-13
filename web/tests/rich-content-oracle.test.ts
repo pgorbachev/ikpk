@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 import { openOracleHarness, type OracleHarness } from './helpers/rich-content-safety/chromium-oracle.js';
-import { DISCARD_WITH_CONTENT } from './helpers/rich-content-safety/closed-matrix.js';
+import { DISCARD_WITH_CONTENT, AUTHENTICATED_FORMS, exactRutubeIframe, EXACT_RUTUBE_SRC, RUTUBE_IFRAME_ATTRS } from './helpers/rich-content-safety/closed-matrix.js';
 
 const HOSTILE = {
   selfRemoving: '<script>document.currentScript.remove();alert(1)</script><p>after</p>',
@@ -74,5 +74,25 @@ describe('rich-content contract: Chromium DOMParser oracle', () => {
       const parsed = await harness.parse(htmlOf(cleanBodyHtml(`<${tag}>payload</${tag}>`)));
       expect(parsed.tagNames, tag).not.toContain(tag);
     }
+  });
+
+  it('точные system-marker forms разбираются oracle без сети', async () => {
+    for (const [name, html] of Object.entries(AUTHENTICATED_FORMS)) {
+      const parsed = await harness.parse(html);
+      expect(parsed.continuedRequests, name).toEqual([]);
+      expect(parsed.mainFrameUrl).toMatch(/^about:blank/);
+    }
+  });
+
+  it('точный RUTUBE iframe form проходит oracle с системными attrs', async () => {
+    const parsedExact = await harness.parse(exactRutubeIframe());
+    expect(parsedExact.continuedRequests).toEqual([]);
+    expect(parsedExact.tagNames).toContain('iframe');
+    const sanitized = htmlOf(cleanBodyHtml(`<iframe src="${EXACT_RUTUBE_SRC}" sandbox="allow-scripts"></iframe>`));
+    const parsed = await harness.parse(sanitized);
+    expect(parsed.tagNames).toContain('iframe');
+    expect(parsed.html).toContain(`sandbox="${RUTUBE_IFRAME_ATTRS.sandbox}"`);
+    expect(parsed.html).toContain(`allow="${RUTUBE_IFRAME_ATTRS.allow}"`);
+    expect(parsed.html).toContain(`referrerpolicy="${RUTUBE_IFRAME_ATTRS.referrerpolicy}"`);
   });
 });
