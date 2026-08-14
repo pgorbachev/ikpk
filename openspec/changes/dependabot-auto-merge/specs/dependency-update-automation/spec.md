@@ -37,13 +37,16 @@
 
 Для `web` система SHALL дополнительно читать committed machine registry зависимостей
 границы rich-content safety, созданный change `sanitize-rich-html-content`. Реестр SHALL
-перечислять выбранные sanitizer, runtime DOM/parser, browser-oracle tooling и точные
-direct/transitive parser lockfile nodes. PR SHALL оставаться на ручном пути, если
-Dependabot metadata прямо называет зарегистрированный package либо если lockfile diff
-меняет любой зарегистрированный node. Lockfile diff здесь является только deny-only
-проверкой транзитивных изменений: он SHALL NOT использоваться для выдачи разрешения,
-которое не следует из Dependabot metadata и таблицы. Отсутствующий, нечитаемый либо
-несогласованный с lockfile registry SHALL означать ручной путь для npm PR пакета `web`.
+лежать по пути `web/tests/fixtures/rich-content-safety/security-dependency-registry.json`
+и SHALL перечислять выбранные sanitizer, runtime DOM/parser, browser-oracle tooling и
+точные direct/transitive parser lockfile nodes. PR SHALL оставаться на ручном пути, если
+Dependabot metadata прямо называет зарегистрированный package (включая `parse5` и
+`playwright`) либо если lockfile diff меняет любой зарегистрированный node из
+`runtime.lockfileNodes` или `oracle.lockfileNodes`. Lockfile diff здесь является только
+deny-only проверкой транзитивных изменений: он SHALL NOT использоваться для выдачи
+разрешения, которое не следует из Dependabot metadata и таблицы. Отсутствующий,
+нечитаемый либо несогласованный с lockfile registry SHALL означать ручной путь для npm
+PR пакета `web`.
 
 #### Scenario: Патч зависимости пакета web
 

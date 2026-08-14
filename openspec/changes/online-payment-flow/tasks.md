@@ -470,8 +470,11 @@ approve владельца → тесты в отдельной сессии с 
       механизм `request-form-transport` (доступность, фокус, Escape, согласие ПДн — не
       переопределяются здесь)
 - [ ] 5.2 Прогрессивное улучшение переписанной кнопки (`LEGACY_CTA_ATTR`,
-      `web/src/lib/html-cleaner.ts`) в триггер модального окна на уровне
-      `web/src/pages/oplata.astro` — без изменения `normalizeLegacyControls`
+      `web/src/lib/html-cleaner.ts:601` на
+      `feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`) в
+      триггер модального окна на уровне `web/src/pages/oplata.astro` — без изменения
+      `normalizeLegacyControls`, без нового `set:html`/`is:raw`/`srcdoc`, с сохранением
+      `RichContent` `sinkId="static-page-oplata"`
 - [ ] 5.2a **Восстановлено по находке целевого ревью.** Замена устаревшей подводки
       («Готовы произвести оплату... Кликайте на кнопку, выбирайте направление...») на
       формулировку, соответствующую переходу к оплате — точечно на уровне

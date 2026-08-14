@@ -48,8 +48,8 @@
 - [x] 5.1 Провести независимое security review соответствия реализации каждому requirement/scenario, включая trust modes, media derivatives, whole-dist canary и whole-document hazard scanner; исправить подтверждённые находки.
 - [x] 5.2 Провести независимое compatibility review source/rendered corpora, SVG/style migrations, существующих cleaner-тестов и полноты sink registry; исправить подтверждённые находки.
 - [x] 5.3 После исправлений повторить раздел 4 и зафиксировать точный SHA проверенной реализации и evidence paths.
-- [ ] 5.4 Обновить пересекающиеся active changes относительно нового sink contract; в `dependabot-auto-merge` сделать security dependency registry deny-only manual override для direct/transitive subtree. Доказать строгую применимость всех delta specs.
-- [ ] 5.5 После приёмки владельцем архивировать change и проверить перенос `rich-content-safety` в main specs.
+- [x] 5.4 Обновить пересекающиеся active changes относительно нового sink contract; в `dependabot-auto-merge` сделать security dependency registry deny-only manual override для direct/transitive subtree. Доказать строгую применимость всех delta specs.
+- [x] 5.5 После приёмки владельцем архивировать change и проверить перенос `rich-content-safety` в main specs.
 
 Evidence 5.1–5.3: implementation SHA `e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3`;
 независимые security/compatibility reviews — PASS без P0–P3; обязательные GitHub checks — green.
@@ -58,3 +58,19 @@ Corpus evidence: `web/tests/fixtures/rich-content-safety/evidence/fingerprint-co
 `web/tests/fixtures/rich-content-safety/evidence/oplata-computed-style.json`,
 `web/tests/fixtures/rich-content-safety/evidence/manual-rutube.md` и
 `web/tests/fixtures/rich-content-safety/evidence/negative-mutations.md`.
+
+Evidence 5.4 (голова `3d10129265f183e2b746a5823012f42a0c115f73`, registry path
+`web/tests/fixtures/rich-content-safety/security-dependency-registry.json`):
+- overlapping updates: `dependabot-auto-merge` (deny-only path + direct/transitive nodes),
+  `online-payment-flow` (RichContent `static-page-oplata`, no new `set:html`),
+  `architecture-frame-prototypes` (preview sink IDs),
+  `education-trust-and-admission-clarity` (FAQ inside sanitized HTML),
+  `dependency-update-gates` (sanitizer subtree not this change’s invariant).
+  `article-list-pagination` и `visual-regression-gate` sink-контракта не пересекают.
+- `./bin/openspec validate --all --strict --no-interactive` — 12 passed / 0 failed.
+- Применимость в одноразовом worktree `/tmp/ikpk-54-apply` (удалён): archive
+  `sanitize-rich-html-content` создаёт `openspec/specs/rich-content-safety` (+12);
+  `dependabot-auto-merge` не применяется, пока нет main spec
+  `dependency-update-automation` (ожидаемый порядок: сначала `dependency-update-gates`);
+  после archive gates — auto-merge применяется (+4 / ~2). Остальные ADDED-дельты
+  применяются. Авторское дерево **не** архивировано.

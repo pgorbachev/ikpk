@@ -139,9 +139,12 @@
       блок permissions
 - [ ] 6.3 Реализовать классификацию по таблице, включая отказ при недоступных метаданных и
       безусловный отказ для мажоров всех экосистем и для любых обновлений пакета `cms`;
-      для `web` потреблять committed security dependency registry как deny-only override:
-      direct metadata match, изменение registered lockfile node и missing/stale registry
-      оставляют PR ручным, но lockfile diff никогда не выдаёт положительное разрешение
+      для `web` потреблять committed
+      `web/tests/fixtures/rich-content-safety/security-dependency-registry.json` как
+      deny-only override: direct metadata match (`parse5`, `playwright` и прочие
+      listed packages), изменение любого registered lockfile node из
+      `runtime.lockfileNodes`/`oracle.lockfileNodes` и missing/stale registry оставляют
+      PR ручным, но lockfile diff никогда не выдаёт положительное разрешение
 - [ ] 6.4 Реализовать снятие пометки при обновлении ветки как **ускоряющую** меру поверх
       4.1 и 4.7, а не вместо них; отказ этого обработчика не должен открывать слияние
 - [ ] 6.5 Только после выполнения 1.3 проверить на живом PR каждого класса: ordinary патч зависимости `web` — слился;

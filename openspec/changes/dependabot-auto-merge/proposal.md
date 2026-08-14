@@ -92,9 +92,12 @@ Security-boundary override не пытается выдать право по lo
 ## Impact
 
 - `.github/workflows/` — новый workflow авто-слияния.
-- Machine security dependency registry из `sanitize-rich-html-content` — deny-only input
-  классификации `web`; его direct/transitive subtree обновляется только вручную. До
-  появления registry и зелёного producer completeness gate auto-merge не включается.
+- Machine security dependency registry из `sanitize-rich-html-content` —
+  `web/tests/fixtures/rich-content-safety/security-dependency-registry.json` — deny-only
+  input классификации `web`; его direct (`parse5`, `playwright`) и transitive lockfile
+  subtree обновляется только вручную. Lockfile diff отзывает разрешение, но никогда его
+  не выдаёт. До появления registry на `main` и зелёного producer completeness gate
+  auto-merge не включается.
 - Настройки репозитория — требуется включить `allow_auto_merge` (сейчас выключено:
   `enablePullRequestAutoMerge` отвечает «Auto merge is not allowed for this repository»).
 - **Механизм продвижения последовательности.** Включается `strict`, но одного его мало: он

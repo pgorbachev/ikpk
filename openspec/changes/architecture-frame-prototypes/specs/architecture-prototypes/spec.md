@@ -103,3 +103,14 @@ unspecified defect of this capability once this change is approved.
   upcoming subset for comparison
 - **THEN** that limitation is an accepted scope boundary, not an open requirement
   of this capability
+
+### Requirement: Preview seminar HTML uses the central rich-content sink
+Dated and undated seminar prototypes SHALL render seminar body HTML through
+`RichContent` with the registered sink IDs `preview-seminar-body` and
+`preview-seminar-undated-body`. They SHALL NOT add production `set:html`, `is:raw`,
+or `srcdoc`.
+
+#### Scenario: Preview seminar bodies stay on registered sinks
+- **WHEN** a demo build emits `/preview/{id}/seminar` and `/preview/{id}/seminar-undated`
+- **THEN** each seminar body is wrapped by `RichContent` with the matching registered
+  sink ID, and the preview templates do not introduce another `set:html`
