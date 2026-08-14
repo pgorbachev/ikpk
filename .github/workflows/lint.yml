@@ -30,6 +30,9 @@ jobs:
           - package: scripts
             node-version: 22
             typecheck-script: typecheck
+          - package: payments
+            node-version: 22
+            typecheck-script: typecheck
 
     defaults:
       run:

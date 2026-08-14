@@ -1,0 +1,18 @@
+[Unit]
+Description=IKPK payment API (YooKassa)
+After=network.target
+
+[Service]
+Type=simple
+User=ikpk-payments
+Group=ikpk-payments
+WorkingDirectory=/opt/ikpk-payments
+EnvironmentFile=-/etc/ikpk-payments/env
+ExecStart=/usr/bin/node --import tsx src/main.ts
+Restart=on-failure
+RestartSec=3
+# Ровно одна реплика: этот юнит не шаблонизирован и не масштабируется.
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
