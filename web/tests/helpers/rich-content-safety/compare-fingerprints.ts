@@ -7,6 +7,7 @@ import { visibleText } from './html-scan.js';
 import { ENTITIES_DIR } from './paths.js';
 import { cleanBodyHtml } from '../../../src/lib/html-cleaner.js';
 import { localizeAssetUrls } from '../../../src/lib/media.js';
+import { replacementForDeclaration } from './migration.js';
 
 const LOCAL_RASTER = /^\/media\/(?!_w\/).+\.(webp|png|jpg|jpeg)$/i;
 
@@ -31,6 +32,8 @@ export interface StructureCounts {
   details: number;
   checkboxes: number;
   rutube: number;
+  mappedStyles: number;
+  mappedClasses: number;
 }
 
 export interface FingerprintComparisonReport {
@@ -66,7 +69,15 @@ function countsOf(fp: SourceFingerprint): StructureCounts {
     details: fp.details.length,
     checkboxes: fp.checkboxes.length,
     rutube: fp.rutube.length,
+    mappedStyles: fp.mappedStyles.length,
+    mappedClasses: fp.mappedClasses.length,
   };
+}
+
+function counts(values: string[]): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const value of values) result.set(value, (result.get(value) ?? 0) + 1);
+  return result;
 }
 
 function normalizeHref(href: string): string {
@@ -124,6 +135,21 @@ export function compareSafeStructure(
   }
   if (source.svgCount === 0 && cleaned.lists.length < source.lists.length) {
     losses.push(`lists:${source.lists.length}->${cleaned.lists.length}`);
+  }
+  const expectedClasses = source.mappedStyles.flatMap((declaration) => {
+    const colon = declaration.indexOf(':');
+    if (colon === -1) return [];
+    const replacement = replacementForDeclaration(
+      declaration.slice(0, colon),
+      declaration.slice(colon + 1),
+    );
+    return replacement ? [replacement] : [];
+  });
+  const expectedCounts = counts(expectedClasses);
+  const actualCounts = counts(cleaned.mappedClasses);
+  for (const [className, expected] of expectedCounts) {
+    const actual = actualCounts.get(className) ?? 0;
+    if (actual < expected) losses.push(`mapped-style:${className}:${expected}->${actual}`);
   }
   return losses;
 }

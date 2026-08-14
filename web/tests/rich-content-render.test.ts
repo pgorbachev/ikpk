@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { WEB_SRC } from './helpers/rich-content-safety/paths.js';
 import { CANARY_HOSTILE_TOKEN } from './helpers/rich-content-safety/closed-matrix.js';
-import { cleanBodyHtml } from '../src/lib/html-cleaner.js';
+import { cleanBodyHtml, contextForSafeRichHtml } from '../src/lib/html-cleaner.js';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 
 const RICH_CONTENT = join(WEB_SRC, 'components', 'RichContent.astro');
@@ -22,8 +22,9 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
   });
 
   it('принимает authenticated SafeRichHtml и ставит sink marker', async () => {
-    const authenticated = cleanBodyHtml('<p>ok</p>');
+    const authenticated = cleanBodyHtml('<p>ok</p>', { sourceType: 'article', sourceId: 'context-check' });
     expect(authenticated).not.toBeTypeOf('string');
+    expect(contextForSafeRichHtml(authenticated)).toEqual({ sourceType: 'article', sourceId: 'context-check' });
     const mod = await loadRichContent();
     const container = await AstroContainer.create();
     const html = await container.renderToString(mod.default as never, {
@@ -68,6 +69,17 @@ describe('rich-content contract: RichContent.astro terminal sink', () => {
     expect(html).not.toMatch(/table-scroll/);
     expect(html.toLowerCase()).not.toContain('<script');
     expect(html).not.toContain(CANARY_HOSTILE_TOKEN);
+  });
+
+  it('ошибка terminal sanitize для untrusted input содержит sink context', async () => {
+    const mod = await loadRichContent();
+    const container = await AstroContainer.create();
+    await expect(container.renderToString(mod.default as never, {
+      props: {
+        html: '<img src="/media/uploads/missing-from-sink-context.webp" alt="x">',
+        sinkId: 'article-body',
+      },
+    })).rejects.toThrow(/тип=sink ID=article-body/);
   });
 
   it('повторно санитизирует hostile html authenticated объекта у set:html', async () => {

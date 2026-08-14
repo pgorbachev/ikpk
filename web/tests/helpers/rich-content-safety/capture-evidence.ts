@@ -10,6 +10,8 @@ import { FIXTURES_DIR, WEB_ROOT } from './paths.js';
 import { exactRutubeIframe } from './closed-matrix.js';
 import { buildFingerprintComparison } from './compare-fingerprints.js';
 import { fingerprintHtml } from './fingerprint.js';
+import { buildMigrationPageInventory } from './migration-page-inventory.js';
+import type { MigrationRow } from './migration.js';
 
 const EVIDENCE = join(FIXTURES_DIR, 'evidence');
 const TYPES: Record<string, string> = {
@@ -49,69 +51,14 @@ function serveDir(root: string, port: number): Promise<{ close: () => Promise<vo
   });
 }
 
-function htmlPathForRoute(dist: string, route: string): string | null {
-  if (route === '/') return join(dist, 'index.html');
-  const file = join(dist, route.replace(/^\//, ''), 'index.html');
-  return existsSync(file) ? file : null;
-}
-
 function migrationInventory(): void {
-  const manifest = JSON.parse(readFileSync(join(FIXTURES_DIR, 'migration-manifest.json'), 'utf-8')) as Array<{
-    route: string;
-    kind: 'svg' | 'style';
-    replacementClass: string;
-    replacementText: string;
-  }>;
+  const manifest = JSON.parse(
+    readFileSync(join(FIXTURES_DIR, 'migration-manifest.json'), 'utf-8'),
+  ) as MigrationRow[];
   const dist = join(WEB_ROOT, 'dist');
-  const byRoute = new Map<string, { style: number; svg: number; classes: Set<string> }>();
-  for (const row of manifest) {
-    if (row.route === 'source-only') continue;
-    if (!byRoute.has(row.route)) byRoute.set(row.route, { style: 0, svg: 0, classes: new Set() });
-    const rec = byRoute.get(row.route)!;
-    rec[row.kind] += 1;
-    if (row.replacementClass) rec.classes.add(row.replacementClass);
-  }
-  const pages = [...byRoute.entries()].map(([route, rec]) => {
-    const file = htmlPathForRoute(dist, route);
-    if (!file) {
-      return {
-        route,
-        style: rec.style,
-        svg: rec.svg,
-        classes: [...rec.classes],
-        exists: false,
-        missingClasses: [] as string[],
-        leftoverSvgInRich: false,
-        leftoverStyleInRich: false,
-      };
-    }
-    const html = readFileSync(file, 'utf-8');
-    const missingClasses = [...rec.classes].filter((cls) => cls && !html.includes(cls));
-    const richBlocks = [...html.matchAll(/data-safe-rich-content="[^"]+"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => m[1]);
-    const leftoverSvgInRich = richBlocks.some((block) => /<svg[\s>]/i.test(block));
-    const leftoverStyleInRich = richBlocks.some((block) => /\sstyle="/i.test(block));
-    return {
-      route,
-      style: rec.style,
-      svg: rec.svg,
-      classes: [...rec.classes],
-      exists: true,
-      missingClasses,
-      leftoverSvgInRich,
-      leftoverStyleInRich,
-    };
-  });
   writeFileSync(
     join(EVIDENCE, 'migration-page-inventory.json'),
-    `${JSON.stringify({
-      generatedAt: new Date().toISOString(),
-      renderedRoutes: pages.length,
-      missingPages: pages.filter((p) => !p.exists).map((p) => p.route),
-      pagesWithMissingClasses: pages.filter((p) => p.exists && p.missingClasses.length > 0),
-      pagesWithSvgInRich: pages.filter((p) => p.leftoverSvgInRich).map((p) => p.route),
-      pagesWithStyleInRich: pages.filter((p) => p.leftoverStyleInRich).map((p) => p.route),
-      note: 'rc-color-10e9f560 (color:transparent) часто отсутствует: исходный style висел на скрытом skeleton/img, который sanitizer удаляет. leftover svg/style в rich roots = 0.',
-    }, null, 2)}\n`,
+    `${JSON.stringify(buildMigrationPageInventory(manifest, dist), null, 2)}\n`,
   );
 }
 
@@ -313,6 +260,12 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1]?.includes('capture-evidence')) {
-  await main();
+  if (process.argv.includes('--machine-only')) {
+    mkdirSync(EVIDENCE, { recursive: true });
+    fingerprintSummary();
+    migrationInventory();
+  } else {
+    await main();
+  }
   console.log(`wrote evidence to ${EVIDENCE}`);
 }

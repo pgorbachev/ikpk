@@ -28,15 +28,17 @@ export { terminalSanitize };
 
 const AUTHENTICATED = new WeakSet<object>();
 const AUTHENTICATED_HTML = new WeakMap<object, string>();
+const AUTHENTICATED_CONTEXT = new WeakMap<object, Readonly<SanitizeContext>>();
 
 export interface SafeRichHtml {
   readonly html: string;
 }
 
-function authenticate(html: string): SafeRichHtml {
+function authenticate(html: string, context: SanitizeContext): SafeRichHtml {
   const out = Object.freeze({ html });
   AUTHENTICATED.add(out);
   AUTHENTICATED_HTML.set(out, html);
+  AUTHENTICATED_CONTEXT.set(out, Object.freeze({ ...context }));
   return out;
 }
 
@@ -44,6 +46,11 @@ export function isSafeRichHtml(value: unknown): value is SafeRichHtml {
   if (!value || typeof value !== 'object' || !AUTHENTICATED.has(value)) return false;
   const record = value as { html?: unknown };
   return typeof record.html === 'string' && AUTHENTICATED_HTML.get(value) === record.html;
+}
+
+export function contextForSafeRichHtml(value: SafeRichHtml): SanitizeContext | undefined {
+  const context = AUTHENTICATED_CONTEXT.get(value);
+  return context ? { ...context } : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -759,7 +766,7 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): SafeRichHt
     sourceType: opts.sourceType ?? 'fragment',
     sourceId: opts.sourceId ?? 'unknown',
   };
-  if (!html) return authenticate('');
+  if (!html) return authenticate('', ctx);
 
   let result = sanitizeUntrustedTree(html, ctx);
   result = rewriteKnownRemoteUpload(result);
@@ -783,7 +790,7 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): SafeRichHt
   result = removeResidualBrokenTagText(result);
   result = terminalSanitize(result, 'authenticated', ctx);
 
-  return authenticate(result);
+  return authenticate(result, ctx);
 }
 
 /**

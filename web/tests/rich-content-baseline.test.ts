@@ -9,7 +9,7 @@ import {
   matchJsonSelector,
 } from './helpers/rich-content-safety/source-discovery.js';
 import { fingerprintHtml } from './helpers/rich-content-safety/fingerprint.js';
-import { buildFingerprintComparison, unexplainedLosses } from './helpers/rich-content-safety/compare-fingerprints.js';
+import { buildFingerprintComparison, compareSafeStructure, unexplainedLosses } from './helpers/rich-content-safety/compare-fingerprints.js';
 import { assertManifestComplete, buildMigrationManifest } from './helpers/rich-content-safety/migration.js';
 import {
   ALLOWED_EMPTY_INNERHTML,
@@ -320,6 +320,19 @@ describe('rich-content baseline: rendered fingerprints текущего cleaner-
       lost.slice(0, 15).map((row) => `${row.selectorId} ${row.entityId}: ${row.error ?? row.losses.join(',')}`).join('\n'),
     ).toEqual([]);
   }, 120_000);
+
+  it('потеря mapped style class обнаруживается сравнением fingerprints', () => {
+    const meta = { jsonPath: 'fixture$[0]', selectorId: 'fixture', entityId: 'mapped-style' };
+    const sourceHtml = '<span style="color:transparent">text</span>';
+    const cleanedHtml = '<span>text</span>';
+    const losses = compareSafeStructure(
+      fingerprintHtml(sourceHtml, meta),
+      fingerprintHtml(cleanedHtml, meta),
+      cleanedHtml,
+      sourceHtml,
+    );
+    expect(losses).toContain('mapped-style:rc-color-10e9f560:1->0');
+  });
 
   it('evidence fingerprint-comparison содержит per-source rows', () => {
     const evidence = JSON.parse(

@@ -31,10 +31,10 @@
       "nodeKind": "element",
       "elementName": "div",
       "attribute": "set:html",
-      "expression": "terminalSanitize(raw, mode)",
+      "expression": "terminalSanitize(raw, mode, context)",
       "attrKind": "expression",
-      "locator": "components/RichContent.astro:L20:C1:element:div:set:html",
-      "fingerprint": "components/RichContent.astro:L20:C1:element:div:set:html"
+      "locator": "components/RichContent.astro:L28:C1:element:div:set:html",
+      "fingerprint": "components/RichContent.astro:L28:C1:element:div:set:html"
     }
   ],
   "typescript": [
