@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { prodEnv, validPayload } from './helpers/payment-contract';
 import {
-  jsonOf,
   postPayments,
   postWebhook,
   startPaymentService,

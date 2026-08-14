@@ -80,7 +80,7 @@ export async function startYooKassaMock(): Promise<YooKassaMock> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? '/';
     const raw = await readBody(req);
-    let parsed: unknown = raw;
+    let parsed: unknown;
     try {
       parsed = raw ? JSON.parse(raw) : null;
     } catch {

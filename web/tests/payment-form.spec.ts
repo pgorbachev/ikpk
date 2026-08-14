@@ -266,7 +266,6 @@ test.describe('3.10a-2 удержание переживает перезагр�
   test('not_found снимает удержание; demo снимает без предупреждения; >14 суток снимает', async ({ page }) => {
     await mockApi(page, (req) => {
       if (req.method === 'POST') {
-        const body = JSON.parse(req.postData ?? '{}') as { requestId: string };
         return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
       }
       return { status: 404, body: { status: 'not_found' } };
