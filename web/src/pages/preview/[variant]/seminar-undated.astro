@@ -6,6 +6,7 @@
 import type { GetStaticPaths } from 'astro';
 import TopNavLayout from '../../../layouts/TopNavLayout.astro';
 import SeminarArchitectureHeader from '../../../components/seminars/SeminarArchitectureHeader.astro';
+import RichContent from '../../../components/RichContent.astro';
 import {
   getInstitutes,
   getCourseGroups,
@@ -84,7 +85,9 @@ const bodyHtml = seminar.description_html
   {architecture !== 'modular' && (
     <div class="sem-body container">
       {bodyHtml ? (
-        <div class="rich-content" set:html={bodyHtml} />
+        <div class="rich-content">
+          <RichContent html={bodyHtml} sinkId="preview-seminar-undated-body" />
+        </div>
       ) : (
         <p class="sem-empty">Описание семинара в данных отсутствует.</p>
       )}

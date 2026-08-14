@@ -2,6 +2,7 @@
 // Секция «Новости» (слайдер). Извлечена из index.astro вместе с CSS и JS.
 import MediaCard from '../../ui/MediaCard.astro';
 import { getNews, cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
+import RichContent from '../../RichContent.astro';
 
 const news = getNews();
 ---
@@ -28,7 +29,9 @@ const news = getNews();
                 rel={[...new Set(['noopener', ...(relForExternalUrl(item.link) ?? [])])].join(' ')}
                 className="news-card"
               >
-                <div class="news-card-desc text-small" set:html={cleanBodyHtml(item.description)} />
+                <div class="news-card-desc text-small">
+                  <RichContent html={cleanBodyHtml(item.description, { type: 'news', id: String(item.id) })} sinkId="news-description" />
+                </div>
               </MediaCard>
             ))}
           </div>

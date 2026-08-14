@@ -6,6 +6,7 @@ import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro'
 import InstituteProgramsSection from '../components/institutes/InstituteProgramsSection.astro';
 import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
 import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers } from '../lib/data';
+import RichContent from '../components/RichContent.astro';
 import { getCourseGroupPreviewImage } from '../lib/course-group-previews.js';
 import type { Institute } from '../lib/data';
 import type { GetStaticPaths } from 'astro';
@@ -209,7 +210,9 @@ const hiddenTeachers = teacherCards.slice(3);
 
     {cleanedAdditionalHtml && (
       <section class="section institute-extra-shell" data-testid="institute-extra-content">
-        <div class="institute-extra rich-content" set:html={cleanedAdditionalHtml} />
+        <div class="institute-extra rich-content">
+          <RichContent html={cleanedAdditionalHtml} sinkId="institute-extra" />
+        </div>
       </section>
     )}
   </div>

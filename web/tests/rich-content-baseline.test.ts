@@ -9,6 +9,7 @@ import {
   matchJsonSelector,
 } from './helpers/rich-content-safety/source-discovery.js';
 import { fingerprintHtml } from './helpers/rich-content-safety/fingerprint.js';
+import { buildFingerprintComparison, compareSafeStructure, unexplainedLosses } from './helpers/rich-content-safety/compare-fingerprints.js';
 import { assertManifestComplete, buildMigrationManifest } from './helpers/rich-content-safety/migration.js';
 import {
   ALLOWED_EMPTY_INNERHTML,
@@ -165,7 +166,7 @@ describe('rich-content baseline: sinks и rendered registry', () => {
     expect(jsonLd.every((s) => s.classification === 'json-ld')).toBe(true);
     expect(jsonLd).toHaveLength(2);
     const rich = live.filter((s) => s.classification === 'rich-html');
-    expect(rich.length).toBe(14);
+    expect(rich.length).toBe(1);
   });
 
   it('четыре точных innerHTML = \'\' и никаких иных TS raw sinks', () => {
@@ -219,25 +220,37 @@ describe('rich-content baseline: sinks и rendered registry', () => {
 });
 
 describe('rich-content baseline: known deviation media', () => {
-  it('локальный webp и manifest entry существуют, remote URL — единственное отклонение', () => {
+  it('локальный webp и manifest entry существуют, remote URL из контента убран миграцией', () => {
     expect(deviation.remoteUrl).toBe(KNOWN_REMOTE_UPLOAD);
     expect(deviation.localAsset).toBe(LOCAL_UPLOAD_WEBP);
     expect(deviation.localOriginalExists).toBe(true);
     expect(existsSync(LOCAL_UPLOAD_ORIGINAL)).toBe(true);
     expect(deviation.manifestEntry?.width).toBeGreaterThan(0);
     expect(deviation.manifestEntry?.height).toBeGreaterThan(0);
-    expect(deviation.otherRemoteUploadCount).toBe(1);
+    expect(deviation.otherRemoteUploadCount).toBe(0);
+    const discovered = discoverSources();
+    const remotes = discovered.htmlBearing.filter((h) => h.value.includes('ikpk.su/api/upload'));
+    expect(remotes).toEqual([]);
     const media = JSON.parse(readFileSync(MEDIA_MANIFEST, 'utf-8')) as Record<string, { width?: number }>;
     expect(media[LOCAL_UPLOAD_WEBP]?.width).toBeGreaterThan(0);
   });
 });
 
 describe('rich-content baseline: пересечения', () => {
-  it('preview sinks architecture-frame-prototypes входят в registry', () => {
-    const files = rawSinks.astro.map((s) => s.file);
-    expect(files).toContain('pages/preview/[variant]/seminar.astro');
-    expect(files).toContain('pages/preview/[variant]/seminar-undated.astro');
-    expect(files).toContain('components/seminars/SeminarArchitectureHeader.astro');
+  it('preview sinks architecture-frame-prototypes входят в rendered registry и страницы', () => {
+    const sinkIds = rendered.sinks.map((s) => s.id);
+    expect(sinkIds).toContain('preview-seminar-body');
+    expect(sinkIds).toContain('preview-seminar-undated-body');
+    expect(sinkIds).toContain('seminar-architecture-header');
+    const seminar = readFileSync(join(REPO_ROOT, 'web', 'src', 'pages', 'preview', '[variant]', 'seminar.astro'), 'utf-8');
+    const undated = readFileSync(join(REPO_ROOT, 'web', 'src', 'pages', 'preview', '[variant]', 'seminar-undated.astro'), 'utf-8');
+    const header = readFileSync(join(REPO_ROOT, 'web', 'src', 'components', 'seminars', 'SeminarArchitectureHeader.astro'), 'utf-8');
+    expect(seminar).toMatch(/RichContent/);
+    expect(undated).toMatch(/RichContent/);
+    expect(header).toMatch(/RichContent/);
+    expect(seminar).toMatch(/preview-seminar-body/);
+    expect(undated).toMatch(/preview-seminar-undated-body/);
+    expect(header).toMatch(/seminar-architecture-header/);
   });
 
   it('online-payment-flow пересекается через oplata.astro и не меняет normalizeLegacyControls', () => {
@@ -297,31 +310,67 @@ describe('rich-content baseline: rendered fingerprints текущего cleaner-
     }
     expect(withMarkers).toBe(htmlHits.length);
   });
+
+  it('source fingerprints не теряют безопасную структуру после pipeline', () => {
+    const report = buildFingerprintComparison();
+    expect(report.records, 'пустой source corpus — vacuous').toBeGreaterThan(0);
+    const lost = unexplainedLosses(report);
+    expect(
+      lost,
+      lost.slice(0, 15).map((row) => `${row.selectorId} ${row.entityId}: ${row.error ?? row.losses.join(',')}`).join('\n'),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('потеря mapped style class обнаруживается сравнением fingerprints', () => {
+    const meta = { jsonPath: 'fixture$[0]', selectorId: 'fixture', entityId: 'mapped-style' };
+    const sourceHtml = '<span style="color:transparent">text</span>';
+    const cleanedHtml = '<span>text</span>';
+    const losses = compareSafeStructure(
+      fingerprintHtml(sourceHtml, meta),
+      fingerprintHtml(cleanedHtml, meta),
+      cleanedHtml,
+      sourceHtml,
+    );
+    expect(losses).toContain('mapped-style:rc-color-10e9f560:1->0');
+  });
+
+  it('evidence fingerprint-comparison содержит per-source rows', () => {
+    const evidence = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'web', 'tests', 'fixtures', 'rich-content-safety', 'evidence', 'fingerprint-comparison.json'), 'utf-8'),
+    ) as { comparisons?: unknown[]; records?: number; withLosses?: number };
+    expect(Array.isArray(evidence.comparisons), 'нет per-source comparisons').toBe(true);
+    expect(evidence.comparisons!.length, 'vacuous evidence').toBeGreaterThan(0);
+    expect(evidence.comparisons!.length).toBe(fingerprints.length);
+    expect(evidence.withLosses).toBe(0);
+  });
 });
 
 describe('rich-content baseline: occurrence registry и generator isolation', () => {
-  it('committed occurrence registry ссылается на source slots и не содержит dist-правил до maintainer SHA', () => {
+  it('committed occurrence registry ссылается на source slots и заполнен maintainer SHA', () => {
     const occ = loadFixture<{
       ciMustNotRegenerate: boolean;
-      occurrences: unknown[];
+      occurrences: { slotId: string }[];
     }>('output-occurrence-registry.json');
     expect(occ.ciMustNotRegenerate).toBe(true);
-    expect(occ.occurrences).toEqual([]);
-    expect(slots.length).toBeGreaterThan(0);
+    expect(occ.occurrences.length, 'пустой occurrence registry — vacuous green').toBeGreaterThan(0);
+    const ids = new Set(slots.map((s) => s.slotId));
+    for (const rule of occ.occurrences) {
+      expect(ids.has(rule.slotId), rule.slotId).toBe(true);
+    }
   });
 
-  it('CI workflows и npm scripts не вызывают generate-baseline как side effect', () => {
+  it('CI workflows и npm scripts не вызывают generate-baseline/generate-occurrences как side effect', () => {
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'web', 'package.json'), 'utf-8')) as {
       scripts: Record<string, string>;
     };
     for (const [name, cmd] of Object.entries(pkg.scripts)) {
-      expect(cmd, name).not.toMatch(/generate-baseline/);
+      expect(cmd, name).not.toMatch(/generate-baseline|generate-occurrences/);
     }
     const workflowsDir = join(REPO_ROOT, '.github', 'workflows');
     expect(existsSync(workflowsDir), 'нет .github/workflows — нечем проверить isolation').toBe(true);
     for (const file of readdirSync(workflowsDir)) {
       const text = readFileSync(join(workflowsDir, file), 'utf-8');
-      expect(text, file).not.toMatch(/generate-baseline/);
+      expect(text, file).not.toMatch(/generate-baseline|generate-occurrences/);
     }
   });
 

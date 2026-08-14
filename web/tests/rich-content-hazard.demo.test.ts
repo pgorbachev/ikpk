@@ -41,7 +41,7 @@ describe('rich-content contract: whole-document hazard scan (demo dist)', () => 
       const parsed = await harness.parse(html);
       expect(parsed.continuedRequests, route).toEqual([]);
       errors.push(
-        ...matchOccurrences(parsed.serialized, route, occ.occurrences, sourceSlots, { ignoreMarkedRegions: true }),
+        ...matchOccurrences(parsed.serialized, route, occ.occurrences, sourceSlots, { ignoreMarkedRegions: true, build: 'demo' }),
       );
       for (const hit of unmarkedDocumentHazards(parsed.serialized)) {
         errors.push(`${route}: ${hit.reason} на <${hit.tag}>`);

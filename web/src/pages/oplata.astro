@@ -2,6 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { getPage, cleanBodyHtml } from '../lib/data';
+import RichContent from '../components/RichContent.astro';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
@@ -31,7 +32,9 @@ const description = page?.seo_description || 'Информация об опла
       </div>
 
       {page?.body_html ? (
-        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz')} />
+        <div class="payment-content rich-content">
+          <RichContent html={cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz')} sinkId="static-page-oplata" />
+        </div>
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

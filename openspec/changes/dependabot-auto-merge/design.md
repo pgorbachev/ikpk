@@ -129,6 +129,17 @@ lockfile diff работают только на запрет:
 Так транзитивное изменение не прячется за именем top-level package, но diff не становится
 вторым способом выдать разрешение. Registry формируется и проверяется реализацией
 `sanitize-rich-html-content`; этот change только потребляет его как committed deny input.
+
+Committed path на реализации
+`feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3`
+(голова PR `3d10129265f183e2b746a5823012f42a0c115f73`):
+`web/tests/fixtures/rich-content-safety/security-dependency-registry.json`.
+Прямые package identities: runtime `parse5`, oracle `playwright`. Transitive lockfile
+nodes — все строки `runtime.lockfileNodes` и `oracle.lockfileNodes` того файла
+(`entities`, вложенный `parse5`, `playwright-core` и остальные перечисленные). Consumer
+SHALL трактовать **каждый** listed package и listed node как deny-only; lockfile diff
+SHALL NOT выдавать разрешение.
+
 Отсюда жёсткий порядок поставки: `sanitize-rich-html-content` сначала реализуется,
 принимается, архивируется и сливается вместе с registry и producer completeness gate.
 Только на следующем состоянии `main` реализуется/включается consumer auto-merge и

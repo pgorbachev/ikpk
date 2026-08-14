@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { dist, walkHtml } from './helpers/dist-pages';
+import { walkFiles } from './helpers/walk';
 import {
   CANARY_CONTROL_TOKEN,
   CANARY_HOSTILE_TOKEN,
@@ -53,5 +54,18 @@ describe('rich-content contract: marker inventory (production)', () => {
     const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
     const missing = collectMarkerInventoryErrors(rendered.sinks, 'production', pages);
     expect(missing, missing.join('\n')).toEqual([]);
+  });
+});
+
+describe('rich-content contract: sanitizer не в browser bundle', () => {
+  it('parse5/parseFragment отсутствуют в клиентских артефактах dist', () => {
+    expect(existsSync(dist), 'dist не собран').toBe(true);
+    const hits: string[] = [];
+    for (const file of walkFiles(dist, ['.js', '.mjs', '.html', '.css'])) {
+      if (file.includes(`${join('dist', 'pagefind')}`)) continue;
+      const text = readFileSync(file, 'utf-8');
+      if (/parse5|parseFragment|defaultTreeAdapter/.test(text)) hits.push(file);
+    }
+    expect(hits, hits.join('\n')).toEqual([]);
   });
 });

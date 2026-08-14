@@ -18,6 +18,40 @@
 
 import { injectImgDimensions } from './media.js';
 import { registrationHref, isDemoForms } from './forms.js';
+import {
+  sanitizeUntrustedTree,
+  terminalSanitize,
+  type SanitizeContext,
+} from './rich-html-sanitize.js';
+
+export { terminalSanitize };
+
+const AUTHENTICATED = new WeakSet<object>();
+const AUTHENTICATED_HTML = new WeakMap<object, string>();
+const AUTHENTICATED_CONTEXT = new WeakMap<object, Readonly<SanitizeContext>>();
+
+export interface SafeRichHtml {
+  readonly html: string;
+}
+
+function authenticate(html: string, context: SanitizeContext): SafeRichHtml {
+  const out = Object.freeze({ html });
+  AUTHENTICATED.add(out);
+  AUTHENTICATED_HTML.set(out, html);
+  AUTHENTICATED_CONTEXT.set(out, Object.freeze({ ...context }));
+  return out;
+}
+
+export function isSafeRichHtml(value: unknown): value is SafeRichHtml {
+  if (!value || typeof value !== 'object' || !AUTHENTICATED.has(value)) return false;
+  const record = value as { html?: unknown };
+  return typeof record.html === 'string' && AUTHENTICATED_HTML.get(value) === record.html;
+}
+
+export function contextForSafeRichHtml(value: SafeRichHtml): SanitizeContext | undefined {
+  const context = AUTHENTICATED_CONTEXT.get(value);
+  return context ? { ...context } : undefined;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
@@ -715,12 +749,27 @@ export interface CleanOptions {
    * придумывает адрес за страницу, см. normalizeLegacyControls.
    */
   legacyCtaHref?: string;
+  sourceType?: string;
+  sourceId?: string;
 }
 
-export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
-  if (!html) return html;
+const KNOWN_REMOTE_UPLOAD =
+  'https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304';
+const LOCAL_UPLOAD_WEBP = '/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp';
 
-  let result = html;
+function rewriteKnownRemoteUpload(html: string): string {
+  return html.split(KNOWN_REMOTE_UPLOAD).join(LOCAL_UPLOAD_WEBP);
+}
+
+export function cleanBodyHtml(html: string, opts: CleanOptions = {}): SafeRichHtml {
+  const ctx: SanitizeContext = {
+    sourceType: opts.sourceType ?? 'fragment',
+    sourceId: opts.sourceId ?? 'unknown',
+  };
+  if (!html) return authenticate('', ctx);
+
+  let result = sanitizeUntrustedTree(html, ctx);
+  result = rewriteKnownRemoteUpload(result);
   // Локализация URL бакета живёт в единственной точке — data.ts loadJson
   // (весь raw JSON до парсинга); здесь только размеры <img> из манифеста.
   result = injectImgDimensions(result);
@@ -739,8 +788,9 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): string {
   result = normalizeLegacyControls(result, opts.legacyCtaHref);
   result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
+  result = terminalSanitize(result, 'authenticated', ctx);
 
-  return result;
+  return authenticate(result, ctx);
 }
 
 /**

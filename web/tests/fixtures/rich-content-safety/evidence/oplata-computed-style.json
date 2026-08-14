@@ -1,0 +1,45 @@
+{
+  "flex": {
+    "selector": ".rc-display-flex",
+    "display": "flex",
+    "flexDirection": "column",
+    "gap": "24px",
+    "marginLeft": "0px",
+    "textAlign": "start",
+    "color": "rgb(112, 112, 112)",
+    "fontSize": "16px"
+  },
+  "column": {
+    "selector": ".rc-flex-column",
+    "display": "flex",
+    "flexDirection": "column",
+    "gap": "24px",
+    "marginLeft": "0px",
+    "textAlign": "start",
+    "color": "rgb(112, 112, 112)",
+    "fontSize": "16px"
+  },
+  "gap": {
+    "selector": ".rc-gap-24",
+    "display": "flex",
+    "flexDirection": "column",
+    "gap": "24px",
+    "marginLeft": "0px",
+    "textAlign": "start",
+    "color": "rgb(112, 112, 112)",
+    "fontSize": "16px"
+  },
+  "ml": {
+    "selector": ".rc-ml-15",
+    "display": "block",
+    "flexDirection": "row",
+    "gap": "normal",
+    "marginLeft": "15px",
+    "textAlign": "start",
+    "color": "rgb(112, 112, 112)",
+    "fontSize": "16px"
+  },
+  "markers": [
+    "static-page-oplata"
+  ]
+}

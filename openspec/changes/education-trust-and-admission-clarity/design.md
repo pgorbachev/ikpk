@@ -155,10 +155,13 @@ curl: (28) Connection timed out after 25002 milliseconds
 
 ### С5. Канонический номер уже виден посетителю
 
-Панель подставляется на сборке: `panelsFor` по пути страницы (`web/src/lib/data.ts:11-21`)
+Панель подставляется на сборке: `panelsFor` по пути страницы (`web/src/lib/data.ts:17-22`
+на `feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`)
 → `cleanBodyHtml` → сборка `<details open><summary>…` в
-`web/src/lib/html-cleaner.ts:343-353` (подстановка восстановленного контента — `:345-347`,
-сборка элемента — `:353`). Вызов — `svedeniya-ob-obrazovatelnoy-organizatsii.astro:24`.
+`web/src/lib/html-cleaner.ts:316-387` (сборка элемента — `:387`). Вызов —
+`svedeniya-ob-obrazovatelnoy-organizatsii.astro:26` через `RichContent`
+`sinkId="static-page-svedeniya"`. Change SHALL NOT добавлять `set:html` / `is:raw` /
+`srcdoc`: FAQ и панели остаются внутри санитизированного HTML.
 
 Существенная деталь для секции вопросов: панели раскрыты по умолчанию (`<details open>`).
 

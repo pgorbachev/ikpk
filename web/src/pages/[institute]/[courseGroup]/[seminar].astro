@@ -13,6 +13,7 @@ import {
   stripLegacySeminarTail,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
+import RichContent from '../../../components/RichContent.astro';
 import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
@@ -157,7 +158,9 @@ const seminarSchema =
       <h1 class="page-title">{seminar.name}</h1>
 
       {seminarBodyHtml ? (
-        <div class="seminar-content rich-content" set:html={seminarBodyHtml} />
+        <div class="seminar-content rich-content">
+          <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
+        </div>
       ) : seminar.description_text && (
         <div class="seminar-content rich-content">
           <p>{seminar.description_text}</p>

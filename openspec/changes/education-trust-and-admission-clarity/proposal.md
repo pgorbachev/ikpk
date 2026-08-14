@@ -150,7 +150,11 @@
   нельзя). Границу описывают оба change одинаково — `online-payment-flow/proposal.md:215-235`:
   - **наше:** содержательные аккордеоны страницы («Как оплатить?», «Способы оплаты?»,
     «Условия возврата денежных средств?») — их подписи, порядок и обрамление секцией
-    вопросов; они приходят из `body_html` через `cleanBodyHtml`;
+    вопросов; они приходят из `body_html` через `cleanBodyHtml` и центральный
+    `RichContent` `sinkId="static-page-oplata"`
+    (`feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`,
+    `web/src/pages/oplata.astro:36`). Change SHALL NOT добавлять `set:html` / `is:raw` /
+    `srcdoc`;
   - **их:** блок контактов `#oplata-svyaz`, подводка перед кнопкой, сама кнопка и модальное
     окно — они не приходят из `body_html`.
 

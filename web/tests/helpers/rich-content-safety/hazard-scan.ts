@@ -201,6 +201,8 @@ export interface OccurrenceRule {
   placement: string;
   identity: string;
   count: number;
+  /** production и demo различаются Analytics и preview routes. */
+  builds?: Array<'production' | 'demo'>;
 }
 
 export interface FoundOccurrence {
@@ -337,15 +339,30 @@ function projectionError(name: string, sourceKey: string, outVal: string | undef
   return null;
 }
 
+function isBundledStylesheet(output: ProjectedIdentity): boolean {
+  const href = output.staticAttrs.get('href') ?? '';
+  return output.tag === 'link' && (output.staticAttrs.get('rel') ?? '') === 'stylesheet' && /^\/_astro\/.+\.css$/.test(href);
+}
+
 export function provenanceError(sourceIdentity: string, outputIdentity: string): string | null {
   const source = projectIdentity(sourceIdentity);
   const output = projectIdentity(outputIdentity);
+  if (source.tag === 'style' && isBundledStylesheet(output)) {
+    return null;
+  }
+  if (source.tag === 'link' && source.staticAttrs.get('rel') === 'stylesheet' && isBundledStylesheet(output)) {
+    return null;
+  }
   if (source.tag !== output.tag) {
     return `tag=${source.tag} ≠ output ${output.tag}`;
   }
   const rule = OCCURRENCE_PROVENANCE[source.tag as OccurrenceTag];
   if (!rule) return `нет provenance rule для ${source.tag}`;
-  if (rule.body && source.body !== output.body) {
+  const bundledModule = source.tag === 'script'
+    && output.staticAttrs.get('type') === 'module'
+    && !source.staticAttrs.has('is:inline');
+  const scopedStyle = source.tag === 'style';
+  if (rule.body && source.body !== output.body && !bundledModule && !scopedStyle) {
     return `source body identity ${source.body ?? '∅'} ≠ output ${output.body ?? '∅'}`;
   }
   const names = rule.attrs === '*'
@@ -390,13 +407,17 @@ export function matchOccurrences(
   route: string,
   rules: OccurrenceRule[],
   sourceSlots: { slotId: string; identity: string }[],
-  opts?: { ignoreMarkedRegions?: boolean },
+  opts?: { ignoreMarkedRegions?: boolean; build?: 'production' | 'demo' },
 ): string[] {
   const errors: string[] = [];
   const subject = opts?.ignoreMarkedRegions ? stripMarkedRegions(html) : html;
   const found = collectOccurrences(subject);
   const used = new Set<number>();
-  const routeRules = rules.filter((r) => r.route === route);
+  const routeRules = rules.filter((r) => {
+    if (r.route !== route) return false;
+    if (!opts?.build || !r.builds || r.builds.length === 0) return true;
+    return r.builds.includes(opts.build);
+  });
   const slotsById = new Map(sourceSlots.map((s) => [s.slotId, s]));
 
   for (const rule of routeRules) {

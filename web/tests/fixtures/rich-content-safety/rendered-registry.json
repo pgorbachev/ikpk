@@ -338,9 +338,10 @@
           "/",
           "/preview/editorial",
           "/preview/faculty",
-          "/preview/modular"
+          "/preview/modular",
+          "/preview/d"
         ],
-        "count": 4
+        "count": 20
       }
     },
     {

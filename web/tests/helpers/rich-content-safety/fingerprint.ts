@@ -26,6 +26,7 @@ export interface SourceFingerprint {
   rutube: string[];
   svgCount: number;
   mappedStyles: string[];
+  mappedClasses: string[];
 }
 
 const MARKER_ATTRS = [
@@ -54,6 +55,7 @@ export function fingerprintHtml(
   const markers: string[] = [];
   const rutube: string[] = [];
   const mappedStyles: string[] = [];
+  const mappedClasses: string[] = [];
 
   for (const h of findElements(html, 'h1')) headings.push(`h1:${visibleText(h.inner)}`);
   for (const h of findElements(html, 'h2')) headings.push(`h2:${visibleText(h.inner)}`);
@@ -97,6 +99,11 @@ export function fingerprintHtml(
       if (attr in tag.attrs) markers.push(`${tag.name}[${attr}=${tag.attrs[attr]}]`);
     }
     const cls = tag.attrs.class ?? '';
+    for (const token of cls.split(/\s+/).filter(Boolean)) {
+      if (/^rc-(?:align|font|color|display|flex|gap|ml)-/.test(token)) {
+        mappedClasses.push(token);
+      }
+    }
     if (/\btable-scroll\b/.test(cls)) markers.push(`${tag.name}.table-scroll`);
     if (/\blegacy-cta-unresolved\b/.test(cls)) markers.push(`${tag.name}.legacy-cta-unresolved`);
     if (tag.attrs.style) {
@@ -130,6 +137,7 @@ export function fingerprintHtml(
     rutube,
     svgCount,
     mappedStyles,
+    mappedClasses,
   };
 }
 

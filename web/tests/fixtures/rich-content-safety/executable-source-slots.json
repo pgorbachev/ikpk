@@ -328,35 +328,35 @@
     "identity": "style|body:71aa7fc0dcb8bca4"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L129:C1:script",
+    "slotId": "src:components/home/sections/News.astro:L132:C1:script",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L129:C1:script",
-    "fingerprint": "5d9f4d202f6486ed51b654b7259d1e2de4482705370e2d1a9130e98d7037bdb4",
+    "locator": "components/home/sections/News.astro:L132:C1:script",
+    "fingerprint": "90e32b406e7b9b56350ed2cfc6d3beb30c617422c5de030eb89eb0b48c9e2bb0",
     "identity": "script|body:7edde442e5505427"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L14:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L15:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L14:C11:svg",
-    "fingerprint": "f9a15758a1981e58f14da3677b3b34f3d77e07ac714e6c25139e59c8e3309e36",
+    "locator": "components/home/sections/News.astro:L15:C11:svg",
+    "fingerprint": "a889277255ab7f0f23b31244f68e89ebfef6ff6f0db3408bedfa6c00582f85dc",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L37:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L40:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L37:C11:svg",
-    "fingerprint": "f67baf5b83893de42d96270db24928dccf3db040e73f05baa8109a254f923a39",
+    "locator": "components/home/sections/News.astro:L40:C11:svg",
+    "fingerprint": "3d233fa3ab2ee1d38160220920e7f0044e965564cd60ca64127355133db4dad5",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L46:C1:style",
+    "slotId": "src:components/home/sections/News.astro:L49:C1:style",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L46:C1:style",
-    "fingerprint": "c2061fe7583d86bd925a6b9a0d68e2f9028ea06bbc5f3cdcc5a505476b6a2053",
+    "locator": "components/home/sections/News.astro:L49:C1:style",
+    "fingerprint": "adf62403b4de7cb9893dd536c1bfaef320aa2d6606239b307ad9d80c9bb149d6",
     "identity": "style|body:0d672d6c6bc3ac6f"
   },
   {
@@ -568,11 +568,11 @@
     "identity": "style|body:6f0cda006973fcb5"
   },
   {
-    "slotId": "src:components/seminars/SeminarArchitectureHeader.astro:L209:C1:style",
+    "slotId": "src:components/seminars/SeminarArchitectureHeader.astro:L213:C1:style",
     "file": "components/seminars/SeminarArchitectureHeader.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarArchitectureHeader.astro:L209:C1:style",
-    "fingerprint": "993451097a0d55adbd03592c2f054c02aeed9b76c832e8fbb2a8ec4fbda0fa40",
+    "locator": "components/seminars/SeminarArchitectureHeader.astro:L213:C1:style",
+    "fingerprint": "a8d039e5ac049c673c69fb6d5748de1908c3e8e8fea434bdd969718dda1e4bd4",
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
@@ -712,12 +712,28 @@
     "identity": "script|body:298b3a0b74635169"
   },
   {
+    "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
+    "file": "layouts/BaseLayout.astro",
+    "nodeKind": "css-import",
+    "locator": "layouts/BaseLayout.astro:css-import:0:../styles/global.css",
+    "fingerprint": "d9a5cd92786b0a3f45487b2e1587bbb4648bea52cf55f63b7d3d63473b76dc9c",
+    "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
+  },
+  {
     "slotId": "src:layouts/BaseLayout.astro:L70:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
     "locator": "layouts/BaseLayout.astro:L70:C1:style",
     "fingerprint": "55ca437a9ea0aa77ab4d53ef6eede1f0477315da4f5b2e848191442e6637cd52",
     "identity": "style|body:c9201fc888e590d9"
+  },
+  {
+    "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
+    "file": "layouts/TopNavLayout.astro",
+    "nodeKind": "css-import",
+    "locator": "layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
+    "fingerprint": "d6b0ec1d87b8f7fd30244923ae898323cc15676c89b3115858cf68a52ca72c78",
+    "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
     "slotId": "src:layouts/TopNavLayout.astro:L63:C1:style",
@@ -728,35 +744,35 @@
     "identity": "style|body:309f315b55438bb4"
   },
   {
-    "slotId": "src:pages/[institute].astro:L218:C1:style",
+    "slotId": "src:pages/[institute].astro:L221:C1:style",
     "file": "pages/[institute].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute].astro:L218:C1:style",
-    "fingerprint": "6fb5e647dc549ed8326c5646039815966b203ef4e15abb6d8f4e8c5e6d6fcdd1",
+    "locator": "pages/[institute].astro:L221:C1:style",
+    "fingerprint": "fd807e8a9ce3d6549823a8a0bb68dbb7aabb1a98bac377d029a015c7ae99d62b",
     "identity": "style|body:15f715eb525f64ac"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup].astro:L191:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
     "file": "pages/[institute]/[courseGroup].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup].astro:L191:C1:style",
-    "fingerprint": "31c61c236689cca388f07964056e2b84daaa90455f457efd7bfd0fcc6ece0fd6",
+    "locator": "pages/[institute]/[courseGroup].astro:L194:C1:style",
+    "fingerprint": "18d5fa75fb6b0cbd17cfb519b34227225334686e79860fc6387420deffc60321",
     "identity": "style|body:8370d74f6937862f"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L172:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L175:C1:style",
     "file": "pages/[institute]/[courseGroup]/[seminar].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L172:C1:style",
-    "fingerprint": "fd328a32421e5ffd3d52ac106836112a4709ba15bf908cfaacbe13487f62ca12",
+    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L175:C1:style",
+    "fingerprint": "ea3376a4ab0f865631a5499d1755bf65bb063a5f6d6daf837253134c3f3f4173",
     "identity": "style|body:a9082b817f8daa78"
   },
   {
-    "slotId": "src:pages/[institute]/prepodavatel/[id].astro:L68:C1:style",
+    "slotId": "src:pages/[institute]/prepodavatel/[id].astro:L71:C1:style",
     "file": "pages/[institute]/prepodavatel/[id].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/prepodavatel/[id].astro:L68:C1:style",
-    "fingerprint": "b55e5d0b9d31f4f120c87f3013490c9d4850972503b2e1358a24076e45e5f7fb",
+    "locator": "pages/[institute]/prepodavatel/[id].astro:L71:C1:style",
+    "fingerprint": "28189f84236a66fc09f0325de794adff778504a1ee61794a0d7eeadfe6d40ba4",
     "identity": "style|body:0368941aea4f7157"
   },
   {
@@ -768,11 +784,11 @@
     "identity": "style|body:6d6250d59d66bb81"
   },
   {
-    "slotId": "src:pages/aktsii-i-skidki.astro:L47:C1:style",
+    "slotId": "src:pages/aktsii-i-skidki.astro:L50:C1:style",
     "file": "pages/aktsii-i-skidki.astro",
     "nodeKind": "element",
-    "locator": "pages/aktsii-i-skidki.astro:L47:C1:style",
-    "fingerprint": "caa8258066444cb840b58fcef61991ee0eeea9207fc4bae64738335c123dfc5b",
+    "locator": "pages/aktsii-i-skidki.astro:L50:C1:style",
+    "fingerprint": "321055098ed96588c8c6ee25fd730948e119d8d526fcd9337ef7b2fed6795bf2",
     "identity": "style|body:898ecc7065ed3541"
   },
   {
@@ -792,19 +808,19 @@
     "identity": "style|body:e301e6bb69eb1046"
   },
   {
-    "slotId": "src:pages/oplata.astro:L20:C11:svg",
+    "slotId": "src:pages/oplata.astro:L21:C11:svg",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L20:C11:svg",
-    "fingerprint": "66cc635d8bd32aef2768f01f5264c16675e091f6356b282b996ad1e8516fbbef",
+    "locator": "pages/oplata.astro:L21:C11:svg",
+    "fingerprint": "22ec59abfb74261c7904960cdf8cde4792f0c78cab98ed26d5fa813363002008",
     "identity": "svg|fill=quoted:none|height=quoted:24|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:24"
   },
   {
-    "slotId": "src:pages/oplata.astro:L42:C1:style",
+    "slotId": "src:pages/oplata.astro:L45:C1:style",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L42:C1:style",
-    "fingerprint": "0813822fb09738ed562e4cdc1aa6861c8e5b629c39fd20e757d11c780dbe7b14",
+    "locator": "pages/oplata.astro:L45:C1:style",
+    "fingerprint": "23294702f01cc237a04cca8804e8b161ceaa2a76b900c8ec7c8b6a8e5c8dfe71",
     "identity": "style|body:d38013dcebc69356"
   },
   {
@@ -832,35 +848,35 @@
     "identity": "style|body:cb54ad807d09fc79"
   },
   {
-    "slotId": "src:pages/preview/[variant]/seminar-undated.astro:L103:C3:script",
+    "slotId": "src:pages/preview/[variant]/seminar-undated.astro:L106:C3:script",
     "file": "pages/preview/[variant]/seminar-undated.astro",
     "nodeKind": "element",
-    "locator": "pages/preview/[variant]/seminar-undated.astro:L103:C3:script",
-    "fingerprint": "5c1ff5e59a6d959c40b9cdc053fd401671b2f13caea0a601a82b06858a05ebfc",
+    "locator": "pages/preview/[variant]/seminar-undated.astro:L106:C3:script",
+    "fingerprint": "44da9e8a0f75969692572b5bbb265309b1a00cb8aea82960504337609e21a391",
     "identity": "script|is:inline=empty:|body:20d1a4afeea549a0"
   },
   {
-    "slotId": "src:pages/preview/[variant]/seminar-undated.astro:L118:C1:style",
+    "slotId": "src:pages/preview/[variant]/seminar-undated.astro:L121:C1:style",
     "file": "pages/preview/[variant]/seminar-undated.astro",
     "nodeKind": "element",
-    "locator": "pages/preview/[variant]/seminar-undated.astro:L118:C1:style",
-    "fingerprint": "a46cef08262e1646ef0098d25d3418714b6641d1e9fc576ac1c4bb23e354426e",
+    "locator": "pages/preview/[variant]/seminar-undated.astro:L121:C1:style",
+    "fingerprint": "fa2471a004be5c2985a06d5a96bca1a7bf9035e647296452932cb1a5e41b2abb",
     "identity": "style|body:2528756895e7f6bb"
   },
   {
-    "slotId": "src:pages/preview/[variant]/seminar.astro:L132:C3:script",
+    "slotId": "src:pages/preview/[variant]/seminar.astro:L135:C3:script",
     "file": "pages/preview/[variant]/seminar.astro",
     "nodeKind": "element",
-    "locator": "pages/preview/[variant]/seminar.astro:L132:C3:script",
-    "fingerprint": "6eb955fa13545cb9d802be3a28fea700a062744009f6875a70e22ec47677ba46",
+    "locator": "pages/preview/[variant]/seminar.astro:L135:C3:script",
+    "fingerprint": "7bd993f6312cf4bbaeb1c9cae3afff4cf7ec41e6d7bb195905ff00fb868c2226",
     "identity": "script|is:inline=empty:|body:20d1a4afeea549a0"
   },
   {
-    "slotId": "src:pages/preview/[variant]/seminar.astro:L147:C1:style",
+    "slotId": "src:pages/preview/[variant]/seminar.astro:L150:C1:style",
     "file": "pages/preview/[variant]/seminar.astro",
     "nodeKind": "element",
-    "locator": "pages/preview/[variant]/seminar.astro:L147:C1:style",
-    "fingerprint": "fce00cfcd1a1d0ab6ee5520bb91f4721e7aa06eb78f74064c5f715b6fd4f7ce7",
+    "locator": "pages/preview/[variant]/seminar.astro:L150:C1:style",
+    "fingerprint": "dbea8421e4d2a8812b9290cac5dc965f06355dedbd78ecf6c5a6f73d8b467206",
     "identity": "style|body:2528756895e7f6bb"
   },
   {
@@ -880,35 +896,35 @@
     "identity": "style|body:a5a70f423abc1970"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L31:C13:svg",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L34:C13:svg",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L31:C13:svg",
-    "fingerprint": "3e5e514d65e1ef0e142a48951386e1e6c2629440169b2b39ae248f1e6cd14014",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L34:C13:svg",
+    "fingerprint": "0d4b1bc146d4a8c31b73938c7afca6dfb7dd60e189522dc98f574032736fa9c6",
     "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L38:C13:svg",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
-    "fingerprint": "54ffe11571d22069fb2e0e19e0cb9c15b669b5a56ac7f1a9ad32ee3802f05d91",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L38:C13:svg",
+    "fingerprint": "6e826da2ed3ee7283f760ae43c258322bbd6946e0f8d0002c933bdc1eb1c8846",
     "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L45:C1:style",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L48:C1:style",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L45:C1:style",
-    "fingerprint": "9ff4f65941ca1171ef0133eff1ca570d3519ba2169357a2ce78809cfd134a265",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L48:C1:style",
+    "fingerprint": "8296dc72d2fe8c95455fcc443fd16d5ed5168716f3ac94eaf7912d94620ad4bf",
     "identity": "style|body:751713f467cb168e"
   },
   {
-    "slotId": "src:pages/statyi/[slug].astro:L153:C1:style",
+    "slotId": "src:pages/statyi/[slug].astro:L156:C1:style",
     "file": "pages/statyi/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/statyi/[slug].astro:L153:C1:style",
-    "fingerprint": "813518ee766bacc7e08088b4d3ca70747ae6457d549138dfa28ea7d1346fdb76",
+    "locator": "pages/statyi/[slug].astro:L156:C1:style",
+    "fingerprint": "c0346d748d54c7b0c5244ce4ff2d0b0291b718e2fe543eb38ba49732253febfb",
     "identity": "style|body:ca3b9642dc9938fe"
   },
   {
@@ -936,11 +952,11 @@
     "identity": "script|body:333c50ff875581dc"
   },
   {
-    "slotId": "src:pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L32:C1:style",
+    "slotId": "src:pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L35:C1:style",
     "file": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro",
     "nodeKind": "element",
-    "locator": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L32:C1:style",
-    "fingerprint": "ff7292d0a8e0003a7a9da4538245038c452a82311cec633e44b374b527b4634c",
+    "locator": "pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L35:C1:style",
+    "fingerprint": "fa1806cf7a062c3abd31eccb71547ae9521276964713e74a6bbab1d24c4a78bb",
     "identity": "style|body:5abb2a66ef902163"
   },
   {
