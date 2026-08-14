@@ -127,19 +127,50 @@ test.describe('Accessibility', () => {
 // обход не доходит, а у ссылок шапки фокус рисует сам браузер — из-за этого
 // общий обход был зелёным при сломанных полях.
 test.describe('Видимый фокус', () => {
+  // Селекторы ИМЕННЫЕ, а не позиционные. Прежняя редакция брала на расписании `select`
+  // через `.first()`, то есть измеряла тот элемент, который сегодня стоит в разметке
+  // первым. С появлением фильтра месяца (`ScheduleFilters.astro:62` против `:76` у
+  // института) первым стал месяц: институт остался вовсе без проверки видимого фокуса, а
+  // месяц оказался покрыт дважды — здесь и в `schedule-month.spec.ts`
+  // (`@month-a11y-focus`), причём ни одна из двух про другую не знала.
+  //
+  // Месяц и программа сюда НЕ входят, и это не пропуск. Оба контрола законно приезжают
+  // `disabled`: месяц — пока в списке нет ни одного месяца (пустое расписание), программа
+  // — пока не выбран институт. `.focus()` на выключенном `select` фокус не переносит, и
+  // измерение застало бы элемент без фокуса — то есть проверка краснела бы на исправном
+  // коде. Месяц при этом покрыт `@month-a11y-focus`, где контрол сначала включается
+  // скриптом; индикатор у всех четырёх один и тот же (`.schedule-select`), поэтому
+  // правило под проверкой остаётся тем же.
   const TARGETS = [
     { path: '/statyi', selectors: ['.article-filter-bar input', '.article-filter-bar select'] },
-    { path: '/raspisanie-i-tseny', selectors: ['select', 'input[type="search"], input[type="text"]'] },
+    {
+      path: '/raspisanie-i-tseny',
+      selectors: [
+        '[data-schedule-filter="institute"]',
+        '[data-schedule-filter="city"]',
+        '[data-schedule-search]',
+      ],
+    },
   ];
 
   for (const { path, selectors } of TARGETS) {
     test(`${path}: поля управления получают видимый фокус`, async ({ page }) => {
-      await page.goto(path);
+      // Код ответа утверждается: `page.goto` на несуществующем адресе отдаёт 404, где
+      // полей нет вовсе, — и проверка прошла бы по пустому списку.
+      const response = await page.goto(path);
+      expect(response?.status(), `${path} отдал не 200 — измерять фокус не на чем`).toBe(200);
 
       const invisible: string[] = [];
+      // Селектор, не нашедший предмета, — это «не смогла проверить», а не «дефектов нет».
+      // Прежняя редакция здесь делала `continue`, и при опечатках во всех трёх селекторах
+      // расписания проверялось НОЛЬ полей при зелёном прогоне (проверено мутацией).
+      const notFound: string[] = [];
       for (const selector of selectors) {
         const el = page.locator(selector).first();
-        if (!(await el.count())) continue;
+        if (!(await el.count())) {
+          notFound.push(`${path} ${selector}`);
+          continue;
+        }
 
         await el.focus();
         const info = await el.evaluate((node) => {
@@ -158,12 +189,18 @@ test.describe('Видимый фокус', () => {
           info.boxShadow !== 'none' && !/rgba\([^)]*0?\.0?[0-9]\)/.test(info.boxShadow);
 
         if (!hasOutline && !strongShadow) {
+          // В сообщение идёт СЕЛЕКТОР, а не только имя тега: на расписании проверяются
+          // три поля, и «select» в двух строках подряд не говорит, какое из них сломано.
           invisible.push(
-            `${path} ${info.tag}: outline ${info.outlineWidth} ${info.outlineStyle}, shadow ${info.boxShadow}`,
+            `${path} ${selector} (${info.tag}): outline ${info.outlineWidth} ${info.outlineStyle}, shadow ${info.boxShadow}`,
           );
         }
       }
 
+      expect(
+        notFound,
+        `эти селекторы не нашли ни одного поля — проверять было нечего:\n${notFound.join('\n')}`,
+      ).toEqual([]);
       expect(
         invisible,
         `поле в фокусе без видимого индикатора:\n${invisible.join('\n')}`,

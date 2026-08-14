@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
-export { stripLegacySeminarTail, relForExternalUrl } from './html-cleaner.js';
-import { cleanBodyHtml as cleanHtml } from './html-cleaner.js';
+export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
+export type { SafeRichHtml } from './html-cleaner.js';
+import { cleanBodyHtml as cleanHtml, type SafeRichHtml } from './html-cleaner.js';
 
 let _panels: Record<string, Record<string, string>> | null = null;
 
@@ -21,11 +22,24 @@ function panelsFor(path?: string): Record<string, string> | undefined {
 }
 
 /**
- * Чистит легаси-HTML для вывода. `path` — путь страницы: по нему
- * подставляется восстановленный контент свёрнутых секций.
+ * Чистит легаси-HTML для вывода. Второй аргумент — путь страницы (для
+ * restored collapsible panels) либо стабильный source `{ type, id }`.
  */
-export function cleanBodyHtml(html: string, path?: string, legacyCtaHref?: string): string {
-  return cleanHtml(html, { panels: panelsFor(path), legacyCtaHref });
+export function cleanBodyHtml(
+  html: string,
+  pathOrSource?: string | { type: string; id: string; path?: string },
+  legacyCtaHref?: string,
+): SafeRichHtml {
+  const source = typeof pathOrSource === 'object' && pathOrSource
+    ? pathOrSource
+    : { type: 'page', id: pathOrSource ?? 'unknown', path: pathOrSource };
+  const path = source.path ?? (typeof pathOrSource === 'string' ? pathOrSource : undefined);
+  return cleanHtml(html, {
+    panels: panelsFor(path),
+    legacyCtaHref,
+    sourceType: source.type,
+    sourceId: source.id,
+  });
 }
 
 const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');

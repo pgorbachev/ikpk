@@ -299,6 +299,14 @@ describe('404 and sitemap', () => {
     }
   });
 
+  it('rich-content canary is noindex and excluded from sitemap', () => {
+    const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
+    expect(xml.includes('rich-content-canary'), 'canary must NOT be in sitemap').toBe(false);
+    const html = readPage('/rich-content-canary');
+    expect(html).toContain('noindex');
+    expect(html).toContain('rc-fixture-control-9f3c2e1a');
+  });
+
   it('variant D is content-complete (parity-блоки в нужном порядке)', () => {
     // то же: в боевой сборке черновика нет
     if (!allPages().includes('/preview/d/')) {

@@ -38,6 +38,9 @@ jobs:
         working-directory: payments
         run: npm ci
 
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Run unit tests
         run: npm test
 
@@ -143,6 +146,13 @@ jobs:
 
       - name: Run payment form e2e (demo)
         run: npm run test:e2e:payment-demo
+
+      # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
+      # останавливает только `Tests`, а проверка, положенная в файл, который не
+      # запускает ни один workflow, зелена ровно потому, что её никто не выполняет.
+      # Мобильный сценарий задаёт свой viewport внутри теста, поэтому проект один.
+      - name: Run schedule month filter tests
+        run: npm run test:e2e:schedule
 
       - name: Upload Playwright report on failure
         if: failure()

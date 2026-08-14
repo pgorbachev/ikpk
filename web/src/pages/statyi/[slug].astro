@@ -6,6 +6,7 @@ import AsideCard from '../../components/ui/AsideCard.astro';
 import MetaLabel from '../../components/ui/MetaLabel.astro';
 import PageHeader from '../../components/ui/PageHeader.astro';
 import { getArticles, formatDate, cleanBodyHtml } from '../../lib/data';
+import RichContent from '../../components/RichContent.astro';
 import type { Article } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
 
@@ -100,7 +101,9 @@ const articleSchema = {
           )}
         </PageHeader>
 
-        <div class="article-body rich-content" set:html={cleanBodyHtml(article.body_html)} />
+        <div class="article-body rich-content">
+          <RichContent html={cleanBodyHtml(article.body_html, { type: 'article', id: article.slug })} sinkId="article-body" />
+        </div>
       </article>
 
       {/* Sidebar column */}

@@ -5,7 +5,8 @@
 на `#oplata-svyaz` — якорь блока контактов той же страницы. Промежуточный фикс #37
 (`4576463`, «очистка перестала выдумывать адрес легаси-кнопок») убрал из
 `normalizeLegacyControls` жёстко вписанный адрес расписания: функция
-(`web/src/lib/html-cleaner.ts:567`) больше не решает сама, куда вести кнопку, а
+(`web/src/lib/html-cleaner.ts:601` на
+`feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`) больше не решает сама, куда вести кнопку, а
 принимает адрес от вызывающей страницы (`legacyCtaHref`); `oplata.astro:34` передаёт
 `#oplata-svyaz`. Проверено сборкой на неизменённом `main`.
 
@@ -434,9 +435,12 @@ prerequisite другого рода — настройки ЮKassa, котор�
   заголовке `Authorization: Basic`, а не в URL — сообщения об ошибках всё равно проверяются
   на отсутствие в них секрета.
 - **`normalizeLegacyControls` не меняется.** Новое поведение кнопки описывается на
-  уровне вызывающей страницы (`web/src/pages/oplata.astro:34`), а не правкой общей
-  функции очистки контента: она сознательно не знает адреса, на который ведёт кнопка
-  (`html-cleaner.ts:558-565`), и это разделение сохраняется.
+  уровне вызывающей страницы (`web/src/pages/oplata.astro:36` на
+  `feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`), а не
+  правкой общей функции очистки контента: она сознательно не знает адреса, на который
+  ведёт кнопка (`html-cleaner.ts:601-619` на том же SHA), и это разделение сохраняется.
+  Rich HTML `/oplata` остаётся в центральном `RichContent` с `sinkId="static-page-oplata"`;
+  change SHALL NOT добавлять `set:html` / `is:raw` / `srcdoc`.
 - **Именованные ограничения объёма** (см. «Ограничения объёма» ниже) — четыре точки,
   которые change не может закрыть исполнителем в одиночку.
 
@@ -648,6 +652,23 @@ Change `education-trust-and-admission-clarity` (спека утверждена 
 реализация `online-payment-flow` на `/oplata` либо ждёт, либо стороны явно
 договариваются об очерёдности на уровне PR (кто мержится первым, кто ребейзит вторым)
 — смешивать «спека слита» с «код слит» здесь нельзя: первое уже верно, второе пока нет.
+
+## Пересечение областей: `sanitize-rich-html-content`
+
+Sink-контракт rich HTML на `/oplata` уже реализован:
+`feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`,
+`web/src/pages/oplata.astro:36` — `<RichContent … sinkId="static-page-oplata" />`.
+Этот change SHALL:
+
+- оставить тело страницы в том же центральном sink и SHALL NOT добавлять `set:html`,
+  `is:raw` или `srcdoc`;
+- навешивать прогрессивное улучшение кнопки (`LEGACY_CTA_ATTR`) на уровне
+  `oplata.astro`, не меняя `normalizeLegacyControls`;
+- не переносить `data-testid` и layout wrappers внутрь sanitized root.
+
+Mapped flex/spacing `/oplata` уже уехали в локальные classes (`rc-display-flex` и
+соседи); визуальный эталон `oplata-*` обязан это учитывать, а не требовать inline
+`style` обратно.
 
 ## Развилки, решённые владельцем (2026-08-11)
 

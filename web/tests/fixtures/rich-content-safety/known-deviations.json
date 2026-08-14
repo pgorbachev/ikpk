@@ -1,0 +1,18 @@
+{
+  "jsonPath": "course_groups.json$[1].description_html",
+  "entityId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
+  "remoteUrl": "https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304",
+  "localAsset": "/media/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp",
+  "localOriginalExists": true,
+  "manifestEntry": {
+    "width": 1200,
+    "height": 655,
+    "widths": [
+      480,
+      768,
+      1200
+    ]
+  },
+    "otherRemoteUploadCount": 0,
+  "migratedToLocalAsset": true
+}

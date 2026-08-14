@@ -1,0 +1,5 @@
+{
+  "input": "<b><i>misnested</b></i><p>ok<script>alert(1)</script>",
+  "expectedSanitized": "<b><i>misnested</i></b><p>ok</p>",
+  "note": "Единственный ожидаемый browser-conformant recovered+sanitized DOM. Recovered tree — HTML5 adoption agency (Chromium DOMParser): </b> закрывает i и b, </i> игнорируется; sanitizer удаляет script вместе с содержимым."
+}

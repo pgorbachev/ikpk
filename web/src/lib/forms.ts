@@ -19,7 +19,7 @@ const PROD_FORM_HOST = 'b24-cbqwqo.bitrix24site.ru';
 // без завершающего слэша: сайт адресует страницы как старый (см. trailingSlash)
 const DEMO_STUB_PATH = '/demo-zayavka';
 
-const mode = (import.meta.env.DEMO_FORMS ?? '').trim();
+const mode = String((import.meta as ImportMeta & { env?: { DEMO_FORMS?: unknown } }).env?.DEMO_FORMS ?? '').trim();
 
 /** Режим демо-форм активен (нужно для баннера на стенде и для гейтов). */
 export const isDemoForms = mode.length > 0;

@@ -1,0 +1,70 @@
+{
+  "astro": [
+    {
+      "id": "json-ld-breadcrumbs",
+      "classification": "json-ld",
+      "file": "components/Breadcrumbs.astro",
+      "nodeKind": "element",
+      "elementName": "script",
+      "attribute": "set:html",
+      "expression": "serializeJsonLd(schema)",
+      "attrKind": "expression",
+      "locator": "components/Breadcrumbs.astro:L44:C1:element:script:set:html",
+      "fingerprint": "components/Breadcrumbs.astro:L44:C1:element:script:set:html"
+    },
+    {
+      "id": "json-ld-head-meta",
+      "classification": "json-ld",
+      "file": "components/HeadMeta.astro",
+      "nodeKind": "element",
+      "elementName": "script",
+      "attribute": "set:html",
+      "expression": "serializeJsonLd(schema)",
+      "attrKind": "expression",
+      "locator": "components/HeadMeta.astro:L66:C12:element:script:set:html",
+      "fingerprint": "components/HeadMeta.astro:L66:C12:element:script:set:html"
+    },
+    {
+      "id": "rich-content-singleton",
+      "classification": "rich-html",
+      "file": "components/RichContent.astro",
+      "nodeKind": "element",
+      "elementName": "div",
+      "attribute": "set:html",
+      "expression": "terminalSanitize(raw, mode, context)",
+      "attrKind": "expression",
+      "locator": "components/RichContent.astro:L28:C1:element:div:set:html",
+      "fingerprint": "components/RichContent.astro:L28:C1:element:div:set:html"
+    }
+  ],
+  "typescript": [
+    {
+      "file": "components/schedule/ScheduleControlsScript.astro",
+      "kind": "innerHTML",
+      "text": "program.innerHTML = ''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L49:C7:program.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "components/schedule/ScheduleControlsScript.astro",
+      "kind": "innerHTML",
+      "text": "pagination.innerHTML = ''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L87:C7:pagination.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "pages/statyi/index.astro",
+      "kind": "innerHTML",
+      "text": "pagination.innerHTML = ''",
+      "locator": "pages/statyi/index.astro:L274:C7:pagination.innerHTML=''",
+      "allowedEmptyClear": true
+    },
+    {
+      "file": "pages/statyi/index.astro",
+      "kind": "innerHTML",
+      "text": "grid.innerHTML = ''",
+      "locator": "pages/statyi/index.astro:L336:C7:grid.innerHTML=''",
+      "allowedEmptyClear": true
+    }
+  ]
+}

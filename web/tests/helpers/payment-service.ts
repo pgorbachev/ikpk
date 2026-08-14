@@ -60,7 +60,8 @@ function headerMap(req: IncomingMessage): Record<string, string> {
 
 export async function startYooKassaMock(): Promise<YooKassaMock> {
   const calls: YooKassaCall[] = [];
-  let createHandler = (call: YooKassaCall): { status: number; body: unknown } => ({
+  type Reply = { status: number; body: unknown };
+  let createHandler: (call: YooKassaCall) => Reply | Promise<Reply> = (call) => ({
     status: 200,
     body: {
       id: `yk-${calls.length + 1}`,
@@ -71,7 +72,7 @@ export async function startYooKassaMock(): Promise<YooKassaMock> {
         : undefined,
     },
   });
-  let getHandler = (id: string): { status: number; body: unknown } => ({
+  let getHandler: (id: string, _call: YooKassaCall) => Reply | Promise<Reply> = (id) => ({
     status: 200,
     body: { id, status: 'pending' },
   });
@@ -93,12 +94,11 @@ export async function startYooKassaMock(): Promise<YooKassaMock> {
     };
     calls.push(call);
 
-    let reply: { status: number; body: unknown };
     const maybe =
       req.method === 'POST' && /\/v3\/payments\/?$/.test(url)
         ? createHandler(call)
         : getHandler(url.split('/').filter(Boolean).at(-1) ?? '', call);
-    reply = await Promise.resolve(maybe);
+    const reply = await Promise.resolve(maybe);
     res.writeHead(reply.status, { 'content-type': 'application/json' });
     res.end(JSON.stringify(reply.body));
   });

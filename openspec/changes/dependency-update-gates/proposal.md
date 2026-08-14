@@ -88,3 +88,13 @@ lockfile, порог числа выполненных тестов. Кажда�
 слияние. После архивирования этого change дельта `dependabot-auto-merge` SHALL быть
 проверена на применимость к появившейся основной спеке — строгой валидации для этого
 недостаточно, она не проверяет существование требования.
+
+## Связь с `sanitize-rich-html-content`
+
+Sanitizer/parser/oracle subtree (`parse5`, `playwright` и их lockfile nodes) **не**
+является инвариантом этого change. Producer completeness gate и committed registry
+живут в `sanitize-rich-html-content`
+(`web/tests/fixtures/rich-content-safety/security-dependency-registry.json` на
+`feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3`).
+Deny-only consumer этого registry — `dependabot-auto-merge`. Этот change не дублирует
+запрет авто-слияния sanitizer-а и не ослабляет его своими инвариантами покрытия.

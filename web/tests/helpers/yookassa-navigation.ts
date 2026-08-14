@@ -60,7 +60,6 @@ export async function gotoOplata(page: Page, path = '/oplata'): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!/ERR_ABORTED|interrupted/i.test(message)) throw error;
-    await page.goto('about:blank', { waitUntil: 'commit' }).catch(() => undefined);
     await page.goto(path, { waitUntil: 'domcontentloaded' });
   }
 }

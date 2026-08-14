@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { cleanBodyHtml, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+import { cleanBodyHtml as cleanRaw, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+import { htmlOf } from './helpers/rich-content-safety/html-of.js';
+
+function cleanBodyHtml(
+  html: string,
+  opts?: Parameters<typeof cleanRaw>[1],
+): string {
+  return htmlOf(cleanRaw(html, opts));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture 1 – Article page
@@ -55,9 +63,12 @@ describe('Fixture 1: Article HTML', () => {
     expect(result).toContain('<p>20 янв., 2025</p>');
   });
 
-  it('preserves the image untouched (локализация URL живёт в data.ts loadJson)', () => {
+  it('preserves the image locally or removes remote src на security boundary (spec rich-content-safety: внешний image src)', () => {
     const result = cleanBodyHtml(input);
-    expect(result).toContain('ikpk-image/photo.webp');
+    // До sanitizer remote Yandex URL переживал cleaner (локализация была в data.ts).
+    // Новый контракт удаляет внешний img src на границе helper-а.
+    expect(result).not.toContain('storage.yandexcloud.net');
+    expect(result).not.toContain('ikpk-image/photo.webp');
   });
 
   it('removes h1 tags', () => {
@@ -380,6 +391,14 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
     expect(result).toContain('type="checkbox"');
   });
 
+  it('forces checkbox disabled and strips name/value (spec rich-content-safety)', () => {
+    const result = cleanBodyHtml(input);
+    expect(result).toMatch(/type=["']checkbox["']/i);
+    expect(result).toMatch(/\bdisabled\b/i);
+    expect(result).not.toContain('name="terms"');
+    expect(result).not.toMatch(/\bvalue=/i);
+  });
+
   it('preserves links and paragraphs', () => {
     const result = cleanBodyHtml(input);
     expect(result).toContain('<a href="/page">click here</a>');
@@ -404,7 +423,8 @@ describe('Fixture 6: Non-form button and checkbox preserved', () => {
 
   it('legacy button uses the destination the page supplied', () => {
     const result = cleanBodyHtml(input, { legacyCtaHref: '#kontakty-bloc' });
-    expect(result).toContain('<a class="btn btn-primary" href="#kontakty-bloc" data-legacy-cta>');
+    expect(result).toMatch(/<a\b[^>]*href="#kontakty-bloc"[^>]*data-legacy-cta/);
+    expect(result).toMatch(/class="[^"]*btn btn-primary/);
     expect(result).toContain('Schedule a meeting');
     expect(result).not.toContain('data-legacy-cta-unresolved');
   });

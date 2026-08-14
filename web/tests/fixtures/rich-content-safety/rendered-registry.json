@@ -1,0 +1,410 @@
+{
+  "sinks": [
+    {
+      "id": "article-body",
+      "production": {
+        "paths": [
+          "/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme",
+          "/statyi/beremennost-rody-i-vozmozhnosti-osteopatii",
+          "/statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
+          "/statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
+          "/statyi/gipertenziya",
+          "/statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm",
+          "/statyi/gryzha-pishevodnogo-otverstiya-diafragmy",
+          "/statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
+          "/statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
+          "/statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
+          "/statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
+          "/statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
+          "/statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii",
+          "/statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
+          "/statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta",
+          "/statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
+          "/statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet",
+          "/statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
+          "/statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
+          "/statyi/lechenie-allergij-v-hiropraktike",
+          "/statyi/lechenie-bronhialnoj-astmy",
+          "/statyi/metody-issledovaniya-mochi",
+          "/statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
+          "/statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
+          "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
+          "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
+          "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
+          "/statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
+          "/statyi/osnovnye-principy-osteopatii",
+          "/statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
+          "/statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
+          "/statyi/pishevoj-faktor-v-hiropraktike",
+          "/statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
+          "/statyi/predmet-prikladnoj-kineziologii",
+          "/statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
+          "/statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami",
+          "/statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
+          "/statyi/principy-balansirovaniya-myshc",
+          "/statyi/problemy-kolennogo-sustava",
+          "/statyi/provokaciya-shejnyh-pozvonkov",
+          "/statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
+          "/statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
+          "/statyi/respiratornye-funkcii-cherepa",
+          "/statyi/sakroiliokalnye-i-iliosakralnye-narusheniya",
+          "/statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv",
+          "/statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv",
+          "/statyi/shizofreniya",
+          "/statyi/sindrom-tarzalnogo-tunnelya",
+          "/statyi/sluchaj-lecheniya-enureza",
+          "/statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii",
+          "/statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
+          "/statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
+          "/statyi/ustalost-i-borba-s-neyu",
+          "/statyi/visceralnaya-manipulyaciya",
+          "/statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
+          "/statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
+          "/statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
+          "/statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
+          "/statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
+          "/statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
+          "/statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
+          "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1",
+          "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2",
+          "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3",
+          "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4",
+          "/statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks",
+          "/statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
+          "/statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti"
+        ],
+        "count": 68
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "institute-extra",
+      "production": {
+        "paths": [
+          "/institut-klinicheskoy-prikladnoy-kineziologii",
+          "/institut-apledzhera",
+          "/institut-barralya"
+        ],
+        "count": 3
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "course-group-extra",
+      "production": {
+        "paths": [
+          "/institut-apledzhera/kraniosakralnaya-terapiya"
+        ],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "seminar-body",
+      "production": {
+        "paths": [
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
+          "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
+          "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
+          "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
+          "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
+          "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
+          "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
+          "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
+          "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
+          "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
+          "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+          "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
+          "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
+          "/institut-barralya/visceralnye-tehniki/taz",
+          "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
+          "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
+          "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
+          "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
+          "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
+          "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
+          "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
+          "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
+          "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
+          "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
+          "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
+          "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
+          "/institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa",
+          "/institut-apledzhera/mozg/mozg-govorit-1",
+          "/institut-apledzhera/mozg/mozg-govorit-2",
+          "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
+          "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
+          "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
+          "/institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
+          "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
+          "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
+          "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
+          "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov",
+          "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
+          "/institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
+          "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii"
+        ],
+        "count": 121
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "teacher-bio",
+      "production": {
+        "paths": [
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/85",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/84",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/82",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/81",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/80",
+          "/institut-apledzhera/prepodavatel/79",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/78",
+          "/institut-apledzhera/prepodavatel/77",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/76",
+          "/institut-apledzhera/prepodavatel/74",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/73",
+          "/institut-barralya/prepodavatel/71",
+          "/institut-barralya/prepodavatel/70",
+          "/institut-barralya/prepodavatel/69",
+          "/institut-apledzhera/prepodavatel/68",
+          "/institut-apledzhera/prepodavatel/67",
+          "/institut-apledzhera/prepodavatel/66",
+          "/institut-apledzhera/prepodavatel/65",
+          "/institut-apledzhera/prepodavatel/64",
+          "/institut-apledzhera/prepodavatel/63",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/61",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/60",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/58",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/57",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/56",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/55",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/54",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/53",
+          "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83"
+        ],
+        "count": 29
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "static-page-oplata",
+      "production": {
+        "paths": [
+          "/oplata"
+        ],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "static-page-sotrudnichestvo",
+      "production": {
+        "paths": [
+          "/sotrudnichestvo-s-nami"
+        ],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "static-page-svedeniya",
+      "production": {
+        "paths": [
+          "/svedeniya-ob-obrazovatelnoy-organizatsii"
+        ],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "promo-description",
+      "production": {
+        "paths": [
+          "/aktsii-i-skidki"
+        ],
+        "count": 4
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "news-description",
+      "production": {
+        "paths": [
+          "/"
+        ],
+        "count": 4
+      },
+      "demo": {
+        "paths": [
+          "/",
+          "/preview/editorial",
+          "/preview/faculty",
+          "/preview/modular",
+          "/preview/d"
+        ],
+        "count": 20
+      }
+    },
+    {
+      "id": "preview-seminar-body",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "paths": [
+          "/preview/editorial/seminar",
+          "/preview/faculty/seminar"
+        ],
+        "count": 2
+      }
+    },
+    {
+      "id": "preview-seminar-undated-body",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "paths": [
+          "/preview/editorial/seminar-undated",
+          "/preview/faculty/seminar-undated"
+        ],
+        "count": 2
+      }
+    },
+    {
+      "id": "seminar-architecture-header",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "paths": [
+          "/preview/modular/seminar",
+          "/preview/modular/seminar-undated"
+        ],
+        "count": 2
+      }
+    },
+    {
+      "id": "canary-body",
+      "production": {
+        "paths": ["/rich-content-canary"],
+        "count": 1
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    }
+  ],
+  "jsonLd": [
+    {
+      "id": "json-ld-head-meta",
+      "note": "serializeJsonLd invariant"
+    },
+    {
+      "id": "json-ld-breadcrumbs",
+      "note": "serializeJsonLd invariant"
+    }
+  ]
+}

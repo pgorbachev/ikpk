@@ -99,15 +99,14 @@ export function injectImgDimensions(html: string): string {
     );
     const legacyUseless = existing !== undefined && distinctUrls.size <= 1;
 
-    if (existing === undefined || legacyUseless) {
-      const srcset = srcsetFor(src);
-      if (srcset) {
-        if (legacyUseless) out = out.replace(/\s*\bsrcset="[^"]*"/i, '');
-        out = out.replace(
-          /^<img\b/i,
-          `<img srcset="${srcset}" sizes="(max-width: 900px) 100vw, 760px"`,
-        );
-      }
+    const srcset = srcsetFor(src);
+    const existingLooksResponsive = /\/media\/_w\//.test(existing ?? '');
+    if (srcset && !existingLooksResponsive && (existing === undefined || legacyUseless)) {
+      if (legacyUseless) out = out.replace(/\s*\bsrcset="[^"]*"/i, '');
+      out = out.replace(
+        /^<img\b/i,
+        `<img srcset="${srcset}" sizes="(max-width: 900px) 100vw, 760px"`,
+      );
     }
 
     // ── 2. Размеры. Только если их нет: уважаем авторский размер и не плодим

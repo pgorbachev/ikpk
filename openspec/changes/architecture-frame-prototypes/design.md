@@ -29,6 +29,11 @@ ships only under `DEMO_FORMS` (same isolation pattern as `/demo-zayavka`).
    and filters deferred; called out in proposal/spec as non-requirement.
 5. **`instituteShortBySlug` map** only when no schedule shortname is available —
    returns raw slug for unknown institutes rather than inventing a label.
+6. **Preview seminar HTML uses the central rich-content sink** — dated/undated
+   seminar prototypes render body HTML through `RichContent` with registered sink
+   IDs `preview-seminar-body` and `preview-seminar-undated-body`
+   (`feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`).
+   This change SHALL NOT add `set:html`, `is:raw`, or `srcdoc`.
 
 ## Risks / Trade-offs
 

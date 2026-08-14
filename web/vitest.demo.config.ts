@@ -16,6 +16,12 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    include: ['tests/demo-output.test.ts', 'tests/demo-prototypes.test.ts', 'tests/demo-payment-form.test.ts'],
+    include: [
+      'tests/demo-output.test.ts',
+      'tests/demo-prototypes.test.ts',
+      'tests/demo-payment-form.test.ts',
+      'tests/rich-content-canary.demo.test.ts',
+      'tests/rich-content-hazard.demo.test.ts',
+    ],
   },
 });

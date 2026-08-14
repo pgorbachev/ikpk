@@ -21,6 +21,10 @@ live-прототипы на реальных данных под `DEMO_FORMS`, 
   modular (§7.6); полное расписание на всех активных событиях с фильтрами,
   группировкой faculty по месяцам и бейджем «цикл семинаров» (§7.7); CI job с
   `build:demo` (пока TD-14).
+- **Sink-контракт:** тела семинаров в preview уже идут через `RichContent`
+  (`preview-seminar-body`, `preview-seminar-undated-body` на
+  `feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`).
+  Change SHALL NOT добавлять `set:html` / `is:raw` / `srcdoc`.
 
 ## Capabilities
 

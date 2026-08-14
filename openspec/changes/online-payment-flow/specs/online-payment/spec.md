@@ -62,6 +62,25 @@
 - **WHEN** собранная страница `/oplata` проверена по атрибуту точки входа в оплату
 - **THEN** таких элементов на странице ровно один
 
+### Requirement: Триггер оплаты не вводит новый raw-HTML sink
+
+Страница `/oplata` SHALL оставлять rich HTML в центральном `RichContent` с
+`sinkId="static-page-oplata"`. Change SHALL NOT добавлять production `set:html`, `is:raw`
+или `srcdoc` вне уже разрешённых JSON-LD sinks. Прогрессивное улучшение кнопки
+(`LEGACY_CTA_ATTR`) SHALL навешиваться на уровне `web/src/pages/oplata.astro` и SHALL NOT
+менять `normalizeLegacyControls`.
+
+#### Scenario: Тело /oplata остаётся в зарегистрированном sink
+
+- **WHEN** страница `/oplata` собрана после реализации этого change
+- **THEN** содержательный HTML проходит через `RichContent` с `sinkId="static-page-oplata"`,
+  и в шаблоне страницы нет дополнительного `set:html`
+
+#### Scenario: Модальный триггер не правит cleaner
+
+- **WHEN** кнопка оплаты становится триггером модального окна
+- **THEN** `normalizeLegacyControls` не меняется, а обработчик живёт в `oplata.astro`
+
 ### Requirement: Устаревшая подводка перед кнопкой заменена
 
 Текст, предшествующий кнопке оплаты («Готовы произвести оплату за семинар? Кликайте на

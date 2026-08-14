@@ -4,6 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatPrice, getInstitutes, getPage, getScheduleEntries, getTeachers } from '../lib/data';
 import { calendarToday, isCurrentOrFuture } from '../lib/schedule-window';
+import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
 import { scheduleSupplements } from '../lib/schedule-supplements';
 
@@ -79,6 +80,12 @@ const visibleCities = entries
   .filter((value, index, values) => values.indexOf(value) === index)
   .sort((a, b) => a.localeCompare(b, 'ru'));
 
+// Месяцы выводятся из ТЕХ ЖЕ записей, что и карточки, и после фильтра окна
+// актуальности: список получается объединением уже отсечённых ключей, поэтому месяца
+// без записей в нём быть не может, а ключа без месяца — тоже. Опорная дата — уже
+// вычисленный `todayDate`; второй вычислитель «сегодня» здесь не заводится.
+const visibleMonths = monthOptions(entries, todayDate);
+
 const visiblePrograms = entries
   .map((entry) => {
     const institute = instituteByName.get(entry.institute.name);
@@ -126,6 +133,7 @@ const cards = entries.map((entry) => {
     imageUrl: entry.image?.url || '',
     instituteName: entry.institute.name,
     instituteSlug,
+    months: monthKeys(entry, todayDate),
     priceLabel: entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,
@@ -144,6 +152,6 @@ const cards = entries.map((entry) => {
 <BaseLayout title={title} description={description} newsletterVariant="none">
   <div class="container schedule-page">
     <Breadcrumbs items={[{ label: 'Расписание и цены' }]} />
-    <SchedulePage title="Расписание и цены" institutes={visibleInstitutes} programs={visiblePrograms} cities={visibleCities} cards={cards} />
+    <SchedulePage title="Расписание и цены" institutes={visibleInstitutes} programs={visiblePrograms} cities={visibleCities} months={visibleMonths} cards={cards} />
   </div>
 </BaseLayout>

@@ -21,21 +21,22 @@ if (form) boot(form);
 function boot(formEl: HTMLFormElement) {
   const endpoint = formEl.getAttribute('data-payment-endpoint') ?? '';
   const isDemoBuild = formEl.getAttribute('data-payment-demo') === 'true';
-  const root = document.getElementById('payment-dialog-root');
-  const dialog = document.querySelector<HTMLElement>('.payment-dialog');
-  const stateHost = document.querySelector<HTMLElement>('[data-payment-state-host]');
-  const chrome = document.querySelector<HTMLElement>('[data-payment-chrome]');
-  const attemptsWrap = document.querySelector<HTMLElement>('[data-payment-attempts]');
-  const attemptList = document.querySelector<HTMLElement>('[data-payment-attempt-list]');
-  const actions = document.querySelector<HTMLElement>('[data-payment-actions]');
+  const root = document.getElementById('payment-dialog-root')!;
+  const dialog = document.querySelector<HTMLElement>('.payment-dialog')!;
+  const stateHost = document.querySelector<HTMLElement>('[data-payment-state-host]')!;
+  const chrome = document.querySelector<HTMLElement>('[data-payment-chrome]')!;
+  const attemptsWrap = document.querySelector<HTMLElement>('[data-payment-attempts]')!;
+  const attemptList = document.querySelector<HTMLElement>('[data-payment-attempt-list]')!;
+  const actions = document.querySelector<HTMLElement>('[data-payment-actions]')!;
   const closeBtn = document.querySelector<HTMLButtonElement>('[data-payment-close]');
   if (!root || !dialog || !stateHost || !chrome || !attemptsWrap || !attemptList || !actions) return;
 
-  const fieldsHtml = formEl.innerHTML;
+  const fieldsTemplate = formEl.cloneNode(true) as HTMLFormElement;
   let activeRequestId = '';
   let pendingToken = '';
   let lastOpener: HTMLElement | null = null;
   let inFlight = false;
+  let inertObserver: MutationObserver | null = null;
   const holdStatuses = new Map<string, ApiBody>();
 
   enhanceEntry();
@@ -85,6 +86,17 @@ function boot(formEl: HTMLFormElement) {
   }
 
   function setBackgroundInert(on: boolean) {
+    applyBackgroundInert(on);
+    if (on) {
+      inertObserver ??= new MutationObserver(() => applyBackgroundInert(true));
+      inertObserver.observe(document.body, { childList: true });
+      return;
+    }
+    inertObserver?.disconnect();
+    inertObserver = null;
+  }
+
+  function applyBackgroundInert(on: boolean) {
     for (const node of [...document.body.children]) {
       if (node.contains(dialog) || node === dialog) continue;
       if (on) node.setAttribute('inert', '');
@@ -146,12 +158,14 @@ function boot(formEl: HTMLFormElement) {
   }
 
   function restoreFieldsDom() {
-    if (!formEl.querySelector('[name="firstName"]')) formEl.innerHTML = fieldsHtml;
+    if (!formEl.querySelector('[name="firstName"]')) {
+      formEl.replaceChildren(...[...fieldsTemplate.childNodes].map((node) => node.cloneNode(true)));
+    }
     formEl.hidden = false;
   }
 
   function stripFieldsDom() {
-    formEl.innerHTML = '';
+    formEl.replaceChildren();
     formEl.hidden = true;
   }
 

@@ -11,6 +11,7 @@ interface Card {
   imageUrl: string;
   instituteName: string;
   instituteSlug: string;
+  months: string[];
   priceLabel: string;
   programName: string;
   programSlug: string;
@@ -28,6 +29,14 @@ interface Props {
 }
 
 const { cards } = Astro.props as Props;
+
+// Ключи месяцев уезжают в разметку через ПРОБЕЛ, и клиентский скрипт сравнивает по
+// целому токену, а не подстрокой. Подстроковое совпадение верно лишь случайно — из-за
+// фиксированной ширины ключа; при первом расширении формата (неделя, квартал) «2026-1»
+// начало бы находить «2026-10» и «2026-11», и обнаружил бы это посетитель, а не проверка.
+//
+// Обоснование живёт здесь, а не комментарием в разметке: комментарий в теле шаблона
+// сборка не снимает, и он уезжает в отдаваемую страницу каждому посетителю.
 ---
 
 <div class="schedule-list" data-testid="schedule-list">
@@ -39,6 +48,7 @@ const { cards } = Astro.props as Props;
       data-program={card.programSlug}
       data-city={card.citySlug}
       data-search={card.searchIndex}
+      data-months={card.months.join(' ')}
     >
       <ScheduleEventCard
         title={card.title}
