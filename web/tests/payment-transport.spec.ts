@@ -1,11 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { PAYMENT_FORM_ATTR } from './helpers/payment-contract';
+import { gotoOplata, interceptYooKassaNavigation } from './helpers/yookassa-navigation';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const DIALOG = '[role="dialog"]';
 
 async function openForm(page: Page) {
-  await page.goto('/oplata');
+  await gotoOplata(page);
   const entry = page.locator('[data-payment-entry]');
   if ((await entry.count()) > 0) await entry.first().click();
   else await page.getByRole('button', { name: /оплат/i }).click();
@@ -13,18 +14,12 @@ async function openForm(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    const w = window as Window & { __paymentAssigns?: string[]; __paymentNavigate?: (href: string) => void };
-    w.__paymentAssigns = [];
-    w.__paymentNavigate = (href) => {
-      w.__paymentAssigns!.push(href);
-    };
-  });
+  await interceptYooKassaNavigation(page);
 });
 
 test.describe('3a.1 модальность и клавиатура', () => {
   test('роль диалога, имя, кнопка закрытия; фокус входит и возвращается', async ({ page }) => {
-    await page.goto('/oplata');
+    await gotoOplata(page);
     const opener = page.locator('[data-payment-entry]').first();
     await opener.focus();
     await opener.press('Enter');
@@ -139,9 +134,9 @@ test.describe('3a.5 честные состояния', () => {
   test('смена состояния объявляется без перевода фокуса', async ({ page }) => {
     await page.route(/\/payments$/, async (route) => {
       await route.fulfill({
-        status: 201,
+        status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'created', confirmationUrl: 'https://yookassa.test/c' }),
+        body: JSON.stringify({ status: 'already_paid' }),
       });
     });
     await openForm(page);
@@ -162,7 +157,7 @@ test.describe('3a.5 честные состояния', () => {
     await submit.click();
     const live = page.locator(`${FORM} [aria-live], [data-payment-state-host][aria-live], [data-payment-state][aria-live], [role="status"]`);
     await expect(live.first()).toBeVisible();
-    await expect(page.locator('[data-payment-state="created"]')).toBeVisible();
+    await expect(page.locator('[data-payment-state="already_paid"]')).toBeVisible();
     const movedIntoPanel = await page.evaluate(() => {
       const panel = document.querySelector('[data-payment-state]');
       const el = document.activeElement;
@@ -176,7 +171,7 @@ test.describe('3a.6 без скриптов', () => {
   test('способ связаться виден, управления формой нет', async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect(page.locator(FORM)).toHaveCount(1);
     await expect(page.locator('#oplata-svyaz')).toBeVisible();
     await expect(page.locator('[data-payment-entry]')).toHaveCount(0);
@@ -189,7 +184,7 @@ test.describe('3a.7 защита от ботов', () => {
     const posts: number[] = [];
     await page.route(/\/payments$/, async (route) => {
       posts.push(1);
-      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'created', confirmationUrl: 'https://x' }) });
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'created', confirmationUrl: 'https://yookassa.test/c' }) });
     });
     await openForm(page);
     const honeypot = page.locator(`${FORM} input[aria-hidden="true"], ${FORM} [hidden] input, ${FORM} .visually-hidden input, ${FORM} .sr-only input`);

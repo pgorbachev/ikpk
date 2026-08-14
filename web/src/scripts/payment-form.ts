@@ -434,9 +434,7 @@ function boot(formEl: HTMLFormElement) {
       go.setAttribute('data-payment-confirmation-url', '');
       go.textContent = 'Продолжить оплату';
       stateHost.querySelector('[data-payment-state]')?.append(go);
-      const hooked = (window as Window & { __paymentNavigate?: (href: string) => void }).__paymentNavigate;
-      if (typeof hooked === 'function') hooked(url);
-      else location.assign(url);
+      location.assign(url);
       return;
     }
     if (status === 'already_paid') {

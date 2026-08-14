@@ -27,9 +27,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            payments/package-lock.json
 
-      - name: Install dependencies
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Install payments dependencies
+        working-directory: payments
         run: npm ci
 
       - name: Run unit tests

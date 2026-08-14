@@ -12,12 +12,18 @@ import {
   PAYMENT_SUMMARY_ATTR,
   RETURN_PARAM,
 } from './helpers/payment-contract';
+import {
+  gotoOplata,
+  interceptYooKassaNavigation,
+  yooKassaFallbackHref,
+  yooKassaNavigationUrls,
+} from './helpers/yookassa-navigation';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const STATE = (s: string) => `[${PAYMENT_STATE_ATTR}="${s}"]`;
 
 async function openForm(page: Page) {
-  await page.goto('/oplata');
+  await gotoOplata(page);
   const entry = page.locator(`[${PAYMENT_ENTRY_ATTR}]`);
   if ((await entry.count()) > 0) await entry.first().click();
   else await page.getByRole('button', { name: /оплат/i }).click();
@@ -46,19 +52,8 @@ async function mockApi(page: Page, handler: (req: { method: string; url: string;
   });
 }
 
-/** Перехват ухода на confirmationUrl: хук вместо location.assign, страница остаётся на /oplata. */
-async function interceptConfirmationNavigation(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as Window & { __paymentAssigns?: string[]; __paymentNavigate?: (href: string) => void };
-    w.__paymentAssigns = [];
-    w.__paymentNavigate = (href) => {
-      w.__paymentAssigns!.push(href);
-    };
-  });
-}
-
 test.beforeEach(async ({ page }) => {
-  await interceptConfirmationNavigation(page);
+  await interceptYooKassaNavigation(page);
 });
 
 test.describe('3.8 клиент: подписи про оплату', () => {
@@ -97,16 +92,15 @@ test.describe('5.4 created: немедленный переход и ссылк�
     }));
     await openForm(page);
     await fillValid(page);
-    await page.locator(`${FORM} [type="submit"]`).click();
-    await expect(page.locator('[data-payment-confirmation-url]')).toBeVisible();
-    await expect(page.locator('[data-payment-confirmation-url]')).toHaveAttribute(
-      'href',
-      'https://yookassa.test/c',
-    );
-    const assigned = await page.evaluate(
-      () => (window as Window & { __paymentAssigns?: string[] }).__paymentAssigns,
-    );
-    expect(assigned).toEqual(['https://yookassa.test/c']);
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await expect.poll(() => ({
+      urls: yooKassaNavigationUrls(page),
+      href: yooKassaFallbackHref(page),
+    })).toEqual({
+      urls: ['https://yookassa.test/c'],
+      href: 'https://yookassa.test/c',
+    });
+    expect(page.url()).toMatch(/\/oplata/);
   });
 });
 
@@ -122,7 +116,7 @@ test.describe('3.10 возврат с параметром запускает о
         body: JSON.stringify({ status: 'succeeded' }),
       });
     });
-    await page.goto(`/oplata?${RETURN_PARAM}=${id}`);
+    await gotoOplata(page, `/oplata?${RETURN_PARAM}=${id}`);
     await expect.poll(() => gets.length).toBeGreaterThan(0);
     await expect(page.locator(STATE('succeeded'))).toBeVisible();
   });
@@ -261,7 +255,7 @@ test.describe('3.10a-2 удержание переживает перезагр�
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
     status = 'succeeded';
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect(page.locator(STATE('succeeded'))).toBeVisible();
     await openForm(page);
     await fillValid(page);
@@ -280,7 +274,7 @@ test.describe('3.10a-2 удержание переживает перезагр�
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect(page.locator(FORM)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
   });
@@ -320,7 +314,7 @@ test.describe('3.10a-2a удержание с момента отправки', 
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click({ timeout: 2000 }).catch(() => undefined);
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toBeVisible();
     await expect(page.locator(`${FORM} [type="submit"]`)).toHaveCount(0);
   });
@@ -395,13 +389,13 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
     await expect(page.getByText(/остаётся незавершённой/i)).toBeVisible();
     await fillValid(page);
     await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
     await page.locator(`${FORM} [type="submit"]`).click();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect(page.locator(`[data-payment-attempts] [data-payment-attempt]`)).toHaveCount(2);
     const local = await page.evaluate(() => JSON.stringify(localStorage));
     expect(local).not.toMatch(/Иван|ivan@example/i);
@@ -423,12 +417,12 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
     await fillValid(page);
     await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
     await page.locator(`${FORM} [type="submit"]`).click();
-    await page.goto('/oplata');
+    await gotoOplata(page);
     const items = page.locator('[data-payment-attempt]');
     await expect(items).toHaveCount(2);
     const statuses = await items.evaluateAll((els) =>
@@ -467,7 +461,7 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
       );
       await page.locator(`${FORM} [type="submit"]`).click();
       await posted;
-      await page.goto('/oplata');
+      await gotoOplata(page);
     }
     await expect(page.locator(`[data-payment-attempt]`)).toHaveCount(5);
     await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeHidden();
@@ -511,13 +505,13 @@ test.describe('3.10d канал корреляции возврата', () => {
       });
     });
     const id = randomUUID();
-    await page.goto(`/oplata?${RETURN_PARAM}=${id}`);
+    await gotoOplata(page, `/oplata?${RETURN_PARAM}=${id}`);
     await expect.poll(() => gets.length).toBeGreaterThan(0);
     await expect.poll(() => new URL(page.url()).searchParams.get(RETURN_PARAM)).toBeNull();
     const afterClean = gets.length;
     await page.reload();
     expect(gets.length).toBe(afterClean);
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await page.waitForTimeout(300);
     expect(gets.length).toBe(afterClean);
   });
@@ -547,7 +541,7 @@ test.describe('3.5a-1 клиент: пять GET на загрузке при п
       });
     });
     for (let i = 0; i < 5; i += 1) {
-      await page.goto('/oplata');
+      await gotoOplata(page);
       const other = page.locator('[data-payment-other-seminar]');
       if (i > 0) await other.click();
       else {
@@ -565,7 +559,7 @@ test.describe('3.5a-1 клиент: пять GET на загрузке при п
       await page.locator(`${FORM} [type="submit"]`).click();
     }
     gets.length = 0;
-    await page.goto('/oplata');
+    await gotoOplata(page);
     await expect.poll(() => gets.length).toBe(5);
     expect(gets).toHaveLength(5);
   });
