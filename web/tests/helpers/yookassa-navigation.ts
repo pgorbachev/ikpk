@@ -55,11 +55,17 @@ export function yooKassaFallbackHref(page: Page): string | null {
 }
 
 export async function gotoOplata(page: Page, path = '/oplata'): Promise<void> {
+  const load = async () => {
+    await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 5_000 });
+  };
   try {
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
+    await load();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!/ERR_ABORTED|interrupted/i.test(message)) throw error;
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
+    if (!/ERR_ABORTED|interrupted|Timeout/i.test(message)) throw error;
+    await load();
+  }
+  if (!new URL(page.url()).pathname.replace(/\/$/, '').endsWith('/oplata')) {
+    await load();
   }
 }

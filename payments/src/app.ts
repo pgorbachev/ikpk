@@ -67,6 +67,32 @@ function parseJsonFile<T>(path: string, fallback: T): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
+function parseRecordsFile(raw: unknown): PaymentRecord[] {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('хранилище payments.json имеет неверную форму');
+  }
+  if (!Object.prototype.hasOwnProperty.call(raw, 'records')) {
+    fail('хранилище payments.json имеет неверную форму');
+  }
+  const records = (raw as { records: unknown }).records;
+  if (!Array.isArray(records)) {
+    fail('хранилище payments.json имеет неверную форму');
+  }
+  return records as PaymentRecord[];
+}
+
+function parseCanaryFile(raw: unknown): Record<string, string> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail('hmac canary file has invalid shape');
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v !== 'string') fail('hmac canary file has invalid shape');
+    out[k] = v;
+  }
+  return out;
+}
+
 function canonicalFingerprintSource(body: PaymentBody): string {
   return JSON.stringify({
     firstName: body.firstName,
@@ -151,12 +177,28 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
   if (prevVer && prevVer === env.HMAC_KEY_CURRENT_VERSION) {
     fail('HMAC_KEY_CURRENT_VERSION must differ from HMAC_KEY_PREVIOUS_VERSION');
   }
-  for (const name of ['PAYMENT_POST_RATE_LIMIT', 'PAYMENT_GET_RATE_LIMIT'] as const) {
+  for (const name of ['PAYMENT_POST_RATE_LIMIT'] as const) {
     const raw = env[name];
     if (!raw) fail(`${name} is required when PAYMENT_MODE=prod`);
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0) {
       fail(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+    }
+  }
+  {
+    const raw = env.PAYMENT_GET_RATE_LIMIT;
+    if (!raw) fail('PAYMENT_GET_RATE_LIMIT is required when PAYMENT_MODE=prod');
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 5) {
+      fail(`PAYMENT_GET_RATE_LIMIT must be an integer >= 5, got ${JSON.stringify(raw)}`);
+    }
+  }
+  if (env.PAYMENT_RATE_LIMIT_WINDOW_MS !== undefined) {
+    const n = Number(env.PAYMENT_RATE_LIMIT_WINDOW_MS);
+    if (!Number.isInteger(n) || n <= 0) {
+      fail(
+        `PAYMENT_RATE_LIMIT_WINDOW_MS must be a positive integer, got ${JSON.stringify(env.PAYMENT_RATE_LIMIT_WINDOW_MS)}`,
+      );
     }
   }
 }
@@ -278,8 +320,8 @@ export function createPaymentService(opts: ServiceOpts) {
   }
 
   function loadRecords(): PaymentRecord[] {
-    const raw = parseJsonFile<{ records?: PaymentRecord[] }>(storagePath, { records: [] });
-    return raw.records ?? [];
+    if (!existsSync(storagePath)) return [];
+    return parseRecordsFile(parseJsonFile<unknown>(storagePath, { records: [] }));
   }
 
   function saveRecords(records: PaymentRecord[]): void {
@@ -473,20 +515,6 @@ export function createPaymentService(opts: ServiceOpts) {
     const currentVersion = env.HMAC_KEY_CURRENT_VERSION!;
     const currentFp = fingerprintOf(body, env.HMAC_KEY_CURRENT!);
     const t = nowFn().getTime();
-
-    if (body.duplicateConfirmationToken) {
-      const tokens = loadTokens();
-      const found = tokens.find((x) => x.token === body.duplicateConfirmationToken);
-      if (found?.used) {
-        return {
-          status: 409,
-          body: {
-            status: 'duplicate_confirmation_required',
-            confirmationToken: issueToken(body.requestId, currentFp),
-          },
-        };
-      }
-    }
 
     let records = loadRecords();
     const existing = records.find((r) => r.requestId === body.requestId);
@@ -807,17 +835,20 @@ export function createPaymentService(opts: ServiceOpts) {
     mkdirSync(dirname(canaryPath), { recursive: true });
     let canary: Record<string, string> | null = null;
     if (existsSync(canaryPath)) {
+      let raw: unknown;
       try {
-        canary = JSON.parse(readFileSync(canaryPath, 'utf8')) as Record<string, string>;
+        raw = JSON.parse(readFileSync(canaryPath, 'utf8'));
       } catch {
         fail(`hmac canary file is unreadable: ${canaryPath}`);
       }
+      canary = parseCanaryFile(raw);
     }
     let records: PaymentRecord[] = [];
     if (existsSync(storagePath)) {
       try {
-        records = parseJsonFile<{ records?: PaymentRecord[] }>(storagePath, { records: [] }).records ?? [];
-      } catch {
+        records = parseRecordsFile(JSON.parse(readFileSync(storagePath, 'utf8')));
+      } catch (err) {
+        if (err instanceof Error && /неверную форму/.test(err.message)) throw err;
         fail(`хранилище payments.json нечитаемо: ${storagePath}`);
       }
     }
@@ -826,6 +857,8 @@ export function createPaymentService(opts: ServiceOpts) {
         fail('hmac canary file is missing while fingerprint storage is not empty');
       }
       canary = {};
+    } else if (Object.keys(canary).length === 0 && records.length > 0) {
+      fail('hmac canary file is empty while fingerprint storage is not empty');
     }
     const version = env.HMAC_KEY_CURRENT_VERSION!;
     const computed = canaryOf(env.HMAC_KEY_CURRENT!);
@@ -844,11 +877,13 @@ export function createPaymentService(opts: ServiceOpts) {
 
   function checkStorage(): void {
     if (!existsSync(storagePath)) return;
+    let raw: unknown;
     try {
-      JSON.parse(readFileSync(storagePath, 'utf8'));
+      raw = JSON.parse(readFileSync(storagePath, 'utf8'));
     } catch {
       fail(`хранилище payments.json нечитаемо: ${storagePath}`);
     }
+    parseRecordsFile(raw);
   }
 
   async function start(): Promise<{ port: number; url: string }> {

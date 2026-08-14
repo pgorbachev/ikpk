@@ -73,18 +73,19 @@ describe('3.5 / 3.5a лимит частоты', () => {
 
   it('3.5a N+1-й GET status → видимая ошибка, не статус чужого платежа', async () => {
     svc = await startPaymentService({
-      env: prodEnv({ PAYMENT_GET_RATE_LIMIT: '2', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
+      env: prodEnv({ PAYMENT_GET_RATE_LIMIT: '5', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
     });
     const body = validPayload();
     await postPayments(svc.url, body);
     const headers = { 'x-real-ip': '203.0.113.11' };
     const { getStatus } = await import('./helpers/payment-service');
-    expect((await jsonOf(await getStatus(svc.url, body.requestId, headers))).status).toBe(200);
-    expect((await jsonOf(await getStatus(svc.url, body.requestId, headers))).status).toBe(200);
-    const third = await jsonOf(await getStatus(svc.url, body.requestId, headers));
-    expect(third.status).toBe(429);
-    expect((third.body as { status?: string }).status).not.toBe('pending');
-    expect((third.body as { status?: string }).status).not.toBe('succeeded');
+    for (let i = 0; i < 5; i += 1) {
+      expect((await jsonOf(await getStatus(svc.url, body.requestId, headers))).status).toBe(200);
+    }
+    const sixth = await jsonOf(await getStatus(svc.url, body.requestId, headers));
+    expect(sixth.status).toBe(429);
+    expect((sixth.body as { status?: string }).status).not.toBe('pending');
+    expect((sixth.body as { status?: string }).status).not.toBe('succeeded');
   });
 
   it('3.5a-1 пять GET status подряд при пяти удержаниях не получают 429', async () => {
@@ -120,6 +121,25 @@ describe('3.5 / 3.5a лимит частоты', () => {
     expect(r.listening, 'порт открыт без лимита GET').toBe(false);
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr + r.stdout).toMatch(/PAYMENT_GET_RATE_LIMIT/i);
+  });
+
+  it('r12-M1 prod с PAYMENT_GET_RATE_LIMIT 1–4 не стартует', async () => {
+    for (const value of ['1', '2', '3', '4']) {
+      const r = await spawnPaymentProcess({ env: prodEnv({ PAYMENT_GET_RATE_LIMIT: value }) });
+      expect(r.listening, `порт открыт при PAYMENT_GET_RATE_LIMIT=${value}`).toBe(false);
+      expect(r.exitCode).not.toBe(0);
+      expect(r.stderr + r.stdout).toMatch(/PAYMENT_GET_RATE_LIMIT/i);
+    }
+  });
+
+  it('r12-M6 нечисловой или неположительный PAYMENT_RATE_LIMIT_WINDOW_MS — процесс не слушает', async () => {
+    for (const value of ['', '0', '-1', 'abc', '1.5']) {
+      const r = await spawnPaymentProcess({ env: prodEnv({ PAYMENT_RATE_LIMIT_WINDOW_MS: value }) });
+      expect(r.listening, `порт открыт при PAYMENT_RATE_LIMIT_WINDOW_MS=${JSON.stringify(value)}`).toBe(
+        false,
+      );
+      expect(r.exitCode).not.toBe(0);
+    }
   });
 
   it('некорректный PAYMENT_POST_RATE_LIMIT — процесс не слушает', async () => {

@@ -8,8 +8,10 @@ const DIALOG = '[role="dialog"]';
 async function openForm(page: Page) {
   await gotoOplata(page);
   const entry = page.locator('[data-payment-entry]');
-  if ((await entry.count()) > 0) await entry.first().click();
-  else await page.getByRole('button', { name: /оплат/i }).click();
+  if ((await entry.count()) > 0) {
+    await expect(entry.first()).toBeEnabled();
+    await entry.first().click();
+  } else await page.getByRole('button', { name: /оплат/i }).click();
   await expect(page.locator(DIALOG)).toBeVisible();
 }
 
@@ -21,6 +23,7 @@ test.describe('3a.1 модальность и клавиатура', () => {
   test('роль диалога, имя, кнопка закрытия; фокус входит и возвращается', async ({ page }) => {
     await gotoOplata(page);
     const opener = page.locator('[data-payment-entry]').first();
+    await expect(opener).toBeEnabled();
     await opener.focus();
     await opener.press('Enter');
     const dialog = page.locator(DIALOG);

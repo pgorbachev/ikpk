@@ -25,8 +25,10 @@ const STATE = (s: string) => `[${PAYMENT_STATE_ATTR}="${s}"]`;
 async function openForm(page: Page) {
   await gotoOplata(page);
   const entry = page.locator(`[${PAYMENT_ENTRY_ATTR}]`);
-  if ((await entry.count()) > 0) await entry.first().click();
-  else await page.getByRole('button', { name: /оплат/i }).click();
+  if ((await entry.count()) > 0) {
+    await expect(entry.first()).toBeEnabled();
+    await entry.first().click();
+  } else await page.getByRole('button', { name: /оплат/i }).click();
   await expect(page.locator(FORM)).toBeVisible();
 }
 
@@ -415,13 +417,17 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     });
     await openForm(page);
     await fillValid(page);
-    await page.locator(`${FORM} [type="submit"]`).click();
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await expect.poll(() => yooKassaNavigationUrls(page).length).toBeGreaterThan(0);
     await gotoOplata(page);
+    await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeVisible();
     await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
     await fillValid(page);
     await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
-    await page.locator(`${FORM} [type="submit"]`).click();
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await expect.poll(() => yooKassaNavigationUrls(page).length).toBeGreaterThan(1);
     await gotoOplata(page);
+    await expect(page.locator(`[${PAYMENT_ENTRY_ATTR}]`).first()).toBeEnabled();
     const items = page.locator('[data-payment-attempt]');
     await expect(items).toHaveCount(2);
     const statuses = await items.evaluateAll((els) =>
@@ -518,6 +524,7 @@ test.describe('3.10d канал корреляции возврата', () => {
 
 test.describe('3.5a-1 клиент: пять GET на загрузке при пяти удержаниях', () => {
   test('одна загрузка /oplata даёт пять GET status и ни один не 429', async ({ page }) => {
+    test.setTimeout(30_000);
     const gets: string[] = [];
     await page.route(/\/payments(\/|$)/, async (route) => {
       const req = route.request();
@@ -542,11 +549,15 @@ test.describe('3.5a-1 клиент: пять GET на загрузке при п
     for (let i = 0; i < 5; i += 1) {
       await gotoOplata(page);
       const other = page.locator('[data-payment-other-seminar]');
-      if (i > 0) await other.click();
-      else {
+      if (i > 0) {
+        await expect(other).toBeVisible();
+        await other.click();
+      } else {
         const entry = page.locator('[data-payment-entry]');
-        if ((await entry.count()) > 0) await entry.first().click();
-        else await page.getByRole('button', { name: /оплат/i }).click();
+        if ((await entry.count()) > 0) {
+          await expect(entry.first()).toBeEnabled();
+          await entry.first().click();
+        } else await page.getByRole('button', { name: /оплат/i }).click();
       }
       await page.locator(`${FORM} [name="firstName"]`).fill('Иван');
       await page.locator(`${FORM} [name="lastName"]`).fill('Петров');
@@ -555,11 +566,173 @@ test.describe('3.5a-1 клиент: пять GET на загрузке при п
       await page.locator(`${FORM} [name="email"]`).fill('ivan@example.com');
       await page.locator(`${FORM} [name="phone"]`).fill('79111234567');
       await page.locator(`${FORM} [name="consent"]`).check();
-      await page.locator(`${FORM} [type="submit"]`).click();
+      await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+      await expect.poll(() => yooKassaNavigationUrls(page).length).toBe(i + 1);
     }
     gets.length = 0;
     await gotoOplata(page);
     await expect.poll(() => gets.length).toBe(5);
     expect(gets).toHaveLength(5);
+  });
+});
+
+const HOLD_KEY = 'ikpk-payment-holds';
+
+async function seedHolds(page: Page, ids: string[]) {
+  await page.addInitScript(
+    ({ key, holds }) => {
+      const flag = `${key}:seeded`;
+      if (sessionStorage.getItem(flag) === '1') return;
+      sessionStorage.setItem(flag, '1');
+      localStorage.setItem(key, JSON.stringify(holds));
+    },
+    { key: HOLD_KEY, holds: ids.map((requestId) => ({ requestId, createdAt: Date.now() })) },
+  );
+}
+
+test.describe('r12-M1 клиент: 429 при проверке статуса', () => {
+  test('GET 429 rejected → unknown, удержание сохраняется', async ({ page }) => {
+    const id = randomUUID();
+    await seedHolds(page, [id]);
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'rejected', errors: [{ field: '_rateLimit' }] }),
+      });
+    });
+    await gotoOplata(page);
+    await expect(page.locator(STATE('unknown'))).toBeVisible();
+    const stored = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+    expect(stored).toContain(id);
+  });
+});
+
+test.describe('r12-M4 возврат paymentRequest и остальные удержания', () => {
+  test('сначала исход возврата, затем статусы остальных; фоновая проверка не затирает панель', async ({ page }) => {
+    const returned = randomUUID();
+    const other = randomUUID();
+    await seedHolds(page, [returned, other]);
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      const url = route.request().url();
+      if (url.includes(returned)) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'succeeded' }),
+        });
+        return;
+      }
+      if (url.includes(other)) {
+        await new Promise((r) => setTimeout(r, 400));
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'pending' }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'pending' }) });
+    });
+    await gotoOplata(page, `/oplata?${RETURN_PARAM}=${returned}`);
+    await expect(page.locator(STATE('succeeded'))).toBeVisible();
+    await expect.poll(async () => {
+      const raw = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+      return raw ?? '';
+    }).toContain(other);
+    await expect.poll(async () => page.locator('[data-payment-attempt]').count()).toBeGreaterThan(0);
+    await expect(page.locator(`[data-payment-attempt-id="${other}"]`)).toHaveAttribute(
+      'data-payment-attempt-status',
+      'pending',
+    );
+    await expect(page.locator(STATE('succeeded'))).toBeVisible();
+    await expect(page.locator(STATE('pending'))).toHaveCount(0);
+    const stored = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+    expect(stored).toContain(other);
+    await expect.poll(async () => {
+      const raw = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+      return raw?.includes(returned) ?? true;
+    }).toBe(false);
+  });
+});
+
+test.describe('r12-M5 гонка restoreOnLoad', () => {
+  test('вход недоступен, пока проверка удержаний не завершилась', async ({ page }) => {
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await seedHolds(page, ids);
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await new Promise((r) => setTimeout(r, 800));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'pending' }),
+      });
+    });
+    await gotoOplata(page);
+    const entry = page.locator(`[${PAYMENT_ENTRY_ATTR}]`).first();
+    await expect(entry).toBeVisible();
+    await expect(entry).toBeDisabled();
+    await expect(entry).toBeEnabled({ timeout: 10_000 });
+  });
+
+  test('при пяти удержаниях новая попытка не уходит на сервер и шестой requestId не теряется молча', async ({
+    page,
+  }) => {
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await seedHolds(page, ids);
+    const posts: string[] = [];
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        posts.push(req.postData() ?? '');
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'created', confirmationUrl: 'https://yookassa.test/c' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'pending' }),
+      });
+    });
+    await gotoOplata(page);
+    await expect(page.locator(`[${PAYMENT_ENTRY_ATTR}]`).first()).toBeEnabled({ timeout: 10_000 });
+    await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).evaluate((el) => {
+      el.removeAttribute('hidden');
+      (el as HTMLButtonElement).click();
+    });
+    await fillValid(page);
+    await page.locator(`${FORM} [name="seminar"]`).fill('Шестой');
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await page.waitForTimeout(400);
+    expect(posts, 'шестая попытка ушла на сервер').toHaveLength(0);
+    const stored = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+    for (const id of ids) expect(stored).toContain(id);
+    expect(stored?.match(/"requestId"/g)?.length ?? 0).toBe(5);
+  });
+});
+
+test.describe('r12-m2 предел опроса 15 секунд', () => {
+  test('молчащий сервер после pending не держит опрос дольше 15с', async ({ page }) => {
+    test.setTimeout(40_000);
+    const id = randomUUID();
+    const started = Date.now();
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      if (Date.now() - started < 12_000) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'pending' }),
+        });
+        return;
+      }
+      await new Promise(() => undefined);
+    });
+    await gotoOplata(page, `/oplata?${RETURN_PARAM}=${id}`);
+    await expect(page.locator(STATE('unknown'))).toBeVisible({ timeout: 35_000 });
+    expect(Date.now() - started, 'опрос превысил 15с с допуском').toBeLessThan(18_000);
   });
 });

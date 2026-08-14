@@ -300,6 +300,65 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
     },
   );
 
+  it('r12-M2 canary [] — fail-closed, не тихий старт', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-array-'));
+    writeFileSync(join(dir, 'hmac-canary.json'), '[]');
+    writeFileSync(
+      join(dir, 'payments.json'),
+      JSON.stringify({
+        records: [
+          {
+            requestId: '00000000-0000-4000-8000-000000000004',
+            yookassaPaymentId: 'yk-4',
+            status: 'pending',
+            fingerprint: 'f',
+            keyVersion: TEST_HMAC_CURRENT_VERSION,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    const r = await spawnPaymentProcess({
+      env: prodEnv({
+        PAYMENT_DATA_DIR: dir,
+        PAYMENT_CANARY_PATH: join(dir, 'hmac-canary.json'),
+        PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
+      }),
+    });
+    expect(r.listening, 'canary-массив прошёл как журнал').toBe(false);
+    expect(r.connection).toBe('refused');
+    expect(r.exitCode).not.toBe(0);
+  });
+
+  it('r12-M2 пустой объект canary при непустом хранилище — fail-closed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-empty-obj-'));
+    writeFileSync(join(dir, 'hmac-canary.json'), '{}');
+    writeFileSync(
+      join(dir, 'payments.json'),
+      JSON.stringify({
+        records: [
+          {
+            requestId: '00000000-0000-4000-8000-000000000005',
+            yookassaPaymentId: 'yk-5',
+            status: 'pending',
+            fingerprint: 'f',
+            keyVersion: TEST_HMAC_CURRENT_VERSION,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    const r = await spawnPaymentProcess({
+      env: prodEnv({
+        PAYMENT_DATA_DIR: dir,
+        PAYMENT_CANARY_PATH: join(dir, 'hmac-canary.json'),
+        PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
+      }),
+    });
+    expect(r.listening, 'пустой canary восстановил защиту молча').toBe(false);
+    expect(r.exitCode).not.toBe(0);
+  });
+
   it('opts.fetch не снимает fail-closed при непустом хранилище без canary', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-fetch-'));
     writeFileSync(

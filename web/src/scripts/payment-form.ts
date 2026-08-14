@@ -40,7 +40,7 @@ function boot(formEl: HTMLFormElement) {
   const holdStatuses = new Map<string, ApiBody>();
 
   enhanceEntry();
-  void restoreOnLoad();
+  void restoreOnLoad().finally(() => setEntryReady(true));
 
   formEl.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -64,8 +64,22 @@ function boot(formEl: HTMLFormElement) {
     button.className = legacy.className;
     button.textContent = legacy.textContent;
     button.setAttribute('data-payment-entry', '');
+    const pending =
+      Boolean(new URL(window.location.href).searchParams.get(RETURN_PARAM)) || readHolds().length > 0;
+    if (pending) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+    }
     legacy.replaceWith(button);
     button.addEventListener('click', () => openDialog(button));
+  }
+
+  function setEntryReady(ready: boolean) {
+    const button = document.querySelector<HTMLButtonElement>('[data-payment-entry]');
+    if (!button) return;
+    button.disabled = !ready;
+    if (ready) button.removeAttribute('aria-busy');
+    else button.setAttribute('aria-busy', 'true');
   }
 
   function openDialog(opener?: HTMLElement) {
@@ -109,7 +123,7 @@ function boot(formEl: HTMLFormElement) {
       const raw = JSON.parse(localStorage.getItem(HOLD_KEY) ?? '[]') as Hold[];
       const now = Date.now();
       const live = raw.filter((h) => now - h.createdAt <= TTL_MS);
-      if (live.length !== raw.length) writeHolds(live);
+      if (live.length !== raw.length && live.length <= MAX_HOLDS) writeHolds(live);
       return live;
     } catch {
       return [];
@@ -117,7 +131,10 @@ function boot(formEl: HTMLFormElement) {
   }
 
   function writeHolds(holds: Hold[]) {
-    localStorage.setItem(HOLD_KEY, JSON.stringify(holds.slice(0, MAX_HOLDS)));
+    if (holds.length > MAX_HOLDS) {
+      throw new Error(`cannot store more than ${MAX_HOLDS} payment holds`);
+    }
+    localStorage.setItem(HOLD_KEY, JSON.stringify(holds));
   }
 
   function readFields(): Record<string, FieldMap> {
@@ -132,11 +149,13 @@ function boot(formEl: HTMLFormElement) {
     sessionStorage.setItem(FIELDS_KEY, JSON.stringify(all));
   }
 
-  function upsertHold(requestId: string) {
-    if (isDemoBuild) return;
+  function upsertHold(requestId: string): boolean {
+    if (isDemoBuild) return true;
     const holds = readHolds().filter((h) => h.requestId !== requestId);
+    if (holds.length >= MAX_HOLDS) return false;
     holds.push({ requestId, createdAt: Date.now() });
     writeHolds(holds);
+    return true;
   }
 
   function dropHold(requestId: string, opts: { keepFields?: boolean } = {}) {
@@ -385,8 +404,12 @@ function boot(formEl: HTMLFormElement) {
         extra.duplicateConfirmationToken = pendingToken;
         extra.duplicateConfirmed = true;
       }
+      if (!upsertHold(activeRequestId)) {
+        setState('error', 'Достигнут предел незавершённых попыток. Завершите одну из них.');
+        unlockSubmit();
+        return;
+      }
       const body = payload(activeRequestId, extra);
-      upsertHold(activeRequestId);
       const fields = readFields();
       fields[activeRequestId] = collectFields();
       writeFields(fields);
@@ -529,20 +552,24 @@ function boot(formEl: HTMLFormElement) {
   }
 
   async function pollStatus(requestId: string, waitPending = false): Promise<ApiBody | null> {
-    const started = Date.now();
-    while (Date.now() - started < STATUS_TIMEOUT_MS) {
+    const deadline = Date.now() + STATUS_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
       try {
         const res = await fetch(`${endpoint}/payments/${requestId}/status`, {
-          signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+          signal: AbortSignal.timeout(remaining),
         });
         const json = (await res.json().catch(() => ({}))) as ApiBody;
         if (res.status === 404 || json.status === 'not_found') return { status: 'not_found' };
-        if (waitPending && json.status === 'pending' && Date.now() - started < STATUS_TIMEOUT_MS - 500) {
-          await new Promise((r) => setTimeout(r, 400));
+        if (res.status === 429 || json.status === 'rejected') return { status: 'unknown' };
+        if (waitPending && json.status === 'pending' && deadline - Date.now() > 500) {
+          await new Promise((r) => setTimeout(r, Math.min(400, Math.max(0, deadline - Date.now()))));
           continue;
         }
         return json;
       } catch {
+        if (Date.now() >= deadline) return { status: 'unknown' };
         return { status: 'unknown' };
       }
     }
@@ -608,6 +635,7 @@ function boot(formEl: HTMLFormElement) {
       history.replaceState({}, '', url.pathname + url.search + url.hash);
       const json = await pollStatus(fromQuery, true);
       if (json) applyStatus(fromQuery, json);
+      await refreshSiblingHolds(fromQuery);
       return;
     }
     const holds = readHolds();
@@ -627,5 +655,22 @@ function boot(formEl: HTMLFormElement) {
     const last = live[live.length - 1]!;
     const json = holdStatuses.get(last.requestId) ?? { status: 'unknown' };
     applyStatus(last.requestId, json);
+  }
+
+  async function refreshSiblingHolds(keepId: string) {
+    const holds = readHolds().filter((h) => h.requestId !== keepId);
+    if (!holds.length) return;
+    const results = await Promise.all(
+      holds.map(async (h) => ({ id: h.requestId, json: await pollStatus(h.requestId) })),
+    );
+    for (const item of results) {
+      if (!item.json) continue;
+      holdStatuses.set(item.id, item.json);
+      const status = item.json.status ?? '';
+      if (status === 'succeeded' || status === 'canceled' || status === 'not_found' || status === 'demo') {
+        dropHold(item.id);
+      }
+    }
+    renderAttempts();
   }
 }

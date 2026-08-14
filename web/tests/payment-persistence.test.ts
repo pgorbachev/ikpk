@@ -47,4 +47,30 @@ describe('3.10c-1 повреждённое хранилище — fail-closed', 
     expect(fail.exitCode).not.toBe(0);
     expect(fail.stderr + fail.stdout).toMatch(/хран|storage|payments\.json|нечита/i);
   });
+
+  it('r12-M3 {} / [] / null и records не-массив — fail-closed; {records:[]} допустим', async () => {
+    for (const raw of ['{}', '[]', 'null', '{"records":{}}', '{"records":null}']) {
+      const dataDir = mkdtempSync(join(tmpdir(), 'ikpk-store-shape-'));
+      writeFileSync(join(dataDir, 'payments.json'), raw);
+      const fail = await spawnPaymentProcess({
+        env: prodEnv({
+          PAYMENT_DATA_DIR: dataDir,
+          PAYMENT_STORAGE_PATH: join(dataDir, 'payments.json'),
+        }),
+      });
+      expect(fail.listening, `хранилище ${raw} открыло порт`).toBe(false);
+      expect(fail.exitCode).not.toBe(0);
+    }
+    const okDir = mkdtempSync(join(tmpdir(), 'ikpk-store-empty-records-'));
+    writeFileSync(join(okDir, 'payments.json'), JSON.stringify({ records: [] }));
+    const ok = await spawnPaymentProcess({
+      env: prodEnv({
+        PAYMENT_DATA_DIR: okDir,
+        PAYMENT_STORAGE_PATH: join(okDir, 'payments.json'),
+        PAYMENT_LISTEN_PORT: '18771',
+      }),
+      waitMs: 2500,
+    });
+    expect(ok.listening, '{records:[]} отвергнут как пустое хранилище').toBe(true);
+  });
 });

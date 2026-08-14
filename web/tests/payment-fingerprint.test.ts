@@ -223,11 +223,34 @@ describe('3.10a-3b подтверждение повторной оплаты', 
     expect((await jsonOf(await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }))).status).toBe(
       201,
     );
+    const creates = svc!.yookassa.creates.length;
     const again = await jsonOf(
       await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }),
     );
     expect(again.status).not.toBe(201);
-    expect((again.body as { status?: string }).status).not.toBe('created');
+    expect(svc!.yookassa.creates.length, 'replay по существующему requestId создал платёж').toBe(creates);
+    const third = { ...first, requestId: randomUUID() };
+    const replayBranch = await jsonOf(
+      await postPayments(svc!.url, { ...third, duplicateConfirmationToken: token }),
+    );
+    expect((replayBranch.body as { status?: string }).status).not.toBe('created');
+    expect(replayBranch.status).not.toBe(201);
+    expect(svc!.yookassa.creates.length, 'replay токена по duplicate-ветви создал платёж').toBe(creates);
+  });
+
+  it('r12-m1 использованный токен при известном requestId не перебивает already_paid', async () => {
+    const first = await succeededRecord();
+    const second = { ...first, requestId: randomUUID() };
+    const token = ((await jsonOf(await postPayments(svc!.url, second))).body as { confirmationToken: string })
+      .confirmationToken;
+    expect(
+      (await jsonOf(await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }))).status,
+    ).toBe(201);
+    const replayOnFirst = await jsonOf(
+      await postPayments(svc!.url, { ...first, duplicateConfirmationToken: token }),
+    );
+    expect(replayOnFirst.body).toMatchObject({ status: 'already_paid' });
+    expect((replayOnFirst.body as { status?: string }).status).not.toBe('duplicate_confirmation_required');
   });
 
   it('(7) живая незавершённая приоритетнее confirmed → verification_required, не вопрос', async () => {
