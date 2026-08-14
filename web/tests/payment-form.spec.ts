@@ -132,7 +132,7 @@ test.describe('3.10a новый requestId после терминального 
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
-    expect(ids.length).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => ids.length).toBeGreaterThanOrEqual(2);
     expect(ids[0]).not.toBe(ids[1]);
   });
 
@@ -352,6 +352,9 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     await page.locator(`${FORM} [type="submit"]`).click();
     await expect(page.locator(`[${PAYMENT_CONTINUE_ATTR}]`)).toBeVisible();
     await page.locator(`[${PAYMENT_CONTINUE_ATTR}]`).click();
+    await expect(page.locator(`${FORM} [name="amount"]`)).toBeEditable();
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect.poll(() => ids.length).toBe(2);
     expect(ids[0]).toBe(ids[1]);
     await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeVisible();
   });

@@ -193,12 +193,8 @@ function boot(formEl: HTMLFormElement) {
       btn.textContent = 'Продолжить эту оплату';
       btn.addEventListener('click', () => {
         const stored = readFields()[activeRequestId];
-        if (stored) {
-          applyFields(stored);
-          void onSubmit();
-          return;
-        }
-        restoreFieldsDom();
+        if (stored) applyFields(stored);
+        else restoreFieldsDom();
         setChrome({ other: true, warning: true });
       });
       actions.append(btn);
@@ -235,10 +231,8 @@ function boot(formEl: HTMLFormElement) {
     attemptList.innerHTML = holds.map((h) => `<li data-payment-attempt>${h.requestId}</li>`).join('');
   }
 
-  function setState(name: string, html: string, focusPanel = false) {
-    stateHost.innerHTML = `<div data-payment-state="${name}" ${focusPanel ? 'tabindex="-1"' : ''} role="status">${html}</div>`;
-    const panel = stateHost.querySelector<HTMLElement>('[data-payment-state]');
-    if (focusPanel && panel) panel.focus();
+  function setState(name: string, html: string) {
+    stateHost.innerHTML = `<div data-payment-state="${name}" role="status">${html}</div>`;
   }
 
   function clearErrors() {
@@ -407,7 +401,6 @@ function boot(formEl: HTMLFormElement) {
       go.setAttribute('data-payment-confirmation-url', '');
       go.textContent = 'Продолжить оплату';
       stateHost.querySelector('[data-payment-state]')?.append(go);
-      setTimeout(() => window.location.assign(url), 3000);
       return;
     }
     if (status === 'already_paid') {
@@ -457,7 +450,6 @@ function boot(formEl: HTMLFormElement) {
       setState(
         'verification_required',
         'Исход этой попытки нельзя подтвердить автоматически. Платёж мог быть создан, повторять оплату не нужно. Свяжитесь с нами.',
-        true,
       );
       stripFieldsDom();
       setChrome({
