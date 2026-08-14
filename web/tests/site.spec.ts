@@ -283,7 +283,7 @@ test.describe('Contrast of CTA inside rich content', () => {
   test('CTA text is readable on its own background', async ({ page }) => {
     await page.goto('/oplata');
 
-    const cta = page.locator('.rich-content a.btn').first();
+    const cta = page.locator('.rich-content [data-payment-entry], .rich-content a.btn').first();
     await expect(cta).toBeVisible();
 
     const { color, background } = await cta.evaluate((el) => {

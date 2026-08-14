@@ -83,14 +83,14 @@ def dispatch(c):
     # истёкшая незавершённая — не совпадение; дальше поиск подтверждённых
     if c["fp_confirmed_lt14d"]:
         if not c["cf_key_known"]:
-            return CREATE, "1a-dup-invisible-key"
-        return (CREATE, "1a-dup-token") if c["valid_token"] else (DUP, "1a-dup-ask")
+            return CREATE, "1a-dup-unknown-ver"
+        return (CREATE, "1a-dup-confirmed") if c["valid_token"] else (DUP, "1a-dup-ask")
     if c["fp_confirmed_ge14d"]:
         return CREATE, "1a-succeeded-expired"
     if c["fp_canceled"]:
         return CREATE, "1a-canceled"
     if c["fp_nonterminal"] and not c["nt_key_known"]:
-        return CREATE, "1a-nonterminal-invisible-key"
+        return CREATE, "1a-nonterminal-unknown-ver"
     if c["fp_nonterminal"] and c["nt_key_known"] and not c["m_age_lt14d"]:
         return CREATE, "1a-nonterminal-block-expired"
     return CREATE, "2-fresh"
@@ -229,8 +229,8 @@ for b in sorted(branches):
 required = {
     "3", "4-match", "4-mismatch", "4-unknown-key", "5-mismatch", "5-existing",
     "5-continue", "5-beyond-window", "6", "1a-nonterminal-match",
-    "1a-nonterminal-block-expired", "1a-nonterminal-invisible-key",
-    "1a-dup-ask", "1a-dup-token", "1a-dup-invisible-key",
+    "1a-nonterminal-block-expired", "1a-nonterminal-unknown-ver",
+    "1a-dup-ask", "1a-dup-confirmed", "1a-dup-unknown-ver",
     "1a-succeeded-expired", "1a-canceled", "2-fresh",
 }
 missing = required - set(branches)

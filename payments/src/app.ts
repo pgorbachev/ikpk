@@ -446,7 +446,7 @@ export function createPaymentService(opts: ServiceOpts) {
     return fingerprintOf(body, key);
   }
 
-  async function handlePost(req: IncomingMessage, origin: string | undefined): Promise<{ status: number; body: unknown }> {
+  async function handlePost(req: IncomingMessage): Promise<{ status: number; body: unknown }> {
     if (env.PAYMENT_MODE === 'demo') {
       await readBody(req).catch(() => '');
       return { status: 200, body: { status: 'created_demo' } };
@@ -781,7 +781,7 @@ export function createPaymentService(opts: ServiceOpts) {
       }
 
       if (req.method === 'POST' && url.pathname === '/payments') {
-        const result = await exclusive(() => handlePost(req, origin));
+        const result = await exclusive(() => handlePost(req));
         send(result.status, result.body);
         return;
       }

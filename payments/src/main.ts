@@ -1,4 +1,4 @@
-import { createPaymentService } from './app.ts';
+import { createPaymentService } from './app.js';
 
 const app = createPaymentService({ env: process.env });
 
