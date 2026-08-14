@@ -3,6 +3,7 @@ import { TEST_HMAC_CURRENT, TEST_YOOKASSA_SECRET, prodEnv, validPayload } from '
 import {
   jsonOf,
   postPayments,
+  spawnPaymentProcess,
   startPaymentService,
   type StartedService,
 } from './helpers/payment-service';
@@ -51,7 +52,7 @@ describe('3.5 / 3.5a лимит частоты', () => {
     svc = await startPaymentService({
       env: prodEnv({ PAYMENT_POST_RATE_LIMIT: '2', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
     });
-    const headers = { 'x-forwarded-for': '203.0.113.10' };
+    const headers = { 'x-real-ip': '203.0.113.10' };
     // Разный семинар/сумма при том же IP: предмет — лимит частоты, не отпечаток.
     // Одинаковый состав дал бы законный verification_required на втором POST.
     expect(
@@ -76,7 +77,7 @@ describe('3.5 / 3.5a лимит частоты', () => {
     });
     const body = validPayload();
     await postPayments(svc.url, body);
-    const headers = { 'x-forwarded-for': '203.0.113.11' };
+    const headers = { 'x-real-ip': '203.0.113.11' };
     const { getStatus } = await import('./helpers/payment-service');
     expect((await jsonOf(await getStatus(svc.url, body.requestId, headers))).status).toBe(200);
     expect((await jsonOf(await getStatus(svc.url, body.requestId, headers))).status).toBe(200);
@@ -90,7 +91,7 @@ describe('3.5 / 3.5a лимит частоты', () => {
     svc = await startPaymentService({
       env: prodEnv({ PAYMENT_GET_RATE_LIMIT: '5', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
     });
-    const headers = { 'x-forwarded-for': '203.0.113.12' };
+    const headers = { 'x-real-ip': '203.0.113.12' };
     const ids: string[] = [];
     for (let i = 0; i < 5; i += 1) {
       const body = validPayload({ seminar: `Семинар ${i}` });
@@ -104,5 +105,92 @@ describe('3.5 / 3.5a лимит частоты', () => {
       codes.push((await jsonOf(await getStatus(svc.url, id, headers))).status);
     }
     expect(codes, 'лимит GET не пропускает штатные пять удержаний').toEqual([200, 200, 200, 200, 200]);
+  });
+
+  it('prod без PAYMENT_POST_RATE_LIMIT не стартует', async () => {
+    const r = await spawnPaymentProcess({ env: prodEnv({ PAYMENT_POST_RATE_LIMIT: undefined }) });
+    expect(r.listening, 'порт открыт без лимита POST').toBe(false);
+    expect(r.connection).toBe('refused');
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr + r.stdout).toMatch(/PAYMENT_POST_RATE_LIMIT/i);
+  });
+
+  it('prod без PAYMENT_GET_RATE_LIMIT не стартует', async () => {
+    const r = await spawnPaymentProcess({ env: prodEnv({ PAYMENT_GET_RATE_LIMIT: undefined }) });
+    expect(r.listening, 'порт открыт без лимита GET').toBe(false);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr + r.stdout).toMatch(/PAYMENT_GET_RATE_LIMIT/i);
+  });
+
+  it('некорректный PAYMENT_POST_RATE_LIMIT — процесс не слушает', async () => {
+    for (const value of ['', '0', '-1', 'abc']) {
+      const r = await spawnPaymentProcess({ env: prodEnv({ PAYMENT_POST_RATE_LIMIT: value }) });
+      expect(r.listening, `порт открыт при PAYMENT_POST_RATE_LIMIT=${JSON.stringify(value)}`).toBe(false);
+      expect(r.exitCode).not.toBe(0);
+    }
+  });
+
+  it('подмена X-Forwarded-For не открывает новое ведро', async () => {
+    svc = await startPaymentService({
+      env: prodEnv({ PAYMENT_POST_RATE_LIMIT: '2', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
+    });
+    const trusted = { 'x-real-ip': '203.0.113.40' };
+    expect(
+      (await jsonOf(await postPayments(svc.url, validPayload({ seminar: 'Модуль 1', amount: 1 }), trusted)))
+        .status,
+    ).toBe(201);
+    expect(
+      (await jsonOf(await postPayments(svc.url, validPayload({ seminar: 'Модуль 2', amount: 2 }), trusted)))
+        .status,
+    ).toBe(201);
+    const spoofed = { 'x-real-ip': '203.0.113.40', 'x-forwarded-for': '198.51.100.1' };
+    const third = await jsonOf(
+      await postPayments(svc.url, validPayload({ seminar: 'Модуль 3', amount: 3 }), spoofed),
+    );
+    expect(third.status).toBe(429);
+  });
+
+  it('клиентский X-Forwarded-For без X-Real-IP не разделяет вёдра', async () => {
+    svc = await startPaymentService({
+      env: prodEnv({ PAYMENT_POST_RATE_LIMIT: '2', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
+    });
+    expect(
+      (
+        await jsonOf(
+          await postPayments(svc.url, validPayload({ seminar: 'A', amount: 1 }), {
+            'x-forwarded-for': '198.51.100.1',
+          }),
+        )
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await jsonOf(
+          await postPayments(svc.url, validPayload({ seminar: 'B', amount: 2 }), {
+            'x-forwarded-for': '198.51.100.2',
+          }),
+        )
+      ).status,
+    ).toBe(201);
+    const third = await jsonOf(
+      await postPayments(svc.url, validPayload({ seminar: 'C', amount: 3 }), {
+        'x-forwarded-for': '198.51.100.3',
+      }),
+    );
+    expect(third.status, 'подмена XFF открыла новое ведро').toBe(429);
+  });
+
+  it('nginx не берёт клиентский X-Forwarded-For как единственный источник', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { repoRoot } = await import('./helpers/payment-contract');
+    const conf = readFileSync(join(repoRoot, 'payments/deploy/nginx-api.conf'), 'utf8');
+    const headers = conf
+      .split('\n')
+      .filter((line) => /^\s*proxy_set_header\s/.test(line))
+      .join('\n');
+    expect(headers).not.toMatch(/\$proxy_add_x_forwarded_for/);
+    expect(headers).toMatch(/X-Forwarded-For\s+\$remote_addr/);
+    expect(headers).toMatch(/X-Real-IP\s+\$remote_addr/);
   });
 });

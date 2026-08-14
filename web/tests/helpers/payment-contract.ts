@@ -98,6 +98,9 @@ export function prodEnv(overrides: Record<string, string | undefined> = {}): Rec
     YOOKASSA_SECRET_KEY: TEST_YOOKASSA_SECRET,
     HMAC_KEY_CURRENT: TEST_HMAC_CURRENT,
     HMAC_KEY_CURRENT_VERSION: TEST_HMAC_CURRENT_VERSION,
+    PAYMENT_POST_RATE_LIMIT: '1000',
+    PAYMENT_GET_RATE_LIMIT: '1000',
+    PAYMENT_RATE_LIMIT_WINDOW_MS: '60000',
   };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete base[k];

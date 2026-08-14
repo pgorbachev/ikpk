@@ -10,6 +10,7 @@
  * на отсутствии реализации.
  */
 
+import { createHmac } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -197,7 +198,6 @@ export async function startPaymentService(opts: {
   if (opts.seedRecords) writeFileSync(paths.storagePath, JSON.stringify({ records: opts.seedRecords }));
   else if (opts.emptyFingerprints) writeFileSync(paths.storagePath, JSON.stringify({ records: [] }));
   if (opts.seedJournal) writeFileSync(paths.journalPath, JSON.stringify({ entries: opts.seedJournal }));
-  if (opts.seedCanary !== undefined) writeFileSync(paths.canaryPath, JSON.stringify(opts.seedCanary));
 
   const env: Record<string, string> = {
     PAYMENT_DATA_DIR: dataDir,
@@ -208,6 +208,16 @@ export async function startPaymentService(opts: {
     ...(opts.env ?? {}),
   };
   if (opts.now) env.PAYMENT_NOW = opts.now().toISOString();
+
+  if (opts.seedCanary !== undefined) writeFileSync(paths.canaryPath, JSON.stringify(opts.seedCanary));
+  else if (env.HMAC_KEY_CURRENT && env.HMAC_KEY_CURRENT_VERSION) {
+    // In-process тесты передают fetch для мока ЮKassa; охрана canary от этого не
+    // зависит. Журнал сажается отдельно, а не через отключение fail-closed.
+    const digest = createHmac('sha256', env.HMAC_KEY_CURRENT)
+      .update('ikpk-hmac-canary-constant')
+      .digest('hex');
+    writeFileSync(paths.canaryPath, JSON.stringify({ [env.HMAC_KEY_CURRENT_VERSION]: digest }));
+  }
 
   const mod: AppModule = await import(pathToFileURL(PAYMENT_SERVICE_ENTRY).href);
   if (typeof mod.createPaymentService !== 'function') {
@@ -286,7 +296,7 @@ export async function spawnPaymentProcess(opts: {
   const entry = existsSync(PAYMENT_SERVICE_MAIN) ? PAYMENT_SERVICE_MAIN : PAYMENT_SERVICE_ENTRY;
   const child: ChildProcess = spawn(process.execPath, ['--import', 'tsx', entry], {
     env,
-    cwd: join(PAYMENT_SERVICE_ENTRY, '..', '..', '..'),
+    cwd: join(PAYMENT_SERVICE_ENTRY, '..', '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -345,6 +355,9 @@ export async function postPayments(url: string, body: unknown, headers: Record<s
 export async function getStatus(url: string, requestId: string, headers: Record<string, string> = {}) {
   return fetch(`${url}/payments/${requestId}/status`, { headers });
 }
+
+/** Тестовый шов HTTPS: как nginx `proxy_set_header X-Forwarded-Proto $scheme`. */
+export const WEBHOOK_HTTPS_HEADERS = { 'x-forwarded-proto': 'https' };
 
 export async function postWebhook(url: string, body: unknown, headers: Record<string, string> = {}) {
   return fetch(`${url}/payments/webhook`, {

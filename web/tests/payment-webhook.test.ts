@@ -6,6 +6,7 @@ import {
   postPayments,
   postWebhook,
   startPaymentService,
+  WEBHOOK_HTTPS_HEADERS,
   type StartedService,
 } from './helpers/payment-service';
 
@@ -23,10 +24,14 @@ describe('3.10b webhook не доверяет телу', () => {
     const rec = svc.readRecords()[0];
     expect(rec?.status).not.toBe('succeeded');
     svc.yookassa.setGetHandler((id) => ({ status: 200, body: { id, status: 'pending' } }));
-    await postWebhook(svc.url, {
-      event: 'payment.succeeded',
-      object: { id: rec?.yookassaPaymentId, status: 'succeeded' },
-    });
+    await postWebhook(
+      svc.url,
+      {
+        event: 'payment.succeeded',
+        object: { id: rec?.yookassaPaymentId, status: 'succeeded' },
+      },
+      WEBHOOK_HTTPS_HEADERS,
+    );
     expect(svc.readRecords()[0]?.status).not.toBe('succeeded');
   });
 
@@ -54,7 +59,7 @@ describe('3.10e незнакомый платёж не создаёт запис
       body: { id, status: 'succeeded', metadata: { requestId: randomUUID(), source: 'ikpk-site' } },
     }));
     const before = svc.readRecords().length;
-    await postWebhook(svc.url, { object: { id: stranger, status: 'succeeded' } });
+    await postWebhook(svc.url, { object: { id: stranger, status: 'succeeded' } }, WEBHOOK_HTTPS_HEADERS);
     expect(svc.readRecords().length).toBe(before);
     expect(svc.readRecords().some((r) => r.yookassaPaymentId === stranger)).toBe(false);
   });
@@ -81,7 +86,7 @@ describe('3.10e-1 восстановление записи без yookassaPayme
       },
     }));
     const beforeCount = svc!.readRecords().length;
-    await postWebhook(svc!.url, { object: { id: ykId } });
+    await postWebhook(svc!.url, { object: { id: ykId } }, WEBHOOK_HTTPS_HEADERS);
     const rec = svc!.readRecords().find((r) => r.requestId === body.requestId);
     expect(svc!.readRecords().length).toBe(beforeCount);
     expect(rec?.yookassaPaymentId).toBe(ykId);
@@ -93,7 +98,7 @@ describe('3.10e-1 восстановление записи без yookassaPayme
     const ykId = `yk-${randomUUID()}`;
     svc!.yookassa.setGetHandler((id) => ({ status: 200, body: { id, status: 'pending' } }));
     const before = structuredClone(svc!.readRecords());
-    await postWebhook(svc!.url, { object: { id: ykId } });
+    await postWebhook(svc!.url, { object: { id: ykId } }, WEBHOOK_HTTPS_HEADERS);
     expect(svc!.readRecords()).toEqual(before);
     void body;
   });
@@ -106,7 +111,7 @@ describe('3.10e-1 восстановление записи без yookassaPayme
       body: { id, status: 'pending', metadata: { requestId: body.requestId, source: 'bitrix-widget' } },
     }));
     const before = structuredClone(svc!.readRecords());
-    await postWebhook(svc!.url, { object: { id: ykId } });
+    await postWebhook(svc!.url, { object: { id: ykId } }, WEBHOOK_HTTPS_HEADERS);
     expect(svc!.readRecords()).toEqual(before);
   });
 
@@ -122,7 +127,7 @@ describe('3.10e-1 восстановление записи без yookassaPayme
       },
     }));
     const before = structuredClone(svc!.readRecords());
-    await postWebhook(svc!.url, { object: { id: ykId } });
+    await postWebhook(svc!.url, { object: { id: ykId } }, WEBHOOK_HTTPS_HEADERS);
     expect(svc!.readRecords()).toEqual(before);
   });
 
@@ -141,7 +146,7 @@ describe('3.10e-1 восстановление записи без yookassaPayme
       body: { id, status: 'pending', metadata: { requestId: b.requestId, source: 'ikpk-site' } },
     }));
     const before = structuredClone(svc.readRecords());
-    await postWebhook(svc.url, { object: { id: aId } });
+    await postWebhook(svc.url, { object: { id: aId } }, WEBHOOK_HTTPS_HEADERS);
     expect(svc.readRecords().find((r) => r.requestId === b.requestId)?.yookassaPaymentId).toBeNull();
     expect(svc.readRecords().find((r) => r.requestId === a.requestId)?.yookassaPaymentId).toBe(aId);
     expect(svc.readRecords().length).toBe(before.length);
@@ -155,12 +160,60 @@ describe('3.10e-1 восстановление записи без yookassaPayme
       body: { id, status: 'pending', metadata: { requestId: 'other', source: 'other' } },
     }));
     const before = structuredClone(svc!.readRecords());
-    await postWebhook(svc!.url, {
-      object: {
-        id: ykId,
+    await postWebhook(
+      svc!.url,
+      {
+        object: {
+          id: ykId,
+          metadata: { requestId: body.requestId, source: 'ikpk-site' },
+        },
+      },
+      WEBHOOK_HTTPS_HEADERS,
+    );
+    expect(svc!.readRecords()).toEqual(before);
+  });
+});
+
+describe('B1 webhook HTTPS до yooGet и restore', () => {
+  it('HTTP + неизвестный id — не restore и не вызов ЮKassa', async () => {
+    svc = await startPaymentService({ env: prodEnv() });
+    const body = validPayload();
+    await postPayments(svc.url, body);
+    svc.writeRecords(svc.readRecords().map((r) => ({ ...r, yookassaPaymentId: null, status: 'unknown' })));
+    const ykId = `yk-http-${randomUUID()}`;
+    svc.yookassa.setGetHandler((id) => ({
+      status: 200,
+      body: {
+        id,
+        status: 'pending',
         metadata: { requestId: body.requestId, source: 'ikpk-site' },
       },
-    });
-    expect(svc!.readRecords()).toEqual(before);
+    }));
+    const getsBefore = svc.yookassa.gets.length;
+    const before = structuredClone(svc.readRecords());
+    await postWebhook(svc.url, { object: { id: ykId } });
+    expect(svc.url.startsWith('http://')).toBe(true);
+    expect(svc.yookassa.gets.length).toBe(getsBefore);
+    expect(svc.readRecords()).toEqual(before);
+  });
+
+  it('позитивный restore только по HTTPS', async () => {
+    svc = await startPaymentService({ env: prodEnv() });
+    const body = validPayload();
+    await postPayments(svc.url, body);
+    svc.writeRecords(svc.readRecords().map((r) => ({ ...r, yookassaPaymentId: null, status: 'unknown' })));
+    const ykId = `yk-https-${randomUUID()}`;
+    svc.yookassa.setGetHandler((id) => ({
+      status: 200,
+      body: {
+        id,
+        status: 'pending',
+        metadata: { requestId: body.requestId, source: 'ikpk-site' },
+      },
+    }));
+    await postWebhook(svc.url, { object: { id: ykId } }, WEBHOOK_HTTPS_HEADERS);
+    const rec = svc.readRecords().find((r) => r.requestId === body.requestId);
+    expect(rec?.yookassaPaymentId).toBe(ykId);
+    expect(rec?.status).toBe('pending');
   });
 });

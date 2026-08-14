@@ -102,8 +102,8 @@ function mapYooKassaStatus(status: unknown): string {
 }
 
 function clientIp(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0]!.trim();
+  const real = req.headers['x-real-ip'];
+  if (typeof real === 'string' && real.trim()) return real.trim();
   return req.socket.remoteAddress ?? 'unknown';
 }
 
@@ -150,6 +150,14 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
   }
   if (prevVer && prevVer === env.HMAC_KEY_CURRENT_VERSION) {
     fail('HMAC_KEY_CURRENT_VERSION must differ from HMAC_KEY_PREVIOUS_VERSION');
+  }
+  for (const name of ['PAYMENT_POST_RATE_LIMIT', 'PAYMENT_GET_RATE_LIMIT'] as const) {
+    const raw = env[name];
+    if (!raw) fail(`${name} is required when PAYMENT_MODE=prod`);
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      fail(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+    }
   }
 }
 
@@ -688,6 +696,12 @@ export function createPaymentService(opts: ServiceOpts) {
   }
 
   async function handleWebhook(req: IncomingMessage): Promise<{ status: number; body: unknown }> {
+    const https = isHttps(req);
+    if (!https) {
+      await readBody(req).catch(() => '');
+      return { status: 200, body: { ok: true } };
+    }
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(await readBody(req));
@@ -700,13 +714,8 @@ export function createPaymentService(opts: ServiceOpts) {
         : undefined;
     if (typeof id !== 'string' || !id) return { status: 200, body: { ok: true } };
 
-    const https = isHttps(req);
     const records = loadRecords();
     const byYk = records.find((r) => r.yookassaPaymentId === id);
-
-    if (!https && byYk) {
-      return { status: 200, body: { ok: true } };
-    }
 
     const got = await yooGet(id);
     if (!got.ok) return { status: 200, body: { ok: true } };
@@ -719,7 +728,6 @@ export function createPaymentService(opts: ServiceOpts) {
     const metaSource = typeof metadata.source === 'string' ? metadata.source : '';
 
     if (byYk) {
-      if (!https) return { status: 200, body: { ok: true } };
       const next = records.map((r) =>
         r.yookassaPaymentId === id
           ? {
@@ -814,7 +822,7 @@ export function createPaymentService(opts: ServiceOpts) {
       }
     }
     if (!canary) {
-      if (records.length > 0 && !opts.fetch) {
+      if (records.length > 0) {
         fail('hmac canary file is missing while fingerprint storage is not empty');
       }
       canary = {};

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
+  PAYMENT_SERVICE_ENTRY,
   TEST_HMAC_CURRENT_VERSION,
   TEST_HMAC_PREVIOUS,
   prodEnv,
@@ -297,4 +299,34 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
       expect(r.exitCode).not.toBe(0);
     },
   );
+
+  it('opts.fetch не снимает fail-closed при непустом хранилище без canary', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-fetch-'));
+    writeFileSync(
+      join(dir, 'payments.json'),
+      JSON.stringify({
+        records: [
+          {
+            requestId: '00000000-0000-4000-8000-000000000003',
+            yookassaPaymentId: 'yk-3',
+            status: 'pending',
+            fingerprint: 'f',
+            keyVersion: TEST_HMAC_CURRENT_VERSION,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    const mod = await import(pathToFileURL(PAYMENT_SERVICE_ENTRY).href);
+    const app = mod.createPaymentService({
+      env: prodEnv({
+        PAYMENT_DATA_DIR: dir,
+        PAYMENT_CANARY_PATH: join(dir, 'hmac-canary.json'),
+        PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
+        PAYMENT_LISTEN_PORT: '0',
+      }),
+      fetch: globalThis.fetch,
+    });
+    await expect(app.start()).rejects.toThrow(/canary/i);
+  });
 });
