@@ -52,11 +52,20 @@ describe('3.5 / 3.5a лимит частоты', () => {
       env: prodEnv({ PAYMENT_POST_RATE_LIMIT: '2', PAYMENT_RATE_LIMIT_WINDOW_MS: '60000' }),
     });
     const headers = { 'x-forwarded-for': '203.0.113.10' };
-    expect((await jsonOf(await postPayments(svc.url, validPayload(), headers))).status).toBe(201);
-    expect((await jsonOf(await postPayments(svc.url, validPayload(), headers))).status).toBe(201);
-    const third = await jsonOf(await postPayments(svc.url, validPayload(), headers));
+    // Разный семинар/сумма при том же IP: предмет — лимит частоты, не отпечаток.
+    // Одинаковый состав дал бы законный verification_required на втором POST.
+    expect(
+      (await jsonOf(await postPayments(svc.url, validPayload({ seminar: 'Модуль 1', amount: 1 }), headers))).status,
+    ).toBe(201);
+    expect(
+      (await jsonOf(await postPayments(svc.url, validPayload({ seminar: 'Модуль 2', amount: 2 }), headers))).status,
+    ).toBe(201);
+    const third = await jsonOf(
+      await postPayments(svc.url, validPayload({ seminar: 'Модуль 3', amount: 3 }), headers),
+    );
     expect(third.status).toBe(429);
     expect(third.body).toMatchObject({ status: 'rejected' });
+    expect((third.body as { status?: string }).status).not.toBe('verification_required');
     const errors = (third.body as { errors?: { field?: string }[] }).errors ?? [];
     expect(errors.some((e) => e.field === '_rateLimit')).toBe(true);
   });

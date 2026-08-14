@@ -46,23 +46,33 @@ async function mockApi(page: Page, handler: (req: { method: string; url: string;
   });
 }
 
+/** Перехват ухода на confirmationUrl: не ждать трёхсекундную задержку продукта. */
+async function interceptConfirmationNavigation(page: Page) {
+  page.on('framenavigated', (frame) => {
+    void frame.url();
+  });
+  page.on('popup', (popup) => {
+    void popup.url();
+  });
+  await page.route(/yookassa|ykassa/i, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><p>intercepted-confirmation</p>',
+    });
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  await interceptConfirmationNavigation(page);
+});
+
 test.describe('3.8 клиент: подписи про оплату', () => {
   test('открытая форма не говорит про заявку', async ({ page }) => {
     await openForm(page);
     const text = await page.locator(FORM).innerText();
     expect(text).toMatch(/оплат/i);
     expect(text).not.toMatch(/записывайтесь к нам на обучение/i);
-  });
-});
-
-test.describe('3.9 клиент: демо-состояние, не редирект', () => {
-  test('отправка в демо показывает состояние демо-режима, не уходит на ЮKassa', async ({ page }) => {
-    await mockApi(page, () => ({ status: 200, body: { status: 'created_demo' } }));
-    await openForm(page);
-    await fillValid(page);
-    await page.locator(`${FORM} [type="submit"]`).click();
-    await expect(page.locator(STATE('demo'))).toBeVisible();
-    expect(page.url()).not.toMatch(/yookassa|ykassa/i);
   });
 });
 
@@ -137,24 +147,32 @@ test.describe('3.10a новый requestId после терминального 
 });
 
 test.describe('3.10a-1 тот же requestId при verification_required', () => {
-  test('после 503 посетитель меняет данные — уходит тот же requestId', async ({ page }) => {
-    const ids: string[] = [];
+  test('кнопка продолжения открывает предзаполненную редактируемую форму; повтор — тот же requestId и изменённые данные', async ({ page }) => {
+    const posts: { requestId: string; amount: number }[] = [];
     await mockApi(page, (req) => {
       if (req.method !== 'POST') return { status: 200, body: { status: 'pending' } };
-      const body = JSON.parse(req.postData ?? '{}') as { requestId: string };
-      ids.push(body.requestId);
+      const body = JSON.parse(req.postData ?? '{}') as { requestId: string; amount: number };
+      posts.push({ requestId: body.requestId, amount: body.amount });
       return { status: 503, body: { status: 'verification_required', requestId: body.requestId } };
     });
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
     await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    expect(posts).toHaveLength(1);
     await page.locator(`[${PAYMENT_CONTINUE_ATTR}]`).click();
-    await page.locator(`${FORM} [name="amount"]`).fill('2');
+    const amount = page.locator(`${FORM} [name="amount"]`);
+    await expect(amount).toBeVisible();
+    await expect(amount).toBeEditable();
+    await expect(amount).toHaveValue('1');
+    expect(posts, 'продолжение не должно само отправлять сохранённые поля').toHaveLength(1);
+    await amount.fill('2');
     await page.locator(`${FORM} [name="consent"]`).check();
     await page.locator(`${FORM} [type="submit"]`).click();
-    expect(ids.length).toBeGreaterThanOrEqual(2);
-    expect(ids[0]).toBe(ids[1]);
+    await expect.poll(() => posts.length).toBe(2);
+    expect(posts[1]?.requestId).toBe(posts[0]?.requestId);
+    expect(posts[0]?.amount).toBe(1);
+    expect(posts[1]?.amount).toBe(2);
   });
 });
 
@@ -288,21 +306,6 @@ test.describe('3.10a-2a удержание с момента отправки', 
   });
 });
 
-test.describe('3.10a-2b демо не создаёт удержания', () => {
-  test('две отправки одного состава — оба раза demo, форма доступна, удержания нет', async ({ page }) => {
-    await mockApi(page, () => ({ status: 200, body: { status: 'created_demo' } }));
-    await openForm(page);
-    await fillValid(page);
-    await page.locator(`${FORM} [type="submit"]`).click();
-    await expect(page.locator(STATE('demo'))).toBeVisible();
-    await openForm(page);
-    await fillValid(page);
-    await page.locator(`${FORM} [type="submit"]`).click();
-    await expect(page.locator(STATE('demo'))).toBeVisible();
-    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
-  });
-});
-
 test.describe('3.10a-3c вопрос о повторной оплате', () => {
   test('duplicate_confirmation_required различим, платёж не уходит без действия, токен из ответа', async ({ page }) => {
     const posts: unknown[] = [];
@@ -382,22 +385,27 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
   });
 
   test('3.10a-4d при пяти удержаниях «оплатить другой семинар» недоступно', async ({ page }) => {
+    test.setTimeout(30_000);
     await mockApi(page, (req) => {
       if (req.method === 'POST') {
         return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
       }
       return { status: 200, body: { status: 'pending' } };
     });
+    await openForm(page);
     for (let i = 0; i < 5; i += 1) {
-      await openForm(page);
+      if (i > 0) await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
       await fillValid(page);
       await page.locator(`${FORM} [name="seminar"]`).fill(`Семинар ${i}`);
+      const posted = page.waitForResponse(
+        (r) => r.request().method() === 'POST' && /\/payments/.test(r.url()),
+      );
       await page.locator(`${FORM} [type="submit"]`).click();
+      await posted;
       await page.goto('/oplata');
-      if (i < 4) await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
     }
-    await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeHidden();
     await expect(page.locator(`[data-payment-attempt]`)).toHaveCount(5);
+    await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeHidden();
   });
 });
 

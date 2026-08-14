@@ -19,12 +19,14 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { viewport: { width: 1280, height: 720 } },
-      testIgnore: '**/compat.spec.ts',
+      // Демо-сценарии (3.9, 3.10a-2b) — отдельный project против DEMO_FORMS,
+      // playwright.demo.config.ts. На боевом dist клиент трактует created_demo как ошибку.
+      testIgnore: ['**/compat.spec.ts', '**/payment-form-demo.spec.ts'],
     },
     {
       name: 'mobile',
       use: { viewport: { width: 375, height: 812 } },
-      testIgnore: '**/compat.spec.ts',
+      testIgnore: ['**/compat.spec.ts', '**/payment-form-demo.spec.ts'],
     },
     {
       name: 'compat-chrome-desktop',

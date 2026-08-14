@@ -48,6 +48,7 @@ const arg = (name, fallback) => {
 
 const host = arg('host', '127.0.0.1');
 const port = Number(arg('port', '4322'));
+const outDir = arg('outDir', '');
 
 const fail = (message) => {
   console.error(`preview-server: ${message}`);
@@ -114,11 +115,16 @@ if (await portBusy()) {
 }
 
 // ─── Запуск ─────────────────────────────────────────────────────────────────
-const child = spawn(
-  'npm',
-  ['run', 'preview', '--', '--host', host, '--port', String(port)],
-  { stdio: ['ignore', 'pipe', 'pipe'] },
-);
+const previewArgs = ['run', 'preview', '--', '--host', host, '--port', String(port)];
+if (outDir) {
+  const { existsSync } = await import('node:fs');
+  if (!existsSync(outDir)) {
+    fail(`каталога вывода нет: ${outDir}. Для демо-проекта сначала npm run build:demo`);
+  }
+  previewArgs.push('--outDir', outDir);
+}
+
+const child = spawn('npm', previewArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
 let output = '';
 for (const stream of [child.stdout, child.stderr]) {

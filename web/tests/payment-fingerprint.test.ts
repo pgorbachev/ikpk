@@ -253,23 +253,30 @@ describe('3.10a-3b подтверждение повторной оплаты', 
     const second = { ...first, requestId: randomUUID() };
     const token = ((await jsonOf(await postPayments(svc!.url, second))).body as { confirmationToken: string })
       .confirmationToken;
-    await postPayments(svc!.url, { ...first, requestId: randomUUID(), seminar: first.seminar + ' x' });
-    const live = validPayload({
-      firstName: first.firstName,
-      lastName: first.lastName,
-      seminar: first.seminar,
-      amount: first.amount,
-      startDate: first.startDate,
-      venue: first.venue,
-      email: first.email,
-      phone: first.phone,
-    });
-    await postPayments(svc!.url, live);
+    const existing = svc!.readRecords();
+    const succeeded = existing.find((r) => r.requestId === first.requestId);
+    expect(succeeded?.fingerprint).toBeTruthy();
+    // Сочетание состояний готовится записью в хранилище, не публичным POST:
+    // POST того же состава упёрся бы в 409 и живой незавершённой бы не появилось.
+    svc!.writeRecords([
+      ...existing,
+      {
+        requestId: randomUUID(),
+        yookassaPaymentId: 'yk-live-between-token-and-confirm',
+        status: 'pending',
+        fingerprint: succeeded!.fingerprint,
+        keyVersion: succeeded!.keyVersion,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    const creates = svc!.yookassa.creates.length;
     const confirm = await jsonOf(
       await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }),
     );
     expect((confirm.body as { status?: string }).status).not.toBe('created');
     expect(confirm.status).not.toBe(201);
+    expect(confirm.body).toMatchObject({ status: 'verification_required' });
+    expect(svc!.yookassa.creates.length).toBe(creates);
   });
 
   it('(9) confirmed с ключом, ставшим PREVIOUS после ротации → вопрос, не создание', async () => {

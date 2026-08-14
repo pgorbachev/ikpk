@@ -12,6 +12,22 @@ async function openForm(page: Page) {
   await expect(page.locator(DIALOG)).toBeVisible();
 }
 
+test.beforeEach(async ({ page }) => {
+  page.on('framenavigated', (frame) => {
+    void frame.url();
+  });
+  page.on('popup', (popup) => {
+    void popup.url();
+  });
+  await page.route(/yookassa|ykassa/i, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><p>intercepted-confirmation</p>',
+    });
+  });
+});
+
 test.describe('3a.1 модальность и клавиатура', () => {
   test('роль диалога, имя, кнопка закрытия; фокус входит и возвращается', async ({ page }) => {
     await page.goto('/oplata');
@@ -108,8 +124,14 @@ test.describe('3a.4 согласие на ПДн', () => {
     await page.locator(`${FORM} [type="submit"]`).click();
     expect(posts).toEqual([]);
     await expect(page.getByText(/соглас/i)).toBeVisible();
-    const label = await page.locator(`${FORM} label[for], ${FORM} label`).filter({ has: consent }).innerText().catch(async () => page.locator(`${FORM}`).innerText());
-    expect(label).toMatch(/оплат|платеж/i);
+    const consentId = await consent.getAttribute('id');
+    expect(consentId, 'у отметки согласия нет id для label[for]').toBeTruthy();
+    const labelled = page.locator(`${FORM} label[for="${consentId}"]`);
+    const label =
+      (await labelled.count()) > 0 ? labelled : consent.locator('xpath=ancestor::label[1]');
+    await expect(label).toBeVisible();
+    const labelText = await label.innerText();
+    expect(labelText).toMatch(/оплат|платеж/i);
     const link = page.locator(`${FORM} a[href*="персонал"], ${FORM} a[href*="конфиденциал"], ${FORM} a[href*="/terms/"]`).first();
     const href = await link.getAttribute('href');
     expect(href).toBeTruthy();
@@ -121,6 +143,16 @@ test.describe('3a.4 согласие на ПДн', () => {
 
 test.describe('3a.5 честные состояния', () => {
   test('принята / ошибка / неизвестный исход различимы; смена объявляется без перевода фокуса', async ({ page }) => {
+    page.on('framenavigated', (frame) => {
+      void frame.url();
+    });
+    await page.route(/yookassa|ykassa/i, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><p>intercepted-confirmation</p>',
+      });
+    });
     await page.route(/\/payments$/, async (route) => {
       await route.fulfill({
         status: 201,
@@ -129,7 +161,6 @@ test.describe('3a.5 честные состояния', () => {
       });
     });
     await openForm(page);
-    const before = await page.evaluate(() => document.activeElement?.outerHTML);
     await page.locator(`${FORM} [name="firstName"]`).fill('Иван');
     await page.locator(`${FORM} [name="lastName"]`).fill('Петров');
     await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 1');
@@ -137,11 +168,23 @@ test.describe('3a.5 честные состояния', () => {
     await page.locator(`${FORM} [name="email"]`).fill('ivan@example.com');
     await page.locator(`${FORM} [name="phone"]`).fill('79111234567');
     await page.locator(`${FORM} [name="consent"]`).check();
-    await page.locator(`${FORM} [type="submit"]`).click();
-    const live = page.locator(`${FORM} [aria-live], [data-payment-state][aria-live], [role="status"]`);
+    const submit = page.locator(`${FORM} [type="submit"]`);
+    await submit.focus();
+    const focusAtSubmit = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      return Boolean(el && (el.getAttribute('type') === 'submit' || el.hasAttribute('data-payment-submit')));
+    });
+    expect(focusAtSubmit, 'перед отправкой фокус должен стоять на элементе submit').toBe(true);
+    await submit.click();
+    const live = page.locator(`${FORM} [aria-live], [data-payment-state-host][aria-live], [data-payment-state][aria-live], [role="status"]`);
     await expect(live.first()).toBeVisible();
-    const after = await page.evaluate(() => document.activeElement?.outerHTML);
-    expect(after).toBe(before);
+    await expect(page.locator('[data-payment-state="created"]')).toBeVisible();
+    const movedIntoPanel = await page.evaluate(() => {
+      const panel = document.querySelector('[data-payment-state]');
+      const el = document.activeElement;
+      return Boolean(panel && el && (panel === el || panel.contains(el)));
+    });
+    expect(movedIntoPanel, 'фокус не переводится внутрь панели исхода').toBe(false);
   });
 });
 
