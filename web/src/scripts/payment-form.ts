@@ -36,6 +36,7 @@ function boot(formEl: HTMLFormElement) {
   let pendingToken = '';
   let lastOpener: HTMLElement | null = null;
   let inFlight = false;
+  const holdStatuses = new Map<string, ApiBody>();
 
   enhanceEntry();
   void restoreOnLoad();
@@ -127,6 +128,7 @@ function boot(formEl: HTMLFormElement) {
   }
 
   function dropHold(requestId: string, opts: { keepFields?: boolean } = {}) {
+    holdStatuses.delete(requestId);
     writeHolds(readHolds().filter((h) => h.requestId !== requestId));
     if (opts.keepFields) return;
     const all = readFields();
@@ -228,11 +230,41 @@ function boot(formEl: HTMLFormElement) {
   function renderAttempts() {
     const holds = readHolds();
     attemptsWrap.hidden = holds.length < 2;
-    attemptList.innerHTML = holds.map((h) => `<li data-payment-attempt>${h.requestId}</li>`).join('');
+    attemptList.replaceChildren();
+    for (const h of holds) {
+      const li = document.createElement('li');
+      li.setAttribute('data-payment-attempt', '');
+      li.setAttribute('data-payment-attempt-id', h.requestId);
+      const status = holdStatuses.get(h.requestId)?.status;
+      if (status) li.setAttribute('data-payment-attempt-status', status);
+      const select = document.createElement('button');
+      select.type = 'button';
+      select.setAttribute('data-payment-attempt-select', '');
+      select.textContent = h.requestId;
+      select.addEventListener('click', () => {
+        const json = holdStatuses.get(h.requestId) ?? { status: 'unknown' };
+        applyStatus(h.requestId, json);
+      });
+      const time = document.createElement('time');
+      time.dateTime = new Date(h.createdAt).toISOString();
+      time.textContent = new Date(h.createdAt).toISOString();
+      li.append(select, time);
+      if (status) {
+        const label = document.createElement('span');
+        label.setAttribute('data-payment-attempt-status-label', '');
+        label.textContent = status;
+        li.append(label);
+      }
+      attemptList.append(li);
+    }
   }
 
-  function setState(name: string, html: string) {
-    stateHost.innerHTML = `<div data-payment-state="${name}" role="status">${html}</div>`;
+  function setState(name: string, text: string) {
+    const box = document.createElement('div');
+    box.setAttribute('data-payment-state', name);
+    box.setAttribute('role', 'status');
+    box.textContent = text;
+    stateHost.replaceChildren(box);
   }
 
   function clearErrors() {
@@ -368,16 +400,17 @@ function boot(formEl: HTMLFormElement) {
     const status = json.status ?? '';
     if (json.requestId && json.requestId !== activeRequestId) {
       const previous = activeRequestId;
-      dropHold(previous);
-      activeRequestId = json.requestId;
-      upsertHold(activeRequestId);
       const all = readFields();
-      if (all[previous] && !all[activeRequestId]) {
-        all[activeRequestId] = all[previous];
+      if (all[previous] && !all[json.requestId]) {
+        all[json.requestId] = all[previous];
         delete all[previous];
         writeFields(all);
       }
+      dropHold(previous);
+      activeRequestId = json.requestId;
+      upsertHold(activeRequestId);
     }
+    if (status) holdStatuses.set(activeRequestId, json);
 
     if (isDemoBuild && status === 'created_demo') {
       dropHold(activeRequestId);
@@ -401,6 +434,9 @@ function boot(formEl: HTMLFormElement) {
       go.setAttribute('data-payment-confirmation-url', '');
       go.textContent = 'Продолжить оплату';
       stateHost.querySelector('[data-payment-state]')?.append(go);
+      const hooked = (window as Window & { __paymentNavigate?: (href: string) => void }).__paymentNavigate;
+      if (typeof hooked === 'function') hooked(url);
+      else location.assign(url);
       return;
     }
     if (status === 'already_paid') {
@@ -469,7 +505,7 @@ function boot(formEl: HTMLFormElement) {
   function startOtherSeminar() {
     activeRequestId = '';
     pendingToken = '';
-    stateHost.innerHTML = '';
+    stateHost.replaceChildren();
     restoreFieldsDom();
     formEl.reset();
     setChrome({ other: readHolds().length < MAX_HOLDS });
@@ -503,6 +539,7 @@ function boot(formEl: HTMLFormElement) {
 
   function applyStatus(requestId: string, json: ApiBody) {
     activeRequestId = requestId;
+    holdStatuses.set(requestId, json);
     const status = json.status ?? '';
     if (status === 'not_found' || status === 'demo') {
       dropHold(requestId);
@@ -565,7 +602,18 @@ function boot(formEl: HTMLFormElement) {
     if (!holds.length) return;
     const results = await Promise.all(holds.map(async (h) => ({ id: h.requestId, json: await pollStatus(h.requestId) })));
     for (const item of results) {
-      if (item.json) applyStatus(item.id, item.json);
+      if (item.json) holdStatuses.set(item.id, item.json);
     }
+    for (const item of results) {
+      const status = item.json?.status ?? '';
+      if (status === 'succeeded' || status === 'canceled' || status === 'not_found' || status === 'demo') {
+        if (item.json) applyStatus(item.id, item.json);
+      }
+    }
+    const live = readHolds();
+    if (!live.length) return;
+    const last = live[live.length - 1]!;
+    const json = holdStatuses.get(last.requestId) ?? { status: 'unknown' };
+    applyStatus(last.requestId, json);
   }
 }

@@ -12,7 +12,6 @@ export default defineConfig({
     headless: true,
     screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 720 },
-    permissions: ['clipboard-read', 'clipboard-write'],
   },
   timeout: 10000,
   projects: [

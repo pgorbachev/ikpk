@@ -46,20 +46,14 @@ async function mockApi(page: Page, handler: (req: { method: string; url: string;
   });
 }
 
-/** Перехват ухода на confirmationUrl: не ждать трёхсекундную задержку продукта. */
+/** Перехват ухода на confirmationUrl: хук вместо location.assign, страница остаётся на /oplata. */
 async function interceptConfirmationNavigation(page: Page) {
-  page.on('framenavigated', (frame) => {
-    void frame.url();
-  });
-  page.on('popup', (popup) => {
-    void popup.url();
-  });
-  await page.route(/yookassa|ykassa/i, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><p>intercepted-confirmation</p>',
-    });
+  await page.addInitScript(() => {
+    const w = window as Window & { __paymentAssigns?: string[]; __paymentNavigate?: (href: string) => void };
+    w.__paymentAssigns = [];
+    w.__paymentNavigate = (href) => {
+      w.__paymentAssigns!.push(href);
+    };
   });
 }
 
@@ -92,6 +86,27 @@ test.describe('3.9b клиент: неизвестный ответ — обща
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
     await expect(page.locator(STATE('error'))).toBeVisible();
+  });
+});
+
+test.describe('5.4 created: немедленный переход и ссылка-подстраховка', () => {
+  test('created вызывает location.assign и оставляет ссылку на confirmationUrl', async ({ page }) => {
+    await mockApi(page, () => ({
+      status: 201,
+      body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' },
+    }));
+    await openForm(page);
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect(page.locator('[data-payment-confirmation-url]')).toBeVisible();
+    await expect(page.locator('[data-payment-confirmation-url]')).toHaveAttribute(
+      'href',
+      'https://yookassa.test/c',
+    );
+    const assigned = await page.evaluate(
+      () => (window as Window & { __paymentAssigns?: string[] }).__paymentAssigns,
+    );
+    expect(assigned).toEqual(['https://yookassa.test/c']);
   });
 });
 
@@ -196,10 +211,15 @@ test.describe('3.10a-3 клиент переключается на канони
     expect(sent).toBeTruthy();
     expect(sent).not.toBe(canonical);
     await expect(page.locator('body')).not.toContainText(sent);
+    await expect(page.locator(`[${PAYMENT_SUMMARY_ATTR}]`)).toContainText(/Иван|Модуль 1/);
     await page.reload();
     await expect.poll(() => statusUrls.some((u) => u.includes(canonical))).toBe(true);
     expect(statusUrls.some((u) => u.includes(sent))).toBe(false);
     await expect(page.locator('body')).not.toContainText(sent);
+    await expect(page.locator(`[${PAYMENT_SUMMARY_ATTR}]`)).toContainText(/Иван|Модуль 1/);
+    await page.locator(`[${PAYMENT_CONTINUE_ATTR}]`).click();
+    await expect(page.locator(`${FORM} [name="firstName"]`)).toHaveValue('Иван');
+    await expect(page.locator(`${FORM} [name="seminar"]`)).toHaveValue('Модуль 1');
   });
 });
 
@@ -387,6 +407,48 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     expect(local).not.toMatch(/Иван|ivan@example/i);
   });
 
+  test('перечень показывает статус каждой попытки и переключает панель, не только последнюю', async ({ page }) => {
+    const ids: string[] = [];
+    await mockApi(page, (req) => {
+      if (req.method === 'POST') {
+        const body = JSON.parse(req.postData ?? '{}') as { requestId: string };
+        ids.push(body.requestId);
+        return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
+      }
+      const url = req.url;
+      if (ids[0] && url.includes(ids[0])) return { status: 200, body: { status: 'pending' } };
+      if (ids[1] && url.includes(ids[1])) return { status: 200, body: { status: 'verification_required' } };
+      return { status: 200, body: { status: 'pending' } };
+    });
+    await openForm(page);
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await page.goto('/oplata');
+    await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
+    await fillValid(page);
+    await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await page.goto('/oplata');
+    const items = page.locator('[data-payment-attempt]');
+    await expect(items).toHaveCount(2);
+    const statuses = await items.evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-payment-attempt-status') ?? ''),
+    );
+    expect(statuses.some((s) => s === 'pending'), `статусы перечня: ${statuses.join(',')}`).toBe(true);
+    expect(statuses.some((s) => s === 'verification_required'), `статусы перечня: ${statuses.join(',')}`).toBe(
+      true,
+    );
+    const pendingItem = page.locator('[data-payment-attempt][data-payment-attempt-status="pending"]');
+    const verifyItem = page.locator(
+      '[data-payment-attempt][data-payment-attempt-status="verification_required"]',
+    );
+    await pendingItem.locator('[data-payment-attempt-select]').click();
+    await expect(page.locator(STATE('pending'))).toBeVisible();
+    await verifyItem.locator('[data-payment-attempt-select]').click();
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    await expect(page.locator(STATE('pending'))).toHaveCount(0);
+  });
+
   test('3.10a-4d при пяти удержаниях «оплатить другой семинар» недоступно', async ({ page }) => {
     test.setTimeout(30_000);
     await mockApi(page, (req) => {
@@ -413,6 +475,7 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
 });
 
 test.describe('3.10a-5 состояние «нужна сверка»', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
   test('машинный признак, копирование канонического id, фокус в панели, сводка не поля ввода', async ({ page }) => {
     const canonical = randomUUID();
     await mockApi(page, (req) => {

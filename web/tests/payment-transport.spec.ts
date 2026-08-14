@@ -13,18 +13,12 @@ async function openForm(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  page.on('framenavigated', (frame) => {
-    void frame.url();
-  });
-  page.on('popup', (popup) => {
-    void popup.url();
-  });
-  await page.route(/yookassa|ykassa/i, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><p>intercepted-confirmation</p>',
-    });
+  await page.addInitScript(() => {
+    const w = window as Window & { __paymentAssigns?: string[]; __paymentNavigate?: (href: string) => void };
+    w.__paymentAssigns = [];
+    w.__paymentNavigate = (href) => {
+      w.__paymentAssigns!.push(href);
+    };
   });
 });
 
@@ -142,17 +136,7 @@ test.describe('3a.4 согласие на ПДн', () => {
 });
 
 test.describe('3a.5 честные состояния', () => {
-  test('принята / ошибка / неизвестный исход различимы; смена объявляется без перевода фокуса', async ({ page }) => {
-    page.on('framenavigated', (frame) => {
-      void frame.url();
-    });
-    await page.route(/yookassa|ykassa/i, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/html',
-        body: '<!doctype html><p>intercepted-confirmation</p>',
-      });
-    });
+  test('смена состояния объявляется без перевода фокуса', async ({ page }) => {
     await page.route(/\/payments$/, async (route) => {
       await route.fulfill({
         status: 201,
