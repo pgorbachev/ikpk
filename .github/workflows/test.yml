@@ -113,6 +113,15 @@ jobs:
       - name: Run article catalog characterization tests
         run: npm run test:e2e:catalog
 
+      - name: Run payment form e2e (production)
+        run: npm run test:e2e:payment
+
+      - name: Build demo site
+        run: npm run build:demo
+
+      - name: Run payment form e2e (demo)
+        run: npm run test:e2e:payment-demo
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7

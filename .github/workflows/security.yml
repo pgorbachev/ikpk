@@ -39,6 +39,7 @@ jobs:
         package:
           - web
           - scripts
+          - payments
 
     defaults:
       run:

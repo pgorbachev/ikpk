@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { dist, readPage, walkHtml } from './helpers/dist-pages';
 import {
   PAYMENT_ENDPOINT_ATTR,
@@ -7,6 +8,7 @@ import {
   TEST_HMAC_CURRENT,
   TEST_HMAC_PREVIOUS,
   TEST_YOOKASSA_SECRET,
+  repoRoot,
 } from './helpers/payment-contract';
 
 function paymentForms(html: string): string[] {
@@ -107,5 +109,20 @@ describe('3.12c описание порядка оплаты соответст�
     const page = html.replace(/\s+/g, ' ');
     expect(page).toMatch(/оплат/i);
     expect(page).not.toMatch(/Подать заявку на интересующий вас курс через сайт/i);
+  });
+});
+
+describe('B2 / 4.9 гейт публикации видит оплату', () => {
+  it('боевые Playwright оплаты входят в npm-скрипт и workflow Tests', () => {
+    const pkg = JSON.parse(readFileSync(join(repoRoot, 'web/package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts['test:e2e:payment']).toMatch(/payment-form\.spec\.ts/);
+    expect(pkg.scripts['test:e2e:payment']).toMatch(/payment-transport\.spec\.ts/);
+    expect(pkg.scripts['test:e2e:payment-demo']).toMatch(/playwright\.demo\.config/);
+    const wf = readFileSync(join(repoRoot, '.github/workflows/test.yml'), 'utf8');
+    expect(wf).toMatch(/test:e2e:payment/);
+    const security = readFileSync(join(repoRoot, '.github/workflows/security.yml'), 'utf8');
+    expect(security).toMatch(/^\s+- payments\s*$/m);
   });
 });
