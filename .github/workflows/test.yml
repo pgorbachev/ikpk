@@ -56,6 +56,18 @@ jobs:
       - name: Run demo build tests (dist-demo checks)
         run: npm run test:demo
 
+      # Тот же dist-demo, который только что проверили. e2e-smoke его скачивает и
+      # не собирает заново: вторая сборка в чужом джобе — как раз то, что ловит
+      # demo-gate (решение 6). uses-шаги не наследуют defaults.run.working-directory,
+      # путь — от корня репозитория.
+      - name: Upload demo site
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
+          if-no-files-found: error
+          retention-days: 1
+
   # Тесты пакета scripts/ гоняются отдельным джобом: у него свой package.json и свой
   # lockfile, а джоб выше целиком работает в web/. Без этого джоба новые тесты
   # оказались бы вне CI — ровно тот случай осиротевших тестов, который описан в
@@ -85,6 +97,7 @@ jobs:
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
+    needs: unit-and-build
     defaults:
       run:
         working-directory: web
@@ -122,8 +135,11 @@ jobs:
       - name: Run payment form e2e (production)
         run: npm run test:e2e:payment
 
-      - name: Build demo site
-        run: npm run build:demo
+      - name: Download demo site
+        uses: actions/download-artifact@v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
 
       - name: Run payment form e2e (demo)
         run: npm run test:e2e:payment-demo
