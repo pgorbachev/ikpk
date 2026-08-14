@@ -45,8 +45,16 @@
 
 ## 5. Независимое ревью и приёмка
 
-- [ ] 5.1 Провести независимое security review соответствия реализации каждому requirement/scenario, включая trust modes, media derivatives, whole-dist canary и whole-document hazard scanner; исправить подтверждённые находки.
-- [ ] 5.2 Провести независимое compatibility review source/rendered corpora, SVG/style migrations, существующих cleaner-тестов и полноты sink registry; исправить подтверждённые находки.
-- [ ] 5.3 После исправлений повторить раздел 4 и зафиксировать точный SHA проверенной реализации и evidence paths.
+- [x] 5.1 Провести независимое security review соответствия реализации каждому requirement/scenario, включая trust modes, media derivatives, whole-dist canary и whole-document hazard scanner; исправить подтверждённые находки.
+- [x] 5.2 Провести независимое compatibility review source/rendered corpora, SVG/style migrations, существующих cleaner-тестов и полноты sink registry; исправить подтверждённые находки.
+- [x] 5.3 После исправлений повторить раздел 4 и зафиксировать точный SHA проверенной реализации и evidence paths.
 - [ ] 5.4 Обновить пересекающиеся active changes относительно нового sink contract; в `dependabot-auto-merge` сделать security dependency registry deny-only manual override для direct/transitive subtree. Доказать строгую применимость всех delta specs.
 - [ ] 5.5 После приёмки владельцем архивировать change и проверить перенос `rich-content-safety` в main specs.
+
+Evidence 5.1–5.3: implementation SHA `e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3`;
+независимые security/compatibility reviews — PASS без P0–P3; обязательные GitHub checks — green.
+Corpus evidence: `web/tests/fixtures/rich-content-safety/evidence/fingerprint-comparison.json`,
+`web/tests/fixtures/rich-content-safety/evidence/migration-page-inventory.json`,
+`web/tests/fixtures/rich-content-safety/evidence/oplata-computed-style.json`,
+`web/tests/fixtures/rich-content-safety/evidence/manual-rutube.md` и
+`web/tests/fixtures/rich-content-safety/evidence/negative-mutations.md`.
