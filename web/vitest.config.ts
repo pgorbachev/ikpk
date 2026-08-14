@@ -1,7 +1,17 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const webRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(webRoot, '..');
 
 export default defineConfig({
+  server: {
+    fs: { allow: [webRoot, repoRoot] },
+  },
   test: {
+    setupFiles: ['tests/helpers/ensure-tsx-root.ts'],
+    testTimeout: 20_000,
     include: ['tests/**/*.test.ts'],
     exclude: [
       // dist-зависимые тесты — только в vitest.build.config.ts (после сборки)

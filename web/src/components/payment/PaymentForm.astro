@@ -1,0 +1,178 @@
+---
+import { isDemoForms, paymentEndpoint } from '../../lib/forms';
+
+const endpoint = paymentEndpoint();
+const demo = isDemoForms;
+---
+
+<div id="payment-dialog-root" hidden>
+  <div
+    class="payment-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="payment-dialog-title"
+    hidden
+  >
+    <div class="payment-dialog-panel">
+      <div class="payment-dialog-head">
+        <h2 id="payment-dialog-title">Оплата семинара</h2>
+        <button type="button" class="payment-dialog-close" data-payment-close>Закрыть</button>
+      </div>
+
+      <div data-payment-chrome></div>
+
+      <div data-payment-attempts hidden>
+        <p>Незавершённые попытки оплаты:</p>
+        <ul data-payment-attempt-list></ul>
+      </div>
+
+      <div data-payment-state-host aria-live="polite"></div>
+
+      <form
+        data-payment-form
+        data-payment-endpoint={endpoint}
+        data-payment-demo={demo ? 'true' : 'false'}
+        method="post"
+        action={`${endpoint}/payments`}
+        novalidate
+        hidden
+      >
+        <p class="payment-lead">Заполните данные для оплаты банковской картой.</p>
+
+        <div class="sr-only" aria-hidden="true">
+          <label for="payment-honeypot">Компания</label>
+          <input id="payment-honeypot" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <div class="payment-field">
+          <label for="payment-firstName">Имя</label>
+          <input id="payment-firstName" name="firstName" type="text" maxlength="100" required autocomplete="given-name" />
+          <p id="payment-err-firstName" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-lastName">Фамилия</label>
+          <input id="payment-lastName" name="lastName" type="text" maxlength="100" required autocomplete="family-name" />
+          <p id="payment-err-lastName" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-seminar">Семинар</label>
+          <input id="payment-seminar" name="seminar" type="text" maxlength="300" required />
+          <p id="payment-err-seminar" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-amount">Сумма, ₽</label>
+          <input id="payment-amount" name="amount" type="number" min="1" step="1" required inputmode="numeric" />
+          <p id="payment-err-amount" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-startDate">Дата начала</label>
+          <input id="payment-startDate" name="startDate" type="date" />
+          <p id="payment-err-startDate" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-venue">Место проведения</label>
+          <input id="payment-venue" name="venue" type="text" maxlength="300" />
+          <p id="payment-err-venue" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-email">Электронная почта</label>
+          <input id="payment-email" name="email" type="email" required autocomplete="email" />
+          <p id="payment-err-email" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field">
+          <label for="payment-phone">Телефон</label>
+          <input id="payment-phone" name="phone" type="tel" required autocomplete="tel" />
+          <p id="payment-err-phone" class="payment-error" hidden></p>
+        </div>
+        <div class="payment-field payment-consent">
+          <label for="payment-consent">
+            <input id="payment-consent" name="consent" type="checkbox" required />
+            Согласен на обработку персональных данных и передачу их оператору платежей для проведения оплаты.
+            <a href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf">Политика конфиденциальности</a>
+          </label>
+          <p id="payment-err-consent" class="payment-error" hidden></p>
+        </div>
+
+        <button type="submit" data-payment-submit>Оплатить</button>
+      </form>
+
+      <div class="payment-actions" data-payment-actions></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import '../../scripts/payment-form.ts';
+</script>
+
+<style>
+  .payment-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 1rem;
+  }
+  .payment-dialog[hidden] {
+    display: none;
+  }
+  .payment-dialog-panel {
+    background: var(--surface-raised);
+    color: var(--color-dark-700);
+    max-width: 32rem;
+    width: min(100%, 32rem);
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    border-radius: var(--radius-m);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-m);
+  }
+  .payment-dialog-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  .payment-dialog-head h2 {
+    margin: 0;
+    font-size: var(--font-xl);
+  }
+  .payment-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .payment-consent {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .payment-error {
+    color: #8a1f1f;
+    font-size: var(--font-s);
+    margin: 0;
+  }
+  .payment-lead {
+    margin-bottom: 1rem;
+  }
+  .payment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  [data-payment-hold-warning] {
+    background: var(--color-warning-50);
+    color: var(--color-warning-700);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-s);
+    margin-bottom: 1rem;
+  }
+  [data-payment-state] {
+    margin-bottom: 1rem;
+  }
+</style>

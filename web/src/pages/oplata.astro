@@ -1,14 +1,32 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
+import PaymentForm from '../components/payment/PaymentForm.astro';
 import { getPage, cleanBodyHtml } from '../lib/data';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
 const description = page?.seo_description || 'Информация об оплате обучения в ИКПК.';
+
+function withPaymentCopy(html: string): string {
+  return html
+    .replace(
+      /Готовы произвести оплату за семинар\?(\s|<\/p>\s*<p>)*Кликайте на кнопку, выбирайте направление и записывайтесь к нам на обучение!/g,
+      'Готовы произвести оплату за семинар? Нажмите кнопку и заполните форму на этой странице.',
+    )
+    .replace(
+      /Подать заявку на интересующий вас курс через сайт[\s\S]{0,500}?стоимости участия\./g,
+      'Оплатите семинар банковской картой на этой странице: заполните форму и подтвердите платёж.',
+    );
+}
+
+const body = page?.body_html
+  ? withPaymentCopy(cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz'))
+  : '';
 ---
 
 <BaseLayout title={title} description={description}>
+  <PaymentForm />
   <div class="container">
     <Breadcrumbs items={[{ label: 'Оплата' }]} />
 
@@ -30,8 +48,8 @@ const description = page?.seo_description || 'Информация об опла
         </div>
       </div>
 
-      {page?.body_html ? (
-        <div class="payment-content rich-content" set:html={cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz')} />
+      {body ? (
+        <div class="payment-content rich-content" set:html={body} />
       ) : (
         <p class="text-muted">Информация об оплате будет добавлена позже.</p>
       )}

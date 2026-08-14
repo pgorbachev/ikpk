@@ -48,4 +48,19 @@ export function isExternalFormHref(href: string): boolean {
   return /^https?:\/\//.test(href);
 }
 
+/** Боевой origin платёжного API (без пути /payments). */
+export const PAYMENT_ENDPOINT_PROD = 'https://api.ikpk.su';
+/** Демонстрационный адрес — не боевой и не ЮKassa. */
+export const PAYMENT_ENDPOINT_DEMO = 'https://demo-api.ikpk.invalid';
+
+/** Объявляемый адрес платёжного эндпоинта в разметке формы. */
+export function paymentEndpoint(): string {
+  if (isDemoForms) {
+    const custom = (import.meta.env.PAYMENT_ENDPOINT_DEMO ?? '').trim();
+    return custom || PAYMENT_ENDPOINT_DEMO;
+  }
+  const custom = (import.meta.env.PAYMENT_ENDPOINT_PROD ?? '').trim();
+  return custom || PAYMENT_ENDPOINT_PROD;
+}
+
 export { PROD_FORM_HOST, DEMO_STUB_PATH };
