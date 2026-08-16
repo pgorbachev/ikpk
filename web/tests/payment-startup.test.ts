@@ -11,6 +11,8 @@ import {
 } from './helpers/payment-contract';
 import { spawnPaymentProcess } from './helpers/payment-service';
 
+const VALID_STORED_FINGERPRINT = 'f'.repeat(64);
+
 describe('3.0a PAYMENT_MODE=prod fail-closed до открытия порта', () => {
   it(
     'не задан RECEIPT_ENABLED — процесс не слушает, connection refused, причина в stderr',
@@ -203,7 +205,10 @@ describe('3.0a-4 canary материала ключа', () => {
     async () => {
       const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-new-'));
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'hmac-canary.json'), JSON.stringify({ 'old-version': 'abc' }));
+      writeFileSync(
+        join(dir, 'hmac-canary.json'),
+        JSON.stringify({ 'old-version': 'a'.repeat(64) }),
+      );
       writeFileSync(
         join(dir, 'payments.json'),
         JSON.stringify({
@@ -212,7 +217,7 @@ describe('3.0a-4 canary материала ключа', () => {
               requestId: '00000000-0000-4000-8000-000000000001',
               yookassaPaymentId: 'yk-1',
               status: 'pending',
-              fingerprint: 'f',
+              fingerprint: VALID_STORED_FINGERPRINT,
               keyVersion: 'old-version',
               createdAt: new Date().toISOString(),
             },
@@ -280,7 +285,7 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
               requestId: '00000000-0000-4000-8000-000000000002',
               yookassaPaymentId: 'yk-2',
               status: 'pending',
-              fingerprint: 'f',
+              fingerprint: VALID_STORED_FINGERPRINT,
               keyVersion: TEST_HMAC_CURRENT_VERSION,
               createdAt: new Date().toISOString(),
             },
@@ -311,7 +316,7 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
             requestId: '00000000-0000-4000-8000-000000000004',
             yookassaPaymentId: 'yk-4',
             status: 'pending',
-            fingerprint: 'f',
+            fingerprint: VALID_STORED_FINGERPRINT,
             keyVersion: TEST_HMAC_CURRENT_VERSION,
             createdAt: new Date().toISOString(),
           },
@@ -341,7 +346,7 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
             requestId: '00000000-0000-4000-8000-000000000005',
             yookassaPaymentId: 'yk-5',
             status: 'pending',
-            fingerprint: 'f',
+            fingerprint: VALID_STORED_FINGERPRINT,
             keyVersion: TEST_HMAC_CURRENT_VERSION,
             createdAt: new Date().toISOString(),
           },
@@ -359,6 +364,37 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
     expect(r.exitCode).not.toBe(0);
   });
 
+  it('r13-M1 пустой digest текущей версии — fail-closed, не перезапись canary', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-empty-digest-'));
+    writeFileSync(join(dir, 'hmac-canary.json'), JSON.stringify({ [TEST_HMAC_CURRENT_VERSION]: '' }));
+    writeFileSync(
+      join(dir, 'payments.json'),
+      JSON.stringify({
+        records: [
+          {
+            requestId: '00000000-0000-4000-8000-000000000006',
+            yookassaPaymentId: 'yk-6',
+            status: 'pending',
+            fingerprint: VALID_STORED_FINGERPRINT,
+            keyVersion: TEST_HMAC_CURRENT_VERSION,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+    const r = await spawnPaymentProcess({
+      env: prodEnv({
+        PAYMENT_DATA_DIR: dir,
+        PAYMENT_CANARY_PATH: join(dir, 'hmac-canary.json'),
+        PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
+        PAYMENT_LISTEN_PORT: '18772',
+      }),
+      waitMs: 2500,
+    });
+    expect(r.listening, '{"v1":""} перезаписал canary и открыл порт').toBe(false);
+    expect(r.exitCode).not.toBe(0);
+  });
+
   it('opts.fetch не снимает fail-closed при непустом хранилище без canary', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ikpk-canary-fetch-'));
     writeFileSync(
@@ -369,7 +405,7 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
             requestId: '00000000-0000-4000-8000-000000000003',
             yookassaPaymentId: 'yk-3',
             status: 'pending',
-            fingerprint: 'f',
+            fingerprint: VALID_STORED_FINGERPRINT,
             keyVersion: TEST_HMAC_CURRENT_VERSION,
             createdAt: new Date().toISOString(),
           },

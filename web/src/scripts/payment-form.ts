@@ -561,13 +561,30 @@ function boot(formEl: HTMLFormElement) {
           signal: AbortSignal.timeout(remaining),
         });
         const json = (await res.json().catch(() => ({}))) as ApiBody;
-        if (res.status === 404 || json.status === 'not_found') return { status: 'not_found' };
-        if (res.status === 429 || json.status === 'rejected') return { status: 'unknown' };
+        if (res.status === 404) return { status: 'not_found' };
+        if (res.status === 503 && json.status === 'verification_required') {
+          return { status: 'verification_required', requestId: json.requestId };
+        }
+        if (!res.ok) return { status: 'unknown' };
+        if (json.status === 'not_found') return { status: 'not_found' };
+        if (json.status === 'verification_required') {
+          return { status: 'verification_required', requestId: json.requestId };
+        }
+        if (json.status === 'rejected') return { status: 'unknown' };
         if (waitPending && json.status === 'pending' && deadline - Date.now() > 500) {
           await new Promise((r) => setTimeout(r, Math.min(400, Math.max(0, deadline - Date.now()))));
           continue;
         }
-        return json;
+        if (
+          json.status === 'pending' ||
+          json.status === 'succeeded' ||
+          json.status === 'canceled' ||
+          json.status === 'unknown' ||
+          json.status === 'demo'
+        ) {
+          return json;
+        }
+        return { status: 'unknown' };
       } catch {
         if (Date.now() >= deadline) return { status: 'unknown' };
         return { status: 'unknown' };
@@ -624,7 +641,12 @@ function boot(formEl: HTMLFormElement) {
       stripFieldsDom();
       setChrome({ warning: true, continue: true, other: true });
       openDialog();
+      return;
     }
+    setState('unknown', 'Статус не удалось проверить. Свяжитесь с нами напрямую.');
+    stripFieldsDom();
+    setChrome({ warning: true, continue: true, other: true, copy: true });
+    openDialog();
   }
 
   async function restoreOnLoad() {

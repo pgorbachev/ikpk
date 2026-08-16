@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prodEnv, validPayload } from './helpers/payment-contract';
+import { prodEnv, TEST_HMAC_CURRENT, TEST_HMAC_CURRENT_VERSION, validPayload } from './helpers/payment-contract';
 import {
   jsonOf,
   postPayments,
@@ -72,5 +73,67 @@ describe('3.10c-1 повреждённое хранилище — fail-closed', 
       waitMs: 2500,
     });
     expect(ok.listening, '{records:[]} отвергнут как пустое хранилище').toBe(true);
+  });
+
+  it('r13-M2 records:[null] и records:[{}] — fail-closed', async () => {
+    const digest = createHmac('sha256', TEST_HMAC_CURRENT)
+      .update('ikpk-hmac-canary-constant')
+      .digest('hex');
+    for (const raw of ['{"records":[null]}', '{"records":[{}]}']) {
+      const dataDir = mkdtempSync(join(tmpdir(), 'ikpk-store-bad-record-'));
+      writeFileSync(join(dataDir, 'payments.json'), raw);
+      writeFileSync(
+        join(dataDir, 'hmac-canary.json'),
+        JSON.stringify({ [TEST_HMAC_CURRENT_VERSION]: digest }),
+      );
+      const fail = await spawnPaymentProcess({
+        env: prodEnv({
+          PAYMENT_DATA_DIR: dataDir,
+          PAYMENT_STORAGE_PATH: join(dataDir, 'payments.json'),
+          PAYMENT_CANARY_PATH: join(dataDir, 'hmac-canary.json'),
+        }),
+      });
+      expect(fail.listening, `хранилище ${raw} открыло порт`).toBe(false);
+      expect(fail.exitCode).not.toBe(0);
+    }
+  });
+
+  it('r14-M2 семантически повреждённая запись не открывает порт', async () => {
+    const canaryDigest = createHmac('sha256', TEST_HMAC_CURRENT)
+      .update('ikpk-hmac-canary-constant')
+      .digest('hex');
+    const validRecord = {
+      requestId: '00000000-0000-4000-8000-000000000007',
+      yookassaPaymentId: 'yk-7',
+      status: 'succeeded',
+      fingerprint: 'f'.repeat(64),
+      keyVersion: TEST_HMAC_CURRENT_VERSION,
+      createdAt: new Date().toISOString(),
+      confirmedAt: new Date().toISOString(),
+    };
+    const corruptions = [
+      { label: 'malformed fingerprint', record: { ...validRecord, fingerprint: 'f' } },
+      { label: 'malformed confirmedAt', record: { ...validRecord, confirmedAt: 'not-a-date' } },
+      { label: 'malformed verificationAt', record: { ...validRecord, verificationAt: 'not-a-date' } },
+      { label: 'empty yookassaPaymentId', record: { ...validRecord, yookassaPaymentId: '' } },
+    ];
+
+    for (const { label, record } of corruptions) {
+      const dataDir = mkdtempSync(join(tmpdir(), 'ikpk-store-semantic-'));
+      writeFileSync(join(dataDir, 'payments.json'), JSON.stringify({ records: [record] }));
+      writeFileSync(
+        join(dataDir, 'hmac-canary.json'),
+        JSON.stringify({ [TEST_HMAC_CURRENT_VERSION]: canaryDigest }),
+      );
+      const fail = await spawnPaymentProcess({
+        env: prodEnv({
+          PAYMENT_DATA_DIR: dataDir,
+          PAYMENT_STORAGE_PATH: join(dataDir, 'payments.json'),
+          PAYMENT_CANARY_PATH: join(dataDir, 'hmac-canary.json'),
+        }),
+      });
+      expect(fail.listening, `${label} открыл порт`).toBe(false);
+      expect(fail.exitCode).not.toBe(0);
+    }
   });
 });

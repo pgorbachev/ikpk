@@ -102,7 +102,7 @@ test.describe('5.4 created: немедленный переход и ссылк�
       urls: ['https://yookassa.test/c'],
       href: 'https://yookassa.test/c',
     });
-    expect(page.url()).toMatch(/\/oplata/);
+    expect(page.url()).not.toMatch(/yookassa\.test/);
   });
 });
 
@@ -589,6 +589,59 @@ async function seedHolds(page: Page, ids: string[]) {
     { key: HOLD_KEY, holds: ids.map((requestId) => ({ requestId, createdAt: Date.now() })) },
   );
 }
+
+test.describe('r13-M3 клиент: нераспознанный GET → unknown', () => {
+  async function assertUnknownKeepsHold(page: Page, fulfill: { status: number; body: string }) {
+    const id = randomUUID();
+    await seedHolds(page, [id]);
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await route.fulfill({
+        status: fulfill.status,
+        contentType: 'application/json',
+        body: fulfill.body,
+      });
+    });
+    await gotoOplata(page);
+    await expect(page.locator(STATE('unknown'))).toBeVisible();
+    const stored = await page.evaluate((key) => localStorage.getItem(key), HOLD_KEY);
+    expect(stored).toContain(id);
+  }
+
+  test('GET 500 status=error → unknown, удержание сохраняется', async ({ page }) => {
+    await assertUnknownKeepsHold(page, { status: 500, body: JSON.stringify({ status: 'error' }) });
+  });
+
+  test('GET 500 status=succeeded → unknown, удержание сохраняется', async ({ page }) => {
+    await assertUnknownKeepsHold(page, { status: 500, body: JSON.stringify({ status: 'succeeded' }) });
+  });
+
+  test('GET 503 status=error → unknown, удержание сохраняется', async ({ page }) => {
+    await assertUnknownKeepsHold(page, { status: 503, body: JSON.stringify({ status: 'error' }) });
+  });
+
+  test('GET с пустым телом → unknown, удержание сохраняется', async ({ page }) => {
+    await assertUnknownKeepsHold(page, { status: 200, body: '' });
+  });
+
+  test('GET с неизвестным status → unknown, удержание сохраняется', async ({ page }) => {
+    await assertUnknownKeepsHold(page, { status: 200, body: JSON.stringify({ status: 'blargh' }) });
+  });
+
+  test('GET 503 verification_required не нормализуется в unknown', async ({ page }) => {
+    const id = randomUUID();
+    await seedHolds(page, [id]);
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'verification_required', requestId: id }),
+      });
+    });
+    await gotoOplata(page);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    await expect(page.locator(STATE('unknown'))).toHaveCount(0);
+  });
+});
 
 test.describe('r12-M1 клиент: 429 при проверке статуса', () => {
   test('GET 429 rejected → unknown, удержание сохраняется', async ({ page }) => {

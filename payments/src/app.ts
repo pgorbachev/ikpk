@@ -78,7 +78,75 @@ function parseRecordsFile(raw: unknown): PaymentRecord[] {
   if (!Array.isArray(records)) {
     fail('хранилище payments.json имеет неверную форму');
   }
-  return records as PaymentRecord[];
+  return records.map((item, index) => parsePaymentRecord(item, index));
+}
+
+function parsePaymentRecord(raw: unknown, index: number): PaymentRecord {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}]`);
+  }
+  const o = raw as Record<string, unknown>;
+  const requestId = o.requestId;
+  if (typeof requestId !== 'string' || !isUuid(requestId)) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].requestId`);
+  }
+  if (
+    o.yookassaPaymentId !== null &&
+    (typeof o.yookassaPaymentId !== 'string' || o.yookassaPaymentId.length === 0)
+  ) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].yookassaPaymentId`);
+  }
+  if (typeof o.status !== 'string' || o.status.length === 0) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].status`);
+  }
+  if (!isHmacDigest(o.fingerprint)) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].fingerprint`);
+  }
+  if (typeof o.keyVersion !== 'string' || o.keyVersion.length === 0) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].keyVersion`);
+  }
+  if (typeof o.createdAt !== 'string' || Number.isNaN(Date.parse(o.createdAt))) {
+    fail(`хранилище payments.json имеет неверную форму: records[${index}].createdAt`);
+  }
+  const record: PaymentRecord = {
+    requestId,
+    yookassaPaymentId: o.yookassaPaymentId,
+    status: o.status,
+    fingerprint: o.fingerprint,
+    keyVersion: o.keyVersion,
+    createdAt: o.createdAt,
+  };
+  if (o.confirmedAt !== undefined) {
+    if (
+      o.confirmedAt !== null &&
+      (typeof o.confirmedAt !== 'string' || Number.isNaN(Date.parse(o.confirmedAt)))
+    ) {
+      fail(`хранилище payments.json имеет неверную форму: records[${index}].confirmedAt`);
+    }
+    record.confirmedAt = o.confirmedAt;
+  }
+  if (o.verificationAt !== undefined) {
+    if (
+      o.verificationAt !== null &&
+      (typeof o.verificationAt !== 'string' || Number.isNaN(Date.parse(o.verificationAt)))
+    ) {
+      fail(`хранилище payments.json имеет неверную форму: records[${index}].verificationAt`);
+    }
+    record.verificationAt = o.verificationAt;
+  }
+  if (o.verificationReason !== undefined) {
+    if (o.verificationReason !== null && typeof o.verificationReason !== 'string') {
+      fail(`хранилище payments.json имеет неверную форму: records[${index}].verificationReason`);
+    }
+    record.verificationReason = o.verificationReason;
+  }
+  return record;
+}
+
+const HMAC_DIGEST = /^[0-9a-f]{64}$/;
+
+function isHmacDigest(value: unknown): value is string {
+  return typeof value === 'string' && HMAC_DIGEST.test(value);
 }
 
 function parseCanaryFile(raw: unknown): Record<string, string> {
@@ -87,7 +155,7 @@ function parseCanaryFile(raw: unknown): Record<string, string> {
   }
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v !== 'string') fail('hmac canary file has invalid shape');
+    if (!k || !isHmacDigest(v)) fail('hmac canary file has invalid shape');
     out[k] = v;
   }
   return out;
@@ -862,8 +930,11 @@ export function createPaymentService(opts: ServiceOpts) {
     }
     const version = env.HMAC_KEY_CURRENT_VERSION!;
     const computed = canaryOf(env.HMAC_KEY_CURRENT!);
-    const stored = canary[version];
-    if (stored) {
+    if (Object.prototype.hasOwnProperty.call(canary, version)) {
+      const stored = canary[version];
+      if (!isHmacDigest(stored)) {
+        fail('hmac canary digest for this version is invalid');
+      }
       const a = Buffer.from(stored);
       const b = Buffer.from(computed);
       if (a.length !== b.length || !timingSafeEqual(a, b)) {
