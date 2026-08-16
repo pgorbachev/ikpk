@@ -24,7 +24,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'node tests/helpers/preview-server.mjs --host 127.0.0.1 --port 4323 --outDir dist-demo',
+    // `--config` ВЫБИРАЕТ вывод: у `astro preview` нет флага `--outDir`, он принимал
+    // его молча и поднимал сервер над боевым `dist`. `--outDir` здесь — то, что
+    // обёртка СВЕРЯЕТ с фактически отданным содержимым.
+    command:
+      'node tests/helpers/preview-server.mjs --host 127.0.0.1 --port 4323 ' +
+      '--config astro.demo.config.mjs --outDir dist-demo',
     port: 4323,
     reuseExistingServer: false,
   },
