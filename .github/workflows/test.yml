@@ -39,13 +39,13 @@ jobs:
 
       - name: Run unit tests
         run: |
-          npx vitest run --reporter=json --outputFile="$RUNNER_TEMP/web-unit-head.json"
-          npx vitest run --config vitest.render.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-render-head.json"
+          npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-head.json"
+          npx vitest run --config vitest.render.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-render-head.json"
 
       - name: Run build tests (dist checks)
         run: |
           npm run build
-          npx vitest run --config vitest.build.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-build-head.json"
+          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json"
 
       # Демо-сборка и проверки её вывода — ВНУТРИ обязательного прогона, а не рядом.
       # Гейтом публикации является ровно то, что лежит внутри workflow Tests: отдельный
@@ -59,7 +59,7 @@ jobs:
       - name: Run demo build tests (dist-demo checks)
         run: |
           npm run build:demo
-          npx vitest run --config vitest.demo.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-demo-head.json"
+          npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-head.json"
 
       - name: Classify dependency-only change for test-count
         id: web-dependency-scope
@@ -94,12 +94,12 @@ jobs:
           npm ci --prefix "$base/web"
           (
             cd "$base/web"
-            npx vitest run --reporter=json --outputFile="$RUNNER_TEMP/web-unit-base.json"
-            npx vitest run --config vitest.render.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-render-base.json"
+            npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-base.json"
+            npx vitest run --config vitest.render.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-render-base.json"
             npm run build
-            npx vitest run --config vitest.build.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-build-base.json"
+            npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-base.json"
             npm run build:demo
-            npx vitest run --config vitest.demo.config.ts --reporter=json --outputFile="$RUNNER_TEMP/web-demo-base.json"
+            npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-base.json"
           )
           git worktree remove --force "$base"
 
@@ -284,7 +284,7 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npx vitest run --reporter=json --outputFile="$RUNNER_TEMP/scripts-unit-head.json"
+        run: npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-head.json"
 
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope
@@ -317,7 +317,7 @@ jobs:
           base="$RUNNER_TEMP/scripts-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           npm ci --prefix "$base/scripts"
-          (cd "$base/scripts" && npx vitest run --reporter=json --outputFile="$RUNNER_TEMP/scripts-unit-base.json")
+          (cd "$base/scripts" && npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-base.json")
           git worktree remove --force "$base"
 
       - name: Dependency invariant - test-count (Vitest scripts)
