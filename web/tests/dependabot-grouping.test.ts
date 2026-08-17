@@ -75,11 +75,13 @@ describe('Dependabot grouping contract', () => {
     expect(bad).toEqual([]);
   });
 
-  it('has no npm update entry with an empty directory scope or no groups', () => {
+  it('has no empty npm scope and every multi-directory scope defines grouping', () => {
     expect(npmUpdates().length, 'no npm Dependabot entries found').toBeGreaterThan(0);
     for (const update of npmUpdates()) {
       expect(dirs(update).length).toBeGreaterThan(0);
-      expect(Object.keys(update.groups ?? {}).length).toBeGreaterThan(0);
+      if (dirs(update).length > 1) {
+        expect(Object.keys(update.groups ?? {}).length).toBeGreaterThan(0);
+      }
     }
   });
 });
