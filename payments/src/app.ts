@@ -237,6 +237,20 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
   if (receipt !== 'true' && receipt !== 'false') {
     fail(`RECEIPT_ENABLED must be true or false, got ${JSON.stringify(receipt)}`);
   }
+  // Код НДС обязателен ровно тогда, когда чеки включены: ЮKassa отвергает чек без
+  // `vat_code` (наблюдено 17.08.2026 на тестовом магазине: 400 invalid_request,
+  // parameter receipt.items[0].vat_code), а негодное значение отвергает так же. Без
+  // проверки на запуске опечатка доживает до первого плательщика и выглядит как 502
+  // без причины. Диапазон допустимых кодов НЕ перечисляется: наблюдением известно
+  // только, что 1 принимается и 99 отвергается, а список чужих кодов отставал бы молча.
+  if (receipt === 'true') {
+    const raw = env.RECEIPT_VAT_CODE;
+    if (!raw) fail('RECEIPT_VAT_CODE is required when RECEIPT_ENABLED=true');
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0) {
+      fail(`RECEIPT_VAT_CODE must be a positive integer, got ${JSON.stringify(raw)}`);
+    }
+  }
   const prevKey = env.HMAC_KEY_PREVIOUS;
   const prevVer = env.HMAC_KEY_PREVIOUS_VERSION;
   if (Boolean(prevKey) !== Boolean(prevVer)) {
@@ -466,6 +480,13 @@ export function createPaymentService(opts: ServiceOpts) {
     const value = `${body.amount}.00`;
     const payload: Record<string, unknown> = {
       amount: { value, currency: 'RUB' },
+      // Одностадийный платёж: успешная оплата списывается сразу и не требует отдельного
+      // действия сотрудника (спека, требование «Оплата подтверждается без отдельного
+      // действия сотрудника»). Умолчание ЮKassa — двухстадийный: без этого поля
+      // оплаченный платёж уходит в `waiting_for_capture`, деньги посетителя удержаны и
+      // истекают через 7 суток, а наш GET отдаёт `unknown`, то есть «нужна сверка».
+      // Наблюдено и закрыто контролем 17.08.2026 на тестовом магазине.
+      capture: true,
       confirmation: {
         type: 'redirect',
         return_url: `${env.PAYMENT_RETURN_BASE ?? 'https://ikpk.su'}/oplata?paymentRequest=${body.requestId}`,
@@ -481,6 +502,10 @@ export function createPaymentService(opts: ServiceOpts) {
             description: body.seminar.slice(0, 128),
             quantity: '1.00',
             amount: { value, currency: 'RUB' },
+            // Обязателен для ЮKassa; значение — из окружения, потому что верный код НДС
+            // для ИКПК определяет заказчик (`tasks.md`, 2.9), а не этот код. Наличие и
+            // годность проверены на запуске (fail-closed), поэтому здесь Number безопасен.
+            vat_code: Number(env.RECEIPT_VAT_CODE),
           },
         ],
       };
