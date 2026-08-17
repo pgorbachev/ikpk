@@ -88,4 +88,8 @@ describe('buildUploadBody — враждебное имя не ломает за
     // Открывающая и закрывающая — ровно две.
     expect(occurrences).toBe(2);
   });
+
+  it('required-check negative proof', () => {
+    expect(true).toBe(false);
+  });
 });
