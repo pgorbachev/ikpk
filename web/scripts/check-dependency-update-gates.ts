@@ -59,7 +59,9 @@ function combineReports(runner: 'vitest' | 'playwright', paths: string[], label:
       (sum, path) => {
         const report = jsonFile(path, label) as Record<string, unknown>;
         for (const key of ['numPassedTests', 'numFailedTests', 'numPendingTests'] as const) {
-          if (!Number.isInteger(report[key])) throw new Error(`${label} report ${path} misses ${key}`);
+          if (!Number.isInteger(report[key]) || (report[key] as number) < 0) {
+            throw new Error(`${label} report ${path} has invalid ${key}`);
+          }
           sum[key] += report[key] as number;
         }
         return sum;
@@ -71,7 +73,9 @@ function combineReports(runner: 'vitest' | 'playwright', paths: string[], label:
     (sum, path) => {
       const report = jsonFile(path, label) as { stats?: Record<string, unknown> };
       for (const key of ['expected', 'unexpected', 'flaky', 'skipped'] as const) {
-        if (!Number.isInteger(report.stats?.[key])) throw new Error(`${label} report ${path} misses stats.${key}`);
+        if (!Number.isInteger(report.stats?.[key]) || (report.stats?.[key] as number) < 0) {
+          throw new Error(`${label} report ${path} has invalid stats.${key}`);
+        }
         sum.stats[key] += report.stats![key] as number;
       }
       return sum;

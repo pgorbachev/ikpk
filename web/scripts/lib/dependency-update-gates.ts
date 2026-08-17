@@ -305,8 +305,12 @@ function runtimeTreeCount(measurement: { exitCode: number; reportJson: string },
   let count = 0;
   const visit = (node: unknown): void => {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    if (!('dependencies' in node)) return;
     const dependencies = (node as { dependencies?: unknown }).dependencies;
-    if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) return;
+    if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) {
+      count = -1;
+      return;
+    }
     for (const dependency of Object.values(dependencies)) {
       if (!dependency || typeof dependency !== 'object' || Array.isArray(dependency)) {
         count = -1;

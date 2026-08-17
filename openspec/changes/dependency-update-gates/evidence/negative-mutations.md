@@ -81,3 +81,11 @@
 manifest показывает фактический перенос `dependencies -> devDependencies`.
 Action scanner разбирает YAML AST, рекурсивно включает composite actions и требует
 digest для Docker reference. Повреждённые отчёты завершаются fail closed.
+
+Повторный независимый review SHA
+`19cff0baa3cfcc405591168701e3823a1014bf33` добавил ещё четыре RED-регрессии:
+повреждённое поле `dependencies` runtime-node, отрицательные счётчики до агрегации
+двух Vitest/Playwright-отчётов и composite action вне `.github/actions`.
+До исправления: **4 failed / 26 passed**; после: **30/30**. Scanner теперь включает
+все tracked `action.yml`/`action.yaml` репозитория, а каждый машинный отчёт
+валидируется до суммирования.

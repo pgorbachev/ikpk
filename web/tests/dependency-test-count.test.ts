@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadDependencyUpdateGates, type TestExecutionInput } from './helpers/dependency-update-gates-contract';
 
@@ -80,5 +84,31 @@ describe('dependency update gate: executed test count', () => {
     const result = checkTestExecution(input({ baseReport: undefined }));
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/base|report|measure|измер|отч[её]т/i);
+  });
+});
+
+describe('dependency update gate CLI: report aggregation', () => {
+  it.each([
+    ['vitest', { numPassedTests: -9, numFailedTests: 0, numPendingTests: 0 }, { numPassedTests: 10, numFailedTests: 0, numPendingTests: 0 }],
+    ['playwright', { stats: { expected: -9, unexpected: 0, flaky: 0, skipped: 0 } }, { stats: { expected: 10, unexpected: 0, flaky: 0, skipped: 0 } }],
+  ])('rejects a negative counter before combining %s reports', (runner, first, second) => {
+    const dir = mkdtempSync(join(tmpdir(), 'dependency-test-count-'));
+    const firstPath = join(dir, 'first.json');
+    const secondPath = join(dir, 'second.json');
+    writeFileSync(firstPath, JSON.stringify(first), 'utf8');
+    writeFileSync(secondPath, JSON.stringify(second), 'utf8');
+    const result = spawnSync(
+      join(import.meta.dirname, '..', 'node_modules', '.bin', 'tsx'),
+      [
+        join(import.meta.dirname, '..', 'scripts', 'check-dependency-update-gates.ts'),
+        'test-count',
+        '--runner', runner,
+        '--threshold', '1',
+        '--head-report', firstPath,
+        '--head-report', secondPath,
+      ],
+      { cwd: join(import.meta.dirname, '..'), encoding: 'utf8' },
+    );
+    expect(result.status, `${result.stderr}${result.stdout}`).not.toBe(0);
   });
 });

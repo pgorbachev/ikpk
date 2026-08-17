@@ -1,11 +1,11 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { isScalar, LineCounter, parse, parseDocument, visit } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const WORKFLOWS = join(ROOT, '.github', 'workflows');
-const COMPOSITE_ACTIONS = join(ROOT, '.github', 'actions');
 
 interface WorkflowStep {
   name?: string;
@@ -29,17 +29,19 @@ function workflowFiles(): string[] {
     .map((file) => join(WORKFLOWS, file));
 }
 
-function compositeActionFiles(dir = COMPOSITE_ACTIONS): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return compositeActionFiles(path);
-    return /^action\.ya?ml$/.test(entry.name) ? [path] : [];
-  });
+function trackedActionFiles(): string[] {
+  const files = execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+  return files.split('\0')
+    .filter((file) => /(^|\/)action\.ya?ml$/.test(file))
+    .map((file) => join(ROOT, file));
 }
 
 function actionDefinitionFiles(): string[] {
-  return [...workflowFiles(), ...compositeActionFiles()];
+  return [...new Set([...workflowFiles(), ...trackedActionFiles()])];
 }
 
 function actionRefProblems(file: string, source = readFileSync(file, 'utf8')): ActionRefProblem[] {
@@ -93,6 +95,12 @@ describe('workflow dependency integrity', () => {
   ])('rejects a movable external ref written as %s', (_label, source) => {
     const probe = join(ROOT, '.github', 'workflows', 'probe.yml');
     expect(actionRefProblems(probe, source).some(({ problem }) => problem === 'movable ref')).toBe(true);
+  });
+
+  it('scans tracked composite actions outside .github/actions', () => {
+    expect(actionDefinitionFiles()).toContain(
+      join(ROOT, 'web', 'tests', 'fixtures', 'dependency-update-gates', 'outside-action', 'action.yml'),
+    );
   });
 });
 

@@ -96,6 +96,15 @@ describe('dependency update gate: runtime audit scope', () => {
       head: { exitCode: 0, reportJson: damaged },
     })).ok).toBe(false);
   });
+
+  it('rejects a runtime dependency node with a malformed dependencies field', async () => {
+    const { checkRuntimeAuditScope } = await loadDependencyUpdateGates();
+    const damaged = JSON.stringify({ dependencies: { astro: { dependencies: 'broken' } } });
+    expect(checkRuntimeAuditScope(input({
+      base: { exitCode: 0, reportJson: damaged },
+      head: { exitCode: 0, reportJson: damaged },
+    })).ok).toBe(false);
+  });
 });
 
 describe('dependency update gate CLI: missing runtime measurement', () => {
