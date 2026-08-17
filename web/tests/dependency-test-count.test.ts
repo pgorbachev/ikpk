@@ -1,0 +1,114 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { loadDependencyUpdateGates, type TestExecutionInput } from './helpers/dependency-update-gates-contract';
+
+const vitestReport = (passed: number, failed = 0, skipped = 0) => ({
+  numPassedTests: passed,
+  numFailedTests: failed,
+  numPendingTests: skipped,
+});
+const playwrightReport = (expected: number, unexpected = 0, flaky = 0, skipped = 0) => ({
+  stats: { expected, unexpected, flaky, skipped },
+});
+
+function input(overrides: Partial<TestExecutionInput> = {}): TestExecutionInput {
+  return {
+    runner: 'vitest',
+    threshold: 100,
+    changedFiles: ['web/package.json', 'web/package-lock.json'],
+    baseReport: vitestReport(120),
+    headReport: vitestReport(120),
+    ...overrides,
+  };
+}
+
+describe('dependency update gate: executed test count', () => {
+  it.each([
+    ['vitest', vitestReport(120), vitestReport(120)],
+    ['playwright', playwrightReport(118, 1, 1), playwrightReport(118, 1, 1)],
+  ] as const)('passes when %s executed volume is preserved', async (runner, baseReport, headReport) => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    expect(checkTestExecution(input({ runner, baseReport, headReport }))).toMatchObject({
+      ok: true,
+      headCount: 120,
+      baseCount: 120,
+    });
+  });
+
+  it('fails a dependency-only PR when some tests stop running above threshold', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(input({ headReport: vitestReport(110, 0, 10) }));
+    expect(result).toMatchObject({ ok: false, headCount: 110, baseCount: 120 });
+    expect(result.message).toMatch(/120/);
+    expect(result.message).toMatch(/110/);
+  });
+
+  it('does not count skipped tests as executed', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(input({ threshold: 120, headReport: vitestReport(110, 0, 10) }));
+    expect(result).toMatchObject({ ok: false, headCount: 110 });
+  });
+
+  it.each([
+    ['negative passed count', vitestReport(-1, 101)],
+    ['negative failed count', vitestReport(101, -1)],
+  ])('rejects a structurally damaged Vitest report: %s', async (_label, headReport) => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    expect(checkTestExecution(input({
+      threshold: 100,
+      changedFiles: ['web/tests/file.test.ts'],
+      headReport,
+    })).ok).toBe(false);
+  });
+
+  it('allows deletion of a test above threshold because base comparison is out of scope', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(
+      input({ changedFiles: ['web/tests/obsolete.test.ts'], headReport: vitestReport(110) }),
+    );
+    expect(result).toMatchObject({ ok: true, headCount: 110 });
+  });
+
+  it('fails instead of treating a missing machine report as zero successful defects', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(input({ headReport: null }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/report|measure|измер|отч[её]т/i);
+  });
+
+  it('fails when a dependency-only comparison has no base measurement', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(input({ baseReport: undefined }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/base|report|measure|измер|отч[её]т/i);
+  });
+});
+
+describe('dependency update gate CLI: report aggregation', () => {
+  it.each([
+    ['vitest', { numPassedTests: -9, numFailedTests: 0, numPendingTests: 0 }, { numPassedTests: 10, numFailedTests: 0, numPendingTests: 0 }],
+    ['playwright', { stats: { expected: -9, unexpected: 0, flaky: 0, skipped: 0 } }, { stats: { expected: 10, unexpected: 0, flaky: 0, skipped: 0 } }],
+  ])('rejects a negative counter before combining %s reports', (runner, first, second) => {
+    const dir = mkdtempSync(join(tmpdir(), 'dependency-test-count-'));
+    const firstPath = join(dir, 'first.json');
+    const secondPath = join(dir, 'second.json');
+    writeFileSync(firstPath, JSON.stringify(first), 'utf8');
+    writeFileSync(secondPath, JSON.stringify(second), 'utf8');
+    const result = spawnSync(
+      join(import.meta.dirname, '..', 'node_modules', '.bin', 'tsx'),
+      [
+        join(import.meta.dirname, '..', 'scripts', 'check-dependency-update-gates.ts'),
+        'test-count',
+        '--runner', runner,
+        '--threshold', '1',
+        '--head-report', firstPath,
+        '--head-report', secondPath,
+      ],
+      { cwd: join(import.meta.dirname, '..'), encoding: 'utf8' },
+    );
+    expect(result.status, `${result.stderr}${result.stdout}`).not.toBe(0);
+  });
+});
