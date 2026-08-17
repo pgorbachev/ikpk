@@ -47,6 +47,12 @@ export interface TestExecutionInput {
   baseReport?: unknown;
 }
 
+export interface RuntimeAuditScopeInput {
+  packageName: 'web' | 'cms' | 'scripts';
+  base: { exitCode: number; reportJson: string };
+  head: { exitCode: number; reportJson: string };
+}
+
 export interface PublishedHeadInput {
   mainHeadSha: string;
   mainHeadCreatedAt: string;
@@ -60,6 +66,7 @@ export interface DependencyUpdateGates {
   checkLintCoverage(input: LintCoverageInput): GateResult;
   checkPlatformEntries(input: PlatformEntriesInput): GateResult;
   checkTestExecution(input: TestExecutionInput): GateResult;
+  checkRuntimeAuditScope(input: RuntimeAuditScopeInput): GateResult;
   checkPublishedHead(input: PublishedHeadInput): GateResult;
 }
 

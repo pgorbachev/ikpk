@@ -64,4 +64,11 @@ describe('dependency update gate: lint coverage', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/lint|report|measure|измер|отч[её]т/i);
   });
+
+  it('fails when a dependency-only comparison has no base measurement', async () => {
+    const { checkLintCoverage } = await loadDependencyUpdateGates();
+    const result = checkLintCoverage(input({ base: undefined }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/base|lint|report|measure|измер|отч[её]т/i);
+  });
 });

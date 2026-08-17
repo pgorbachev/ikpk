@@ -17,6 +17,12 @@ already passed on GitHub.
 - Published head policy is covered by `web/tests/dependency-published-head.test.ts`.
 - The locally observable semantics of Dependabot grouping are covered by
   `web/tests/dependabot-grouping.test.ts`.
+- Runtime-audit scope before/after a manifest-section move, including empty and
+  unreadable measurements at both the checker and CLI boundary, is covered by
+  `web/tests/dependency-runtime-audit-scope.test.ts`.
+- Full-SHA action pins, readable version comments, file/line diagnostics for a
+  movable ref, and placement of all three invariants inside workflow `Tests`
+  are covered by `web/tests/dependency-workflow-integrity.test.ts`.
 
 ### Manual or stand verification
 

@@ -62,4 +62,11 @@ describe('dependency update gate: executed test count', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/report|measure|измер|отч[её]т/i);
   });
+
+  it('fails when a dependency-only comparison has no base measurement', async () => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    const result = checkTestExecution(input({ baseReport: undefined }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/base|report|measure|измер|отч[её]т/i);
+  });
 });
