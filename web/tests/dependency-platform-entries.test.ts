@@ -103,6 +103,47 @@ describe('dependency update gate: platform lockfile entries', () => {
     expect(result.message).toMatch(/remove|stale|устар|убра/i);
   });
 
+  it('keeps an allowance one-shot across the complete accepted-loss lifecycle', async () => {
+    const { checkPlatformEntries } = await loadDependencyUpdateGates();
+    const present = lockfile({ 'node_modules/@vendor/binary-linux-x64': linuxX64, ...otherEntry });
+    const missing = lockfile(otherEntry);
+
+    const acceptedLoss = checkPlatformEntries({
+      baseLockfile: present,
+      headLockfile: missing,
+      baseAcceptedLosses: [],
+      headAcceptedLosses: [accepted],
+    });
+    expect(acceptedLoss, 'state 1: a newly accepted named loss').toMatchObject({ ok: true });
+
+    const returnedWithStaleAllowance = checkPlatformEntries({
+      baseLockfile: missing,
+      headLockfile: present,
+      baseAcceptedLosses: [accepted],
+      headAcceptedLosses: [accepted],
+    });
+    expect(returnedWithStaleAllowance, 'state 2: returned tuple invalidates the allowance')
+      .toMatchObject({ ok: false, staleAllowances: [tuple] });
+
+    const returnedAfterCleanup = checkPlatformEntries({
+      baseLockfile: missing,
+      headLockfile: present,
+      baseAcceptedLosses: [accepted],
+      headAcceptedLosses: [],
+    });
+    expect(returnedAfterCleanup, 'state 3: removing the stale allowance restores green')
+      .toMatchObject({ ok: true });
+
+    const repeatedUnacceptedLoss = checkPlatformEntries({
+      baseLockfile: present,
+      headLockfile: missing,
+      baseAcceptedLosses: [],
+      headAcceptedLosses: [],
+    });
+    expect(repeatedUnacceptedLoss, 'state 4: a later loss needs a new explicit allowance')
+      .toMatchObject({ ok: false, missingTuples: [tuple] });
+  });
+
   it.each([
     ['base', input({ baseLockfile: lockfile({}) })],
     ['head', input({ headLockfile: lockfile({}) })],
