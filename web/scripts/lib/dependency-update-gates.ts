@@ -41,6 +41,12 @@ export interface TestExecutionInput {
   baseReport?: unknown;
 }
 
+export interface RuntimeAuditScopeInput {
+  packageName: 'web' | 'cms' | 'scripts';
+  base: { exitCode: number; reportJson: string };
+  head: { exitCode: number; reportJson: string };
+}
+
 export interface PublishedHeadInput {
   mainHeadSha: string;
   mainHeadCreatedAt: string;
@@ -262,6 +268,56 @@ export function checkTestExecution(input: TestExecutionInput): GateResult {
     message: `${input.runner}: выполнено ${headCount} тестов, base=${baseCount}`,
     headCount,
     baseCount,
+  };
+}
+
+function runtimeTreeCount(measurement: { exitCode: number; reportJson: string }, label: string): GateResult {
+  if (measurement.exitCode !== 0) {
+    return failure(`${label}: runtime audit measurement завершился с кодом ${measurement.exitCode}`);
+  }
+  let report: unknown;
+  try {
+    report = JSON.parse(measurement.reportJson);
+  } catch {
+    return failure(`${label}: runtime audit report отсутствует или не является JSON`);
+  }
+  if (!report || typeof report !== 'object' || Array.isArray(report)) {
+    return failure(`${label}: runtime audit report имеет неизвестный формат`);
+  }
+
+  let count = 0;
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    const dependencies = (node as { dependencies?: unknown }).dependencies;
+    if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) return;
+    for (const dependency of Object.values(dependencies)) {
+      count += 1;
+      visit(dependency);
+    }
+  };
+  visit(report);
+  if (count === 0) return failure(`${label}: runtime audit scope пуст; измерение не выполнено`);
+  return { ok: true, message: `${label}: runtime audit scope=${count}`, headCount: count };
+}
+
+export function checkRuntimeAuditScope(input: RuntimeAuditScopeInput): GateResult {
+  const base = runtimeTreeCount(input.base, `${input.packageName} base`);
+  if (!base.ok) return base;
+  const head = runtimeTreeCount(input.head, `${input.packageName} head`);
+  if (!head.ok) return head;
+  const baseCount = base.headCount!;
+  const headCount = head.headCount!;
+  if (headCount < baseCount) {
+    return failure(
+      `${input.packageName}: runtime audit scope сократился с ${baseCount} до ${headCount}`,
+      { baseCount, headCount },
+    );
+  }
+  return {
+    ok: true,
+    message: `${input.packageName}: runtime audit scope ${headCount} >= base ${baseCount}`,
+    baseCount,
+    headCount,
   };
 }
 
