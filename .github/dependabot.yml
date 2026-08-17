@@ -13,17 +13,22 @@
 version: 2
 
 updates:
-  # ─── Фронтенд: единственный пакет, чьи зависимости уезжают в прод ───────────
+  # ─── Пакеты одного класса допуска: web + scripts ───────────────────────────
+  # Один scope через `directories` позволяет Dependabot обновить общую
+  # зависимость в обоих пакетах одним PR. Секция dependencies/devDependencies не
+  # является признаком риска: `astro` и `tsx` показывают, почему это было бы
+  # ложным разделением. CMS остаётся отдельным scope ниже.
   - package-ecosystem: npm
-    directory: /web
+    directories:
+      - /web
+      - /scripts
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 8
     groups:
-      # Мелкие подъёмы приходят одной пачкой: десять отдельных PR никто не смотрит,
-      # а несмотренный PR ничем не лучше отсутствующего.
-      web-minor-patch:
+      # Только patch/minor: major всегда остаётся отдельным PR.
+      web-scripts-minor-patch:
         update-types: [minor, patch]
     commit-message:
       prefix: "chore(deps)"
@@ -39,19 +44,6 @@ updates:
     open-pull-requests-limit: 3
     groups:
       cms-minor-patch:
-        update-types: [minor, patch]
-    commit-message:
-      prefix: "chore(deps)"
-
-  # ─── Скрипты импорта и проверки адресов ─────────────────────────────────────
-  - package-ecosystem: npm
-    directory: /scripts
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
-    groups:
-      scripts-minor-patch:
         update-types: [minor, patch]
     commit-message:
       prefix: "chore(deps)"
