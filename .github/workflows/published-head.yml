@@ -23,6 +23,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   deployments: read
 
@@ -37,7 +38,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Compare main with the latest successful Pages deployment
+      - name: Compare main with its current Pages deployment state
         env:
           GITHUB_TOKEN: ${{ github.token }}
           OVERRIDE_MAIN_SHA: ${{ inputs.main_sha }}

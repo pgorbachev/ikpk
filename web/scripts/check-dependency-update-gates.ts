@@ -8,6 +8,7 @@ import {
   type AcceptedPlatformLoss,
   type GateResult,
 } from './lib/dependency-update-gates.ts';
+import { resolvePublishedHeadInputFromGitHub } from './lib/github-published-head.ts';
 
 function option(name: string): string {
   const index = process.argv.indexOf(name);
@@ -91,35 +92,6 @@ function emit(result: GateResult): void {
   if (!result.ok) process.exitCode = 1;
 }
 
-interface GitHubCommit {
-  sha?: unknown;
-  commit?: { committer?: { date?: unknown } };
-}
-
-interface GitHubDeployment {
-  sha?: unknown;
-  statuses_url?: unknown;
-}
-
-interface GitHubDeploymentStatus {
-  state?: unknown;
-}
-
-async function githubJson<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'User-Agent': 'ikpk-published-head-monitor',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub API ${response.status} for ${url}`);
-  }
-  return await response.json() as T;
-}
-
 async function resolvePublishedHeadInput(maxLagMs: number): Promise<Parameters<typeof checkPublishedHead>[0]> {
   const overrideSha = optional('--main-sha');
   const overrideCreatedAt = optional('--main-created-at');
@@ -145,32 +117,13 @@ async function resolvePublishedHeadInput(maxLagMs: number): Promise<Parameters<t
     throw new Error('published-head requires GITHUB_REPOSITORY and GITHUB_TOKEN or GH_TOKEN');
   }
 
-  const commit = await githubJson<GitHubCommit>(`${api}/repos/${repository}/commits/main`, token);
-  if (typeof commit.sha !== 'string' || typeof commit.commit?.committer?.date !== 'string') {
-    throw new Error('GitHub main commit response has no SHA or committer date');
-  }
-
-  const deployments = await githubJson<GitHubDeployment[]>(
-    `${api}/repos/${repository}/deployments?environment=github-pages&per_page=100`,
+  return resolvePublishedHeadInputFromGitHub({
+    api,
+    repository,
     token,
-  );
-  let publishedSha: string | null = null;
-  for (const deployment of deployments) {
-    if (typeof deployment.sha !== 'string' || typeof deployment.statuses_url !== 'string') continue;
-    const statuses = await githubJson<GitHubDeploymentStatus[]>(deployment.statuses_url, token);
-    if (statuses.some((status) => status.state === 'success')) {
-      publishedSha = deployment.sha;
-      break;
-    }
-  }
-
-  return {
-    mainHeadSha: commit.sha,
-    mainHeadCreatedAt: commit.commit.committer.date,
-    publishedSha,
     now: overrideNow ?? new Date().toISOString(),
     maxLagMs,
-  };
+  });
 }
 
 async function main(): Promise<void> {

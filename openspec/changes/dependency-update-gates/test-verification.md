@@ -43,8 +43,8 @@ already passed on GitHub.
    service opens. After merging the configuration, trigger or wait for one update
    cycle and preserve `gh pr list --author app/dependabot --state all` plus the
    changed package paths for the resulting PRs. Verify `typescript-eslint` in
-   particular: `web` and `scripts` share a PR for the same update type, `cms` is a
-   separate PR, and majors are separate from patch/minor groups.
+   particular: `web` and `scripts` share a PR when their constraints allow one target,
+   `cms` is a separate PR, and majors are separate from patch/minor groups.
 
 3. **Actual signal delivery for an unpublished head.** Unit tests prove the
    decision rule, not that GitHub schedules the monitor and delivers its signal.
@@ -56,7 +56,7 @@ already passed on GitHub.
 ### Resolved planning decision
 
 The owner selected per-dependency cross-directory grouping. Task 2.5, spec, and
-design now agree: `group-by: dependency-name` combines the same dependency
-across `web`/`scripts`; manifest section is not an input; `cms`, majors, and
-different dependency names arrive separately. The updated RED evidence is in
+design now agree: `group-by: dependency-name` combines the same dependency with
+compatible constraints across `web`/`scripts`; manifest section and relative patch/minor
+type are not grouping inputs; `cms`, majors, and different dependency names arrive separately. The updated RED evidence is in
 `evidence/owner-choice-red.md`.

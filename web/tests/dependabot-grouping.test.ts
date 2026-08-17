@@ -13,6 +13,9 @@ const config = parse(readFileSync(configPath, 'utf8')) as {
       'dependency-type'?: string;
       'group-by'?: string;
       'update-types'?: string[];
+      'applies-to'?: string;
+      patterns?: string[];
+      'exclude-patterns'?: string[];
     }>;
   }>;
 };
@@ -32,6 +35,9 @@ describe('Dependabot grouping contract', () => {
       .toBe('dependency-name');
     expect(['minor', 'patch'].every((kind) => groups[0]?.['update-types']?.includes(kind))).toBe(true);
     expect(groups[0]?.['update-types']).not.toContain('major');
+    expect(groups[0]?.['applies-to'] ?? 'version-updates').toBe('version-updates');
+    expect(groups[0]?.patterns ?? ['*']).toEqual(['*']);
+    expect(groups[0]?.['exclude-patterns'] ?? []).toEqual([]);
   });
 
   it('keeps cms outside the allowed web/scripts update scope', () => {
@@ -82,6 +88,15 @@ describe('Dependabot grouping contract', () => {
       if (dirs(update).length > 1) {
         expect(Object.keys(update.groups ?? {}).length).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it('assigns web and scripts to exactly one npm update scope each', () => {
+    for (const directory of ['/web', '/scripts']) {
+      expect(
+        npmUpdates().filter((update) => dirs(update).includes(directory)),
+        `${directory} must not be shadowed by an overlapping Dependabot scope`,
+      ).toHaveLength(1);
     }
   });
 });
