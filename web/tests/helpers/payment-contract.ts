@@ -101,6 +101,11 @@ export function prodEnv(overrides: Record<string, string | undefined> = {}): Rec
     PAYMENT_POST_RATE_LIMIT: '1000',
     PAYMENT_GET_RATE_LIMIT: '1000',
     PAYMENT_RATE_LIMIT_WINDOW_MS: '60000',
+    // Фикстура, а не решение: какой код НДС верен для ИКПК — ответ заказчика
+    // (`tasks.md`, 2.9), и в продукте значение приходит из окружения. Наблюдением
+    // 17.08.2026 на тестовом магазине подтверждено лишь то, что чек без `vat_code`
+    // отвергается (`400 invalid_request`, `parameter: receipt.items[0].vat_code`).
+    RECEIPT_VAT_CODE: '1',
   };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete base[k];

@@ -262,3 +262,49 @@ describe('3.6b оплата не требует заявки и не созда�
     expect(foreign, `обработчик ходил мимо оператора: ${JSON.stringify(foreign)}`).toEqual([]);
   });
 });
+
+// Вторая половина задачи 3.3a: она была записана в задаче, но теста не имела — слово
+// `capture` не встречалось ни в одном тесте и ни в одном исходнике. Именно этот пробел
+// пропустил дефект: 17.08.2026 живой прогон против тестового магазина ЮKassa показал,
+// что оплаченный платёж уходит в `waiting_for_capture` (`paid: true`, `expires_at` через
+// 7 суток), а наш GET отдаёт `unknown` — то есть посетитель с замороженными деньгами
+// видит «нужна сверка». Причинность закрыта контролем на том же магазине: тот же
+// кошелёк и сумма, разница в одном поле — с `capture: true` статус `succeeded`
+// (`captured_at` заполнен).
+//
+// Мок обнаружить это требование не мог и не может: он отвечает то, что ему велели. Тест
+// ниже стережёт ПРОВОДКУ (поле уходит в запрос), а не поведение оператора; живой прогон
+// остаётся задачей 7.4.
+describe('3.3a (вторая половина) создание платежа объявляет одностадийный режим', () => {
+  it('запрос к оператору содержит capture: true', async () => {
+    svc = await startPaymentService({ env: prodEnv() });
+    await postPayments(svc.url, validPayload());
+    const sent = svc.yookassa.creates.at(-1)?.body as Record<string, unknown>;
+    expect(sent, 'мок создания не вызван').toBeTruthy();
+    expect(sent.capture).toBe(true);
+  });
+
+  it('режим не оставлен на умолчание оператора: поле присутствует явно', async () => {
+    svc = await startPaymentService({ env: prodEnv({ RECEIPT_ENABLED: 'true' }) });
+    await postPayments(svc.url, validPayload());
+    const sent = svc.yookassa.creates.at(-1)?.body as Record<string, unknown>;
+    expect(Object.keys(sent)).toContain('capture');
+    expect(sent.capture).toBe(true);
+  });
+});
+
+// Наблюдение 17.08.2026: чек без `vat_code` ЮKassa отвергает — `400 invalid_request`,
+// `parameter: receipt.items[0].vat_code`. Наш код его не отправлял вовсе, поэтому с
+// включёнными чеками платёж не создавался НИКОГДА, а причина скрывалась за 502
+// `{"status":"error"}`. Значение берётся из окружения: какой код НДС верен для ИКПК —
+// ответ заказчика (2.9), константой это ставить нельзя.
+describe('3.1b чек несёт vat_code из конфигурации', () => {
+  it('каждый элемент чека несёт vat_code из RECEIPT_VAT_CODE', async () => {
+    svc = await startPaymentService({ env: prodEnv({ RECEIPT_ENABLED: 'true', RECEIPT_VAT_CODE: '4' }) });
+    await postPayments(svc.url, validPayload());
+    const sent = svc.yookassa.creates.at(-1)?.body as Record<string, unknown>;
+    const items = (sent.receipt as { items?: Array<Record<string, unknown>> }).items ?? [];
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) expect(item.vat_code).toBe(4);
+  });
+});

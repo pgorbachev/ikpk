@@ -425,3 +425,38 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
     await expect(app.start()).rejects.toThrow(/canary/i);
   });
 });
+
+// Наблюдение 17.08.2026 на тестовом магазине: чек без `vat_code` отвергается
+// (`400 invalid_request`, `parameter: receipt.items[0].vat_code`), а негодное значение
+// (99) отвергается так же. Без проверки на запуске опечатка в коде НДС доживает до
+// первого живого плательщика и выглядит как 502 «error» без причины — ровно то, что
+// наблюдалось. Диапазон допустимых кодов здесь НЕ перечисляется: наблюдением проверено
+// только что `1` принимается и `99` отвергается, а список чужих кодов отставал бы молча.
+describe('3.0a-6 чек включён — код НДС обязателен до открытия порта', () => {
+  it('RECEIPT_ENABLED=true без RECEIPT_VAT_CODE — процесс не слушает, причина в stderr', async () => {
+    const r = await spawnPaymentProcess({
+      env: prodEnv({ RECEIPT_ENABLED: 'true', RECEIPT_VAT_CODE: undefined }),
+    });
+    expect(r.listening, 'порт открыт при чеках без кода НДС').toBe(false);
+    expect(r.connection).toBe('refused');
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr + r.stdout).toMatch(/RECEIPT_VAT_CODE/i);
+  });
+
+  it('RECEIPT_VAT_CODE не целое положительное — тот же исход', async () => {
+    for (const bad of ['0', '-1', '1.5', 'нет', '']) {
+      const r = await spawnPaymentProcess({
+        env: prodEnv({ RECEIPT_ENABLED: 'true', RECEIPT_VAT_CODE: bad }),
+      });
+      expect(r.listening, `порт открыт при RECEIPT_VAT_CODE=${JSON.stringify(bad)}`).toBe(false);
+      expect(r.stderr + r.stdout).toMatch(/RECEIPT_VAT_CODE/i);
+    }
+  });
+
+  it('чеки выключены — код НДС не требуется, процесс поднимается', async () => {
+    const r = await spawnPaymentProcess({
+      env: prodEnv({ RECEIPT_ENABLED: 'false', RECEIPT_VAT_CODE: undefined }),
+    });
+    expect(r.listening, 'порт закрыт, хотя чеки выключены и код НДС не нужен').toBe(true);
+  });
+});
