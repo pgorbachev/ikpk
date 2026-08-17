@@ -53,10 +53,10 @@ already passed on GitHub.
    URL/log showing the exact unpublished SHA. Restore deployment afterwards and
    preserve the successful follow-up run.
 
-### Planning conflict
+### Resolved planning decision
 
-Task 2.5 says that `tsx` in `scripts` runtime dependencies and `web`
-development dependencies must arrive in different PRs. The normative spec and
-design say the opposite: manifest section is not a grouping input, while `web`
-and `scripts` belong to one acceptance class. Therefore task 2.5 remains open
-until its wording is updated; the automated test follows the spec/design.
+The owner selected per-dependency cross-directory grouping. Task 2.5, spec, and
+design now agree: `group-by: dependency-name` combines the same dependency
+across `web`/`scripts`; manifest section is not an input; `cms`, majors, and
+different dependency names arrive separately. The updated RED evidence is in
+`evidence/owner-choice-red.md`.
