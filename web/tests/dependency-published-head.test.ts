@@ -10,7 +10,7 @@ function input(overrides: Partial<PublishedHeadInput> = {}): PublishedHeadInput 
     mainHeadCreatedAt: '2026-08-17T09:00:00.000Z',
     publishedSha: HEAD,
     now: '2026-08-17T09:05:00.000Z',
-    maxLagMs: 10 * 60 * 1000,
+    maxLagMs: 30 * 60 * 1000,
     cancelledIntermediateShas: [OLD],
     ...overrides,
   };
@@ -25,9 +25,17 @@ describe('dependency update gate: published main head', () => {
   it('signals and names an unpublished main head after the allowed lag', async () => {
     const { checkPublishedHead } = await loadDependencyUpdateGates();
     const result = checkPublishedHead(
-      input({ publishedSha: OLD, now: '2026-08-17T09:10:00.001Z' }),
+      input({ publishedSha: OLD, now: '2026-08-17T09:30:00.001Z' }),
     );
     expect(result.ok).toBe(false);
     expect(result.message).toContain(HEAD);
+  });
+
+  it('uses an exact 30 minute grace period', async () => {
+    const { checkPublishedHead } = await loadDependencyUpdateGates();
+    expect(checkPublishedHead(input({ publishedSha: OLD, now: '2026-08-17T09:30:00.000Z' })))
+      .toMatchObject({ ok: true });
+    expect(checkPublishedHead(input({ publishedSha: OLD, now: '2026-08-17T09:30:00.001Z' })))
+      .toMatchObject({ ok: false });
   });
 });
