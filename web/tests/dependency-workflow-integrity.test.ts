@@ -1,14 +1,16 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import { parse } from 'yaml';
+import { isScalar, LineCounter, parse, parseDocument, visit } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const WORKFLOWS = join(ROOT, '.github', 'workflows');
+const COMPOSITE_ACTIONS = join(ROOT, '.github', 'actions');
 
 interface WorkflowStep {
   name?: string;
   run?: string;
+  if?: string;
 }
 
 interface Workflow {
@@ -18,7 +20,7 @@ interface Workflow {
 
 interface ActionRefProblem {
   location: string;
-  problem: 'movable ref' | 'missing readable version comment';
+  problem: 'movable ref' | 'missing readable version comment' | 'invalid yaml';
 }
 
 function workflowFiles(): string[] {
@@ -27,30 +29,51 @@ function workflowFiles(): string[] {
     .map((file) => join(WORKFLOWS, file));
 }
 
+function compositeActionFiles(dir = COMPOSITE_ACTIONS): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return compositeActionFiles(path);
+    return /^action\.ya?ml$/.test(entry.name) ? [path] : [];
+  });
+}
+
+function actionDefinitionFiles(): string[] {
+  return [...workflowFiles(), ...compositeActionFiles()];
+}
+
 function actionRefProblems(file: string, source = readFileSync(file, 'utf8')): ActionRefProblem[] {
   const problems: ActionRefProblem[] = [];
-  source.split('\n').forEach((line, index) => {
-    const match = line.match(/^\s*(?:-\s*)?uses:\s*([^\s#]+)(?:\s+#\s*(.*))?$/);
-    if (!match) return;
-    const target = match[1].replace(/^['"]|['"]$/g, '');
-    if (target.startsWith('./') || target.startsWith('docker://')) return;
-    const separator = target.lastIndexOf('@');
-    if (separator < 1) return;
+  const lines = source.split('\n');
+  const lineCounter = new LineCounter();
+  const document = parseDocument(source, { lineCounter });
+  if (document.errors.length > 0) {
+    return [{ location: `${relative(ROOT, file)}:1`, problem: 'invalid yaml' }];
+  }
 
-    const location = `${relative(ROOT, file)}:${index + 1}`;
-    if (!/^[0-9a-f]{40}$/i.test(target.slice(separator + 1))) {
-      problems.push({ location, problem: 'movable ref' });
-    }
-    if (!/\bv\d+(?:\.\d+){0,2}\b/i.test(match[2] ?? '')) {
-      problems.push({ location, problem: 'missing readable version comment' });
-    }
+  visit(document, {
+    Pair(_key, pair) {
+      if (!isScalar(pair.key) || pair.key.value !== 'uses' || !isScalar(pair.value)) return;
+      const target = pair.value.value;
+      if (typeof target !== 'string' || target.startsWith('./')) return;
+      const offset = pair.value.range?.[0] ?? pair.key.range?.[0] ?? 0;
+      const lineNumber = lineCounter.linePos(offset).line;
+      const location = `${relative(ROOT, file)}:${lineNumber}`;
+      const immutable = target.startsWith('docker://')
+        ? /@sha256:[0-9a-f]{64}$/i.test(target)
+        : /^[^\s@]+@[0-9a-f]{40}$/i.test(target);
+      if (!immutable) problems.push({ location, problem: 'movable ref' });
+      if (!/#[^\n]*\bv?\d+(?:\.\d+){0,2}\b/i.test(lines[lineNumber - 1] ?? '')) {
+        problems.push({ location, problem: 'missing readable version comment' });
+      }
+    },
   });
   return problems;
 }
 
 describe('workflow dependency integrity', () => {
   it('pins every external action in every workflow to a full SHA with a readable version comment', () => {
-    const problems = workflowFiles().flatMap((file) => actionRefProblems(file));
+    const problems = actionDefinitionFiles().flatMap((file) => actionRefProblems(file));
     expect(
       problems,
       problems.map(({ location, problem }) => `${location}: ${problem}`).join('\n'),
@@ -61,6 +84,15 @@ describe('workflow dependency integrity', () => {
     const probe = join(ROOT, '.github', 'workflows', 'probe.yml');
     expect(actionRefProblems(probe, 'steps:\n  - uses: owner/action@v4'))
       .toContainEqual({ location: '.github/workflows/probe.yml:2', problem: 'movable ref' });
+  });
+
+  it.each([
+    ['flow YAML', 'steps: [{ uses: actions/checkout@v7 }]'],
+    ['quoted key', 'steps:\n  - "uses" : actions/checkout@v7'],
+    ['mutable Docker tag', 'steps:\n  - uses: docker://alpine:latest'],
+  ])('rejects a movable external ref written as %s', (_label, source) => {
+    const probe = join(ROOT, '.github', 'workflows', 'probe.yml');
+    expect(actionRefProblems(probe, source).some(({ problem }) => problem === 'movable ref')).toBe(true);
   });
 });
 
@@ -84,5 +116,15 @@ describe('publication gate placement', () => {
         `${basename(testsPath!)} does not run ${invariant} inside workflow Tests`,
       ).toBe(true);
     }
+  });
+
+  it('does not limit runtime-audit scope to dependency-only pull requests', () => {
+    const testsPath = join(WORKFLOWS, 'test.yml');
+    const workflow = parse(readFileSync(testsPath, 'utf8')) as Workflow;
+    const runtimeStep = Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
+      .find((step) => step.name === 'Dependency invariant - runtime-audit scope') as WorkflowStep & { if?: string };
+    expect(runtimeStep, 'runtime-audit scope step not found').toBeDefined();
+    expect(runtimeStep.if ?? '', 'mixed PR with a manifest transfer must not bypass runtime scope')
+      .not.toContain('dependency_only');
   });
 });

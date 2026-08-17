@@ -153,6 +153,12 @@ jobs:
           changed="$RUNNER_TEMP/dependency-changed-files.txt"
           git diff --name-only "$base_sha"...HEAD > "$changed"
           dependency_only=false
+          runtime_scope=false
+          while IFS= read -r file; do
+            case "$file" in
+              web/package.json|cms/package.json|scripts/package.json) runtime_scope=true ;;
+            esac
+          done < "$changed"
           if [ -n "$PR_BASE_SHA" ] && [ -s "$changed" ]; then
             dependency_only=true
             while IFS= read -r file; do
@@ -164,6 +170,7 @@ jobs:
           fi
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
+          echo "runtime_scope=$runtime_scope" >> "$GITHUB_OUTPUT"
 
       - name: Install package dependencies for measurements
         run: |
@@ -188,13 +195,14 @@ jobs:
           done
 
       - name: Produce dependency-only base measurements
-        if: steps.dependency-scope.outputs.dependency_only == 'true'
+        if: steps.dependency-scope.outputs.dependency_only == 'true' || steps.dependency-scope.outputs.runtime_scope == 'true'
         env:
           BASE_SHA: ${{ steps.dependency-scope.outputs.base_sha }}
         run: |
           base="$RUNNER_TEMP/dependency-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           for package in web cms scripts; do
+            cp "$base/$package/package.json" "$RUNNER_TEMP/${package}-manifest-base.json"
             npm ci --prefix "$base/$package"
             set +e
             (cd "$base/$package" && npx eslint . --format json) > "$RUNNER_TEMP/${package}-lint-base.json"
@@ -247,11 +255,13 @@ jobs:
           done
 
       - name: Dependency invariant - runtime-audit scope
-        if: steps.dependency-scope.outputs.dependency_only == 'true'
+        if: steps.dependency-scope.outputs.runtime_scope == 'true'
         run: |
           for package in web cms scripts; do
             web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts runtime-audit-scope \
               --package "$package" \
+              --base-manifest "$RUNNER_TEMP/${package}-manifest-base.json" \
+              --head-manifest "$package/package.json" \
               --base-report "$RUNNER_TEMP/${package}-runtime-base.json" \
               --base-exit "$(cat "$RUNNER_TEMP/${package}-runtime-base.exit")" \
               --head-report "$RUNNER_TEMP/${package}-runtime-head.json" \

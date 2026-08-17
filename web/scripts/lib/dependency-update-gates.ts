@@ -43,6 +43,8 @@ export interface TestExecutionInput {
 
 export interface RuntimeAuditScopeInput {
   packageName: 'web' | 'cms' | 'scripts';
+  baseManifest: unknown;
+  headManifest: unknown;
   base: { exitCode: number; reportJson: string };
   head: { exitCode: number; reportJson: string };
 }
@@ -82,8 +84,17 @@ function parseLintCount(measurement: { exitCode: number; reportJson: string }, l
     return failure(`${label}: отчёт lint пуст; покрытие не измерено`);
   }
 
-  if (!report.every((entry) => entry && typeof entry === 'object' && 'filePath' in entry)) {
+  if (!report.every((entry) =>
+    entry && typeof entry === 'object' &&
+    typeof (entry as { filePath?: unknown }).filePath === 'string' &&
+    Boolean((entry as { filePath: string }).filePath)
+  )) {
     return failure(`${label}: отчёт lint имеет неизвестный формат; покрытие не измерено`);
+  }
+
+  const paths = report.map((entry) => (entry as { filePath: string }).filePath);
+  if (new Set(paths).size !== paths.length) {
+    return failure(`${label}: отчёт lint содержит повторяющиеся файлы; покрытие не измерено`);
   }
 
   return { ok: true, message: `${label}: lint проанализировал ${report.length} файлов`, headCount: report.length };
@@ -229,14 +240,20 @@ function executedTestCount(runner: TestExecutionInput['runner'], report: unknown
   if (!report || typeof report !== 'object') return null;
   if (runner === 'vitest') {
     const value = report as { numPassedTests?: unknown; numFailedTests?: unknown };
-    if (!Number.isInteger(value.numPassedTests) || !Number.isInteger(value.numFailedTests)) return null;
+    if (
+      !Number.isInteger(value.numPassedTests) || !Number.isInteger(value.numFailedTests) ||
+      (value.numPassedTests as number) < 0 || (value.numFailedTests as number) < 0
+    ) return null;
     return (value.numPassedTests as number) + (value.numFailedTests as number);
   }
 
   const stats = (report as { stats?: unknown }).stats;
   if (!stats || typeof stats !== 'object') return null;
   const value = stats as { expected?: unknown; unexpected?: unknown; flaky?: unknown };
-  if (![value.expected, value.unexpected, value.flaky].every(Number.isInteger)) return null;
+  if (
+    ![value.expected, value.unexpected, value.flaky].every(Number.isInteger) ||
+    [value.expected, value.unexpected, value.flaky].some((count) => (count as number) < 0)
+  ) return null;
   return (value.expected as number) + (value.unexpected as number) + (value.flaky as number);
 }
 
@@ -291,11 +308,17 @@ function runtimeTreeCount(measurement: { exitCode: number; reportJson: string },
     const dependencies = (node as { dependencies?: unknown }).dependencies;
     if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) return;
     for (const dependency of Object.values(dependencies)) {
+      if (!dependency || typeof dependency !== 'object' || Array.isArray(dependency)) {
+        count = -1;
+        return;
+      }
       count += 1;
       visit(dependency);
+      if (count < 0) return;
     }
   };
   visit(report);
+  if (count < 0) return failure(`${label}: runtime audit report содержит повреждённый dependency node`);
   if (count === 0) return failure(`${label}: runtime audit scope пуст; измерение не выполнено`);
   return { ok: true, message: `${label}: runtime audit scope=${count}`, headCount: count };
 }
@@ -307,15 +330,38 @@ export function checkRuntimeAuditScope(input: RuntimeAuditScopeInput): GateResul
   if (!head.ok) return head;
   const baseCount = base.headCount!;
   const headCount = head.headCount!;
-  if (headCount < baseCount) {
+
+  const dependencies = (manifest: unknown, section: 'dependencies' | 'devDependencies'): Set<string> | null => {
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return null;
+    const value = (manifest as Record<string, unknown>)[section];
+    if (value === undefined) return new Set();
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return new Set(Object.keys(value));
+  };
+  const baseRuntime = dependencies(input.baseManifest, 'dependencies');
+  const headRuntime = dependencies(input.headManifest, 'dependencies');
+  const headDevelopment = dependencies(input.headManifest, 'devDependencies');
+  if (!baseRuntime || !headRuntime || !headDevelopment) {
+    return failure(`${input.packageName}: manifests для runtime audit отсутствуют или повреждены`, {
+      baseCount,
+      headCount,
+    });
+  }
+  const movedToDevelopment = [...baseRuntime]
+    .filter((name) => !headRuntime.has(name) && headDevelopment.has(name))
+    .sort();
+
+  if (movedToDevelopment.length > 0 && headCount < baseCount) {
     return failure(
-      `${input.packageName}: runtime audit scope сократился с ${baseCount} до ${headCount}`,
+      `${input.packageName}: runtime audit scope сократился с ${baseCount} до ${headCount} после переноса ${movedToDevelopment.join(', ')} в devDependencies`,
       { baseCount, headCount },
     );
   }
   return {
     ok: true,
-    message: `${input.packageName}: runtime audit scope ${headCount} >= base ${baseCount}`,
+    message: movedToDevelopment.length > 0
+      ? `${input.packageName}: runtime audit scope ${headCount} >= base ${baseCount} после переноса ${movedToDevelopment.join(', ')}`
+      : `${input.packageName}: переносов dependencies -> devDependencies нет; scope base=${baseCount}, head=${headCount}`,
     baseCount,
     headCount,
   };

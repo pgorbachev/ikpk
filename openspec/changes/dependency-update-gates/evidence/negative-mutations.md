@@ -64,3 +64,20 @@
 - Диагностика назвала `.github/workflows/test.yml:24`, `movable ref` и
   `missing readable version comment`.
 
+## Регрессии по независимому ревью
+
+На SHA `cf16b34840833d3b392648bd634aee957e8b9214` два независимых ревью нашли
+дополнительные fail-open/fail-closed границы. До исправления целевой прогон дал
+**9 failed / 28 passed**:
+
+- mixed PR с переносом dependency обходил `runtime-audit-scope`;
+- обычный pruning **4 → 1** без переноса секции ошибочно блокировался;
+- flow-YAML, quoted key и `docker://image:tag` обходили action-pin scanner;
+- lint принимал `filePath: null` и повтор одного пути;
+- Vitest принимал отрицательный passed/failed count.
+
+После исправления те же четыре файла дают **37/37**. Runtime-аудит теперь запускается
+при любом изменении package manifest, но запрещает сокращение только когда сравнение
+manifest показывает фактический перенос `dependencies -> devDependencies`.
+Action scanner разбирает YAML AST, рекурсивно включает composite actions и требует
+digest для Docker reference. Повреждённые отчёты завершаются fail closed.

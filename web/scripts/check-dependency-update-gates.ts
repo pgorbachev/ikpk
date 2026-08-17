@@ -94,6 +94,8 @@ function main(): void {
   if (command === 'runtime-audit-scope') {
     emit(checkRuntimeAuditScope({
       packageName: option('--package') as 'web' | 'cms' | 'scripts',
+      baseManifest: jsonFile(option('--base-manifest'), 'base manifest'),
+      headManifest: jsonFile(option('--head-manifest'), 'head manifest'),
       base: {
         exitCode: integerOption('--base-exit', 0),
         reportJson: readReport(option('--base-report'), 'base'),

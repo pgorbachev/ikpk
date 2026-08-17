@@ -65,6 +65,21 @@ describe('dependency update gate: lint coverage', () => {
     expect(result.message).toMatch(/lint|report|measure|измер|отч[её]т/i);
   });
 
+  it.each([
+    ['null filePath', JSON.stringify([{ filePath: null, messages: [] }])],
+    ['duplicate filePath', JSON.stringify([
+      { filePath: '/repo/src/same.ts', messages: [] },
+      { filePath: '/repo/src/same.ts', messages: [] },
+    ])],
+  ])('rejects a structurally damaged lint report: %s', async (_label, reportJson) => {
+    const { checkLintCoverage } = await loadDependencyUpdateGates();
+    expect(checkLintCoverage(input({
+      threshold: 1,
+      changedFiles: ['web/src/file.ts'],
+      head: { exitCode: 0, reportJson },
+    })).ok).toBe(false);
+  });
+
   it('fails when a dependency-only comparison has no base measurement', async () => {
     const { checkLintCoverage } = await loadDependencyUpdateGates();
     const result = checkLintCoverage(input({ base: undefined }));

@@ -27,6 +27,8 @@ function input(overrides: Partial<RuntimeAuditScopeInput> = {}): RuntimeAuditSco
   });
   return {
     packageName: 'web',
+    baseManifest: { dependencies: { astro: '^6.0.0' }, devDependencies: {} },
+    headManifest: { dependencies: { astro: '^6.0.0' }, devDependencies: {} },
     base: { exitCode: 0, reportJson: full },
     head: { exitCode: 0, reportJson: full },
     ...overrides,
@@ -47,6 +49,7 @@ describe('dependency update gate: runtime audit scope', () => {
     const { checkRuntimeAuditScope } = await loadDependencyUpdateGates();
     const result = checkRuntimeAuditScope(
       input({
+        headManifest: { dependencies: {}, devDependencies: { astro: '^6.0.0' } },
         head: {
           exitCode: 0,
           reportJson: report({ '@astrojs/sitemap': packageNode() }),
@@ -60,6 +63,19 @@ describe('dependency update gate: runtime audit scope', () => {
     expect(result.message).toMatch(/1/);
   });
 
+  it('allows ordinary dependency pruning when no package moved to devDependencies', async () => {
+    const { checkRuntimeAuditScope } = await loadDependencyUpdateGates();
+    const result = checkRuntimeAuditScope(
+      input({
+        head: {
+          exitCode: 0,
+          reportJson: report({ '@astrojs/sitemap': packageNode() }),
+        },
+      }),
+    );
+    expect(result).toMatchObject({ ok: true, baseCount: 4, headCount: 1 });
+  });
+
   it.each([
     ['base process failed', { base: { exitCode: 1, reportJson: '' } }],
     ['head report is absent', { head: { exitCode: 0, reportJson: '' } }],
@@ -71,13 +87,26 @@ describe('dependency update gate: runtime audit scope', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/runtime|audit|report|measure|измер|отч[её]т/i);
   });
+
+  it('rejects a runtime report whose dependency entry is not an object', async () => {
+    const { checkRuntimeAuditScope } = await loadDependencyUpdateGates();
+    const damaged = JSON.stringify({ dependencies: { bogus: null } });
+    expect(checkRuntimeAuditScope(input({
+      base: { exitCode: 0, reportJson: damaged },
+      head: { exitCode: 0, reportJson: damaged },
+    })).ok).toBe(false);
+  });
 });
 
 describe('dependency update gate CLI: missing runtime measurement', () => {
   const run = (baseReport: string, headReportPath: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'dependency-runtime-audit-'));
     const base = join(dir, 'base.json');
+    const baseManifest = join(dir, 'base-package.json');
+    const headManifest = join(dir, 'head-package.json');
     writeFileSync(base, baseReport, 'utf8');
+    writeFileSync(baseManifest, JSON.stringify({ dependencies: { astro: '^6.0.0' } }), 'utf8');
+    writeFileSync(headManifest, JSON.stringify({ dependencies: { astro: '^6.0.0' } }), 'utf8');
     return spawnSync(
       TSX,
       [
@@ -85,6 +114,10 @@ describe('dependency update gate CLI: missing runtime measurement', () => {
         'runtime-audit-scope',
         '--package',
         'web',
+        '--base-manifest',
+        baseManifest,
+        '--head-manifest',
+        headManifest,
         '--base-report',
         base,
         '--head-report',

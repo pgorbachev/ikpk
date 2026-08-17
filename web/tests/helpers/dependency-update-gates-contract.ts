@@ -49,6 +49,8 @@ export interface TestExecutionInput {
 
 export interface RuntimeAuditScopeInput {
   packageName: 'web' | 'cms' | 'scripts';
+  baseManifest: unknown;
+  headManifest: unknown;
   base: { exitCode: number; reportJson: string };
   head: { exitCode: number; reportJson: string };
 }

@@ -48,6 +48,18 @@ describe('dependency update gate: executed test count', () => {
     expect(result).toMatchObject({ ok: false, headCount: 110 });
   });
 
+  it.each([
+    ['negative passed count', vitestReport(-1, 101)],
+    ['negative failed count', vitestReport(101, -1)],
+  ])('rejects a structurally damaged Vitest report: %s', async (_label, headReport) => {
+    const { checkTestExecution } = await loadDependencyUpdateGates();
+    expect(checkTestExecution(input({
+      threshold: 100,
+      changedFiles: ['web/tests/file.test.ts'],
+      headReport,
+    })).ok).toBe(false);
+  });
+
   it('allows deletion of a test above threshold because base comparison is out of scope', async () => {
     const { checkTestExecution } = await loadDependencyUpdateGates();
     const result = checkTestExecution(
