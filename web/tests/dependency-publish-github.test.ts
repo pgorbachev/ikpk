@@ -107,4 +107,23 @@ describe('GitHub published-head adapter', () => {
       api: 'https://api.github.test', repository: 'o/r', token: 'token', maxLagMs: 1_800_000, fetch,
     })).rejects.toThrow();
   });
+
+  it('validates every deployment record before accepting a successful one', async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/commits/main')) return jsonResponse({ sha: 'head' });
+      if (url.includes('/actions/workflows/test.yml/runs')) return jsonResponse({
+        workflow_runs: [{ head_sha: 'head', event: 'push', created_at: '2026-08-17T10:00:00Z' }],
+      });
+      if (url.includes('/deployments?')) return jsonResponse([{ sha: 'head', id: 1 }, { sha: 'head' }]);
+      if (url.includes('/deployments/1/statuses')) return jsonResponse([
+        { state: 'success', created_at: '2026-08-17T10:01:00Z' },
+      ]);
+      throw new Error(`unexpected URL ${url}`);
+    });
+
+    await expect(resolvePublishedHeadInputFromGitHub({
+      api: 'https://api.github.test', repository: 'o/r', token: 'token', maxLagMs: 1_800_000, fetch,
+    })).rejects.toThrow(/incomplete deployment/);
+  });
 });

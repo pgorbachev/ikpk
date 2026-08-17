@@ -5,7 +5,7 @@
     "scripts": 10
   },
   "testThresholds": {
-    "web-vitest-total": 707,
+    "web-vitest-total": 708,
     "scripts-unit": 13,
     "playwright": 143
   }

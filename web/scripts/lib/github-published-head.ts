@@ -88,12 +88,16 @@ export async function resolvePublishedHeadInputFromGitHub(input: {
     fetchImpl,
   );
   if (!Array.isArray(deployments)) throw new Error('GitHub deployments response is malformed');
+  for (const deployment of deployments) {
+    const validId = Number.isInteger(deployment.id) ||
+      (typeof deployment.id === 'string' && deployment.id.length > 0);
+    if (deployment.sha !== commit.sha || !validId) {
+      throw new Error('GitHub deployments response contains an incomplete deployment');
+    }
+  }
 
   let publishedSha: string | null = null;
   for (const deployment of deployments) {
-    if (deployment.sha !== commit.sha || (!Number.isInteger(deployment.id) && typeof deployment.id !== 'string')) {
-      throw new Error('GitHub deployments response contains an incomplete deployment');
-    }
     const statuses = await githubJson<GitHubDeploymentStatus[]>(
       `${input.api}/repos/${input.repository}/deployments/${deployment.id}/statuses?per_page=100`,
       input.token,
