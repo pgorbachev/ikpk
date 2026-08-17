@@ -66,4 +66,45 @@ describe('GitHub published-head adapter', () => {
       api: 'https://api.github.test', repository: 'o/r', token: 'token', maxLagMs: 1_800_000, fetch,
     })).resolves.toMatchObject({ mainHeadCreatedAt: '2026-08-17T10:00:00Z' });
   });
+
+  it('treats a new deployment with no statuses as not published yet', async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/commits/main')) return jsonResponse({ sha: 'head' });
+      if (url.includes('/actions/workflows/test.yml/runs')) return jsonResponse({
+        workflow_runs: [{ head_sha: 'head', event: 'push', created_at: '2026-08-17T10:00:00Z' }],
+      });
+      if (url.includes('/deployments?')) return jsonResponse([{ sha: 'head', id: 9 }]);
+      if (url.includes('/deployments/9/statuses')) return jsonResponse([]);
+      throw new Error(`unexpected URL ${url}`);
+    });
+
+    await expect(resolvePublishedHeadInputFromGitHub({
+      api: 'https://api.github.test', repository: 'o/r', token: 'token', maxLagMs: 1_800_000, fetch,
+    })).resolves.toMatchObject({ publishedSha: null });
+  });
+
+  it.each([
+    { deployments: [{ sha: 'head' }], statuses: [], label: 'deployment without id' },
+    {
+      deployments: [{ sha: 'head', id: 10 }],
+      statuses: [{ created_at: '2026-08-17T10:01:00Z' }],
+      label: 'status without state',
+    },
+  ])('fails closed for a malformed $label', async ({ deployments, statuses }) => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/commits/main')) return jsonResponse({ sha: 'head' });
+      if (url.includes('/actions/workflows/test.yml/runs')) return jsonResponse({
+        workflow_runs: [{ head_sha: 'head', event: 'push', created_at: '2026-08-17T10:00:00Z' }],
+      });
+      if (url.includes('/deployments?')) return jsonResponse(deployments);
+      if (url.includes('/deployments/10/statuses')) return jsonResponse(statuses);
+      throw new Error(`unexpected URL ${url}`);
+    });
+
+    await expect(resolvePublishedHeadInputFromGitHub({
+      api: 'https://api.github.test', repository: 'o/r', token: 'token', maxLagMs: 1_800_000, fetch,
+    })).rejects.toThrow();
+  });
 });

@@ -39,12 +39,14 @@ async function githubJson<T>(url: string, token: string, fetchImpl: Fetch): Prom
   return await response.json() as T;
 }
 
-function latestStatus(statuses: GitHubDeploymentStatus[]): GitHubDeploymentStatus {
+function latestStatus(statuses: GitHubDeploymentStatus[]): GitHubDeploymentStatus | null {
+  if (statuses.length === 0) return null;
   const valid = statuses.filter((status): status is GitHubDeploymentStatus & { created_at: string } =>
-    typeof status.created_at === 'string' && !Number.isNaN(Date.parse(status.created_at)),
+    typeof status.state === 'string' && typeof status.created_at === 'string' &&
+    !Number.isNaN(Date.parse(status.created_at)),
   );
-  if (valid.length !== statuses.length || valid.length === 0) {
-    throw new Error('GitHub deployment statuses response has no complete current status');
+  if (valid.length !== statuses.length) {
+    throw new Error('GitHub deployment statuses response contains an incomplete status');
   }
   return valid.reduce((latest, status) =>
     Date.parse(status.created_at) > Date.parse(latest.created_at) ? status : latest,
@@ -90,7 +92,7 @@ export async function resolvePublishedHeadInputFromGitHub(input: {
   let publishedSha: string | null = null;
   for (const deployment of deployments) {
     if (deployment.sha !== commit.sha || (!Number.isInteger(deployment.id) && typeof deployment.id !== 'string')) {
-      continue;
+      throw new Error('GitHub deployments response contains an incomplete deployment');
     }
     const statuses = await githubJson<GitHubDeploymentStatus[]>(
       `${input.api}/repos/${input.repository}/deployments/${deployment.id}/statuses?per_page=100`,
@@ -98,7 +100,7 @@ export async function resolvePublishedHeadInputFromGitHub(input: {
       fetchImpl,
     );
     if (!Array.isArray(statuses)) throw new Error('GitHub deployment statuses response is malformed');
-    if (latestStatus(statuses).state === 'success') {
+    if (latestStatus(statuses)?.state === 'success') {
       publishedSha = commit.sha;
       break;
     }

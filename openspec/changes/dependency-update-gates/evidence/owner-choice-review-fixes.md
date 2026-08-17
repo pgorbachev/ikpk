@@ -23,9 +23,10 @@ Tests       7 passed (7)
 Error: Cannot find module '../scripts/lib/github-published-head'
 ```
 
-After the implementation, the focused command passed 14/14 and the full unit command
-passed 33 files / 548 tests. Together with render 9, build 119, and demo 28, the web
-Vitest floor is 704 executed tests.
+After the first implementation, the focused command passed 14/14. Final re-review added
+coverage for empty status lists, malformed deployments/statuses, glob scopes, and YAML
+null values. The final full unit command passed 33 files / 551 tests. Together with
+render 9, build 119, and demo 28, the web Vitest floor is 707 executed tests.
 
 The production adapter was also executed read-only against GitHub with Node 22.22.3. It
 resolved the matching push run, current Pages deployment and status, and reported:

@@ -22,6 +22,7 @@ const config = parse(readFileSync(configPath, 'utf8')) as {
 
 const npmUpdates = () => (config.updates ?? []).filter((u) => u['package-ecosystem'] === 'npm');
 const dirs = (u: ReturnType<typeof npmUpdates>[number]) => u.directories ?? (u.directory ? [u.directory] : []);
+const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 
 describe('Dependabot grouping contract', () => {
   it('uses one update scope for the same minor dependency in allowed web and scripts packages', () => {
@@ -35,9 +36,10 @@ describe('Dependabot grouping contract', () => {
       .toBe('dependency-name');
     expect(['minor', 'patch'].every((kind) => groups[0]?.['update-types']?.includes(kind))).toBe(true);
     expect(groups[0]?.['update-types']).not.toContain('major');
-    expect(groups[0]?.['applies-to'] ?? 'version-updates').toBe('version-updates');
-    expect(groups[0]?.patterns ?? ['*']).toEqual(['*']);
-    expect(groups[0]?.['exclude-patterns'] ?? []).toEqual([]);
+    const group = groups[0] ?? {};
+    expect(hasOwn(group, 'applies-to') ? group['applies-to'] : 'version-updates').toBe('version-updates');
+    expect(hasOwn(group, 'patterns') ? group.patterns : ['*']).toEqual(['*']);
+    expect(hasOwn(group, 'exclude-patterns') ? group['exclude-patterns'] : []).toEqual([]);
   });
 
   it('keeps cms outside the allowed web/scripts update scope', () => {
@@ -92,6 +94,12 @@ describe('Dependabot grouping contract', () => {
   });
 
   it('assigns web and scripts to exactly one npm update scope each', () => {
+    const exactDirectories = new Set(['/web', '/scripts', '/cms']);
+    for (const update of npmUpdates()) {
+      for (const directory of dirs(update)) {
+        expect(exactDirectories.has(directory), `glob or unknown npm directory is not allowed: ${directory}`).toBe(true);
+      }
+    }
     for (const directory of ['/web', '/scripts']) {
       expect(
         npmUpdates().filter((update) => dirs(update).includes(directory)),

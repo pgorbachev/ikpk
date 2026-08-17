@@ -1,5 +1,10 @@
 # Verification of the approved owner choices
 
+> Historical evidence for `a66d63ab19871d13072324bd6cf30f38c5ce7eca`.
+> The monitor implementation described below was superseded by
+> `owner-choice-review-fixes.md`; current behavior uses the matching `Tests` push run
+> and the current deployment status.
+
 Implemented after the owner selected **A** (one PR per dependency across
 `web`/`scripts`) and a **30 minute** publication lag.
 
