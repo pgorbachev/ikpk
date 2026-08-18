@@ -18,6 +18,7 @@
 # (`./bin/check-spec-refs --write-absent`). Без обратной сверки объявление со временем начинает
 # разрешать уже сломанную ссылку.
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro
+openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro
 openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md
 openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md
