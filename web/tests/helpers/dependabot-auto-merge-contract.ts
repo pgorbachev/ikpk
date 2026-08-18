@@ -93,7 +93,7 @@ export interface TrustedEvidencePolicy {
   checkName: string;
   appSlug: string;
   appId: number;
-  eventName: 'pull_request_target';
+  eventName: 'workflow_run';
   externalId: string;
   callerWorkflowPath: string;
   reusablePolicyPath: string;
@@ -104,9 +104,29 @@ export interface AuthoritativeEvidenceRunInput {
   targetPullRequestNumber: number;
   targetHeadSha: string;
   provenanceJobName: string;
-  run: {
+  expectedDispatcherWorkflowPath: string;
+  expectedSignalWorkflowPath: string;
+  expectedSignalActor: string;
+  dispatcherRun: {
+    id: number;
+    runAttempt: number;
+    event: string;
+    path: string;
+    sourceRunId: number;
+    sourceRunAttempt: number;
+  };
+  sourceRun: {
+    id: number;
+    runAttempt: number;
+    event: string;
+    path: string;
+    conclusion: string | null;
+    actorLogin: string;
+    headSha: string;
     pullRequests: Array<{ number: number; headSha: string }>;
   };
+  jobsRunId: number;
+  jobsRunAttempt: number;
   jobs: Array<{
     name: string;
     conclusion: 'success' | 'failure' | 'cancelled' | null;
