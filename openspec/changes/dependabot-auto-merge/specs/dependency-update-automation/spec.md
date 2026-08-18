@@ -474,12 +474,46 @@ Dependabot, второй случай SHALL NOT применяться — та�
 pull request — минимумом, при котором пометка к слиянию выполнима. Права на публикацию
 и на изменение workflow SHALL NOT выдаваться.
 
-Определение producer workflow SHALL читаться из default branch, а исполняемый policy-код
-SHALL быть привязан к полному immutable SHA reusable workflow. Producer SHALL NOT
-исполнять workflow-определение из проверяемой ветки. Обязательный gate и отдельное
-свидетельство SHALL публиковаться на свежо прочитанный текущий head SHA отдельным job с
-`checks: write`; этот job SHALL NOT иметь `contents: write` или `pull-requests: write`.
-Право `checks: write` SHALL NOT выдаваться другим workflow этой автоматизации.
+Определения producer workflow SHALL читаться из default branch, а исполняемый policy-код
+SHALL быть привязан к полному immutable SHA reusable workflow. Producer SHALL состоять из
+read-only signal на `pull_request_target` и privileged dispatcher на `workflow_run`, потому
+что GitHub принудительно понижает токен Dependabot-authored `pull_request_target` до
+read-only. Signal SHALL NOT получать write-token или secrets и SHALL передавать только
+строго типизированный metadata artifact, созданный без исполнения содержимого PR.
+
+Dispatcher SHALL до использования artifact проверить exact source run, workflow path,
+event, conclusion, actor, PR/head association, единственность artifact, digest, состав и
+schema. Source и dispatcher SHALL быть связаны с exact `run_id` и `run_attempt`; artifact,
+jobs или check identity из разных попыток SHALL NOT смешиваться. Producer SHALL NOT
+исполнять workflow-определение из проверяемой ветки.
+Reusable policy SHALL до любого привилегированного job проверять server-controlled
+identity caller: событие `workflow_run` и exact dispatcher `workflow_ref` из
+`refs/heads/main`. Прямой вызов immutable policy из другого workflow или ref SHALL
+завершаться без публикации check и без изменения PR.
+Обязательный gate и отдельное свидетельство SHALL публиковаться на свежо прочитанный
+текущий head SHA отдельным job с `checks: write`; этот job SHALL NOT иметь
+`contents: write` или `pull-requests: write`. Право `checks: write` SHALL NOT выдаваться
+другим workflow этой автоматизации.
+
+Только события `opened` и `synchronize` SHALL связывать authenticated actor с появлением
+новой вершины и создавать либо заменять provenance. `reopened`, `auto_merge_enabled` и
+`auto_merge_disabled` SHALL переоценивать тот же SHA только по сохранённому свидетельству;
+actor этих событий SHALL NOT считаться создателем head и SHALL NOT перезаписывать
+provenance.
+
+Signal SHALL иметь только `contents: read` и `pull-requests: read`. Job аутентификации
+source run/artifact SHALL иметь `actions: read` и `pull-requests: read`; read-only
+assessment — `actions: read`, `checks: read`, `contents: read`, `pull-requests: read`;
+publisher — только `checks: write`; job пометки/слияния — только `contents: write` и
+`pull-requests: write`; rebase commenter — только `pull-requests: write`. Неуказанные
+permissions SHALL быть `none`.
+
+Использование общей GitHub Actions App identity SHALL иметь явное rollout-предусловие:
+единственным субъектом репозитория с `push`, `maintain` или `admin` остаётся владелец.
+Перед выдачей такого доступа другому субъекту auto-merge SHALL быть отключён. Возврат к
+автоматическому слиянию при наличии иного write-субъекта допускается только с отдельной
+GitHub App identity publisher, недоступной обычным workflow, и required check,
+привязанным к integration id этой App.
 
 Event payload SHALL NOT считаться свежим доказательством marker. Если текущий head или
 marker прочитать не удалось, система SHALL завершаться fail closed: положительный
@@ -498,11 +532,49 @@ marker прочитать не удалось, система SHALL заверш
 - **THEN** ему выданы права записи в содержимое репозитория и права на операции с pull
   request, и не выданы права на публикацию и на изменение workflow
 
+#### Scenario: GitHub понижает токен Dependabot signal
+
+- **WHEN** `pull_request_target` запускается для PR, созданного Dependabot
+- **THEN** signal остаётся полностью работоспособным с read-only `GITHUB_TOKEN`, а все
+  операции записи выполняются только последующим доверенным `workflow_run` dispatcher
+
+#### Scenario: Подменён source run или artifact
+
+- **WHEN** dispatcher получает artifact от другого workflow/run/head, несколько
+  одноимённых artifact, неверный digest, лишний файл либо несовпадающие actor/action/PR/head
+- **THEN** положительный gate и свидетельство не публикуются и auto-merge не включается
+
+#### Scenario: Actor marker-event не создавал вершину
+
+- **WHEN** `reopened`, `auto_merge_enabled` или `auto_merge_disabled` инициирован человеком
+  либо механизмом обновления для уже существующего SHA
+- **THEN** actor этого события не используется как происхождение head и не создаёт или
+  перезаписывает provenance; допустимость определяется сохранённым evidence того же SHA
+
+#### Scenario: Смешаны попытки workflow run
+
+- **WHEN** artifact либо provenance job относится к другому `run_attempt` того же run id
+- **THEN** dispatcher или consumer отвергает evidence и завершает проверку fail closed
+
 #### Scenario: Ветка PR не может подменить producer
 
 - **WHEN** PR меняет caller workflow или добавляет job с именем обязательного gate
 - **THEN** это определение не исполняется доверенным producer, а результат без ожидаемых
-  external id, target-caller и immutable reusable SHA не принимается
+  external id, dispatcher-caller, authenticated source run и immutable reusable SHA не
+  принимается
+
+#### Scenario: Reusable policy вызван в обход dispatcher
+
+- **WHEN** workflow из другой ветки или с другим `workflow_ref` напрямую вызывает тот же
+  immutable reusable policy и передаёт синтетические source inputs
+- **THEN** caller guard не запускает assessment, publisher или marker jobs, check не
+  создаётся и PR не изменяется
+
+#### Scenario: Появился новый write-субъект
+
+- **WHEN** кроме владельца репозитория субъект получает `push`, `maintain` или `admin`
+- **THEN** текущая Actions-App схема больше не удовлетворяет предусловию и auto-merge
+  остаётся отключённым до ввода отдельной publisher GitHub App identity
 
 #### Scenario: Event snapshot устарел
 

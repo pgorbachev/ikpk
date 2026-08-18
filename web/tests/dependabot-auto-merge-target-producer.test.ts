@@ -50,12 +50,12 @@ function autoMergeWorkflowFiles(): string[] {
     .sort();
 }
 
-describe('trusted pull_request_target producer', () => {
-  it('loads the caller from the default branch event and delegates only to an immutable reusable SHA', () => {
+describe('trusted workflow_run producer', () => {
+  it('loads the dispatcher from the default branch event and delegates only to an immutable reusable SHA', () => {
     if (!existsSync(join(WORKFLOW_DIR, CALLER_FILE))) {
       const activeTargetCallers = autoMergeWorkflowFiles().filter((file) => {
         const document = workflow(file);
-        return Object.hasOwn(record(document.on ?? document.true), 'pull_request_target');
+        return Object.hasOwn(record(document.on ?? document.true), 'workflow_run');
       });
       expect(activeTargetCallers, 'an inactive engine must not have a partial target caller').toEqual([]);
       return;
@@ -63,15 +63,16 @@ describe('trusted pull_request_target producer', () => {
     const caller = workflow(CALLER_FILE);
     const triggers = record(caller.on ?? caller.true);
 
-    expect(triggers).toHaveProperty('pull_request_target');
+    expect(triggers).toHaveProperty('workflow_run');
+    expect(triggers).not.toHaveProperty('pull_request_target');
     expect(triggers).not.toHaveProperty('pull_request');
 
     const calls = Object.values(jobs(caller)).filter((job) => typeof job.uses === 'string');
-    expect(calls, 'target caller must contain exactly one reusable policy call').toHaveLength(1);
+    expect(calls, 'dispatcher must contain exactly one reusable policy call').toHaveLength(1);
     expect(calls[0].uses).toMatch(
       /^pgorbachev\/ikpk\/\.github\/workflows\/dependabot-auto-merge-policy\.yml@[0-9a-f]{40}$/,
     );
-    expect(steps(calls[0]), 'target caller must not execute pull-request steps itself').toHaveLength(0);
+    expect(steps(calls[0]), 'dispatcher policy call must not contain inline steps').toHaveLength(0);
   });
 
   it('checks out trusted policy source by job.workflow_repository and job.workflow_sha, never moving main', () => {
@@ -148,7 +149,7 @@ describe('consumer identity for externally published provenance', () => {
     checkName: 'Dependabot auto-merge / Provenance evidence',
     appSlug: 'github-actions',
     appId: 15368,
-    eventName: 'pull_request_target',
+    eventName: 'workflow_run',
     externalId: 'provenance:1111111111111111111111111111111111111111:2222222222222222222222222222222222222222',
     callerWorkflowPath: '.github/workflows/dependabot-auto-merge.yml',
     reusablePolicyPath: '.github/workflows/dependabot-auto-merge-policy.yml',
@@ -168,7 +169,7 @@ describe('consumer identity for externally published provenance', () => {
     reusablePolicySha: policy.reusablePolicySha,
   };
 
-  it('accepts the fully bound target-producer result (control)', async () => {
+  it('accepts the fully bound dispatcher result (control)', async () => {
     const { isTrustedPositiveEvidence } = await loadDependabotAutoMerge();
     expect(isTrustedPositiveEvidence(candidate, policy)).toBe(true);
   });

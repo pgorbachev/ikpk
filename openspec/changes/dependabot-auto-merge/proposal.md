@@ -76,12 +76,19 @@ branch protection с `enforce_admins=true` и bypass не получают.
 
 ### Привилегированный контекст
 
-Доверенный producer запускается из workflow default branch (`pull_request_target`) и не
-делает checkout кода PR. Policy-код берётся по immutable SHA reusable workflow, а
-обязательный gate и отдельное свидетельство публикуются на фактический head SHA через
-Checks API. Только шаг пометки к слиянию получает `contents: write` и
-`pull-requests: write`; отдельный publisher получает `checks: write`. Ни один из них не
-получает прав на публикацию или изменение workflow и не устанавливает зависимости.
+Доверенный producer двухступенчатый. Read-only signal workflow из default branch
+запускается через `pull_request_target`, не делает checkout кода PR и сохраняет только
+строго типизированный metadata artifact. Privileged dispatcher запускается через
+`workflow_run`, проверяет exact source run/path/actor/PR/head и artifact, после чего
+вызывает policy-код по immutable SHA reusable workflow. Обязательный gate и отдельное
+свидетельство публикуются на фактический head SHA через Checks API. Только шаг пометки к
+слиянию получает `contents: write` и `pull-requests: write`; отдельный publisher получает
+`checks: write`. Ни один из них не получает прав на публикацию или изменение workflow и
+не исполняет содержимое PR. Долгоживущий PAT или GitHub App token этому producer не нужен.
+Это допустимо только при текущей owner-only модели доступа: единственный субъект с
+`push`/`maintain`/`admin` — владелец, который и без Actions может изменить ruleset.
+Перед добавлением другого write-субъекта автоматизация отключается до перевода publisher
+на отдельную GitHub App identity.
 
 ## Capabilities
 

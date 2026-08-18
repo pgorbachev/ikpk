@@ -64,24 +64,36 @@ globalThis.fetch = async (input, init = {}) => {
       status: 'completed',
       conclusion: 'success',
       head_sha: 'parent-head',
-      external_id: `provenance:parent-head:${'a'.repeat(40)}`,
+      external_id: `provenance:parent-head:${'a'.repeat(40)}:81:1:91:2`,
       details_url: 'https://github.com/acme/ikpk/actions/runs/91',
       app: { slug: 'github-actions', id: 15368 },
     }] : [] });
   }
   if (url.pathname === '/repos/acme/ikpk/actions/runs/91') {
     return response({
-      event: 'pull_request_target',
-      head_sha: 'parent-head',
+      id: 91,
+      run_attempt: 2,
+      event: 'workflow_run',
       path: '.github/workflows/dependabot-auto-merge.yml@refs/heads/main',
-      pull_requests: [{ number: 7, head: { sha: 'parent-head' } }],
+      display_title: 'Dependabot auto-merge source=81 attempt=1',
       referenced_workflows: [{
         path: `acme/ikpk/.github/workflows/dependabot-auto-merge-policy.yml@${'a'.repeat(40)}`,
         sha: 'a'.repeat(40),
       }],
     });
   }
-  if (url.pathname === '/repos/acme/ikpk/actions/runs/91/jobs') {
+  if (url.pathname === '/repos/acme/ikpk/actions/runs/81') {
+    return response({
+      id: 81,
+      run_attempt: 1,
+      event: 'pull_request_target',
+      path: '.github/workflows/dependabot-auto-merge-signal.yml@refs/heads/main',
+      conclusion: 'success',
+      actor: { login: 'dependabot[bot]' },
+      pull_requests: [{ number: 7, head: { sha: 'parent-head' } }],
+    });
+  }
+  if (url.pathname === '/repos/acme/ikpk/actions/runs/91/attempts/2/jobs') {
     return response({ jobs: [{ name: 'Policy / Provenance evidence', conclusion: 'success' }] });
   }
   const compare = /^\/repos\/acme\/ikpk\/compare\/([^/]+)\.\.\.([^/]+)$/.exec(url.pathname);
