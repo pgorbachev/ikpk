@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
@@ -47,6 +49,39 @@ function runEligibilityGate(overrides: Record<string, string>) {
       ...overrides,
     },
   });
+}
+
+function freshSnapshotStep(): { env: Record<string, string>; run: string } {
+  const job = WORKFLOW.jobs?.snapshot;
+  const step = job?.steps?.find(({ name }) => name?.toLowerCase().includes('current head'));
+  expect(step, 'fresh pull-request snapshot step is missing').toBeDefined();
+  expect(step?.run, 'fresh pull-request snapshot has no executable contract').toBeTypeOf('string');
+  return { env: step?.env ?? {}, run: step?.run ?? '' };
+}
+
+function runFreshSnapshot(currentPullRequest: unknown) {
+  const directory = mkdtempSync(join(tmpdir(), 'dependabot-fresh-snapshot-'));
+  const outputPath = join(directory, 'github-output');
+  writeFileSync(outputPath, '');
+  const step = freshSnapshotStep();
+  const result = spawnSync('bash', ['-euo', 'pipefail', '-c', `
+gh() { printf '%s\\n' "$MOCK_CURRENT_PR_JSON"; }
+${step.run}
+`], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      EVENT_HEAD_SHA: '1111111111111111111111111111111111111111',
+      GH_TOKEN: 'test-token',
+      GITHUB_OUTPUT: outputPath,
+      GITHUB_REPOSITORY: 'pgorbachev/ikpk',
+      MOCK_CURRENT_PR_JSON: JSON.stringify(currentPullRequest),
+      PR_NUMBER: '123',
+    },
+  });
+  const output = readFileSync(outputPath, 'utf8');
+  rmSync(directory, { recursive: true, force: true });
+  return { output, result };
 }
 
 describe('review regressions: Dependabot metadata adapter', () => {
@@ -115,6 +150,18 @@ describe('review regressions: mandatory gate failure semantics', () => {
   it.each(['false', 'true'])('fails closed when assessment fails with marker=%s', (marker) => {
     const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: marker });
     expect(result.status, result.stderr || result.stdout).not.toBe(0);
+  });
+});
+
+describe('review regressions: fresh marker snapshot', () => {
+  it('accepts a null auto_merge marker as disabled', () => {
+    const { output, result } = runFreshSnapshot({
+      auto_merge: null,
+      head: { sha: '1111111111111111111111111111111111111111' },
+    });
+
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(output).toContain('auto-merge-enabled=false');
   });
 });
 
