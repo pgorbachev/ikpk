@@ -48,6 +48,13 @@ const arg = (name, fallback) => {
 
 const host = arg('host', '127.0.0.1');
 const port = Number(arg('port', '4322'));
+// Каким конфигом поднимать сервер. Именно конфиг, а не `--outDir`: у `astro preview`
+// флага `--outDir` нет, и он игнорировал его молча (см. astro.demo.config.mjs).
+const configPath = arg('config', '');
+// Каталог, содержимое которого сервер ОБЯЗАН отдавать. Не выбирает вывод — проверяет
+// его после старта. По умолчанию боевой `dist`, потому что таков `outDir` в
+// astro.config.mjs, и проверку получают все вызовы, а не только демонстрационный.
+const outDir = arg('outDir', 'dist');
 
 const fail = (message) => {
   console.error(`preview-server: ${message}`);
@@ -97,6 +104,19 @@ const ownDaemonRunning = () => {
 };
 
 // ─── Предполётная уборка ────────────────────────────────────────────────────
+//
+// Сначала — свой демон на ЛЮБОМ порту. Демон у astro один на проект: пока он жив, запуск
+// на другом порту не поднимается вовсе («Preview server already running at …»), а порт,
+// который мы ждём, так и не открывается — Playwright отваливается по 60-секундному
+// таймауту webServer без внятной причины. Проверено 18.08.2026: демон на 4341, оставшийся
+// от прогона с временным портом, съел демо-прогон на 4323. Прежняя редакция спрашивала
+// `astro preview status` ТОЛЬКО когда занят запрошенный порт, то есть именно этот случай
+// пропускала.
+if (!(await portBusy()) && ownDaemonRunning()) {
+  console.log('preview-server: свой фоновый preview занят другим портом, гашу');
+  spawnSync('npx', ['astro', 'preview', 'stop'], { stdio: 'inherit' });
+}
+
 if (await portBusy()) {
   if (ownDaemonRunning()) {
     console.log('preview-server: найден свой фоновый preview от прошлого прогона, гашу');
@@ -114,11 +134,19 @@ if (await portBusy()) {
 }
 
 // ─── Запуск ─────────────────────────────────────────────────────────────────
-const child = spawn(
-  'npm',
-  ['run', 'preview', '--', '--host', host, '--port', String(port)],
-  { stdio: ['ignore', 'pipe', 'pipe'] },
-);
+const previewArgs = ['run', 'preview', '--', '--host', host, '--port', String(port)];
+const { existsSync } = await import('node:fs');
+if (!existsSync(outDir)) {
+  fail(`каталога вывода нет: ${outDir}. Для демо-проекта сначала npm run build:demo`);
+}
+if (configPath) {
+  if (!existsSync(configPath)) {
+    fail(`конфигурации нет: ${configPath}`);
+  }
+  previewArgs.push('--config', configPath);
+}
+
+const child = spawn('npm', previewArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
 let output = '';
 for (const stream of [child.stdout, child.stderr]) {
@@ -194,6 +222,38 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 process.on('exit', () => shutdown('exit'));
+
+// ─── Проверка: сервер отдаёт ИМЕННО тот каталог, ради которого поднят ────────
+//
+// Зачем она нужна. Выбор каталога делает конфигурация astro, а не эта обёртка, и
+// ошибка в выборе не проявляется ничем: сервер поднимается, порт отвечает, страницы
+// приходят — просто не те. Ровно так демо-прогон Playwright полгода проверял бы
+// боевую сборку, отчитываясь зелёным. Проверка сравнивает то, что отдал сервер, с
+// файлом на диске: расхождение — отказ, а не молчание.
+//
+// Регистрируется ПОСЛЕ обработчиков уборки: отказ уходит через `fail` → `exit`, и
+// поднятый демон гасится, а не остаётся ломать следующий прогон.
+{
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  let served;
+  try {
+    const res = await fetch(`http://${host}:${port}/`);
+    if (!res.ok) fail(`сервер ответил ${res.status} на «/» — проверить содержимое нечем`);
+    served = await res.text();
+  } catch (err) {
+    fail(`не удалось прочитать «/» с ${host}:${port}: ${err}`);
+  }
+  const expected = readFileSync(join(outDir, 'index.html'), 'utf8');
+  if (served !== expected) {
+    fail(
+      `сервер на ${host}:${port} отдаёт НЕ ${outDir}: «/» разошлось с ${join(outDir, 'index.html')} ` +
+        `(отдано ${served.length} байт, на диске ${expected.length}). Прогон над чужим выводом ` +
+        `выглядел бы обычным зелёным, поэтому отказ. Проверить --config и outDir в нём.`,
+    );
+  }
+  console.log(`preview-server: отдаётся ${outDir} — сверено по «/»`);
+}
 
 // Держим фронт. Playwright снимет этот процесс сам, когда тесты кончатся.
 if (adoptedPid !== null) {

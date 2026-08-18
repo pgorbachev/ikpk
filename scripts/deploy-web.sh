@@ -183,6 +183,54 @@ if [[ -n "$wrong" ]]; then
 fi
 echo "[deploy] Проверка форм: ${form_count} различных адресов, все соответствуют ${EXPECT_HUMAN}"
 
+# ── Гейты платёжной формы: адрес и секреты (задачи 6.1 и 6.2).
+#
+# Сама механика — в `scripts/lib/deploy-checks.sh`, потому что этот блок стоит ПОСЛЕ
+# ssh-загрузки релиза: запуском скрипта до него не дойти без реального хоста, и без
+# выноса у гейтов был бы только греп исходника. Так же вынесены preflight и health-check.
+case "$DEPLOY_MODE" in
+  prod)
+    EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_PROD:-https://api.ikpk.su}"
+    EXPECT_DEMO_FLAG=false
+    ;;
+  stand)
+    EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_DEMO:-https://demo-api.ikpk.invalid}"
+    EXPECT_DEMO_FLAG=true
+    ;;
+esac
+
+echo "[deploy] Проверка адреса платёжной формы (режим ${DEPLOY_MODE})"
+if ! payment_endpoint_matches "$DIST_DIR" "$EXPECT_ENDPOINT" "$EXPECT_DEMO_FLAG"; then
+  echo "Загрузка отменена: в режиме stand это отправило бы боевые платежи с демо-стенда," >&2
+  echo "в режиме prod — увело бы оплату на неверный адрес." >&2
+  exit 1
+fi
+
+# Значения секретов ищутся только те, что переданы в окружение вызова. Пустой список —
+# «проверить не удалось», а не «утечек нет», поэтому отказ либо назван явно
+# (`PAYMENT_SECRET_SCAN=skip`), либо деплой останавливается.
+secret_args=()
+for name in YOOKASSA_SECRET_KEY HMAC_KEY_CURRENT HMAC_KEY_PREVIOUS; do
+  [[ -n "${!name:-}" ]] && secret_args+=("$name=${!name}")
+done
+if (( ${#secret_args[@]} == 0 )); then
+  if [[ "${PAYMENT_SECRET_SCAN:-}" == "skip" ]]; then
+    echo "[deploy] Проверка секретов ПРОПУЩЕНА явным PAYMENT_SECRET_SCAN=skip (значения не переданы)" >&2
+  else
+    echo "Проверка секретов не выполнена: ни одно значение не передано" >&2
+    echo "(YOOKASSA_SECRET_KEY, HMAC_KEY_CURRENT, HMAC_KEY_PREVIOUS)." >&2
+    echo "Это «не смогли проверить», а не «утечек нет». Передайте значения либо назовите" >&2
+    echo "отказ явно: PAYMENT_SECRET_SCAN=skip." >&2
+    exit 1
+  fi
+else
+  echo "[deploy] Проверка секретов в сборке"
+  if ! dist_has_no_secret_values "$DIST_DIR" "${secret_args[@]}"; then
+    echo "Загрузка отменена: значение секрета попало в статику." >&2
+    exit 1
+  fi
+fi
+
 # ── Preflight: активный vhost обязан подключать файл редиректов.
 #
 # Загрузка файла в shared/ этого НЕ доказывает: `nginx -t` проходит и без include,

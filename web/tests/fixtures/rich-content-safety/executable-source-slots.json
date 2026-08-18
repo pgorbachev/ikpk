@@ -520,6 +520,22 @@
     "identity": "style|body:9f6d54699a658ece"
   },
   {
+    "slotId": "src:components/payment/PaymentForm.astro:L104:C1:script",
+    "file": "components/payment/PaymentForm.astro",
+    "nodeKind": "element",
+    "locator": "components/payment/PaymentForm.astro:L104:C1:script",
+    "fingerprint": "8d47fe9133be3394cf6d17e88608bab741411b7e485746e6c301b158bc0f96ad",
+    "identity": "script|body:8e820ffafdd8d41f"
+  },
+  {
+    "slotId": "src:components/payment/PaymentForm.astro:L108:C1:style",
+    "file": "components/payment/PaymentForm.astro",
+    "nodeKind": "element",
+    "locator": "components/payment/PaymentForm.astro:L108:C1:style",
+    "fingerprint": "91ca412ec5e4aa174041b583dda69267329dda34f0d9197c5ff7f879c7ba9781",
+    "identity": "style|body:d3234cd98becb37e"
+  },
+  {
     "slotId": "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
     "file": "components/schedule/ScheduleControlsScript.astro",
     "nodeKind": "element",
@@ -808,19 +824,19 @@
     "identity": "style|body:e301e6bb69eb1046"
   },
   {
-    "slotId": "src:pages/oplata.astro:L21:C11:svg",
+    "slotId": "src:pages/oplata.astro:L36:C11:svg",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L21:C11:svg",
-    "fingerprint": "22ec59abfb74261c7904960cdf8cde4792f0c78cab98ed26d5fa813363002008",
+    "locator": "pages/oplata.astro:L36:C11:svg",
+    "fingerprint": "b8c6fa9584914ac9459004b46444392a74475e25891f0df0906cd3a62e89e5dc",
     "identity": "svg|fill=quoted:none|height=quoted:24|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:24"
   },
   {
-    "slotId": "src:pages/oplata.astro:L45:C1:style",
+    "slotId": "src:pages/oplata.astro:L63:C1:style",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L45:C1:style",
-    "fingerprint": "23294702f01cc237a04cca8804e8b161ceaa2a76b900c8ec7c8b6a8e5c8dfe71",
+    "locator": "pages/oplata.astro:L63:C1:style",
+    "fingerprint": "85c526c79f4e8f9d3baba7bb49a1e94ea461b6536b119d663f8fedfa982c9747",
     "identity": "style|body:d38013dcebc69356"
   },
   {

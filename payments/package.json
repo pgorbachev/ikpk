@@ -1,0 +1,23 @@
+{
+  "name": "ikpk-payments",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node --import tsx src/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.5.2",
+    "eslint": "^10.8.1",
+    "globals": "^17.9.0",
+    "tsx": "^4.23.11",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.66.0"
+  }
+}

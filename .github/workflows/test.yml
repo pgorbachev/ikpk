@@ -29,9 +29,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            payments/package-lock.json
 
-      - name: Install dependencies
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Install payments dependencies
+        working-directory: payments
         run: npm ci
 
       - name: Install Playwright chromium
@@ -128,6 +134,18 @@ jobs:
             --head-report "$RUNNER_TEMP/web-demo-head.json" \
             "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
+
+      # Тот же dist-demo, который только что проверили. e2e-smoke его скачивает и
+      # не собирает заново: вторая сборка в чужом джобе — как раз то, что ловит
+      # demo-gate (решение 6). uses-шаги не наследуют defaults.run.working-directory,
+      # путь — от корня репозитория.
+      - name: Upload demo site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
+          if-no-files-found: error
+          retention-days: 1
   dependency-invariants:
     name: Dependency update invariants
     runs-on: ubuntu-latest
@@ -357,6 +375,7 @@ jobs:
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
+    needs: unit-and-build
     defaults:
       run:
         working-directory: web
@@ -398,6 +417,18 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
+
+      - name: Run payment form e2e (production)
+        run: npm run test:e2e:payment
+
+      - name: Download demo site
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
+
+      - name: Run payment form e2e (demo)
+        run: npm run test:e2e:payment-demo
 
       # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
       # останавливает только `Tests`, а проверка, положенная в файл, который не

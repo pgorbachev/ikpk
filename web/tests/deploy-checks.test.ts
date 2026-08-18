@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -219,5 +220,232 @@ describe('health_check — фактический ответ сайта', () => 
   it('ошибка сервера роняет проверку', async () => {
     mode = 'error';
     expect(await runFn(`health_check http://127.0.0.1:${port}/`)).not.toBe(0);
+  });
+});
+
+// ─── Гейты платёжной формы: адрес и секреты (задачи 6.1, 6.2; негативная 6.4) ──
+//
+// Проверяется ПОВЕДЕНИЕ функций на подставных каталогах сборки, а не текст скрипта:
+// греп исходника утверждал бы, что гейт написан, но не что он что-то ловит. Каждая
+// ветка отказа пройдена хотя бы раз — непройденная ветка такое же обещание, как
+// непроверенный гейт.
+describe('payment_endpoint_matches — адрес платёжной формы в сборке', () => {
+  const mkDist = (html: string | null): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-'));
+    if (html !== null) writeFileSync(join(dir, 'index.html'), html, 'utf-8');
+    return dir;
+  };
+  const page = (endpoint: string, demo: string) =>
+    `<!doctype html><form data-payment-form data-payment-endpoint="${endpoint}" data-payment-demo="${demo}"></form>`;
+
+  it('верный адрес и признак режима проходят', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).toBe(0);
+  });
+
+  it('чужой адрес не проходит', async () => {
+    const dist = mkDist(page('https://evil.example/pay', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('демо-адрес в боевом режиме не проходит', async () => {
+    const dist = mkDist(page('https://demo-api.ikpk.invalid', 'true'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('похожий адрес не проходит: сверка буквальная, а не по образцу хоста', async () => {
+    const dist = mkDist(page('https://api.ikpk.su.evil.example', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('верный адрес при неверном data-payment-demo не проходит', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'true'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('НЕТ атрибута вовсе — отказ, а не проход: проверять нечего', async () => {
+    const dist = mkDist('<!doctype html><p>страница без формы оплаты</p>');
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('каталога сборки нет — отказ', async () => {
+    expect(
+      await runFn(`payment_endpoint_matches '/nonexistent-dist-ikpk' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('один верный адрес не покрывает второй неверный', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'false'));
+    writeFileSync(join(dist, 'other.html'), page('https://evil.example/pay', 'false'), 'utf-8');
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+});
+
+describe('dist_has_no_secret_values — значения секретов в сборке', () => {
+  const mkDist = (body: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-'));
+    writeFileSync(join(dir, 'index.html'), body, 'utf-8');
+    return dir;
+  };
+
+  it('чистая сборка проходит', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).toBe(0);
+  });
+
+  it('значение секрета в сборке — отказ', async () => {
+    const dist = mkDist('<!doctype html><script>const k="test_secret_value_42";</script>');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).not.toBe(0);
+  });
+
+  it('ключ отпечатка ловится наравне с секретом оператора', async () => {
+    const dist = mkDist('<!doctype html><script>const h="hmac_current_abc";</script>');
+    expect(
+      await runFn(
+        `dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=zzz' 'HMAC_KEY_CURRENT=hmac_current_abc'`,
+      ),
+    ).not.toBe(0);
+  });
+
+  it('утечка не в HTML тоже ловится: ищется весь каталог, не только *.html', async () => {
+    const dist = mkDist('<!doctype html><p>чисто</p>');
+    writeFileSync(join(dist, 'app.js'), 'const k="test_secret_value_42";', 'utf-8');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).not.toBe(0);
+  });
+
+  it('ни одного значения не передано — отказ, а не проход', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(await runFn(`dist_has_no_secret_values '${dist}'`)).not.toBe(0);
+  });
+
+  it('пустое значение — отказ: искать нечего', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(await runFn(`dist_has_no_secret_values '${dist}' 'HMAC_KEY_CURRENT='`)).not.toBe(0);
+  });
+
+  it('каталога сборки нет — отказ', async () => {
+    expect(
+      await runFn(`dist_has_no_secret_values '/nonexistent-dist-ikpk' 'YOOKASSA_SECRET_KEY=x'`),
+    ).not.toBe(0);
+  });
+});
+
+// ─── Резервное копирование состояния платежей (задача 4.3a) ───────────────────
+//
+// Проверяется ПОВЕДЕНИЕ скрипта на подставных каталогах, а не его текст: греп по исходнику
+// утверждал бы, что копирование написано, но не что копия появляется и что отказ наступает
+// там, где копировать нечего. Ветви отказа пройдены каждая: нет каталога состояния, нет ни
+// одного файла состояния.
+describe('ikpk-payments-backup.sh — копия состояния платежей', () => {
+  const BACKUP = join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.sh');
+
+  const runBackup = async (data: string, backup: string, keep = '42'): Promise<number> => {
+    try {
+      await execFileAsync('bash', [BACKUP], {
+        env: { ...process.env, PAYMENT_DATA_DIR: data, BACKUP_DIR: backup, KEEP_BACKUPS: keep },
+      });
+      return 0;
+    } catch (err) {
+      return (err as { code?: number }).code ?? 1;
+    }
+  };
+
+  const mkData = (files: Record<string, string>): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-state-'));
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body, 'utf-8');
+    return dir;
+  };
+
+  it('копия появляется и совпадает с исходником', async () => {
+    const data = mkData({ 'payments.json': '{"records":[{"requestId":"a"}]}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).toBe(0);
+    const made = readdirSync(backup).filter((f) => f.endsWith('.payments.json'));
+    expect(made.length, `в каталоге копий: ${readdirSync(backup).join(',')}`).toBe(1);
+    expect(readFileSync(join(backup, made[0]!), 'utf-8')).toBe('{"records":[{"requestId":"a"}]}');
+  });
+
+  it('копируются все четыре файла состояния, а не только хранилище', async () => {
+    const data = mkData({
+      'payments.json': '{}',
+      'verification-journal.json': '[]',
+      'hmac-canary.json': '{}',
+      'duplicate-tokens.json': '[]',
+    });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).toBe(0);
+    expect(readdirSync(backup).length).toBe(4);
+  });
+
+  it('незавершённых `.part` после успешной копии не остаётся', async () => {
+    const data = mkData({ 'payments.json': '{}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    await runBackup(data, backup);
+    expect(readdirSync(backup).filter((f) => f.endsWith('.part'))).toEqual([]);
+  });
+
+  it('каталога состояния нет — ОТКАЗ, а не «копировать нечего»', async () => {
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup('/nonexistent-state-ikpk', backup)).not.toBe(0);
+  });
+
+  it('каталог есть, но файлов состояния в нём нет — ОТКАЗ', async () => {
+    const data = mkData({ 'unrelated.txt': 'x' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).not.toBe(0);
+    expect(readdirSync(backup)).toEqual([]);
+  });
+
+  it('старые копии вытесняются по KEEP_BACKUPS, свежая остаётся', async () => {
+    const data = mkData({ 'payments.json': '{"n":1}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    for (const n of [1, 2, 3]) {
+      writeFileSync(join(data, 'payments.json'), `{"n":${n}}`, 'utf-8');
+      expect(await runBackup(data, backup, '2')).toBe(0);
+      // Метка копии — с точностью до секунды, поэтому между прогонами нужна пауза,
+      // иначе три копии получат одно имя и вытеснять будет нечего.
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    const made = readdirSync(backup).filter((f) => f.endsWith('.payments.json'));
+    expect(made.length, `копий осталось: ${made.join(',')}`).toBe(2);
+    const newest = made.sort().at(-1)!;
+    expect(readFileSync(join(backup, newest), 'utf-8')).toBe('{"n":3}');
+  });
+});
+
+describe('ikpk-payments-backup.timer — интервал не дольше границы решения', () => {
+  it('OnUnitActiveSec не больше 4 часов', () => {
+    const timer = readFileSync(join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.timer'), 'utf-8');
+    const raw = timer.match(/OnUnitActiveSec=(\S+)/)?.[1] ?? '';
+    expect(raw, 'интервал не объявлен вовсе').toBeTruthy();
+    const m = raw.match(/^(\d+)(s|min|h)$/);
+    expect(m, `нераспознанный интервал: ${raw}`).toBeTruthy();
+    const seconds = Number(m![1]) * (m![2] === 'h' ? 3600 : m![2] === 'min' ? 60 : 1);
+    expect(seconds, `интервал ${raw} превышает 4 часа`).toBeLessThanOrEqual(4 * 3600);
+  });
+
+  it('таймер переживает простой хоста: Persistent=true', () => {
+    const timer = readFileSync(join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.timer'), 'utf-8');
+    expect(timer).toMatch(/^Persistent=true$/m);
   });
 });

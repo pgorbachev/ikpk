@@ -9,6 +9,8 @@ export default defineConfig({
       'tests/media-migration.test.ts',
       'tests/content-quality.test.ts',
       'tests/seo-package.test.ts',
+      'tests/payment-characterization.test.ts',
+      'tests/payment-form-dist.test.ts',
       'tests/schedule-month-dist.test.ts',
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',

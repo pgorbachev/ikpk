@@ -1,0 +1,13 @@
+title = "ikpk"
+
+# Keep built-in rules. This file only adds an allowlist; it must not replace them.
+[extend]
+useDefault = true
+
+# gitleaks 8.24 (CI): singular [allowlist], paths only — mixing regexes+paths is AND.
+# Maintainer proof script: dispatch branch names, not credentials.
+[allowlist]
+description = "Payment POST state-matrix branch labels, not credentials"
+paths = [
+  '''openspec/changes/online-payment-flow/state-matrix4\.py$''',
+]
