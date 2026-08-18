@@ -1,0 +1,13 @@
+name: Dependabot rebase
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  policy:
+    name: Rebase policy
+    uses: "pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml@634dad5c75b1f67b16c4fa73f072d14717a3b305" # engine v1
