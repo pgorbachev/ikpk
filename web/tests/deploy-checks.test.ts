@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -219,5 +220,132 @@ describe('health_check — фактический ответ сайта', () => 
   it('ошибка сервера роняет проверку', async () => {
     mode = 'error';
     expect(await runFn(`health_check http://127.0.0.1:${port}/`)).not.toBe(0);
+  });
+});
+
+// ─── Гейты платёжной формы: адрес и секреты (задачи 6.1, 6.2; негативная 6.4) ──
+//
+// Проверяется ПОВЕДЕНИЕ функций на подставных каталогах сборки, а не текст скрипта:
+// греп исходника утверждал бы, что гейт написан, но не что он что-то ловит. Каждая
+// ветка отказа пройдена хотя бы раз — непройденная ветка такое же обещание, как
+// непроверенный гейт.
+describe('payment_endpoint_matches — адрес платёжной формы в сборке', () => {
+  const mkDist = (html: string | null): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-'));
+    if (html !== null) writeFileSync(join(dir, 'index.html'), html, 'utf-8');
+    return dir;
+  };
+  const page = (endpoint: string, demo: string) =>
+    `<!doctype html><form data-payment-form data-payment-endpoint="${endpoint}" data-payment-demo="${demo}"></form>`;
+
+  it('верный адрес и признак режима проходят', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).toBe(0);
+  });
+
+  it('чужой адрес не проходит', async () => {
+    const dist = mkDist(page('https://evil.example/pay', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('демо-адрес в боевом режиме не проходит', async () => {
+    const dist = mkDist(page('https://demo-api.ikpk.invalid', 'true'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('похожий адрес не проходит: сверка буквальная, а не по образцу хоста', async () => {
+    const dist = mkDist(page('https://api.ikpk.su.evil.example', 'false'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('верный адрес при неверном data-payment-demo не проходит', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'true'));
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('НЕТ атрибута вовсе — отказ, а не проход: проверять нечего', async () => {
+    const dist = mkDist('<!doctype html><p>страница без формы оплаты</p>');
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('каталога сборки нет — отказ', async () => {
+    expect(
+      await runFn(`payment_endpoint_matches '/nonexistent-dist-ikpk' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+
+  it('один верный адрес не покрывает второй неверный', async () => {
+    const dist = mkDist(page('https://api.ikpk.su', 'false'));
+    writeFileSync(join(dist, 'other.html'), page('https://evil.example/pay', 'false'), 'utf-8');
+    expect(
+      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+    ).not.toBe(0);
+  });
+});
+
+describe('dist_has_no_secret_values — значения секретов в сборке', () => {
+  const mkDist = (body: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-'));
+    writeFileSync(join(dir, 'index.html'), body, 'utf-8');
+    return dir;
+  };
+
+  it('чистая сборка проходит', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).toBe(0);
+  });
+
+  it('значение секрета в сборке — отказ', async () => {
+    const dist = mkDist('<!doctype html><script>const k="test_secret_value_42";</script>');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).not.toBe(0);
+  });
+
+  it('ключ отпечатка ловится наравне с секретом оператора', async () => {
+    const dist = mkDist('<!doctype html><script>const h="hmac_current_abc";</script>');
+    expect(
+      await runFn(
+        `dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=zzz' 'HMAC_KEY_CURRENT=hmac_current_abc'`,
+      ),
+    ).not.toBe(0);
+  });
+
+  it('утечка не в HTML тоже ловится: ищется весь каталог, не только *.html', async () => {
+    const dist = mkDist('<!doctype html><p>чисто</p>');
+    writeFileSync(join(dist, 'app.js'), 'const k="test_secret_value_42";', 'utf-8');
+    expect(
+      await runFn(`dist_has_no_secret_values '${dist}' 'YOOKASSA_SECRET_KEY=test_secret_value_42'`),
+    ).not.toBe(0);
+  });
+
+  it('ни одного значения не передано — отказ, а не проход', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(await runFn(`dist_has_no_secret_values '${dist}'`)).not.toBe(0);
+  });
+
+  it('пустое значение — отказ: искать нечего', async () => {
+    const dist = mkDist('<!doctype html><p>без секретов</p>');
+    expect(await runFn(`dist_has_no_secret_values '${dist}' 'HMAC_KEY_CURRENT='`)).not.toBe(0);
+  });
+
+  it('каталога сборки нет — отказ', async () => {
+    expect(
+      await runFn(`dist_has_no_secret_values '/nonexistent-dist-ikpk' 'YOOKASSA_SECRET_KEY=x'`),
+    ).not.toBe(0);
   });
 });

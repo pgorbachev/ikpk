@@ -27,3 +27,30 @@ describe('3.12c ветвь (3) демо-сборка с формой', () => {
     expect(html).toMatch(/оплат/i);
   });
 });
+
+// ─── 6.3: признаки демо-сборки сверяются БУКВАЛЬНО ───────────────────────────
+//
+// Проверка выше требует лишь «адрес не боевой» — под это подходит и опечатка, и чужой
+// хост, и пустая строка. У боевой сборки буквальное равенство уже стережётся
+// (`payment-form-dist.test.ts`, 3.12), у демонстрационной такой сверки не было, хотя
+// гейт деплоя (`payment_endpoint_matches`) требует равенства в обоих режимах. Без неё
+// сборка могла разойтись с тем, что проверяет деплой, и расхождение всплыло бы только
+// при выкладке.
+describe('6.3 демо-сборка: адрес и признак режима равны ожидаемым', () => {
+  it('data-payment-endpoint равен демонстрационному адресу буквально', () => {
+    const html = readDemoPage('/oplata');
+    const forms = paymentForms(html);
+    expect(forms.length, 'в демо-сборке нет формы оплаты').toBeGreaterThan(0);
+    const endpoint = forms[0].match(new RegExp(`\\b${PAYMENT_ENDPOINT_ATTR}="([^"]*)"`))?.[1] ?? '';
+    const expected = process.env.PAYMENT_ENDPOINT_DEMO ?? 'https://demo-api.ikpk.invalid';
+    expect(endpoint).toBe(expected);
+  });
+
+  it('data-payment-demo равен true: клиент знает, что он демонстрационный', () => {
+    const html = readDemoPage('/oplata');
+    const forms = paymentForms(html);
+    expect(forms.length).toBeGreaterThan(0);
+    const flag = forms[0].match(/\bdata-payment-demo="([^"]*)"/)?.[1] ?? '';
+    expect(flag).toBe('true');
+  });
+});
