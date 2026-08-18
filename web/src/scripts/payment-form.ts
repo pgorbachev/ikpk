@@ -15,6 +15,42 @@ type ApiBody = {
   confirmationToken?: string;
 };
 
+/**
+ * Человеческое название состояния попытки для перечня удержаний: спека требует состояние
+ * «названное человеческим языком, а не техническим именем статуса». Машинное имя остаётся
+ * атрибутом `data-payment-attempt-status` — по нему состояние читают проверки. Неизвестное
+ * состояние получает нейтральную формулировку, а НЕ своё сырое имя: иначе перечень чужих
+ * статусов отставал бы молча, и незнакомый статус утёк бы в интерфейс техническим словом.
+ */
+function attemptStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'Ожидается оплата';
+    case 'succeeded':
+      return 'Оплата подтверждена';
+    case 'canceled':
+      return 'Оплата отменена';
+    case 'verification_required':
+      return 'Статус пока не определён';
+    case 'duplicate_confirmation_required':
+      return 'Нужно подтверждение';
+    case 'demo':
+      return 'Демонстрационный режим';
+    default:
+      return 'Состояние уточняется';
+  }
+}
+
+/** Время создания попытки в читаемом виде; машинное значение остаётся в атрибуте `datetime`. */
+function attemptTimeLabel(createdAt: number): string {
+  return new Date(createdAt).toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 const form = document.querySelector<HTMLFormElement>('[data-payment-form]');
 if (form) boot(form);
 
@@ -203,7 +239,6 @@ function boot(formEl: HTMLFormElement) {
     summary?: string;
     continue?: boolean;
     other?: boolean;
-    copy?: boolean;
     confirm?: boolean;
   }) {
     chrome.replaceChildren();
@@ -242,14 +277,6 @@ function boot(formEl: HTMLFormElement) {
       btn.addEventListener('click', () => void onSubmit({ confirmDuplicate: true }));
       actions.append(btn);
     }
-    if (opts.copy) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.setAttribute('data-payment-copy-id', '');
-      btn.textContent = 'Скопировать идентификатор';
-      btn.addEventListener('click', () => void navigator.clipboard.writeText(activeRequestId));
-      actions.append(btn);
-    }
     const other = document.createElement('button');
     other.type = 'button';
     other.setAttribute('data-payment-other-seminar', '');
@@ -264,32 +291,52 @@ function boot(formEl: HTMLFormElement) {
     const holds = readHolds();
     attemptsWrap.hidden = holds.length < 2;
     attemptList.replaceChildren();
-    for (const h of holds) {
+    holds.forEach((h, index) => {
       const li = document.createElement('li');
       li.setAttribute('data-payment-attempt', '');
+      // Идентификатор остаётся МАШИННЫМ признаком: он не виден и не копируется действием
+      // интерфейса, но по нему попытка выбирается и читается проверками.
       li.setAttribute('data-payment-attempt-id', h.requestId);
       const status = holdStatuses.get(h.requestId)?.status;
       if (status) li.setAttribute('data-payment-attempt-status', status);
+
+      // Подпись — порядковый номер, а не `requestId`: посетителю UUID ничего не даёт, а
+      // сотрудник по нему платёж всё равно не найдёт (наблюдение в панели ЮKassa, 2.2a).
       const select = document.createElement('button');
       select.type = 'button';
       select.setAttribute('data-payment-attempt-select', '');
-      select.textContent = h.requestId;
+      select.textContent = `Попытка ${index + 1}`;
       select.addEventListener('click', () => {
         const json = holdStatuses.get(h.requestId) ?? { status: 'unknown' };
         applyStatus(h.requestId, json);
       });
+
       const time = document.createElement('time');
       time.dateTime = new Date(h.createdAt).toISOString();
-      time.textContent = new Date(h.createdAt).toISOString();
+      time.textContent = attemptTimeLabel(h.createdAt);
       li.append(select, time);
+
+      // Семинар и сумма — только из хранилища ТЕКУЩЕЙ сессии. Постоянное хранилище держит
+      // лишь `requestId` и время создания, и расширять его ради подписи нельзя: это
+      // принятая граница приватности, а не деталь реализации.
+      const stored = readFields()[h.requestId];
+      const seminar = typeof stored?.seminar === 'string' ? stored.seminar.trim() : '';
+      const amount = stored?.amount === undefined ? '' : String(stored.amount).trim();
+      if (seminar || amount) {
+        const summary = document.createElement('span');
+        summary.setAttribute('data-payment-attempt-summary', '');
+        summary.textContent = [seminar, amount && `${amount} ₽`].filter(Boolean).join(' · ');
+        li.append(summary);
+      }
+
       if (status) {
         const label = document.createElement('span');
         label.setAttribute('data-payment-attempt-status-label', '');
-        label.textContent = status;
+        label.textContent = attemptStatusLabel(status);
         li.append(label);
       }
       attemptList.append(li);
-    }
+    });
   }
 
   function setState(name: string, text: string) {
@@ -428,7 +475,7 @@ function boot(formEl: HTMLFormElement) {
     } catch {
       setState('unknown', 'Исход отправки неизвестен. Свяжитесь с нами напрямую.');
       stripFieldsDom();
-      setChrome({ warning: true, continue: true, other: true, copy: true });
+      setChrome({ warning: true, continue: true, other: true });
       unlockSubmit();
     }
   }
@@ -528,13 +575,12 @@ function boot(formEl: HTMLFormElement) {
         summary: stored ? `${stored.firstName ?? ''} ${stored.lastName ?? ''}, ${stored.seminar ?? ''}, ${stored.amount ?? ''} ₽` : undefined,
         continue: true,
         other: true,
-        copy: true,
       });
       return;
     }
     setState('error', 'Ошибка адресата. Свяжитесь с нами напрямую.');
     stripFieldsDom();
-    setChrome({ warning: true, continue: true, other: true, copy: true });
+    setChrome({ warning: true, continue: true, other: true });
   }
 
   function startOtherSeminar() {
@@ -632,7 +678,7 @@ function boot(formEl: HTMLFormElement) {
     if (status === 'unknown') {
       setState('unknown', 'Статус не удалось проверить. Свяжитесь с нами напрямую.');
       stripFieldsDom();
-      setChrome({ warning: true, continue: true, other: true, copy: true });
+      setChrome({ warning: true, continue: true, other: true });
       openDialog();
       return;
     }
@@ -645,7 +691,7 @@ function boot(formEl: HTMLFormElement) {
     }
     setState('unknown', 'Статус не удалось проверить. Свяжитесь с нами напрямую.');
     stripFieldsDom();
-    setChrome({ warning: true, continue: true, other: true, copy: true });
+    setChrome({ warning: true, continue: true, other: true });
     openDialog();
   }
 
