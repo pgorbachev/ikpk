@@ -1,16 +1,132 @@
 name: Dependabot auto-merge
+run-name: Dependabot auto-merge source=${{ github.event.workflow_run.id }} attempt=${{ github.event.workflow_run.run_attempt }}
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, auto_merge_enabled, auto_merge_disabled]
+  workflow_run:
+    workflows: [Dependabot auto-merge signal]
+    types: [completed]
 
-permissions:
-  actions: read
-  checks: write
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
+  authenticate:
+    name: Authenticate source signal
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      head-sha: ${{ steps.signal.outputs.head-sha }}
+      metadata-json-base64: ${{ steps.signal.outputs.metadata-json-base64 }}
+      pr-author: ${{ steps.signal.outputs.pr-author }}
+      pr-number: ${{ steps.signal.outputs.pr-number }}
+      source-action: ${{ steps.signal.outputs.source-action }}
+      source-actor: ${{ steps.signal.outputs.source-actor }}
+      source-run-attempt: ${{ steps.signal.outputs.source-run-attempt }}
+      source-run-id: ${{ steps.signal.outputs.source-run-id }}
+    steps:
+      - name: Validate exact source run and typed artifact
+        id: signal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE_RUN_ID" -eq "$SOURCE_RUN_ID"
+          test "$SOURCE_RUN_ATTEMPT" -eq "$SOURCE_RUN_ATTEMPT"
+          source_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          SOURCE_CONCLUSION="$(jq -er '.conclusion' <<<"$source_run")"
+          SOURCE_ACTOR="$(jq -er '.actor.login' <<<"$source_run")"
+          jq -e \
+            --argjson id "$SOURCE_RUN_ID" \
+            --argjson attempt "$SOURCE_RUN_ATTEMPT" \
+            --arg path '.github/workflows/dependabot-auto-merge-signal.yml' \
+            --arg repository "$SOURCE_REPOSITORY" \
+            '.id == $id and .run_attempt == $attempt and
+             ((.path | split("@")[0]) == $path) and
+             .repository.full_name == $repository and
+             .event == "pull_request_target" and .conclusion == "success" and
+             (.actor.login | type == "string" and length > 0) and
+             (.pull_requests | type == "array" and length == 1) and
+             (.pull_requests[0].number | type == "number") and
+             (.pull_requests[0].head.sha | test("^[0-9a-f]{40}$"))' \
+            <<<"$source_run" >/dev/null
+
+          artifact_name="dependabot-auto-merge-signal-${SOURCE_RUN_ID}-${SOURCE_RUN_ATTEMPT}"
+          artifacts="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?name=$artifact_name&per_page=100")"
+          ARTIFACT_COUNT="$(jq -er '.total_count' <<<"$artifacts")"
+          test "$ARTIFACT_COUNT" -eq 1
+          test "$(jq -er '.artifacts | length' <<<"$artifacts")" -eq 1
+          artifact_id="$(jq -er '.artifacts[0].id' <<<"$artifacts")"
+          ARTIFACT_DIGEST="$(jq -er '.artifacts[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' <<<"$artifacts")"
+          jq -e --argjson run_id "$SOURCE_RUN_ID" \
+            '.artifacts[0].expired == false and .artifacts[0].workflow_run.id == $run_id' \
+            <<<"$artifacts" >/dev/null
+
+          archive="$RUNNER_TEMP/dependabot-auto-merge-signal.zip"
+          gh api "repos/$SOURCE_REPOSITORY/actions/artifacts/$artifact_id/zip" >"$archive"
+          test "sha256:$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARTIFACT_DIGEST"
+          ARCHIVE_MEMBERS="$(zipinfo -1 "$archive")"
+          test "$ARCHIVE_MEMBERS" = dependabot-auto-merge-signal.json
+          unzip -p "$archive" dependabot-auto-merge-signal.json >"$RUNNER_TEMP/dependabot-auto-merge-signal.json"
+
+          signal="$(jq -ce '.' "$RUNNER_TEMP/dependabot-auto-merge-signal.json")"
+          SIGNAL_SCHEMA="$(jq -er '.schema' <<<"$signal")"
+          test "$SIGNAL_SCHEMA" = dependabot-auto-merge-signal/v1
+          SOURCE_ACTION="$(jq -er '.action | select(. == "opened" or . == "synchronize" or . == "reopened" or . == "auto_merge_enabled" or . == "auto_merge_disabled")' <<<"$signal")"
+          SOURCE_PR_NUMBER="$(jq -er '.prNumber' <<<"$signal")"
+          SOURCE_HEAD_SHA="$(jq -er '.headSha | select(test("^[0-9a-f]{40}$"))' <<<"$signal")"
+          pr_author="$(jq -er '.prAuthor | select(type == "string" and length > 0)' <<<"$signal")"
+          jq -e \
+            --argjson run_id "$SOURCE_RUN_ID" \
+            --argjson run_attempt "$SOURCE_RUN_ATTEMPT" \
+            --arg actor "$SOURCE_ACTOR" \
+            --argjson pr_number "$SOURCE_PR_NUMBER" \
+            --arg head_sha "$SOURCE_HEAD_SHA" \
+            '.sourceRunId == $run_id and .sourceRunAttempt == $run_attempt and
+             .actor == $actor and .prNumber == $pr_number and .headSha == $head_sha and
+             (.metadata == null or (.metadata | type == "array"))' \
+            <<<"$signal" >/dev/null
+          jq -e --argjson pr_number "$SOURCE_PR_NUMBER" --arg head_sha "$SOURCE_HEAD_SHA" \
+            '(.pull_requests | length == 1) and .pull_requests[0].number == $pr_number and
+             .pull_requests[0].head.sha == $head_sha' <<<"$source_run" >/dev/null
+
+          current_pr="$(gh api "repos/$SOURCE_REPOSITORY/pulls/$SOURCE_PR_NUMBER")"
+          jq -e --arg head_sha "$SOURCE_HEAD_SHA" --arg pr_author "$pr_author" \
+            '.head.sha == $head_sha and .user.login == $pr_author' <<<"$current_pr" >/dev/null
+          if [ "$pr_author" != 'dependabot[bot]' ]; then
+            jq -e '.metadata == null' <<<"$signal" >/dev/null
+          fi
+
+          metadata_json_base64="$(jq -c '.metadata' <<<"$signal" | base64 -w0)"
+          {
+            echo "head-sha=$SOURCE_HEAD_SHA"
+            echo "metadata-json-base64=$metadata_json_base64"
+            echo "pr-author=$pr_author"
+            echo "pr-number=$SOURCE_PR_NUMBER"
+            echo "source-action=$SOURCE_ACTION"
+            echo "source-actor=$SOURCE_ACTOR"
+            echo "source-run-attempt=$SOURCE_RUN_ATTEMPT"
+            echo "source-run-id=$SOURCE_RUN_ID"
+          } >>"$GITHUB_OUTPUT"
+
   policy:
     name: Policy
-    uses: "pgorbachev/ikpk/.github/workflows/dependabot-auto-merge-policy.yml@634dad5c75b1f67b16c4fa73f072d14717a3b305" # engine v1
+    needs: authenticate
+    permissions:
+      actions: read
+      checks: write
+      contents: write
+      pull-requests: write
+    uses: "pgorbachev/ikpk/.github/workflows/dependabot-auto-merge-policy.yml@0000000000000000000000000000000000000000" # engine v2
+    with:
+      metadata-json-base64: ${{ needs.authenticate.outputs.metadata-json-base64 }}
+      source-action: ${{ needs.authenticate.outputs.source-action }}
+      source-actor: ${{ needs.authenticate.outputs.source-actor }}
+      source-head-sha: ${{ needs.authenticate.outputs.head-sha }}
+      source-pr-author: ${{ needs.authenticate.outputs.pr-author }}
+      source-pr-number: ${{ needs.authenticate.outputs.pr-number }}
+      source-run-attempt: ${{ needs.authenticate.outputs.source-run-attempt }}
+      source-run-id: ${{ needs.authenticate.outputs.source-run-id }}

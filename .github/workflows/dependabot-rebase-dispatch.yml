@@ -1,0 +1,56 @@
+name: Dependabot rebase
+run-name: Dependabot rebase source=${{ github.event.workflow_run.id }} attempt=${{ github.event.workflow_run.run_attempt }}
+
+on:
+  workflow_run:
+    workflows: [Dependabot rebase signal]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  authenticate:
+    name: Authenticate merged source
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.source.outputs.merged }}
+    steps:
+      - name: Validate exact closed pull-request run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          source_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          jq -e \
+            --argjson id "$SOURCE_RUN_ID" \
+            --argjson attempt "$SOURCE_RUN_ATTEMPT" \
+            --arg repository "$SOURCE_REPOSITORY" \
+            '.id == $id and .run_attempt == $attempt and
+             ((.path | split("@")[0]) == ".github/workflows/dependabot-rebase.yml") and
+             .repository.full_name == $repository and .event == "pull_request_target" and
+             .conclusion == "success" and (.pull_requests | type == "array" and length == 1) and
+             (.pull_requests[0].number | type == "number") and
+             (.pull_requests[0].head.sha | test("^[0-9a-f]{40}$"))' \
+            <<<"$source_run" >/dev/null
+          pr_number="$(jq -er '.pull_requests[0].number' <<<"$source_run")"
+          head_sha="$(jq -er '.pull_requests[0].head.sha' <<<"$source_run")"
+          current="$(gh api "repos/$SOURCE_REPOSITORY/pulls/$pr_number")"
+          jq -e --arg head_sha "$head_sha" \
+            '.head.sha == $head_sha and .merged == true and (.merged_at | type == "string")' \
+            <<<"$current" >/dev/null
+          echo 'merged=true' >>"$GITHUB_OUTPUT"
+
+  policy:
+    name: Policy
+    needs: authenticate
+    if: needs.authenticate.outputs.merged == 'true'
+    permissions:
+      pull-requests: write
+    uses: "pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml@0000000000000000000000000000000000000000" # engine v2

@@ -93,8 +93,8 @@ describe('two-stage Dependabot producer topology', () => {
     const policy = workflowNamed('dependabot-auto-merge-policy.yml');
     const provenance = Object.values(policy.jobs).find(({ key }) => key === 'provenance-evidence');
     expect(provenance, 'separate provenance job must exist').toBeDefined();
-    expect(provenance!.if).toContain("github.event.action == 'opened'");
-    expect(provenance!.if).toContain("github.event.action == 'synchronize'");
+    expect(provenance!.if).toContain("inputs.source-action == 'opened'");
+    expect(provenance!.if).toContain("inputs.source-action == 'synchronize'");
     expect(provenance!.if).not.toMatch(/reopened|auto_merge_enabled|auto_merge_disabled/);
   });
 

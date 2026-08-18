@@ -78,11 +78,14 @@ fi
         GH_LOG: log,
         GH_TOKEN: 'test-token',
         GITHUB_REPOSITORY: 'pgorbachev/ikpk',
+        GITHUB_RUN_ATTEMPT: '2',
         GITHUB_RUN_ID: '1234',
         GITHUB_SERVER_URL: 'https://github.com',
         HEAD_SHA,
         POLICY_SHA,
         PROVENANCE_RESULT: 'skipped',
+        SOURCE_RUN_ATTEMPT: '3',
+        SOURCE_RUN_ID: '7001',
       },
     });
     const calls = readFileSync(log, 'utf8').trim().split('\n')
@@ -189,7 +192,7 @@ describe('authoritative provenance run behind a check details_url', () => {
 });
 
 describe('idempotent custom check publisher', () => {
-  const externalId = `eligibility:${HEAD_SHA}:${POLICY_SHA}`;
+  const externalId = `eligibility:${HEAD_SHA}:${POLICY_SHA}:7001:3:1234:2`;
 
   it('POSTs a new check with the assessed head_sha', () => {
     const result = runPublisher([]);

@@ -31,17 +31,22 @@
       security registry ручной, транзитивный registered node в lockfile diff ручной,
       missing/stale registry ручной
       Evidence: `web/tests/dependabot-auto-merge-classification.test.ts` (19 cases).
-- [ ] 2.2 Переписать проверки обязательной auto-eligibility после security review:
+- [x] 2.2 Переписать проверки обязательной auto-eligibility после security review:
       человеческий PR и PR Dependabot с мажором красные независимо от marker; разрешённый
       Dependabot head зелёный; ручной путь проверяется отдельным PR-only ruleset bypass,
       который не обходит остальные CI. Прежняя manual-green evidence в
       `web/tests/dependabot-auto-merge-provenance.test.ts` superseded.
-- [ ] 2.2a Написать RED-проверки двухступенчатого producer: Dependabot signal не требует
+      Evidence: `web/tests/dependabot-auto-merge-invariant-scope.test.ts`,
+      `web/tests/dependabot-auto-merge-target-producer.test.ts` and repository-policy plan assertions.
+- [x] 2.2a Написать RED-проверки двухступенчатого producer: Dependabot signal не требует
       write permissions/secrets; privileged `workflow_run` принимает только exact
       signal run/path/actor/PR/head и единственный artifact с верным digest/schema;
       подмена каждого из этих полей, actor от marker/reopen, другой `run_attempt` и второй
       одноимённый artifact дают fail closed; только `opened`/`synchronize` выпускают
       provenance
+      Evidence: test-only commit `aad5a92` was RED (22 failed / 32 passed across three
+      producer files); production topology is covered by
+      `web/tests/dependabot-auto-merge-workflow-run-producer.test.ts` and independent mutations.
 - [x] 2.3 Написать проверки на **две независимые мутации**, подпись и действующее лицо
       порознь: (а) подпись платформы есть, действующее лицо — участник с правом записи —
       падает; (б) действующее лицо допустимо, но подписи платформы нет — падает; (в) оба
