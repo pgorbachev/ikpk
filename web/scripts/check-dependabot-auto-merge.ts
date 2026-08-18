@@ -44,10 +44,6 @@ interface SecurityRegistryFile {
   oracle?: { packages?: unknown; lockfileNodes?: unknown };
 }
 
-interface PolicyTrustFile {
-  trustedPolicyShas?: unknown;
-}
-
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
@@ -241,14 +237,9 @@ async function signatureFor(sha: string): Promise<{
 }
 
 function trustedPolicyShas(): string[] {
-  const source = readFileSync(new URL('../../.github/dependabot-auto-merge-policy.json', import.meta.url), 'utf8');
-  const parsed = JSON.parse(source) as PolicyTrustFile;
-  if (!Array.isArray(parsed.trustedPolicyShas) ||
-      !parsed.trustedPolicyShas.every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/i.test(sha)) ||
-      new Set(parsed.trustedPolicyShas).size !== parsed.trustedPolicyShas.length) {
-    throw new Error('trusted policy SHA registry is malformed');
-  }
-  return parsed.trustedPolicyShas;
+  const sha = requiredEnv('TRUSTED_POLICY_SHA');
+  if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error('TRUSTED_POLICY_SHA is malformed');
+  return [sha];
 }
 
 async function hasPositiveEvidence(sha: string): Promise<boolean> {
@@ -257,6 +248,8 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
     name?: string;
     conclusion?: string | null;
     status?: string;
+    head_sha?: string;
+    external_id?: string;
     app?: { slug?: string; id?: number };
   }> }>(`/repos/${owner}/${repo}/commits/${sha}/check-runs?filter=all&per_page=100`);
   if (!Array.isArray(result.check_runs)) throw new Error('check-runs response is malformed');
@@ -268,7 +261,7 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
   for (const candidate of candidates) {
     const detailsUrl = (candidate as typeof candidate & { details_url?: unknown }).details_url;
     if (typeof detailsUrl !== 'string') continue;
-    const runId = /\/actions\/runs\/(\d+)\/job\/\d+(?:\?|$)/.exec(detailsUrl)?.[1];
+    const runId = /\/actions\/runs\/(\d+)(?:\/job\/\d+)?(?:\?|$)/.exec(detailsUrl)?.[1];
     if (!runId) continue;
     const run = await githubApi<{
       event?: string;
@@ -283,13 +276,17 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
     const callerWorkflowPath = run.path?.split('@')[0] ?? '';
     const reusablePolicyPath = trustedReference?.path?.split('@')[0]
       .replace(`${owner}/${repo}/`, '') ?? '';
-    if (run.event === 'pull_request' && run.head_sha === sha && trustedReference?.sha &&
+    const externalId = `provenance:${sha}:${trustedReference?.sha ?? ''}`;
+    if (run.event === 'pull_request_target' && trustedReference?.sha &&
         isTrustedPositiveEvidence({
-          sha,
+          sha: candidate.head_sha ?? '',
           name: candidate.name ?? '',
           status: candidate.status as 'completed',
           conclusion: candidate.conclusion as 'success',
           appSlug: candidate.app?.slug ?? '',
+          appId: candidate.app?.id ?? -1,
+          eventName: run.event,
+          externalId: candidate.external_id ?? '',
           callerWorkflowPath,
           reusablePolicyPath,
           reusablePolicySha: trustedReference.sha,
@@ -297,6 +294,9 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
           sha,
           checkName: EVIDENCE_CHECK_NAME,
           appSlug: 'github-actions',
+          appId: 15368,
+          eventName: 'pull_request_target',
+          externalId,
           callerWorkflowPath: expectedCaller,
           reusablePolicyPath: '.github/workflows/dependabot-auto-merge-policy.yml',
           reusablePolicySha: trustedReference.sha,

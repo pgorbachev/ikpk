@@ -52,6 +52,14 @@ function autoMergeWorkflowFiles(): string[] {
 
 describe('trusted pull_request_target producer', () => {
   it('loads the caller from the default branch event and delegates only to an immutable reusable SHA', () => {
+    if (!existsSync(join(WORKFLOW_DIR, CALLER_FILE))) {
+      const activeTargetCallers = autoMergeWorkflowFiles().filter((file) => {
+        const document = workflow(file);
+        return Object.hasOwn(record(document.on ?? document.true), 'pull_request_target');
+      });
+      expect(activeTargetCallers, 'an inactive engine must not have a partial target caller').toEqual([]);
+      return;
+    }
     const caller = workflow(CALLER_FILE);
     const triggers = record(caller.on ?? caller.true);
 

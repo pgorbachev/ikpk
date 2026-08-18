@@ -6,10 +6,43 @@ on:
 permissions: {}
 
 jobs:
-  assess:
-    name: Assessment
+  snapshot:
+    name: Fresh pull-request snapshot
     runs-on: ubuntu-latest
     permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.current.outputs.pr-number }}
+      head-sha: ${{ steps.current.outputs.head-sha }}
+      head-matches-event: ${{ steps.current.outputs.head-matches-event }}
+      auto-merge-enabled: ${{ steps.current.outputs.auto-merge-enabled }}
+    steps:
+      - name: Read current head and auto-merge marker
+        id: current
+        env:
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          head_sha="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$current")"
+          auto_merge_enabled="$(jq -er 'if has("auto_merge") then (.auto_merge != null) else error("missing auto_merge") end' <<<"$current")"
+          head_matches_event=false
+          if [ "$head_sha" = "$EVENT_HEAD_SHA" ]; then head_matches_event=true; fi
+          {
+            echo "pr-number=$PR_NUMBER"
+            echo "head-sha=$head_sha"
+            echo "head-matches-event=$head_matches_event"
+            echo "auto-merge-enabled=$auto_merge_enabled"
+          } >>"$GITHUB_OUTPUT"
+
+  assess:
+    name: Assessment
+    needs: snapshot
+    if: needs.snapshot.result == 'success' && needs.snapshot.outputs.head-matches-event == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
       checks: read
       contents: read
       pull-requests: read
@@ -37,7 +70,8 @@ jobs:
       - name: Checkout trusted policy source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -51,6 +85,7 @@ jobs:
         env:
           DEPENDABOT_METADATA_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
           GITHUB_TOKEN: ${{ github.token }}
+          TRUSTED_POLICY_SHA: ${{ job.workflow_sha }}
         run: node --experimental-strip-types web/scripts/check-dependabot-auto-merge.ts
 
   provenance-evidence:
@@ -68,7 +103,7 @@ jobs:
 
   eligibility-gate:
     name: Eligibility gate
-    needs: assess
+    needs: [snapshot, assess]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
@@ -76,13 +111,18 @@ jobs:
       - name: Enforce fail-closed automatic-merge policy
         env:
           ASSESS_RESULT: ${{ needs.assess.result }}
-          AUTO_MERGE_ENABLED: ${{ github.event.pull_request.auto_merge != null }}
+          FRESH_SNAPSHOT_RESULT: ${{ needs.snapshot.result }}
+          FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
+          FRESH_AUTO_MERGE_ENABLED: ${{ needs.snapshot.outputs.auto-merge-enabled }}
           GATE_OK: ${{ needs.assess.outputs.gate-ok }}
           REASON: ${{ needs.assess.outputs.reason }}
         run: |
-          # An API outage must not block the manual path. If auto-merge was
-          # enabled in this event, the same outage is deliberately fail-closed.
-          if [ "$ASSESS_RESULT" != success ] && [ "$AUTO_MERGE_ENABLED" != true ]; then
+          # Manual fallback requires a successful fresh API snapshot proving
+          # both the current head match and an absent auto-merge marker.
+          if [ "$FRESH_SNAPSHOT_RESULT" != success ] || [ "$FRESH_HEAD_MATCHES_CURRENT" != true ]; then
+            exit 1
+          fi
+          if [ "$ASSESS_RESULT" != success ] && [ "$FRESH_AUTO_MERGE_ENABLED" = false ]; then
             exit 0
           fi
           if [ "$ASSESS_RESULT" != success ] || [ "$GATE_OK" != true ]; then
@@ -90,6 +130,66 @@ jobs:
             exit 1
           fi
 
+  publish-checks:
+    name: Publish head-bound policy checks
+    needs: [snapshot, assess, provenance-evidence, eligibility-gate]
+    if: always() && needs.snapshot.result == 'success' && needs.snapshot.outputs.head-matches-event == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - name: Publish current-head eligibility and provenance results
+        env:
+          ASSESSMENT_RESULT: ${{ needs.assess.result }}
+          EVENT_ACTION: ${{ github.event.action }}
+          FRESH_AUTO_MERGE_ENABLED: ${{ needs.snapshot.outputs.auto-merge-enabled }}
+          FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
+          GATE_RESULT: ${{ needs.eligibility-gate.result }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.snapshot.outputs.head-sha }}
+          POLICY_SHA: ${{ job.workflow_sha }}
+          PROVENANCE_RESULT: ${{ needs.provenance-evidence.result }}
+        run: |
+          publish_check() {
+            local kind="$1" name="$2" conclusion="$3"
+            local external_id="${kind}:${HEAD_SHA}:${POLICY_SHA}"
+            local run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            local existing_id
+            existing_id="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
+              | jq -r --arg external_id "$external_id" \
+                '[.check_runs[] | select(.external_id == $external_id)] | sort_by(.id) | last | .id // empty')"
+            local endpoint="repos/$GITHUB_REPOSITORY/check-runs"
+            local method=POST
+            if [ -n "$existing_id" ]; then
+              endpoint="repos/$GITHUB_REPOSITORY/check-runs/$existing_id"
+              method=PATCH
+            fi
+            gh api --method "$method" "$endpoint" \
+              -f name="$name" \
+              -f head_sha="$HEAD_SHA" \
+              -f status=completed \
+              -f conclusion="$conclusion" \
+              -f external_id="$external_id" \
+              -f details_url="$run_url" \
+              -f 'output[title]=Dependabot auto-merge policy' \
+              -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA"
+          }
+
+          gate_conclusion=failure
+          if [ "$GATE_RESULT" = success ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
+            gate_conclusion=success
+          elif [ "$ASSESSMENT_RESULT" != success ] && [ "$FRESH_AUTO_MERGE_ENABLED" = false ]; then
+            gate_conclusion=success
+          fi
+          publish_check eligibility "Dependabot auto-merge / Eligibility gate" "$gate_conclusion"
+
+          if [ "$EVENT_ACTION" = opened ] || [ "$EVENT_ACTION" = synchronize ]; then
+            provenance_conclusion=failure
+            if [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_RESULT" = success ]; then
+              provenance_conclusion=success
+            fi
+            publish_check provenance "Dependabot auto-merge / Provenance evidence" "$provenance_conclusion"
+          fi
   enable-auto-merge:
     name: Enable native auto-merge
     needs: [assess, provenance-evidence, eligibility-gate]

@@ -72,6 +72,9 @@ export interface ProvenanceEvidenceCandidate {
   status: 'queued' | 'in_progress' | 'completed';
   conclusion: 'success' | 'failure' | null;
   appSlug: string;
+  appId: number;
+  eventName: string;
+  externalId: string;
   callerWorkflowPath: string;
   reusablePolicyPath: string;
   reusablePolicySha: string;
@@ -81,6 +84,9 @@ export interface TrustedEvidencePolicy {
   sha: string;
   checkName: string;
   appSlug: string;
+  appId: number;
+  eventName: 'pull_request_target';
+  externalId: string;
   callerWorkflowPath: string;
   reusablePolicyPath: string;
   reusablePolicySha: string;
@@ -104,6 +110,9 @@ export function isTrustedPositiveEvidence(
     candidate.status === 'completed' &&
     candidate.conclusion === 'success' &&
     candidate.appSlug === policy.appSlug &&
+    candidate.appId === policy.appId &&
+    candidate.eventName === policy.eventName &&
+    candidate.externalId === policy.externalId &&
     candidate.callerWorkflowPath === policy.callerWorkflowPath &&
     candidate.reusablePolicyPath === policy.reusablePolicyPath &&
     candidate.reusablePolicySha === policy.reusablePolicySha;

@@ -39,7 +39,9 @@ function runEligibilityGate(overrides: Record<string, string>) {
     env: {
       ...process.env,
       ASSESS_RESULT: 'failure',
-      AUTO_MERGE_ENABLED: 'false',
+      FRESH_SNAPSHOT_RESULT: 'success',
+      FRESH_HEAD_MATCHES_CURRENT: 'true',
+      FRESH_AUTO_MERGE_ENABLED: 'false',
       GATE_OK: '',
       REASON: 'assessment unavailable',
       ...overrides,
@@ -112,13 +114,13 @@ describe('review regressions: provenance evidence identity', () => {
 describe('review regressions: mandatory gate failure semantics', () => {
   it('keeps the mandatory gate green when assessment fails on the manual path', () => {
     const step = eligibilityGateStep();
-    expect(JSON.stringify(step.env)).toContain('pull_request.auto_merge');
-    const result = runEligibilityGate({ AUTO_MERGE_ENABLED: 'false' });
+    expect(JSON.stringify(step.env)).toContain('needs.snapshot.outputs.auto-merge-enabled');
+    const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: 'false' });
     expect(result.status, result.stderr || result.stdout).toBe(0);
   });
 
   it('fails closed when assessment fails for a PR that is still marked for auto-merge', () => {
-    const result = runEligibilityGate({ AUTO_MERGE_ENABLED: 'true' });
+    const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: 'true' });
     expect(result.status, result.stderr || result.stdout).not.toBe(0);
   });
 });
