@@ -68,7 +68,7 @@ describe('review regressions: provenance evidence identity', () => {
     checkName: 'Dependabot auto-merge / Provenance evidence',
     appSlug: 'github-actions',
     appId: 15368,
-    eventName: 'pull_request_target',
+    eventName: 'workflow_run',
     externalId: 'provenance:parent-sha:trusted-policy-sha',
     callerWorkflowPath: '.github/workflows/pull-request.yml',
     reusablePolicyPath: '.github/workflows/dependabot-auto-merge-policy.yml',

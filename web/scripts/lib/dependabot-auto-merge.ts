@@ -85,7 +85,7 @@ export interface TrustedEvidencePolicy {
   checkName: string;
   appSlug: string;
   appId: number;
-  eventName: 'pull_request_target';
+  eventName: 'workflow_run';
   externalId: string;
   callerWorkflowPath: string;
   reusablePolicyPath: string;
@@ -96,9 +96,29 @@ export interface AuthoritativeEvidenceRunInput {
   targetPullRequestNumber: number;
   targetHeadSha: string;
   provenanceJobName: string;
-  run: {
+  expectedDispatcherWorkflowPath: string;
+  expectedSignalWorkflowPath: string;
+  expectedSignalActor: string;
+  dispatcherRun: {
+    id: number;
+    runAttempt: number;
+    event: string;
+    path: string;
+    sourceRunId: number;
+    sourceRunAttempt: number;
+  };
+  sourceRun: {
+    id: number;
+    runAttempt: number;
+    event: string;
+    path: string;
+    conclusion: string | null;
+    actorLogin: string;
+    headSha: string;
     pullRequests: Array<{ number: number; headSha: string }>;
   };
+  jobsRunId: number;
+  jobsRunAttempt: number;
   jobs: Array<{
     name: string;
     conclusion: 'success' | 'failure' | 'cancelled' | null;
@@ -132,11 +152,22 @@ export function isTrustedPositiveEvidence(
 }
 
 export function isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput): boolean {
-  const matchingPullRequests = input.run.pullRequests.filter(({ number, headSha }) =>
-    number === input.targetPullRequestNumber && headSha === input.targetHeadSha);
-  if (matchingPullRequests.length !== 1) return false;
+  const dispatcherIsBound = input.dispatcherRun.event === 'workflow_run' &&
+    input.dispatcherRun.path === input.expectedDispatcherWorkflowPath &&
+    input.dispatcherRun.sourceRunId === input.sourceRun.id &&
+    input.dispatcherRun.sourceRunAttempt === input.sourceRun.runAttempt &&
+    input.jobsRunId === input.dispatcherRun.id &&
+    input.jobsRunAttempt === input.dispatcherRun.runAttempt;
+  const sourceIsBound = input.sourceRun.event === 'pull_request_target' &&
+    input.sourceRun.path === input.expectedSignalWorkflowPath &&
+    input.sourceRun.conclusion === 'success' &&
+    input.sourceRun.actorLogin === input.expectedSignalActor &&
+    input.sourceRun.headSha === input.targetHeadSha &&
+    input.sourceRun.pullRequests.filter(({ number, headSha }) =>
+      number === input.targetPullRequestNumber && headSha === input.targetHeadSha).length === 1;
   const provenanceJobs = input.jobs.filter(({ name }) => name === input.provenanceJobName);
-  return provenanceJobs.length === 1 && provenanceJobs[0].conclusion === 'success';
+  return dispatcherIsBound && sourceIsBound && provenanceJobs.length === 1 &&
+    provenanceJobs[0].conclusion === 'success';
 }
 
 function updateMatchesAllowTable(update: DependencyUpdate): boolean {
