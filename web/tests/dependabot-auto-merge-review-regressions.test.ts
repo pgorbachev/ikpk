@@ -18,6 +18,10 @@ const WORKFLOW_SOURCE = readFileSync(
   new URL('../../.github/workflows/dependabot-auto-merge-policy.yml', import.meta.url),
   'utf8',
 );
+const DISPATCHER_SOURCE = readFileSync(
+  new URL('../../.github/workflows/dependabot-auto-merge.yml', import.meta.url),
+  'utf8',
+);
 const WORKFLOW = parse(WORKFLOW_SOURCE) as {
   jobs?: Record<string, {
     if?: string;
@@ -25,6 +29,20 @@ const WORKFLOW = parse(WORKFLOW_SOURCE) as {
     steps?: Array<{ name?: string; if?: string; env?: Record<string, string>; run?: string }>;
   }>;
 };
+
+function pinnedWorkflowSource(): string {
+  const match = DISPATCHER_SOURCE.match(
+    /pgorbachev\/ikpk\/\.github\/workflows\/dependabot-auto-merge-policy\.yml@([0-9a-f]{40})/,
+  );
+  expect(match, 'dispatcher must pin the reusable policy by an immutable SHA').not.toBeNull();
+  const result = spawnSync(
+    'git',
+    ['show', `${match?.[1]}:.github/workflows/dependabot-auto-merge-policy.yml`],
+    { encoding: 'utf8' },
+  );
+  expect(result.status, result.stderr || 'pinned policy commit is not available').toBe(0);
+  return result.stdout;
+}
 
 function eligibilityGateStep(): { env: Record<string, string>; run: string } {
   const job = WORKFLOW.jobs?.['eligibility-gate'];
@@ -52,7 +70,8 @@ function runEligibilityGate(overrides: Record<string, string>) {
 }
 
 function freshSnapshotStep(): { env: Record<string, string>; run: string } {
-  const job = WORKFLOW.jobs?.snapshot;
+  const pinnedWorkflow = parse(pinnedWorkflowSource()) as typeof WORKFLOW;
+  const job = pinnedWorkflow.jobs?.snapshot;
   const step = job?.steps?.find(({ name }) => name?.toLowerCase().includes('current head'));
   expect(step, 'fresh pull-request snapshot step is missing').toBeDefined();
   expect(step?.run, 'fresh pull-request snapshot has no executable contract').toBeTypeOf('string');
@@ -65,7 +84,12 @@ function runFreshSnapshot(currentPullRequest: unknown) {
   writeFileSync(outputPath, '');
   const step = freshSnapshotStep();
   const result = spawnSync('bash', ['-euo', 'pipefail', '-c', `
-gh() { printf '%s\\n' "$MOCK_CURRENT_PR_JSON"; }
+gh() {
+  test "$#" -eq 2
+  test "$1" = api
+  test "$2" = "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER"
+  printf '%s\\n' "$MOCK_CURRENT_PR_JSON"
+}
 ${step.run}
 `], {
     encoding: 'utf8',
@@ -154,6 +178,18 @@ describe('review regressions: mandatory gate failure semantics', () => {
 });
 
 describe('review regressions: fresh marker snapshot', () => {
+  it('executes the exact policy revision pinned by the dispatcher', () => {
+    expect(pinnedWorkflowSource()).toBe(WORKFLOW_SOURCE);
+  });
+
+  it('binds the snapshot inputs and token through the workflow environment', () => {
+    expect(freshSnapshotStep().env).toEqual({
+      EVENT_HEAD_SHA: '${{ inputs.source-head-sha }}',
+      GH_TOKEN: '${{ github.token }}',
+      PR_NUMBER: '${{ inputs.source-pr-number }}',
+    });
+  });
+
   it('accepts a null auto_merge marker as disabled', () => {
     const { output, result } = runFreshSnapshot({
       auto_merge: null,
@@ -162,6 +198,15 @@ describe('review regressions: fresh marker snapshot', () => {
 
     expect(result.status, result.stderr || result.stdout).toBe(0);
     expect(output).toContain('auto-merge-enabled=false');
+  });
+
+  it('fails closed when the REST snapshot omits auto_merge', () => {
+    const { output, result } = runFreshSnapshot({
+      head: { sha: '1111111111111111111111111111111111111111' },
+    });
+
+    expect(result.status, result.stderr || result.stdout).not.toBe(0);
+    expect(output).toBe('');
   });
 });
 
