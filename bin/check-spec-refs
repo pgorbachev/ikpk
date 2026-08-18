@@ -1,0 +1,140 @@
+#!/usr/bin/env node
+// Проверяет ссылки на файлы внутри OpenSpec-артефактов: существование пути, попадание
+// номера строки в файл и — если ссылка приведена вместе с фрагментом кода — совпадение
+// этого фрагмента со строкой, на которую ссылаются.
+//
+// Зачем: спека переживает код. Ссылка вида `web/src/lib/data.ts:31` верна в день
+// написания и молча становится ложной после любого сдвига файла — при этом строгая
+// валидация OpenSpec её не смотрит (она проверяет структуру дельты), а зелёный цвет
+// валидации читается как «спека в порядке». Замерено 18.08.2026: из 62 ссылок в двух
+// changes четыре указывали не туда, включая номера строк в workflow, где заодно
+// оказалось занижено число сборок.
+//
+// Что считается ссылкой: `путь` или `путь:строка` в обратных кавычках, где путь
+// оканчивается известным расширением исходника. Признак намеренно общий — перечислять
+// конкретные файлы бессмысленно, список отстанет от предмета.
+//
+// Строгость разная у разных артефактов, и это не послабление, а разные предметы:
+//   - `openspec/specs/**` описывает ПРИНЯТОЕ поведение существующего кода. Там несуществующий
+//     путь — дефект: спека утверждает про то, чего нет;
+//   - `openspec/changes/**` описывает ПРЕДЛАГАЕМОЕ. Там ссылка на файл, который change ещё
+//     только создаст, законна, поэтому несуществующий путь идёт в предупреждение, а не в отказ.
+//     Но если файл существует, номер строки обязан попадать в него: молча устаревшая ссылка на
+//     реальный файл — это то же ложное утверждение;
+//   - `openspec/changes/archive/**` не проверяется вовсе: архив описывает состояние своего
+//     времени, и сдвиг кода после архивирования его не опровергает.
+//
+// Что НЕ проверяется и почему:
+//   - пути внутри `openspec/` — они живут рядом с артефактом и двигаются вместе с ним;
+//   - `node_modules/**` — не наше дерево;
+//   - URL-пути сайта (`/robots.txt`, `/statyi/<slug>`) — это адреса, а не файлы;
+//   - у диапазона строк (`:16-28`) точное попадание не требуется: фрагмент ищется в пределах
+//     диапазона целиком. Требовать точной строки было бы шумом — диапазон сдвигается вместе с
+//     кодом; но грубое устаревание при этом ловится. Первая редакция скрипта брала из диапазона
+//     первое число и проверяла его как одиночную строку — вопреки собственному описанию.
+//
+// Коды выхода: 0 — расхождений нет; 1 — есть расхождения; 2 — измерить не удалось
+// (нет каталога артефактов, не нашлось ни одной ссылки). Третий код обязателен:
+// «ссылок не найдено» — это не «ссылки верны», и различать их надо явно.
+
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+
+const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..');
+const ARTIFACT_DIRS = [join(ROOT, 'openspec', 'changes'), join(ROOT, 'openspec', 'specs')];
+
+const SRC_EXT = /\.(ts|tsx|mjs|cjs|js|astro|json|ya?ml|csv|css|sh)$/;
+// `путь` либо `путь:строка`; опционально следом фрагмент кода в кавычках через запятую.
+const REF = /`([A-Za-z0-9_\-./[\]]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?`(?:\s*,\s*`([^`]+)`)?/g;
+
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return walk(p);
+    return e.name.endsWith('.md') ? [p] : [];
+  });
+}
+
+/** Кандидаты на разрешение пути: от корня и от web/ — артефакты пишут и так, и так. */
+function resolveCandidates(p) {
+  return [join(ROOT, p), join(ROOT, 'web', p)];
+}
+
+const findings = [];
+const warnings = [];
+let refsChecked = 0;
+const files = ARTIFACT_DIRS.flatMap(walk);
+
+for (const md of files) {
+  const rel = md.slice(ROOT.length + 1);
+  if (rel.includes('openspec/changes/archive/')) continue; // архив описывает своё время
+  const isProposal = rel.startsWith('openspec/changes/');
+  const text = readFileSync(md, 'utf8');
+  for (const m of text.matchAll(REF)) {
+    const [, path, lineNo, lineEnd, snippet] = m;
+    if (!SRC_EXT.test(path)) continue;
+    if (path.startsWith('openspec/')) continue;
+    if (path.startsWith('/')) continue; // адрес сайта, не файл
+    if (path.includes('node_modules/')) continue; // не наше дерево
+    if (!path.includes('/')) continue; // короткая форма без каталога — не разрешаема однозначно
+
+    const hit = resolveCandidates(path).find((c) => existsSync(c) && statSync(c).isFile());
+    refsChecked += 1;
+
+    if (!hit) {
+      // В предложении изменений ссылка на ещё не созданный файл законна; в принятой спеке — нет.
+      (isProposal ? warnings : findings).push(`${rel}: путь не существует — ${path}`);
+      continue;
+    }
+    if (!lineNo) continue;
+
+    const lines = readFileSync(hit, 'utf8').split('\n');
+    const from = Number(lineNo);
+    const to = lineEnd ? Number(lineEnd) : from;
+    if (to > lines.length) {
+      findings.push(`${rel}: ${path}:${lineNo}${lineEnd ? '-' + lineEnd : ''} — в файле ${lines.length} строк`);
+      continue;
+    }
+    if (snippet) {
+      // Фрагмент из спеки часто сокращён многоточием: сверяем по самому длинному куску.
+      const parts = snippet.split(/[…]|\.\.\./).map((s) => s.trim()).filter((s) => s.length >= 6);
+      const needle = parts.sort((a, b) => b.length - a.length)[0];
+      const inRange = lines.slice(from - 1, to).some((l) => l.includes(needle));
+      if (needle && !inRange) {
+        const where = lineEnd ? `${from}-${to}` : `${from}`;
+        findings.push(
+          `${rel}: ${path}:${where} — фрагмент «${needle}» там не найден; на ${from}-й строке: ` +
+            `${lines[from - 1].trim().slice(0, 70)}`,
+        );
+      }
+    }
+  }
+}
+
+if (files.length === 0) {
+  console.error('check-spec-refs: не найдено ни одного артефакта в openspec/ — измерить нечего');
+  process.exit(2);
+}
+if (refsChecked === 0) {
+  console.error(
+    `check-spec-refs: в ${files.length} артефактах не нашлось ни одной проверяемой ссылки на файл — ` +
+      'это не «ссылки верны», а «проверять нечего»',
+  );
+  process.exit(2);
+}
+
+if (warnings.length > 0) {
+  console.log(`check-spec-refs: ссылок на ещё не созданные файлы: ${warnings.length} (предложения изменений — это норма)`);
+  for (const w of warnings) console.log(`  · ${w}`);
+}
+
+if (findings.length > 0) {
+  console.error(`check-spec-refs: расхождений ${findings.length} (проверено ссылок: ${refsChecked})`);
+  for (const f of findings) console.error(`  ${f}`);
+  console.error('\nСсылка в спеке верна в день написания и молча становится ложной после сдвига файла.');
+  console.error('Исправьте номер строки или путь; если предмет исчез — исправьте утверждение.');
+  process.exit(1);
+}
+
+console.log(`check-spec-refs: ссылок проверено ${refsChecked} в ${files.length} артефактах, расхождений нет`);

@@ -69,3 +69,6 @@ jobs:
 
       - name: Check for bare openspec calls
         run: ./bin/check-openspec-integration
+
+      - name: Check file references in OpenSpec artifacts
+        run: ./bin/check-spec-refs
