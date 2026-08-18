@@ -115,6 +115,18 @@ describe('two-stage Dependabot producer topology', () => {
     expect(policyCalls[0].needs.length, 'policy must depend on authenticated source/artifact validation').toBeGreaterThan(0);
   });
 
+  it('guards the reusable policy against a direct call from another workflow or ref', () => {
+    const policy = workflowNamed('dependabot-auto-merge-policy.yml');
+    const guard = policy.jobs['caller-authentication'];
+    expect(guard, 'server-controlled caller guard is missing').toBeDefined();
+    expect(guard!.if).toContain("github.event_name == 'workflow_run'");
+    expect(guard!.if).toContain(
+      "github.workflow_ref == 'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'",
+    );
+    expect(permissionMap(guard!.permissions)).toEqual({});
+    expect(policy.jobs.snapshot?.needs).toContain('caller-authentication');
+  });
+
   it('authenticates exact source run and one digest/schema-bound archive before policy execution', () => {
     const dispatcher = producerDispatcher();
     const authenticators = Object.values(dispatcher.jobs).filter(({ steps }) =>

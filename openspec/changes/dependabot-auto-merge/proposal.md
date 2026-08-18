@@ -85,6 +85,10 @@ branch protection с `enforce_admins=true` и bypass не получают.
 слиянию получает `contents: write` и `pull-requests: write`; отдельный publisher получает
 `checks: write`. Ни один из них не получает прав на публикацию или изменение workflow и
 не исполняет содержимое PR. Долгоживущий PAT или GitHub App token этому producer не нужен.
+Это допустимо только при текущей owner-only модели доступа: единственный субъект с
+`push`/`maintain`/`admin` — владелец, который и без Actions может изменить ruleset.
+Перед добавлением другого write-субъекта автоматизация отключается до перевода publisher
+на отдельную GitHub App identity.
 
 ## Capabilities
 

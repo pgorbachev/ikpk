@@ -36,8 +36,25 @@ on:
 permissions: {}
 
 jobs:
+  caller-authentication:
+    name: Authenticate dispatcher caller
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.workflow_ref == 'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Confirm server-controlled caller context
+        env:
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          test "$EVENT_NAME" = workflow_run
+          test "$CALLER_WORKFLOW_REF" = 'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'
+
   snapshot:
     name: Fresh pull-request snapshot
+    needs: caller-authentication
     runs-on: ubuntu-latest
     permissions:
       actions: read

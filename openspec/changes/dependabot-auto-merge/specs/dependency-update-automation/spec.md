@@ -486,6 +486,10 @@ event, conclusion, actor, PR/head association, единственность arti
 schema. Source и dispatcher SHALL быть связаны с exact `run_id` и `run_attempt`; artifact,
 jobs или check identity из разных попыток SHALL NOT смешиваться. Producer SHALL NOT
 исполнять workflow-определение из проверяемой ветки.
+Reusable policy SHALL до любого привилегированного job проверять server-controlled
+identity caller: событие `workflow_run` и exact dispatcher `workflow_ref` из
+`refs/heads/main`. Прямой вызов immutable policy из другого workflow или ref SHALL
+завершаться без публикации check и без изменения PR.
 Обязательный gate и отдельное свидетельство SHALL публиковаться на свежо прочитанный
 текущий head SHA отдельным job с `checks: write`; этот job SHALL NOT иметь
 `contents: write` или `pull-requests: write`. Право `checks: write` SHALL NOT выдаваться
@@ -503,6 +507,13 @@ assessment — `actions: read`, `checks: read`, `contents: read`, `pull-requests
 publisher — только `checks: write`; job пометки/слияния — только `contents: write` и
 `pull-requests: write`; rebase commenter — только `pull-requests: write`. Неуказанные
 permissions SHALL быть `none`.
+
+Использование общей GitHub Actions App identity SHALL иметь явное rollout-предусловие:
+единственным субъектом репозитория с `push`, `maintain` или `admin` остаётся владелец.
+Перед выдачей такого доступа другому субъекту auto-merge SHALL быть отключён. Возврат к
+автоматическому слиянию при наличии иного write-субъекта допускается только с отдельной
+GitHub App identity publisher, недоступной обычным workflow, и required check,
+привязанным к integration id этой App.
 
 Event payload SHALL NOT считаться свежим доказательством marker. Если текущий head или
 marker прочитать не удалось, система SHALL завершаться fail closed: положительный
@@ -551,6 +562,19 @@ marker прочитать не удалось, система SHALL заверш
 - **THEN** это определение не исполняется доверенным producer, а результат без ожидаемых
   external id, dispatcher-caller, authenticated source run и immutable reusable SHA не
   принимается
+
+#### Scenario: Reusable policy вызван в обход dispatcher
+
+- **WHEN** workflow из другой ветки или с другим `workflow_ref` напрямую вызывает тот же
+  immutable reusable policy и передаёт синтетические source inputs
+- **THEN** caller guard не запускает assessment, publisher или marker jobs, check не
+  создаётся и PR не изменяется
+
+#### Scenario: Появился новый write-субъект
+
+- **WHEN** кроме владельца репозитория субъект получает `push`, `maintain` или `admin`
+- **THEN** текущая Actions-App схема больше не удовлетворяет предусловию и auto-merge
+  остаётся отключённым до ввода отдельной publisher GitHub App identity
 
 #### Scenario: Event snapshot устарел
 

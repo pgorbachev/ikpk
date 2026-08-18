@@ -207,10 +207,22 @@ job — `contents: write` и `pull-requests: write`; rebase commenter — тол
 статическим inventory. Check содержит machine external id с типом результата, head SHA и
 SHA reusable policy. Consumer принимает свидетельство только при совпадении всех этих
 полей, ожидаемого GitHub App, доверенного dispatcher-caller и immutable reusable SHA.
+Reusable policy дополнительно сверяет server-controlled `github.event_name` и
+`github.workflow_ref`: вызывать привилегированные jobs может только exact dispatcher из
+`refs/heads/main`, прямой `workflow_call` из другой ветки остаётся без результата.
 Кроме того, он читает authoritative dispatcher jobs, извлекает из server-controlled run
 title source run id и принимает результат лишь когда этот exact source run прошёл все
 проверки связи с тем же PR head, а exact provenance job dispatcher run завершился
 успешно: один лишь копируемый `details_url` доказательством не является.
+
+GitHub Actions App id `15368` общий для workflow одного репозитория и сам по себе не
+отличает доверенный publisher от произвольного same-repository workflow. Для текущего
+репозитория граница замыкается фактической owner-only моделью: API collaborators перед
+активацией обязан показывать только владельца с write-доступом. Владелец уже может менять
+ruleset напрямую, поэтому его workflow не является новым субъектом угрозы. Добавление
+иного `push`/`maintain`/`admin` SHALL сначала отключить auto-merge; повторное включение
+разрешено только после выделения отдельной GitHub App identity для publisher и привязки
+required check к её integration id. Статический inventory workflow эту границу не заменяет.
 
 Перед публикацией отдельный read-only job свежо читает `head.sha` и `auto_merge` через API.
 Снимок из event payload не используется как доказательство текущего состояния. Если

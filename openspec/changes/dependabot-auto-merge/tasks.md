@@ -18,6 +18,10 @@
       последовательность не двигает — механизм из группы 3 обязателен
 - [x] 1.7 Зафиксировать тип владельца репозитория (`User`) как ограничение площадки:
       очередь слияния недоступна и запасным вариантом не является
+- [x] 1.8 Подтвердить owner-only write boundary перед rollout: API collaborators показывает
+      только `pgorbachev` с ролью `admin`; Actions default token read-only. Добавление
+      другого `push`/`maintain`/`admin` требует сначала отключить auto-merge и ввести
+      отдельную publisher GitHub App identity
 
 ## 2. Тесты по спеке (отдельная сессия, до реализации)
 
@@ -138,6 +142,12 @@
       обязан отвергаться
       Evidence: `web/tests/dependabot-auto-merge-security-regressions.test.ts` and
       executable publisher cases on the trusted reusable workflow.
+- [x] 4.7b Добавить server-controlled caller guard в immutable reusable policy: только
+      `workflow_run` и exact `dependabot-auto-merge.yml@refs/heads/main`; все assessment,
+      publisher и marker jobs зависят от guard. Предъявить RED-регрессию прямого вызова
+      policy из другой ветки
+      Evidence: `web/tests/dependabot-auto-merge-workflow-run-producer.test.ts`; before
+      implementation the focused run failed 1/23 at `server-controlled caller guard is missing`.
 - [ ] 4.8 **Негативная проверка ложного свидетельства:** запушить человеческий коммит в
       ветку PR Dependabot при выключенном авто-слиянии (гейт допустимости при этом обязан
       быть красным), затем обновить ветку механизмом. Ожидание: обновление **красное**.
