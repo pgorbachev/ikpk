@@ -144,3 +144,44 @@ export type VerificationJournalEntry = {
   at: string;
   reason: string;
 };
+
+// ── Матрица контуров (release modes) ─────────────────────────────────────────
+//
+// Значения нормативны: спека change `online-payment-flow`
+// (`specs/online-payment/spec.md`, Requirements «Роль сборки объявлена перечислением…»,
+// «Личность контура сообщается несекретным readiness-ответом», «Установленные платёжные
+// контуры нельзя публиковать выключенными или перепутанными») и решения владельца от
+// 2026-08-18. Магазины закреплены: тестовый `1440249`, боевой `409285`.
+
+/** Роль КЛИЕНТСКОЙ сборки. Три значения, а не булев признак «демо». */
+export const PAYMENT_ROLE_ATTR = 'data-payment-role';
+export const PAYMENT_ROLES = ['ci', 'stand', 'prod'] as const;
+export type PaymentRole = (typeof PAYMENT_ROLES)[number];
+
+/** Признак прежней матрицы: удалён решением владельца 2026-08-18 (задачи 5.10a, 6.14). */
+export const RETIRED_DEMO_ATTR = 'data-payment-demo';
+/** Адрес прежней матрицы: относится только к роли `ci` и стенд не представляет. */
+export const RETIRED_STAND_ENDPOINT = 'https://demo-api.ikpk.invalid';
+
+/** Объявляемая БАЗА эндпоинта по роли. Клиент дописывает `/payments` сам. */
+export const PAYMENT_ENDPOINT_BASE: Record<'stand' | 'prod', string> = {
+  stand: 'http://193.124.115.99/api',
+  prod: 'https://api.ikpk.su',
+};
+
+/** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */
+export const PAYMENT_RETURN_BASE_STAND = 'http://193.124.115.99';
+export const PAYMENT_RETURN_BASE_PROD = 'https://ikpk.su';
+
+/** Режим УСТАНОВЛЕННОГО сервиса и закреплённый за ним магазин. */
+export const SERVICE_SHOP_ID: Record<'test' | 'prod', string> = {
+  test: '1440249',
+  prod: '409285',
+};
+
+/** Loopback-адрес инстанции стенда: наружу открыт только путь через обратный прокси. */
+export const STAND_BIND_HOST = '127.0.0.1';
+export const STAND_BIND_PORT = '8787';
+/** Гейт публикации спрашивает readiness изнутри host, не через публичный эндпоинт. */
+export const READYZ_PATH = '/readyz';
+export const READYZ_INTERNAL_URL = `http://${STAND_BIND_HOST}:${STAND_BIND_PORT}${READYZ_PATH}`;
