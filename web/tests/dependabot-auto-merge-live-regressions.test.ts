@@ -74,6 +74,7 @@ interface ShellResult {
   stderr: string;
   output: string;
   calls: string;
+  dir: string;
 }
 
 /**
@@ -109,6 +110,7 @@ exec /usr/bin/shasum -a 256 "$@"
 
   const result = spawnSync('bash', ['-e', scriptPath], {
     encoding: 'utf8',
+    cwd: dir,
     env: {
       ...process.env,
       PATH: `${bin}:${process.env.PATH ?? ''}`,
@@ -124,7 +126,20 @@ exec /usr/bin/shasum -a 256 "$@"
     stderr: result.stderr ?? '',
     output: readFileSync(outputPath, 'utf8'),
     calls: readFileSync(callLogPath, 'utf8'),
+    dir,
   };
+}
+
+function stepNamed(file: string, jobKey: string, stepName: string) {
+  const workflow = workflowNamed(file);
+  const job = workflow.jobs[jobKey];
+  if (job === undefined) throw new Error(`${file}: нет джоба ${jobKey}`);
+  const step = job.steps.find((candidate) => candidate.name === stepName);
+  if (step === undefined) throw new Error(`${file}: в джобе ${jobKey} нет шага ${stepName}`);
+  if (step.run === undefined || step.run.trim() === '') {
+    throw new Error(`${file}: шаг ${stepName} джоба ${jobKey} не содержит run`);
+  }
+  return step;
 }
 
 function outputValue(output: string, name: string): string | undefined {
@@ -255,6 +270,7 @@ function rebaseSignal(overrides: Record<string, unknown> = {}): Record<string, u
 function mergedPull(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     number: PR_NUMBER,
+    state: 'closed',
     head: { sha: HEAD_SHA },
     merged: true,
     merged_at: '2026-08-18T14:07:34Z',
@@ -429,6 +445,26 @@ describe('живая регрессия: продвижение опознаёт
     expect(outputValue(result.output, 'merged')).toBe('false');
   });
 
+  it('отвергает закрытый без слияния PR, если artifact называет другую вершину', () => {
+    const result = runRebaseAuthentication({
+      signalOverrides: { merged: false },
+      pullOverrides: { merged: false, merged_at: null, head: { sha: 'c'.repeat(40) } },
+    });
+
+    expect(result.status, 'связь artifact со свежим head обязательна и для quiet skip').not.toBe(0);
+    expect(outputValue(result.output, 'merged')).toBeUndefined();
+  });
+
+  it('отвергает устаревший closed-signal, если PR уже открыт снова', () => {
+    const result = runRebaseAuthentication({
+      signalOverrides: { merged: false },
+      pullOverrides: { merged: false, merged_at: null, state: 'open' },
+    });
+
+    expect(result.status, 'тихий skip допустим только для всё ещё закрытого PR').not.toBe(0);
+    expect(outputValue(result.output, 'merged')).toBeUndefined();
+  });
+
   it('отвергает свежий снимок с другой вершиной, чем в artifact', () => {
     const result = runRebaseAuthentication({ pullOverrides: { head: { sha: 'c'.repeat(40) } } });
 
@@ -445,6 +481,53 @@ describe('живая регрессия: продвижение опознаёт
 });
 
 describe('живая регрессия: сигнал продвижения выпускает типизированный artifact', () => {
+  function runSignal(merged: 'true' | 'false' | 'invalid' = 'true'): ShellResult {
+    const step = stepNamed(REBASE_SIGNAL_FILE, 'signal', 'Create typed signal without writing');
+    expect(step.env).toEqual({
+      SIGNAL_ACTION: '${{ github.event.action }}',
+      SIGNAL_ACTOR: '${{ github.actor }}',
+      SIGNAL_HEAD_SHA: '${{ github.event.pull_request.head.sha }}',
+      SIGNAL_MERGED: '${{ github.event.pull_request.merged }}',
+      SIGNAL_PR_NUMBER: '${{ github.event.pull_request.number }}',
+      SOURCE_RUN_ATTEMPT: '${{ github.run_attempt }}',
+      SOURCE_RUN_ID: '${{ github.run_id }}',
+    });
+    return runStep(step.run ?? '', {
+      SIGNAL_ACTION: 'closed',
+      SIGNAL_ACTOR: ACTOR,
+      SIGNAL_HEAD_SHA: HEAD_SHA,
+      SIGNAL_MERGED: merged,
+      SIGNAL_PR_NUMBER: String(PR_NUMBER),
+      SOURCE_RUN_ATTEMPT: String(RUN_ATTEMPT),
+      SOURCE_RUN_ID: String(RUN_ID),
+    }, {});
+  }
+
+  for (const merged of ['true', 'false'] as const) {
+    it(`исполняет producer shell и записывает exact typed JSON для merged=${merged}`, () => {
+      const result = runSignal(merged);
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(readFileSync(join(result.dir, REBASE_SIGNAL_FILENAME), 'utf8'))).toEqual({
+        schema: REBASE_SIGNAL_SCHEMA,
+        sourceRunId: RUN_ID,
+        sourceRunAttempt: RUN_ATTEMPT,
+        action: 'closed',
+        actor: ACTOR,
+        prNumber: PR_NUMBER,
+        headSha: HEAD_SHA,
+        merged: merged === 'true',
+      });
+    });
+  }
+
+  it('отвергает нетипизированный merged до выгрузки artifact', () => {
+    const result = runSignal('invalid');
+
+    expect(result.status).not.toBe(0);
+    expect(() => readFileSync(join(result.dir, REBASE_SIGNAL_FILENAME), 'utf8')).toThrow();
+  });
+
   it('остаётся read-only и выгружает ровно один типизированный artifact', () => {
     const signal = workflowNamed(REBASE_SIGNAL_FILE);
     const steps = Object.values(signal.jobs).flatMap((job) => job.steps);
@@ -463,5 +546,14 @@ describe('живая регрессия: сигнал продвижения в�
     const body = steps.map((step) => step.run ?? '').join('\n');
     expect(body, 'сигнал обязан записывать схему типизированного artifact').toContain(REBASE_SIGNAL_SCHEMA);
     expect(body, 'сигнал обязан записывать признак слияния').toMatch(/merged/);
+  });
+
+  it('запускает write-capable policy только после успешной аутентификации merged=true', () => {
+    const policy = workflowNamed(REBASE_DISPATCH_FILE).jobs.policy;
+
+    expect(policy?.if).toBe(
+      "needs.authenticate.result == 'success' && needs.authenticate.outputs.merged == 'true'",
+    );
+    expect(policy?.permissions).toEqual({ 'pull-requests': 'write' });
   });
 });
