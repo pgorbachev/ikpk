@@ -82,15 +82,25 @@ jobs:
 
       - name: Generate runtime audit report
         run: |
-          npm audit --omit=dev --json > audit-report.json || true
+          # Код возврата npm audit — это НАХОДКИ, его глотаем осознанно (джоб report-only
+          # через continue-on-error). Но сбой самого измерения — сеть, npm, битый JSON —
+          # глотать нельзя: пустой отчёт с зелёным джобом читается как «advisory нет».
+          set -o pipefail
+          npm audit --omit=dev --json > audit-report.json || audit_status=$?
+          node -e "const v=require('./audit-report.json').metadata.vulnerabilities; if(!v) process.exit(1)" \
+            || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
+          echo "npm audit exit=${audit_status:-0} (ненулевой код здесь означает найденные advisory)"
 
       - name: Upload runtime audit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
         with:
           name: cms-runtime-audit-report
           path: cms/audit-report.json
+          if-no-files-found: warn
 
       - name: Visibility note
+        if: always()
         run: |
           # Ни версию, ни состав advisory не пишем строкой: захардкоженное устаревает молча
           # и потом читается как факт (было "Strapi 5.40.0" при 5.51.2, и утверждение
