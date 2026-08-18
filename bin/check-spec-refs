@@ -73,7 +73,7 @@ const WRITE_DEBT = process.argv.includes('--write-debt');
 const WRITE_ABSENT = process.argv.includes('--write-absent');
 
 const SRC_EXT = /\.(ts|tsx|mjs|cjs|js|astro|json|ya?ml|csv|css|sh|md)$/;
-const REF = /`([A-Za-z0-9_\-./[\]]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?`(?:[^\S\n]*,[^\S\n]*`([^`]+)`)?/g;
+const REF = /`([A-Za-z0-9_\-./[\]]+\.[A-Za-z0-9]+)(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?`(?:[^\S\n]*,[^\S\n]*`([^`]+)`)?/g;
 
 const DEBT_HEADER = `# Поимённый долг неизмеримых ссылок: каждая строка — ссылка «путь:строка» БЕЗ фрагмента
 # в кавычках, то есть не проверяемая по содержимому. Формат: <артефакт> :: <путь>:<строки>.
@@ -209,14 +209,14 @@ for (const md of files) {
   const text = readFileSync(md, 'utf8');
 
   for (const m of text.matchAll(REF)) {
-    const [, path, lineNo, lineEnd, snippet] = m;
+    const [, path, lineSpec, snippet] = m;
     if (!SRC_EXT.test(path)) continue;
     if (path.startsWith('/')) continue;
     if (path.includes('node_modules/')) continue;
 
     // Короткое имя без номера строки — имя файла в прозе («`pagefind-entry.json` — манифест»),
     // а не ссылка на место в дереве. Ссылкой оно становится, когда указана строка.
-    if (!path.includes('/') && !lineNo) continue;
+    if (!path.includes('/') && !lineSpec) continue;
 
     const r = resolveRef(path, md);
     if (r.missing) {
@@ -243,20 +243,38 @@ for (const md of files) {
       continue;
     }
 
-    if (!lineNo) {
+    if (!lineSpec) {
       pathOnly += 1;
       continue;
     }
 
     const lines = readFileSync(r.hit, 'utf8').split('\n');
-    const from = Number(lineNo);
-    const to = lineEnd ? Number(lineEnd) : from;
-    const where = lineEnd ? `${from}-${to}` : `${from}`;
-
-    if (to > lines.length) {
-      defects.push(`${rel}: ${path}:${where} — в файле ${lines.length} строк`);
+    // Ссылка бывает перечнем: `test.yml:47,61,99`. Прежняя регулярка такую форму не
+    // распознавала ВОВСЕ — то есть шесть номеров строк молча не проверялись, и это ровно
+    // «не перечислять частные случаи, ловить общий признак» на самом гейте.
+    const ranges = lineSpec.split(',').map((piece) => {
+      const [a, b] = piece.split('-');
+      return { from: Number(a), to: Number(b ?? a) };
+    });
+    const where = lineSpec;
+    const outside = ranges.find((x) => x.to > lines.length);
+    if (outside) {
+      defects.push(
+        `${rel}: ${path}:${where} — в файле ${lines.length} строк, а указана ${outside.to}-я`,
+      );
       continue;
     }
+    if (ranges.length > 1) {
+      // Фрагмент к перечню не отнести: непонятно, к какой из строк он относится. Такая ссылка
+      // проверена по существованию и попаданию номеров в файл, но не по содержимому.
+      unmeasurable.set(
+        `${rel} :: ${path}:${where}`,
+        `${rel}: ${path}:${where} — перечень строк, фрагмент к нему не отнести; разбейте на ` +
+          'отдельные ссылки с фрагментами',
+      );
+      continue;
+    }
+    const { from, to } = ranges[0];
     if (!snippet) {
       unmeasurable.set(
         `${rel} :: ${path}:${where}`,

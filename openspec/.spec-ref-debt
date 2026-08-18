@@ -22,6 +22,7 @@ openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/comp
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/data.ts:17-22
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/html-cleaner.ts:316-387
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/[institute].astro:61-72
+openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/preview/[variant].astro:31,70
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Programs.astro:26
@@ -50,6 +51,7 @@ openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:3
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: web/src/pages/oplata.astro:18-31
 openspec/changes/online-payment-flow/tasks.md :: web/src/lib/html-cleaner.ts:601
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
+openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
 openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: web/src/lib/data.ts:264-267
