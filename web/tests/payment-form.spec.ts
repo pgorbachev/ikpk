@@ -264,19 +264,61 @@ test.describe('3.10a-2 удержание переживает перезагр�
     expect(new Set(ids).size).toBeGreaterThan(1);
   });
 
-  test('not_found снимает удержание; demo снимает без предупреждения; >14 суток снимает', async ({ page }) => {
-    await mockApi(page, (req) => {
-      if (req.method === 'POST') {
-        return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
-      }
-      return { status: 404, body: { status: 'not_found' } };
-    });
+  // Разделено на три проверки негативной проверкой 6.7. Прежний единственный тест обещал
+  // ИМЕНЕМ три вещи — «not_found снимает удержание; demo снимает без предупреждения;
+  // >14 суток снимает», — а в теле был только `not_found`, причём без обращения к
+  // хранилищу: он смотрел на доступность формы и отсутствие предупреждения. Мутация,
+  // снимавшая обработку `demo` во ВСЕХ трёх местах кода, оставляла его зелёным. Правило
+  // «судить по имени покрасневшего теста» опирается на честность имён, поэтому имя,
+  // обещающее непроверенное, — дефект того же рода, что декоративный гейт.
+  const holdsIn = (page: Page) =>
+    page.evaluate(() => JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as unknown[]);
+
+  test('not_found снимает удержание', async ({ page }) => {
+    await mockApi(page, (req) =>
+      req.method === 'POST'
+        ? { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } }
+        : { status: 404, body: { status: 'not_found' } },
+    );
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click();
     await gotoOplata(page);
     await expect(page.locator(FORM)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
+    expect(await holdsIn(page), 'удержание осталось после not_found').toEqual([]);
+  });
+
+  test('demo снимает удержание и не показывает предупреждения', async ({ page }) => {
+    await mockApi(page, (req) =>
+      req.method === 'POST'
+        ? { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } }
+        : { status: 200, body: { status: 'demo' } },
+    );
+    await openForm(page);
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await gotoOplata(page);
+    await expect(page.locator(STATE('demo'))).toBeVisible();
+    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
+    expect(await holdsIn(page), 'удержание осталось после ответа demo').toEqual([]);
+  });
+
+  test('удержание старше 14 суток снимается', async ({ page }) => {
+    await mockApi(page, () => ({ status: 200, body: { status: 'pending' } }));
+    await gotoOplata(page);
+    // Заведомо просроченное удержание кладётся напрямую: воспроизводить 14 суток ходом
+    // времени нельзя, а срок — свойство записи, не хода часов.
+    await page.evaluate(() => {
+      const old = Date.now() - 15 * 24 * 60 * 60 * 1000;
+      localStorage.setItem(
+        'ikpk-payment-holds',
+        JSON.stringify([{ requestId: '11111111-1111-4111-8111-111111111111', createdAt: old }]),
+      );
+    });
+    await gotoOplata(page);
+    await expect(page.locator(`[${PAYMENT_ENTRY_ATTR}]`).first()).toBeEnabled();
+    expect(await holdsIn(page), 'просроченное удержание не снято').toEqual([]);
   });
 });
 

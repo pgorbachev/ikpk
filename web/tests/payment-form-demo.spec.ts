@@ -79,5 +79,50 @@ test.describe('3.10a-2b демо не создаёт удержания', () => 
     await expect(page.locator(STATE('demo'))).toBeVisible();
     await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
     await expect(page.locator(`${FORM} [type="submit"]`)).toBeVisible();
+
+    // Предмет проверки — ХРАНИЛИЩЕ, а не наблюдаемые следствия. Найдено негативной
+    // проверкой 6.7(3): после снятия обеих защит демо-режима (исключение в `upsertHold`
+    // и снятие удержания в демо-ветви ответа) тест оставался зелёным, потому что
+    // состояние `demo`, доступность формы и отсутствие предупреждения верны и при
+    // ЗАПИСАННОМ удержании. То есть имя теста обещало то, чего он не проверял.
+    const holds = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as unknown[],
+    );
+    expect(holds, `демо-сборка записала удержания: ${JSON.stringify(holds)}`).toEqual([]);
+  });
+});
+
+// Найдено негативной проверкой 6.7(3): требование «демо-сборка удержания НЕ создаёт»
+// защищено двумя механизмами подряд — исключение в `upsertHold` и снятие удержания в
+// демо-ветви ответа. По концу потока они неразличимы: «не записал» и «записал и сразу
+// снял» дают одно и то же пустое хранилище, поэтому снятие ОДНОГО из двух механизмов
+// не ловилось ничем. Требование при этом говорит «не создаёт», а не «не оставляет».
+//
+// Проверка смотрит в хранилище, пока запрос ещё в полёте: ответ задержан обработчиком
+// маршрута, и в этот момент удержание либо есть, либо нет.
+test.describe('3.10a-2b(2) демо не создаёт удержания даже во время отправки', () => {
+  test('пока запрос в полёте, постоянное хранилище пусто', async ({ page }) => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'created_demo' }),
+      });
+    });
+    await openForm(page);
+    await fillValid(page);
+    const inFlight = page.waitForRequest((r) => r.method() === 'POST' && /\/payments/.test(r.url()));
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await inFlight;
+    const during = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as unknown[],
+    );
+    release?.();
+    expect(during, `во время отправки демо записала удержания: ${JSON.stringify(during)}`).toEqual([]);
   });
 });
