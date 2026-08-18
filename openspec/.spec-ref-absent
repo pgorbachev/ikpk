@@ -1,15 +1,27 @@
-# Объявленные ссылки в пустоту: артефакт OpenSpec, на который ссылаются осознанно, зная, что
-# файла нет. Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора «так и должно
-# быть», поэтому она объявляется здесь, а не выводится гейтом из текста рядом со ссылкой.
+# Объявленные ссылки в пустоту: путь, которого в репозитории нет, и это названо намеренно.
+# Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора, поэтому она объявляется
+# здесь, а не выводится гейтом из вида пути: любой такой признак («это артефакт OpenSpec», «это
+# файл кода») либо угадывает, либо опирается на существование предмета — а именно предмета и нет.
 #
-# Наш случай — каталог `openspec/changes/payment-request-flow/`, удалённый решением владельца
-# тем же PR, что и слитый `online-payment-flow`: цитаты на него оставлены как указание на
-# происхождение уже принятых решений.
+# Три законных повода попасть сюда, и они разного веса:
+#   1. файл, который change ещё СОЗДАСТ (`statyi/page/[page].astro` в article-list-pagination);
+#   2. осознанная цитата на УДАЛЁННОЕ — каталог `openspec/changes/payment-request-flow/` снесён
+#      решением владельца тем же PR, что слит `online-payment-flow`, а ссылки на него оставлены
+#      как указание на происхождение принятых решений;
+#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН — у нас это
+#      `docs/security-audit-2026-08-08.md`: он лежит в рабочем дереве автора и отсутствует в
+#      репозитории, поэтому для любого другого читателя ссылка ведёт в пустоту. Это долг, а не
+#      намерение: правильный исход — закоммитить документ и убрать строки отсюда.
 #
-# Без этого файла у гейта было бы два плохих выхода: либо считать ненайденный артефакт нормой
-# (тогда переименование change тихо ломает все ссылки на него), либо краснеть на осознанной
-# цитате. Список сверяется поимённо и в обе стороны: `./bin/check-spec-refs --write-absent`.
+# Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
+# объявленная разрешилась или исчезла из текста — тоже отказ с требованием обновить файл
+# (`./bin/check-spec-refs --write-absent`). Без обратной сверки объявление со временем начинает
+# разрешать уже сломанную ссылку.
+openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro
+openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro
+openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md
 openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md
 openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md
 openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md
 openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md
+openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md
