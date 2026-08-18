@@ -275,10 +275,10 @@ describe('rich-content baseline: пересечения', () => {
     expect(autoMerge).toMatch(/deny-only/);
     expect(autoMerge).toMatch(/security registry|security dependency registry/i);
     const gates = readFileSync(
-      join(REPO_ROOT, 'openspec', 'changes', 'dependency-update-gates', 'proposal.md'),
+      join(REPO_ROOT, 'openspec', 'specs', 'dependency-update-automation', 'spec.md'),
       'utf-8',
     );
-    expect(gates.length).toBeGreaterThan(0);
+    expect(gates).toContain('### Requirement: Новые инварианты входят в условие публикации и в условие слияния');
     const registry = loadFixture<{ runtime: { packages: string[] }; oracle: { packages: string[] } }>(
       'security-dependency-registry.json',
     );
