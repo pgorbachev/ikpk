@@ -245,22 +245,32 @@ function trustedPolicyShas(): string[] {
 
 async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Promise<boolean> {
   const { owner, repo } = repository();
-  const result = await githubApi<{ check_runs?: Array<{
+  type EvidenceCheckRun = {
     name?: string;
     conclusion?: string | null;
     status?: string;
     head_sha?: string;
     external_id?: string;
+    details_url?: string | null;
     app?: { slug?: string; id?: number };
-  }> }>(`/repos/${owner}/${repo}/commits/${sha}/check-runs?filter=all&per_page=100`);
-  if (!Array.isArray(result.check_runs)) throw new Error('check-runs response is malformed');
-  const candidates = result.check_runs.filter((run) =>
+  };
+  const checkRuns: EvidenceCheckRun[] = [];
+  for (let page = 1; ; page += 1) {
+    const result = await githubApi<{ check_runs?: EvidenceCheckRun[] }>(
+      `/repos/${owner}/${repo}/commits/${sha}/check-runs?filter=all` +
+      `&check_name=${encodeURIComponent(EVIDENCE_CHECK_NAME)}&app_id=15368&per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(result.check_runs)) throw new Error('check-runs response is malformed');
+    checkRuns.push(...result.check_runs);
+    if (result.check_runs.length < 100) break;
+  }
+  const candidates = checkRuns.filter((run) =>
     run.status === 'completed' && run.conclusion === 'success' &&
     run.name === EVIDENCE_CHECK_NAME &&
     run.app?.slug === 'github-actions');
   const trusted = new Set(trustedPolicyShas());
   for (const candidate of candidates) {
-    const detailsUrl = (candidate as typeof candidate & { details_url?: unknown }).details_url;
+    const detailsUrl = candidate.details_url;
     if (typeof detailsUrl !== 'string') continue;
     const runId = /\/actions\/runs\/(\d+)(?:\/job\/\d+)?(?:\?|$)/.exec(detailsUrl)?.[1];
     if (!runId) continue;
@@ -282,7 +292,7 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
     const jobsResult = await githubApi<{ jobs?: Array<{
       name?: string;
       conclusion?: 'success' | 'failure' | 'cancelled' | null;
-    }> }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=all&per_page=100`);
+    }> }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`);
     if (!Array.isArray(run.pull_requests) || !Array.isArray(jobsResult.jobs)) {
       throw new Error('authoritative workflow run response is malformed');
     }

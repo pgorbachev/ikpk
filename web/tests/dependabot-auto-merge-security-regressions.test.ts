@@ -10,6 +10,10 @@ const HEAD_SHA = '1111111111111111111111111111111111111111';
 const POLICY_SHA = '2222222222222222222222222222222222222222';
 const ELIGIBILITY_NAME = 'Dependabot auto-merge / Eligibility gate';
 const PROVENANCE_JOB = 'Provenance evidence';
+const POLICY_SCRIPT_SOURCE = readFileSync(
+  new URL('../scripts/check-dependabot-auto-merge.ts', import.meta.url),
+  'utf8',
+);
 
 const WORKFLOW_SOURCE = readFileSync(
   process.env.DEPENDABOT_CHECK_PUBLISHER_WORKFLOW
@@ -110,6 +114,16 @@ describe('authoritative provenance run behind a check details_url', () => {
         { name: 'A different successful job', conclusion: 'success' },
       ],
     })).toBe(false);
+  });
+
+  it('reads only the latest workflow attempt when authenticating the provenance job', () => {
+    expect(POLICY_SCRIPT_SOURCE).toMatch(/actions\/runs\/\$\{runId\}\/jobs\?filter=latest/);
+  });
+
+  it('filters and paginates historical provenance checks instead of trusting page one', () => {
+    expect(POLICY_SCRIPT_SOURCE).toContain('check_name=${encodeURIComponent(EVIDENCE_CHECK_NAME)}');
+    expect(POLICY_SCRIPT_SOURCE).toContain('app_id=15368');
+    expect(POLICY_SCRIPT_SOURCE).toMatch(/page=\$\{page\}/);
   });
 });
 
