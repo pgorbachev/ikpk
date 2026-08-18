@@ -2,6 +2,12 @@ name: Dependabot auto-merge policy
 
 on:
   workflow_call:
+    inputs:
+      update-mechanism-login:
+        description: Explicit trusted updater actor; empty keeps the API update fallback disabled
+        required: false
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -86,6 +92,7 @@ jobs:
           DEPENDABOT_METADATA_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
           GITHUB_TOKEN: ${{ github.token }}
           TRUSTED_POLICY_SHA: ${{ job.workflow_sha }}
+          UPDATE_MECHANISM_LOGIN: ${{ inputs.update-mechanism-login }}
         run: node --experimental-strip-types web/scripts/check-dependabot-auto-merge.ts
 
   provenance-evidence:

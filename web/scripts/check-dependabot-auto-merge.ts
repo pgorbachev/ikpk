@@ -45,6 +45,23 @@ interface SecurityRegistryFile {
   oracle?: { packages?: unknown; lockfileNodes?: unknown };
 }
 
+interface CompareFile {
+  filename?: string;
+  previous_filename?: string;
+  status?: string;
+  additions?: number;
+  deletions?: number;
+  changes?: number;
+  patch?: string;
+  sha?: string;
+}
+
+interface CompareResult {
+  status?: string;
+  merge_base_commit?: { sha?: string };
+  files?: CompareFile[];
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
@@ -341,8 +358,86 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
   return false;
 }
 
-function actorKind(login: string): 'dependabot' | 'human' {
-  return login === 'dependabot[bot]' ? 'dependabot' : 'human';
+async function compareCommits(base: string, head: string): Promise<CompareResult> {
+  const { owner, repo } = repository();
+  return await githubApi<CompareResult>(
+    `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+  );
+}
+
+function compareFingerprint(result: CompareResult): string | null {
+  if (!Array.isArray(result.files) || result.files.length >= 300) return null;
+  const files = result.files.map((file) => ({
+    filename: file.filename ?? null,
+    previousFilename: file.previous_filename ?? null,
+    status: file.status ?? null,
+    additions: file.additions ?? null,
+    deletions: file.deletions ?? null,
+    changes: file.changes ?? null,
+    patch: file.patch ?? null,
+    sha: file.sha ?? null,
+  })).sort((left, right) => String(left.filename).localeCompare(String(right.filename)));
+  return JSON.stringify(files);
+}
+
+async function updateMechanismTopology(
+  headSha: string,
+  baseSha: string,
+  pullRequestNumber: number,
+): Promise<{
+  topology: { parentShas: string[]; secondParentInBase: boolean; introducesOnlyBaseChanges: boolean };
+  parentEvidence: StoredResult[];
+  reason: string;
+}> {
+  const { owner, repo } = repository();
+  const commit = await githubApi<{ parents?: Array<{ sha?: string }> }>(
+    `/repos/${owner}/${repo}/git/commits/${encodeURIComponent(headSha)}`,
+  );
+  const parentShas = Array.isArray(commit.parents)
+    ? commit.parents.map(({ sha }) => sha ?? '')
+    : [];
+  const topology = { parentShas, secondParentInBase: false, introducesOnlyBaseChanges: false };
+  if (parentShas.length !== 2 || parentShas.some((sha) => !sha)) {
+    return { topology, parentEvidence: [], reason: 'update topology requires exactly two parents' };
+  }
+
+  const [firstParent, secondParent] = parentShas;
+  if (!await hasPositiveEvidence(firstParent, pullRequestNumber)) {
+    return { topology, parentEvidence: [], reason: 'first parent has no trusted positive provenance evidence' };
+  }
+  const parentEvidence: StoredResult[] = [{
+    sha: firstParent,
+    kind: 'provenance',
+    producer: EVIDENCE_PRODUCER,
+    conclusion: 'positive',
+  }];
+
+  const ancestry = await compareCommits(secondParent, baseSha);
+  topology.secondParentInBase = ancestry.merge_base_commit?.sha === secondParent &&
+    (ancestry.status === 'ahead' || ancestry.status === 'identical');
+  if (!topology.secondParentInBase) {
+    return { topology, parentEvidence, reason: 'second parent is outside current base ancestry' };
+  }
+
+  const parentComparison = await compareCommits(firstParent, secondParent);
+  const forkPoint = parentComparison.merge_base_commit?.sha;
+  if (!forkPoint) {
+    return { topology, parentEvidence, reason: 'update topology has no base merge point' };
+  }
+  const [mergeChanges, baseChanges] = await Promise.all([
+    compareCommits(firstParent, headSha),
+    compareCommits(forkPoint, secondParent),
+  ]);
+  const mergeFingerprint = compareFingerprint(mergeChanges);
+  const baseFingerprint = compareFingerprint(baseChanges);
+  topology.introducesOnlyBaseChanges = mergeFingerprint !== null && mergeFingerprint === baseFingerprint;
+  return {
+    topology,
+    parentEvidence,
+    reason: topology.introducesOnlyBaseChanges
+      ? 'trusted update topology contains only base changes'
+      : 'update topology diff contains changes outside the base branch',
+  };
 }
 
 function output(name: string, value: string | boolean): void {
@@ -374,30 +469,49 @@ async function main(): Promise<void> {
   const signature = await signatureFor(current.head.sha);
   const priorEvidence = introducesHead ? false : await hasPositiveEvidence(current.head.sha, current.number);
   const actorLogin = requiredEnv('GITHUB_ACTOR');
-  const storedResults: StoredResult[] = priorEvidence ? [{
+  let storedResults: StoredResult[] = priorEvidence ? [{
     sha: current.head.sha,
     kind: 'provenance',
     producer: EVIDENCE_PRODUCER,
     conclusion: 'positive',
   }] : [];
-
-  const directOrigin = introducesHead && current.user.login === 'dependabot[bot]' &&
-    signature.valid && signature.wasSignedByGitHub && actorKind(actorLogin) === 'dependabot';
-  const originPositive = directOrigin || priorEvidence;
+  const updateMechanismLogin = process.env.UPDATE_MECHANISM_LOGIN ?? '';
+  const directDependabot = introducesHead && actorLogin === 'dependabot[bot]';
+  const trustedUpdater = introducesHead && updateMechanismLogin.length > 0 && actorLogin === updateMechanismLogin;
+  let topology: {
+    parentShas: string[];
+    secondParentInBase: boolean;
+    introducesOnlyBaseChanges: boolean;
+  } | undefined;
+  let topologyReason = '';
+  if (trustedUpdater) {
+    const result = await updateMechanismTopology(current.head.sha, current.base.sha, current.number);
+    topology = result.topology;
+    storedResults = result.parentEvidence;
+    topologyReason = result.reason;
+  }
   const evaluation = evaluateHead({
     sha: current.head.sha,
     autoMergeEnabled: current.auto_merge !== null,
     classificationEligible: classification.eligible,
     prAuthor: current.user.login,
     signature,
-    actor: originPositive ? { login: 'dependabot[bot]', kind: 'dependabot' } : { login: actorLogin, kind: 'human' },
+    actor: directDependabot
+      ? { login: actorLogin, kind: 'dependabot' }
+      : trustedUpdater
+        ? { login: actorLogin, kind: 'update-mechanism' }
+        : priorEvidence
+          ? { login: 'dependabot[bot]', kind: 'dependabot' }
+          : { login: actorLogin, kind: 'human' },
+    topology,
     storedResults,
     expectedEvidenceProducer: EVIDENCE_PRODUCER,
   });
+  const originPositive = evaluation.evidence.conclusion === 'positive';
   const enable = current.user.login === 'dependabot[bot]' && classification.eligible &&
     originPositive && current.auto_merge === null;
   const disable = current.auto_merge !== null && (!classification.eligible || !originPositive);
-  const reason = `${classification.reason}; ${evaluation.gate.reason}`;
+  const reason = [classification.reason, topologyReason, evaluation.gate.reason].filter(Boolean).join('; ');
 
   output('eligible', classification.eligible);
   output('origin-positive', originPositive);
