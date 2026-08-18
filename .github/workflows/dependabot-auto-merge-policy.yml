@@ -3,6 +3,30 @@ name: Dependabot auto-merge policy
 on:
   workflow_call:
     inputs:
+      metadata-json-base64:
+        required: true
+        type: string
+      source-action:
+        required: true
+        type: string
+      source-actor:
+        required: true
+        type: string
+      source-head-sha:
+        required: true
+        type: string
+      source-pr-author:
+        required: true
+        type: string
+      source-pr-number:
+        required: true
+        type: string
+      source-run-attempt:
+        required: true
+        type: string
+      source-run-id:
+        required: true
+        type: string
       update-mechanism-login:
         description: Explicit trusted updater actor; empty keeps the API update fallback disabled
         required: false
@@ -12,10 +36,28 @@ on:
 permissions: {}
 
 jobs:
+  caller-authentication:
+    name: Authenticate dispatcher caller
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.workflow_ref == 'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Confirm server-controlled caller context
+        env:
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          test "$EVENT_NAME" = workflow_run
+          test "$CALLER_WORKFLOW_REF" = 'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge.yml@refs/heads/main'
+
   snapshot:
     name: Fresh pull-request snapshot
+    needs: caller-authentication
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       pull-requests: read
     outputs:
       pr-number: ${{ steps.current.outputs.pr-number }}
@@ -26,9 +68,9 @@ jobs:
       - name: Read current head and auto-merge marker
         id: current
         env:
-          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_HEAD_SHA: ${{ inputs.source-head-sha }}
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ inputs.source-pr-number }}
         run: |
           current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           head_sha="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$current")"
@@ -63,14 +105,6 @@ jobs:
       head-sha: ${{ steps.policy.outputs.head-sha }}
       reason: ${{ steps.policy.outputs.reason }}
     steps:
-      - name: Read verified Dependabot metadata
-        if: github.event.pull_request.user.login == 'dependabot[bot]'
-        id: metadata
-        continue-on-error: true
-        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.3.0
-        with:
-          github-token: ${{ github.token }}
-
       # The policy source comes from trusted main, never from the pull-request head.
       # This job is read-only; the separate write job below has no checkout or setup.
       - name: Checkout trusted policy source
@@ -89,8 +123,12 @@ jobs:
       - name: Evaluate current pull-request head
         id: policy
         env:
-          DEPENDABOT_METADATA_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          DEPENDABOT_METADATA_JSON_BASE64: ${{ inputs.metadata-json-base64 }}
           GITHUB_TOKEN: ${{ github.token }}
+          POLICY_EVENT_ACTION: ${{ inputs.source-action }}
+          POLICY_EVENT_ACTOR: ${{ inputs.source-actor }}
+          POLICY_EVENT_HEAD_SHA: ${{ inputs.source-head-sha }}
+          POLICY_PR_NUMBER: ${{ inputs.source-pr-number }}
           TRUSTED_POLICY_SHA: ${{ job.workflow_sha }}
           UPDATE_MECHANISM_LOGIN: ${{ inputs.update-mechanism-login }}
         run: node --experimental-strip-types web/scripts/check-dependabot-auto-merge.ts
@@ -98,7 +136,7 @@ jobs:
   provenance-evidence:
     name: Provenance evidence
     needs: assess
-    if: always() && (github.event.action == 'opened' || github.event.action == 'synchronize')
+    if: always() && (inputs.source-action == 'opened' || inputs.source-action == 'synchronize')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -142,17 +180,19 @@ jobs:
       - name: Publish current-head eligibility and provenance results
         env:
           ASSESSMENT_RESULT: ${{ needs.assess.result }}
-          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_ACTION: ${{ inputs.source-action }}
           FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
           GATE_RESULT: ${{ needs.eligibility-gate.result }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.snapshot.outputs.head-sha }}
           POLICY_SHA: ${{ job.workflow_sha }}
           PROVENANCE_RESULT: ${{ needs.provenance-evidence.result }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source-run-attempt }}
+          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
         run: |
           publish_check() {
             local kind="$1" name="$2" conclusion="$3"
-            local external_id="${kind}:${HEAD_SHA}:${POLICY_SHA}"
+            local external_id="${kind}:${HEAD_SHA}:${POLICY_SHA}:${SOURCE_RUN_ID}:${SOURCE_RUN_ATTEMPT}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
             local run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             local encoded_name page response count check_runs existing_id
             encoded_name="$(jq -nr --arg value "$name" '$value | @uri')"

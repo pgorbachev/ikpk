@@ -163,14 +163,42 @@ SHALL NOT выдавать разрешение.
 Альтернатива «checkout с последующей осторожностью» отвергнута: осторожность здесь не
 проверяется ничем, а цена ошибки — исполнение чужого кода с правом записи.
 
-**Producer запускается через `pull_request_target`, а не через `pull_request`.** Обычный
-`pull_request` исполняет workflow из merge commit проверяемой ветки и потому позволяет
-ветке подменить job с тем же именем. Кроме того, события Dependabot получают в таком
-контексте read-only token. `pull_request_target` берёт определение workflow из default
-branch; в нём запрещены checkout/download/исполнение содержимого PR. Reusable policy
-вызывается по полному SHA, а checkout собственного кода использует
-`repository: ${{ job.workflow_repository }}` и `ref: ${{ job.workflow_sha }}` — moving
-`main` не является доверенной привязкой.
+**Producer двухступенчатый: read-only `pull_request_target` signal, затем privileged
+`workflow_run`.** GitHub принудительно оставляет `GITHUB_TOKEN` read-only и не выдаёт
+secrets для `pull_request_target`, если PR создан Dependabot; явный блок `permissions`
+этого не отменяет. Поэтому signal workflow из default branch только фиксирует
+server-provided action, actor, PR number/head и вывод pinned `dependabot/fetch-metadata`
+в одном строго типизированном JSON artifact. Он не делает checkout/download кода или
+artifact из PR и не исполняет PR-содержимое.
+
+Только signal с action `opened` или `synchronize` связывает actor с появлением нового
+head и может создать либо заменить provenance. `reopened`, `auto_merge_enabled` и
+`auto_merge_disabled` переоценивают policy для того же SHA по уже сохранённому
+authenticated evidence; actor этих событий не считается создателем вершины и не может
+перезаписать provenance.
+
+Dispatcher слушает завершение только этого exact signal workflow через `workflow_run`.
+До выдачи любого результата он через API проверяет source run id, repository, event,
+path, conclusion, actor и связь с тем же PR/head; требует ровно один ожидаемый artifact,
+проверяет его digest, состав архива, schema и совпадение полей с authoritative source run.
+Source `run_id` и `run_attempt` входят в имя и schema artifact. Dispatcher также включает
+собственные `run_id`/`run_attempt` и source `run_id`/`run_attempt` в machine identity
+опубликованных checks; consumer читает jobs exact attempt и отвергает смешение попыток.
+Лишь затем он вызывает reusable policy по полному SHA. Checkout собственного policy-кода
+использует `repository: ${{ job.workflow_repository }}` и
+`ref: ${{ job.workflow_sha }}` — moving `main` не является доверенной привязкой.
+
+Прямая передача PAT/App token в signal отвергнута: secrets в этом Dependabot-контексте
+недоступны, а долгоживущий credential добавил бы ротацию и более широкую границу доверия.
+Schedule без signal отвергнут: он теряет authoritative actor события, необходимого для
+проверки происхождения.
+
+Permission matrix разделён по jobs, а не объединён на уровне workflow: signal получает
+только `contents: read` и `pull-requests: read`; authenticator/snapshot — `actions: read`
+и `pull-requests: read`; read-only assessment — `actions: read`, `checks: read`,
+`contents: read`, `pull-requests: read`; publisher — только `checks: write`; marker/merge
+job — `contents: write` и `pull-requests: write`; rebase commenter — только
+`pull-requests: write`. Неуказанные scopes равны `none`.
 
 Нативный check такого запуска относится к base-контексту, поэтому producer публикует два
 отдельных check run на **свежо прочитанный текущий head SHA**: обязательный gate и
@@ -178,10 +206,23 @@ branch; в нём запрещены checkout/download/исполнение со
 правом `checks: write`; право существует только у этого producer и контролируется
 статическим inventory. Check содержит machine external id с типом результата, head SHA и
 SHA reusable policy. Consumer принимает свидетельство только при совпадении всех этих
-полей, ожидаемого GitHub App, доверенного target-caller и immutable reusable SHA. Кроме
-того, он читает authoritative workflow-run jobs и принимает результат лишь когда run
-привязан платформой к тому же PR head, а exact provenance job этого run завершился
+полей, ожидаемого GitHub App, доверенного dispatcher-caller и immutable reusable SHA.
+Reusable policy дополнительно сверяет server-controlled `github.event_name` и
+`github.workflow_ref`: вызывать привилегированные jobs может только exact dispatcher из
+`refs/heads/main`, прямой `workflow_call` из другой ветки остаётся без результата.
+Кроме того, он читает authoritative dispatcher jobs, извлекает из server-controlled run
+title source run id и принимает результат лишь когда этот exact source run прошёл все
+проверки связи с тем же PR head, а exact provenance job dispatcher run завершился
 успешно: один лишь копируемый `details_url` доказательством не является.
+
+GitHub Actions App id `15368` общий для workflow одного репозитория и сам по себе не
+отличает доверенный publisher от произвольного same-repository workflow. Для текущего
+репозитория граница замыкается фактической owner-only моделью: API collaborators перед
+активацией обязан показывать только владельца с write-доступом. Владелец уже может менять
+ruleset напрямую, поэтому его workflow не является новым субъектом угрозы. Добавление
+иного `push`/`maintain`/`admin` SHALL сначала отключить auto-merge; повторное включение
+разрешено только после выделения отдельной GitHub App identity для publisher и привязки
+required check к её integration id. Статический inventory workflow эту границу не заменяет.
 
 Перед публикацией отдельный read-only job свежо читает `head.sha` и `auto_merge` через API.
 Снимок из event payload не используется как доказательство текущего состояния. Если

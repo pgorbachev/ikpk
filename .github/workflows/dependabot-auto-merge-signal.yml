@@ -1,0 +1,60 @@
+name: Dependabot auto-merge signal
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, auto_merge_enabled, auto_merge_disabled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  signal:
+    name: Record trusted event metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read verified Dependabot metadata
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        id: metadata
+        continue-on-error: true
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.3.0
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Create typed signal
+        env:
+          SIGNAL_ACTION: ${{ github.event.action }}
+          SIGNAL_ACTOR: ${{ github.actor }}
+          SIGNAL_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SIGNAL_METADATA_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          SIGNAL_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          SIGNAL_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          metadata=null
+          if [ -n "$SIGNAL_METADATA_JSON" ]; then
+            metadata="$(jq -ce 'if type == "array" then . else error("metadata must be an array") end' <<<"$SIGNAL_METADATA_JSON")"
+          fi
+          jq -cn \
+            --arg schema 'dependabot-auto-merge-signal/v1' \
+            --arg action "$SIGNAL_ACTION" \
+            --arg actor "$SIGNAL_ACTOR" \
+            --arg headSha "$SIGNAL_HEAD_SHA" \
+            --arg prAuthor "$SIGNAL_PR_AUTHOR" \
+            --argjson metadata "$metadata" \
+            --argjson prNumber "$SIGNAL_PR_NUMBER" \
+            --argjson sourceRunAttempt "$SOURCE_RUN_ATTEMPT" \
+            --argjson sourceRunId "$SOURCE_RUN_ID" \
+            '{schema:$schema, sourceRunId:$sourceRunId, sourceRunAttempt:$sourceRunAttempt,
+              action:$action, actor:$actor, prNumber:$prNumber, headSha:$headSha,
+              prAuthor:$prAuthor, metadata:$metadata}' \
+            > dependabot-auto-merge-signal.json
+
+      - name: Upload typed signal
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dependabot-auto-merge-signal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dependabot-auto-merge-signal.json
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,22 @@
+name: Dependabot rebase signal
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  signal:
+    name: Record merged pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate server event without writing
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          test "$PR_NUMBER" -eq "$PR_NUMBER"
+          test "${#HEAD_SHA}" -eq 40

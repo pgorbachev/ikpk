@@ -443,7 +443,8 @@ find .claude .codex -name '*.md' -exec perl -pi -e \
 
 **Не входят в гейт и публикацию не блокируют:** `Lint and Typecheck`, `Lighthouse CI`,
 `Security`, `Nightly full checks`, `Published main head monitor`,
-`Dependabot auto-merge policy`, `Dependabot rebase policy`. Их падение видно на PR и в
+`Dependabot auto-merge`, `Dependabot auto-merge policy`, `Dependabot auto-merge signal`,
+`Dependabot rebase`, `Dependabot rebase policy`, `Dependabot rebase signal`. Их падение видно на PR и в
 ленте прогонов, но выкладку оно не останавливает. `Published main head monitor` не
 разрешает публикацию, а отдельно сигнализирует, если вершина `main` не опубликована за 30 минут.
 Причина техническая: событие `workflow_run` подписывается на завершение workflow и не
