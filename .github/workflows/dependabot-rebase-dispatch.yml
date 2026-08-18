@@ -53,4 +53,4 @@ jobs:
     if: needs.authenticate.outputs.merged == 'true'
     permissions:
       pull-requests: write
-    uses: "pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml@0000000000000000000000000000000000000000" # engine v2
+    uses: "pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml@1de4d5bacb55e8f2e15da3bea9f8bcf972c1b087" # engine v2

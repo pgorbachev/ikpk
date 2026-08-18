@@ -129,7 +129,7 @@
       с гейтом допустимости, вычисляемый на каждой вершине независимо от состояния пометки
       и положительный только при фактически пройденных проверках подписи и действующего
       лица. В обязательные проверки его **не вносить** — иначе он запретит ручной путь
-- [ ] 4.7a Публиковать gate и свидетельство на свежо прочитанный head SHA из доверенного
+- [x] 4.7a Публиковать gate и свидетельство на свежо прочитанный head SHA из доверенного
       двухступенчатого producer. Проверить полный immutable SHA reusable policy, machine
       external id, ожидаемый GitHub App, authenticated source signal run и отсутствие
       второго workflow с `checks: write`; same-name job из ветки PR обязан отвергаться.
@@ -176,13 +176,13 @@
 
 ## 6. Авто-слияние
 
-- [ ] 6.1 Реализовать двухступенчатый producer без checkout кода PR и без установки его
+- [x] 6.1 Реализовать двухступенчатый producer без checkout кода PR и без установки его
       зависимостей: read-only `pull_request_target` signal из default branch создаёт один
       типизированный metadata artifact; privileged `workflow_run` dispatcher проверяет
       exact source run/path/actor/PR/head/artifact и вызывает reusable workflow по полному
       SHA; policy source checkout'ится по `job.workflow_repository` +
       `job.workflow_sha`, а не по moving `main`
-- [ ] 6.2 Реализовать и проверить exact permission matrix: signal — `contents: read` и
+- [x] 6.2 Реализовать и проверить exact permission matrix: signal — `contents: read` и
       `pull-requests: read`; authenticator/snapshot — `actions: read` и
       `pull-requests: read`; assessment — `actions/checks/contents/pull-requests: read`;
       publisher — только `checks: write`; marker/merge — только `contents: write` и
