@@ -60,8 +60,10 @@ function runScenario(scenario: Scenario) {
   writeFileSync(git, `#!/usr/bin/env bash
 set -euo pipefail
 printf 'GIT %s\\n' "$*" >>"$MOCK_GITHUB_CALL_LOG"
-if [ "$1" = fetch ]; then exit 0; fi
-if [ "$1" = merge-tree ]; then printf '%s\\n' "$MOCK_EXPECTED_MERGE_TREE"; exit 0; fi
+if [[ " $* " == *' init --bare '* ]]; then exit 0; fi
+if [[ " $* " == *' remote add '* ]] || [[ " $* " == *' config '* ]]; then exit 0; fi
+if [[ " $* " == *' fetch '* ]]; then exit 0; fi
+if [[ " $* " == *' merge-tree '* ]]; then printf '%s\\n' "$MOCK_EXPECTED_MERGE_TREE"; exit 0; fi
 exit 2
 `);
   spawnSync('chmod', ['+x', git]);
@@ -158,9 +160,10 @@ describe('production CLI adapter: update-branch synchronize topology', () => {
     expect(result.calls).toMatch(/GET \/repos\/acme\/ikpk\/(?:git\/)?commits\/merge-head/);
     expect(result.calls).toContain('GET /repos/acme/ikpk/commits/parent-head/check-runs');
     expect(result.calls).toContain('GET /repos/acme/ikpk/compare/base-parent...base-head');
-    expect(result.calls).toMatch(/GIT fetch .*parent-head.*base-parent/);
+    expect(result.calls).toMatch(/GIT init --bare \/.*dependabot-merge-tree-/);
+    expect(result.calls).toMatch(/GIT .*fetch .*parent-head.*base-parent/);
     expect(result.calls).not.toContain('--depth=1');
-    expect(result.calls).toContain('GIT merge-tree --write-tree parent-head base-parent');
+    expect(result.calls).toMatch(/GIT -C .* merge-tree --write-tree parent-head base-parent/);
   });
 
   it('accepts a clean merge when the PR and base changed different regions of the same file', () => {
@@ -184,7 +187,7 @@ describe('production CLI adapter: update-branch synchronize topology', () => {
         ];
       },
       reason: /only base|unexpected|foreign|diff|topolog/i,
-      requiredCall: /GIT merge-tree --write-tree parent-head base-parent/,
+      requiredCall: /GIT -C .* merge-tree --write-tree parent-head base-parent/,
     },
     {
       label: 'missing positive evidence for the first parent',

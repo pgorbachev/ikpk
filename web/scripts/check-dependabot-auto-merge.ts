@@ -1,5 +1,7 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   classifyPullRequest,
   evaluateHead,
@@ -375,17 +377,27 @@ function expectedMergeTree(firstParent: string, secondParent: string): string | 
     GIT_TERMINAL_PROMPT: '0',
   };
   const remote = `https://github.com/${owner}/${repo}.git`;
-  const fetched = spawnSync('git', [
-    'fetch', '--no-tags', '--no-recurse-submodules', remote, firstParent, secondParent,
-  ], { encoding: 'utf8', env });
-  if (fetched.status !== 0) return null;
-  const merged = spawnSync('git', ['merge-tree', '--write-tree', firstParent, secondParent], {
-    encoding: 'utf8',
-    env,
-  });
-  if (merged.status !== 0) return null;
-  const tree = merged.stdout.trim().split(/\r?\n/, 1)[0];
-  return /^[0-9a-f]{40}$/i.test(tree) ? tree : null;
+  const repositoryDir = mkdtempSync(join(tmpdir(), 'dependabot-merge-tree-'));
+  try {
+    const run = (args: string[]) => spawnSync('git', args, { encoding: 'utf8', env });
+    if (run(['init', '--bare', repositoryDir]).status !== 0) return null;
+    if (run(['-C', repositoryDir, 'remote', 'add', 'origin', remote]).status !== 0) return null;
+    if (run(['-C', repositoryDir, 'config', 'remote.origin.promisor', 'true']).status !== 0) return null;
+    if (run(['-C', repositoryDir, 'config', 'remote.origin.partialclonefilter', 'blob:none']).status !== 0) {
+      return null;
+    }
+    const fetched = run([
+      '-C', repositoryDir, 'fetch', '--filter=blob:none', '--no-tags', '--no-recurse-submodules',
+      'origin', firstParent, secondParent,
+    ]);
+    if (fetched.status !== 0) return null;
+    const merged = run(['-C', repositoryDir, 'merge-tree', '--write-tree', firstParent, secondParent]);
+    if (merged.status !== 0) return null;
+    const tree = merged.stdout.trim().split(/\r?\n/, 1)[0];
+    return /^[0-9a-f]{40}$/i.test(tree) ? tree : null;
+  } finally {
+    rmSync(repositoryDir, { recursive: true, force: true });
+  }
 }
 
 async function updateMechanismTopology(
