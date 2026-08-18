@@ -29,6 +29,10 @@ function options(name: string): string[] {
   return values;
 }
 
+function flag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
 function readReport(path: string, label: string): string {
   try {
     return readFileSync(path, 'utf8');
@@ -160,6 +164,7 @@ async function main(): Promise<void> {
       packageName: option('--package') as 'web' | 'cms' | 'scripts',
       threshold: integerOption('--threshold'),
       changedFiles: options('--changed-file'),
+      autoMergeEligible: flag('--auto-merge-eligible'),
       head: {
         exitCode: integerOption('--head-exit', 0),
         reportJson: readReport(option('--head-report'), 'head'),
@@ -196,6 +201,7 @@ async function main(): Promise<void> {
       runner,
       threshold: integerOption('--threshold'),
       changedFiles: options('--changed-file'),
+      autoMergeEligible: flag('--auto-merge-eligible'),
       headReport: combineReports(runner, options('--head-report'), 'head'),
       baseReport: baseReports.length > 0 ? combineReports(runner, baseReports, 'base') : undefined,
     }));

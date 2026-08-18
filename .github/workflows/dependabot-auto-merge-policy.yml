@@ -1,0 +1,240 @@
+name: Dependabot auto-merge policy
+
+on:
+  workflow_call:
+    inputs:
+      update-mechanism-login:
+        description: Explicit trusted updater actor; empty keeps the API update fallback disabled
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  snapshot:
+    name: Fresh pull-request snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.current.outputs.pr-number }}
+      head-sha: ${{ steps.current.outputs.head-sha }}
+      head-matches-event: ${{ steps.current.outputs.head-matches-event }}
+      auto-merge-enabled: ${{ steps.current.outputs.auto-merge-enabled }}
+    steps:
+      - name: Read current head and auto-merge marker
+        id: current
+        env:
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          head_sha="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$current")"
+          auto_merge_enabled="$(jq -er 'if has("auto_merge") then (.auto_merge != null) else error("missing auto_merge") end' <<<"$current")"
+          head_matches_event=false
+          if [ "$head_sha" = "$EVENT_HEAD_SHA" ]; then head_matches_event=true; fi
+          {
+            echo "pr-number=$PR_NUMBER"
+            echo "head-sha=$head_sha"
+            echo "head-matches-event=$head_matches_event"
+            echo "auto-merge-enabled=$auto_merge_enabled"
+          } >>"$GITHUB_OUTPUT"
+
+  assess:
+    name: Assessment
+    needs: snapshot
+    if: needs.snapshot.result == 'success' && needs.snapshot.outputs.head-matches-event == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.policy.outputs.eligible }}
+      origin-positive: ${{ steps.policy.outputs.origin-positive }}
+      gate-ok: ${{ steps.policy.outputs.gate-ok }}
+      record-evidence: ${{ steps.policy.outputs.record-evidence }}
+      enable-auto-merge: ${{ steps.policy.outputs.enable-auto-merge }}
+      disable-auto-merge: ${{ steps.policy.outputs.disable-auto-merge }}
+      pr-number: ${{ steps.policy.outputs.pr-number }}
+      head-sha: ${{ steps.policy.outputs.head-sha }}
+      reason: ${{ steps.policy.outputs.reason }}
+    steps:
+      - name: Read verified Dependabot metadata
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        id: metadata
+        continue-on-error: true
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.3.0
+        with:
+          github-token: ${{ github.token }}
+
+      # The policy source comes from trusted main, never from the pull-request head.
+      # This job is read-only; the separate write job below has no checkout or setup.
+      - name: Checkout trusted policy source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Evaluate current pull-request head
+        id: policy
+        env:
+          DEPENDABOT_METADATA_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          GITHUB_TOKEN: ${{ github.token }}
+          TRUSTED_POLICY_SHA: ${{ job.workflow_sha }}
+          UPDATE_MECHANISM_LOGIN: ${{ inputs.update-mechanism-login }}
+        run: node --experimental-strip-types web/scripts/check-dependabot-auto-merge.ts
+
+  provenance-evidence:
+    name: Provenance evidence
+    needs: assess
+    if: always() && (github.event.action == 'opened' || github.event.action == 'synchronize')
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Record independently evaluated provenance
+        env:
+          ASSESS_RESULT: ${{ needs.assess.result }}
+          ORIGIN_POSITIVE: ${{ needs.assess.outputs.origin-positive }}
+        run: test "$ASSESS_RESULT" = success && test "$ORIGIN_POSITIVE" = true
+
+  eligibility-gate:
+    name: Eligibility gate
+    needs: [snapshot, assess]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Enforce fail-closed automatic-merge policy
+        env:
+          ASSESS_RESULT: ${{ needs.assess.result }}
+          FRESH_SNAPSHOT_RESULT: ${{ needs.snapshot.result }}
+          FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
+          GATE_OK: ${{ needs.assess.outputs.gate-ok }}
+          REASON: ${{ needs.assess.outputs.reason }}
+        run: |
+          if [ "$FRESH_SNAPSHOT_RESULT" != success ] || [ "$FRESH_HEAD_MATCHES_CURRENT" != true ]; then
+            exit 1
+          fi
+          if [ "$ASSESS_RESULT" != success ] || [ "$GATE_OK" != true ]; then
+            echo "$REASON"
+            exit 1
+          fi
+
+  publish-checks:
+    name: Publish head-bound policy checks
+    needs: [snapshot, assess, provenance-evidence, eligibility-gate]
+    if: always() && needs.snapshot.result == 'success' && needs.snapshot.outputs.head-matches-event == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - name: Publish current-head eligibility and provenance results
+        env:
+          ASSESSMENT_RESULT: ${{ needs.assess.result }}
+          EVENT_ACTION: ${{ github.event.action }}
+          FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
+          GATE_RESULT: ${{ needs.eligibility-gate.result }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.snapshot.outputs.head-sha }}
+          POLICY_SHA: ${{ job.workflow_sha }}
+          PROVENANCE_RESULT: ${{ needs.provenance-evidence.result }}
+        run: |
+          publish_check() {
+            local kind="$1" name="$2" conclusion="$3"
+            local external_id="${kind}:${HEAD_SHA}:${POLICY_SHA}"
+            local run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            local encoded_name page response count check_runs existing_id
+            encoded_name="$(jq -nr --arg value "$name" '$value | @uri')"
+            page=1
+            check_runs='[]'
+            while true; do
+              response="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&check_name=${encoded_name}&app_id=15368&per_page=100&page=${page}")"
+              count="$(jq -er '.check_runs | if type == "array" then length else error("malformed check runs") end' <<<"$response")"
+              check_runs="$(jq -cn --argjson accumulated "$check_runs" --argjson response "$response" '$accumulated + $response.check_runs')"
+              if [ "$count" -lt 100 ]; then break; fi
+              page=$((page + 1))
+            done
+            existing_id="$(jq -r --arg external_id "$external_id" --arg name "$name" --arg head_sha "$HEAD_SHA" \
+                '[.check_runs[] | select(.external_id == $external_id and .name == $name and .head_sha == $head_sha and .app.id == 15368)] | sort_by(.id) | last | .id // empty' \
+                <<<"{\"check_runs\":$check_runs}")"
+            if [ -n "$existing_id" ]; then
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/check-runs/$existing_id" \
+                -f name="$name" \
+                -f status=completed \
+                -f conclusion="$conclusion" \
+                -f external_id="$external_id" \
+                -f details_url="$run_url" \
+                -f 'output[title]=Dependabot auto-merge policy' \
+                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA"
+            else
+              gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+                -f name="$name" \
+                -f head_sha="$HEAD_SHA" \
+                -f status=completed \
+                -f conclusion="$conclusion" \
+                -f external_id="$external_id" \
+                -f details_url="$run_url" \
+                -f 'output[title]=Dependabot auto-merge policy' \
+                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA"
+            fi
+          }
+
+          gate_conclusion=failure
+          if [ "$GATE_RESULT" = success ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
+            gate_conclusion=success
+          fi
+          publish_check eligibility "Dependabot auto-merge / Eligibility gate" "$gate_conclusion"
+
+          if [ "$EVENT_ACTION" = opened ] || [ "$EVENT_ACTION" = synchronize ]; then
+            provenance_conclusion=failure
+            if [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_RESULT" = success ]; then
+              provenance_conclusion=success
+            fi
+            publish_check provenance "Dependabot auto-merge / Provenance evidence" "$provenance_conclusion"
+          fi
+  enable-auto-merge:
+    name: Enable native auto-merge
+    needs: [assess, provenance-evidence, eligibility-gate]
+    if: >-
+      always() &&
+      needs.assess.result == 'success' &&
+      needs.eligibility-gate.result == 'success' &&
+      (needs.provenance-evidence.result == 'success' || needs.provenance-evidence.result == 'skipped') &&
+      needs.assess.outputs.enable-auto-merge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Mark the exact assessed head for merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.assess.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.assess.outputs.pr-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$HEAD_SHA"
+
+  disable-auto-merge:
+    name: Disable stale auto-merge marker
+    needs: assess
+    if: needs.assess.result == 'success' && needs.assess.outputs.disable-auto-merge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove marker from the exact invalid head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.assess.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.assess.outputs.pr-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto --match-head-commit "$HEAD_SHA"
