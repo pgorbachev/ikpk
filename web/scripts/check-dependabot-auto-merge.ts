@@ -26,6 +26,13 @@ interface PullRequestEvent {
   };
 }
 
+interface PolicyEvent {
+  action: string;
+  actor: string;
+  pullRequestNumber: number;
+  headSha: string;
+}
+
 interface ApiPullRequest {
   number: number;
   auto_merge: object | null;
@@ -57,6 +64,37 @@ function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function positiveInteger(name: string, value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${name} must be a positive integer`);
+  return Number(value);
+}
+
+function policyEvent(): PolicyEvent {
+  const action = process.env.POLICY_EVENT_ACTION;
+  const actor = process.env.POLICY_EVENT_ACTOR;
+  const number = process.env.POLICY_PR_NUMBER;
+  const headSha = process.env.POLICY_EVENT_HEAD_SHA;
+  if (action || actor || number || headSha) {
+    if (!action || !actor || !number || !headSha) throw new Error('policy event inputs are incomplete');
+    if (!/^[0-9a-f]{40}$/i.test(headSha)) throw new Error('POLICY_EVENT_HEAD_SHA is malformed');
+    return {
+      action,
+      actor,
+      pullRequestNumber: positiveInteger('POLICY_PR_NUMBER', number),
+      headSha,
+    };
+  }
+
+  const event = JSON.parse(readFileSync(requiredEnv('GITHUB_EVENT_PATH'), 'utf8')) as PullRequestEvent;
+  if (!event.pull_request) throw new Error('pull_request payload is required');
+  return {
+    action: event.action ?? '',
+    actor: requiredEnv('GITHUB_ACTOR'),
+    pullRequestNumber: event.pull_request.number,
+    headSha: event.pull_request.head.sha,
+  };
 }
 
 async function githubApi<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -120,7 +158,10 @@ async function allPullRequestFiles(number: number): Promise<string[]> {
 }
 
 function metadataFromEnvironment(): MetadataDependency[] | null {
-  const source = process.env.DEPENDABOT_METADATA_JSON;
+  const encoded = process.env.DEPENDABOT_METADATA_JSON_BASE64;
+  const source = encoded
+    ? Buffer.from(encoded, 'base64').toString('utf8')
+    : process.env.DEPENDABOT_METADATA_JSON;
   if (!source) return null;
   try {
     const parsed = JSON.parse(source) as unknown;
@@ -283,12 +324,27 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
     const runId = /\/actions\/runs\/(\d+)(?:\/job\/\d+)?(?:\?|$)/.exec(detailsUrl)?.[1];
     if (!runId) continue;
     const run = await githubApi<{
+      id?: number;
+      run_attempt?: number;
       event?: string;
-      head_sha?: string;
       path?: string;
-      pull_requests?: Array<{ number?: number; head?: { sha?: string } }>;
+      display_title?: string;
       referenced_workflows?: Array<{ path?: string; sha?: string }>;
     }>(`/repos/${owner}/${repo}/actions/runs/${runId}`);
+    const sourceIdentity = /^Dependabot auto-merge source=(\d+) attempt=(\d+)$/.exec(run.display_title ?? '');
+    if (!sourceIdentity) continue;
+    const sourceRunId = Number(sourceIdentity[1]);
+    const sourceRunAttempt = Number(sourceIdentity[2]);
+    const runAttempt = run.run_attempt ?? -1;
+    const sourceRun = await githubApi<{
+      id?: number;
+      run_attempt?: number;
+      event?: string;
+      path?: string;
+      conclusion?: string | null;
+      actor?: { login?: string };
+      pull_requests?: Array<{ number?: number; head?: { sha?: string } }>;
+    }>(`/repos/${owner}/${repo}/actions/runs/${sourceRunId}`);
     const trustedReference = run.referenced_workflows?.find((workflow) =>
       workflow.path?.startsWith(`${owner}/${repo}/.github/workflows/dependabot-auto-merge-policy.yml@`) &&
       typeof workflow.sha === 'string');
@@ -296,14 +352,17 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
     const callerWorkflowPath = run.path?.split('@')[0] ?? '';
     const reusablePolicyPath = trustedReference?.path?.split('@')[0]
       .replace(`${owner}/${repo}/`, '') ?? '';
-    const externalId = `provenance:${sha}:${trustedReference?.sha ?? ''}`;
+    const externalId = [
+      'provenance', sha, trustedReference?.sha ?? '', sourceRunId, sourceRunAttempt,
+      runId, runAttempt,
+    ].join(':');
     const jobs: Array<{
       name?: string;
       conclusion?: 'success' | 'failure' | 'cancelled' | null;
     }> = [];
     for (let page = 1; ; page += 1) {
       const jobsResult = await githubApi<{ jobs?: typeof jobs }>(
-        `/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100&page=${page}`,
+        `/repos/${owner}/${repo}/actions/runs/${runId}/attempts/${runAttempt}/jobs?per_page=100&page=${page}`,
       );
       if (!Array.isArray(jobsResult.jobs)) {
         throw new Error('authoritative workflow jobs response is malformed');
@@ -311,25 +370,45 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
       jobs.push(...jobsResult.jobs);
       if (jobsResult.jobs.length < 100) break;
     }
-    if (!Array.isArray(run.pull_requests)) {
-      throw new Error('authoritative workflow run response is malformed');
+    if (!Array.isArray(sourceRun.pull_requests)) {
+      throw new Error('authoritative source workflow run response is malformed');
     }
     const authoritative = isAuthoritativeEvidenceRun({
       targetPullRequestNumber: pullRequestNumber,
       targetHeadSha: sha,
       provenanceJobName: 'Policy / Provenance evidence',
-      run: {
-        pullRequests: run.pull_requests.map((pullRequest) => ({
+      expectedDispatcherWorkflowPath: '.github/workflows/dependabot-auto-merge.yml',
+      expectedSignalWorkflowPath: '.github/workflows/dependabot-auto-merge-signal.yml',
+      expectedSignalActor: 'dependabot[bot]',
+      dispatcherRun: {
+        id: Number(runId),
+        runAttempt,
+        event: run.event ?? '',
+        path: callerWorkflowPath,
+        sourceRunId,
+        sourceRunAttempt,
+      },
+      sourceRun: {
+        id: sourceRun.id ?? -1,
+        runAttempt: sourceRun.run_attempt ?? -1,
+        event: sourceRun.event ?? '',
+        path: sourceRun.path?.split('@')[0] ?? '',
+        conclusion: sourceRun.conclusion ?? null,
+        actorLogin: sourceRun.actor?.login ?? '',
+        headSha: sourceRun.pull_requests.find(({ number }) => number === pullRequestNumber)?.head?.sha ?? '',
+        pullRequests: sourceRun.pull_requests.map((pullRequest) => ({
           number: pullRequest.number ?? -1,
           headSha: pullRequest.head?.sha ?? '',
         })),
       },
+      jobsRunId: Number(runId),
+      jobsRunAttempt: runAttempt,
       jobs: jobs.map((job) => ({
         name: job.name ?? '',
         conclusion: job.conclusion ?? null,
       })),
     });
-    if (run.event === 'pull_request_target' && trustedReference?.sha && authoritative &&
+    if (run.event === 'workflow_run' && trustedReference?.sha && authoritative &&
         isTrustedPositiveEvidence({
           sha: candidate.head_sha ?? '',
           name: candidate.name ?? '',
@@ -347,7 +426,7 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
           checkName: EVIDENCE_CHECK_NAME,
           appSlug: 'github-actions',
           appId: 15368,
-          eventName: 'pull_request_target',
+          eventName: 'workflow_run',
           externalId,
           callerWorkflowPath: expectedCaller,
           reusablePolicyPath: '.github/workflows/dependabot-auto-merge-policy.yml',
@@ -457,12 +536,11 @@ function output(name: string, value: string | boolean): void {
 }
 
 async function main(): Promise<void> {
-  const event = JSON.parse(readFileSync(requiredEnv('GITHUB_EVENT_PATH'), 'utf8')) as PullRequestEvent;
-  if (!event.pull_request) throw new Error('pull_request payload is required');
+  const event = policyEvent();
   const { owner, repo } = repository();
-  const current = await githubApi<ApiPullRequest>(`/repos/${owner}/${repo}/pulls/${event.pull_request.number}`);
-  if (current.head.sha !== event.pull_request.head.sha) {
-    throw new Error(`event head ${event.pull_request.head.sha} is stale; current head is ${current.head.sha}`);
+  const current = await githubApi<ApiPullRequest>(`/repos/${owner}/${repo}/pulls/${event.pullRequestNumber}`);
+  if (current.head.sha !== event.headSha) {
+    throw new Error(`event head ${event.headSha} is stale; current head is ${current.head.sha}`);
   }
 
   const files = await allPullRequestFiles(current.number);
@@ -475,11 +553,11 @@ async function main(): Promise<void> {
     changedLockfileNodes: registry?.changedLockfileNodes,
   });
 
-  const action = event.action ?? '';
+  const action = event.action;
   const introducesHead = action === 'opened' || action === 'synchronize';
   const signature = await signatureFor(current.head.sha);
   const priorEvidence = introducesHead ? false : await hasPositiveEvidence(current.head.sha, current.number);
-  const actorLogin = requiredEnv('GITHUB_ACTOR');
+  const actorLogin = event.actor;
   let storedResults: StoredResult[] = priorEvidence ? [{
     sha: current.head.sha,
     kind: 'provenance',

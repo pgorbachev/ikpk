@@ -63,11 +63,22 @@ export function evaluateHead(input: HeadEvaluationInput): HeadEvaluation {
 }
 
 export function isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput): boolean {
-  const targetIsBound = input.run.pullRequests.some(({ number, headSha }) =>
-    number === input.targetPullRequestNumber && headSha === input.targetHeadSha);
-  const exactJobSucceeded = input.jobs.some(({ name, conclusion }) =>
-    name === input.provenanceJobName && conclusion === 'success');
-  return targetIsBound && exactJobSucceeded;
+  const dispatcherIsBound = input.dispatcherRun.event === 'workflow_run' &&
+    input.dispatcherRun.path === input.expectedDispatcherWorkflowPath &&
+    input.dispatcherRun.sourceRunId === input.sourceRun.id &&
+    input.dispatcherRun.sourceRunAttempt === input.sourceRun.runAttempt &&
+    input.jobsRunId === input.dispatcherRun.id &&
+    input.jobsRunAttempt === input.dispatcherRun.runAttempt;
+  const sourceIsBound = input.sourceRun.event === 'pull_request_target' &&
+    input.sourceRun.path === input.expectedSignalWorkflowPath &&
+    input.sourceRun.conclusion === 'success' &&
+    input.sourceRun.actorLogin === input.expectedSignalActor &&
+    input.sourceRun.headSha === input.targetHeadSha &&
+    input.sourceRun.pullRequests.filter(({ number, headSha }) =>
+      number === input.targetPullRequestNumber && headSha === input.targetHeadSha).length === 1;
+  const provenanceJobs = input.jobs.filter(({ name }) => name === input.provenanceJobName);
+  return dispatcherIsBound && sourceIsBound && provenanceJobs.length === 1 &&
+    provenanceJobs[0].conclusion === 'success';
 }
 
 export function evaluateMergeReadiness(input: MergeReadinessInput): Decision {

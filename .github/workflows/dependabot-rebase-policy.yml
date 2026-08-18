@@ -8,7 +8,6 @@ permissions: {}
 jobs:
   request-rebase:
     name: Request Dependabot rebases
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

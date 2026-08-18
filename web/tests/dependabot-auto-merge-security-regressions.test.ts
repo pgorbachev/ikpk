@@ -11,7 +11,9 @@ const POLICY_SHA = '2222222222222222222222222222222222222222';
 const ELIGIBILITY_NAME = 'Dependabot auto-merge / Eligibility gate';
 const PROVENANCE_JOB = 'Provenance evidence';
 const POLICY_SCRIPT_SOURCE = readFileSync(
-  new URL('../scripts/check-dependabot-auto-merge.ts', import.meta.url),
+  process.env.DEPENDABOT_PROVENANCE_CONSUMER_SOURCE
+    ? new URL(process.env.DEPENDABOT_PROVENANCE_CONSUMER_SOURCE, import.meta.url)
+    : new URL('../scripts/check-dependabot-auto-merge.ts', import.meta.url),
   'utf8',
 );
 
@@ -76,11 +78,14 @@ fi
         GH_LOG: log,
         GH_TOKEN: 'test-token',
         GITHUB_REPOSITORY: 'pgorbachev/ikpk',
+        GITHUB_RUN_ATTEMPT: '2',
         GITHUB_RUN_ID: '1234',
         GITHUB_SERVER_URL: 'https://github.com',
         HEAD_SHA,
         POLICY_SHA,
         PROVENANCE_RESULT: 'skipped',
+        SOURCE_RUN_ATTEMPT: '3',
+        SOURCE_RUN_ID: '7001',
       },
     });
     const calls = readFileSync(log, 'utf8').trim().split('\n')
@@ -97,21 +102,68 @@ describe('authoritative provenance run behind a check details_url', () => {
     targetPullRequestNumber: 135,
     targetHeadSha: HEAD_SHA,
     provenanceJobName: PROVENANCE_JOB,
-    run: { pullRequests: [{ number: 135, headSha: HEAD_SHA }] },
+    expectedDispatcherWorkflowPath: '.github/workflows/dependabot-auto-merge.yml',
+    expectedSignalWorkflowPath: '.github/workflows/dependabot-auto-merge-signal.yml',
+    expectedSignalActor: 'dependabot[bot]',
+    dispatcherRun: {
+      id: 8001,
+      runAttempt: 2,
+      event: 'workflow_run',
+      path: '.github/workflows/dependabot-auto-merge.yml',
+      sourceRunId: 7001,
+      sourceRunAttempt: 3,
+    },
+    sourceRun: {
+      id: 7001,
+      runAttempt: 3,
+      event: 'pull_request_target',
+      path: '.github/workflows/dependabot-auto-merge-signal.yml',
+      conclusion: 'success',
+      actorLogin: 'dependabot[bot]',
+      headSha: HEAD_SHA,
+      pullRequests: [{ number: 135, headSha: HEAD_SHA }],
+    },
+    jobsRunId: 8001,
+    jobsRunAttempt: 2,
     jobs: [{ name: PROVENANCE_JOB, conclusion: 'success' as const }],
   };
 
-  it('accepts a run only when its authoritative PR head and exact provenance job match (control)', async () => {
+  it('accepts only a dispatcher bound to its authenticated source signal and exact provenance job (control)', async () => {
     const { isAuthoritativeEvidenceRun } = await loadDependabotAutoMerge();
     expect(isAuthoritativeEvidenceRun(matching)).toBe(true);
   });
 
-  it('rejects a borrowed producer URL whose authoritative run belongs to another PR head', async () => {
+  it('rejects a dispatcher whose recorded source id points at another authenticated run', async () => {
     const { isAuthoritativeEvidenceRun } = await loadDependabotAutoMerge();
     expect(isAuthoritativeEvidenceRun({
       ...matching,
-      run: { pullRequests: [{ number: 135, headSha: '3333333333333333333333333333333333333333' }] },
+      dispatcherRun: { ...matching.dispatcherRun, sourceRunId: 7002 },
     })).toBe(false);
+  });
+
+  it.each([
+    ['source artifact attempt', {
+      dispatcherRun: { ...matching.dispatcherRun, sourceRunAttempt: matching.sourceRun.runAttempt + 1 },
+    }],
+    ['dispatcher jobs run id', { jobsRunId: matching.dispatcherRun.id + 1 }],
+    ['dispatcher jobs attempt', { jobsRunAttempt: matching.dispatcherRun.runAttempt + 1 }],
+  ])('rejects cross-attempt mixing of %s', async (_label, mutation) => {
+    const { isAuthoritativeEvidenceRun } = await loadDependabotAutoMerge();
+    expect(isAuthoritativeEvidenceRun({ ...matching, ...mutation })).toBe(false);
+  });
+
+  it.each([
+    ['dispatcher event', { dispatcherRun: { ...matching.dispatcherRun, event: 'pull_request_target' } }],
+    ['dispatcher path', { dispatcherRun: { ...matching.dispatcherRun, path: '.github/workflows/attacker.yml' } }],
+    ['source event', { sourceRun: { ...matching.sourceRun, event: 'pull_request' } }],
+    ['source path', { sourceRun: { ...matching.sourceRun, path: '.github/workflows/attacker.yml' } }],
+    ['source conclusion', { sourceRun: { ...matching.sourceRun, conclusion: 'failure' } }],
+    ['source actor', { sourceRun: { ...matching.sourceRun, actorLogin: 'maintainer' } }],
+    ['source head', { sourceRun: { ...matching.sourceRun, headSha: '3'.repeat(40) } }],
+    ['source PR association', { sourceRun: { ...matching.sourceRun, pullRequests: [{ number: 136, headSha: HEAD_SHA }] } }],
+  ])('rejects an independently mutated %s', async (_label, mutation) => {
+    const { isAuthoritativeEvidenceRun } = await loadDependabotAutoMerge();
+    expect(isAuthoritativeEvidenceRun({ ...matching, ...mutation })).toBe(false);
   });
 
   it('rejects a borrowed producer URL when the exact provenance job did not succeed', async () => {
@@ -125,9 +177,11 @@ describe('authoritative provenance run behind a check details_url', () => {
     })).toBe(false);
   });
 
-  it('reads only the latest workflow attempt when authenticating the provenance job', () => {
-    expect(POLICY_SCRIPT_SOURCE).toMatch(/actions\/runs\/\$\{runId\}\/jobs\?filter=latest/);
-    expect(POLICY_SCRIPT_SOURCE).toMatch(/jobs\?filter=latest[^`]*page=\$\{page\}/);
+  it('reads jobs from the exact dispatcher attempt when authenticating provenance', () => {
+    expect(POLICY_SCRIPT_SOURCE).toMatch(
+      /actions\/runs\/\$\{runId\}\/attempts\/\$\{runAttempt\}\/jobs[^`]*page=\$\{page\}/,
+    );
+    expect(POLICY_SCRIPT_SOURCE).not.toContain('jobs?filter=latest');
   });
 
   it('filters and paginates historical provenance checks instead of trusting page one', () => {
@@ -138,7 +192,7 @@ describe('authoritative provenance run behind a check details_url', () => {
 });
 
 describe('idempotent custom check publisher', () => {
-  const externalId = `eligibility:${HEAD_SHA}:${POLICY_SHA}`;
+  const externalId = `eligibility:${HEAD_SHA}:${POLICY_SHA}:7001:3:1234:2`;
 
   it('POSTs a new check with the assessed head_sha', () => {
     const result = runPublisher([]);
