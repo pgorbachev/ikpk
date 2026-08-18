@@ -528,8 +528,14 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
 
   test('3.10a-4d при пяти удержаниях «оплатить другой семинар» недоступно', async ({ page }) => {
     test.setTimeout(30_000);
+    // Собираем отправленные идентификаторы: одного ЧИСЛА попыток недостаточно. Найдено
+    // негативной проверкой 6.10(13) — при молчаливом вытеснении старейшего их снова пять, и
+    // проверка по количеству остаётся зелёной, хотя состав подменён. Требование говорит
+    // «вытеснения нет», то есть предмет — состав, а не размер.
+    const posted: string[] = [];
     await mockApi(page, (req) => {
       if (req.method === 'POST') {
+        posted.push((JSON.parse(req.postData ?? '{}') as { requestId: string }).requestId);
         return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
       }
       return { status: 200, body: { status: 'pending' } };
@@ -548,6 +554,55 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     }
     await expect(page.locator(`[data-payment-attempt]`)).toHaveCount(5);
     await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeHidden();
+    const shown = await page
+      .locator('[data-payment-attempt]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-payment-attempt-id') ?? ''));
+    expect(new Set(shown), `состав удержаний подменён: отправляли ${posted.join(',')}`).toEqual(
+      new Set(posted),
+    );
+  });
+
+  // Требование «завершение одной попытки SHALL NOT снимать удержание другой» не имело теста
+  // вовсе: найдено негативной проверкой 6.10(18) — мутация «терминальный ответ снимает все
+  // удержания» проходила зелёной, потому что независимость снятия ничем не наблюдалась.
+  test('3.10a-4b(2) завершение одной попытки оставляет вторую удержанной', async ({ page }) => {
+    // Две фазы: сначала обе попытки висят незавершёнными, и только потом первая становится
+    // терминальной. Иначе она снимается уже при восстановлении, кнопки «другой семинар» к
+    // этому моменту нет, и вторую попытку создать нечем — так первая редакция теста и
+    // упиралась в таймаут (дефект теста, не продукта).
+    const ids: string[] = [];
+    let phase: 1 | 2 = 1;
+    await mockApi(page, (req) => {
+      if (req.method === 'POST') {
+        ids.push((JSON.parse(req.postData ?? '{}') as { requestId: string }).requestId);
+        return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
+      }
+      if (phase === 2 && ids[0] && req.url.includes(ids[0])) {
+        return { status: 200, body: { status: 'succeeded' } };
+      }
+      return { status: 200, body: { status: 'pending' } };
+    });
+    await openForm(page);
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await gotoOplata(page);
+    await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
+    await fillValid(page);
+    await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await gotoOplata(page);
+    await expect(page.locator('[data-payment-attempt]')).toHaveCount(2);
+    phase = 2;
+    await gotoOplata(page);
+    const holds = await page.evaluate(
+      () =>
+        (JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as Array<{ requestId: string }>).map(
+          (h) => h.requestId,
+        ),
+    );
+    expect(ids.length, 'обе попытки не отправились').toBe(2);
+    expect(holds, `терминальный исход первой снял и вторую: осталось ${holds.join(',')}`).toContain(ids[1]);
+    expect(holds, 'завершённая первая попытка осталась удержанной').not.toContain(ids[0]);
   });
 });
 

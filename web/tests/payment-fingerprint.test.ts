@@ -302,6 +302,41 @@ describe('3.10a-3b подтверждение повторной оплаты', 
     expect(svc!.yookassa.creates.length).toBe(creates);
   });
 
+  // Одноразовость токена не имела наблюдателя: найдено негативной проверкой 6.10(9) —
+  // мутация «разрешить повторное использование токена» проходила зелёной, потому что ОБА
+  // пути повтора закрыты другими правилами. Повтор с тем же `requestId` уходит в ветвь
+  // найденной записи и отвечает её состоянием; повтор с новым `requestId` упирается в
+  // совпадение с незавершённой записью, созданной первым подтверждением. То есть проверка
+  // `used` защищена дважды и её снятие ниоткуда не видно.
+  //
+  // Тест изолирует предмет: созданная первым подтверждением запись удаляется из хранилища,
+  // как в случае (8), — и тогда единственное, что может отказать повтору, это сам флаг
+  // одноразовости.
+  it('(6b) одноразовость токена наблюдается изолированно: запись убрана, повтор всё равно отказан', async () => {
+    const first = await succeededRecord();
+    const second = { ...first, requestId: randomUUID() };
+    const token = ((await jsonOf(await postPayments(svc!.url, second))).body as { confirmationToken: string })
+      .confirmationToken;
+    const ok = await jsonOf(await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }));
+    expect(ok.status, 'первое подтверждение не создало платёж').toBe(201);
+
+    // Убираем запись, созданную подтверждением: иначе повтор упрётся в совпадение с ней,
+    // и флаг одноразовости снова окажется незаметен.
+    svc!.writeRecords(svc!.readRecords().filter((r) => r.requestId !== second.requestId));
+    const creates = svc!.yookassa.creates.length;
+    // Повтор идёт ТЕМ ЖЕ `requestId`, для которого токен выдан: с новым его отсекала бы
+    // привязка токена к идентификатору, а не флаг одноразовости, и предмет опять остался бы
+    // без наблюдателя (проверено — мутация `used` при новом `requestId` не краснеет).
+    const replay = await jsonOf(
+      await postPayments(svc!.url, { ...second, duplicateConfirmationToken: token }),
+    );
+    expect((replay.body as { status?: string }).status, 'использованный токен создал платёж').not.toBe(
+      'created',
+    );
+    expect(replay.status).not.toBe(201);
+    expect(svc!.yookassa.creates.length, 'повтор по использованному токену вызвал оператора').toBe(creates);
+  });
+
   it('(9) confirmed с ключом, ставшим PREVIOUS после ротации → вопрос, не создание', async () => {
     svc = await startPaymentService({ env: prodEnv() });
     const first = validPayload();
