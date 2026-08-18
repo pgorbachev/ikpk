@@ -1,0 +1,25 @@
+name: Dependabot rebase policy
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  request-rebase:
+    name: Request Dependabot rebases
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Ask Dependabot to rebuild every remaining marked PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --author app/dependabot \
+            --limit 100 --json number,autoMergeRequest \
+            --jq '.[] | select(.autoMergeRequest != null) | .number' |
+          while IFS= read -r number; do
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body '@dependabot rebase'
+          done

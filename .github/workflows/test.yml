@@ -89,8 +89,8 @@ jobs:
           fi
           echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
 
-      - name: Measure base Vitest volume for dependency-only PR
-        if: steps.web-dependency-scope.outputs.dependency_only == 'true'
+      - name: Measure base Vitest volume for dependency or Dependabot PR
+        if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -113,15 +113,18 @@ jobs:
         working-directory: .
         env:
           DEPENDENCY_ONLY: ${{ steps.web-dependency-scope.outputs.dependency_only }}
+          AUTO_MERGE_CANDIDATE: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           changed_args=()
           while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/web-changed-files.txt"
           base_args=()
-          if [ "$DEPENDENCY_ONLY" = true ]; then
+          if [ "$DEPENDENCY_ONLY" = true ] || [ "$AUTO_MERGE_CANDIDATE" = true ]; then
             for report in web-unit web-render web-build web-demo; do
               base_args+=(--base-report "$RUNNER_TEMP/${report}-base.json")
             done
           fi
+          eligible_args=()
+          if [ "$AUTO_MERGE_CANDIDATE" = true ]; then eligible_args+=(--auto-merge-eligible); fi
           threshold=$(jq -r '.testThresholds["web-vitest-total"]' .github/dependency-update-gates.json)
           web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
             --runner vitest --threshold "$threshold" \
@@ -129,7 +132,7 @@ jobs:
             --head-report "$RUNNER_TEMP/web-render-head.json" \
             --head-report "$RUNNER_TEMP/web-build-head.json" \
             --head-report "$RUNNER_TEMP/web-demo-head.json" \
-            "${changed_args[@]}" "${base_args[@]}"
+            "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
 
       # Тот же dist-demo, который только что проверили. e2e-smoke его скачивает и
@@ -212,8 +215,8 @@ jobs:
             echo "$status" > "$RUNNER_TEMP/${package}-runtime-head.exit"
           done
 
-      - name: Produce dependency-only base measurements
-        if: steps.dependency-scope.outputs.dependency_only == 'true' || steps.dependency-scope.outputs.runtime_scope == 'true'
+      - name: Produce dependency and Dependabot base measurements
+        if: steps.dependency-scope.outputs.dependency_only == 'true' || steps.dependency-scope.outputs.runtime_scope == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         env:
           BASE_SHA: ${{ steps.dependency-scope.outputs.base_sha }}
         run: |
@@ -239,21 +242,24 @@ jobs:
       - name: Dependency invariant - lint-coverage
         env:
           DEPENDENCY_ONLY: ${{ steps.dependency-scope.outputs.dependency_only }}
+          AUTO_MERGE_CANDIDATE: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           changed_args=()
           while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/dependency-changed-files.txt"
           for package in web cms scripts; do
             threshold=$(jq -r ".lintThresholds.\"$package\"" .github/dependency-update-gates.json)
             base_args=()
-            if [ "$DEPENDENCY_ONLY" = true ]; then
+            if [ "$DEPENDENCY_ONLY" = true ] || [ "$AUTO_MERGE_CANDIDATE" = true ]; then
               base_args+=(--base-report "$RUNNER_TEMP/${package}-lint-base.json")
               base_args+=(--base-exit "$(cat "$RUNNER_TEMP/${package}-lint-base.exit")")
             fi
+            eligible_args=()
+            if [ "$AUTO_MERGE_CANDIDATE" = true ]; then eligible_args+=(--auto-merge-eligible); fi
             web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts lint-coverage \
               --package "$package" --threshold "$threshold" \
               --head-report "$RUNNER_TEMP/${package}-lint-head.json" \
               --head-exit "$(cat "$RUNNER_TEMP/${package}-lint-head.exit")" \
-              "${changed_args[@]}" "${base_args[@]}"
+              "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
           done
 
       - name: Dependency invariant - platform-entries
@@ -336,8 +342,8 @@ jobs:
           fi
           echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
 
-      - name: Measure base scripts tests for dependency-only PR
-        if: steps.scripts-dependency-scope.outputs.dependency_only == 'true'
+      - name: Measure base scripts tests for dependency or Dependabot PR
+        if: steps.scripts-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -352,16 +358,19 @@ jobs:
         working-directory: .
         env:
           DEPENDENCY_ONLY: ${{ steps.scripts-dependency-scope.outputs.dependency_only }}
+          AUTO_MERGE_CANDIDATE: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           changed_args=()
           while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/scripts-changed-files.txt"
           base_args=()
-          if [ "$DEPENDENCY_ONLY" = true ]; then base_args+=(--base-report "$RUNNER_TEMP/scripts-unit-base.json"); fi
+          if [ "$DEPENDENCY_ONLY" = true ] || [ "$AUTO_MERGE_CANDIDATE" = true ]; then base_args+=(--base-report "$RUNNER_TEMP/scripts-unit-base.json"); fi
+          eligible_args=()
+          if [ "$AUTO_MERGE_CANDIDATE" = true ]; then eligible_args+=(--auto-merge-eligible); fi
           threshold=$(jq -r '.testThresholds["scripts-unit"]' .github/dependency-update-gates.json)
           scripts/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
             --runner vitest --threshold "$threshold" \
             --head-report "$RUNNER_TEMP/scripts-unit-head.json" \
-            "${changed_args[@]}" "${base_args[@]}"
+            "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
@@ -452,8 +461,8 @@ jobs:
           fi
           echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
 
-      - name: Measure base browser tests for dependency-only PR
-        if: steps.browser-dependency-scope.outputs.dependency_only == 'true'
+      - name: Measure base browser tests for dependency or Dependabot PR
+        if: steps.browser-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -476,15 +485,18 @@ jobs:
         working-directory: .
         env:
           DEPENDENCY_ONLY: ${{ steps.browser-dependency-scope.outputs.dependency_only }}
+          AUTO_MERGE_CANDIDATE: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           changed_args=()
           while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/browser-changed-files.txt"
           base_args=()
-          if [ "$DEPENDENCY_ONLY" = true ]; then
+          if [ "$DEPENDENCY_ONLY" = true ] || [ "$AUTO_MERGE_CANDIDATE" = true ]; then
             for report in smoke a11y catalog schedule; do
               base_args+=(--base-report "$RUNNER_TEMP/playwright-${report}-base.json")
             done
           fi
+          eligible_args=()
+          if [ "$AUTO_MERGE_CANDIDATE" = true ]; then eligible_args+=(--auto-merge-eligible); fi
           threshold=$(jq -r '.testThresholds.playwright' .github/dependency-update-gates.json)
           web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
             --runner playwright --threshold "$threshold" \
@@ -492,7 +504,7 @@ jobs:
             --head-report "$RUNNER_TEMP/playwright-a11y-head.json" \
             --head-report "$RUNNER_TEMP/playwright-catalog-head.json" \
             --head-report "$RUNNER_TEMP/playwright-schedule-head.json" \
-            "${changed_args[@]}" "${base_args[@]}"
+            "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
       - name: Upload Playwright report on failure
         if: failure()
