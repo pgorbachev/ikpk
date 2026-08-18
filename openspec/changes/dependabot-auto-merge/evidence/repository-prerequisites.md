@@ -30,6 +30,24 @@ bindings:
 - `Dependency update invariants`
 - `Scripts unit tests`
 
-Task 1.5 remains open until `enablePullRequestAutoMerge` is exercised on a safe draft PR
-and shown not to return the former repository-level denial. Repository configuration
-alone proves the flag but not the mutation path named by the task.
+## Auto-merge mutation proof
+
+Draft PR #133 was used as the controlled target. GitHub first rejected the mutation with
+`Pull request is a draft`, confirming that the draft guard was active. While required
+checks were still pending, the PR was briefly changed to ready and the same GraphQL
+mutation succeeded:
+
+```json
+{
+  "number": 133,
+  "autoMergeRequest": {
+    "enabledAt": "2026-08-18T08:15:06Z",
+    "mergeMethod": "SQUASH"
+  }
+}
+```
+
+`disablePullRequestAutoMerge` was called immediately and returned
+`autoMergeRequest: null`; PR #133 was then converted back to draft. Its final observed
+state is open draft with no auto-merge request. The former repository-level denial did
+not occur.
