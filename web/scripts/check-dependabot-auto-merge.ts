@@ -376,7 +376,7 @@ function expectedMergeTree(firstParent: string, secondParent: string): string | 
   };
   const remote = `https://github.com/${owner}/${repo}.git`;
   const fetched = spawnSync('git', [
-    'fetch', '--no-tags', '--no-recurse-submodules', '--depth=1', remote, firstParent, secondParent,
+    'fetch', '--no-tags', '--no-recurse-submodules', remote, firstParent, secondParent,
   ], { encoding: 'utf8', env });
   if (fetched.status !== 0) return null;
   const merged = spawnSync('git', ['merge-tree', '--write-tree', firstParent, secondParent], {

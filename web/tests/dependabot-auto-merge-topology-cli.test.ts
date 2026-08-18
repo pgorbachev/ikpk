@@ -159,6 +159,7 @@ describe('production CLI adapter: update-branch synchronize topology', () => {
     expect(result.calls).toContain('GET /repos/acme/ikpk/commits/parent-head/check-runs');
     expect(result.calls).toContain('GET /repos/acme/ikpk/compare/base-parent...base-head');
     expect(result.calls).toMatch(/GIT fetch .*parent-head.*base-parent/);
+    expect(result.calls).not.toContain('--depth=1');
     expect(result.calls).toContain('GIT merge-tree --write-tree parent-head base-parent');
   });
 
