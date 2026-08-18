@@ -92,6 +92,19 @@ export interface TrustedEvidencePolicy {
   reusablePolicySha: string;
 }
 
+export interface AuthoritativeEvidenceRunInput {
+  targetPullRequestNumber: number;
+  targetHeadSha: string;
+  provenanceJobName: string;
+  run: {
+    pullRequests: Array<{ number: number; headSha: string }>;
+  };
+  jobs: Array<{
+    name: string;
+    conclusion: 'success' | 'failure' | 'cancelled' | null;
+  }>;
+}
+
 const allow = (reason: string): ClassificationDecision => ({ ok: true, eligible: true, reason });
 const deny = (reason: string): ClassificationDecision => ({ ok: true, eligible: false, reason });
 
@@ -116,6 +129,14 @@ export function isTrustedPositiveEvidence(
     candidate.callerWorkflowPath === policy.callerWorkflowPath &&
     candidate.reusablePolicyPath === policy.reusablePolicyPath &&
     candidate.reusablePolicySha === policy.reusablePolicySha;
+}
+
+export function isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput): boolean {
+  const matchingPullRequests = input.run.pullRequests.filter(({ number, headSha }) =>
+    number === input.targetPullRequestNumber && headSha === input.targetHeadSha);
+  if (matchingPullRequests.length !== 1) return false;
+  const provenanceJobs = input.jobs.filter(({ name }) => name === input.provenanceJobName);
+  return provenanceJobs.length === 1 && provenanceJobs[0].conclusion === 'success';
 }
 
 function updateMatchesAllowTable(update: DependencyUpdate): boolean {
@@ -178,9 +199,6 @@ export function evaluateHead(input: HeadEvaluationInput): HeadEvaluation {
     conclusion: originIsValid ? 'positive' : 'negative',
   };
 
-  if (!input.autoMergeEnabled) {
-    return { gate: { ok: true, reason: 'manual merge path' }, evidence };
-  }
   if (!input.classificationEligible) {
     return { gate: { ok: false, reason: 'update class requires manual review' }, evidence };
   }

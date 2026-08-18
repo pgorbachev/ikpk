@@ -2,6 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import {
   classifyPullRequest,
   evaluateHead,
+  isAuthoritativeEvidenceRun,
   isTrustedPositiveEvidence,
   normalizeDependabotEcosystem,
   type DependencyUpdate,
@@ -242,7 +243,7 @@ function trustedPolicyShas(): string[] {
   return [sha];
 }
 
-async function hasPositiveEvidence(sha: string): Promise<boolean> {
+async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Promise<boolean> {
   const { owner, repo } = repository();
   const result = await githubApi<{ check_runs?: Array<{
     name?: string;
@@ -267,6 +268,7 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
       event?: string;
       head_sha?: string;
       path?: string;
+      pull_requests?: Array<{ number?: number; head?: { sha?: string } }>;
       referenced_workflows?: Array<{ path?: string; sha?: string }>;
     }>(`/repos/${owner}/${repo}/actions/runs/${runId}`);
     const trustedReference = run.referenced_workflows?.find((workflow) =>
@@ -277,7 +279,29 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
     const reusablePolicyPath = trustedReference?.path?.split('@')[0]
       .replace(`${owner}/${repo}/`, '') ?? '';
     const externalId = `provenance:${sha}:${trustedReference?.sha ?? ''}`;
-    if (run.event === 'pull_request_target' && trustedReference?.sha &&
+    const jobsResult = await githubApi<{ jobs?: Array<{
+      name?: string;
+      conclusion?: 'success' | 'failure' | 'cancelled' | null;
+    }> }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=all&per_page=100`);
+    if (!Array.isArray(run.pull_requests) || !Array.isArray(jobsResult.jobs)) {
+      throw new Error('authoritative workflow run response is malformed');
+    }
+    const authoritative = isAuthoritativeEvidenceRun({
+      targetPullRequestNumber: pullRequestNumber,
+      targetHeadSha: sha,
+      provenanceJobName: 'Policy / Provenance evidence',
+      run: {
+        pullRequests: run.pull_requests.map((pullRequest) => ({
+          number: pullRequest.number ?? -1,
+          headSha: pullRequest.head?.sha ?? '',
+        })),
+      },
+      jobs: jobsResult.jobs.map((job) => ({
+        name: job.name ?? '',
+        conclusion: job.conclusion ?? null,
+      })),
+    });
+    if (run.event === 'pull_request_target' && trustedReference?.sha && authoritative &&
         isTrustedPositiveEvidence({
           sha: candidate.head_sha ?? '',
           name: candidate.name ?? '',
@@ -338,7 +362,7 @@ async function main(): Promise<void> {
   const action = event.action ?? '';
   const introducesHead = action === 'opened' || action === 'synchronize';
   const signature = await signatureFor(current.head.sha);
-  const priorEvidence = introducesHead ? false : await hasPositiveEvidence(current.head.sha);
+  const priorEvidence = introducesHead ? false : await hasPositiveEvidence(current.head.sha, current.number);
   const actorLogin = requiredEnv('GITHUB_ACTOR');
   const storedResults: StoredResult[] = priorEvidence ? [{
     sha: current.head.sha,
