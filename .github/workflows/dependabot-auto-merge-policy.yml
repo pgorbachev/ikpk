@@ -19,6 +19,7 @@ jobs:
       gate-ok: ${{ steps.policy.outputs.gate-ok }}
       record-evidence: ${{ steps.policy.outputs.record-evidence }}
       enable-auto-merge: ${{ steps.policy.outputs.enable-auto-merge }}
+      disable-auto-merge: ${{ steps.policy.outputs.disable-auto-merge }}
       pr-number: ${{ steps.policy.outputs.pr-number }}
       head-sha: ${{ steps.policy.outputs.head-sha }}
       reason: ${{ steps.policy.outputs.reason }}
@@ -55,14 +56,15 @@ jobs:
   provenance-evidence:
     name: Provenance evidence
     needs: assess
-    if: needs.assess.result == 'success' && needs.assess.outputs.record-evidence == 'true'
+    if: always() && (github.event.action == 'opened' || github.event.action == 'synchronize')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: Record independently evaluated provenance
         env:
+          ASSESS_RESULT: ${{ needs.assess.result }}
           ORIGIN_POSITIVE: ${{ needs.assess.outputs.origin-positive }}
-        run: test "$ORIGIN_POSITIVE" = true
+        run: test "$ASSESS_RESULT" = success && test "$ORIGIN_POSITIVE" = true
 
   eligibility-gate:
     name: Eligibility gate
@@ -74,9 +76,15 @@ jobs:
       - name: Enforce fail-closed automatic-merge policy
         env:
           ASSESS_RESULT: ${{ needs.assess.result }}
+          AUTO_MERGE_ENABLED: ${{ github.event.pull_request.auto_merge != null }}
           GATE_OK: ${{ needs.assess.outputs.gate-ok }}
           REASON: ${{ needs.assess.outputs.reason }}
         run: |
+          # An API outage must not block the manual path. If auto-merge was
+          # enabled in this event, the same outage is deliberately fail-closed.
+          if [ "$ASSESS_RESULT" != success ] && [ "$AUTO_MERGE_ENABLED" != true ]; then
+            exit 0
+          fi
           if [ "$ASSESS_RESULT" != success ] || [ "$GATE_OK" != true ]; then
             echo "$REASON"
             exit 1
@@ -102,3 +110,18 @@ jobs:
           HEAD_SHA: ${{ needs.assess.outputs.head-sha }}
           PR_NUMBER: ${{ needs.assess.outputs.pr-number }}
         run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$HEAD_SHA"
+
+  disable-auto-merge:
+    name: Disable stale auto-merge marker
+    needs: assess
+    if: needs.assess.result == 'success' && needs.assess.outputs.disable-auto-merge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove marker from the exact invalid head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.assess.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.assess.outputs.pr-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto --match-head-commit "$HEAD_SHA"

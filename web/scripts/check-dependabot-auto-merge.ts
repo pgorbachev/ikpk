@@ -2,12 +2,14 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import {
   classifyPullRequest,
   evaluateHead,
+  isTrustedPositiveEvidence,
+  normalizeDependabotEcosystem,
   type DependencyUpdate,
   type StoredResult,
 } from './lib/dependabot-auto-merge.ts';
 
 const API = 'https://api.github.com';
-const EVIDENCE_CHECK_SUFFIX = 'Provenance evidence';
+const EVIDENCE_CHECK_NAME = 'Dependabot auto-merge / Provenance evidence';
 const EVIDENCE_PRODUCER = 'github-actions/dependabot-auto-merge';
 
 interface PullRequestEvent {
@@ -40,6 +42,10 @@ interface SecurityRegistryFile {
   status?: string;
   runtime?: { packages?: unknown; lockfileNodes?: unknown };
   oracle?: { packages?: unknown; lockfileNodes?: unknown };
+}
+
+interface PolicyTrustFile {
+  trustedPolicyShas?: unknown;
 }
 
 function requiredEnv(name: string): string {
@@ -134,7 +140,7 @@ function metadataUpdates(metadata: MetadataDependency[] | null, files: string[])
   if (!metadata) return null;
   const ecosystems = new Set(metadata.map(({ packageEcosystem }) => packageEcosystem));
   if (ecosystems.size !== 1) return null;
-  const ecosystem = [...ecosystems][0];
+  const ecosystem = normalizeDependabotEcosystem([...ecosystems][0]);
   if (ecosystem === 'github-actions') {
     if (!files.every((file) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(file) || /(^|\/)action\.ya?ml$/.test(file))) {
       return null;
@@ -146,7 +152,7 @@ function metadataUpdates(metadata: MetadataDependency[] | null, files: string[])
       dependencySection: item.dependencyType,
     }));
   }
-  if (ecosystem !== 'npm_and_yarn') return null;
+  if (ecosystem !== 'npm') return null;
 
   const roots = packageRoots(files);
   if (roots.length === 0 || !files.every((file) => /^(web|scripts|cms)\/(?:package|npm-shrinkwrap)(?:-lock)?\.json$/.test(file))) {
@@ -234,6 +240,17 @@ async function signatureFor(sha: string): Promise<{
   };
 }
 
+function trustedPolicyShas(): string[] {
+  const source = readFileSync(new URL('../../.github/dependabot-auto-merge-policy.json', import.meta.url), 'utf8');
+  const parsed = JSON.parse(source) as PolicyTrustFile;
+  if (!Array.isArray(parsed.trustedPolicyShas) ||
+      !parsed.trustedPolicyShas.every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/i.test(sha)) ||
+      new Set(parsed.trustedPolicyShas).size !== parsed.trustedPolicyShas.length) {
+    throw new Error('trusted policy SHA registry is malformed');
+  }
+  return parsed.trustedPolicyShas;
+}
+
 async function hasPositiveEvidence(sha: string): Promise<boolean> {
   const { owner, repo } = repository();
   const result = await githubApi<{ check_runs?: Array<{
@@ -243,10 +260,51 @@ async function hasPositiveEvidence(sha: string): Promise<boolean> {
     app?: { slug?: string; id?: number };
   }> }>(`/repos/${owner}/${repo}/commits/${sha}/check-runs?filter=all&per_page=100`);
   if (!Array.isArray(result.check_runs)) throw new Error('check-runs response is malformed');
-  return result.check_runs.some((run) =>
+  const candidates = result.check_runs.filter((run) =>
     run.status === 'completed' && run.conclusion === 'success' &&
-    (run.name === EVIDENCE_CHECK_SUFFIX || run.name?.endsWith(` / ${EVIDENCE_CHECK_SUFFIX}`)) &&
+    run.name === EVIDENCE_CHECK_NAME &&
     run.app?.slug === 'github-actions');
+  const trusted = new Set(trustedPolicyShas());
+  for (const candidate of candidates) {
+    const detailsUrl = (candidate as typeof candidate & { details_url?: unknown }).details_url;
+    if (typeof detailsUrl !== 'string') continue;
+    const runId = /\/actions\/runs\/(\d+)\/job\/\d+(?:\?|$)/.exec(detailsUrl)?.[1];
+    if (!runId) continue;
+    const run = await githubApi<{
+      event?: string;
+      head_sha?: string;
+      path?: string;
+      referenced_workflows?: Array<{ path?: string; sha?: string }>;
+    }>(`/repos/${owner}/${repo}/actions/runs/${runId}`);
+    const trustedReference = run.referenced_workflows?.find((workflow) =>
+      workflow.path?.startsWith(`${owner}/${repo}/.github/workflows/dependabot-auto-merge-policy.yml@`) &&
+      typeof workflow.sha === 'string');
+    const expectedCaller = '.github/workflows/dependabot-auto-merge.yml';
+    const callerWorkflowPath = run.path?.split('@')[0] ?? '';
+    const reusablePolicyPath = trustedReference?.path?.split('@')[0]
+      .replace(`${owner}/${repo}/`, '') ?? '';
+    if (run.event === 'pull_request' && run.head_sha === sha && trustedReference?.sha &&
+        isTrustedPositiveEvidence({
+          sha,
+          name: candidate.name ?? '',
+          status: candidate.status as 'completed',
+          conclusion: candidate.conclusion as 'success',
+          appSlug: candidate.app?.slug ?? '',
+          callerWorkflowPath,
+          reusablePolicyPath,
+          reusablePolicySha: trustedReference.sha,
+        }, {
+          sha,
+          checkName: EVIDENCE_CHECK_NAME,
+          appSlug: 'github-actions',
+          callerWorkflowPath: expectedCaller,
+          reusablePolicyPath: '.github/workflows/dependabot-auto-merge-policy.yml',
+          reusablePolicySha: trustedReference.sha,
+        }) && trusted.has(trustedReference.sha)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function actorKind(login: string): 'dependabot' | 'human' {
@@ -304,6 +362,7 @@ async function main(): Promise<void> {
   });
   const enable = current.user.login === 'dependabot[bot]' && classification.eligible &&
     originPositive && current.auto_merge === null;
+  const disable = current.auto_merge !== null && (!classification.eligible || !originPositive);
   const reason = `${classification.reason}; ${evaluation.gate.reason}`;
 
   output('eligible', classification.eligible);
@@ -311,6 +370,7 @@ async function main(): Promise<void> {
   output('gate-ok', evaluation.gate.ok);
   output('record-evidence', introducesHead);
   output('enable-auto-merge', enable);
+  output('disable-auto-merge', disable);
   output('auto-merge-enabled', current.auto_merge !== null);
   output('pr-number', current.number.toString());
   output('head-sha', current.head.sha);
@@ -323,6 +383,7 @@ async function main(): Promise<void> {
     originPositive,
     gate: evaluation.gate,
     enable,
+    disable,
   }, null, 2));
 }
 

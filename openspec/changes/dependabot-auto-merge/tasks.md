@@ -141,10 +141,15 @@
 
 ## 5. Расширение области инвариантов
 
-- [ ] 5.1 Расширить область сравнения с базой у двух инвариантов из
+- [x] 5.1 Расширить область сравнения с базой у двух инвариантов из
       `dependency-update-gates` на PR, признанные пригодными к автоматическому слиянию
-- [ ] 5.2 Проверить, что PR экосистемы `github-actions`, признанный пригодным, попадает под
+- [x] 5.2 Проверить, что PR экосистемы `github-actions`, признанный пригодным, попадает под
       сравнение с базой, хотя манифесты в нём не изменены
+      Evidence: `web/tests/dependency-auto-merge-invariant-scope.test.ts` has 8
+      scenarios; the exact RED commit is
+      `1ca160035b46ead62a5ed1a978b2ee1890455932`. `Tests` conservatively runs the
+      base comparison for every Dependabot PR, so every eligible Actions PR is
+      covered even before the privileged policy has marked it.
 
 ## 6. Авто-слияние
 

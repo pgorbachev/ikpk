@@ -66,8 +66,48 @@ export interface MergeReadinessInput {
   mergeCombinationChecks: Array<{ name: string; state: 'pending' | 'success' | 'failure' }>;
 }
 
+export interface ProvenanceEvidenceCandidate {
+  sha: string;
+  name: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: 'success' | 'failure' | null;
+  appSlug: string;
+  callerWorkflowPath: string;
+  reusablePolicyPath: string;
+  reusablePolicySha: string;
+}
+
+export interface TrustedEvidencePolicy {
+  sha: string;
+  checkName: string;
+  appSlug: string;
+  callerWorkflowPath: string;
+  reusablePolicyPath: string;
+  reusablePolicySha: string;
+}
+
 const allow = (reason: string): ClassificationDecision => ({ ok: true, eligible: true, reason });
 const deny = (reason: string): ClassificationDecision => ({ ok: true, eligible: false, reason });
+
+export function normalizeDependabotEcosystem(ecosystem: string): string {
+  if (ecosystem === 'npm_and_yarn') return 'npm';
+  if (ecosystem === 'github_actions') return 'github-actions';
+  return ecosystem;
+}
+
+export function isTrustedPositiveEvidence(
+  candidate: ProvenanceEvidenceCandidate,
+  policy: TrustedEvidencePolicy,
+): boolean {
+  return candidate.sha === policy.sha &&
+    candidate.name === policy.checkName &&
+    candidate.status === 'completed' &&
+    candidate.conclusion === 'success' &&
+    candidate.appSlug === policy.appSlug &&
+    candidate.callerWorkflowPath === policy.callerWorkflowPath &&
+    candidate.reusablePolicyPath === policy.reusablePolicyPath &&
+    candidate.reusablePolicySha === policy.reusablePolicySha;
+}
 
 function updateMatchesAllowTable(update: DependencyUpdate): boolean {
   if (!['semver-patch', 'semver-minor'].includes(update.updateType)) return false;
