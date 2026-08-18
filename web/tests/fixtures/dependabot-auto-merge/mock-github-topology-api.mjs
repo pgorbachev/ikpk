@@ -54,8 +54,8 @@ globalThis.fetch = async (input, init = {}) => {
     return response({
       sha: 'merge-head',
       parents: scenario.parents.map((sha) => ({ sha })),
-      commit: { tree: { sha: scenario.mergeTree ?? 'merge-tree' } },
-      tree: { sha: scenario.mergeTree ?? 'merge-tree' },
+      commit: { tree: { sha: scenario.mergeTree ?? 'b'.repeat(40) } },
+      tree: { sha: scenario.mergeTree ?? 'b'.repeat(40) },
     });
   }
   if (url.pathname === '/repos/acme/ikpk/commits/parent-head/check-runs') {

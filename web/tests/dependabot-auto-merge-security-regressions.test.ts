@@ -32,7 +32,11 @@ function publisherScript(): string {
   return step?.run ?? '';
 }
 
-function runPublisher(checkRuns: unknown[]): { status: number | null; stderr: string; calls: string[][] } {
+function runPublisher(checkRuns: unknown[], secondPage: unknown[] = []): {
+  status: number | null;
+  stderr: string;
+  calls: string[][];
+} {
   const dir = mkdtempSync(join(tmpdir(), 'dependabot-check-publisher-'));
   const bin = join(dir, 'bin');
   const log = join(dir, 'gh.log');
@@ -47,7 +51,11 @@ set -euo pipefail
   printf '\\n'
 } >>"$GH_LOG"
 if [[ "$*" == *'/commits/'*'/check-runs?'* ]]; then
-  printf '%s\\n' "$CHECK_RUNS_JSON"
+  if [[ "$*" == *'page=2'* ]]; then
+    printf '%s\\n' "$CHECK_RUNS_PAGE_2_JSON"
+  else
+    printf '%s\\n' "$CHECK_RUNS_JSON"
+  fi
 else
   printf '{}\\n'
 fi
@@ -60,6 +68,7 @@ fi
         PATH: `${bin}:${process.env.PATH ?? ''}`,
         ASSESSMENT_RESULT: 'success',
         CHECK_RUNS_JSON: JSON.stringify({ check_runs: checkRuns }),
+        CHECK_RUNS_PAGE_2_JSON: JSON.stringify({ check_runs: secondPage }),
         EVENT_ACTION: 'reopened',
         FRESH_AUTO_MERGE_ENABLED: 'false',
         FRESH_HEAD_MATCHES_CURRENT: 'true',
@@ -118,6 +127,7 @@ describe('authoritative provenance run behind a check details_url', () => {
 
   it('reads only the latest workflow attempt when authenticating the provenance job', () => {
     expect(POLICY_SCRIPT_SOURCE).toMatch(/actions\/runs\/\$\{runId\}\/jobs\?filter=latest/);
+    expect(POLICY_SCRIPT_SOURCE).toMatch(/jobs\?filter=latest[^`]*page=\$\{page\}/);
   });
 
   it('filters and paginates historical provenance checks instead of trusting page one', () => {
@@ -152,6 +162,35 @@ describe('idempotent custom check publisher', () => {
     expect(write).toContain('repos/pgorbachev/ikpk/check-runs/41');
     expect(write).not.toContain(`head_sha=${HEAD_SHA}`);
     expect(write).toContain('conclusion=failure');
+  });
+
+  it('filters and paginates the existing-check lookup before deciding to POST', () => {
+    const script = publisherScript();
+    expect(script).toContain('check_name=${encoded_name}');
+    expect(script).toContain('app_id=15368');
+    expect(script).toMatch(/page=\$\{page\}/);
+  });
+
+  it('finds its exact existing check on page two and PATCHes instead of duplicating it', () => {
+    const pageOne = Array.from({ length: 100 }, (_, id) => ({
+      id: id + 1,
+      external_id: `other:${id}`,
+      name: ELIGIBILITY_NAME,
+      head_sha: HEAD_SHA,
+      app: { id: 15368 },
+    }));
+    const target = {
+      id: 501,
+      external_id: externalId,
+      name: ELIGIBILITY_NAME,
+      head_sha: HEAD_SHA,
+      app: { id: 15368 },
+    };
+    const result = runPublisher(pageOne, [target]);
+    expect(result.status, result.stderr).toBe(0);
+    const write = result.calls.at(-1) ?? [];
+    expect(write).toContain('PATCH');
+    expect(write).toContain('repos/pgorbachev/ikpk/check-runs/501');
   });
 });
 

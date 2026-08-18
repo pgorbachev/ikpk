@@ -1,4 +1,5 @@
 import { appendFileSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import {
   classifyPullRequest,
   evaluateHead,
@@ -45,21 +46,9 @@ interface SecurityRegistryFile {
   oracle?: { packages?: unknown; lockfileNodes?: unknown };
 }
 
-interface CompareFile {
-  filename?: string;
-  previous_filename?: string;
-  status?: string;
-  additions?: number;
-  deletions?: number;
-  changes?: number;
-  patch?: string;
-  sha?: string;
-}
-
 interface CompareResult {
   status?: string;
   merge_base_commit?: { sha?: string };
-  files?: CompareFile[];
 }
 
 function requiredEnv(name: string): string {
@@ -306,11 +295,21 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
     const reusablePolicyPath = trustedReference?.path?.split('@')[0]
       .replace(`${owner}/${repo}/`, '') ?? '';
     const externalId = `provenance:${sha}:${trustedReference?.sha ?? ''}`;
-    const jobsResult = await githubApi<{ jobs?: Array<{
+    const jobs: Array<{
       name?: string;
       conclusion?: 'success' | 'failure' | 'cancelled' | null;
-    }> }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`);
-    if (!Array.isArray(run.pull_requests) || !Array.isArray(jobsResult.jobs)) {
+    }> = [];
+    for (let page = 1; ; page += 1) {
+      const jobsResult = await githubApi<{ jobs?: typeof jobs }>(
+        `/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100&page=${page}`,
+      );
+      if (!Array.isArray(jobsResult.jobs)) {
+        throw new Error('authoritative workflow jobs response is malformed');
+      }
+      jobs.push(...jobsResult.jobs);
+      if (jobsResult.jobs.length < 100) break;
+    }
+    if (!Array.isArray(run.pull_requests)) {
       throw new Error('authoritative workflow run response is malformed');
     }
     const authoritative = isAuthoritativeEvidenceRun({
@@ -323,7 +322,7 @@ async function hasPositiveEvidence(sha: string, pullRequestNumber: number): Prom
           headSha: pullRequest.head?.sha ?? '',
         })),
       },
-      jobs: jobsResult.jobs.map((job) => ({
+      jobs: jobs.map((job) => ({
         name: job.name ?? '',
         conclusion: job.conclusion ?? null,
       })),
@@ -365,19 +364,28 @@ async function compareCommits(base: string, head: string): Promise<CompareResult
   );
 }
 
-function compareFingerprint(result: CompareResult): string | null {
-  if (!Array.isArray(result.files) || result.files.length >= 300) return null;
-  const files = result.files.map((file) => ({
-    filename: file.filename ?? null,
-    previousFilename: file.previous_filename ?? null,
-    status: file.status ?? null,
-    additions: file.additions ?? null,
-    deletions: file.deletions ?? null,
-    changes: file.changes ?? null,
-    patch: file.patch ?? null,
-    sha: file.sha ?? null,
-  })).sort((left, right) => String(left.filename).localeCompare(String(right.filename)));
-  return JSON.stringify(files);
+function expectedMergeTree(firstParent: string, secondParent: string): string | null {
+  const { owner, repo } = repository();
+  const authorization = Buffer.from(`x-access-token:${requiredEnv('GITHUB_TOKEN')}`).toString('base64');
+  const env = {
+    ...process.env,
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${authorization}`,
+    GIT_TERMINAL_PROMPT: '0',
+  };
+  const remote = `https://github.com/${owner}/${repo}.git`;
+  const fetched = spawnSync('git', [
+    'fetch', '--no-tags', '--no-recurse-submodules', '--depth=1', remote, firstParent, secondParent,
+  ], { encoding: 'utf8', env });
+  if (fetched.status !== 0) return null;
+  const merged = spawnSync('git', ['merge-tree', '--write-tree', firstParent, secondParent], {
+    encoding: 'utf8',
+    env,
+  });
+  if (merged.status !== 0) return null;
+  const tree = merged.stdout.trim().split(/\r?\n/, 1)[0];
+  return /^[0-9a-f]{40}$/i.test(tree) ? tree : null;
 }
 
 async function updateMechanismTopology(
@@ -390,7 +398,7 @@ async function updateMechanismTopology(
   reason: string;
 }> {
   const { owner, repo } = repository();
-  const commit = await githubApi<{ parents?: Array<{ sha?: string }> }>(
+  const commit = await githubApi<{ parents?: Array<{ sha?: string }>; tree?: { sha?: string } }>(
     `/repos/${owner}/${repo}/git/commits/${encodeURIComponent(headSha)}`,
   );
   const parentShas = Array.isArray(commit.parents)
@@ -419,18 +427,9 @@ async function updateMechanismTopology(
     return { topology, parentEvidence, reason: 'second parent is outside current base ancestry' };
   }
 
-  const parentComparison = await compareCommits(firstParent, secondParent);
-  const forkPoint = parentComparison.merge_base_commit?.sha;
-  if (!forkPoint) {
-    return { topology, parentEvidence, reason: 'update topology has no base merge point' };
-  }
-  const [mergeChanges, baseChanges] = await Promise.all([
-    compareCommits(firstParent, headSha),
-    compareCommits(forkPoint, secondParent),
-  ]);
-  const mergeFingerprint = compareFingerprint(mergeChanges);
-  const baseFingerprint = compareFingerprint(baseChanges);
-  topology.introducesOnlyBaseChanges = mergeFingerprint !== null && mergeFingerprint === baseFingerprint;
+  const actualTree = commit.tree?.sha;
+  const mergedTree = expectedMergeTree(firstParent, secondParent);
+  topology.introducesOnlyBaseChanges = typeof actualTree === 'string' && mergedTree === actualTree;
   return {
     topology,
     parentEvidence,

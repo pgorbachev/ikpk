@@ -154,10 +154,20 @@ jobs:
             local kind="$1" name="$2" conclusion="$3"
             local external_id="${kind}:${HEAD_SHA}:${POLICY_SHA}"
             local run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            local existing_id
-            existing_id="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
-              | jq -r --arg external_id "$external_id" --arg name "$name" --arg head_sha "$HEAD_SHA" \
-                '[.check_runs[] | select(.external_id == $external_id and .name == $name and .head_sha == $head_sha and .app.id == 15368)] | sort_by(.id) | last | .id // empty')"
+            local encoded_name page response count check_runs existing_id
+            encoded_name="$(jq -nr --arg value "$name" '$value | @uri')"
+            page=1
+            check_runs='[]'
+            while true; do
+              response="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?filter=all&check_name=${encoded_name}&app_id=15368&per_page=100&page=${page}")"
+              count="$(jq -er '.check_runs | if type == "array" then length else error("malformed check runs") end' <<<"$response")"
+              check_runs="$(jq -cn --argjson accumulated "$check_runs" --argjson response "$response" '$accumulated + $response.check_runs')"
+              if [ "$count" -lt 100 ]; then break; fi
+              page=$((page + 1))
+            done
+            existing_id="$(jq -r --arg external_id "$external_id" --arg name "$name" --arg head_sha "$HEAD_SHA" \
+                '[.check_runs[] | select(.external_id == $external_id and .name == $name and .head_sha == $head_sha and .app.id == 15368)] | sort_by(.id) | last | .id // empty' \
+                <<<"{\"check_runs\":$check_runs}")"
             if [ -n "$existing_id" ]; then
               gh api --method PATCH "repos/$GITHUB_REPOSITORY/check-runs/$existing_id" \
                 -f name="$name" \

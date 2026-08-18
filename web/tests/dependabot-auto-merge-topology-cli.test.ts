@@ -7,11 +7,20 @@ import { afterEach, describe, expect, it } from 'vitest';
 const SCRIPT = new URL('../scripts/check-dependabot-auto-merge.ts', import.meta.url).pathname;
 const MOCK_API = new URL('./fixtures/dependabot-auto-merge/mock-github-topology-api.mjs', import.meta.url).pathname;
 const POLICY_SHA = 'a'.repeat(40);
+const MERGE_TREE = 'b'.repeat(40);
 const scratch: string[] = [];
+
+function gitOutput(cwd: string, args: string[]): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout.trim();
+}
 
 interface Scenario {
   parents: string[];
   parentEvidence: boolean;
+  mergeTree?: string;
+  expectedMergeTree?: string;
   comparisons: Record<string, {
     status: string;
     merge_base_commit?: { sha: string };
@@ -45,6 +54,17 @@ function runScenario(scenario: Scenario) {
   const eventPath = join(dir, 'event.json');
   const outputPath = join(dir, 'output.txt');
   const callLogPath = join(dir, 'calls.txt');
+  const bin = join(dir, 'bin');
+  const git = join(bin, 'git');
+  spawnSync('mkdir', ['-p', bin]);
+  writeFileSync(git, `#!/usr/bin/env bash
+set -euo pipefail
+printf 'GIT %s\\n' "$*" >>"$MOCK_GITHUB_CALL_LOG"
+if [ "$1" = fetch ]; then exit 0; fi
+if [ "$1" = merge-tree ]; then printf '%s\\n' "$MOCK_EXPECTED_MERGE_TREE"; exit 0; fi
+exit 2
+`);
+  spawnSync('chmod', ['+x', git]);
   writeFileSync(scenarioPath, JSON.stringify(scenario));
   writeFileSync(eventPath, JSON.stringify({
     action: 'synchronize',
@@ -65,6 +85,7 @@ function runScenario(scenario: Scenario) {
     encoding: 'utf8',
     env: {
       ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ''}`,
       GITHUB_TOKEN: 'test-token',
       GITHUB_REPOSITORY: 'acme/ikpk',
       GITHUB_ACTOR: 'branch-updater[bot]',
@@ -81,6 +102,7 @@ function runScenario(scenario: Scenario) {
       }]),
       MOCK_GITHUB_SCENARIO: scenarioPath,
       MOCK_GITHUB_CALL_LOG: callLogPath,
+      MOCK_EXPECTED_MERGE_TREE: scenario.expectedMergeTree ?? MERGE_TREE,
     },
   });
   return {
@@ -95,6 +117,39 @@ afterEach(() => {
 });
 
 describe('production CLI adapter: update-branch synchronize topology', () => {
+  it('derives the exact clean merge tree when PR and base edit different regions of one file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dependabot-real-merge-tree-'));
+    scratch.push(dir);
+    gitOutput(dir, ['init', '-q']);
+    gitOutput(dir, ['config', 'user.name', 'Test']);
+    gitOutput(dir, ['config', 'user.email', 'test@example.com']);
+    const file = join(dir, 'package-lock.json');
+    writeFileSync(file, 'pr-line\nshared-line\nbase-line\n');
+    gitOutput(dir, ['add', 'package-lock.json']);
+    gitOutput(dir, ['commit', '-qm', 'root']);
+    const root = gitOutput(dir, ['rev-parse', 'HEAD']);
+
+    writeFileSync(file, 'pr-changed\nshared-line\nbase-line\n');
+    gitOutput(dir, ['commit', '-qam', 'pr']);
+    const firstParent = gitOutput(dir, ['rev-parse', 'HEAD']);
+
+    gitOutput(dir, ['checkout', '-q', root]);
+    writeFileSync(file, 'pr-line\nshared-line\nbase-changed\n');
+    gitOutput(dir, ['commit', '-qam', 'base']);
+    const secondParent = gitOutput(dir, ['rev-parse', 'HEAD']);
+    const expectedTree = gitOutput(dir, ['merge-tree', '--write-tree', firstParent, secondParent]);
+
+    gitOutput(dir, ['checkout', '-q', firstParent]);
+    gitOutput(dir, ['merge', '--no-ff', '--no-edit', secondParent]);
+    const actualTree = gitOutput(dir, ['rev-parse', 'HEAD^{tree}']);
+    expect(actualTree).toBe(expectedTree);
+
+    writeFileSync(file, 'pr-changed\nforeign-edit\nbase-changed\n');
+    gitOutput(dir, ['add', 'package-lock.json']);
+    const foreignTree = gitOutput(dir, ['write-tree']);
+    expect(foreignTree).not.toBe(expectedTree);
+  });
+
   it('accepts a two-parent update merge after fetching its exact topology, parent evidence and base comparisons', () => {
     const result = runScenario(validScenario());
     expect(result.status, result.stderr || result.stdout).toBe(0);
@@ -103,21 +158,32 @@ describe('production CLI adapter: update-branch synchronize topology', () => {
     expect(result.calls).toMatch(/GET \/repos\/acme\/ikpk\/(?:git\/)?commits\/merge-head/);
     expect(result.calls).toContain('GET /repos/acme/ikpk/commits/parent-head/check-runs');
     expect(result.calls).toContain('GET /repos/acme/ikpk/compare/base-parent...base-head');
-    expect(result.calls).toContain('GET /repos/acme/ikpk/compare/parent-head...merge-head');
-    expect(result.calls).toMatch(/GET \/repos\/acme\/ikpk\/compare\/(?:parent-head|fork-point)\.\.\.base-parent/);
+    expect(result.calls).toMatch(/GIT fetch .*parent-head.*base-parent/);
+    expect(result.calls).toContain('GIT merge-tree --write-tree parent-head base-parent');
+  });
+
+  it('accepts a clean merge when the PR and base changed different regions of the same file', () => {
+    const scenario = validScenario();
+    scenario.comparisons['parent-head...merge-head'].files = [{ ...baseFiles[0], sha: 'combined-blob', patch: '@@ combined context' }];
+    scenario.comparisons['fork-point...base-parent'].files = [{ ...baseFiles[0], sha: 'base-only-blob', patch: '@@ base context' }];
+    const result = runScenario(scenario);
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(outputValue(result.output, 'gate-ok')).toBe('true');
+    expect(outputValue(result.output, 'origin-positive')).toBe('true');
   });
 
   it.each([
     {
       label: 'a foreign edit in the merge commit',
       mutate: (scenario: Scenario) => {
+        scenario.mergeTree = 'c'.repeat(40);
         scenario.comparisons['parent-head...merge-head'].files = [
           ...baseFiles,
           { filename: 'foreign.txt', status: 'added', additions: 1, deletions: 0, changes: 1, patch: '@@ foreign' },
         ];
       },
       reason: /only base|unexpected|foreign|diff|topolog/i,
-      requiredCall: /GET \/repos\/acme\/ikpk\/compare\/parent-head\.\.\.merge-head/,
+      requiredCall: /GIT merge-tree --write-tree parent-head base-parent/,
     },
     {
       label: 'missing positive evidence for the first parent',
