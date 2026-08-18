@@ -129,18 +129,16 @@ describe('fresh marker and head snapshot', () => {
     expect(contract).toMatch(/assessment|assess/i);
   });
 
-  it('requires a successful fresh read proving both the current head and absent marker for manual fallback', () => {
+  it('does not derive a green published eligibility result from an absent marker', () => {
     const policy = workflow(POLICY_FILE);
     const publisher = Object.values(jobs(policy)).find((job) => permissions(job.permissions).checks === 'write');
     expect(publisher, 'fresh API result must feed the check publisher').toBeDefined();
     const contract = sourceOf(publisher);
 
     expect(contract).toMatch(/snapshot|fresh/i);
-    expect(contract).toMatch(/success|ok|known/i);
     expect(contract).toMatch(/head/i);
     expect(contract).toMatch(/match|current/i);
-    expect(contract).toMatch(/auto[_-]?merge/i);
-    expect(contract).toMatch(/false|null|absent/i);
+    expect(contract).not.toMatch(/fresh[_-]?auto[_-]?merge[_-]?enabled/i);
   });
 });
 

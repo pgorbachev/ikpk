@@ -100,12 +100,26 @@ export interface TrustedEvidencePolicy {
   reusablePolicySha: string;
 }
 
+export interface AuthoritativeEvidenceRunInput {
+  targetPullRequestNumber: number;
+  targetHeadSha: string;
+  provenanceJobName: string;
+  run: {
+    pullRequests: Array<{ number: number; headSha: string }>;
+  };
+  jobs: Array<{
+    name: string;
+    conclusion: 'success' | 'failure' | 'cancelled' | null;
+  }>;
+}
+
 export interface DependabotAutoMerge {
   classifyPullRequest(input: ClassificationInput): ClassificationDecision;
   evaluateHead(input: HeadEvaluationInput): HeadEvaluation;
   evaluateMergeReadiness(input: MergeReadinessInput): Decision;
   normalizeDependabotEcosystem(ecosystem: string): string;
   isTrustedPositiveEvidence(candidate: ProvenanceEvidenceCandidate, policy: TrustedEvidencePolicy): boolean;
+  isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput): boolean;
 }
 
 export async function loadDependabotAutoMerge(): Promise<DependabotAutoMerge> {

@@ -39,16 +39,21 @@ const update = (overrides: Partial<HeadEvaluationInput> = {}): HeadEvaluationInp
 });
 
 describe('mandatory eligibility gate and separate provenance evidence', () => {
-  it('does not block an ordinary human PR on the manual path', async () => {
+  it.each([false, true])('keeps an ordinary human PR ineligible when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ autoMergeEnabled: false, prAuthor: 'maintainer', actor: { login: 'maintainer', kind: 'human' } })).gate)
-      .toMatchObject({ ok: true });
+    expect(evaluateHead(head({ autoMergeEnabled, prAuthor: 'maintainer', actor: { login: 'maintainer', kind: 'human' } })).gate)
+      .toMatchObject({ ok: false });
   });
 
-  it('does not block a manual-path Dependabot major or cms PR', async () => {
+  it.each([false, true])('keeps an ineligible Dependabot update red when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ autoMergeEnabled: false, classificationEligible: false })).gate)
-      .toMatchObject({ ok: true });
+    expect(evaluateHead(head({ autoMergeEnabled, classificationEligible: false })).gate)
+      .toMatchObject({ ok: false });
+  });
+
+  it.each([false, true])('keeps an eligible valid Dependabot head green when marker=%s', async (autoMergeEnabled) => {
+    const { evaluateHead } = await loadDependabotAutoMerge();
+    expect(evaluateHead(head({ autoMergeEnabled })).gate).toMatchObject({ ok: true });
   });
 
   it('fails when auto-merge is enabled for an invalid origin', async () => {
@@ -103,13 +108,13 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
     expect(evaluateHead(update({ storedResults })).gate.ok).toBe(false);
   });
 
-  it('records negative evidence for a human commit while leaving the manual gate green', async () => {
+  it('records negative evidence for a human commit and leaves auto-eligibility red', async () => {
     const { evaluateHead } = await loadDependabotAutoMerge();
     const result = evaluateHead(head({
       autoMergeEnabled: false,
       actor: { login: 'maintainer', kind: 'human' },
     }));
-    expect(result.gate.ok).toBe(true);
+    expect(result.gate.ok).toBe(false);
     expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'negative' });
   });
 

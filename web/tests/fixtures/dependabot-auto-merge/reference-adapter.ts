@@ -1,4 +1,5 @@
 import type {
+  AuthoritativeEvidenceRunInput,
   ClassificationInput,
   ClassificationDecision,
   Decision,
@@ -55,12 +56,18 @@ export function evaluateHead(input: HeadEvaluationInput): HeadEvaluation {
     producer: input.expectedEvidenceProducer,
     conclusion: origin ? 'positive' : 'negative',
   };
-  const gate = !input.autoMergeEnabled
-    ? { ok: true, reason: 'manual path' }
-    : input.classificationEligible && origin
-      ? { ok: true, reason: 'eligible class and valid origin' }
-      : { ok: false, reason: 'auto-merge requires eligible class and valid origin' };
+  const gate = input.classificationEligible && origin
+    ? { ok: true, reason: 'eligible class and valid origin' }
+    : { ok: false, reason: 'auto-merge requires eligible class and valid origin' };
   return { gate, evidence };
+}
+
+export function isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput): boolean {
+  const targetIsBound = input.run.pullRequests.some(({ number, headSha }) =>
+    number === input.targetPullRequestNumber && headSha === input.targetHeadSha);
+  const exactJobSucceeded = input.jobs.some(({ name, conclusion }) =>
+    name === input.provenanceJobName && conclusion === 'success');
+  return targetIsBound && exactJobSucceeded;
 }
 
 export function evaluateMergeReadiness(input: MergeReadinessInput): Decision {

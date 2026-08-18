@@ -112,15 +112,8 @@ describe('review regressions: provenance evidence identity', () => {
 });
 
 describe('review regressions: mandatory gate failure semantics', () => {
-  it('keeps the mandatory gate green when assessment fails on the manual path', () => {
-    const step = eligibilityGateStep();
-    expect(JSON.stringify(step.env)).toContain('needs.snapshot.outputs.auto-merge-enabled');
-    const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: 'false' });
-    expect(result.status, result.stderr || result.stdout).toBe(0);
-  });
-
-  it('fails closed when assessment fails for a PR that is still marked for auto-merge', () => {
-    const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: 'true' });
+  it.each(['false', 'true'])('fails closed when assessment fails with marker=%s', (marker) => {
+    const result = runEligibilityGate({ FRESH_AUTO_MERGE_ENABLED: marker });
     expect(result.status, result.stderr || result.stdout).not.toBe(0);
   });
 });

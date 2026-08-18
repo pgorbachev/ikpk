@@ -29,12 +29,14 @@ reproduced faithfully by a local adapter.
 Reproduction:
 
 1. Create a disposable Dependabot PR and push a human commit while auto-merge is off.
-2. Record the head SHA, the green eligibility gate, and the separate negative
+2. Record the head SHA, the red eligibility gate, and the separate negative
    provenance result for that same SHA.
 3. Enable auto-merge manually without changing the head SHA.
-4. Record whether GitHub schedules a new eligibility evaluation and whether it merges.
-5. Disable auto-merge and close the disposable PR after collecting the run/PR URLs.
+4. Confirm the eligibility result remains red and GitHub does not merge the PR.
+5. Confirm the owner can use only the dedicated eligibility ruleset's PR-only bypass
+   after every ordinary required CI check succeeds.
+6. Disable auto-merge and close the disposable PR after collecting the run/PR URLs.
 
-Expected result per the documented residual-risk decision: no new head event is
-guaranteed; enabling the flag is an explicit maintainer action and must be recorded as
-such, not claimed as an automatically covered path.
+Expected result: marker state never changes auto-eligibility for the same head. The
+manual path is the repository owner's narrow PR-only bypass of the eligibility ruleset,
+not a green result that could later be reused by native auto-merge.
