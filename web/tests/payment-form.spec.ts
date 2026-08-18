@@ -347,6 +347,43 @@ test.describe('3.10a-2c два хранилища', () => {
   });
 });
 
+// Найдено ревью владельца (P1) по коммиту fa71ef6: прямое нарушение приватности —
+// однострочная мутация `writeFields → localStorage` — оставалось зелёным. Проверка 3.10a-2c
+// смотрит в хранилище только ПОСЛЕ ответа сервера, а к этому моменту `dropHold()` успевает
+// перезаписать ключ пустым объектом, полученным из пустого `sessionStorage`. То есть утечка
+// существует, но к моменту наблюдения её уже затёрли.
+//
+// Мутация одновременно чтения и записи покрасить умеет, но это ДРУГОЙ, более широкий дефект:
+// она меняет и источник чтения. Требуемый негативный контроль — именно однострочная запись.
+//
+// Отсюда проверка ниже: ответ API задержан, и хранилище читается, пока POST ещё выполняется.
+test.describe('3.10a-2c(2) значения полей не попадают в постоянное хранилище во время отправки', () => {
+  test('пока POST в полёте, localStorage не содержит значений формы', async ({ page }) => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      await held;
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'verification_required', requestId: randomUUID() }),
+      });
+    });
+    await openForm(page);
+    await fillValid(page);
+    const inFlight = page.waitForRequest((r) => r.method() === 'POST' && /\/payments/.test(r.url()));
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await inFlight;
+    const during = await page.evaluate(() => JSON.stringify(localStorage));
+    release?.();
+    expect(during, 'значения формы попали в постоянное хранилище').not.toMatch(
+      /Иван|Петров|ivan@example\.com|79111234567/i,
+    );
+  });
+});
+
 test.describe('3.10a-2a удержание с момента отправки', () => {
   test('ответ на создание не получен, страница закрыта и открыта — попытка удержана', async ({ page }) => {
     await page.route(/\/payments$/, async (route) => {
