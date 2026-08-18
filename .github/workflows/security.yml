@@ -92,8 +92,12 @@ jobs:
 
       - name: Visibility note
         run: |
-          # Версию берём из манифеста, а не пишем строкой: захардкоженная версия
-          # устаревает молча и потом читается как факт (было "Strapi 5.40.0" при 5.51.2).
+          # Ни версию, ни состав advisory не пишем строкой: захардкоженное устаревает молча
+          # и потом читается как факт (было "Strapi 5.40.0" при 5.51.2, и утверждение
+          # "carries advisories with no clean fix" осталось бы и после их закрытия).
+          # Всё, что печатается, вычисляется из манифеста и из отчёта этого же прогона.
           strapi_version="$(node -p "require('./package.json').dependencies['@strapi/strapi'] || 'unknown'")"
-          echo "CMS audit is report-only: @strapi/strapi ${strapi_version} carries upstream advisories with no clean automatic fix."
-          echo "Counts come from the uploaded report, not from this note — the local gate (npm run audit:prod, --audit-level=critical) is the blocking one."
+          counts="$(node -p "const v=require('./audit-report.json').metadata.vulnerabilities; ['critical','high','moderate','low'].map(k=>k+'='+(v[k]||0)).join(' ')" 2>/dev/null || echo 'report unavailable')"
+          echo "CMS runtime audit is report-only (this job does not gate the PR)."
+          echo "@strapi/strapi ${strapi_version}; prod-tree advisories in this run: ${counts}"
+          echo "Local script cms/npm run audit:prod uses --audit-level=critical; see AGENTS.md for when its red result blocks a task."
