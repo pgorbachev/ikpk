@@ -482,10 +482,25 @@ read-only. Signal SHALL NOT получать write-token или secrets и SHALL
 строго типизированный metadata artifact, созданный без исполнения содержимого PR.
 
 Dispatcher SHALL до использования artifact проверить exact source run, workflow path,
-event, conclusion, actor, PR/head association, единственность artifact, digest, состав и
-schema. Source и dispatcher SHALL быть связаны с exact `run_id` и `run_attempt`; artifact,
-jobs или check identity из разных попыток SHALL NOT смешиваться. Producer SHALL NOT
-исполнять workflow-определение из проверяемой ветки.
+event, conclusion, actor, единственность artifact, digest, состав и schema. Source и
+dispatcher SHALL быть связаны с exact `run_id` и `run_attempt`; artifact, jobs или check
+identity из разных попыток SHALL NOT смешиваться. Producer SHALL NOT исполнять
+workflow-определение из проверяемой ветки.
+
+Связь run→PR SHALL требоваться только там, где площадка её сохраняет. Для открытого PR
+`pull_requests` у source run заполнен, и dispatcher SHALL сверять с ним номер PR и head
+SHA из artifact. Для **закрытого** PR площадка эту связь не сохраняет: у настоящего source
+run `pull_request_target: closed` массив пуст (измерено на run 32146430416 —
+`pull_requests: []` — при заполненном массиве у run 32151328732 того же типа события для
+открытого PR). Требовать её и там означало бы требовать невыполнимого, поэтому dispatcher
+закрытого PR SHALL устанавливать связь двумя другими фактами: номер PR берётся из
+аутентифицированного типизированного artifact, а факт слияния и вершина SHALL читаться
+свежим authoritative снимком этого PR. Artifact при этом сообщает, ЧТО читать, и SHALL NOT
+служить доказательством самого слияния.
+
+Расхождение между artifact и свежим снимком о факте слияния SHALL завершаться fail closed.
+Согласованное закрытие без слияния SHALL NOT считаться отказом: продвижение просто не
+запускается, потому что красный прогон на каждом закрытом PR обесценил бы красный цвет.
 Reusable policy SHALL до любого привилегированного job проверять server-controlled
 identity caller: событие `workflow_run` и exact dispatcher `workflow_ref` из
 `refs/heads/main`. Прямой вызов immutable policy из другого workflow или ref SHALL
@@ -543,6 +558,24 @@ marker прочитать не удалось, система SHALL заверш
 - **WHEN** dispatcher получает artifact от другого workflow/run/head, несколько
   одноимённых artifact, неверный digest, лишний файл либо несовпадающие actor/action/PR/head
 - **THEN** положительный gate и свидетельство не публикуются и auto-merge не включается
+
+#### Scenario: Площадка не сохранила связь run→PR для закрытого PR
+
+- **WHEN** dispatcher продвижения получает аутентифицированный source run события
+  `closed`, у которого массив `pull_requests` пуст, и типизированный artifact с номером PR
+- **THEN** dispatcher опознаёт PR по artifact, перечитывает его свежим снимком и продолжает,
+  а отсутствие связи в объекте run отказом не является
+
+#### Scenario: Artifact и свежий снимок расходятся о слиянии
+
+- **WHEN** artifact сообщает о слиянии PR, а свежий снимок того же PR слияния не
+  подтверждает
+- **THEN** dispatcher завершается fail closed и продвижение не запускается
+
+#### Scenario: PR закрыт без слияния
+
+- **WHEN** artifact и свежий снимок согласно сообщают, что PR закрыт без слияния
+- **THEN** продвижение не запускается, а прогон dispatcher остаётся успешным
 
 #### Scenario: Actor marker-event не создавал вершину
 
