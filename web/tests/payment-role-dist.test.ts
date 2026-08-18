@@ -11,7 +11,7 @@
  * Источник требований (change `online-payment-flow`):
  *  - `specs/online-payment/spec.md`, Requirement «Роль сборки объявлена перечислением, а
  *    не признаком «демо»», сценарий «Роль сборки читается из разметки»: значение из
- *    набора `ci|stand|prod`, признака `data-payment-demo` в артефакте нет;
+ *    набора `ci|preview|stand|prod`, признака `data-payment-demo` в артефакте нет;
  *  - там же, Requirement «Адрес платёжного эндпоинта опознаётся в сборке», сценарии
  *    «Адрес объявлен в разметке» и «Объявленный адрес соответствует режиму сборки»;
  *  - там же, сценарии «Артефакт без формы не обещает оплату на странице» и «CI может
@@ -27,7 +27,7 @@
  * привести те проверки к роли — предмет задачи 6.14, и до её выполнения два файла дают
  * разные ответы про один артефакт. Здесь ответ по спеке; там — по прежней матрице.
  *
- * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `ac4089b` артефакт роли не объявляет вовсе — в разметке стоит
+ * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты) артефакт роли не объявляет вовсе — в разметке стоит
  * булев `data-payment-demo` (`src/components/payment/PaymentForm.astro`), а `withPaymentCopy`
  * (`src/pages/oplata.astro`) переписывает описание на «оплатите на этой странице»
  * безусловно, независимо от наличия активной формы.
@@ -76,14 +76,18 @@ function artifactRole(html: string): PaymentRole {
   return value as PaymentRole;
 }
 
-/** Активная форма: признак + объявленная база, буквально равная ожидаемой для роли. */
+/**
+ * Активная форма: признак + объявленная база, буквально равная ожидаемой для роли, при роли
+ * `stand` либо `prod`. У `ci` формы нет вовсе, у `preview` она есть, но ведёт на mock —
+ * активной по определению спеки не является ни та, ни другая.
+ */
 function activeForms(html: string, role: PaymentRole): string[] {
-  if (role === 'ci') return [];
+  if (role === 'ci' || role === 'preview') return [];
   return paymentForms(html).filter((tag) => declaredEndpoint(tag) === PAYMENT_ENDPOINT_BASE[role]);
 }
 
 describe('5.10a артефакт объявляет роль перечислением; прежний булев признак удалён', () => {
-  it('роль читается из разметки страницы оплаты и входит в набор ci|stand|prod', () => {
+  it('роль читается из разметки страницы оплаты и входит в набор ci|preview|stand|prod', () => {
     expect(PAYMENT_ROLES as readonly string[]).toContain(artifactRole(readPage(PAGE)));
   });
 
@@ -109,27 +113,46 @@ describe('5.10a артефакт объявляет роль перечисле�
 });
 
 describe('5.10/6.13 объявленный адрес и число форм ожидаются ПО РОЛИ', () => {
-  it('роль stand|prod: ровно одна активная форма с буквально ожидаемой базой; ноль — отказ', () => {
+  it('роль с формой: ровно одна форма с буквально ожидаемой для роли базой; ноль — отказ', () => {
     const html = readPage(PAGE);
     const role = artifactRole(html);
     if (role === 'ci') {
-      expect(activeForms(html, role), 'роль ci: активной формы быть не должно').toHaveLength(0);
+      expect(paymentForms(html), 'роль ci: формы быть не должно').toHaveLength(0);
       return;
     }
     const forms = paymentForms(html);
-    expect(forms.length, `роль ${role}: активной формы нет — публикация должна остановиться`).toBe(1);
+    expect(forms.length, `роль ${role}: формы нет — предмет проверки потерян`).toBe(1);
     const value = declaredEndpoint(forms[0]!);
     expect(value, `роль ${role}: форма без ${PAYMENT_ENDPOINT_ATTR}`).toBeTruthy();
     expect(value).toBe(PAYMENT_ENDPOINT_BASE[role]);
     expect(/hidden|inert|aria-hidden="true"/.test(forms[0]!)).toBe(true);
   });
 
-  it('роль ci: ни одна форма не объявляет базу установленного контура', () => {
+  // Роль `ci`: ноль форм И ни одного объявленного эндпоинта. Второе — не придирка: дельта
+  // `deploy-gating` называет наличие объявленного эндпоинта у роли без формы отказом, потому
+  // что адрес без формы всё равно обещает контур, которого в артефакте нет.
+  it('роль ci: ни платёжной формы, ни объявленного эндпоинта', () => {
     const html = readPage(PAGE);
     const role = artifactRole(html);
     if (role !== 'ci') return;
-    const bases = paymentForms(html).map(declaredEndpoint);
-    for (const value of bases) {
+    expect(paymentForms(html)).toHaveLength(0);
+    expect(html).not.toMatch(new RegExp(`\\b${PAYMENT_ENDPOINT_ATTR}=`));
+  });
+
+  it('роль preview: ровно одна форма, и её база — буквально mock-адрес', () => {
+    const html = readPage(PAGE);
+    const role = artifactRole(html);
+    if (role !== 'preview') return;
+    const forms = paymentForms(html);
+    expect(forms.length, 'роль preview обязана нести форму для клиентских сценариев').toBe(1);
+    expect(declaredEndpoint(forms[0]!)).toBe(PAYMENT_ENDPOINT_BASE.preview);
+  });
+
+  it('никакая роль, кроме stand и prod, не объявляет базу установленного контура', () => {
+    const html = readPage(PAGE);
+    const role = artifactRole(html);
+    if (role === 'stand' || role === 'prod') return;
+    for (const value of paymentForms(html).map(declaredEndpoint)) {
       expect(value).not.toBe(PAYMENT_ENDPOINT_BASE.prod);
       expect(value).not.toBe(PAYMENT_ENDPOINT_BASE.stand);
     }
@@ -145,7 +168,7 @@ describe('5.10/6.13 объявленный адрес и число форм о�
 
   it('чужая база не встречается ни на одной странице артефакта', () => {
     const role = artifactRole(readPage(PAGE));
-    const forbidden = (Object.keys(PAYMENT_ENDPOINT_BASE) as ('stand' | 'prod')[])
+    const forbidden = (Object.keys(PAYMENT_ENDPOINT_BASE) as ('preview' | 'stand' | 'prod')[])
       .filter((r) => r !== role)
       .map((r) => PAYMENT_ENDPOINT_BASE[r]);
     const hits: string[] = [];

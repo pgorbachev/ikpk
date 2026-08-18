@@ -20,7 +20,7 @@
  *
  * ПОЧЕМУ ЭТИ ТЕСТЫ КРАСНЫЕ СЕЙЧАС: `payments/src/app.ts` знает ровно два режима
  * (`demo`, `prod`), не сверяет `YOOKASSA_SHOP_ID` с режимом вовсе и не имеет маршрута
- * `/readyz` (проверено на `ac4089b`, `validateProdEnv` и `dispatch`). То есть красное —
+ * `/readyz` (проверено на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты), `validateProdEnv` и `dispatch`). То есть красное —
  * отсутствие реализации, а не сломанная обвязка: `assertPaymentServiceExists` отличает
  * «файла нет» от «порт не слушает» ещё до проверки порта.
  *
@@ -33,6 +33,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  PAYMENT_ROLES,
   PAYMENT_RETURN_BASE_PROD,
   PAYMENT_RETURN_BASE_STAND,
   READYZ_PATH,
@@ -130,8 +131,14 @@ describe('4.10 роль установленного сервиса — толь
   );
 
   // Роль СБОРКИ и режим СЕРВИСА — разные значения (спека: «Совпадение имён не
-  // предполагается»). Подстановка роли сборки в режим сервиса — ошибка, а не синоним.
-  it.each(['ci', 'stand', 'TEST', 'Prod', 'mock', 'staging', 'test,prod'])(
+  // предполагается»). Подстановка роли сборки в режим сервиса — ошибка, а не синоним, и
+  // перечень таких значений НЕ выписан руками: он выведен из набора ролей, поэтому новая
+  // роль попадает под проверку сама. Совпадающее имя (`prod`) из перечня исключено — там
+  // отображение как раз законно.
+  const SERVICE_MODES = ['demo', 'test', 'prod'];
+  const ROLE_NAMES_THAT_ARE_NOT_MODES = PAYMENT_ROLES.filter((r) => !SERVICE_MODES.includes(r));
+
+  it.each([...ROLE_NAMES_THAT_ARE_NOT_MODES, 'TEST', 'Prod', 'mock', 'staging', 'test,prod'])(
     'нераспознанный режим %j не открывает порт и не трактуется как демонстрационный',
     async (mode) => {
       const r = await spawnPaymentProcess({ env: contourEnv('test', { PAYMENT_MODE: mode }) });

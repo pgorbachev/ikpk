@@ -153,20 +153,51 @@ export type VerificationJournalEntry = {
 // контуры нельзя публиковать выключенными или перепутанными») и решения владельца от
 // 2026-08-18. Магазины закреплены: тестовый `1440249`, боевой `409285`.
 
-/** Роль КЛИЕНТСКОЙ сборки. Три значения, а не булев признак «демо». */
+/**
+ * Роль КЛИЕНТСКОЙ сборки: ЧЕТЫРЕ значения, а не булев признак «демо».
+ *
+ * `preview` выделена из `ci` решением владельца от 2026-08-19 (находка D1 сессии красных
+ * тестов): прежние три роли давали `ci` два несовместимых смысла — сборка без формы и сборка
+ * с mock-формой, — а ожидание гейта требуется выводить ИЗ РОЛИ. Спека прямо запрещает
+ * уточняющий второй признак рядом с ролью.
+ */
 export const PAYMENT_ROLE_ATTR = 'data-payment-role';
-export const PAYMENT_ROLES = ['ci', 'stand', 'prod'] as const;
+export const PAYMENT_ROLES = ['ci', 'preview', 'stand', 'prod'] as const;
 export type PaymentRole = (typeof PAYMENT_ROLES)[number];
 
 /** Признак прежней матрицы: удалён решением владельца 2026-08-18 (задачи 5.10a, 6.14). */
 export const RETIRED_DEMO_ATTR = 'data-payment-demo';
-/** Адрес прежней матрицы: относится только к роли `ci` и стенд не представляет. */
-export const RETIRED_STAND_ENDPOINT = 'https://demo-api.ikpk.invalid';
 
-/** Объявляемая БАЗА эндпоинта по роли. Клиент дописывает `/payments` сам. */
-export const PAYMENT_ENDPOINT_BASE: Record<'stand' | 'prod', string> = {
+/**
+ * Объявляемая БАЗА эндпоинта по роли. Клиент дописывает `/payments` сам.
+ *
+ * У роли `ci` записи здесь нет намеренно: по спеке объявленного эндпоинта у неё нет вовсе, и
+ * «ожидаемое значение» для неё — отсутствие атрибута, а не какая-то строка.
+ */
+export const PAYMENT_ENDPOINT_BASE: Record<'preview' | 'stand' | 'prod', string> = {
+  preview: 'https://demo-api.ikpk.invalid',
   stand: 'http://193.124.115.99/api',
   prod: 'https://api.ikpk.su',
+};
+
+/**
+ * Адрес mock-обработчика. Тот же, что прежде выдавался за стендовый: решением владельца от
+ * 2026-08-18 он объявлен НЕ представляющим стенд (`.invalid` недостижим по построению), а
+ * решением от 2026-08-19 закреплён за ролью `preview`.
+ */
+export const PREVIEW_MOCK_ENDPOINT = PAYMENT_ENDPOINT_BASE.preview;
+/** Прежнее имя того же значения — оставлено, чтобы старые ссылки читались однозначно. */
+export const RETIRED_STAND_ENDPOINT = PREVIEW_MOCK_ENDPOINT;
+
+/**
+ * Отображение роли сборки на режим серверного процесса. У `ci` процесса нет вовсе —
+ * поэтому `null`, а не какое-то значение режима.
+ */
+export const ROLE_TO_SERVICE_MODE: Record<PaymentRole, 'demo' | 'test' | 'prod' | null> = {
+  ci: null,
+  preview: 'demo',
+  stand: 'test',
+  prod: 'prod',
 };
 
 /** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */

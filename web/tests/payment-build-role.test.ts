@@ -26,7 +26,7 @@
  * правится этот файл, но НЕ ослабляется требование. Артефактная сторона того же
  * требования проверяется отдельно и от имён не зависит — `payment-role-dist.test.ts`.
  *
- * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `ac4089b` роли нет вовсе — ни переменной, ни экспорта;
+ * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты) роли нет вовсе — ни переменной, ни экспорта;
  * `paymentEndpoint()` выбирает адрес по `DEMO_FORMS` (признак форм ЗАЯВКИ, чужой
  * предмет), а стендовая база `http://193.124.115.99/api` не существует в коде.
  */
@@ -35,6 +35,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PAYMENT_ENDPOINT_BASE,
   PAYMENT_ROLES,
+  PREVIEW_MOCK_ENDPOINT,
   RETIRED_STAND_ENDPOINT,
 } from './helpers/payment-contract';
 
@@ -78,7 +79,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('5.10a роль сборки — перечисление из трёх значений', () => {
+describe('5.10a роль сборки — перечисление из четырёх значений', () => {
   it.each(PAYMENT_ROLES)('роль %s разрешается сама в себя', async (value) => {
     const mod = await loadWithRole(value);
     expect(role(mod)()).toBe(value);
@@ -92,7 +93,7 @@ describe('5.10a роль сборки — перечисление из трёх
   // Неизвестная роль останавливает сборку. Молчаливое приведение к `ci` тут хуже
   // отказа: опечатка `stnad` дала бы артефакт без формы там, где заказан стенд, и
   // расхождение всплыло бы только у посетителя.
-  it.each(['stnad', 'staging', 'demo', 'test', 'PROD', 'ci prod', 'true'])(
+  it.each(['stnad', 'staging', 'demo', 'test', 'PROD', 'Preview', 'ci prod', 'true'])(
     'неизвестная роль %j — отказ, а не молчаливое приведение к ci',
     async (value) => {
       const mod = await loadWithRole(value);
@@ -127,9 +128,17 @@ describe('5.10 объявляемый адрес соответствует ро
     expect(value).not.toMatch(/\/payments(\/|$)/);
   });
 
-  it('ci объявляет mock-адрес: ни боевой базы, ни стендовой, ни адреса ЮKassa', async () => {
+  // Роль `ci` формы не несёт, значит и базы у неё нет: ожидаемое для неё значение —
+  // ОТСУТСТВИЕ адреса, а не какая-то строка. Шов: `paymentEndpoint()` отдаёт `null`.
+  it('ci не объявляет базы вовсе', async () => {
     const mod = await loadWithRole('ci');
+    expect(endpoint(mod)()).toBeNull();
+  });
+
+  it('preview объявляет mock-адрес: ни боевой базы, ни стендовой, ни адреса ЮKassa', async () => {
+    const mod = await loadWithRole('preview');
     const value = endpoint(mod)();
+    expect(value).toBe(PREVIEW_MOCK_ENDPOINT);
     expect(value).not.toBe(PAYMENT_ENDPOINT_BASE.prod);
     expect(value).not.toBe(PAYMENT_ENDPOINT_BASE.stand);
     expect(value).not.toMatch(/yookassa|ykassa/i);

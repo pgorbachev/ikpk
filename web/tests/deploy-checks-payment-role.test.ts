@@ -30,7 +30,7 @@
  * (фикстуры с `data-payment-demo`, третий аргумент — булев). До выполнения задачи 6.14 два
  * файла дают разные ответы про одну функцию; здесь ответ по спеке.
  *
- * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `ac4089b` функция сверяет `data-payment-demo` и про роль не
+ * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты) функция сверяет `data-payment-demo` и про роль не
  * знает вовсе (`scripts/lib/deploy-checks.sh`), а отображение в `scripts/deploy-web.sh`
  * даёт стенду недостижимый `https://demo-api.ikpk.invalid`.
  */
@@ -44,9 +44,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   PAYMENT_ENDPOINT_BASE,
+  PREVIEW_MOCK_ENDPOINT,
   READYZ_PATH,
   RETIRED_DEMO_ATTR,
-  RETIRED_STAND_ENDPOINT,
   SERVICE_SHOP_ID,
   repoRoot,
 } from './helpers/payment-contract';
@@ -112,8 +112,8 @@ describe('payment_endpoint_matches — ожидание по роли артеф
 
   // Негативная проверка задачи 6.14 в её же формулировке: подсунуть stand-артефакт с
   // mock-адресом. Зелёный гейт здесь означал бы mock, выданный за стенд.
-  it('stand с mock-адресом прежней матрицы не проходит', async () => {
-    const dist = mkDist({ 'index.html': withForm(RETIRED_STAND_ENDPOINT, 'stand') });
+  it('stand с mock-адресом роли preview не проходит', async () => {
+    const dist = mkDist({ 'index.html': withForm(PREVIEW_MOCK_ENDPOINT, 'stand') });
     expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
   });
 
@@ -145,9 +145,29 @@ describe('payment_endpoint_matches — ожидание по роли артеф
   it(`артефакт прежней матрицы (${RETIRED_DEMO_ATTR}, без роли) не проходит`, async () => {
     const dist = mkDist({
       'index.html':
-        `<!doctype html><form data-payment-form data-payment-endpoint="${RETIRED_STAND_ENDPOINT}" ` +
+        `<!doctype html><form data-payment-form data-payment-endpoint="${PREVIEW_MOCK_ENDPOINT}" ` +
         `${RETIRED_DEMO_ATTR}="true"></form>`,
     });
+    expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
+  });
+
+  it('preview: роль объявлена, форма ведёт на mock — проверка проходит', async () => {
+    const dist = mkDist({ 'index.html': withForm(PREVIEW_MOCK_ENDPOINT, 'preview') });
+    expect(await gate(dist, PREVIEW_MOCK_ENDPOINT, 'preview')).toBe(0);
+  });
+
+  it('preview без формы вовсе — отказ: у этой роли форма есть по контракту', async () => {
+    const dist = mkDist({ 'index.html': withoutForm('preview') });
+    expect(await gate(dist, PREVIEW_MOCK_ENDPOINT, 'preview')).not.toBe(0);
+  });
+
+  it('preview с базой установленного контура — отказ', async () => {
+    const dist = mkDist({ 'index.html': withForm(PAYMENT_ENDPOINT_BASE.stand, 'preview') });
+    expect(await gate(dist, PREVIEW_MOCK_ENDPOINT, 'preview')).not.toBe(0);
+  });
+
+  it('артефакт роли preview отвергается выкладкой stand', async () => {
+    const dist = mkDist({ 'index.html': withForm(PREVIEW_MOCK_ENDPOINT, 'preview') });
     expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
   });
 
@@ -158,6 +178,13 @@ describe('payment_endpoint_matches — ожидание по роли артеф
 
   it('ci с базой установленного контура — отказ: артефакт роли ci не несёт активной формы', async () => {
     const dist = mkDist({ 'index.html': withForm(PAYMENT_ENDPOINT_BASE.prod, 'ci') });
+    expect(await gate(dist, '', 'ci')).not.toBe(0);
+  });
+
+  // У роли `ci` эндпоинта нет ВОВСЕ, включая mock: адрес без формы всё равно обещает контур,
+  // которого в артефакте нет, и дельта `deploy-gating` называет это отказом.
+  it('ci с mock-адресом — тоже отказ, а не «почти ci»', async () => {
+    const dist = mkDist({ 'index.html': withForm(PREVIEW_MOCK_ENDPOINT, 'ci') });
     expect(await gate(dist, '', 'ci')).not.toBe(0);
   });
 
@@ -338,5 +365,69 @@ describe('payment_cors_allows — прод-контур разрешает origi
   it('разрешение для чужого origin — отказ', async () => {
     allowOrigin = 'https://evil.example';
     expect(await check()).not.toBe(0);
+  });
+});
+
+/**
+ * Проба доступности ПУБЛИЧНОГО пути (задача 6.13; спека, Requirement «Установленные платёжные
+ * контуры нельзя публиковать выключенными или перепутанными»: «Доступность публичного пути
+ * проверяется `OPTIONS <объявленная база>/payments` с ожиданием `204`»).
+ *
+ * ШОВ: `payment_endpoint_reachable <объявленная база>`. Функция сама дописывает `/payments` —
+ * ровно так же, как это делает клиент, и по той же причине: в артефакте объявлена БАЗА.
+ *
+ * Предмет здесь двойной, и второе не менее важно первого: проба обязана быть БЕЗОПАСНОЙ.
+ * Поэтому проверяется не только код возврата гейта, но и то, ЧТО именно увидел сервер: один
+ * запрос методом `OPTIONS` по пути `/payments`, и ни одного `POST`/`GET`. Без этой половины
+ * гейт мог бы «проверять доступность» созданием платежа, и проверка выкладки стала бы
+ * источником мусорных записей в тестовом магазине.
+ */
+describe('payment_endpoint_reachable — безопасная проба публичного пути', () => {
+  let server: Server;
+  let port = 0;
+  let status = 204;
+  let seen: { method: string; url: string }[] = [];
+
+  beforeAll(async () => {
+    await requireFn('payment_endpoint_reachable');
+    server = createServer((req, res) => {
+      seen.push({ method: req.method ?? '', url: req.url ?? '' });
+      res.writeHead(status, status === 204 ? {} : { 'Content-Type': 'application/json' });
+      res.end(status === 204 ? undefined : '{}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  const probe = (base = `http://127.0.0.1:${port}`) => {
+    seen = [];
+    return runFn(`payment_endpoint_reachable '${base}'`);
+  };
+
+  it('204 на OPTIONS — проба пройдена', async () => {
+    status = 204;
+    expect(await probe()).toBe(0);
+  });
+
+  it('проба идёт методом OPTIONS по пути /payments и ничего не создаёт', async () => {
+    status = 204;
+    await probe();
+    expect(seen.length, `сервер увидел запросов: ${JSON.stringify(seen)}`).toBe(1);
+    expect(seen[0]!.method).toBe('OPTIONS');
+    expect(seen[0]!.url).toBe('/payments');
+    expect(seen.some((r) => r.method === 'POST' || r.method === 'GET')).toBe(false);
+  });
+
+  it.each([200, 404, 500, 301])('код %i вместо 204 — отказ', async (code) => {
+    status = code;
+    expect(await probe()).not.toBe(0);
+  });
+
+  it('путь недостижим вовсе — отказ тем же способом', async () => {
+    expect(await probe('http://127.0.0.1:1')).not.toBe(0);
   });
 });
