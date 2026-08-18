@@ -31,10 +31,11 @@
       security registry ручной, транзитивный registered node в lockfile diff ручной,
       missing/stale registry ручной
       Evidence: `web/tests/dependabot-auto-merge-classification.test.ts` (19 cases).
-- [x] 2.2 Написать проверки того, что обязательная проверка допустимости **не трогает
-      ручной путь**: человеческий PR проходит, PR Dependabot с мажором проходит, PR с
-      включённым авто-слиянием и вершиной без допустимого происхождения падает
-      Evidence: `web/tests/dependabot-auto-merge-provenance.test.ts`.
+- [ ] 2.2 Переписать проверки обязательной auto-eligibility после security review:
+      человеческий PR и PR Dependabot с мажором красные независимо от marker; разрешённый
+      Dependabot head зелёный; ручной путь проверяется отдельным PR-only ruleset bypass,
+      который не обходит остальные CI. Прежняя manual-green evidence в
+      `web/tests/dependabot-auto-merge-provenance.test.ts` superseded.
 - [x] 2.3 Написать проверки на **две независимые мутации**, подпись и действующее лицо
       порознь: (а) подпись платформы есть, действующее лицо — участник с правом записи —
       падает; (б) действующее лицо допустимо, но подписи платформы нет — падает; (в) оба
@@ -93,14 +94,14 @@
 
 ## 4. Обязательная проверка допустимости и свидетельство происхождения
 
-- [ ] 4.1 Реализовать обязательную проверку допустимости: на каждом head SHA падает тогда и
-      только тогда, когда авто-слияние включено, а вершина не имеет допустимого
-      происхождения, класс не разрешён либо срабатывает security-boundary override
-      (включая недоступность metadata/registry); при
-      выключенном авто-слиянии — проходит. Внести её имя в обязательные
-- [ ] 4.2 Проверить, что она **не блокирует ручной путь**: обычный человеческий PR и PR
-      Dependabot с мажором или security-boundary dependency сливаются вручную как прежде.
-      Предъявить все случаи
+- [ ] 4.1 Реализовать обязательную проверку допустимости: на каждом head SHA независимо от
+      auto-merge marker падает, когда вершина не имеет допустимого происхождения, класс не
+      разрешён либо срабатывает security-boundary override (включая недоступность
+      metadata/registry). Внести её имя в отдельный required ruleset
+- [ ] 4.2 Сохранить ручной путь узким bypass: только владелец имеет PR-only bypass ruleset
+      `Eligibility gate`; остальные required checks остаются в branch protection с
+      `enforce_admins=true`. Предъявить human, major, CMS и security-boundary случаи и
+      доказать, что упавший обычный CI bypass не получает
 - [ ] 4.3 Реализовать определение происхождения двумя независимыми фактами: подпись
       платформы (способ создания) **и** действующее лицо события (субъект). Поля
       `author`/`committer` и выведенную по адресу учётную запись автора не использовать
@@ -120,7 +121,9 @@
 - [ ] 4.7a Публиковать gate и свидетельство на свежо прочитанный head SHA из доверенного
       `pull_request_target` producer. Проверить полный immutable SHA reusable policy,
       machine external id, ожидаемый GitHub App и отсутствие второго workflow с
-      `checks: write`; same-name job из ветки PR обязан отвергаться
+      `checks: write`; same-name job из ветки PR обязан отвергаться. При чтении evidence
+      сверять authoritative `run.pull_requests[].head.sha` и exact provenance job success;
+      borrowed `details_url` отрицательного/чужого run обязан отвергаться
 - [ ] 4.8 **Негативная проверка ложного свидетельства:** запушить человеческий коммит в
       ветку PR Dependabot при выключенном авто-слиянии (гейт допустимости при этом обязан
       быть зелёным), затем обновить ветку механизмом. Ожидание: обновление **красное**.
@@ -186,8 +189,14 @@
       равно не произошло
 - [ ] 6.8 Проверить stale-event race: event payload говорит `auto_merge == null`, свежий
       API-снимок говорит, что marker включён (и отдельно API-снимок недоступен). При сбое
-      assessment оба случая не должны публиковать зелёный required gate; ручной путь
-      зелёный только при успешно подтверждённом свежем `auto_merge == null`
+      assessment оба случая не должны публиковать зелёный required gate; отсутствие
+      marker также не делает неразрешённый head зелёным
+- [ ] 6.9 Проверить same-SHA marker race: для human/ineligible head gate остаётся красным
+      до и после `auto_merge_enabled`; автоматическое слияние невозможно, а владелец может
+      вручную применить только PR-only bypass eligibility ruleset после успеха прочих CI
+- [ ] 6.10 Проверить повторную публикацию custom check: POST содержит `head_sha`, PATCH
+      существующего check его не передаёт и способен сменить success на failure; selector
+      существующего check дополнительно сверяет name, head SHA и GitHub Actions app id
 
 ## 7. Приёмка и архив
 
