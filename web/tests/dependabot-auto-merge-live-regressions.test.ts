@@ -219,6 +219,7 @@ interface RebaseScenario {
   artifactOverrides?: Record<string, unknown>;
   artifactCount?: number;
   corruptArchive?: boolean;
+  extraArchiveMember?: boolean;
   pullOverrides?: Record<string, unknown>;
 }
 
@@ -261,16 +262,22 @@ function mergedPull(overrides: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
-function zipWith(name: string, content: string, dir: string): string {
+function zipWith(members: Array<[string, string]>, dir: string): string {
   const archive = join(dir, 'artifact.zip');
-  const source = join(dir, name);
-  writeFileSync(source, content);
+  const args = members.flatMap(([name, content]) => {
+    const source = join(dir, name);
+    writeFileSync(source, content);
+    return [source, name];
+  });
   const result = spawnSync('python3', [
     '-c',
-    'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w"); z.write(sys.argv[2], sys.argv[3]); z.close()',
+    `import sys, zipfile
+archive, *rest = sys.argv[1:]
+with zipfile.ZipFile(archive, "w") as z:
+    for source, name in zip(rest[::2], rest[1::2]):
+        z.write(source, name)`,
     archive,
-    source,
-    name,
+    ...args,
   ], { encoding: 'utf8' });
   expect(result.status, result.stderr).toBe(0);
   return archive;
@@ -281,12 +288,16 @@ function runRebaseAuthentication(scenario: RebaseScenario = {}): ShellResult {
   scratch.push(fixtures);
 
   const signal = rebaseSignal(scenario.signalOverrides);
-  const archive = zipWith(REBASE_SIGNAL_FILENAME, `${JSON.stringify(signal)}\n`, fixtures);
+  const members: Array<[string, string]> = [[REBASE_SIGNAL_FILENAME, `${JSON.stringify(signal)}\n`]];
+  if (scenario.extraArchiveMember === true) {
+    members.push(['extra.json', '{"smuggled":true}\n']);
+  }
+  const archive = zipWith(members, fixtures);
   const digest = `sha256:${createHash('sha256').update(readFileSync(archive)).digest('hex')}`;
   if (scenario.corruptArchive === true) {
     // Дайджест объявлен по исходному содержимому, а отдаётся другое: ровно подмена
     // содержимого artifact при верной записи в API.
-    zipWith(REBASE_SIGNAL_FILENAME, `${JSON.stringify(rebaseSignal({ prNumber: 999 }))}\n`, fixtures);
+    zipWith([[REBASE_SIGNAL_FILENAME, `${JSON.stringify(rebaseSignal({ prNumber: 999 }))}\n`]], fixtures);
   }
 
   const artifact = {
@@ -341,6 +352,13 @@ describe('живая регрессия: продвижение опознаёт
     const result = runRebaseAuthentication({ corruptArchive: true });
 
     expect(result.status, 'подмена содержимого artifact обязана быть отказом').not.toBe(0);
+    expect(outputValue(result.output, 'merged')).toBeUndefined();
+  });
+
+  it('отвергает лишний файл в архиве', () => {
+    const result = runRebaseAuthentication({ extraArchiveMember: true });
+
+    expect(result.status, 'состав архива обязан быть ровно одним ожидаемым файлом').not.toBe(0);
     expect(outputValue(result.output, 'merged')).toBeUndefined();
   });
 
