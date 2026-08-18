@@ -74,7 +74,7 @@ jobs:
         run: |
           current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           head_sha="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$current")"
-          auto_merge_enabled="$(jq -er 'if has("auto_merge") then (.auto_merge != null) else error("missing auto_merge") end' <<<"$current")"
+          auto_merge_enabled="$(jq -r 'if has("auto_merge") then (.auto_merge != null) else error("missing auto_merge") end' <<<"$current")"
           head_matches_event=false
           if [ "$head_sha" = "$EVENT_HEAD_SHA" ]; then head_matches_event=true; fi
           {
