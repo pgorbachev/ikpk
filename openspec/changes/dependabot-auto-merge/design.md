@@ -171,10 +171,19 @@ server-provided action, actor, PR number/head и вывод pinned `dependabot/f
 в одном строго типизированном JSON artifact. Он не делает checkout/download кода или
 artifact из PR и не исполняет PR-содержимое.
 
+Только signal с action `opened` или `synchronize` связывает actor с появлением нового
+head и может создать либо заменить provenance. `reopened`, `auto_merge_enabled` и
+`auto_merge_disabled` переоценивают policy для того же SHA по уже сохранённому
+authenticated evidence; actor этих событий не считается создателем вершины и не может
+перезаписать provenance.
+
 Dispatcher слушает завершение только этого exact signal workflow через `workflow_run`.
 До выдачи любого результата он через API проверяет source run id, repository, event,
 path, conclusion, actor и связь с тем же PR/head; требует ровно один ожидаемый artifact,
 проверяет его digest, состав архива, schema и совпадение полей с authoritative source run.
+Source `run_id` и `run_attempt` входят в имя и schema artifact. Dispatcher также включает
+собственные `run_id`/`run_attempt` и source `run_id`/`run_attempt` в machine identity
+опубликованных checks; consumer читает jobs exact attempt и отвергает смешение попыток.
 Лишь затем он вызывает reusable policy по полному SHA. Checkout собственного policy-кода
 использует `repository: ${{ job.workflow_repository }}` и
 `ref: ${{ job.workflow_sha }}` — moving `main` не является доверенной привязкой.
@@ -183,6 +192,13 @@ path, conclusion, actor и связь с тем же PR/head; требует р�
 недоступны, а долгоживущий credential добавил бы ротацию и более широкую границу доверия.
 Schedule без signal отвергнут: он теряет authoritative actor события, необходимого для
 проверки происхождения.
+
+Permission matrix разделён по jobs, а не объединён на уровне workflow: signal получает
+только `contents: read` и `pull-requests: read`; authenticator/snapshot — `actions: read`
+и `pull-requests: read`; read-only assessment — `actions: read`, `checks: read`,
+`contents: read`, `pull-requests: read`; publisher — только `checks: write`; marker/merge
+job — `contents: write` и `pull-requests: write`; rebase commenter — только
+`pull-requests: write`. Неуказанные scopes равны `none`.
 
 Нативный check такого запуска относится к base-контексту, поэтому producer публикует два
 отдельных check run на **свежо прочитанный текущий head SHA**: обязательный gate и

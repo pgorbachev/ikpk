@@ -39,7 +39,9 @@
 - [ ] 2.2a Написать RED-проверки двухступенчатого producer: Dependabot signal не требует
       write permissions/secrets; privileged `workflow_run` принимает только exact
       signal run/path/actor/PR/head и единственный artifact с верным digest/schema;
-      подмена каждого из этих полей и второй одноимённый artifact дают fail closed
+      подмена каждого из этих полей, actor от marker/reopen, другой `run_attempt` и второй
+      одноимённый artifact дают fail closed; только `opened`/`synchronize` выпускают
+      provenance
 - [x] 2.3 Написать проверки на **две независимые мутации**, подпись и действующее лицо
       порознь: (а) подпись платформы есть, действующее лицо — участник с правом записи —
       падает; (б) действующее лицо допустимо, но подписи платформы нет — падает; (в) оба
@@ -175,10 +177,12 @@
       exact source run/path/actor/PR/head/artifact и вызывает reusable workflow по полному
       SHA; policy source checkout'ится по `job.workflow_repository` +
       `job.workflow_sha`, а не по moving `main`
-- [ ] 6.2 Выдать job'у ровно `contents: write` и `pull-requests: write`; убедиться, что
-      прав на публикацию и на изменение workflow нет. Зафиксировать в отчёте фактический
-      блок permissions. Отдельному publisher выдать только `checks: write` и проверить,
-      что это право отсутствует у прочих workflow автоматизации
+- [ ] 6.2 Реализовать и проверить exact permission matrix: signal — `contents: read` и
+      `pull-requests: read`; authenticator/snapshot — `actions: read` и
+      `pull-requests: read`; assessment — `actions/checks/contents/pull-requests: read`;
+      publisher — только `checks: write`; marker/merge — только `contents: write` и
+      `pull-requests: write`; rebase commenter — только `pull-requests: write`.
+      Неуказанные scopes равны `none`, прав на publication/workflow нет
 - [x] 6.3 Реализовать классификацию по таблице, включая отказ при недоступных метаданных и
       безусловный отказ для мажоров всех экосистем и для любых обновлений пакета `cms`;
       для `web` потреблять committed

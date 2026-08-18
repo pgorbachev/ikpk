@@ -483,11 +483,26 @@ read-only. Signal SHALL NOT получать write-token или secrets и SHALL
 
 Dispatcher SHALL до использования artifact проверить exact source run, workflow path,
 event, conclusion, actor, PR/head association, единственность artifact, digest, состав и
-schema. Producer SHALL NOT исполнять workflow-определение из проверяемой ветки.
+schema. Source и dispatcher SHALL быть связаны с exact `run_id` и `run_attempt`; artifact,
+jobs или check identity из разных попыток SHALL NOT смешиваться. Producer SHALL NOT
+исполнять workflow-определение из проверяемой ветки.
 Обязательный gate и отдельное свидетельство SHALL публиковаться на свежо прочитанный
 текущий head SHA отдельным job с `checks: write`; этот job SHALL NOT иметь
 `contents: write` или `pull-requests: write`. Право `checks: write` SHALL NOT выдаваться
 другим workflow этой автоматизации.
+
+Только события `opened` и `synchronize` SHALL связывать authenticated actor с появлением
+новой вершины и создавать либо заменять provenance. `reopened`, `auto_merge_enabled` и
+`auto_merge_disabled` SHALL переоценивать тот же SHA только по сохранённому свидетельству;
+actor этих событий SHALL NOT считаться создателем head и SHALL NOT перезаписывать
+provenance.
+
+Signal SHALL иметь только `contents: read` и `pull-requests: read`. Job аутентификации
+source run/artifact SHALL иметь `actions: read` и `pull-requests: read`; read-only
+assessment — `actions: read`, `checks: read`, `contents: read`, `pull-requests: read`;
+publisher — только `checks: write`; job пометки/слияния — только `contents: write` и
+`pull-requests: write`; rebase commenter — только `pull-requests: write`. Неуказанные
+permissions SHALL быть `none`.
 
 Event payload SHALL NOT считаться свежим доказательством marker. Если текущий head или
 marker прочитать не удалось, система SHALL завершаться fail closed: положительный
@@ -517,6 +532,18 @@ marker прочитать не удалось, система SHALL заверш
 - **WHEN** dispatcher получает artifact от другого workflow/run/head, несколько
   одноимённых artifact, неверный digest, лишний файл либо несовпадающие actor/action/PR/head
 - **THEN** положительный gate и свидетельство не публикуются и auto-merge не включается
+
+#### Scenario: Actor marker-event не создавал вершину
+
+- **WHEN** `reopened`, `auto_merge_enabled` или `auto_merge_disabled` инициирован человеком
+  либо механизмом обновления для уже существующего SHA
+- **THEN** actor этого события не используется как происхождение head и не создаёт или
+  перезаписывает provenance; допустимость определяется сохранённым evidence того же SHA
+
+#### Scenario: Смешаны попытки workflow run
+
+- **WHEN** artifact либо provenance job относится к другому `run_attempt` того же run id
+- **THEN** dispatcher или consumer отвергает evidence и завершает проверку fail closed
 
 #### Scenario: Ветка PR не может подменить producer
 
