@@ -8,10 +8,11 @@
    напрямую. Решение, делающее чтение асинхронным, задевает все 31 и лишает проверки контента
    возможности работать без сети.
 2. **Сайт собирают три независимых джоба**: `unit-and-build` и `e2e-smoke`
-   (`.github/workflows/test.yml`, семь вызовов сборки на строках 47, 61, 99, 101, 372, 435) и
-   `build` (`.github/workflows/deploy.yml:117`).
+   (`.github/workflows/test.yml`, шесть вызовов сборки — предикат
+   `grep -nE 'npm run build|astro build'`) и `build`
+   (`.github/workflows/deploy.yml:117`, `run: npm run build`); всего семь вызовов.
 3. **Часть вывода зависит от календарной даты**: статус семинара вычисляется от «сегодня»
-   (`web/scripts/lib/planned-seminars.ts:54`).
+   (`web/scripts/lib/planned-seminars.ts:54`, `export const calendarToday`).
 4. **Принятая `schedule-month-filter`** уже требует, чтобы опорная дата приходила аргументом из
    того же источника, что у сборки, и чтобы модули не обращались к текущему времени.
 5. **Принятая `deploy-gating`** привязывает публикацию к коммиту и объявляет ручной путь
