@@ -17,6 +17,7 @@ export interface LintCoverageInput {
   packageName: 'web' | 'cms' | 'scripts';
   threshold: number;
   changedFiles: string[];
+  autoMergeEligible?: boolean;
   head: { exitCode: number; reportJson: string };
   base?: { exitCode: number; reportJson: string };
 }
@@ -43,6 +44,7 @@ export interface TestExecutionInput {
   runner: 'vitest' | 'playwright';
   threshold: number;
   changedFiles: string[];
+  autoMergeEligible?: boolean;
   headReport: unknown;
   baseReport?: unknown;
 }

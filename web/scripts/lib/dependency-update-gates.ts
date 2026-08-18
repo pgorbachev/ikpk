@@ -11,6 +11,7 @@ export interface LintCoverageInput {
   packageName: 'web' | 'cms' | 'scripts';
   threshold: number;
   changedFiles: string[];
+  autoMergeEligible?: boolean;
   head: { exitCode: number; reportJson: string };
   base?: { exitCode: number; reportJson: string };
 }
@@ -37,6 +38,7 @@ export interface TestExecutionInput {
   runner: 'vitest' | 'playwright';
   threshold: number;
   changedFiles: string[];
+  autoMergeEligible?: boolean;
   headReport: unknown;
   baseReport?: unknown;
 }
@@ -115,11 +117,11 @@ export function checkLintCoverage(input: LintCoverageInput): GateResult {
     );
   }
 
-  if (!isDependencyOnlyChange(input.changedFiles)) {
+  if (!isDependencyOnlyChange(input.changedFiles) && !input.autoMergeEligible) {
     return { ok: true, message: `${input.packageName}: lint ${headCount} >= ${input.threshold}`, headCount };
   }
   if (!input.base) {
-    return failure(`${input.packageName}: для dependency-only PR отсутствует базовый отчёт lint`, { headCount });
+    return failure(`${input.packageName}: для base-comparison scope отсутствует базовый отчёт lint`, { headCount });
   }
 
   const base = parseLintCount(input.base, `${input.packageName} base`);
@@ -267,7 +269,7 @@ export function checkTestExecution(input: TestExecutionInput): GateResult {
     return failure(`${input.runner}: выполнено ${headCount} тестов, ниже порога ${input.threshold}`, { headCount });
   }
 
-  if (!isDependencyOnlyChange(input.changedFiles)) {
+  if (!isDependencyOnlyChange(input.changedFiles) && !input.autoMergeEligible) {
     return { ok: true, message: `${input.runner}: выполнено ${headCount} тестов`, headCount };
   }
   const baseCount = executedTestCount(input.runner, input.baseReport);
