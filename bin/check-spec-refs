@@ -7,22 +7,31 @@
 // и молча становится ложной после сдвига файла; строгая валидация OpenSpec её не смотрит, а
 // её зелёный цвет читается как «спека в порядке».
 //
-// ПЕРВАЯ РЕДАКЦИЯ ЭТОГО СКРИПТА БЫЛА ВАКУУМНО ЗЕЛЁНОЙ, и это главный довод за нынешнее
-// устройство. Она печатала «128 ссылок, расхождений нет», хотя по содержимому проверяла
-// ДВЕ: короткие ссылки (`index.astro:375-379`) отбрасывались целиком — их 23, — а полные
-// без фрагмента проверялись только на то, что номер строки не больше длины файла. Перенос
-// предмета с `data.ts:31` на `:45` такую проверку проходил. То есть гейт не ловил ровно тот
-// класс ошибки, ради которого написан.
+// ДВЕ ПРЕДЫДУЩИЕ РЕДАКЦИИ ЭТОГО СКРИПТА БЫЛИ ЛОЖНОЗЕЛЁНЫМИ, и это главный довод за нынешнее
+// устройство:
+//   1. Первая печатала «128 ссылок, расхождений нет», проверяя по содержимому ДВЕ: короткие
+//      ссылки (`index.astro:375-379`) отбрасывались целиком, а полные без фрагмента
+//      проверялись только на то, что номер строки не больше длины файла.
+//   2. Вторая печатала «проверено по содержимому 146» — и это была та же ошибка в подсчёте,
+//      а не в проверке: в 146 попали 142 ссылки, у которых проверено ТОЛЬКО существование
+//      пути. Ссылок с номером И фрагментом на том дереве было ЧЕТЫРЕ. Заодно она пропускала
+//      ровно тот пример, ради которого писалась: `online-payment-flow/proposal.md:215-235`
+//      не разрешался относительно `openspec/changes/`, а любая ненайденная ссылка из
+//      активного change объявлялась предупреждением — гейт выходил нулём при уехавшем на
+//      254-ю строку разделе.
+// Отсюда правило вывода: числа печатаются по КЛАССАМ проверки и не складываются в одно
+// «проверено». Сумма разных по силе проверок — это способ выдать неизмеренное за измеренное.
 //
-// Отсюда три класса исхода вместо двух, и они не сливаются:
-//   РАСХОЖДЕНИЕ  — путь не существует (в принятой спеке и в ссылках между артефактами),
-//                  номер строки за концом файла, фрагмент на этой строке не найден,
+// Три класса исхода:
+//   РАСХОЖДЕНИЕ  — путь не существует (в принятой спеке и в ссылке на артефакт другого
+//                  change), номер строки за концом файла, фрагмент на этой строке не найден,
 //                  короткая ссылка разрешается неоднозначно;
 //   НЕИЗМЕРИМО   — ссылка с номером строки, но без фрагмента: содержимое проверить нечем.
-//                  Такие не выдаются за проверенные, а считаются и сравниваются с
-//                  зафиксированным долгом (openspec/.spec-ref-debt). Долг может только
-//                  уменьшаться: новые неизмеримые ссылки гейт не пропускает;
-//   ПРОВЕРЕНО    — путь разрешён и, если есть фрагмент, фрагмент найден.
+//                  Такие не выдаются за проверенные, а сравниваются с ПОИМЁННЫМ долгом
+//                  (openspec/.spec-ref-debt). Поимённым, а не числом: при сравнении чисел
+//                  снятие одной старой ссылки открывает место новой при том же итоге —
+//                  храповик, который проворачивается;
+//   ПРОВЕРЕНО    — путь разрешён; отдельно считается, у скольких сверено содержимое.
 //
 // Строгость разная у разных артефактов, и это не послабление, а разные предметы:
 //   - openspec/specs/** описывает ПРИНЯТОЕ поведение существующего кода: несуществующий
@@ -30,23 +39,68 @@
 //   - openspec/changes/** описывает ПРЕДЛАГАЕМОЕ: ссылка на файл, который change ещё
 //     создаст, законна и идёт в предупреждение. Но существующий файл обязан содержать то,
 //     что заявлено;
-//   - ссылки на файлы openspec/** (между артефактами) проверяются как обычные: раздел
-//     переезжает, и «proposal.md:215-235» стареет так же, как строка кода;
+//   - ссылка на артефакт ДРУГОГО change или принятой спеки — не обещание создать файл, а
+//     ссылка на существующий документ: ненайденный путь здесь расхождение даже в
+//     предложении. Раздел переезжает, и «proposal.md:215-235» стареет так же, как строка
+//     кода. Переименование или удаление change иначе тихо ломает все ссылки на него;
+//   - ссылка, которая ДОЛЖНА указывать в пустоту (у нас каталог `payment-request-flow`
+//     удалён решением владельца, а цитаты на него оставлены осознанно), объявляется в
+//     openspec/.spec-ref-absent. Объявляется, а не выводится из текста: «намеренно» —
+//     утверждение автора, и распознавать его по формулировкам рядом означало бы гадать;
 //   - openspec/changes/archive/** не проверяется вовсе: архив описывает своё время.
 //
-// Коды выхода: 0 — чисто; 1 — расхождения либо рост долга неизмеримых; 2 — измерить не
-// удалось (нет артефактов, нет ни одной ссылки, нет файла долга). Третий код обязателен:
+// Предупреждения (ссылка на ещё не созданный файл кода) НЕ enforced и намеренно: в
+// предложении это законная форма. Их число печатается, но зелёный цвет о них ничего не
+// утверждает — читать «предупреждений 17» как «проверено 17» нельзя.
+//
+// Коды выхода: 0 — чисто; 1 — расхождения либо расхождение с поимённым долгом; 2 — измерить
+// не удалось (нет артефактов, нет ни одной ссылки, нет файла долга). Третий код обязателен:
 // «ссылок не найдено» — это не «ссылки верны».
+//
+// `--write-debt` перезаписывает openspec/.spec-ref-debt текущим списком неизмеримых ссылок.
+// Это не способ узаконить рост: рост виден в диффе файла поимённо, а не как «54 → 56».
+// `--write-absent` так же перезаписывает openspec/.spec-ref-absent списком ненайденных
+// ссылок на артефакты — применять только после того, как каждая строка прочитана глазами.
 
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..');
 const DEBT_FILE = join(ROOT, 'openspec', '.spec-ref-debt');
+const ABSENT_FILE = join(ROOT, 'openspec', '.spec-ref-absent');
+const WRITE_DEBT = process.argv.includes('--write-debt');
+const WRITE_ABSENT = process.argv.includes('--write-absent');
 
 const SRC_EXT = /\.(ts|tsx|mjs|cjs|js|astro|json|ya?ml|csv|css|sh|md)$/;
 const REF = /`([A-Za-z0-9_\-./[\]]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?`(?:[^\S\n]*,[^\S\n]*`([^`]+)`)?/g;
+
+const DEBT_HEADER = `# Поимённый долг неизмеримых ссылок: каждая строка — ссылка «путь:строка» БЕЗ фрагмента
+# в кавычках, то есть не проверяемая по содержимому. Формат: <артефакт> :: <путь>:<строки>.
+#
+# Гейт ./bin/check-spec-refs сравнивает текущий набор с этим ПОИМЁННО и падает в обе стороны:
+# появилась новая неизмеримая ссылка — отказ; исчезла записанная — отказ с требованием
+# обновить файл (\`./bin/check-spec-refs --write-debt\`). Сравнение по числу проворачивается:
+# снять одну старую ссылку и добавить новую — то же число и зелёный гейт.
+#
+# Почему долг, а не немедленный запрет: ссылка «путь:строка» без фрагмента — принятая в
+# проекте форма, её несут и уже слитые спеки. Требовать разом переписать все было бы
+# запретом на существующее состояние вместо защиты от регресса. Новая ссылка обязана нести
+# фрагмент: \`web/src/lib/data.ts:45\`, \`const ENTITIES_DIR =\`
+`;
+
+const ABSENT_HEADER = `# Объявленные ссылки в пустоту: артефакт OpenSpec, на который ссылаются осознанно, зная, что
+# файла нет. Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора «так и должно
+# быть», поэтому она объявляется здесь, а не выводится гейтом из текста рядом со ссылкой.
+#
+# Наш случай — каталог \`openspec/changes/payment-request-flow/\`, удалённый решением владельца
+# тем же PR, что и слитый \`online-payment-flow\`: цитаты на него оставлены как указание на
+# происхождение уже принятых решений.
+#
+# Без этого файла у гейта было бы два плохих выхода: либо считать ненайденный артефакт нормой
+# (тогда переименование change тихо ломает все ссылки на него), либо краснеть на осознанной
+# цитате. Список сверяется поимённо и в обе стороны: \`./bin/check-spec-refs --write-absent\`.
+`;
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -73,10 +127,44 @@ function buildBasenameIndex() {
 const byBasename = buildBasenameIndex();
 
 /**
+ * Базовые имена файлов-артефактов OpenSpec, СНЯТЫЕ С ДЕРЕВА, а не перечисленные списком:
+ * `proposal.md`, `design.md`, `tasks.md`, `spec.md` и что бы ни добавила схема. Перечень в
+ * коде отстал бы от схемы молча — ровно тот способ промолчать, от которого правило «не
+ * перечислять частные случаи».
+ */
+function artifactBasenames() {
+  const names = new Set();
+  for (const base of ['changes', 'specs']) {
+    const dir = join(ROOT, 'openspec', base);
+    if (!existsSync(dir)) continue;
+    for (const p of walk(dir)) {
+      if (p.includes('/archive/')) continue;
+      names.add(basename(p));
+    }
+  }
+  return names;
+}
+
+const ARTIFACT_BASENAMES = artifactBasenames();
+
+/**
+ * Ссылка указывает на артефакт OpenSpec, а не на файл кода, который change ещё создаст.
+ * Признак — базовое имя из набора артефактов плюс каталог в пути: `payment-request-flow/
+ * proposal.md` остаётся артефактной ссылкой и после удаления самого каталога, поэтому
+ * распознавать по имени существующего change нельзя — переименование прошло бы молча.
+ */
+function isArtifactRef(path) {
+  if (path.startsWith('openspec/')) return true;
+  return path.includes('/') && ARTIFACT_BASENAMES.has(basename(path));
+}
+
+/**
  * Разрешение ссылки. Порядок кандидатов важен: сначала рядом с самим артефактом и от корня
  * его change — «см. proposal.md» и «specs/article-catalog/spec.md» внутри change означают
  * файлы ЭТОГО change, а не одноимённые в других. Первая редакция искала их по всему
- * репозиторию и объявляла неоднозначными двенадцать раз подряд.
+ * репозиторию и объявляла неоднозначными двенадцать раз подряд. Затем — корень репозитория,
+ * `web/` и корни OpenSpec: `online-payment-flow/proposal.md` пишут без префикса
+ * `openspec/changes/`, и без этих двух кандидатов такая ссылка не проверялась вовсе.
  */
 function resolveRef(path, mdPath) {
   const mdDir = dirname(mdPath);
@@ -91,9 +179,12 @@ function resolveRef(path, mdPath) {
   if (local) return { hit: local };
 
   if (path.includes('/')) {
-    const hit = [join(ROOT, path), join(ROOT, 'web', path)].find(
-      (c) => existsSync(c) && statSync(c).isFile(),
-    );
+    const hit = [
+      join(ROOT, path),
+      join(ROOT, 'web', path),
+      join(ROOT, 'openspec', 'changes', path),
+      join(ROOT, 'openspec', 'specs', path),
+    ].find((c) => existsSync(c) && statSync(c).isFile());
     return hit ? { hit } : { missing: true };
   }
   const cands = byBasename.get(path) ?? [];
@@ -104,8 +195,10 @@ function resolveRef(path, mdPath) {
 
 const defects = [];
 const warnings = [];
-const unverified = [];
-let verified = 0;
+const unmeasurable = new Map(); // identity -> человекочитаемое пояснение
+const absentSeen = new Map(); // identity -> человекочитаемое пояснение
+let pathOnly = 0;
+let contentVerified = 0;
 
 const files = [join(ROOT, 'openspec', 'changes'), join(ROOT, 'openspec', 'specs')].flatMap(walk);
 
@@ -127,22 +220,31 @@ for (const md of files) {
 
     const r = resolveRef(path, md);
     if (r.missing) {
-      // В предложении изменений ссылка может указывать на файл, который change ещё создаст,
-      // или на соседний change, успевший переехать: это предупреждение. В принятой спеке —
-      // расхождение: она описывает то, что уже есть.
-      (isProposal ? warnings : defects).push(`${rel}: путь не существует — ${path}`);
+      // В предложении изменений ссылка может указывать на файл, который change ещё создаст:
+      // это предупреждение. Но ссылка на артефакт другого change или принятой спеки ничего
+      // не обещает создать — там ненайденный путь расхождение в любом артефакте.
+      if (isArtifactRef(path)) {
+        // Артефактную ссылку в пустоту гейт не додумывает: она либо объявлена в
+        // openspec/.spec-ref-absent, либо расхождение. Сверка объявленных — ниже, вместе с
+        // долгом, чтобы «объявлено, но уже существует» тоже не проходило молча.
+        absentSeen.set(`${rel} :: ${path}`, `${rel}: артефакт не существует — ${path}`);
+      } else {
+        (isProposal ? warnings : defects).push(`${rel}: путь не существует — ${path}`);
+      }
       continue;
     }
     if (r.ambiguous) {
-      const msg =
+      // Неоднозначность — не «файла ещё нет», а «непонятно, о каком файле речь»: расхождение
+      // независимо от вида артефакта.
+      defects.push(
         `${rel}: короткая ссылка ${path} разрешается неоднозначно ` +
-        `(${r.ambiguous.length}: ${r.ambiguous.slice(0, 3).join(', ')}…) — укажите путь целиком`;
-      (isProposal ? warnings : defects).push(msg);
+          `(${r.ambiguous.length}: ${r.ambiguous.slice(0, 3).join(', ')}…) — укажите путь целиком`,
+      );
       continue;
     }
 
     if (!lineNo) {
-      verified += 1;
+      pathOnly += 1;
       continue;
     }
 
@@ -156,7 +258,10 @@ for (const md of files) {
       continue;
     }
     if (!snippet) {
-      unverified.push(`${rel}: ${path}:${where} — номер строки без фрагмента, содержимое не проверено`);
+      unmeasurable.set(
+        `${rel} :: ${path}:${where}`,
+        `${rel}: ${path}:${where} — номер строки без фрагмента, содержимое не проверено`,
+      );
       continue;
     }
     const parts = snippet
@@ -165,11 +270,14 @@ for (const md of files) {
       .filter((s) => s.length >= 6);
     const needle = parts.sort((a, b) => b.length - a.length)[0];
     if (!needle) {
-      unverified.push(`${rel}: ${path}:${where} — фрагмент слишком короткий для сверки`);
+      unmeasurable.set(
+        `${rel} :: ${path}:${where}`,
+        `${rel}: ${path}:${where} — фрагмент слишком короткий для сверки`,
+      );
       continue;
     }
     if (lines.slice(from - 1, to).some((l) => l.includes(needle))) {
-      verified += 1;
+      contentVerified += 1;
     } else {
       defects.push(
         `${rel}: ${path}:${where} — фрагмент «${needle}» там не найден; на ${from}-й строке: ` +
@@ -183,7 +291,7 @@ if (files.length === 0) {
   console.error('check-spec-refs: не найдено ни одного артефакта в openspec/ — измерить нечего');
   process.exit(2);
 }
-if (verified + unverified.length + defects.length === 0) {
+if (pathOnly + contentVerified + unmeasurable.size + absentSeen.size + defects.length === 0) {
   console.error(
     `check-spec-refs: в ${files.length} артефактах не нашлось ни одной проверяемой ссылки — ` +
       'это не «ссылки верны», а «проверять нечего»',
@@ -191,20 +299,67 @@ if (verified + unverified.length + defects.length === 0) {
   process.exit(2);
 }
 
-const debtRaw = existsSync(DEBT_FILE) ? readFileSync(DEBT_FILE, 'utf8') : '';
-const debtMatch = debtRaw.match(/^\s*(\d+)\s*$/m);
-const debt = debtMatch ? Number(debtMatch[1]) : NaN;
-if (!Number.isFinite(debt)) {
-  console.error(
-    'check-spec-refs: нет или не читается openspec/.spec-ref-debt — без зафиксированного ' +
-      'долга неизмеримых ссылок гейт не отличит рост от нормы',
+const current = [...unmeasurable.keys()].sort();
+const currentAbsent = [...absentSeen.keys()].sort();
+
+if (WRITE_DEBT) {
+  writeFileSync(DEBT_FILE, `${DEBT_HEADER}${current.map((k) => `${k}\n`).join('')}`, 'utf8');
+  console.log(`check-spec-refs: в openspec/.spec-ref-debt записано ${current.length} ссылок`);
+}
+if (WRITE_ABSENT) {
+  writeFileSync(
+    ABSENT_FILE,
+    `${ABSENT_HEADER}${currentAbsent.map((k) => `${k}\n`).join('')}`,
+    'utf8',
   );
-  process.exit(2);
+  console.log(
+    `check-spec-refs: в openspec/.spec-ref-absent записано ${currentAbsent.length} ссылок`,
+  );
+}
+if (WRITE_DEBT || WRITE_ABSENT) process.exit(0);
+
+/** Читает поимённый список. Отсутствие файла и пустой список — «не измерено», код 2: пустой
+ *  список неотличим от неснятого, а гейт без опоры не отличает рост от нормы. */
+function readDeclared(file, name, flag, why) {
+  if (!existsSync(file)) {
+    console.error(`check-spec-refs: нет ${name} — ${why}`);
+    process.exit(2);
+  }
+  const rows = readFileSync(file, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  if (rows.length === 0) {
+    console.error(
+      `check-spec-refs: ${name} не содержит ни одной записи — пустой список неотличим от ` +
+        `«не измерено»; снимите его через ${flag}`,
+    );
+    process.exit(2);
+  }
+  return new Set(rows);
 }
 
+const debt = readDeclared(
+  DEBT_FILE,
+  'openspec/.spec-ref-debt',
+  '--write-debt',
+  'без зафиксированного поимённого долга гейт не отличит рост неизмеримых ссылок от нормы',
+);
+const absentDeclared = readDeclared(
+  ABSENT_FILE,
+  'openspec/.spec-ref-absent',
+  '--write-absent',
+  'без объявленных ссылок в пустоту гейт не отличит осознанную цитату на удалённый change от ' +
+    'сломанной ссылки',
+);
+
+// Числа печатаются по классам и НЕ складываются: у первой группы проверено только
+// существование пути, у второй — содержимое. Их сумма выдала бы неизмеренное за измеренное.
 console.log(
-  `check-spec-refs: проверено по содержимому ${verified}, неизмеримых ${unverified.length} ` +
-    `(зафиксированный долг ${debt}), расхождений ${defects.length}`,
+  `check-spec-refs: содержимое сверено у ${contentVerified}, существование пути — ещё у ` +
+    `${pathOnly}, неизмеримых ${unmeasurable.size} (в долге ${debt.size}), объявленных ` +
+    `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
+    `${defects.length}`,
 );
 
 if (warnings.length > 0) {
@@ -220,19 +375,52 @@ if (defects.length > 0) {
   for (const d of defects) console.error(`  ${d}`);
 }
 
-if (unverified.length > debt) {
+const added = current.filter((k) => !debt.has(k));
+const gone = [...debt].filter((k) => !unmeasurable.has(k)).sort();
+
+if (added.length > 0) {
+  failed = true;
+  console.error(`\nНОВЫЕ НЕИЗМЕРИМЫЕ ССЫЛКИ (${added.length}), в долге их нет:`);
+  for (const k of added) console.error(`  ${unmeasurable.get(k)}`);
+  console.error('Ссылка с номером строки обязана приводить рядом фрагмент в кавычках, например:');
+  console.error('  `web/src/lib/data.ts:45`, `const ENTITIES_DIR =`');
+}
+
+if (gone.length > 0) {
   failed = true;
   console.error(
-    `\nНЕИЗМЕРИМЫХ ССЫЛОК СТАЛО БОЛЬШЕ: ${unverified.length} против зафиксированных ${debt}.`,
+    `\nЗАПИСИ ДОЛГА БОЛЬШЕ НЕ НАХОДЯТСЯ (${gone.length}) — храповик защёлкивается только при ` +
+      'точном списке, иначе снятая ссылка оставляет место новой:',
   );
-  console.error('Новая ссылка с номером строки обязана приводить рядом фрагмент в кавычках, например:');
-  console.error('  `web/src/lib/data.ts:45`, `const ENTITIES_DIR =`');
-  for (const u of unverified.slice(-10)) console.error(`  ${u}`);
-} else if (unverified.length < debt) {
-  console.log(
-    `\nДолг неизмеримых ссылок уменьшился: ${unverified.length} против ${debt}. ` +
-      'Запишите новое число в openspec/.spec-ref-debt, иначе храповик не защёлкнется.',
+  for (const k of gone) console.error(`  ${k}`);
+  console.error('Обновите файл: ./bin/check-spec-refs --write-debt');
+}
+
+const absentNew = currentAbsent.filter((k) => !absentDeclared.has(k));
+const absentStale = [...absentDeclared].filter((k) => !absentSeen.has(k)).sort();
+
+if (absentNew.length > 0) {
+  failed = true;
+  console.error(
+    `\nССЫЛКИ НА НЕСУЩЕСТВУЮЩИЕ АРТЕФАКТЫ (${absentNew.length}), не объявленные в ` +
+      'openspec/.spec-ref-absent:',
   );
+  for (const k of absentNew) console.error(`  ${absentSeen.get(k)}`);
+  console.error(
+    'Либо ссылка сломана переименованием — исправьте её; либо она указывает в пустоту ' +
+      'осознанно — объявите: ./bin/check-spec-refs --write-absent',
+  );
+}
+
+if (absentStale.length > 0) {
+  failed = true;
+  console.error(
+    `\nОБЪЯВЛЕННЫЕ ОТСУТСТВУЮЩИМИ БОЛЬШЕ НЕ ОТСУТСТВУЮТ ИЛИ ИСЧЕЗЛИ ИЗ ТЕКСТА ` +
+      `(${absentStale.length}) — объявление, не сверяемое в обе стороны, со временем ` +
+      'разрешает уже сломанную ссылку:',
+  );
+  for (const k of absentStale) console.error(`  ${k}`);
+  console.error('Обновите файл: ./bin/check-spec-refs --write-absent');
 }
 
 if (failed) {

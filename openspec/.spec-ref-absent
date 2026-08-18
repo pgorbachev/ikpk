@@ -1,0 +1,15 @@
+# Объявленные ссылки в пустоту: артефакт OpenSpec, на который ссылаются осознанно, зная, что
+# файла нет. Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора «так и должно
+# быть», поэтому она объявляется здесь, а не выводится гейтом из текста рядом со ссылкой.
+#
+# Наш случай — каталог `openspec/changes/payment-request-flow/`, удалённый решением владельца
+# тем же PR, что и слитый `online-payment-flow`: цитаты на него оставлены как указание на
+# происхождение уже принятых решений.
+#
+# Без этого файла у гейта было бы два плохих выхода: либо считать ненайденный артефакт нормой
+# (тогда переименование change тихо ломает все ссылки на него), либо краснеть на осознанной
+# цитате. Список сверяется поимённо и в обе стороны: `./bin/check-spec-refs --write-absent`.
+openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md
+openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md
+openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md
+openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md
