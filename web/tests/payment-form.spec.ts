@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import {
   PAYMENT_CONFIRM_DUPLICATE_ATTR,
   PAYMENT_CONTINUE_ATTR,
-  PAYMENT_COPY_ID_ATTR,
   PAYMENT_ENTRY_ATTR,
   PAYMENT_FORM_ATTR,
   PAYMENT_HOLD_WARNING_ATTR,
@@ -474,8 +473,10 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
 });
 
 test.describe('3.10a-5 состояние «нужна сверка»', () => {
-  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
-  test('машинный признак, копирование канонического id, фокус в панели, сводка не поля ввода', async ({ page }) => {
+  // Утверждения про копирование идентификатора убраны: спека их запрещает (решение
+  // владельца от 2026-08-18). Отсутствие показа и копирования проверяется в 3.15(1) —
+  // здесь остаётся предмет этого теста: машинный признак, действия панели, сводка.
+  test('машинный признак, действия панели, сводка не поля ввода', async ({ page }) => {
     const canonical = randomUUID();
     await mockApi(page, (req) => {
       if (req.method === 'POST') {
@@ -491,9 +492,6 @@ test.describe('3.10a-5 состояние «нужна сверка»', () => {
     await expect(panel.getByText(/мог быть создан|повторять оплату не нужно/i)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_CONTINUE_ATTR}]`)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeVisible();
-    await page.locator(`[${PAYMENT_COPY_ID_ATTR}]`).click();
-    const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied).toBe(canonical);
     await expect(page.locator(`[${PAYMENT_SUMMARY_ATTR}] input`)).toHaveCount(0);
   });
 });
@@ -789,3 +787,272 @@ test.describe('r12-m2 предел опроса 15 секунд', () => {
     expect(Date.now() - started, 'опрос превысил 15с с допуском').toBeLessThan(18_000);
   });
 });
+
+// ─── 3.15 Показ идентификатора убран (решение владельца от 2026-08-18) ────────
+//
+// Критерии взяты из спеки, а не из tasks.md: Requirement «Состояние „нужна сверка“
+// удерживает от второй оплаты и даёт, чем себя объяснить» (запрет показа и копирования
+// `requestId`) и Requirement про перечень удержаний (порядковый номер, время создания,
+// состояние человеческим языком, семинар и сумма — только при сводке текущей сессии,
+// постоянное хранилище не расширяется).
+//
+// Предмет первой проверки — ЗНАЧЕНИЕ идентификатора в доступном выводе, а не наличие
+// элемента с прежним именем `data-payment-copy-id`: проверка по имени обошлась бы
+// переименованием кнопки.
+const HOLDS_KEY = 'ikpk-payment-holds';
+const FIELDS_SESSION_KEY = 'ikpk-payment-fields';
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** Весь текст окна оплаты, который доступен посетителю (видимый + доступные имена). */
+async function dialogAccessibleText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const root = document.querySelector('.payment-dialog');
+    if (!root) return '';
+    const parts: string[] = [root instanceof HTMLElement ? root.innerText : ''];
+    for (const el of root.querySelectorAll('*')) {
+      for (const attr of ['aria-label', 'title', 'value', 'placeholder']) {
+        const v = el.getAttribute(attr);
+        if (v) parts.push(v);
+      }
+    }
+    return parts.join('\n');
+  });
+}
+
+/** Ставит наблюдателя за буфером обмена до загрузки страницы. */
+async function spyClipboard(page: Page) {
+  await page.addInitScript(() => {
+    (window as unknown as { __copied: string[] }).__copied = [];
+    const spy = (text: string) => {
+      (window as unknown as { __copied: string[] }).__copied.push(text);
+      return Promise.resolve();
+    };
+    try {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: spy, readText: () => Promise.resolve('') },
+      });
+    } catch {
+      /* окружение без clipboard — наблюдать нечего */
+    }
+  });
+}
+
+const copied = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __copied?: string[] }).__copied ?? []);
+
+
+/**
+ * Текст каждой строки перечня, разложенный по дочерним элементам. Склеенный `innerText`
+ * для поиска порядкового номера не годится: «Попытка 1» и «18 августа» сливаются в
+ * «Попытка 118 августа», и отдельное число уже не найти (проверено на себе). Разложение
+ * по детям не привязано к тому, какой именно элемент несёт номер.
+ */
+async function attemptRowTokens(page: Page): Promise<string[][]> {
+  return page.locator('[data-payment-attempt]').evaluateAll((els) =>
+    els.map((el) => [
+      ...[...el.childNodes]
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => (n.textContent ?? '').trim()),
+      ...[...el.children].map((c) => (c.textContent ?? '').trim()),
+    ].filter((t) => t.length > 0)),
+  );
+}
+
+const hasOrdinal = (tokens: string[], n: number) =>
+  tokens.some((t) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(t));
+
+test.describe('3.15 идентификатор попытки не показывается и не копируется', () => {
+  test('3.15(1) в состоянии «нужна сверка» ни один идентификатор не показан и не скопирован', async ({
+    page,
+  }) => {
+    const canonical = randomUUID();
+    await spyClipboard(page);
+    await mockApi(page, (req) =>
+      req.method === 'POST'
+        ? { status: 503, body: { status: 'verification_required', requestId: canonical } }
+        : { status: 200, body: { status: 'verification_required' } },
+    );
+    const sent = await submitForVerification(page);
+
+    const text = await dialogAccessibleText(page);
+    expect(text, 'канонический requestId предъявлен посетителю').not.toContain(canonical);
+    expect(text, 'отправленный requestId предъявлен посетителю').not.toContain(sent.requestId);
+    expect(text.match(UUID_RE)?.[0] ?? '', 'в окне оплаты показан UUID').toBe('');
+
+    // Ни один элемент управления не копирует идентификатор. Кнопки перебираются по
+    // ИНДЕКСУ, а не по имени атрибута, и панель перед каждым нажатием восстанавливается:
+    // первая же кнопка может оказаться «Закрыть», и без восстановления цикл кончался бы,
+    // не дойдя до остальных, — проверка прошла бы вакуумно (так и было в первой редакции).
+    // Самопроверка прибора: если подмена `navigator.clipboard` не удалась, «ничего не
+    // скопировано» означает «я не смогла посмотреть», а не «нарушений нет». Первая редакция
+    // этой проверки была зелёной именно поэтому.
+    await page.evaluate(() => navigator.clipboard.writeText('__probe__')).catch(() => undefined);
+    expect(
+      await copied(page),
+      'наблюдатель за буфером обмена не установлен — проверка ничего не измеряет',
+    ).toContain('__probe__');
+    await page.evaluate(() => {
+      (window as unknown as { __copied: string[] }).__copied = [];
+    });
+
+    const total = await page.locator('.payment-dialog button:visible').count();
+    expect(total, 'в панели нет кнопок — перебирать нечего').toBeGreaterThan(0);
+    for (let i = 0; i < total; i += 1) {
+      // Панель пересобирается ПЕРЕД каждым нажатием, а не только когда кнопок не хватило:
+      // иначе нажатие меняет состав, индексы съезжают между итерациями и часть кнопок не
+      // проверяется вовсе. Первая редакция была зелёной именно из-за этого.
+      await submitForVerification(page);
+      const buttons = page.locator('.payment-dialog button:visible');
+      await expect(buttons).toHaveCount(total);
+      const label = (await buttons.nth(i).textContent())?.trim() ?? `№${i + 1}`;
+      await buttons.nth(i).click({ noWaitAfter: true }).catch(() => undefined);
+      const clip = await copied(page);
+      expect(
+        clip.filter((c) => UUID_RE.test(c)),
+        `кнопка «${label}» скопировала идентификатор: ${clip.join('|')}`,
+      ).toEqual([]);
+    }
+  });
+
+  test('3.15(1) в перечне удержаний идентификатор не показан', async ({ page }) => {
+    await seedTwoHolds(page);
+    const ids = await page
+      .locator('[data-payment-attempt]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-payment-attempt-id') ?? ''));
+    expect(ids.length, 'перечень не собран').toBe(2);
+    const text = await dialogAccessibleText(page);
+    for (const id of ids) expect(text, `requestId ${id} показан в перечне`).not.toContain(id);
+    expect(text.match(UUID_RE)?.[0] ?? '', 'в перечне показан UUID').toBe('');
+  });
+
+  test('3.15(2) попытки различимы по номеру и состоянию человеческим языком', async ({ page }) => {
+    await seedTwoHolds(page);
+    const rows = page.locator('[data-payment-attempt]');
+    await expect(rows).toHaveCount(2);
+    const seen = await rows.evaluateAll((els) =>
+      els.map((el) => ({
+        text: el instanceof HTMLElement ? el.innerText : '',
+        status: el.getAttribute('data-payment-attempt-status') ?? '',
+      })),
+    );
+    const tokens = await attemptRowTokens(page);
+    seen.forEach((row, i) => {
+      expect(
+        hasOrdinal(tokens[i] ?? [], i + 1),
+        `строка ${i + 1} без порядкового номера: ${JSON.stringify(tokens[i])}`,
+      ).toBe(true);
+    });
+    for (const row of seen) {
+      if (!row.status) continue;
+      expect(
+        row.text.includes(row.status),
+        `состояние подписано техническим именем «${row.status}»: «${row.text}»`,
+      ).toBe(false);
+    }
+  });
+
+  test('3.15(3) семинар и сумма — только при сводке текущей сессии', async ({ page }) => {
+    await seedTwoHolds(page);
+    const withSummary = await page.locator('[data-payment-attempt]').first().innerText();
+    expect(withSummary, 'при сохранённой сводке семинар не показан').toMatch(/Модуль/);
+    expect(withSummary, 'при сохранённой сводке сумма не показана').toMatch(/1/);
+
+    await page.evaluate((k) => sessionStorage.removeItem(k), FIELDS_SESSION_KEY);
+    await gotoOplata(page);
+    const rows = page.locator('[data-payment-attempt]');
+    await expect(rows).toHaveCount(2);
+    const rest = await rows.first().innerText();
+    expect(rest, 'сводка очищена, а семинар всё ещё показан').not.toMatch(/Модуль/);
+    expect(rest.trim().length, 'без сводки строка перечня пуста — попытка неразличима').toBeGreaterThan(0);
+    const restTokens = await attemptRowTokens(page);
+    expect(
+      hasOrdinal(restTokens[0] ?? [], 1),
+      `без сводки нет номера: ${JSON.stringify(restTokens[0])}`,
+    ).toBe(true);
+    await rows.first().locator('[data-payment-attempt-select]').click();
+    await expect(page.locator(`[${PAYMENT_STATE_ATTR}]`)).toBeVisible();
+  });
+
+  test('3.15(4) постоянное хранилище не расширено', async ({ page }) => {
+    await seedTwoHolds(page);
+    const holds = await page.evaluate(
+      (k) => JSON.parse(localStorage.getItem(k) ?? '[]') as Array<Record<string, unknown>>,
+      HOLDS_KEY,
+    );
+    expect(holds.length).toBe(2);
+    for (const h of holds) {
+      expect(Object.keys(h).sort(), `в удержании лишние поля: ${JSON.stringify(h)}`).toEqual([
+        'createdAt',
+        'requestId',
+      ]);
+    }
+    const persisted = await page.evaluate(() =>
+      Object.keys(localStorage)
+        .map((k) => `${k}=${localStorage.getItem(k) ?? ''}`)
+        .join('\n'),
+    );
+    expect(persisted, 'семинар попал в постоянное хранилище').not.toMatch(/Модуль/);
+    expect(persisted, 'почта попала в постоянное хранилище').not.toMatch(/ivan@example\.com/);
+  });
+
+  test('3.15 выбор попытки обращается к её внутреннему requestId', async ({ page }) => {
+    await seedTwoHolds(page);
+    const rows = page.locator('[data-payment-attempt]');
+    const second = rows.nth(1);
+    const wanted = await second.getAttribute('data-payment-attempt-id');
+    await second.locator('[data-payment-attempt-select]').click();
+    const cont = page.locator(`[${PAYMENT_CONTINUE_ATTR}]`);
+    if (await cont.count()) await cont.first().click();
+    const posted = page.waitForRequest((r) => r.method() === 'POST' && /\/payments/.test(r.url()));
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    const body = JSON.parse((await posted).postData() ?? '{}') as { requestId?: string };
+    expect(body.requestId, 'продолжение пошло не по выбранной попытке').toBe(wanted);
+  });
+});
+
+/** Два удержания с разными состояниями, сводка полей сохранена сессией. */
+async function seedTwoHolds(page: Page) {
+  let n = 0;
+  await mockApi(page, (req) => {
+    if (req.method === 'POST') {
+      n += 1;
+      return n === 2
+        ? { status: 503, body: { status: 'verification_required', requestId: randomUUID() } }
+        : { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
+    }
+    return { status: 200, body: { status: 'pending' } };
+  });
+  await openForm(page);
+  await fillValid(page);
+  await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+  await gotoOplata(page);
+  await page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`).click();
+  await fillValid(page);
+  await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 2');
+  await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+  await gotoOplata(page);
+  await expect(page.locator('[data-payment-attempt]')).toHaveCount(2);
+}
+
+/**
+ * Отправляет форму так, чтобы сервер ответил `verification_required`; отдаёт отправленный id.
+ * Хранилища очищаются перед каждым проходом: с сохранённым удержанием диалог открывается сам
+ * при загрузке, и нажатие входа перехватывается его оверлеем — восстановление панели без
+ * сброса состояния недетерминированно (проверено: таймаут 10 с на повторном проходе).
+ */
+async function submitForVerification(page: Page): Promise<{ requestId: string }> {
+  await gotoOplata(page);
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await gotoOplata(page);
+  await openForm(page);
+  await fillValid(page);
+  const posted = page.waitForRequest((r) => r.method() === 'POST' && /\/payments/.test(r.url()));
+  await page.locator(`${FORM} [type="submit"]`).click();
+  const sent = JSON.parse((await posted).postData() ?? '{}') as { requestId: string };
+  await expect(page.locator(STATE('verification_required'))).toBeVisible();
+  return sent;
+}
