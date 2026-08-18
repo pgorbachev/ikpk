@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'node:util';
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'path';
 
@@ -347,5 +347,105 @@ describe('dist_has_no_secret_values — значения секретов в с�
     expect(
       await runFn(`dist_has_no_secret_values '/nonexistent-dist-ikpk' 'YOOKASSA_SECRET_KEY=x'`),
     ).not.toBe(0);
+  });
+});
+
+// ─── Резервное копирование состояния платежей (задача 4.3a) ───────────────────
+//
+// Проверяется ПОВЕДЕНИЕ скрипта на подставных каталогах, а не его текст: греп по исходнику
+// утверждал бы, что копирование написано, но не что копия появляется и что отказ наступает
+// там, где копировать нечего. Ветви отказа пройдены каждая: нет каталога состояния, нет ни
+// одного файла состояния.
+describe('ikpk-payments-backup.sh — копия состояния платежей', () => {
+  const BACKUP = join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.sh');
+
+  const runBackup = async (data: string, backup: string, keep = '42'): Promise<number> => {
+    try {
+      await execFileAsync('bash', [BACKUP], {
+        env: { ...process.env, PAYMENT_DATA_DIR: data, BACKUP_DIR: backup, KEEP_BACKUPS: keep },
+      });
+      return 0;
+    } catch (err) {
+      return (err as { code?: number }).code ?? 1;
+    }
+  };
+
+  const mkData = (files: Record<string, string>): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-state-'));
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body, 'utf-8');
+    return dir;
+  };
+
+  it('копия появляется и совпадает с исходником', async () => {
+    const data = mkData({ 'payments.json': '{"records":[{"requestId":"a"}]}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).toBe(0);
+    const made = readdirSync(backup).filter((f) => f.endsWith('.payments.json'));
+    expect(made.length, `в каталоге копий: ${readdirSync(backup).join(',')}`).toBe(1);
+    expect(readFileSync(join(backup, made[0]!), 'utf-8')).toBe('{"records":[{"requestId":"a"}]}');
+  });
+
+  it('копируются все четыре файла состояния, а не только хранилище', async () => {
+    const data = mkData({
+      'payments.json': '{}',
+      'verification-journal.json': '[]',
+      'hmac-canary.json': '{}',
+      'duplicate-tokens.json': '[]',
+    });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).toBe(0);
+    expect(readdirSync(backup).length).toBe(4);
+  });
+
+  it('незавершённых `.part` после успешной копии не остаётся', async () => {
+    const data = mkData({ 'payments.json': '{}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    await runBackup(data, backup);
+    expect(readdirSync(backup).filter((f) => f.endsWith('.part'))).toEqual([]);
+  });
+
+  it('каталога состояния нет — ОТКАЗ, а не «копировать нечего»', async () => {
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup('/nonexistent-state-ikpk', backup)).not.toBe(0);
+  });
+
+  it('каталог есть, но файлов состояния в нём нет — ОТКАЗ', async () => {
+    const data = mkData({ 'unrelated.txt': 'x' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    expect(await runBackup(data, backup)).not.toBe(0);
+    expect(readdirSync(backup)).toEqual([]);
+  });
+
+  it('старые копии вытесняются по KEEP_BACKUPS, свежая остаётся', async () => {
+    const data = mkData({ 'payments.json': '{"n":1}' });
+    const backup = mkdtempSync(join(tmpdir(), 'ikpk-backup-'));
+    for (const n of [1, 2, 3]) {
+      writeFileSync(join(data, 'payments.json'), `{"n":${n}}`, 'utf-8');
+      expect(await runBackup(data, backup, '2')).toBe(0);
+      // Метка копии — с точностью до секунды, поэтому между прогонами нужна пауза,
+      // иначе три копии получат одно имя и вытеснять будет нечего.
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    const made = readdirSync(backup).filter((f) => f.endsWith('.payments.json'));
+    expect(made.length, `копий осталось: ${made.join(',')}`).toBe(2);
+    const newest = made.sort().at(-1)!;
+    expect(readFileSync(join(backup, newest), 'utf-8')).toBe('{"n":3}');
+  });
+});
+
+describe('ikpk-payments-backup.timer — интервал не дольше границы решения', () => {
+  it('OnUnitActiveSec не больше 4 часов', () => {
+    const timer = readFileSync(join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.timer'), 'utf-8');
+    const raw = timer.match(/OnUnitActiveSec=(\S+)/)?.[1] ?? '';
+    expect(raw, 'интервал не объявлен вовсе').toBeTruthy();
+    const m = raw.match(/^(\d+)(s|min|h)$/);
+    expect(m, `нераспознанный интервал: ${raw}`).toBeTruthy();
+    const seconds = Number(m![1]) * (m![2] === 'h' ? 3600 : m![2] === 'min' ? 60 : 1);
+    expect(seconds, `интервал ${raw} превышает 4 часа`).toBeLessThanOrEqual(4 * 3600);
+  });
+
+  it('таймер переживает простой хоста: Persistent=true', () => {
+    const timer = readFileSync(join(ROOT, 'payments', 'deploy', 'ikpk-payments-backup.timer'), 'utf-8');
+    expect(timer).toMatch(/^Persistent=true$/m);
   });
 });

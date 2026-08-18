@@ -1,0 +1,14 @@
+[Unit]
+Description=IKPK payments state backup (task 4.3a)
+# Копия состояния, а не кода: восстановление из неё — явное действие оператора,
+# описанное в docs/runbook-payments-backup.md.
+
+[Service]
+Type=oneshot
+# root: каталог состояния принадлежит ikpk-payments, каталог копий — отдельный,
+# и right на чтение обоих проще держать у root, чем раздавать сервисному пользователю
+# доступ к каталогу резервных копий.
+User=root
+Environment=PAYMENT_DATA_DIR=/var/lib/ikpk-payments
+Environment=BACKUP_DIR=/var/backups/ikpk-payments
+ExecStart=/opt/ikpk-payments/deploy/ikpk-payments-backup.sh
