@@ -92,4 +92,8 @@ jobs:
 
       - name: Visibility note
         run: |
-          echo "CMS audit is report-only because Strapi 5.40.0 currently carries upstream advisories with no clean automatic fix."
+          # Версию берём из манифеста, а не пишем строкой: захардкоженная версия
+          # устаревает молча и потом читается как факт (было "Strapi 5.40.0" при 5.51.2).
+          strapi_version="$(node -p "require('./package.json').dependencies['@strapi/strapi'] || 'unknown'")"
+          echo "CMS audit is report-only: @strapi/strapi ${strapi_version} carries upstream advisories with no clean automatic fix."
+          echo "Counts come from the uploaded report, not from this note — the local gate (npm run audit:prod, --audit-level=critical) is the blocking one."
