@@ -594,15 +594,26 @@ test.describe('3.10a-4a / 3.10a-4b / 3.10a-4d удержания и «друго
     await expect(page.locator('[data-payment-attempt]')).toHaveCount(2);
     phase = 2;
     await gotoOplata(page);
-    const holds = await page.evaluate(
-      () =>
-        (JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as Array<{ requestId: string }>).map(
-          (h) => h.requestId,
-        ),
-    );
     expect(ids.length, 'обе попытки не отправились').toBe(2);
+    // Снятие удержания идёт по асинхронной проверке статуса, поэтому состояние ОЖИДАЕТСЯ, а
+    // не читается сразу после перезагрузки. Первая редакция читала немедленно и была зелёной
+    // локально, но упала в CI («завершённая первая попытка осталась удержанной») — гонка в
+    // тесте, не дефект продукта. Ожидание не делает проверку вакуумной: если снятие не
+    // произойдёт вовсе, `expect.poll` исчерпает срок и покраснеет.
+    const holdIds = () =>
+      page.evaluate(
+        () =>
+          (
+            JSON.parse(localStorage.getItem('ikpk-payment-holds') ?? '[]') as Array<{ requestId: string }>
+          ).map((h) => h.requestId),
+      );
+    await expect
+      .poll(async () => (await holdIds()).includes(ids[0]!), {
+        message: 'завершённая первая попытка осталась удержанной',
+      })
+      .toBe(false);
+    const holds = await holdIds();
     expect(holds, `терминальный исход первой снял и вторую: осталось ${holds.join(',')}`).toContain(ids[1]);
-    expect(holds, 'завершённая первая попытка осталась удержанной').not.toContain(ids[0]);
   });
 });
 
