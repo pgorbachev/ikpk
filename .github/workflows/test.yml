@@ -21,9 +21,11 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -42,10 +44,14 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run unit tests
-        run: npm test
+        run: |
+          npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-head.json"
+          npx vitest run --config vitest.render.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-render-head.json"
 
       - name: Run build tests (dist checks)
-        run: npm run test:build
+        run: |
+          npm run build
+          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json"
 
       # Демо-сборка и проверки её вывода — ВНУТРИ обязательного прогона, а не рядом.
       # Гейтом публикации является ровно то, что лежит внутри workflow Tests: отдельный
@@ -57,19 +63,228 @@ jobs:
       # отдельный джоб платил бы за npm ci и установку зависимостей второй раз.
       # Вывод — в dist-demo, поэтому боевые гейты выше остаются на своём предмете.
       - name: Run demo build tests (dist-demo checks)
-        run: npm run test:demo
+        run: |
+          npm run build:demo
+          npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-head.json"
+
+      - name: Classify dependency-only change for test-count
+        id: web-dependency-scope
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed="$RUNNER_TEMP/web-changed-files.txt"
+          : > "$changed"
+          dependency_only=false
+          if [ -n "$BASE_SHA" ]; then
+            git diff --name-only "$BASE_SHA"...HEAD > "$changed"
+            dependency_only=true
+            while IFS= read -r file; do
+              case "$file" in
+                package.json|package-lock.json|npm-shrinkwrap.json|*/package.json|*/package-lock.json|*/npm-shrinkwrap.json) ;;
+                *) dependency_only=false ;;
+              esac
+            done < "$changed"
+            [ -s "$changed" ] || dependency_only=false
+          fi
+          echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
+
+      - name: Measure base Vitest volume for dependency-only PR
+        if: steps.web-dependency-scope.outputs.dependency_only == 'true'
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$RUNNER_TEMP/web-base-worktree"
+          git worktree add --detach "$base" "$BASE_SHA"
+          npm ci --prefix "$base/web"
+          (
+            cd "$base/web"
+            npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-base.json"
+            npx vitest run --config vitest.render.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-render-base.json"
+            npm run build
+            npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-base.json"
+            npm run build:demo
+            npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-base.json"
+          )
+          git worktree remove --force "$base"
+
+      - name: Dependency invariant - test-count (Vitest web)
+        working-directory: .
+        env:
+          DEPENDENCY_ONLY: ${{ steps.web-dependency-scope.outputs.dependency_only }}
+        run: |
+          changed_args=()
+          while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/web-changed-files.txt"
+          base_args=()
+          if [ "$DEPENDENCY_ONLY" = true ]; then
+            for report in web-unit web-render web-build web-demo; do
+              base_args+=(--base-report "$RUNNER_TEMP/${report}-base.json")
+            done
+          fi
+          threshold=$(jq -r '.testThresholds["web-vitest-total"]' .github/dependency-update-gates.json)
+          web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
+            --runner vitest --threshold "$threshold" \
+            --head-report "$RUNNER_TEMP/web-unit-head.json" \
+            --head-report "$RUNNER_TEMP/web-render-head.json" \
+            --head-report "$RUNNER_TEMP/web-build-head.json" \
+            --head-report "$RUNNER_TEMP/web-demo-head.json" \
+            "${changed_args[@]}" "${base_args[@]}"
+
 
       # Тот же dist-demo, который только что проверили. e2e-smoke его скачивает и
       # не собирает заново: вторая сборка в чужом джобе — как раз то, что ловит
       # demo-gate (решение 6). uses-шаги не наследуют defaults.run.working-directory,
       # путь — от корня репозитория.
       - name: Upload demo site
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-dist-demo
           path: web/dist-demo
           if-no-files-found: error
           retention-days: 1
+  dependency-invariants:
+    name: Dependency update invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            cms/package-lock.json
+            scripts/package-lock.json
+
+      - name: Classify dependency update scope
+        id: dependency-scope
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base_sha="$PR_BASE_SHA"
+          if [ -z "$base_sha" ]; then base_sha=$(git rev-parse HEAD^); fi
+          changed="$RUNNER_TEMP/dependency-changed-files.txt"
+          git diff --name-only "$base_sha"...HEAD > "$changed"
+          dependency_only=false
+          runtime_scope=false
+          while IFS= read -r file; do
+            case "$file" in
+              web/package.json|cms/package.json|scripts/package.json) runtime_scope=true ;;
+            esac
+          done < "$changed"
+          if [ -n "$PR_BASE_SHA" ] && [ -s "$changed" ]; then
+            dependency_only=true
+            while IFS= read -r file; do
+              case "$file" in
+                package.json|package-lock.json|npm-shrinkwrap.json|*/package.json|*/package-lock.json|*/npm-shrinkwrap.json) ;;
+                *) dependency_only=false ;;
+              esac
+            done < "$changed"
+          fi
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
+          echo "runtime_scope=$runtime_scope" >> "$GITHUB_OUTPUT"
+
+      - name: Install package dependencies for measurements
+        run: |
+          npm ci --prefix web
+          npm ci --prefix cms
+          npm ci --prefix scripts
+
+      - name: Produce head lint and runtime-audit measurements
+        run: |
+          for package in web cms scripts; do
+            set +e
+            (cd "$package" && npx eslint . --format json) > "$RUNNER_TEMP/${package}-lint-head.json"
+            status=$?
+            set -e
+            echo "$status" > "$RUNNER_TEMP/${package}-lint-head.exit"
+
+            set +e
+            (cd "$package" && npm ls --all --omit=dev --json) > "$RUNNER_TEMP/${package}-runtime-head.json"
+            status=$?
+            set -e
+            echo "$status" > "$RUNNER_TEMP/${package}-runtime-head.exit"
+          done
+
+      - name: Produce dependency-only base measurements
+        if: steps.dependency-scope.outputs.dependency_only == 'true' || steps.dependency-scope.outputs.runtime_scope == 'true'
+        env:
+          BASE_SHA: ${{ steps.dependency-scope.outputs.base_sha }}
+        run: |
+          base="$RUNNER_TEMP/dependency-base-worktree"
+          git worktree add --detach "$base" "$BASE_SHA"
+          for package in web cms scripts; do
+            cp "$base/$package/package.json" "$RUNNER_TEMP/${package}-manifest-base.json"
+            npm ci --prefix "$base/$package"
+            set +e
+            (cd "$base/$package" && npx eslint . --format json) > "$RUNNER_TEMP/${package}-lint-base.json"
+            status=$?
+            set -e
+            echo "$status" > "$RUNNER_TEMP/${package}-lint-base.exit"
+
+            set +e
+            (cd "$base/$package" && npm ls --all --omit=dev --json) > "$RUNNER_TEMP/${package}-runtime-base.json"
+            status=$?
+            set -e
+            echo "$status" > "$RUNNER_TEMP/${package}-runtime-base.exit"
+          done
+          git worktree remove --force "$base"
+
+      - name: Dependency invariant - lint-coverage
+        env:
+          DEPENDENCY_ONLY: ${{ steps.dependency-scope.outputs.dependency_only }}
+        run: |
+          changed_args=()
+          while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/dependency-changed-files.txt"
+          for package in web cms scripts; do
+            threshold=$(jq -r ".lintThresholds.\"$package\"" .github/dependency-update-gates.json)
+            base_args=()
+            if [ "$DEPENDENCY_ONLY" = true ]; then
+              base_args+=(--base-report "$RUNNER_TEMP/${package}-lint-base.json")
+              base_args+=(--base-exit "$(cat "$RUNNER_TEMP/${package}-lint-base.exit")")
+            fi
+            web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts lint-coverage \
+              --package "$package" --threshold "$threshold" \
+              --head-report "$RUNNER_TEMP/${package}-lint-head.json" \
+              --head-exit "$(cat "$RUNNER_TEMP/${package}-lint-head.exit")" \
+              "${changed_args[@]}" "${base_args[@]}"
+          done
+
+      - name: Dependency invariant - platform-entries
+        env:
+          BASE_SHA: ${{ steps.dependency-scope.outputs.base_sha }}
+        run: |
+          for package in web cms scripts; do
+            git show "$BASE_SHA:$package/package-lock.json" > "$RUNNER_TEMP/${package}-lock-base.json"
+            if ! git show "$BASE_SHA:.github/accepted-platform-losses/${package}.json" > "$RUNNER_TEMP/${package}-accepted-base.json"; then
+              echo '[]' > "$RUNNER_TEMP/${package}-accepted-base.json"
+            fi
+            web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts platform-entries \
+              --base-lockfile "$RUNNER_TEMP/${package}-lock-base.json" \
+              --head-lockfile "$package/package-lock.json" \
+              --base-accepted "$RUNNER_TEMP/${package}-accepted-base.json" \
+              --head-accepted ".github/accepted-platform-losses/${package}.json"
+          done
+
+      - name: Dependency invariant - runtime-audit scope
+        if: steps.dependency-scope.outputs.runtime_scope == 'true'
+        run: |
+          for package in web cms scripts; do
+            web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts runtime-audit-scope \
+              --package "$package" \
+              --base-manifest "$RUNNER_TEMP/${package}-manifest-base.json" \
+              --head-manifest "$package/package.json" \
+              --base-report "$RUNNER_TEMP/${package}-runtime-base.json" \
+              --base-exit "$(cat "$RUNNER_TEMP/${package}-runtime-base.exit")" \
+              --head-report "$RUNNER_TEMP/${package}-runtime-head.json" \
+              --head-exit "$(cat "$RUNNER_TEMP/${package}-runtime-head.exit")"
+          done
 
   # Тесты пакета scripts/ гоняются отдельным джобом: у него свой package.json и свой
   # lockfile, а джоб выше целиком работает в web/. Без этого джоба новые тесты
@@ -83,9 +298,11 @@ jobs:
       run:
         working-directory: scripts
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -95,7 +312,56 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npm test
+        run: npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-head.json"
+
+      - name: Classify dependency-only change for scripts test-count
+        id: scripts-dependency-scope
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed="$RUNNER_TEMP/scripts-changed-files.txt"
+          : > "$changed"
+          dependency_only=false
+          if [ -n "$BASE_SHA" ]; then
+            git diff --name-only "$BASE_SHA"...HEAD > "$changed"
+            dependency_only=true
+            while IFS= read -r file; do
+              case "$file" in
+                package.json|package-lock.json|npm-shrinkwrap.json|*/package.json|*/package-lock.json|*/npm-shrinkwrap.json) ;;
+                *) dependency_only=false ;;
+              esac
+            done < "$changed"
+            [ -s "$changed" ] || dependency_only=false
+          fi
+          echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
+
+      - name: Measure base scripts tests for dependency-only PR
+        if: steps.scripts-dependency-scope.outputs.dependency_only == 'true'
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$RUNNER_TEMP/scripts-base-worktree"
+          git worktree add --detach "$base" "$BASE_SHA"
+          npm ci --prefix "$base/scripts"
+          (cd "$base/scripts" && npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-base.json")
+          git worktree remove --force "$base"
+
+      - name: Dependency invariant - test-count (Vitest scripts)
+        working-directory: .
+        env:
+          DEPENDENCY_ONLY: ${{ steps.scripts-dependency-scope.outputs.dependency_only }}
+        run: |
+          changed_args=()
+          while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/scripts-changed-files.txt"
+          base_args=()
+          if [ "$DEPENDENCY_ONLY" = true ]; then base_args+=(--base-report "$RUNNER_TEMP/scripts-unit-base.json"); fi
+          threshold=$(jq -r '.testThresholds["scripts-unit"]' .github/dependency-update-gates.json)
+          scripts/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
+            --runner vitest --threshold "$threshold" \
+            --head-report "$RUNNER_TEMP/scripts-unit-head.json" \
+            "${changed_args[@]}" "${base_args[@]}"
 
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
@@ -105,9 +371,11 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -123,9 +391,13 @@ jobs:
         run: npm run build
 
       - name: Run smoke tests
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-smoke-head.json
         run: npm run test:e2e:smoke
 
       - name: Run accessibility tests (axe-core)
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-a11y-head.json
         run: npm run test:e2e:a11y
 
       # Характеризационные проверки каталога статей. Отдельным шагом, а не внутри
@@ -133,13 +405,15 @@ jobs:
       # Только desktop: предмет — охват поиска и сортировки, он от ширины окна не
       # зависит, а раскладка в области каталога не описана вовсе.
       - name: Run article catalog characterization tests
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
 
       - name: Run payment form e2e (production)
         run: npm run test:e2e:payment
 
       - name: Download demo site
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: web-dist-demo
           path: web/dist-demo
@@ -152,11 +426,77 @@ jobs:
       # запускает ни один workflow, зелена ровно потому, что её никто не выполняет.
       # Мобильный сценарий задаёт свой viewport внутри теста, поэтому проект один.
       - name: Run schedule month filter tests
-        run: npm run test:e2e:schedule
+        run: |
+          npm run test:e2e:schedule
+          cp test-results/schedule-month-run.json "$RUNNER_TEMP/playwright-schedule-head.json"
+
+      - name: Classify dependency-only change for browser test-count
+        id: browser-dependency-scope
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed="$RUNNER_TEMP/browser-changed-files.txt"
+          : > "$changed"
+          dependency_only=false
+          if [ -n "$BASE_SHA" ]; then
+            git diff --name-only "$BASE_SHA"...HEAD > "$changed"
+            dependency_only=true
+            while IFS= read -r file; do
+              case "$file" in
+                package.json|package-lock.json|npm-shrinkwrap.json|*/package.json|*/package-lock.json|*/npm-shrinkwrap.json) ;;
+                *) dependency_only=false ;;
+              esac
+            done < "$changed"
+            [ -s "$changed" ] || dependency_only=false
+          fi
+          echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
+
+      - name: Measure base browser tests for dependency-only PR
+        if: steps.browser-dependency-scope.outputs.dependency_only == 'true'
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$RUNNER_TEMP/browser-base-worktree"
+          git worktree add --detach "$base" "$BASE_SHA"
+          npm ci --prefix "$base/web"
+          (
+            cd "$base/web"
+            npm run build
+            PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-smoke-base.json" npm run test:e2e:smoke
+            PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-a11y-base.json" npm run test:e2e:a11y
+            PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-catalog-base.json" npm run test:e2e:catalog
+            npm run test:e2e:schedule
+            cp test-results/schedule-month-run.json "$RUNNER_TEMP/playwright-schedule-base.json"
+          )
+          git worktree remove --force "$base"
+
+      - name: Dependency invariant - test-count (Playwright)
+        working-directory: .
+        env:
+          DEPENDENCY_ONLY: ${{ steps.browser-dependency-scope.outputs.dependency_only }}
+        run: |
+          changed_args=()
+          while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/browser-changed-files.txt"
+          base_args=()
+          if [ "$DEPENDENCY_ONLY" = true ]; then
+            for report in smoke a11y catalog schedule; do
+              base_args+=(--base-report "$RUNNER_TEMP/playwright-${report}-base.json")
+            done
+          fi
+          threshold=$(jq -r '.testThresholds.playwright' .github/dependency-update-gates.json)
+          web/node_modules/.bin/tsx web/scripts/check-dependency-update-gates.ts test-count \
+            --runner playwright --threshold "$threshold" \
+            --head-report "$RUNNER_TEMP/playwright-smoke-head.json" \
+            --head-report "$RUNNER_TEMP/playwright-a11y-head.json" \
+            --head-report "$RUNNER_TEMP/playwright-catalog-head.json" \
+            --head-report "$RUNNER_TEMP/playwright-schedule-head.json" \
+            "${changed_args[@]}" "${base_args[@]}"
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-smoke-report
           path: web/playwright-report/

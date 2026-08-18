@@ -7,23 +7,29 @@
 #
 # Оговорка про lockfile: PR от Dependabot надо смотреть тем же взглядом, что и ручную
 # правку — не потерялись ли платформенные записи (`@emnapi/runtime` и подобные), без
-# которых `npm ci` падает на Linux. Число пакетов в lockfile до и после обязано
-# совпадать, если обновляется одна зависимость. Проверено на себе: `npm audit fix`
-# локальным npm 11 такие записи вырезает.
+# которых `npm ci` падает на Linux. Комбинации `(пакет, os, cpu, libc)` сравниваются с
+# базой; точечная принятая потеря требует одноразовой записи с причиной. Проверено на
+# себе: `npm audit fix` локальным npm 11 такие записи вырезает.
 version: 2
 
 updates:
-  # ─── Фронтенд: единственный пакет, чьи зависимости уезжают в прод ───────────
+  # ─── Пакеты одного класса допуска: web + scripts ───────────────────────────
+  # Один scope через `directories` позволяет Dependabot обновить общую
+  # зависимость в обоих пакетах одним PR. Секция dependencies/devDependencies не
+  # является признаком риска: `astro` и `tsx` показывают, почему это было бы
+  # ложным разделением. CMS остаётся отдельным scope ниже.
   - package-ecosystem: npm
-    directory: /web
+    directories:
+      - /web
+      - /scripts
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 8
     groups:
-      # Мелкие подъёмы приходят одной пачкой: десять отдельных PR никто не смотрит,
-      # а несмотренный PR ничем не лучше отсутствующего.
-      web-minor-patch:
+      # Только patch/minor: major всегда остаётся отдельным PR.
+      web-scripts-minor-patch:
+        group-by: dependency-name
         update-types: [minor, patch]
     commit-message:
       prefix: "chore(deps)"
@@ -37,22 +43,6 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 3
-    groups:
-      cms-minor-patch:
-        update-types: [minor, patch]
-    commit-message:
-      prefix: "chore(deps)"
-
-  # ─── Скрипты импорта и проверки адресов ─────────────────────────────────────
-  - package-ecosystem: npm
-    directory: /scripts
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
-    groups:
-      scripts-minor-patch:
-        update-types: [minor, patch]
     commit-message:
       prefix: "chore(deps)"
 
@@ -70,10 +60,9 @@ updates:
       prefix: "chore(deps)"
 
   # ─── Сами workflow ──────────────────────────────────────────────────────────
-  # Actions сейчас закреплены мажорным тегом (`actions/checkout@v4`), то есть
-  # содержимое под тегом может меняться без нашего ведома. Это отдельный долг —
-  # переход на пины по SHA; Dependabot такие пины умеет обновлять и делает переход
-  # посильным, поэтому экосистема заведена заранее.
+  # Actions закреплены полными SHA; читаемая major-версия остаётся в комментарии
+  # рядом с каждым `uses:`. Dependabot обновляет такие пины отдельным PR, поэтому
+  # изменение исполняемого кода действия всегда видно в diff.
   - package-ecosystem: github-actions
     directory: /
     schedule:
