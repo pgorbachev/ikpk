@@ -11,6 +11,7 @@ permissions: {}
 jobs:
   authenticate:
     name: Authenticate merged source
+    if: github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -50,7 +51,7 @@ jobs:
   policy:
     name: Policy
     needs: authenticate
-    if: needs.authenticate.outputs.merged == 'true'
+    if: needs.authenticate.result == 'success' && needs.authenticate.outputs.merged == 'true'
     permissions:
       pull-requests: write
     uses: "pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml@1de4d5bacb55e8f2e15da3bea9f8bcf972c1b087" # engine v2
