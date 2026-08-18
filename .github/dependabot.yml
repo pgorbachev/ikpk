@@ -46,6 +46,19 @@ updates:
     commit-message:
       prefix: "chore(deps)"
 
+  # ─── Платёжный сервис ─────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /payments
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      payments-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
   # ─── Сами workflow ──────────────────────────────────────────────────────────
   # Actions закреплены полными SHA; читаемая major-версия остаётся в комментарии
   # рядом с каждым `uses:`. Dependabot обновляет такие пины отдельным PR, поэтому

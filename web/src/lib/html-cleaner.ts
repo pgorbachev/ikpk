@@ -53,6 +53,18 @@ export function contextForSafeRichHtml(value: SafeRichHtml): SanitizeContext | u
   return context ? { ...context } : undefined;
 }
 
+/** Текстовая правка уже очищенного HTML без смены режима доверия. */
+export function rewriteSafeRichHtml(value: SafeRichHtml, rewrite: (html: string) => string): SafeRichHtml {
+  if (!isSafeRichHtml(value)) {
+    throw new Error('rewriteSafeRichHtml: вход не аутентифицирован');
+  }
+  const ctx = contextForSafeRichHtml(value);
+  if (!ctx) {
+    throw new Error('rewriteSafeRichHtml: нет контекста');
+  }
+  return authenticate(terminalSanitize(rewrite(value.html), 'authenticated', ctx), ctx);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
 // ─────────────────────────────────────────────────────────────────────────────

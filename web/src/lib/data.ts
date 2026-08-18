@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
-export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize } from './html-cleaner.js';
+export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
 export type { SafeRichHtml } from './html-cleaner.js';
 import { cleanBodyHtml as cleanHtml, type SafeRichHtml } from './html-cleaner.js';
 

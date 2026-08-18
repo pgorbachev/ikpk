@@ -1,10 +1,10 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "038cf96875fe7a454c53d35e59d5f6b401871015",
+  "generatedFromSha": "99f660a6a54852517575037109ca4dfbf601b96e",
   "distRoots": [
-    "/Users/pgorbachev/projects/private/ikpk-sanitize-rich-html-impl/web/dist",
-    "/Users/pgorbachev/projects/private/ikpk-sanitize-rich-html-impl/web/dist-demo"
+    "/private/tmp/wt-payment-ux/web/dist",
+    "/private/tmp/wt-payment-ux/web/dist-demo"
   ],
   "ciMustNotRegenerate": true,
   "slotIds": [
@@ -73,6 +73,8 @@
     "src:components/institutes/InstituteTeacherCard.astro:L33:C1:style",
     "src:components/MotionScript.astro:L11:C1:script",
     "src:components/NewsletterSignup.astro:L44:C1:style",
+    "src:components/payment/PaymentForm.astro:L104:C1:script",
+    "src:components/payment/PaymentForm.astro:L108:C1:style",
     "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
     "src:components/schedule/ScheduleEventCard.astro:L123:C1:style",
     "src:components/schedule/ScheduleFilters.astro:L105:C1:style",
@@ -109,8 +111,8 @@
     "src:pages/aktsii-i-skidki.astro:L50:C1:style",
     "src:pages/demo-zayavka/[...rest].astro:L48:C1:style",
     "src:pages/kontakty.astro:L68:C1:style",
-    "src:pages/oplata.astro:L21:C11:svg",
-    "src:pages/oplata.astro:L45:C1:style",
+    "src:pages/oplata.astro:L36:C11:svg",
+    "src:pages/oplata.astro:L63:C1:style",
     "src:pages/preview/[variant].astro:L118:C3:script",
     "src:pages/preview/[variant].astro:L133:C1:style",
     "src:pages/preview/[variant]/schedule.astro:L146:C1:style",
@@ -33296,7 +33298,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/oplata",
       "placement": "doc-order:6:style",
-      "identity": "style|body:de514f4dc59ba14d",
+      "identity": "style|body:22a17fc539ca0226",
       "count": 1,
       "builds": [
         "production",
@@ -33306,7 +33308,7 @@
     {
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/oplata",
-      "placement": "doc-order:8:style",
+      "placement": "doc-order:9:style",
       "identity": "style|body:b0b0a67a3cff9bcc",
       "count": 1,
       "builds": [
@@ -33330,6 +33332,17 @@
       "route": "/oplata",
       "placement": "after:#header-search-close",
       "identity": "script|type=module|body:e6854065516af2f2",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/contacts/ContactShell.astro:L127:C3:script",
+      "route": "/oplata",
+      "placement": "after:#payment-err-consent",
+      "identity": "script|src=/_astro/PaymentForm.astro_astro_type_script_index_0_lang.Dk1ePIKH.js|type=module|body:e3b0c44298fc1c14",
       "count": 1,
       "builds": [
         "production",
@@ -33449,7 +33462,7 @@
     {
       "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
       "route": "/oplata",
-      "placement": "doc-order:9:svg",
+      "placement": "doc-order:11:svg",
       "identity": "svg|aria-hidden=true|class=chev|data-astro-cid-4tx7svmc=|viewbox=0 0 12 12",
       "count": 1,
       "builds": [
@@ -33461,6 +33474,17 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:7:link",
+      "identity": "link|href=/_astro/oplata.ClXnhCWI.css|rel=stylesheet",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
+      "route": "/oplata",
+      "placement": "doc-order:8:link",
       "identity": "link|href=/_astro/global.G94VS-zu.css|rel=stylesheet",
       "count": 1,
       "builds": [

@@ -1,0 +1,14 @@
+[Unit]
+Description=IKPK payments state backup every 4 hours (Решение 4а)
+# Интервал НЕ дольше 4 часов — это граница из решения: окно идемпотентности ЮKassa
+# 24 часа, и копия обязана быть заметно свежее, чтобы восстановление не потеряло
+# сопоставления внутри этого окна.
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=4h
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

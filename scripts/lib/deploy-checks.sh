@@ -63,3 +63,113 @@ health_check() {
     return 1
   fi
 }
+
+# ── Гейт адреса платёжной формы (задача 6.1) ─────────────────────────────────
+#
+# Вынесен сюда по той же причине, что и проверки выше: он стоит в `deploy-web.sh`
+# ПОСЛЕ ssh-загрузки релиза, поэтому запуском самого скрипта до него не дойти без
+# реального хоста, и без выноса у него был бы только греп исходника — утверждение о
+# тексте, а не о поведении.
+#
+# Отдельный проход, а не расширение проверки форм: у формы оплаты нет `href`, её адрес
+# живёт в атрибуте, и `grep 'href="..."'` его не увидит по построению. Признак —
+# БУКВАЛЬНОЕ равенство, а не regex по образцу хоста: у нашего эндпоинта один
+# канонический адрес, в отличие от нескольких порталов Bitrix24.
+#
+# Аргументы: <каталог сборки> <ожидаемый адрес> <ожидаемое значение data-payment-demo>.
+# Ноль найденных атрибутов — ОТКАЗ: это «проверить не удалось», а не «всё верно».
+payment_endpoint_matches() {
+  local dist="${1:-}" expect_endpoint="${2:-}" expect_demo="${3:-}"
+  if [[ ! -d "$dist" ]]; then
+    echo "каталога сборки нет: $dist — проверка платёжного эндпоинта не выполнена" >&2
+    return 1
+  fi
+
+  local endpoints demo_flags rc_e rc_d
+  set +e
+  endpoints=$(grep -roh 'data-payment-endpoint="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
+    | sed 's/^data-payment-endpoint="//; s/"$//' | sort -u)
+  rc_e=$?
+  demo_flags=$(grep -roh 'data-payment-demo="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
+    | sed 's/^data-payment-demo="//; s/"$//' | sort -u)
+  rc_d=$?
+  set -e
+  # У grep 0 — нашёл, 1 — не нашёл, 2+ — ошибка чтения. Третий случай нельзя путать
+  # со вторым: именно там проверка сломана сильнее всего.
+  if (( rc_e > 1 || rc_d > 1 )); then
+    echo "не удалось прочитать $dist (grep коды $rc_e/$rc_d) — проверка не выполнена" >&2
+    return 1
+  fi
+
+  local count
+  count=$(printf '%s\n' "$endpoints" | grep -c . || true)
+  if (( count == 0 )); then
+    echo "в сборке нет ни одного data-payment-endpoint — проверять нечего" >&2
+    echo "ожидался ровно один адрес: $expect_endpoint" >&2
+    return 1
+  fi
+
+  local wrong
+  wrong=$(printf '%s\n' "$endpoints" | grep -vxF "$expect_endpoint" || true)
+  if [[ -n "$wrong" ]]; then
+    echo "адрес платёжного эндпоинта не равен ожидаемому ($expect_endpoint):" >&2
+    printf '%s\n' "$wrong" | head -5 >&2
+    return 1
+  fi
+
+  # Признак режима клиента сверяется отдельно: рассогласование «адрес боевой, а клиент
+  # считает себя демонстрационным» по одному адресу не видно, а исход у него скверный —
+  # демо-клиент трактует боевой ответ как ошибку адресата, и наоборот.
+  wrong=$(printf '%s\n' "$demo_flags" | grep -vxF "$expect_demo" || true)
+  if [[ -n "$wrong" ]]; then
+    echo "data-payment-demo не равен ожидаемому ($expect_demo):" >&2
+    printf '%s\n' "$wrong" | head -5 >&2
+    return 1
+  fi
+  printf 'платёжный эндпоинт: %d адрес(ов), все равны %s, data-payment-demo=%s\n' \
+    "$count" "$expect_endpoint" "$expect_demo"
+}
+
+# ── Гейт секретов в артефакте (задача 6.2) ───────────────────────────────────
+#
+# Отдельная проверка от гейта адреса: они стерегут разные утечки — ЗНАЧЕНИЕ секрета
+# против АДРЕСА назначения. Аргументы: <каталог сборки> <ИМЯ=значение>…
+#
+# Пустой список значений — ОТКАЗ, а не проход: «нечего искать» означает «проверить не
+# удалось». Явный отказ оформляется вызывающей стороной, а не молчанием здесь.
+dist_has_no_secret_values() {
+  local dist="${1:-}"; shift || true
+  if [[ ! -d "$dist" ]]; then
+    echo "каталога сборки нет: $dist — проверка секретов не выполнена" >&2
+    return 1
+  fi
+  if (( $# == 0 )); then
+    echo "ни одного значения для поиска не передано — проверка секретов не выполнена" >&2
+    return 1
+  fi
+
+  local pair name value hits rc leaked=()
+  for pair in "$@"; do
+    name="${pair%%=*}"
+    value="${pair#*=}"
+    if [[ -z "$value" ]]; then
+      echo "значение $name пустое — проверка секретов не выполнена" >&2
+      return 1
+    fi
+    set +e
+    hits=$(grep -rlF -- "$value" "$dist" 2>/dev/null | head -5)
+    rc=$?
+    set -e
+    if (( rc > 1 )); then
+      echo "не удалось прочитать $dist при поиске $name (grep код $rc) — проверка не выполнена" >&2
+      return 1
+    fi
+    [[ -n "$hits" ]] && leaked+=("$name: $(printf '%s ' $hits)")
+  done
+  if (( ${#leaked[@]} > 0 )); then
+    echo "в сборке найдены значения секретов:" >&2
+    printf '%s\n' "${leaked[@]}" >&2
+    return 1
+  fi
+  printf 'секреты в сборке: искали %d значени(й), ни одного не найдено\n' "$#"
+}

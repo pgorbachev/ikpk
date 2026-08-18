@@ -1,5 +1,6 @@
 # Dependencies
-node_modules/
+# Без завершающего слэша: git считает symlink файлом, и `node_modules/` его не прячет.
+node_modules
 .pnp.*
 .yarn/
 
