@@ -74,13 +74,7 @@ jobs:
         run: |
           current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           head_sha="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$current")"
-          # `tostring` здесь несущий, а не косметика: `jq -e` возвращает код 1, когда
-          # последнее выведенное значение — `false`. Прежняя запись `.auto_merge != null`
-          # роняла весь job на каждом PR без включённой пометки, то есть обязательный
-          # check не публиковался вовсе (живой след: run 32151344352). Отсутствие поля
-          # по-прежнему отказ — его даёт `error`, а не код выхода `-e`.
-          auto_merge_enabled="$(jq -er 'if has("auto_merge") then (.auto_merge != null | tostring) else error("missing auto_merge") end' <<<"$current")"
-          case "$auto_merge_enabled" in true | false) ;; *) exit 1 ;; esac
+          auto_merge_enabled="$(jq -r 'if has("auto_merge") then (.auto_merge != null) else error("missing auto_merge") end' <<<"$current")"
           head_matches_event=false
           if [ "$head_sha" = "$EVENT_HEAD_SHA" ]; then head_matches_event=true; fi
           {
