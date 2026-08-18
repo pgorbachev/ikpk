@@ -74,10 +74,32 @@ export interface MergeReadinessInput {
   mergeCombinationChecks: Array<{ name: string; state: 'pending' | 'success' | 'failure' }>;
 }
 
+export interface ProvenanceEvidenceCandidate {
+  sha: string;
+  name: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: 'success' | 'failure' | null;
+  appSlug: string;
+  callerWorkflowPath: string;
+  reusablePolicyPath: string;
+  reusablePolicySha: string;
+}
+
+export interface TrustedEvidencePolicy {
+  sha: string;
+  checkName: string;
+  appSlug: string;
+  callerWorkflowPath: string;
+  reusablePolicyPath: string;
+  reusablePolicySha: string;
+}
+
 export interface DependabotAutoMerge {
   classifyPullRequest(input: ClassificationInput): ClassificationDecision;
   evaluateHead(input: HeadEvaluationInput): HeadEvaluation;
   evaluateMergeReadiness(input: MergeReadinessInput): Decision;
+  normalizeDependabotEcosystem(ecosystem: string): string;
+  isTrustedPositiveEvidence(candidate: ProvenanceEvidenceCandidate, policy: TrustedEvidencePolicy): boolean;
 }
 
 export async function loadDependabotAutoMerge(): Promise<DependabotAutoMerge> {
