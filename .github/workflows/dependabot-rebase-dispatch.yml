@@ -78,12 +78,13 @@ jobs:
           # Свежий authoritative снимок: artifact сообщает, ЧТО читать, а факт слияния
           # берётся из API. Расхождение — несогласованность, а не обычное закрытие.
           current="$(gh api "repos/$SOURCE_REPOSITORY/pulls/$SIGNAL_PR_NUMBER")"
+          jq -e --arg head_sha "$SIGNAL_HEAD_SHA" \
+            '.state == "closed" and .head.sha == $head_sha' \
+            <<<"$current" >/dev/null
           API_MERGED="$(jq -er 'if has("merged") then (.merged == true | tostring) else error("missing merged") end' <<<"$current")"
           test "$API_MERGED" = "$SIGNAL_MERGED"
           if [ "$API_MERGED" = true ]; then
-            jq -e --arg head_sha "$SIGNAL_HEAD_SHA" \
-              '.head.sha == $head_sha and (.merged_at | type == "string")' \
-              <<<"$current" >/dev/null
+            jq -e '(.merged_at | type == "string")' <<<"$current" >/dev/null
           fi
           {
             echo "merged=$API_MERGED"
