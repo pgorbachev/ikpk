@@ -75,8 +75,12 @@ Security-boundary override не пытается выдать право по lo
 
 ### Привилегированный контекст
 
-Шаг, решающий судьбу PR, не делает checkout кода PR и не устанавливает зависимости. Права —
-`contents: write` и `pull-requests: write`, без публикации и без изменения workflow.
+Доверенный producer запускается из workflow default branch (`pull_request_target`) и не
+делает checkout кода PR. Policy-код берётся по immutable SHA reusable workflow, а
+обязательный gate и отдельное свидетельство публикуются на фактический head SHA через
+Checks API. Только шаг пометки к слиянию получает `contents: write` и
+`pull-requests: write`; отдельный publisher получает `checks: write`. Ни один из них не
+получает прав на публикацию или изменение workflow и не устанавливает зависимости.
 
 ## Capabilities
 
