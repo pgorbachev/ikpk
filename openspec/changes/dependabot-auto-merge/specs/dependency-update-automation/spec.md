@@ -474,12 +474,20 @@ Dependabot, второй случай SHALL NOT применяться — та�
 pull request — минимумом, при котором пометка к слиянию выполнима. Права на публикацию
 и на изменение workflow SHALL NOT выдаваться.
 
-Определение producer workflow SHALL читаться из default branch, а исполняемый policy-код
-SHALL быть привязан к полному immutable SHA reusable workflow. Producer SHALL NOT
-исполнять workflow-определение из проверяемой ветки. Обязательный gate и отдельное
-свидетельство SHALL публиковаться на свежо прочитанный текущий head SHA отдельным job с
-`checks: write`; этот job SHALL NOT иметь `contents: write` или `pull-requests: write`.
-Право `checks: write` SHALL NOT выдаваться другим workflow этой автоматизации.
+Определения producer workflow SHALL читаться из default branch, а исполняемый policy-код
+SHALL быть привязан к полному immutable SHA reusable workflow. Producer SHALL состоять из
+read-only signal на `pull_request_target` и privileged dispatcher на `workflow_run`, потому
+что GitHub принудительно понижает токен Dependabot-authored `pull_request_target` до
+read-only. Signal SHALL NOT получать write-token или secrets и SHALL передавать только
+строго типизированный metadata artifact, созданный без исполнения содержимого PR.
+
+Dispatcher SHALL до использования artifact проверить exact source run, workflow path,
+event, conclusion, actor, PR/head association, единственность artifact, digest, состав и
+schema. Producer SHALL NOT исполнять workflow-определение из проверяемой ветки.
+Обязательный gate и отдельное свидетельство SHALL публиковаться на свежо прочитанный
+текущий head SHA отдельным job с `checks: write`; этот job SHALL NOT иметь
+`contents: write` или `pull-requests: write`. Право `checks: write` SHALL NOT выдаваться
+другим workflow этой автоматизации.
 
 Event payload SHALL NOT считаться свежим доказательством marker. Если текущий head или
 marker прочитать не удалось, система SHALL завершаться fail closed: положительный
@@ -498,11 +506,24 @@ marker прочитать не удалось, система SHALL заверш
 - **THEN** ему выданы права записи в содержимое репозитория и права на операции с pull
   request, и не выданы права на публикацию и на изменение workflow
 
+#### Scenario: GitHub понижает токен Dependabot signal
+
+- **WHEN** `pull_request_target` запускается для PR, созданного Dependabot
+- **THEN** signal остаётся полностью работоспособным с read-only `GITHUB_TOKEN`, а все
+  операции записи выполняются только последующим доверенным `workflow_run` dispatcher
+
+#### Scenario: Подменён source run или artifact
+
+- **WHEN** dispatcher получает artifact от другого workflow/run/head, несколько
+  одноимённых artifact, неверный digest, лишний файл либо несовпадающие actor/action/PR/head
+- **THEN** положительный gate и свидетельство не публикуются и auto-merge не включается
+
 #### Scenario: Ветка PR не может подменить producer
 
 - **WHEN** PR меняет caller workflow или добавляет job с именем обязательного gate
 - **THEN** это определение не исполняется доверенным producer, а результат без ожидаемых
-  external id, target-caller и immutable reusable SHA не принимается
+  external id, dispatcher-caller, authenticated source run и immutable reusable SHA не
+  принимается
 
 #### Scenario: Event snapshot устарел
 

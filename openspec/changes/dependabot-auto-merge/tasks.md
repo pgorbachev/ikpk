@@ -36,6 +36,10 @@
       Dependabot head зелёный; ручной путь проверяется отдельным PR-only ruleset bypass,
       который не обходит остальные CI. Прежняя manual-green evidence в
       `web/tests/dependabot-auto-merge-provenance.test.ts` superseded.
+- [ ] 2.2a Написать RED-проверки двухступенчатого producer: Dependabot signal не требует
+      write permissions/secrets; privileged `workflow_run` принимает только exact
+      signal run/path/actor/PR/head и единственный artifact с верным digest/schema;
+      подмена каждого из этих полей и второй одноимённый artifact дают fail closed
 - [x] 2.3 Написать проверки на **две независимые мутации**, подпись и действующее лицо
       порознь: (а) подпись платформы есть, действующее лицо — участник с правом записи —
       падает; (б) действующее лицо допустимо, но подписи платформы нет — падает; (в) оба
@@ -118,12 +122,13 @@
       с гейтом допустимости, вычисляемый на каждой вершине независимо от состояния пометки
       и положительный только при фактически пройденных проверках подписи и действующего
       лица. В обязательные проверки его **не вносить** — иначе он запретит ручной путь
-- [x] 4.7a Публиковать gate и свидетельство на свежо прочитанный head SHA из доверенного
-      `pull_request_target` producer. Проверить полный immutable SHA reusable policy,
-      machine external id, ожидаемый GitHub App и отсутствие второго workflow с
-      `checks: write`; same-name job из ветки PR обязан отвергаться. При чтении evidence
-      сверять authoritative `run.pull_requests[].head.sha` и exact provenance job success;
-      borrowed `details_url` отрицательного/чужого run обязан отвергаться
+- [ ] 4.7a Публиковать gate и свидетельство на свежо прочитанный head SHA из доверенного
+      двухступенчатого producer. Проверить полный immutable SHA reusable policy, machine
+      external id, ожидаемый GitHub App, authenticated source signal run и отсутствие
+      второго workflow с `checks: write`; same-name job из ветки PR обязан отвергаться.
+      При чтении evidence сверять authoritative source run PR/head association и exact
+      provenance job dispatcher run; borrowed `details_url` отрицательного/чужого run
+      обязан отвергаться
       Evidence: `web/tests/dependabot-auto-merge-security-regressions.test.ts` and
       executable publisher cases on the trusted reusable workflow.
 - [ ] 4.8 **Негативная проверка ложного свидетельства:** запушить человеческий коммит в
@@ -164,10 +169,12 @@
 
 ## 6. Авто-слияние
 
-- [ ] 6.1 Реализовать workflow, помечающий PR к слиянию, в привилегированном контексте без
-      checkout кода PR и без установки зависимостей. Caller читается из default branch,
-      reusable workflow вызывается по полному SHA, policy source checkout'ится по
-      `job.workflow_repository` + `job.workflow_sha`, а не по moving `main`
+- [ ] 6.1 Реализовать двухступенчатый producer без checkout кода PR и без установки его
+      зависимостей: read-only `pull_request_target` signal из default branch создаёт один
+      типизированный metadata artifact; privileged `workflow_run` dispatcher проверяет
+      exact source run/path/actor/PR/head/artifact и вызывает reusable workflow по полному
+      SHA; policy source checkout'ится по `job.workflow_repository` +
+      `job.workflow_sha`, а не по moving `main`
 - [ ] 6.2 Выдать job'у ровно `contents: write` и `pull-requests: write`; убедиться, что
       прав на публикацию и на изменение workflow нет. Зафиксировать в отчёте фактический
       блок permissions. Отдельному publisher выдать только `checks: write` и проверить,
