@@ -1,10 +1,43 @@
+/**
+ * Браузерный набор АРТЕФАКТА РОЛИ `preview` (задача 6.15; конфигурация —
+ * `playwright.preview.config.ts`, артефакт — `dist-demo`).
+ *
+ * ПРЕДМЕТ ОГРАНИЧЕН РОЛЬЮ: демо-исход, повторяемость показа, отсутствие удержания и то, что
+ * форма ведёт ТОЛЬКО на mock. Рабочей семантики (удержание, сверка, продолжение, дубль) у
+ * этой роли нет по норме, и проверять её здесь нельзя — она живёт в наборе роли `stand`
+ * (`payment-form.spec.ts`). Источник: `specs/online-payment/spec.md`, Requirements «Роли `ci`
+ * и `preview` не создают платежей, а развёрнутый стенд работает с тестовым магазином» и «Роль
+ * сборки объявлена перечислением, а не признаком «демо»» (таблица четырёх ролей).
+ *
+ * РАЗВЕДЕНИЕ ИДЁТ ПО РОЛИ, А НЕ ПО `DEMO_FORMS`: прежняя конфигурация
+ * `playwright.demo.config.ts` противопоставлялась основной по признаку форм ЗАЯВКИ
+ * (Bitrix24), у которого с платёжным контуром общего только история.
+ *
+ * ЖИВАЯ ЮKASSA НЕ УЧАСТВУЕТ: fail-closed guard (`helpers/payment-network-guard.ts`) роняет
+ * тест на любом неперехваченном обращении к платёжному контуру или к настоящей ЮKassa, а
+ * мёртвый прокси в конфигурации не даёт запросу уйти с машины вовсе.
+ *
+ * ОЖИДАНИЕ ПО ЦВЕТУ на `b4e80e7`: проверка объявленной роли КРАСНАЯ — артефакт `dist-demo`
+ * несёт булев `data-payment-demo="true"` и роли не объявляет. Проверки mock-адреса,
+ * терминальности демо-исхода, отсутствия удержания и повторяемости — ЗЕЛЁНЫЕ уже сегодня
+ * (характеризация: поведение есть, 6.15 переносит его на артефакт своей роли).
+ */
 import { expect, test, type Page } from '@playwright/test';
 import {
+  PAYMENT_ENDPOINT_ATTR,
   PAYMENT_ENTRY_ATTR,
   PAYMENT_FORM_ATTR,
   PAYMENT_HOLD_WARNING_ATTR,
+  PAYMENT_ROLE_ATTR,
   PAYMENT_STATE_ATTR,
+  PREVIEW_MOCK_ENDPOINT,
 } from './helpers/payment-contract';
+import {
+  expectNoEscapes,
+  installFailClosedGuard,
+  takeEscapes,
+  type FailClosedGuard,
+} from './helpers/payment-network-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const STATE = (s: string) => `[${PAYMENT_STATE_ATTR}="${s}"]`;
@@ -42,16 +75,114 @@ async function mockApi(
   });
 }
 
+let guard: FailClosedGuard;
+
 test.beforeEach(async ({ page }) => {
   page.on('framenavigated', (frame) => {
     void frame.url();
   });
-  await page.route(/yookassa|ykassa/i, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><p>intercepted-confirmation</p>',
+  // Прежде здесь стоял ЗАГЛУШАЮЩИЙ маршрут на `/yookassa|ykassa/i`: обращение к настоящей
+  // ЮKassa он превращал в безобидную страницу, то есть утечка проходила молча и тест
+  // оставался зелёным. По задаче 6.15 такое обращение обязано РОНЯТЬ тест, поэтому мок
+  // заменён на fail-closed guard, который предмет называет.
+  guard = await installFailClosedGuard(page, 'preview');
+});
+
+test.afterEach(() => {
+  expectNoEscapes(guard);
+});
+
+test.describe('6.15 артефакт набора: роль preview и только mock-адрес', () => {
+  test('артефакт объявляет роль preview, и другой роли в нём нет', async ({ page }) => {
+    await openForm(page);
+    const declared = await page.evaluate(
+      (attr) => [...document.querySelectorAll(`[${attr}]`)].map((el) => el.getAttribute(attr)),
+      PAYMENT_ROLE_ATTR,
+    );
+    // «Роль не объявлена» — непройденная проверка, а не «нарушений нет»: без роли неизвестно,
+    // на каком артефакте идёт набор, и его зелёный исход ничего не значит.
+    expect(
+      declared,
+      `страница не объявляет ${PAYMENT_ROLE_ATTR} — предмет набора не подтверждён, проверка не пройдена`,
+    ).not.toEqual([]);
+    expect([...new Set(declared)]).toEqual(['preview']);
+  });
+
+  test('форма ведёт только на mock: база равна mock-адресу, запрос уходит туда и больше никуда', async ({
+    page,
+  }) => {
+    const seen: string[] = [];
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      seen.push(`${route.request().method()} ${route.request().url()}`);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'created_demo' }),
+      });
     });
+
+    await openForm(page);
+    expect(
+      await page.locator(FORM).getAttribute(PAYMENT_ENDPOINT_ATTR),
+      'форма роли preview не объявляет базу эндпоинта — проверка не пройдена',
+    ).toBe(PREVIEW_MOCK_ENDPOINT);
+
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect(page.locator(STATE('demo'))).toBeVisible();
+
+    // Ни одного обращения мимо mock-адреса. Обращение к установленному контуру или к живой
+    // ЮKassa поймал бы ещё и guard в afterEach — здесь предмет уже́, чем у него: адресат
+    // ИМЕННО отправки формы.
+    expect(seen).toEqual([`POST ${PREVIEW_MOCK_ENDPOINT}/payments`]);
+  });
+
+  test('демо-исход терминален: перезагрузка не опрашивает статус и не показывает состояния попытки', async ({
+    page,
+  }) => {
+    const statusGets: string[] = [];
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') statusGets.push(request.url());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'created_demo' }),
+      });
+    });
+
+    await openForm(page);
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect(page.locator(STATE('demo'))).toBeVisible();
+
+    // Терминальность — не «в этой сессии всё выглядит хорошо», а отсутствие продолжения
+    // попытки после перезагрузки. Проверка соседняя, но НЕ та же, что «две отправки одного
+    // состава»: там предмет — повторяемость показа внутри сессии и пустое хранилище.
+    await page.reload();
+    await page.waitForTimeout(1000);
+    expect(statusGets, `демо-исход оставил попытку живой: опрос статуса ${statusGets.join(', ')}`).toEqual([]);
+    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
+    const entry = page.locator(`[${PAYMENT_ENTRY_ATTR}]`);
+    if ((await entry.count()) > 0) await expect(entry.first()).toBeEnabled();
+  });
+
+  test('перехват полон: неперехваченный запрос к живой ЮKassa останавливается и назван', async ({ page }) => {
+    await page.goto('/oplata');
+    // Намеренный запрос БЕЗ мока: иначе «утечек не было» означало бы лишь «никто не пробовал».
+    // Раньше на этом месте стоял заглушающий маршрут, и обращение к настоящей ЮKassa прошло бы
+    // молча — ровно то, что запрещает 6.15.
+    const reached = await page.evaluate(async () => {
+      try {
+        await fetch('https://api.yookassa.ru/v3/payments', { method: 'POST', body: '{}' });
+        return 'дошёл';
+      } catch {
+        return 'остановлен';
+      }
+    });
+    expect(reached).toBe('остановлен');
+    // Судить по НАЗВАННОМУ предмету, а не по сетевому отказу: отказ даёт и мёртвый прокси.
+    expect(takeEscapes(guard).map((e) => e.subject)).toEqual(['живая ЮKassa']);
   });
 });
 

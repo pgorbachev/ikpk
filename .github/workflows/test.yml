@@ -418,17 +418,31 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
 
-      - name: Run payment form e2e (production)
+      # Наборы оплаты разведены по РОЛИ АРТЕФАКТА (задача 6.15): здесь остались только те,
+      # чей предмет — не контурная семантика (модальность, доступность, транспорт заявки и
+      # инвариант контура при недоступном API). Клиентские сценарии идут ниже, каждый на
+      # артефакте своей роли.
+      - name: Run payment transport and contour e2e (dist)
         run: npm run test:e2e:payment
 
-      - name: Download demo site
+      - name: Download preview-role site
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: web-dist-demo
           path: web/dist-demo
 
-      - name: Run payment form e2e (demo)
-        run: npm run test:e2e:payment-demo
+      - name: Run payment form e2e (preview role)
+        run: npm run test:e2e:payment-preview
+
+      # Артефакт роли `stand` собирается здесь, а не скачивается: джоб unit-and-build его не
+      # собирает, а набор без артефакта своей роли — это «проверять нечего», выданное за
+      # «прошло». Живая ЮKassa в прогоне не участвует, секреты ей не передаются: весь
+      # платёжный API перехвачен Playwright, и утечка роняет тест (fail-closed guard).
+      - name: Build stand-role site
+        run: npm run build:stand
+
+      - name: Run payment form e2e (stand role)
+        run: npm run test:e2e:payment-stand
 
       # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
       # останавливает только `Tests`, а проверка, положенная в файл, который не

@@ -13,6 +13,9 @@ web/dist/
 # Вывод демо-сборки — отдельный каталог, чтобы проверки боевого и демо-вывода не
 # получали на вход чужой предмет (change deploy-gated-on-tests, решение 6).
 web/dist-demo/
+# Вывод сборки роли `stand` — артефакт браузерного набора этой роли (задача 6.15
+# change online-payment-flow).
+web/dist-stand/
 web/.astro/
 
 # Environment

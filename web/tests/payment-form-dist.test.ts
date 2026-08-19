@@ -113,13 +113,28 @@ describe('3.12c описание порядка оплаты соответст�
 });
 
 describe('B2 / 4.9 гейт публикации видит оплату', () => {
-  it('боевые Playwright оплаты входят в npm-скрипт и workflow Tests', () => {
+  /**
+   * ПРЕДМЕТ СУЖЕН ЗАДАЧЕЙ 6.15, и часть его переехала, а не исчезла. Прежняя редакция
+   * требовала, чтобы `test:e2e:payment` упоминал `payment-form.spec.ts`, а
+   * `test:e2e:payment-demo` — `playwright.demo.config.ts`. Оба требования кодировали прежнюю
+   * организацию проверок: браузерные наборы теперь разведены по РОЛИ АРТЕФАКТА, клиентские
+   * сценарии идут на артефактах ролей `preview` и `stand`, а сам `test:e2e:payment-demo`
+   * переименован. Оставить их значило бы держать гейт, красный от выполненной работы.
+   *
+   * Куда переехало: `tests/payment-artifact-roles.test.ts` — там для КАЖДОЙ роли
+   * проверяется, что обязательный прогон запускает её набор своей конфигурацией и готовит её
+   * артефакт до прогона. Это строго сильнее упоминания имени файла в одном скрипте, поэтому
+   * дублировать проверку здесь нельзя: два гейта об одном предмете дают два ответа.
+   *
+   * Здесь остаётся то, чего у наследника нет: наборы, не привязанные к роли артефакта
+   * (транспорт и инвариант контура), и охват `payments` сканированием безопасности.
+   */
+  it('наборы оплаты, не привязанные к роли, входят в npm-скрипт и workflow Tests', () => {
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'web/package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts['test:e2e:payment']).toMatch(/payment-form\.spec\.ts/);
     expect(pkg.scripts['test:e2e:payment']).toMatch(/payment-transport\.spec\.ts/);
-    expect(pkg.scripts['test:e2e:payment-demo']).toMatch(/playwright\.demo\.config/);
+    expect(pkg.scripts['test:e2e:payment']).toMatch(/payment-contour\.spec\.ts/);
     const wf = readFileSync(join(repoRoot, '.github/workflows/test.yml'), 'utf8');
     expect(wf).toMatch(/test:e2e:payment/);
     const security = readFileSync(join(repoRoot, '.github/workflows/security.yml'), 'utf8');
