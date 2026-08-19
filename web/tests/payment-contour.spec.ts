@@ -18,6 +18,13 @@
  * страницы не исчезла. Проверять здесь ещё и «какое состояние» значило бы дать двум
  * проверкам один предмет с риском разных ответов.
  *
+ * АРТЕФАКТ — РОЛЬ `stand` (`dist-stand`, `playwright.stand.config.ts`), решение владельца
+ * 2026-08-19; прежде набор шёл основной конфигурацией по боевому `dist`, то есть по сборке
+ * роли `ci`, у которой формы по контракту нет. Объявленная база берётся из артефакта КАК
+ * ЕСТЬ и ничем не подменяется: предмет — что клиент после сбоя не уходит мимо неё, а не
+ * какое именно значение там записано. Перехват (`payment-network-guard.ts`) взведён тем же
+ * способом, что и в остальных наборах роли, и живёт только в транспорте.
+ *
  * ОЖИДАНИЕ ПО ЦВЕТУ: этот инвариант, по наблюдению на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты), уже выполняется —
  * проверка предъявляется как ЗЕЛЁНАЯ и закрепляет свойство, а не доказывает
  * нереализованное. Красными в этой сессии предъявлены проверки роли, readiness, базы
@@ -27,6 +34,11 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { PAYMENT_ENDPOINT_ATTR, PAYMENT_ENTRY_ATTR, PAYMENT_FORM_ATTR } from './helpers/payment-contract';
 import { gotoOplata, interceptYooKassaNavigation } from './helpers/yookassa-navigation';
+import {
+  expectNoEscapes,
+  installFailClosedGuard,
+  type FailClosedGuard,
+} from './helpers/payment-network-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 
@@ -50,8 +62,18 @@ async function fillValid(page: Page) {
   await page.locator(`${FORM} [name="consent"]`).check();
 }
 
+let guard: FailClosedGuard;
+
 test.beforeEach(async ({ page }) => {
+  // Guard ПЕРВЫМ: маршруты применяются в обратном порядке регистрации, поэтому обрыв
+  // `/payments` самим тестом (это и есть его предмет — недоступный API) забирает свои
+  // запросы, а guard видит только то, что не забрал никто.
+  guard = await installFailClosedGuard(page, 'stand');
   await interceptYooKassaNavigation(page);
+});
+
+test.afterEach(() => {
+  expectNoEscapes(guard);
 });
 
 test.describe('3.16(4) недоступность API не переключает контур', () => {

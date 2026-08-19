@@ -119,7 +119,7 @@ describe('6.15 каждой роли — свой набор, и наоборо�
   for (const role of ROLES) {
     const artifact = BROWSER_ARTIFACTS[role];
 
-    it(`конфигурация роли ${role} выбирает ровно ${artifact.spec}`, () => {
+    it(`конфигурация роли ${role} выбирает ровно объявленные ${artifact.specs.length} файла(ов)`, () => {
       const picked = selections.get(artifact.playwrightConfig)!;
       // Пустой набор — «не выполнено», а не «нарушений нет»: конфигурация, не выбравшая ни
       // одного файла, зелена ровно потому, что ничего не проверяет.
@@ -127,7 +127,12 @@ describe('6.15 каждой роли — свой набор, и наоборо�
         picked.map((p) => p.file),
         `набор роли ${role} пуст — проверка не пройдена`,
       ).not.toEqual([]);
-      expect(picked.map((p) => p.file).sort()).toEqual([artifact.spec.replace(/^tests\//, '')]);
+      // Сверка СИММЕТРИЧНА: файл, выпавший из конфигурации, и файл, попавший в неё сверх
+      // объявленного, роняют проверку одинаково. Асимметрия сделала бы «набор потеряли»
+      // неотличимым от «набор пополнили».
+      expect(picked.map((p) => p.file).sort()).toEqual(
+        artifact.specs.map((spec) => spec.replace(/^tests\//, '')).sort(),
+      );
     });
 
     it(`конфигурация роли ${role} раздаёт артефакт своей сборки на порту ${artifact.port}`, () => {
@@ -158,13 +163,18 @@ describe('6.15 каждой роли — свой набор, и наоборо�
       expect(cfg.webServer?.command ?? '').not.toContain(RETIRED_DEMO_ATTR);
     });
 
-    it(`fail-closed guard взведён в наборе роли ${role}`, () => {
-      const source = readFileSync(join(webRoot, artifact.spec), 'utf8');
-      expect(
-        source,
-        `набор роли ${role} не ставит guard: неперехваченный запрос к платёжному контуру ушёл бы молча`,
-      ).toContain(`installFailClosedGuard(page, '${role}')`);
-      expect(source).toContain('expectNoEscapes(guard)');
+    it(`fail-closed guard взведён в каждом наборе роли ${role}`, () => {
+      // КАЖДЫЙ файл роли, а не первый: набор, добавленный к роли без guard'а, уходил бы на
+      // живой контур молча, и его зелёный исход говорил бы не о поведении продукта.
+      expect(artifact.specs, `у роли ${role} не объявлено ни одного набора`).not.toEqual([]);
+      for (const spec of artifact.specs) {
+        const source = readFileSync(join(webRoot, spec), 'utf8');
+        expect(
+          source,
+          `${spec} (роль ${role}) не ставит guard: неперехваченный запрос к платёжному контуру ушёл бы молча`,
+        ).toContain(`installFailClosedGuard(page, '${role}')`);
+        expect(source, `${spec} не проверяет утечки постусловием`).toContain('expectNoEscapes(guard)');
+      }
       const cfg = configs.get(artifact.playwrightConfig)!;
       // Слой 1 (внешние имена не разрешаются) и слой 2 (перехват, называющий предмет) —
       // разные, и проверять надо оба: без слоя 1 запрос, ушедший мимо интерцептора, уходит в
@@ -180,11 +190,14 @@ describe('6.15 каждой роли — свой набор, и наоборо�
   it('наборы ролей не смешаны: разные артефакты, разные порты, разные конфигурации', () => {
     const outDirs = ROLES.map((r) => outDirOf(configs.get(BROWSER_ARTIFACTS[r].playwrightConfig)!.webServer?.command ?? ''));
     const ports = ROLES.map((r) => configs.get(BROWSER_ARTIFACTS[r].playwrightConfig)!.webServer?.port);
-    const specs = ROLES.map((r) => BROWSER_ARTIFACTS[r].spec);
+    const specs = ROLES.flatMap((r) => BROWSER_ARTIFACTS[r].specs);
     expect(outDirs.filter(Boolean).length, 'каталог раздачи не объявлен — сверять нечего').toBe(ROLES.length);
     expect(new Set(outDirs).size).toBe(ROLES.length);
     expect(new Set(ports).size).toBe(ROLES.length);
-    expect(new Set(specs).size).toBe(ROLES.length);
+    // Один и тот же файл не может принадлежать двум ролям: он шёл бы по двум артефактам, и
+    // его исход перестал бы говорить о конкретном контуре.
+    expect(specs.length, 'ни одна роль не объявила наборов').toBeGreaterThan(0);
+    expect(new Set(specs).size).toBe(specs.length);
     // Порт основного набора (над боевым выводом) занят третьим сервером — совпадение увело бы
     // набор роли на чужой артефакт, а при `reuseExistingServer: false` вовсе сняло бы прогон.
     expect(ports).not.toContain(configs.get(MAIN_CONFIG)!.webServer?.port);
@@ -194,8 +207,10 @@ describe('6.15 каждой роли — свой набор, и наоборо�
     const picked = selections.get(MAIN_CONFIG)!.map((p) => p.file);
     expect(picked, 'основной набор пуст — проверка не пройдена').not.toEqual([]);
     for (const role of ROLES) {
-      const spec = BROWSER_ARTIFACTS[role].spec.replace(/^tests\//, '');
-      expect(picked, `${spec} идёт на артефакте, роль которого не его`).not.toContain(spec);
+      for (const declared of BROWSER_ARTIFACTS[role].specs) {
+        const spec = declared.replace(/^tests\//, '');
+        expect(picked, `${spec} идёт на артефакте, роль которого не его`).not.toContain(spec);
+      }
     }
   });
 

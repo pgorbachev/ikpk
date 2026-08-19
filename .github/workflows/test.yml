@@ -418,13 +418,6 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
 
-      # Наборы оплаты разведены по РОЛИ АРТЕФАКТА (задача 6.15): здесь остались только те,
-      # чей предмет — не контурная семантика (модальность, доступность, транспорт заявки и
-      # инвариант контура при недоступном API). Клиентские сценарии идут ниже, каждый на
-      # артефакте своей роли.
-      - name: Run payment transport and contour e2e (dist)
-        run: npm run test:e2e:payment
-
       - name: Download preview-role site
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -441,7 +434,13 @@ jobs:
       - name: Build stand-role site
         run: npm run build:stand
 
-      - name: Run payment form e2e (stand role)
+      # Здесь идут ВСЕ три набора роли `stand`: клиентские сценарии контура
+      # (payment-form.spec.ts), транспорт заявки (payment-transport.spec.ts) и инвариант
+      # контура при недоступном API (payment-contour.spec.ts). Прежде два последних шли
+      # основной конфигурацией по боевому `dist` — сборке роли `ci`, у которой формы по
+      # контракту нет вовсе. Состав набора задаёт `testMatch` конфигурации, а не перечень
+      # файлов в этой команде.
+      - name: Run payment e2e (stand role)
         run: npm run test:e2e:payment-stand
 
       # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию

@@ -264,21 +264,92 @@ export async function startPaymentService(opts: {
   };
 }
 
+export type SpawnOutcome = 'exited' | 'listening' | 'timeout';
+
 export type SpawnResult = {
+  /**
+   * ФАКТИЧЕСКИЙ исход, а не снимок по таймеру:
+   *  - `exited` — процесс завершился сам (и вывод дочитан до конца потоков);
+   *  - `listening` — процесс отвечает на своём порту и продолжает жить;
+   *  - `timeout` — не случилось ни того, ни другого за `deadlineMs`. Это «измерить не
+   *    удалось», а не «отказ подтверждён», и по умолчанию наружу такой исход не отдаётся
+   *    вовсе (см. `allowTimeout`).
+   */
+  outcome: SpawnOutcome;
+  /** Процесс завершился САМ в пределах deadline. */
+  exited: boolean;
+  /**
+   * Код выхода: ЧИСЛО, если процесс завершился сам; `null`, если он ещё жив или был убит
+   * сигналом. Отличать обязательно: `null !== 0` проходит проверку «код не ноль» и на
+   * живом процессе — именно так fail-closed проверки были зелёными, ничего не проверив.
+   */
   exitCode: number | null;
+  /** Сигнал, которым процесс завершился, если завершился сигналом. */
+  signal: NodeJS.Signals | null;
   stderr: string;
   stdout: string;
   listening: boolean;
   connection: 'refused' | 'open' | 'http-error';
+  /** Сколько ждали исхода и каков был предел — для сообщений об отказе. */
+  waitedMs: number;
+  deadlineMs: number;
 };
 
 /**
- * Запуск процесса для 3.0a*: предмет — слушает ли порт. Отсутствие бинаря — FAIL
- * до проверки порта.
+ * Предел ожидания ФАКТИЧЕСКОГО исхода. Прежняя обвязка ждала фиксированные 1500 мс и
+ * возвращала `child.exitCode` — то есть `null`, если процесс к этому моменту ещё не
+ * успел ни упасть, ни подняться. Под нагрузкой (шестнадцать файлов vitest на одной
+ * машине) старт `node --import tsx` в эти 1500 мс не укладывался, и один и тот же набор
+ * давал разное число красных: 41 против 40 на двух одинаковых прогонах.
+ *
+ * Ожидание кончается по СОБЫТИЮ, а не по таймеру, поэтому увеличение предела ничего не
+ * замедляет: исправный fail-closed процесс завершается за десятки миллисекунд, исправный
+ * рабочий — открывает порт и тоже прекращает ожидание.
+ */
+const DEFAULT_DEADLINE_MS = 10_000;
+const POLL_MS = 25;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Гасим процесс сами: SIGTERM, затем SIGKILL. Возврат — когда потоки закрыты. */
+async function terminate(child: ChildProcess, closed: () => boolean): Promise<void> {
+  if (closed() || !child.pid) return;
+  child.kill('SIGTERM');
+  for (let waited = 0; waited < 500 && !closed(); waited += POLL_MS) await sleep(POLL_MS);
+  if (closed()) return;
+  child.kill('SIGKILL');
+  for (let waited = 0; waited < 500 && !closed(); waited += POLL_MS) await sleep(POLL_MS);
+}
+
+async function probe(port: number): Promise<SpawnResult['connection']> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/payments`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(300),
+    });
+    return res.ok ? 'open' : 'http-error';
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /ECONNREFUSED|fetch failed/i.test(msg) ? 'refused' : 'http-error';
+  }
+}
+
+/**
+ * Запуск процесса сервиса. Предмет — ФАКТИЧЕСКИЙ исход старта: завершился процесс сам
+ * (и с каким кодом) или поднялся и слушает.
+ *
+ * Отсутствие бинаря — FAIL до всякой проверки порта (`assertPaymentServiceExists`).
+ *
+ * Исход `timeout` по умолчанию ПОДНИМАЕТ ИСКЛЮЧЕНИЕ, а не возвращается вызывающему:
+ * «процесс не подал признаков ни в одну сторону» — это непройденное измерение, и любой
+ * вывод из него («порт не открыт, значит fail-closed») был бы ложным. Вызывающий, чей
+ * предмет — сам исход (`expectFailClosedStart`), просит `allowTimeout: true` и обязан
+ * утверждать про `outcome` сам.
  */
 export async function spawnPaymentProcess(opts: {
   env: Record<string, string>;
-  waitMs?: number;
+  deadlineMs?: number;
+  allowTimeout?: boolean;
 }): Promise<SpawnResult> {
   assertPaymentServiceExists();
   const dataDir = mkdtempSync(join(tmpdir(), 'ikpk-pay-spawn-'));
@@ -308,40 +379,92 @@ export async function spawnPaymentProcess(opts: {
     stderr += String(c);
   });
 
-  const waitMs = opts.waitMs ?? 1500;
-  const exitCode = await new Promise<number | null>((resolve) => {
-    const t = setTimeout(() => resolve(child.exitCode), waitMs);
-    child.on('exit', (code) => {
-      clearTimeout(t);
-      resolve(code);
-    });
+  // Ждём `close`, а не `exit`: `exit` наступает до дочитывания stderr, и причина отказа
+  // приходит уже после снимка. Ровно так проверка «в stderr названа причина» краснела на
+  // исправном коде.
+  let closed = false;
+  let exitCode: number | null = null;
+  let signal: NodeJS.Signals | null = null;
+  child.on('close', (code, sig) => {
+    closed = true;
+    exitCode = code;
+    signal = sig;
   });
 
-  const portMatch = `${stdout}\n${stderr}`.match(/listening[^\d]*(\d{2,5})/i);
-  const port = env.PAYMENT_LISTEN_PORT !== '0' ? Number(env.PAYMENT_LISTEN_PORT) : Number(portMatch?.[1] ?? 0);
+  const deadlineMs = opts.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  const startedAt = Date.now();
+  const declaredPort = env.PAYMENT_LISTEN_PORT !== '0' ? Number(env.PAYMENT_LISTEN_PORT) : 0;
+  const announcedPort = (): number =>
+    Number(`${stdout}\n${stderr}`.match(/listening[^\d]*(\d{2,5})/i)?.[1] ?? 0);
 
-  let connection: SpawnResult['connection'] = 'refused';
   let listening = false;
-  if (port > 0) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/payments`, { method: 'GET', signal: AbortSignal.timeout(300) });
-      listening = true;
-      connection = res.ok ? 'open' : 'http-error';
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/ECONNREFUSED|fetch failed/i.test(msg)) connection = 'refused';
-      else connection = 'http-error';
+  let connection: SpawnResult['connection'] = 'refused';
+  // Гасила ли процесс сама обвязка — фиксируется ДО SIGTERM. Без этого признака `closed` к
+  // моменту вычисления исхода уже true (его сделал наш же SIGTERM из `finally`), и процесс,
+  // не подавший признаков ни в одну сторону, выглядел бы завершившимся САМ — с `exitCode:
+  // null` при исходе `exited`. Найдено негативной мутацией (предел ожидания 1 мс), а не
+  // рассуждением.
+  let killedByHelper = false;
+  try {
+    while (!closed && Date.now() - startedAt < deadlineMs) {
+      const port = declaredPort > 0 ? declaredPort : announcedPort();
+      if (port > 0) {
+        const probed = await probe(port);
+        if (probed !== 'refused') {
+          listening = true;
+          connection = probed;
+          break;
+        }
+      }
+      await sleep(POLL_MS);
     }
+    // Процесс завершился — состояние порта всё равно спрашиваем: «порт закрыт» должно
+    // быть измерено, а не выведено из факта завершения.
+    if (closed && !listening) {
+      const port = declaredPort > 0 ? declaredPort : announcedPort();
+      if (port > 0) {
+        connection = await probe(port);
+        listening = connection !== 'refused';
+      }
+    }
+  } finally {
+    if (!closed) killedByHelper = true;
+    await terminate(child, () => closed);
+    rmSync(dataDir, { recursive: true, force: true });
   }
 
-  if (child.exitCode === null && child.pid) {
-    child.kill('SIGTERM');
-    await new Promise((r) => setTimeout(r, 200));
-    if (child.exitCode === null) child.kill('SIGKILL');
+  const waitedMs = Date.now() - startedAt;
+  const outcome: SpawnOutcome =
+    closed && !killedByHelper ? 'exited' : listening ? 'listening' : 'timeout';
+  const result: SpawnResult = {
+    outcome,
+    exited: outcome === 'exited',
+    exitCode: outcome === 'exited' ? exitCode : null,
+    signal: outcome === 'exited' ? signal : null,
+    stderr,
+    stdout,
+    listening,
+    connection,
+    waitedMs,
+    deadlineMs,
+  };
+  if (outcome === 'timeout' && opts.allowTimeout !== true) {
+    throw new Error(
+      `процесс сервиса за ${deadlineMs} мс не завершился и не открыл порт — измерения нет, ` +
+        'и «порт не открыт» здесь ничего не доказывает. ' +
+        `env: ${JSON.stringify(pickEnvForDiagnostics(opts.env))}\nstderr: ${stderr.slice(0, 600)}\nstdout: ${stdout.slice(0, 300)}`,
+    );
   }
-  rmSync(dataDir, { recursive: true, force: true });
+  return result;
+}
 
-  return { exitCode, stderr, stdout, listening, connection };
+/** Диагностика без секретов: имена переданных переменных и значения только режима. */
+function pickEnvForDiagnostics(env: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    out[key] = /MODE|SHOP|PORT|HOST|ENABLED|VAT/i.test(key) ? value : '<задано>';
+  }
+  return out;
 }
 
 export async function postPayments(url: string, body: unknown, headers: Record<string, string> = {}) {

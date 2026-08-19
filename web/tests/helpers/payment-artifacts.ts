@@ -38,8 +38,15 @@ export type BrowserArtifact = {
   astroConfig: string;
   port: number;
   playwrightConfig: string;
-  /** Единственный spec-файл набора этой роли. */
-  spec: string;
+  /**
+   * ВСЕ spec-файлы набора этой роли — перечень, а не один файл. У роли `stand` их три:
+   * решением владельца от 2026-08-19 наборы транспорта (`payment-transport.spec.ts`) и
+   * инварианта контура (`payment-contour.spec.ts`) переехали с боевого `dist` на артефакт
+   * стенда. Раньше они шли основной конфигурацией, то есть по сборке роли `ci`, у которой
+   * формы по контракту нет вовсе: их зелёный исход после реализации ролей означал бы
+   * «проверять было нечего», а не «поведение верно».
+   */
+  specs: string[];
   npmScript: string;
   /** Команда сборки артефакта: она же обязана объявлять роль переменной `PAYMENT_ROLE`. */
   buildScript: string;
@@ -51,7 +58,7 @@ export const BROWSER_ARTIFACTS: Record<BrowserRole, BrowserArtifact> = {
     astroConfig: 'astro.demo.config.mjs',
     port: 4323,
     playwrightConfig: 'playwright.preview.config.ts',
-    spec: 'tests/payment-form-demo.spec.ts',
+    specs: ['tests/payment-form-demo.spec.ts'],
     npmScript: 'test:e2e:payment-preview',
     buildScript: 'build:demo',
   },
@@ -60,7 +67,11 @@ export const BROWSER_ARTIFACTS: Record<BrowserRole, BrowserArtifact> = {
     astroConfig: 'astro.stand.config.mjs',
     port: 4324,
     playwrightConfig: 'playwright.stand.config.ts',
-    spec: 'tests/payment-form.spec.ts',
+    specs: [
+      'tests/payment-form.spec.ts',
+      'tests/payment-transport.spec.ts',
+      'tests/payment-contour.spec.ts',
+    ],
     npmScript: 'test:e2e:payment-stand',
     buildScript: 'build:stand',
   },

@@ -78,7 +78,6 @@ describe('3.0a PAYMENT_MODE=prod fail-closed до открытия порта', 
           PAYMENT_MODE: 'demo',
           PAYMENT_LISTEN_PORT: '18765',
         },
-        waitMs: 2500,
       });
       expect(r.listening, 'демо-режим не стартовал без секретов').toBe(true);
       expect(r.exitCode).toBeNull();
@@ -156,7 +155,6 @@ describe('3.0a-4 canary материала ключа', () => {
           PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
           PAYMENT_LISTEN_PORT: '18766',
         }),
-        waitMs: 2500,
       });
       expect(first.listening).toBe(true);
       const second = await spawnPaymentProcess({
@@ -166,7 +164,6 @@ describe('3.0a-4 canary материала ключа', () => {
           PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
           PAYMENT_LISTEN_PORT: '18767',
         }),
-        waitMs: 2500,
       });
       expect(second.listening, 'повторный старт с тем же материалом ключа отвергнут').toBe(true);
     },
@@ -183,7 +180,6 @@ describe('3.0a-4 canary материала ключа', () => {
           PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
           PAYMENT_LISTEN_PORT: '18768',
         }),
-        waitMs: 2500,
       });
       expect(first.listening).toBe(true);
       const second = await spawnPaymentProcess({
@@ -232,7 +228,6 @@ describe('3.0a-4 canary материала ключа', () => {
           PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
           PAYMENT_LISTEN_PORT: '18769',
         }),
-        waitMs: 2500,
       });
       expect(r.listening, 'плановая ротация на новую версию отвергнута').toBe(true);
     },
@@ -267,7 +262,6 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
           PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
           PAYMENT_LISTEN_PORT: '18770',
         }),
-        waitMs: 2500,
       });
       expect(r.listening, 'первый запуск с пустым хранилищем отвергнут').toBe(true);
     },
@@ -389,7 +383,6 @@ describe('3.0a-5 журнал canary: файл vs пустое хранилищ�
         PAYMENT_STORAGE_PATH: join(dir, 'payments.json'),
         PAYMENT_LISTEN_PORT: '18772',
       }),
-      waitMs: 2500,
     });
     expect(r.listening, '{"v1":""} перезаписал canary и открыл порт').toBe(false);
     expect(r.exitCode).not.toBe(0);

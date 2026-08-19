@@ -1,6 +1,32 @@
+/**
+ * Транспорт заявки на оплату: модальность, доступность полей, согласие, честные состояния,
+ * поведение без скриптов, защита от ботов, повторная отправка.
+ *
+ * АРТЕФАКТ — РОЛЬ `stand` (`dist-stand`, `playwright.stand.config.ts`), решение владельца
+ * 2026-08-19. Прежде набор шёл основной конфигурацией по боевому `dist`: после 5.10 это
+ * сборка роли `ci`, у которой платёжной формы по контракту нет вовсе — то есть каждый тест
+ * здесь падал бы на «формы нет» либо, что хуже, читался бы как «проверять нечего, значит
+ * прошло». Предмет транспорта требует живой формы, а живая форма есть у ролей `preview` и
+ * `stand`; рабочая семантика контура — только у `stand`.
+ *
+ * FAIL-CLOSED GUARD взведён так же, как в остальных наборах роли (задача 6.15, пятый пункт):
+ * любой запрос к объявленной базе контура, к чужому контуру или к живой ЮKassa, не
+ * перехваченный самим тестом, обрывается до сети и РОНЯЕТ тест. Guard ставится ПЕРВЫМ:
+ * Playwright применяет маршруты в обратном порядке регистрации, поэтому моки каждого теста,
+ * поставленные позже, забирают свои запросы, а guard видит ровно то, что не забрал никто.
+ *
+ * Guard НЕ МЕНЯЕТ предмет: ни `data-payment-role`, ни объявленную базу, ни ответы продукта
+ * он не переписывает — он живёт только в транспорте.
+ */
+
 import { expect, test, type Page } from '@playwright/test';
 import { PAYMENT_FORM_ATTR } from './helpers/payment-contract';
 import { gotoOplata, interceptYooKassaNavigation } from './helpers/yookassa-navigation';
+import {
+  expectNoEscapes,
+  installFailClosedGuard,
+  type FailClosedGuard,
+} from './helpers/payment-network-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const DIALOG = '[role="dialog"]';
@@ -15,8 +41,18 @@ async function openForm(page: Page) {
   await expect(page.locator(DIALOG)).toBeVisible();
 }
 
+let guard: FailClosedGuard;
+
 test.beforeEach(async ({ page }) => {
+  guard = await installFailClosedGuard(page, 'stand');
   await interceptYooKassaNavigation(page);
+});
+
+// Fail-closed постусловие КАЖДОГО теста файла: пропущенный мок роняет тест, а не уходит на
+// живой контур молча. Зелёный тест с утечкой — ложное зелёное: его исход получен не от того
+// адресата, о котором он говорит.
+test.afterEach(() => {
+  expectNoEscapes(guard);
 });
 
 test.describe('3a.1 модальность и клавиатура', () => {
@@ -174,10 +210,14 @@ test.describe('3a.6 без скриптов', () => {
   test('способ связаться виден, управления формой нет', async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
+    // Своя страница — свой guard: guard из `beforeEach` стоит на странице фикстуры и об этой
+    // ничего не знает, а «на этой странице перехвата не было» — это не «утечек не было».
+    const ownGuard = await installFailClosedGuard(page, 'stand');
     await gotoOplata(page);
     await expect(page.locator(FORM)).toHaveCount(1);
     await expect(page.locator('#oplata-svyaz')).toBeVisible();
     await expect(page.locator('[data-payment-entry]')).toHaveCount(0);
+    expectNoEscapes(ownGuard);
     await context.close();
   });
 });

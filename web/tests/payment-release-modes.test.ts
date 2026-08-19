@@ -52,6 +52,20 @@ import {
   startPaymentService,
   type StartedService,
 } from './helpers/payment-service';
+import { expectFailClosedStart } from './helpers/payment-fail-closed';
+
+/**
+ * ПРИЗНАКИ ПРИЧИНЫ в выводе процесса. Отказ обязан называть предмет: «упал с кодом 1» без
+ * причины неотличим от падения по посторонней причине — опечатке в обвязке, чужому порту,
+ * отсутствующему модулю. Достаточно одного совпадения из перечня: имя переменной или
+ * человеческое название того же предмета одинаково годятся, а выбор формулировки — дело
+ * реализации, не спеки.
+ */
+const REASON = {
+  mode: [/PAYMENT_MODE/i, /\bрежим/i, /\bmode\b/i],
+  shop: [/YOOKASSA_SHOP_ID/i, /\bмагазин/i, /\bshop\s*id\b/i],
+  returnBase: [/PAYMENT_RETURN_BASE/i, /баз\w* возврат/i, /return[_\s-]?url/i],
+} as const;
 
 /** Полный набор платёжной конфигурации для контура: меняется только режим и магазин. */
 function contourEnv(
@@ -84,38 +98,40 @@ afterEach(async () => {
 });
 
 describe('4.10 роль установленного сервиса — только test|prod, и каждая привязана к своему магазину', () => {
+  // Положительные ветви: исход `timeout` обвязка не отдаёт вовсе (поднимает исключение),
+  // поэтому «не слушает» здесь означает именно завершившийся процесс, а не «не успел».
   it('test с тестовым магазином 1440249 открывает порт', async () => {
     const r = await spawnPaymentProcess({ env: contourEnv('test') });
-    expect(r.listening, `test/1440249 не слушает:\n${r.stderr}${r.stdout}`).toBe(true);
+    expect(r.listening, `test/1440249 не слушает (исход ${r.outcome}, код ${r.exitCode}):\n${r.stderr}${r.stdout}`).toBe(true);
   });
 
   it('prod с боевым магазином 409285 открывает порт', async () => {
     const r = await spawnPaymentProcess({ env: contourEnv('prod') });
-    expect(r.listening, `prod/409285 не слушает:\n${r.stderr}${r.stdout}`).toBe(true);
+    expect(r.listening, `prod/409285 не слушает (исход ${r.outcome}, код ${r.exitCode}):\n${r.stderr}${r.stdout}`).toBe(true);
   });
 
   it('test с БОЕВЫМ магазином не открывает порт — тем же исходом, что недостающий секрет', async () => {
-    const r = await spawnPaymentProcess({
-      env: contourEnv('test', { YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.prod }),
-    });
-    expect(r.listening).toBe(false);
-    expect(r.connection).toBe('refused');
-    expect(r.exitCode).not.toBe(0);
+    await expectFailClosedStart(
+      'режим test с боевым магазином',
+      contourEnv('test', { YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.prod }),
+      REASON.shop,
+    );
   });
 
   it('prod с ТЕСТОВЫМ магазином не открывает порт', async () => {
-    const r = await spawnPaymentProcess({
-      env: contourEnv('prod', { YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.test }),
-    });
-    expect(r.listening).toBe(false);
-    expect(r.connection).toBe('refused');
-    expect(r.exitCode).not.toBe(0);
+    await expectFailClosedStart(
+      'режим prod с тестовым магазином',
+      contourEnv('prod', { YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.test }),
+      REASON.shop,
+    );
   });
 
   it('test без магазина не открывает порт', async () => {
-    const r = await spawnPaymentProcess({ env: contourEnv('test', { YOOKASSA_SHOP_ID: undefined }) });
-    expect(r.listening).toBe(false);
-    expect(r.connection).toBe('refused');
+    await expectFailClosedStart(
+      'режим test без YOOKASSA_SHOP_ID',
+      contourEnv('test', { YOOKASSA_SHOP_ID: undefined }),
+      REASON.shop,
+    );
   });
 
   // Битый идентификатор магазина — отдельная ветвь: «похоже на тестовый» не значит
@@ -124,9 +140,11 @@ describe('4.10 роль установленного сервиса — толь
   it.each(['1440249 ', ' 1440249', '01440249', '1440249\n', 'shop-1440249', ''])(
     'test с битым shopId %j не открывает порт',
     async (shopId) => {
-      const r = await spawnPaymentProcess({ env: contourEnv('test', { YOOKASSA_SHOP_ID: shopId }) });
-      expect(r.listening).toBe(false);
-      expect(r.connection).toBe('refused');
+      await expectFailClosedStart(
+        `режим test с битым shopId ${JSON.stringify(shopId)}`,
+        contourEnv('test', { YOOKASSA_SHOP_ID: shopId }),
+        REASON.shop,
+      );
     },
   );
 
@@ -141,10 +159,11 @@ describe('4.10 роль установленного сервиса — толь
   it.each([...ROLE_NAMES_THAT_ARE_NOT_MODES, 'TEST', 'Prod', 'mock', 'staging', 'test,prod'])(
     'нераспознанный режим %j не открывает порт и не трактуется как демонстрационный',
     async (mode) => {
-      const r = await spawnPaymentProcess({ env: contourEnv('test', { PAYMENT_MODE: mode }) });
-      expect(r.listening).toBe(false);
-      expect(r.connection).toBe('refused');
-      expect(r.exitCode).not.toBe(0);
+      await expectFailClosedStart(
+        `нераспознанный режим ${JSON.stringify(mode)}`,
+        contourEnv('test', { PAYMENT_MODE: mode }),
+        REASON.mode,
+      );
     },
   );
 });
@@ -229,11 +248,11 @@ describe('3.16(2)/5.10e стенд создаёт платёж в 1440249 и в�
   // Если владелец предпочтёт «только конфигурацией инстанции, без fail-closed», предмет
   // проверки переезжает в конфигурацию — см. отчёт сессии, пункт A1.
   it('режим test без PAYMENT_RETURN_BASE не открывает порт, а не подставляет боевой origin', async () => {
-    const r = await spawnPaymentProcess({
-      env: contourEnv('test', { PAYMENT_RETURN_BASE: undefined }),
-    });
-    expect(r.listening).toBe(false);
-    expect(r.connection).toBe('refused');
+    await expectFailClosedStart(
+      'режим test без PAYMENT_RETURN_BASE',
+      contourEnv('test', { PAYMENT_RETURN_BASE: undefined }),
+      REASON.returnBase,
+    );
   });
 });
 
