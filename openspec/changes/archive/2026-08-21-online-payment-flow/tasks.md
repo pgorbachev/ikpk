@@ -113,7 +113,7 @@ approve владельца → тесты в отдельной сессии с 
       `modalOverflowsViewport: true`
       (`design/trust-and-verification-mockups@c924da54e94675673d1bd40720fa375d90ba2fd0`,
       сокращённо `c924da5`,
-      `docs/design/mockups/trust-and-verification/README.md:68` и `:273`). Ревизия
+      `docs/design/mockups/trust-and-verification/README.md@c924da54e94675673d1bd40720fa375d90ba2fd0:68`, `в телефон.` и `:273`, `прочитать свои же данные с экрана`). Ревизия
       названа потому, что мокапы живут в неопубликованной ветке: без неё номера строк
       невоспроизводимы (`AGENTS.md`). **Улучшение предъявляется в одной мере на двух
       мокапах:** та же величина снимается на варианте A (мокап существует) и на A′ — A′

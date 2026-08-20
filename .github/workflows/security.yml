@@ -92,8 +92,16 @@ jobs:
           # «advisory нет».
           set -o pipefail
           npm audit --omit=dev --json > audit-report.json || audit_status=$?
-          node -e "const v=require('./audit-report.json').metadata.vulnerabilities; if(!v) process.exit(1)" \
-            || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
+          # Проверяется не «поле есть», а что отчёт СОДЕРЖИТ ЧИСЛА по всем уровням: пустой
+          # объект `{"metadata":{"vulnerabilities":{}}}` прежнюю проверку проходил, и заметка
+          # ниже печатала нули — «advisory нет» вместо «измерение не выполнено».
+          node -e "
+            const v = require('./audit-report.json')?.metadata?.vulnerabilities;
+            const levels = ['critical', 'high', 'moderate', 'low', 'info'];
+            if (!v || typeof v !== 'object') process.exit(1);
+            const missing = levels.filter((k) => typeof v[k] !== 'number');
+            if (missing.length) { console.error('нет числовых полей: ' + missing.join(', ')); process.exit(1); }
+          " || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
           echo "npm audit exit=${audit_status:-0} (ненулевой код здесь означает найденные advisory)"
 
       - name: Upload runtime audit report

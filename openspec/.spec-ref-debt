@@ -12,7 +12,6 @@
 # фрагмент: `web/src/lib/data.ts:45`, `const ENTITIES_DIR =`
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:87
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
-openspec/changes/article-list-pagination/tasks.md :: scripts/bootstrap-vps.sh:87
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: sotrudnichestvo-s-nami.astro:19
 openspec/changes/education-trust-and-admission-clarity/design.md :: svedeniya-ob-obrazovatelnoy-organizatsii.astro:26
@@ -20,7 +19,6 @@ openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/comp
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/components/home/sections/InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/components/home/sections/Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/data.ts:17-22
-openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/html-cleaner.ts:316-387
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/preview/[variant].astro:31,70
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:25

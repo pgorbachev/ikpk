@@ -158,7 +158,7 @@ curl: (28) Connection timed out after 25002 milliseconds
 Панель подставляется на сборке: `panelsFor` по пути страницы (`web/src/lib/data.ts:17-22`
 на `feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73`)
 → `cleanBodyHtml` → сборка `<details open><summary>…` в
-`web/src/lib/html-cleaner.ts:316-387` (сборка элемента — `:387`). Вызов —
+`web/src/lib/html-cleaner.ts:316-387`, `contentInner.trim()`. Вызов —
 `svedeniya-ob-obrazovatelnoy-organizatsii.astro:26` через `RichContent`
 `sinkId="static-page-svedeniya"`. Change SHALL NOT добавлять `set:html` / `is:raw` /
 `srcdoc`: FAQ и панели остаются внутри санитизированного HTML.

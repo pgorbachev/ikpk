@@ -83,7 +83,11 @@ const SPAN = /`([^`\n]+)`/g;
 // него прежней регуляркой не распознавалась вовсе — то есть его удаление гейт не увидел бы.
 // Расширение необязательно: путь без расширения (`bin/openspec`) — тоже ссылка, см. ниже.
 const PATH_SPAN =
-  /^([\p{L}\p{N}_\-./[\]]+)(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?$/u;
+  /^([\p{L}\p{N}_\-./[\]]+)(?:@([0-9a-f]{7,40}))?(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?$/u;
+// Продолжение предыдущей ссылки: `…/README.md:68` и `:273`. Форма уже используется в
+// артефактах, и прежняя редакция её игнорировала молча — второй номер не проверялся и в долг
+// не попадал.
+const LINE_ONLY_SPAN = /^:(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/;
 
 const DEBT_HEADER = `# Поимённый долг неизмеримых ссылок: каждая строка — ссылка «путь:строка» БЕЗ фрагмента
 # в кавычках, то есть не проверяемая по содержимому. Формат: <артефакт> :: <путь>:<строки>.
@@ -101,24 +105,28 @@ const DEBT_HEADER = `# Поимённый долг неизмеримых ссы
 
 const ABSENT_HEADER = `# Объявленные ссылки в пустоту: путь, которого в репозитории нет, и это названо намеренно.
 # Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора, поэтому она объявляется
-# здесь, а не выводится гейтом из вида пути: любой такой признак («это артефакт OpenSpec», «это
-# файл кода») либо угадывает, либо опирается на существование предмета — а именно предмета и нет.
+# здесь, а не выводится гейтом из вида пути: любой такой признак либо угадывает, либо опирается
+# на существование предмета — а именно предмета и нет.
 #
-# Три законных повода попасть сюда, и они разного веса:
+# Четыре законных повода попасть сюда:
 #   1. файл, который change ещё СОЗДАСТ (\`statyi/page/[page].astro\` в article-list-pagination);
 #   2. осознанная цитата на УДАЛЁННОЕ — каталог \`openspec/changes/payment-request-flow/\` снесён
-#      решением владельца тем же PR, что слит \`online-payment-flow\`, а ссылки на него оставлены
-#      как указание на происхождение принятых решений;
-#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН. Таких два, и оба — долг, а не
-#      намерение; правильный исход — закоммитить документ и убрать строки отсюда:
-#      \`docs/security-audit-2026-08-08.md\` (лежит в рабочем дереве автора, в репозитории его нет)
-#      и \`docs/design/mockups/trust-and-verification/README.md\` (каталога \`docs/design/mockups/\`
-#      в репозитории нет вовсе, а активный change ссылается на его строки \`:68\` и \`:273\`).
+#      решением владельца тем же PR, что слит \`online-payment-flow\`;
+#   3. файл, который НЕ ДОЛЖЕН существовать по инварианту: \`web/public/robots.txt\` перекрыл бы
+#      генерируемый маршрут и открыл демо-стенд поисковикам, на его отсутствие стоит гейт
+#      (\`web/tests/repo-hygiene.test.ts\`). Ссылка на него в задаче стоит как «не сюда»;
+#   4. материал, живущий В ДРУГОЙ РЕВИЗИИ. Правильная форма для него — не эта запись, а привязка
+#      к ревизии: \`путь@<sha>:строка\`, и тогда гейт читает файл из той ревизии. Так уехал отсюда
+#      \`docs/design/mockups/trust-and-verification/README.md\` (лежит в \`c924da5\`, ветка
+#      \`design/trust-and-verification-mockups\`).
+#
+# Отдельно про \`docs/security-audit-2026-08-08.md\`: он есть в рабочем дереве автора и его нет в
+# репозитории. Прежняя редакция этой шапки предписывала «закоммитить документ» — это НЕВЕРНО и
+# противоречит принятому решению не добавлять сырые аудиты. Допустимые исходы: обезличенный
+# материал, привязка к ревизии по образцу пункта 4 либо снятие ссылок. Пока — эта запись.
 #
 # Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
-# объявленная разрешилась или исчезла из текста — тоже отказ с требованием обновить файл
-# (\`./bin/check-spec-refs --write-absent\`). Без обратной сверки объявление со временем начинает
-# разрешать уже сломанную ссылку.
+# объявленная разрешилась или исчезла из текста — тоже отказ (\`--write-absent\`).
 `;
 
 function walk(dir) {
@@ -163,21 +171,38 @@ function bySuffix(path) {
 }
 
 /**
- * Путь ведёт в сгенерированный вывод, если git его игнорирует. Признак снят с `.gitignore`, а не
- * из списка имён каталогов: `dist/index.html` в артефактах означает `web/dist/index.html`,
- * которого в репозитории нет по построению — он появляется только после сборки. Такие ссылки
- * нельзя ни считать сломанными, ни объявлять «в пустоту»: они верны, но проверяемы только на
- * собранном дереве.
+ * Корни сборочного вывода — ЗАКРЫТЫЙ перечень, а не «всё, что игнорирует git». Прежняя редакция
+ * спрашивала `git check-ignore`, и под «сгенерированный вывод» попадало всё игнорируемое:
+ * `.env`, `.mcp.json`, `node_modules`, каталоги результатов прогонов и — что хуже — ОПЕЧАТКА
+ * внутри `dist` (`web/dist/statayi/index.html` прошла бы молча). Здесь перечень уместен именно
+ * потому, что предмет закрыт по смыслу: это вывод известных сборок, и новый вывод появляется
+ * вместе с новой сборкой, то есть с правкой этого файла.
+ *
+ * Каждый корень СВЕРЯЕТСЯ с `.gitignore`: если он перестал игнорироваться, значит перечень
+ * разошёлся с репозиторием, и гейт обязан сказать это, а не молчать.
  */
+const BUILD_OUTPUT_ROOTS = ['web/dist', 'web/dist-demo', 'cms/dist', 'payments/dist'];
+
+function verifyBuildRoots() {
+  const notIgnored = BUILD_OUTPUT_ROOTS.filter((r) => {
+    if (!existsSync(join(ROOT, dirname(r)))) return false; // пакета нет — корня и не должно быть
+    return spawnSync('git', ['-C', ROOT, 'check-ignore', '-q', `${r}/`]).status !== 0;
+  });
+  if (notIgnored.length > 0) {
+    console.error(
+      'check-spec-refs: перечень корней сборочного вывода разошёлся с .gitignore — ' +
+        `${notIgnored.join(', ')} больше не игнорируются; перечень надо обновить`,
+    );
+    process.exit(2);
+  }
+}
+
 function isGeneratedOutput(path) {
-  // Проверяются и форма с косой чертой на конце: `.gitignore` содержит `web/dist/`, и
-  // `git check-ignore web/dist` (без слэша) НЕ совпадает, а `web/dist/` совпадает. Без этого
-  // ссылка на каталог сборки выглядела бы сломанной ссылкой.
   const bare = path.replace(/\/$/, '');
-  const candidates = [bare, `${bare}/`, join('web', bare), `${join('web', bare)}/`];
+  const candidates = [bare, join('web', bare)];
   return candidates.some((c) => {
-    const r = spawnSync('git', ['-C', ROOT, 'check-ignore', '-q', c]);
-    return r.status === 0;
+    const norm = c.split('/').filter(Boolean).join('/');
+    return BUILD_OUTPUT_ROOTS.some((root) => norm === root || norm.startsWith(`${root}/`));
   });
 }
 
@@ -264,11 +289,27 @@ function schemaArtifactBasenames() {
     console.error('check-spec-refs: ответ OpenSpec не разобрался как JSON — состав артефактов не измерен');
     process.exit(2);
   }
+  const paths = parsed.artifactPaths;
+  if (!paths || typeof paths !== 'object' || Object.keys(paths).length === 0) {
+    console.error(
+      'check-spec-refs: ответ OpenSpec не содержит artifactPaths — состав артефактов схемы не ' +
+        'измерен. Молча продолжать нельзя: проверка коротких имён артефактов просто перестала ' +
+        'бы работать, оставаясь зелёной',
+    );
+    process.exit(2);
+  }
   const names = new Set();
-  for (const info of Object.values(parsed.artifactPaths ?? {})) {
+  for (const info of Object.values(paths)) {
     const out = info?.resolvedOutputPath;
     // Глоб (`specs/**/*.md`) базового имени не даёт — такие артефакты правилом не покрываются.
     if (typeof out === 'string' && !out.includes('*')) names.add(basename(out));
+  }
+  if (names.size === 0) {
+    console.error(
+      'check-spec-refs: у схемы не нашлось ни одного артефакта с конкретным именем файла — ' +
+        'проверять короткие имена нечем',
+    );
+    process.exit(2);
   }
   return names;
 }
@@ -283,6 +324,64 @@ let contentVerified = 0;
 let generated = 0;
 let localNames = 0;
 let dirRefs = 0;
+
+/**
+ * Сверка содержимого по номерам строк. Вынесена в функцию, потому что вызывается из двух мест:
+ * для рабочего дерева и для файла на указанной ревизии — раньше второго места не было вовсе.
+ */
+function checkContent({ rel, path, lines, lineSpec, snippet }) {
+  // Ссылка бывает перечнем: `test.yml:47,61,99`. Прежняя регулярка такую форму не распознавала
+  // ВОВСЕ — то есть шесть номеров строк молча не проверялись.
+  const ranges = lineSpec.split(',').map((piece) => {
+    const [a, b] = piece.split('-');
+    return { from: Number(a), to: Number(b ?? a) };
+  });
+  const where = lineSpec;
+  const outside = ranges.find((x) => x.to > lines.length);
+  if (outside) {
+    defects.push(
+      `${rel}: ${path}:${where} — в файле ${lines.length} строк, а указана ${outside.to}-я`,
+    );
+    return;
+  }
+  if (ranges.length > 1) {
+    // Фрагмент к перечню не отнести: непонятно, к какой из строк он относится.
+    unmeasurable.set(
+      `${rel} :: ${path}:${where}`,
+      `${rel}: ${path}:${where} — перечень строк, фрагмент к нему не отнести; разбейте на ` +
+        'отдельные ссылки с фрагментами',
+    );
+    return;
+  }
+  const { from, to } = ranges[0];
+  if (!snippet) {
+    unmeasurable.set(
+      `${rel} :: ${path}:${where}`,
+      `${rel}: ${path}:${where} — номер строки без фрагмента, содержимое не проверено`,
+    );
+    return;
+  }
+  const parts = snippet
+    .split(/[…]|\.\.\./)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 6);
+  const needle = parts.sort((a, b) => b.length - a.length)[0];
+  if (!needle) {
+    unmeasurable.set(
+      `${rel} :: ${path}:${where}`,
+      `${rel}: ${path}:${where} — фрагмент слишком короткий для сверки`,
+    );
+    return;
+  }
+  if (lines.slice(from - 1, to).some((l) => l.includes(needle))) {
+    contentVerified += 1;
+  } else {
+    defects.push(
+      `${rel}: ${path}:${where} — фрагмент «${needle}» там не найден; на ${from}-й строке: ` +
+        `${(lines[from - 1] ?? '').trim().slice(0, 70)}`,
+    );
+  }
+}
 
 const files = [join(ROOT, 'openspec', 'changes'), join(ROOT, 'openspec', 'specs')].flatMap(walk);
 
@@ -300,18 +399,40 @@ for (const md of files) {
     start: m.index,
     end: m.index + m[0].length,
     parsed: PATH_SPAN.exec(m[1]),
+    lineOnly: LINE_ONLY_SPAN.exec(m[1]),
   }));
+
+  // Ссылка-продолжение (`:273`) наследует путь и ревизию последней ссылки НА ТОЙ ЖЕ СТРОКЕ:
+  // разнесённые по разным строкам номера пришлось бы связывать догадкой, а догадка здесь — тот
+  // же класс ошибки, что и остальные в этом файле.
+  let carry = null;
 
   for (let i = 0; i < spans.length; i += 1) {
     const span = spans[i];
-    if (!span.parsed) continue;
-    const [, path, lineSpec] = span.parsed;
+    if (span.lineOnly) {
+      if (!carry || text.slice(carry.end, span.start).includes('\n')) continue;
+      spans[i] = {
+        ...span,
+        parsed: [span.body, carry.path, carry.rev, span.lineOnly[1]],
+      };
+    }
+    if (!spans[i].parsed) continue;
+    const [, path, revSpec, lineSpec] = spans[i].parsed;
+    if (!span.lineOnly) carry = { path, rev: revSpec, end: span.end };
     const next = spans[i + 1];
     const between = next ? text.slice(span.end, next.start) : '';
     const snippet =
-      next && !next.parsed && /^[^\S\n]*,[^\S\n]*$/.test(between) ? next.body : undefined;
+      next && !next.parsed && !next.lineOnly && /^[^\S\n]*,[^\S\n]*$/.test(between)
+        ? next.body
+        : undefined;
     if (path.startsWith('/')) continue;
-    if (path.includes('node_modules/')) continue;
+    if (path.split('/').includes('node_modules')) continue;
+    // `..` уводит проверку за пределы репозитория: `../../etc/passwd` разрешился бы в файл вне
+    // дерева, и «ссылка верна» означало бы «на машине проверяющего что-то нашлось».
+    if (path.split('/').includes('..')) {
+      defects.push(`${rel}: ссылка выходит за пределы репозитория — ${path}`);
+      continue;
+    }
 
     const hasExt = /\.[\p{L}\p{N}]+$/u.test(path);
     const firstSegment = path.split('/')[0];
@@ -323,7 +444,20 @@ for (const md of files) {
     // предмета намеренно: удаление `bin/session-cost` каталог `bin` не убирает, поэтому проверка
     // не исчезает вместе с проверяемым — в отличие от двух прежних редакций.
     if (!hasExt) {
-      if (!path.includes('/') || !existsSync(join(ROOT, firstSegment))) continue;
+      if (path.includes('/')) {
+        // Первый сегмент обязан существовать в корне: это отсекает прозу с косой чертой
+        // (`text/html`). Признак грубее предмета намеренно — удаление `bin/session-cost`
+        // каталог `bin` не убирает. **Известное ограничение:** если исчезнет весь первый
+        // каталог, ссылки в него перестанут проверяться; событие такого размера ломает и сам
+        // гейт (он живёт в `bin/`), поэтому здесь это принято, а не замаскировано.
+        if (!existsSync(join(ROOT, firstSegment))) continue;
+      } else if (!(existsSync(join(ROOT, path)) && statSync(join(ROOT, path)).isFile())) {
+        // Короткое имя без расширения — ссылка только если в корне есть такой ФАЙЛ
+        // (`Dockerfile`, `Makefile`). Каталог здесь не годится: `web`, `cms`, `scripts` в
+        // артефактах называют пакеты, и, приняв их за ссылки, гейт насчитал бы 105 проверок,
+        // каждая из которых утверждает лишь «каталог пакета существует».
+        continue;
+      }
     }
 
     // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
@@ -332,6 +466,12 @@ for (const md of files) {
     const asDir = [path, `web/${path}`].map((c) => join(ROOT, c.replace(/\/$/, '')));
     const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
     if (dirHit && (path.endsWith('/') || !hasExt)) {
+      if (lineSpec) {
+        // Прежняя редакция номер молча выбрасывала: ссылка «каталог:строка» выглядела
+        // проверенной, хотя проверить в ней нечего.
+        defects.push(`${rel}: у каталога не бывает строки — ${path}:${lineSpec}`);
+        continue;
+      }
       dirRefs += 1;
       continue;
     }
@@ -354,6 +494,48 @@ for (const md of files) {
           `${rel}: артефакт схемы не существует в этом change — ${path}`,
         );
       }
+      continue;
+    }
+
+    // Ссылка, привязанная к РЕВИЗИИ (`путь@<sha>:строка`), читается из этой ревизии, а не из
+    // рабочего дерева. Без этого гейт был не просто неполон, а ВРЕДЕН: принятая спека
+    // `article-catalog` объявляет, что её ссылки проверены на `main@45297b4`, а гейт, всегда
+    // читающий HEAD, потребовал заменить верные для той ревизии `:62` и `:12-13` на текущие
+    // `:63` и `:10-11` — и я это сделала. Историческое свидетельство было испорчено
+    // инструментом, который его охраняет.
+    if (revSpec) {
+      // Существование ревизии и пути проверяется ОТДЕЛЬНО, а не по коду возврата `git show`:
+      // проверено, что `git show deadbeef:путь` выходит НУЛЁМ с пустым выводом, и такая ссылка
+      // выглядела «файлом в одну строку» вместо «ревизии не существует».
+      const revOk =
+        spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', `${revSpec}^{commit}`])
+          .status === 0;
+      if (!revOk) {
+        defects.push(`${rel}: ревизии ${revSpec} в репозитории нет — ${path}`);
+        continue;
+      }
+      if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
+        defects.push(`${rel}: на ревизии ${revSpec} нет пути ${path}`);
+        continue;
+      }
+      const blob = spawnSync('git', ['-C', ROOT, 'cat-file', 'blob', `${revSpec}:${path}`], {
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      if (blob.status !== 0) {
+        defects.push(
+          `${rel}: не удалось прочитать ${path} на ревизии ${revSpec} — ` +
+            `${(blob.stderr || '').trim().slice(0, 90)}`,
+        );
+        continue;
+      }
+      checkContent({
+        rel,
+        path: `${path}@${revSpec}`,
+        lines: blob.stdout.split('\n'),
+        lineSpec,
+        snippet,
+      });
       continue;
     }
 
@@ -388,60 +570,13 @@ for (const md of files) {
       continue;
     }
 
-    const lines = readFileSync(r.hit, 'utf8').split('\n');
-    // Ссылка бывает перечнем: `test.yml:47,61,99`. Прежняя регулярка такую форму не
-    // распознавала ВОВСЕ — то есть шесть номеров строк молча не проверялись, и это ровно
-    // «не перечислять частные случаи, ловить общий признак» на самом гейте.
-    const ranges = lineSpec.split(',').map((piece) => {
-      const [a, b] = piece.split('-');
-      return { from: Number(a), to: Number(b ?? a) };
+    checkContent({
+      rel,
+      path,
+      lines: readFileSync(r.hit, 'utf8').split('\n'),
+      lineSpec,
+      snippet,
     });
-    const where = lineSpec;
-    const outside = ranges.find((x) => x.to > lines.length);
-    if (outside) {
-      defects.push(
-        `${rel}: ${path}:${where} — в файле ${lines.length} строк, а указана ${outside.to}-я`,
-      );
-      continue;
-    }
-    if (ranges.length > 1) {
-      // Фрагмент к перечню не отнести: непонятно, к какой из строк он относится. Такая ссылка
-      // проверена по существованию и попаданию номеров в файл, но не по содержимому.
-      unmeasurable.set(
-        `${rel} :: ${path}:${where}`,
-        `${rel}: ${path}:${where} — перечень строк, фрагмент к нему не отнести; разбейте на ` +
-          'отдельные ссылки с фрагментами',
-      );
-      continue;
-    }
-    const { from, to } = ranges[0];
-    if (!snippet) {
-      unmeasurable.set(
-        `${rel} :: ${path}:${where}`,
-        `${rel}: ${path}:${where} — номер строки без фрагмента, содержимое не проверено`,
-      );
-      continue;
-    }
-    const parts = snippet
-      .split(/[…]|\.\.\./)
-      .map((s) => s.trim())
-      .filter((s) => s.length >= 6);
-    const needle = parts.sort((a, b) => b.length - a.length)[0];
-    if (!needle) {
-      unmeasurable.set(
-        `${rel} :: ${path}:${where}`,
-        `${rel}: ${path}:${where} — фрагмент слишком короткий для сверки`,
-      );
-      continue;
-    }
-    if (lines.slice(from - 1, to).some((l) => l.includes(needle))) {
-      contentVerified += 1;
-    } else {
-      defects.push(
-        `${rel}: ${path}:${where} — фрагмент «${needle}» там не найден; на ${from}-й строке: ` +
-          `${lines[from - 1].trim().slice(0, 70)}`,
-      );
-    }
   }
 }
 

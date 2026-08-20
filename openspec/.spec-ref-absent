@@ -1,23 +1,27 @@
 # Объявленные ссылки в пустоту: путь, которого в репозитории нет, и это названо намеренно.
 # Формат: <артефакт> :: <путь>. Каждая строка — утверждение автора, поэтому она объявляется
-# здесь, а не выводится гейтом из вида пути: любой такой признак («это артефакт OpenSpec», «это
-# файл кода») либо угадывает, либо опирается на существование предмета — а именно предмета и нет.
+# здесь, а не выводится гейтом из вида пути: любой такой признак либо угадывает, либо опирается
+# на существование предмета — а именно предмета и нет.
 #
-# Три законных повода попасть сюда, и они разного веса:
+# Четыре законных повода попасть сюда:
 #   1. файл, который change ещё СОЗДАСТ (`statyi/page/[page].astro` в article-list-pagination);
 #   2. осознанная цитата на УДАЛЁННОЕ — каталог `openspec/changes/payment-request-flow/` снесён
-#      решением владельца тем же PR, что слит `online-payment-flow`, а ссылки на него оставлены
-#      как указание на происхождение принятых решений;
-#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН. Таких два, и оба — долг, а не
-#      намерение; правильный исход — закоммитить документ и убрать строки отсюда:
-#      `docs/security-audit-2026-08-08.md` (лежит в рабочем дереве автора, в репозитории его нет)
-#      и `docs/design/mockups/trust-and-verification/README.md` (каталога `docs/design/mockups/`
-#      в репозитории нет вовсе, а активный change ссылается на его строки `:68` и `:273`).
+#      решением владельца тем же PR, что слит `online-payment-flow`;
+#   3. файл, который НЕ ДОЛЖЕН существовать по инварианту: `web/public/robots.txt` перекрыл бы
+#      генерируемый маршрут и открыл демо-стенд поисковикам, на его отсутствие стоит гейт
+#      (`web/tests/repo-hygiene.test.ts`). Ссылка на него в задаче стоит как «не сюда»;
+#   4. материал, живущий В ДРУГОЙ РЕВИЗИИ. Правильная форма для него — не эта запись, а привязка
+#      к ревизии: `путь@<sha>:строка`, и тогда гейт читает файл из той ревизии. Так уехал отсюда
+#      `docs/design/mockups/trust-and-verification/README.md` (лежит в `c924da5`, ветка
+#      `design/trust-and-verification-mockups`).
+#
+# Отдельно про `docs/security-audit-2026-08-08.md`: он есть в рабочем дереве автора и его нет в
+# репозитории. Прежняя редакция этой шапки предписывала «закоммитить документ» — это НЕВЕРНО и
+# противоречит принятому решению не добавлять сырые аудиты. Допустимые исходы: обезличенный
+# материал, привязка к ревизии по образцу пункта 4 либо снятие ссылок. Пока — эта запись.
 #
 # Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
-# объявленная разрешилась или исчезла из текста — тоже отказ с требованием обновить файл
-# (`./bin/check-spec-refs --write-absent`). Без обратной сверки объявление со временем начинает
-# разрешать уже сломанную ссылку.
+# объявленная разрешилась или исчезла из текста — тоже отказ (`--write-absent`).
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro
@@ -29,5 +33,4 @@ openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.
 openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md
 openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/
 openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md
-openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md
 openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md
