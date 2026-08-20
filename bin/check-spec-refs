@@ -314,6 +314,14 @@ function schemaArtifactBasenames() {
   return names;
 }
 
+// Усечённый клон определяется один раз: в нём отсутствие ревизии ничего не говорит о ссылке.
+const isShallow =
+  (
+    execFileSync('git', ['-C', ROOT, 'rev-parse', '--is-shallow-repository'], {
+      encoding: 'utf8',
+    }) ?? ''
+  ).trim() === 'true';
+
 verifyBuildRoots();
 
 const SCHEMA_ARTIFACTS = schemaArtifactBasenames();
@@ -513,6 +521,17 @@ for (const md of files) {
         spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', `${revSpec}^{commit}`])
           .status === 0;
       if (!revOk) {
+        // «Ревизии не существует» и «история не выбрана» — РАЗНЫЕ факты, и путать их нельзя:
+        // в усечённом клоне (у `actions/checkout` по умолчанию `fetch-depth: 1`) отсутствуют
+        // почти все ревизии, и объявить это расхождением значило бы объявить дефектом сам
+        // способ клонирования. Поэтому усечённый клон — «не смогла измерить», код 2.
+        if (isShallow) {
+          console.error(
+            `check-spec-refs: клон усечён, ревизии ${revSpec} в нём нет — измерить ссылку ` +
+              `${path} нечем. Джобу нужен полный клон: \`fetch-depth: 0\` у actions/checkout`,
+          );
+          process.exit(2);
+        }
         defects.push(`${rel}: ревизии ${revSpec} в репозитории нет — ${path}`);
         continue;
       }
