@@ -94,8 +94,12 @@ const PATH_SPAN =
 // не попадал.
 const LINE_ONLY_SPAN = /^:(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/;
 
-const DEBT_HEADER = `# Поимённый долг неизмеримых ссылок: каждая строка — ссылка «путь:строка» БЕЗ фрагмента
-# в кавычках, то есть не проверяемая по содержимому. Формат: <артефакт> :: <путь>:<строки>.
+const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Два класса, и оба здесь:
+#   1. ссылка «путь:строка» БЕЗ фрагмента в кавычках — содержимое сверить нечем;
+#   2. ссылка в СБОРОЧНЫЙ ВЫВОД (\`web/dist/…\`) — её предмет появляется только после сборки,
+#      поэтому обязательный гейт её не проверяет вовсе; проверка идёт отдельным шагом
+#      \`--check-built\` в джобе, где оба дерева уже собраны.
+# Формат: <артефакт> :: <путь>[:<строки>].
 #
 # Гейт ./bin/check-spec-refs сравнивает текущий набор с этим ПОИМЁННО и падает в обе стороны:
 # появилась новая неизмеримая ссылка — отказ; исчезла записанная — отказ с требованием
@@ -108,7 +112,9 @@ const DEBT_HEADER = `# Поимённый долг неизмеримых ссы
 # фрагмент: \`web/src/lib/data.ts:45\`, \`const ENTITIES_DIR =\`
 `;
 
-const ABSENT_HEADER = `# Объявленные ссылки в пустоту. Формат: <артефакт> :: <путь> :: <код причины>.
+const ABSENT_HEADER = `# Объявленные ссылки в пустоту. Формат: <артефакт> :: <путь или sha> :: <код причины>.
+# Ключом может быть и путь, и САМ SHA (тогда артефакт допускается писать как \`*\`): форма
+# \`<ветка>@<sha>\` пути не содержит вовсе, и объявить её по пути невозможно.
 # Причина ОБЯЗАТЕЛЬНА и гейтом не выводится: \`--write-absent\` вписывает
 # \`ТРЕБУЕТСЯ-ПРИЧИНА\`, и такой файл гейт не принимает (код 2). Иначе один прогон превращал
 # красное в зелёное, а диффом оставалась строка без объяснения — при обязательной проверке это
@@ -121,7 +127,12 @@ const ABSENT_HEADER = `# Объявленные ссылки в пустоту. 
 #   forbidden-by-invariant  — файла не должно существовать: \`web/public/robots.txt\` перекрыл бы
 #                             генерируемый маршрут и открыл демо-стенд поисковикам, на его
 #                             отсутствие стоит гейт \`web/tests/repo-hygiene.test.ts\`;
-#   external-revision       — свидетельство живёт вне \`main\`: неслитая ветка либо — хуже —
+#   external-revision       — объявление можно ставить ЗАРАНЕЕ, пока ревизия ещё достижима: оно
+#                             для того и нужно, чтобы удаление ветки не остановило merge. Поэтому
+#                             «запись есть, а ревизия достижима» — норма, а не мусор; мусор —
+#                             это SHA, на который не ссылается ни один артефакт, и такие строки
+#                             гейт называет мёртвыми и требует убрать.
+#                             Свидетельство живёт вне \`main\`: неслитая ветка либо — хуже —
 #                             коммит, которого нет и в origin вовсе (у нас
 #                             \`2ccee7b131cf5512672686271f8647dea50af683\`, ветка
 #                             \`docs/zet-nmo-audit\` в origin отсутствует, объект есть только в
@@ -430,6 +441,12 @@ function readAbsentDeclared() {
       bad.push(row);
       continue;
     }
+    // Ключ по SHA обязан быть 40 hex: `ne-sha-vovse` прежде принимался молча и висел в реестре
+    // как объявление, которое ничего не объявляет.
+    if (parts[0] === '*' && !/^[0-9a-f]{40}$/.test(parts[1])) {
+      bad.push(`${row} (ключ по SHA обязан быть 40 hex)`);
+      continue;
+    }
     const key = `${parts[0]} :: ${parts[1]}`;
     if (out.has(key)) {
       dup.push(key);
@@ -470,9 +487,50 @@ function externalRevisionDeclared(rel, revSpec) {
   );
 }
 
+/**
+ * Достижима ли ревизия из ОБЩЕГО репозитория. Мерить локальной базой объектов нельзя: коммит
+ * может лежать в клоне автора и отсутствовать в origin (у нас так с
+ * `2ccee7b131cf5512672686271f8647dea50af683` — ветки `docs/zet-nmo-audit` в origin нет). Тогда
+ * локально гейт сверяет содержимое, а в CI не может — то есть один и тот же артефакт получает
+ * разные проверки в двух средах, и вердикт «сверено» ничего не значит для читателя.
+ *
+ * Поэтому «общая» ревизия — та, что содержится хотя бы в одном `refs/remotes/origin/*`.
+ * Отсутствие origin-рефов вовсе — «не смогла измерить» (код 2), а не «ничего не достижимо»:
+ * иначе среда без remote-рефов объявила бы дефектной каждую ссылку на ревизию.
+ */
+const originRefsPresent =
+  execFileSync('git', ['-C', ROOT, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
+    encoding: 'utf8',
+  }).trim().length > 0;
+
+const sharedRevisionCache = new Map();
+/** Все SHA, на которые ссылаются артефакты — для поиска мёртвых объявлений. */
+const seenRevisions = new Set();
+
+function revisionSharedInOrigin(revSpec) {
+  if (sharedRevisionCache.has(revSpec)) return sharedRevisionCache.get(revSpec);
+  const r = spawnSync(
+    'git',
+    ['-C', ROOT, 'for-each-ref', '--contains', revSpec, '--format=%(refname)', 'refs/remotes/origin'],
+    { encoding: 'utf8' },
+  );
+  // Ненулевой код здесь означает «объекта нет в клоне» — для нашего вопроса это «не общая».
+  const shared = r.status === 0 && (r.stdout ?? '').trim().length > 0;
+  sharedRevisionCache.set(revSpec, shared);
+  return shared;
+}
+
 // Реестр отсутствующих читается ДО обхода: решение «расхождение или объявленная
 // недостижимость» принимается внутри цикла.
 const absentDeclared = readAbsentDeclared();
+
+if (!originRefsPresent) {
+  console.error(
+    'check-spec-refs: в клоне нет ни одного refs/remotes/origin/* — достижимость ревизий из ' +
+      'общего репозитория измерить нечем. Джобу нужен клон с remote-рефами (fetch-depth: 0)',
+  );
+  process.exit(2);
+}
 
 verifyBuildRoots();
 
@@ -492,6 +550,34 @@ let contentVerified = 0;
 let generated = 0;
 let localNames = 0;
 let dirRefs = 0;
+
+/**
+ * Ссылка в сборочный вывод. Всегда идёт в поимённый реестр — и в режиме `--check-built` тоже:
+ * состав реестра не должен зависеть от состояния сборки, иначе один и тот же файл не может быть
+ * верным и в CI (не собрано), и локально (собрано). Прежняя редакция в режиме проверки собранного
+ * дерева не кладла путь в реестр, из-за чего **все** его записи класса «сборка» объявлялись
+ * исчезнувшими, и режим был структурно всегда красным — то есть непроходимой ветвью.
+ */
+function buildOutputRef({ rel, path, lineSpec }) {
+  if (lineSpec) {
+    defects.push(
+      `${rel}: ${path}:${lineSpec} — номер строки в сборочном выводе проверить нечем; ` +
+        'ссылайтесь на исходник либо снимите номер',
+    );
+    return;
+  }
+  unmeasurable.set(`${rel} :: ${path}`, {
+    kind: 'build',
+    text: `${rel}: ${path} — сборочный вывод, без собранного дерева не проверяется`,
+  });
+  if (!CHECK_BUILT) return;
+  const built = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
+  if (built) {
+    generated += 1;
+    return;
+  }
+  defects.push(`${rel}: в собранном дереве пути нет — ${path} (опечатка либо предмет ушёл)`);
+}
 
 /**
  * Сверка содержимого по номерам строк. Вынесена в функцию, потому что вызывается из двух мест:
@@ -606,6 +692,7 @@ for (const md of files) {
     }
     if (!spans[i].parsed) continue;
     const [, path, revSpec, lineSpec] = spans[i].parsed;
+    if (revSpec) seenRevisions.add(revSpec);
     // Фрагмент отличается от ссылки ФОРМОЙ, а не тем, «разобрался ли он как путь». Прежняя
     // редакция считала фрагментом только span, не подходящий под `PATH_SPAN`, — а под него
     // подходит любой идентификатор (`defineConfig`, `initialQuery`, `ab`). Из-за этого гейт
@@ -660,21 +747,29 @@ for (const md of files) {
         );
         process.exit(2);
       }
-      if (
-        spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', `${revSpec}^{commit}`])
-          .status === 0
-      ) {
+      if (revisionSharedInOrigin(revSpec)) {
         revisionRefs += 1;
+        // Поимённо — иначе верную ссылку можно бесшумно понизить до этой формы: она проверяема
+        // только на существование ревизии, а числовой счётчик такой подмены не показывает.
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'revision-only',
+          text: `${rel}: ${path}@${revSpec} — только достижимость ревизии, содержимое не сверено`,
+        });
       } else if (externalRevisionDeclared(rel, revSpec)) {
         // Форма `<ветка>@<sha>` без пути — самая частая запись «где найден факт», и девять таких
         // ссылок держались на ветке открытого PR. Без возможности объявить это её удаление
         // роняло бы обязательный гейт, а единственным «лечением» было бы стирание исторического
         // свидетельства.
         unreachableDeclared += 1;
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'unreachable',
+          text: `${rel}: ${path}@${revSpec} — ревизия вне общего репозитория, объявлена`,
+        });
       } else {
         defects.push(
-          `${rel}: ревизии ${revSpec} в репозитории нет — ${path}@${revSpec}. Если свидетельство ` +
-            'живёт вне main, объявите его: <артефакт> :: <sha> :: external-revision',
+          `${rel}: ревизия ${revSpec} не достижима ни из одного refs/remotes/origin/* — ` +
+            `${path}@${revSpec}. Если свидетельство живёт вне общего репозитория, объявите его: ` +
+            '<артефакт> :: <sha> :: external-revision',
         );
       }
       continue;
@@ -701,6 +796,16 @@ for (const md of files) {
         // каждая из которых утверждает лишь «каталог пакета существует».
         continue;
       }
+    }
+
+    // Сборочный вывод распознаётся РАНЬШЕ каталога: ссылка `web/dist` (форма без расширения) до
+    // сборки попадала в реестр как «сборочный вывод», а после появления каталога — в класс
+    // каталогов, и запись реестра «исчезала». То есть вердикт снова зависел от состояния сборки,
+    // только через другую ветвь. Проверено мутацией `mkdir -p web/dist`: три записи реестра
+    // переставали находиться.
+    if (isGeneratedOutput(path)) {
+      buildOutputRef({ rel, path, lineSpec });
+      continue;
     }
 
     // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
@@ -755,9 +860,7 @@ for (const md of files) {
       // Существование ревизии и пути проверяется ОТДЕЛЬНО, а не по коду возврата `git show`:
       // проверено, что `git show deadbeef:путь` выходит НУЛЁМ с пустым выводом, и такая ссылка
       // выглядела «файлом в одну строку» вместо «ревизии не существует».
-      const revOk =
-        spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', `${revSpec}^{commit}`])
-          .status === 0;
+      const revOk = revisionSharedInOrigin(revSpec);
       if (!revOk && externalRevisionDeclared(rel, revSpec)) {
         // Свидетельство живёт вне `main` (мокапы и ветки открытых PR). Пока ревизия достижима,
         // ссылка проверяется по содержимому; когда ветку удалят, гейт говорит «проверить нечем»
@@ -765,6 +868,10 @@ for (const md of files) {
         // «не блокирует» превращалось бы в «блокирует по росту долга» — прошлая редакция ровно
         // этим и кончилась, проверено мутацией.
         unreachableDeclared += 1;
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'unreachable',
+          text: `${rel}: ${path}@${revSpec} — ревизия вне общего репозитория, объявлена`,
+        });
         continue;
       }
       if (!revOk) {
@@ -779,7 +886,7 @@ for (const md of files) {
           );
           process.exit(2);
         }
-        defects.push(`${rel}: ревизии ${revSpec} в репозитории нет — ${path}`);
+        defects.push(`${rel}: ревизия ${revSpec} не достижима ни из одного refs/remotes/origin/* — ${path}`);
         continue;
       }
       if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
@@ -805,6 +912,13 @@ for (const md of files) {
         );
         continue;
       }
+      if (!lineSpec) {
+        // Без номера строки сверять содержимое нечем — проверено, что путь на этой ревизии
+        // существует. Прежняя редакция шла в checkContent с undefined и падала исключением,
+        // причём код выхода был 1: «не смогла измерить» выдавалось за «расхождения».
+        pathOnly += 1;
+        continue;
+      }
       checkContent({
         rel,
         path: `${path}@${revSpec}`,
@@ -816,41 +930,6 @@ for (const md of files) {
     }
 
     const r = resolveRef(path, md);
-    if (isGeneratedOutput(path)) {
-      // Ссылка в сборочный вывод ВСЕГДА идёт в поимённый реестр, и это сознательно: вердикт
-      // гейта не должен зависеть от того, собрано дерево или нет. Прежняя редакция проверяла
-      // путь в собранном дереве, если оно есть, — и обычный локальный `npm run build` давал 13
-      // расхождений и 17 срывов храповика на исправном дереве, потому что часть путей уходила
-      // из «неизмеримых» в «проверенные». Реестр, содержимое которого зависит от состояния
-      // сборки, не может быть верным одновременно в CI (не собрано) и локально (собрано).
-      //
-      // Проверка по собранному дереву осталась, но отдельным флагом `--check-built`: её место —
-      // джоб, который уже собрал сайт, а не обязательный гейт ссылок.
-      if (CHECK_BUILT) {
-        const built = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
-        if (built) {
-          generated += 1;
-          continue;
-        }
-        defects.push(
-          `${rel}: в собранном дереве пути нет — ${path} (опечатка либо предмет ушёл)`,
-        );
-        continue;
-      }
-      if (lineSpec) {
-        // Номер строки у пути в сборочный вывод раньше молча выбрасывался.
-        defects.push(
-          `${rel}: ${path}:${lineSpec} — номер строки в сборочном выводе проверить нечем; ` +
-            'ссылайтесь на исходник либо снимите номер',
-        );
-        continue;
-      }
-      unmeasurable.set(`${rel} :: ${path}`, {
-        kind: 'build',
-        text: `${rel}: ${path} — сборочный вывод, без собранного дерева не проверяется`,
-      });
-      continue;
-    }
     if (r.missing) {
       // Ненайденная ссылка не классифицируется гейтом по виду пути: она либо ОБЪЯВЛЕНА в
       // openspec/.spec-ref-absent (файл, который change ещё создаст; осознанная цитата на
@@ -921,6 +1000,10 @@ const absentDeclaredBefore = existsSync(ABSENT_FILE)
     )
   : new Map();
 
+/** Сколько записей храповика данного класса. Считается по самой карте: отдельный счётчик уже
+ *  однажды разошёлся с ней (считал вхождения против уникальных identity). */
+const kindCount = (kind) => [...unmeasurable.values()].filter((v) => v.kind === kind).length;
+
 const current = [...unmeasurable.keys()].sort();
 const currentAbsent = [...absentSeen.keys()].sort();
 
@@ -929,9 +1012,17 @@ if (WRITE_DEBT) {
   console.log(`check-spec-refs: в openspec/.spec-ref-debt записано ${current.length} ссылок`);
 }
 if (WRITE_ABSENT) {
+  // Объявления по САМОМУ SHA (`external-revision`) не выводятся из ненайденных путей — они
+  // говорят о ревизии, а не о файле. Поэтому режим записи их СОХРАНЯЕТ: первая редакция их
+  // снесла, и ссылки на неслитые ветки мгновенно стали расхождениями. Реестр, который теряет
+  // часть себя при штатной перезаписи, хуже отсутствующего: он выглядит полным.
+  const keepExternal = [...absentDeclaredBefore.entries()]
+    .filter(([key, reason]) => reason === 'external-revision' && !currentAbsent.includes(key))
+    .map(([key]) => key);
+  const rows = [...currentAbsent, ...keepExternal].sort();
   writeFileSync(
     ABSENT_FILE,
-    `${ABSENT_HEADER}${currentAbsent
+    `${ABSENT_HEADER}${rows
       .map((k) => `${k} :: ${absentDeclaredBefore.get(k) ?? 'ТРЕБУЕТСЯ-ПРИЧИНА'}\n`)
       .join('')}`,
     'utf8',
@@ -973,9 +1064,9 @@ console.log(
   `check-spec-refs: содержимое сверено у ${contentVerified}, существование пути — ещё у ` +
     `${pathOnly}, каталогов — ещё у ${dirRefs}, имён соседних артефактов — ещё у ` +
     `${localNames}, неизмеримых ` +
-    `${[...unmeasurable.values()].filter((v) => v.kind !== 'build').length} + ` +
-    `${[...unmeasurable.values()].filter((v) => v.kind === 'build').length} в сборочный вывод ` +
-    `(в реестре ${debt.size}), объявленных ` +
+    `${kindCount('no-snippet')} без фрагмента + ${kindCount('build')} в сборочный вывод + ` +
+    `${kindCount('revision-only')} только по ревизии + ${kindCount('unreachable')} вне общего ` +
+    `репозитория (в реестре ${debt.size}), объявленных ` +
     `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
     `${defects.length}`,
 );
@@ -1020,10 +1111,28 @@ if (gone.length > 0) {
   console.error('Обновите файл: ./bin/check-spec-refs --write-debt');
 }
 
+// Объявление, на предмет которого никто не ссылается, — мёртвая строка: она разрешает то, чего
+// нет, и «оживёт» без ревью, когда кто-нибудь случайно совпадёт с этим SHA. Проверяется только
+// для ключей по SHA: для путей ту же роль играет обратная сверка ниже.
+const declaredShaUnused = [...absentDeclared.entries()]
+  .filter(([key, reason]) => reason === 'external-revision' && key.startsWith('* :: '))
+  .map(([key]) => key.slice('* :: '.length))
+  .filter((sha) => !seenRevisions.has(sha));
+
 const absentNew = currentAbsent.filter((k) => !absentDeclared.has(k));
 const absentStale = [...absentDeclared.keys()]
   .filter((k) => !absentSeen.has(k) && absentDeclared.get(k) !== 'external-revision')
   .sort();
+
+if (declaredShaUnused.length > 0) {
+  failed = true;
+  console.error(
+    `\nМЁРТВЫЕ ОБЪЯВЛЕНИЯ РЕВИЗИЙ (${declaredShaUnused.length}): на эти SHA не ссылается ни один ` +
+      'артефакт, значит объявление ничего не объявляет — уберите строки из ' +
+      'openspec/.spec-ref-absent:',
+  );
+  for (const sha of declaredShaUnused) console.error(`  ${sha}`);
+}
 
 if (absentNew.length > 0) {
   failed = true;

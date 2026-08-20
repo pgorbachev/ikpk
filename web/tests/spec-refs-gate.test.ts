@@ -63,6 +63,17 @@ function makeRepo(): string {
   }
   writeFileSync(join(dir, 'openspec', '.spec-ref-debt'), '# пусто\n');
   writeFileSync(join(dir, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  writeFileSync(join(dir, 'openspec', 'specs', 'demo', 'spec.md'), '## P\n\nСтартовое состояние.\n');
+  execFileSync('git', ['-C', dir, 'add', '-A']);
+  execFileSync('git', ['-C', dir, 'commit', '-q', '-m', 'init']);
+  // Достижимость ревизий гейт мерит по `refs/remotes/origin/*`, а не по локальной базе объектов
+  // (иначе локальный и CI-вердикт расходятся). Значит песочница обязана иметь настоящий origin —
+  // иначе тесты проверяли бы поведение, которого в жизни не бывает.
+  const originDir = `${dir}-origin.git`;
+  execFileSync('git', ['init', '-q', '--bare', originDir]);
+  execFileSync('git', ['-C', dir, 'remote', 'add', 'origin', originDir]);
+  execFileSync('git', ['-C', dir, 'push', '-q', 'origin', 'HEAD:refs/heads/main']);
+  execFileSync('git', ['-C', dir, 'fetch', '-q', 'origin']);
   return dir;
 }
 
@@ -71,6 +82,10 @@ function run(dir: string, specBody: string): { code: number; out: string } {
   writeFileSync(join(dir, 'openspec', 'specs', 'demo', 'spec.md'), specBody);
   execFileSync('git', ['-C', dir, 'add', '-A']);
   execFileSync('git', ['-C', dir, 'commit', '-q', '-m', 'state', '--allow-empty']);
+  // Состояние публикуется в origin: ссылка на ревизию считается проверяемой только если ревизия
+  // достижима из общего репозитория.
+  execFileSync('git', ['-C', dir, 'push', '-q', '-f', 'origin', 'HEAD:refs/heads/main']);
+  execFileSync('git', ['-C', dir, 'fetch', '-q', 'origin']);
   const r = spawnSync(join(dir, 'bin', 'check-spec-refs'), { cwd: dir, encoding: 'utf8' });
   return { code: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
@@ -99,7 +114,10 @@ beforeEach(() => {
 });
 
 afterAll(() => {
-  if (sandbox) rmSync(sandbox, { recursive: true, force: true });
+  if (sandbox) {
+    rmSync(sandbox, { recursive: true, force: true });
+    rmSync(`${sandbox}-origin.git`, { recursive: true, force: true });
+  }
 });
 
 describe('гейт ссылок: исходы по классам', () => {
@@ -211,7 +229,7 @@ describe('гейт ссылок: исходы по классам', () => {
       '## Purpose\n\nСсылка: `web/src/thing.ts@0123456789abcdef0123456789abcdef01234567:1`, `marker`.\n',
     );
     expect(r.code, r.out).toBe(1);
-    expect(r.out).toMatch(/ревизии .* в репозитории нет/);
+    expect(r.out).toMatch(/не достижима ни из одного refs\/remotes\/origin/);
   });
 
   it('пустые реестры при нуле неизмеримых — код 0', () => {
@@ -272,7 +290,7 @@ describe('гейт ссылок: исходы по классам', () => {
       '## P\n\n`web/src/thing.ts@0123456789abcdef0123456789abcdef01234567:1`, `marker`.\n',
     );
     expect(r.code, r.out).toBe(1);
-    expect(r.out).toMatch(/ревизии .* нет/);
+    expect(r.out).toMatch(/не достижима ни из одного refs\/remotes\/origin/);
   });
 
   it('недостижимая ревизия, объявленная как external-revision, merge не блокирует', () => {
@@ -281,6 +299,12 @@ describe('гейт ссылок: исходы по классам', () => {
     writeFileSync(
       join(sandbox, 'openspec', '.spec-ref-absent'),
       '# пусто\n* :: 0123456789abcdef0123456789abcdef01234567 :: external-revision\n',
+    );
+    // Одного объявления мало: класс «вне общего репозитория» тоже поимённый — иначе одна строка
+    // реестра открывала бы неограниченный класс непроверяемых ссылок.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@0123456789abcdef0123456789abcdef01234567\n',
     );
     const r = run(
       sandbox,
@@ -300,6 +324,10 @@ describe('гейт ссылок: исходы по классам', () => {
     writeFileSync(
       join(sandbox, 'openspec', '.spec-ref-absent'),
       '# пусто\n* :: 0123456789abcdef0123456789abcdef01234567 :: external-revision\n',
+    );
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: feat/whatever@0123456789abcdef0123456789abcdef01234567\n',
     );
     const ok = run(
       sandbox,
@@ -422,6 +450,51 @@ describe('гейт ссылок: исходы по классам', () => {
     expect(r.code, r.out).toBe(2);
     expect(r.out).toMatch(/\.openspec\.yaml/);
     writeFileSync(yml, saved);
+  });
+
+  it('--write-absent сохраняет объявления по SHA, а не сносит их', () => {
+    // Первая редакция режима записи их снесла, и ссылки на неслитые ветки мгновенно стали
+    // расхождениями: реестр терял часть себя при штатной перезаписи, оставаясь на вид полным.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\n* :: 0123456789abcdef0123456789abcdef01234567 :: external-revision\n',
+    );
+    // На объявленный SHA обязана быть ссылка: мёртвое объявление гейт отклоняет отдельно.
+    writeFileSync(
+      join(sandbox, 'openspec', 'specs', 'demo', 'spec.md'),
+      '## P\n\n`web/src/thing.ts:1`, `marker`.\n\nФакт на `feat/x@0123456789abcdef0123456789abcdef01234567`.\n',
+    );
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: feat/x@0123456789abcdef0123456789abcdef01234567\n',
+    );
+    execFileSync('git', ['-C', sandbox, 'add', '-A']);
+    execFileSync('git', ['-C', sandbox, 'commit', '-q', '-m', 's', '--allow-empty']);
+    execFileSync(join(sandbox, 'bin', 'check-spec-refs'), ['--write-absent'], { cwd: sandbox });
+    const after = readFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), 'utf8');
+    expect(after).toMatch(/0123456789abcdef0123456789abcdef01234567 :: external-revision/);
+  });
+
+  it('без refs/remotes/origin достижимость ревизий не измеряется — код 2', () => {
+    // Отсутствие origin-рефов — «не смогла измерить», а не «всё недостижимо». Отдельный
+    // репозиторий: в основной песочнице origin есть по построению.
+    const lonely = mkdtempSync(join(tmpdir(), 'spec-refs-lonely-'));
+    execFileSync('git', ['init', '-q', lonely]);
+    execFileSync('git', ['-C', lonely, 'config', 'user.email', 't@t']);
+    execFileSync('git', ['-C', lonely, 'config', 'user.name', 't']);
+    mkdirSync(join(lonely, 'bin'), { recursive: true });
+    mkdirSync(join(lonely, 'openspec', 'specs', 'demo'), { recursive: true });
+    cpSync(join(sandbox, 'bin', 'check-spec-refs'), join(lonely, 'bin', 'check-spec-refs'));
+    cpSync(join(sandbox, 'bin', 'openspec'), join(lonely, 'bin', 'openspec'));
+    writeFileSync(join(lonely, 'openspec', '.spec-ref-debt'), '# пусто\n');
+    writeFileSync(join(lonely, 'openspec', '.spec-ref-absent'), '# пусто\n');
+    writeFileSync(join(lonely, 'openspec', 'specs', 'demo', 'spec.md'), '## P\n\nТекст.\n');
+    execFileSync('git', ['-C', lonely, 'add', '-A']);
+    execFileSync('git', ['-C', lonely, 'commit', '-q', '-m', 'init']);
+    const r = spawnSync(join(lonely, 'bin', 'check-spec-refs'), { cwd: lonely, encoding: 'utf8' });
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(2);
+    expect(`${r.stdout}${r.stderr}`).toMatch(/refs\/remotes\/origin/);
+    rmSync(lonely, { recursive: true, force: true });
   });
 
   it('ссылка без номера строки и без фрагмента идёт в храповик, а не в «проверено»', () => {
