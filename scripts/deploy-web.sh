@@ -307,22 +307,28 @@ then
   exit 1
 fi
 
-# Доступность ПУБЛИЧНОГО пути — отдельная проба, ничего не создающая (OPTIONS, не POST):
-# совпадение адреса и работающий readiness — про разные предметы, ни один не заменяет
-# другой (спека, Requirement «Личность контура сообщается несекретным readiness-ответом»).
-echo "[deploy] Проверка доступности объявленного эндпоинта (OPTIONS ${EXPECT_ENDPOINT}/payments)"
-if ! payment_endpoint_reachable "$EXPECT_ENDPOINT"; then
-  echo "Загрузка отменена: объявленный платёжный эндпоинт недостижим снаружи." >&2
-  exit 1
-fi
-
-# CORS — только для контура, у которого API раздаётся на origin, отличном от origin
-# сайта (спека, Requirement «CORS ограничен доменом сайта»). У стенда его нет: same-origin
-# запрос браузер с CORS не сверяет вовсе.
+# Доступность ПУБЛИЧНОГО пути — проба, ничего не создающая (OPTIONS, не POST): совпадение
+# адреса и работающий readiness — про разные предметы, ни один не заменяет другой (спека,
+# Requirement «Личность контура сообщается несекретным readiness-ответом»).
+#
+# ОДНА проба на контур, не две (исправлено по находке владельца O-4, 2026-08-19/20):
+# у `stand` — `payment_endpoint_reachable` (без `Origin`, ей и не положен — same-origin,
+# CORS не участвует). У `prod` — только `payment_cors_allows`: она САМА проверяет и `204`,
+# и заголовок на ОДНОМ запросе с `Origin` (design.md, Решение 13, п.4: «тот же OPTIONS
+# служит и проверкой CORS»). Раздельный вызов `payment_endpoint_reachable` без `Origin` для
+# prod был бы ВТОРЫМ, отличным от браузерного, запросом — «204 без Origin» плюс «заголовок
+# верен при Origin, а код ответа при Origin не проверен» проходили бы гейт при живом 403 на
+# фактическом preflight.
 if [[ "$DEPLOY_MODE" == "prod" ]]; then
-  echo "[deploy] Проверка CORS для origin боевого сайта"
+  echo "[deploy] Проверка доступности и CORS одним preflight-запросом (OPTIONS с Origin ${EXPECT_ENDPOINT}/payments)"
   if ! payment_cors_allows "$EXPECT_ENDPOINT" "https://ikpk.su"; then
-    echo "Загрузка отменена: CORS платёжного API не разрешает origin боевого сайта." >&2
+    echo "Загрузка отменена: платёжный эндпоинт недостижим или CORS не разрешает origin боевого сайта." >&2
+    exit 1
+  fi
+else
+  echo "[deploy] Проверка доступности объявленного эндпоинта (OPTIONS ${EXPECT_ENDPOINT}/payments)"
+  if ! payment_endpoint_reachable "$EXPECT_ENDPOINT"; then
+    echo "Загрузка отменена: объявленный платёжный эндпоинт недостижим снаружи." >&2
     exit 1
   fi
 fi
