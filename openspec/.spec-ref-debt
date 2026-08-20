@@ -22,6 +22,7 @@ openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:87
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/dependabot-auto-merge/design.md :: feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3
+openspec/changes/dependabot-auto-merge/design.md :: package.json
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/sotrudnichestvo-s-nami/index.html
@@ -51,6 +52,7 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/co
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/oplata.astro:36
 openspec/changes/education-trust-and-admission-clarity/specs/verifiable-public-claims/spec.md :: web/src/components/home/sections/Approach.astro:23-36
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: .gitignore
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: Approach.astro:23-36
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: InstitutesStrips.astro:13
@@ -86,6 +88,7 @@ openspec/changes/online-payment-flow/specs/online-payment/spec.md :: dist/oplata
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850
 openspec/changes/online-payment-flow/tasks.md :: design/trust-and-verification-mockups@c924da54e94675673d1bd40720fa375d90ba2fd0
 openspec/changes/online-payment-flow/tasks.md :: main@90003af89e2a6fc4a122ef18cfd821c61e401a34
+openspec/changes/online-payment-flow/tasks.md :: spec.md
 openspec/changes/online-payment-flow/tasks.md :: web/dist/oplata/index.html
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212

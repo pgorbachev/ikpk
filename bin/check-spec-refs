@@ -66,7 +66,16 @@ const ABSENT_FILE = join(ROOT, 'openspec', '.spec-ref-absent');
 const WRITE_DEBT = process.argv.includes('--write-debt');
 const WRITE_ABSENT = process.argv.includes('--write-absent');
 // Проверять пути в собранном дереве — отдельный режим: см. комментарий у isGeneratedOutput.
-const CHECK_BUILT = process.argv.includes('--check-built');
+const CHECK_BUILT = process.argv.some((a) => a === '--check-built' || a.startsWith('--check-built='));
+/** Корни, которые вызывающий объявляет собранными: `--check-built=web/dist,web/dist-demo`. Пустой
+ *  список означает «взять все, что есть на диске», и тогда пустой диск — код 2, а не зелёный. */
+const CLAIMED_BUILT_ROOTS = (process.argv.find((a) => a.startsWith('--check-built=')) ?? '')
+  .split('=')
+  .slice(1)
+  .join('=')
+  .split(',')
+  .map((x) => x.trim())
+  .filter(Boolean);
 
 // Что считать ссылкой, а что прозой, определяется ФОРМОЙ span, и ни в одну сторону не зависит от
 // того, существует ли предмет:
@@ -240,6 +249,18 @@ function verifyBuildRoots() {
   }
 }
 
+/** Корень сборочного вывода, к которому относится путь (или null). Кандидат `web/<путь>` нужен
+ *  потому, что `dist/client/**` пишут без префикса пакета. */
+function buildRootOf(path) {
+  const bare = path.replace(/\/$/, '');
+  for (const c of [bare, join('web', bare)]) {
+    const norm = c.split('/').filter(Boolean).join('/');
+    const hit = BUILD_OUTPUT_ROOTS.find((root) => norm === root || norm.startsWith(`${root}/`));
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function isGeneratedOutput(path) {
   const bare = path.replace(/\/$/, '');
   const candidates = [bare, join('web', bare)];
@@ -267,6 +288,23 @@ function caseExact(absPath) {
 }
 
 function resolveRef(path, mdPath) {
+  // Расхождение регистра определяется по ИНДЕКСУ git, а не по попытке открыть файл. Прежняя
+  // редакция узнавала о нём только через `existsSync`, то есть только на регистро-НЕзависимой ФС:
+  // на Linux-раннере — а это и есть CI, где гейт обязателен — та же ссылка шла другой ветвью и
+  // получала другое сообщение, а сама ветвь `wrongCase` была недостижима вовсе. Вердикт
+  // обязательной проверки не имеет права зависеть от файловой системы исполнителя.
+  const literalCase = caseIndex.get(path.toLowerCase());
+  if (literalCase !== undefined && literalCase !== path) {
+    return { wrongCase: join(ROOT, literalCase) };
+  }
+  if (!path.includes('/')) {
+    const byLower = [...caseIndex.entries()].find(
+      ([lower, exact]) => lower.endsWith(`/${path.toLowerCase()}`) && !exact.endsWith(`/${path}`),
+    );
+    if (byLower && (byBasename.get(path) ?? []).length === 0) {
+      return { wrongCase: join(ROOT, byLower[1]) };
+    }
+  }
   const mdDir = dirname(mdPath);
   const changeRoot = (() => {
     const rel = mdPath.slice(ROOT.length + 1).split('/');
@@ -441,9 +479,11 @@ function readAbsentDeclared() {
       bad.push(row);
       continue;
     }
-    // Ключ по SHA обязан быть 40 hex: `ne-sha-vovse` прежде принимался молча и висел в реестре
-    // как объявление, которое ничего не объявляет.
-    if (parts[0] === '*' && !/^[0-9a-f]{40}$/.test(parts[1])) {
+    // Ключ по SHA обязан быть 40 hex — и признак берётся по ПРИЧИНЕ, а не по одному из двух
+    // написаний ключа. Прежняя редакция требовала 40 hex только при `* ::`, поэтому
+    // `<артефакт> :: ne-sha-vovse :: external-revision` принимался молча и висел в реестре как
+    // объявление, которое ничего не объявляет (проверено ревью: код 0, «объявлено 16»).
+    if (parts[2] === 'external-revision' && !/^[0-9a-f]{40}$/.test(parts[1])) {
       bad.push(`${row} (ключ по SHA обязан быть 40 hex)`);
       continue;
     }
@@ -506,6 +546,8 @@ const originRefsPresent =
 const sharedRevisionCache = new Map();
 /** Все SHA, на которые ссылаются артефакты — для поиска мёртвых объявлений. */
 const seenRevisions = new Set();
+/** Голые SHA (вне формы ссылки): SHA -> первый артефакт, где встретился. */
+const bareRevisions = new Map();
 
 function revisionSharedInOrigin(revSpec) {
   if (sharedRevisionCache.has(revSpec)) return sharedRevisionCache.get(revSpec);
@@ -520,6 +562,46 @@ function revisionSharedInOrigin(revSpec) {
   return shared;
 }
 
+/**
+ * Достижима ли ревизия из ОСНОВНОЙ ветки. Разница с `revisionSharedInOrigin` не косметическая:
+ * ревизия, лежащая только на чужой ветке, достижима СЕЙЧАС и станет недостижимой в тот день,
+ * когда ветку удалят, — а `main` не сдвигается назад. Правило `AGENTS.md` требует объявлять такую
+ * ссылку **заранее**, пока ревизия ещё достижима, и до этой редакции требование не проверялось
+ * ничем: гейт узнавал о проблеме ровно в момент, когда уборка чужой ветки красила обязательную
+ * проверку на ВСЕХ открытых PR. Измерено на `55f6013`: две ссылки в области действия гейта
+ * (`openspec/specs/article-catalog/spec.md` и `openspec/changes/dependabot-auto-merge/design.md`)
+ * держались на ветках `feat/demo-mode-and-hero-photo` и `feat/sanitize-rich-html-content` без
+ * объявления — то есть бомба уже была заложена, просто ещё не сработала.
+ *
+ * Отсутствие самой основной ветки — «не смогла измерить» (код 2), а не «всё вне main»: иначе
+ * клон без `origin/main` объявил бы дефектной каждую ссылку на ревизию.
+ */
+const MAINLINE_REF = 'refs/remotes/origin/main';
+const mainlinePresent =
+  spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', MAINLINE_REF], {
+    encoding: 'utf8',
+  }).status === 0;
+
+const mainlineCache = new Map();
+function revisionOnMainline(revSpec) {
+  if (mainlineCache.has(revSpec)) return mainlineCache.get(revSpec);
+  const r = spawnSync('git', ['-C', ROOT, 'merge-base', '--is-ancestor', revSpec, MAINLINE_REF], {
+    encoding: 'utf8',
+  });
+  const onMain = r.status === 0;
+  mainlineCache.set(revSpec, onMain);
+  return onMain;
+}
+
+function originRefsContaining(revSpec) {
+  const r = spawnSync(
+    'git',
+    ['-C', ROOT, 'for-each-ref', '--contains', revSpec, '--format=%(refname:short)', 'refs/remotes/origin'],
+    { encoding: 'utf8' },
+  );
+  return r.status === 0 ? (r.stdout ?? '').trim().split('\n').filter(Boolean) : [];
+}
+
 // Реестр отсутствующих читается ДО обхода: решение «расхождение или объявленная
 // недостижимость» принимается внутри цикла.
 const absentDeclared = readAbsentDeclared();
@@ -532,7 +614,50 @@ if (!originRefsPresent) {
   process.exit(2);
 }
 
+if (!mainlinePresent) {
+  console.error(
+    `check-spec-refs: в клоне нет ${MAINLINE_REF} — отличить ревизию основной ветки от ревизии, ` +
+      'живущей только на чужой ветке, нечем. Джобу нужен клон с remote-рефами (fetch-depth: 0)',
+  );
+  process.exit(2);
+}
+
 verifyBuildRoots();
+
+/** Корни, против которых режим `--check-built` реально что-то проверяет. */
+let BUILT_ROOTS = [];
+if (CHECK_BUILT) {
+  const unknown = CLAIMED_BUILT_ROOTS.filter((r) => !BUILD_OUTPUT_ROOTS.includes(r));
+  if (unknown.length > 0) {
+    console.error(
+      `check-spec-refs: --check-built= назвал корни вне перечня сборочного вывода: ${unknown.join(', ')}`,
+    );
+    process.exit(2);
+  }
+  const missing = CLAIMED_BUILT_ROOTS.filter((r) => !existsSync(join(ROOT, r)));
+  if (missing.length > 0) {
+    // Названный собранным корень обязан существовать: иначе «проверено» означало бы «проверять
+    // было нечего», а именно этот режим стоит в гейте публикации.
+    console.error(
+      `check-spec-refs: корни ${missing.join(', ')} названы собранными, но их нет — проверять ` +
+        'нечем. Соберите дерево либо не называйте этот корень',
+    );
+    process.exit(2);
+  }
+  BUILT_ROOTS =
+    CLAIMED_BUILT_ROOTS.length > 0
+      ? CLAIMED_BUILT_ROOTS
+      : BUILD_OUTPUT_ROOTS.filter((r) => existsSync(join(ROOT, r)));
+  if (BUILT_ROOTS.length === 0) {
+    // Без единого собранного корня режим вакуумен, а вакуумный прогон — «не выполнено», а не
+    // успех: зелёный цвет здесь читался бы как «ссылки в сборочный вывод проверены».
+    console.error(
+      'check-spec-refs: режиму --check-built нужно собранное дерево, ни одного корня из ' +
+        `${BUILD_OUTPUT_ROOTS.join(', ')} на диске нет — проверять нечего`,
+    );
+    process.exit(2);
+  }
+}
 
 const SCHEMA_ARTIFACTS = schemaArtifactBasenames();
 
@@ -544,10 +669,36 @@ const defects = [];
 const unmeasurable = new Map(); // identity -> { kind, text }
 let revisionRefs = 0;
 let unreachableDeclared = 0;
+let branchOnlyDeclared = 0;
+
+/**
+ * Ссылка на ревизию, которой нет в основной ветке, обязана быть объявлена ЗАРАНЕЕ. Возвращает
+ * true, если объявления нет — тогда это дефект сейчас, а не в день уборки чужой ветки. Так
+ * предикат перестаёт зависеть от предмета: до этой редакции проверка появлялась ровно тогда,
+ * когда исправить ссылку было уже нечем (ревизия исчезла вместе с веткой), и «зелено» означало
+ * лишь «ветка пока жива».
+ */
+function branchOnlyUndeclared(rel, revSpec, spanText) {
+  if (revisionOnMainline(revSpec)) return false;
+  if (externalRevisionDeclared(rel, revSpec)) {
+    branchOnlyDeclared += 1;
+    return false;
+  }
+  const refs = originRefsContaining(revSpec);
+  defects.push(
+    `${rel}: ревизия ${revSpec} в ${MAINLINE_REF} отсутствует и достижима только через ` +
+      `${refs.slice(0, 2).join(', ') || 'ref вне основной ветки'} — ${spanText}. Удаление этой ветки ` +
+      'уронит обязательный гейт на всех PR, поэтому объявите ссылку заранее, пока ревизия ' +
+      `достижима: \`${rel} :: ${revSpec} :: external-revision\` либо \`* :: ${revSpec} :: external-revision\``,
+  );
+  return true;
+}
 const absentSeen = new Map(); // identity -> человекочитаемое пояснение
 let pathOnly = 0;
 let contentVerified = 0;
-let generated = 0;
+const generated = new Set();
+/** Корень сборочного вывода -> сколько ссылок в него не проверено, потому что дерева нет. */
+const unbuiltRoots = new Map();
 let localNames = 0;
 let dirRefs = 0;
 
@@ -571,9 +722,23 @@ function buildOutputRef({ rel, path, lineSpec }) {
     text: `${rel}: ${path} — сборочный вывод, без собранного дерева не проверяется`,
   });
   if (!CHECK_BUILT) return;
+  // Корень, к которому относится ссылка. Нужен потому, что шаг `--check-built` стоит в джобе,
+  // где собирается ТОЛЬКО `web`, а перечень корней включает ещё `cms/dist` и `payments/dist`.
+  // Прежняя редакция объявляла отсутствие такого дерева расхождением — то есть законная по всем
+  // документированным правилам ссылка на `cms/dist/**` проходила проверку ветки и валила ГЕЙТ
+  // ПУБЛИКАЦИИ боевого сайта, причём автор узнавал об этом только из CI.
+  const root = buildRootOf(path);
+  if (root && !BUILT_ROOTS.includes(root)) {
+    // Дерева нет — «не проверено», а не «дефект». Молчать об этом нельзя: класс печатается ниже
+    // отдельной строкой, иначе «расхождений 0» читалось бы как «все ссылки в сборку проверены».
+    unbuiltRoots.set(root, (unbuiltRoots.get(root) ?? 0) + 1);
+    return;
+  }
   const built = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
   if (built) {
-    generated += 1;
+    // ИДЕНТИЧНОСТИ, а не вхождения: тот же счётчик уже однажды разошёлся с картой (31 против 17
+    // в одной строке вывода про один и тот же предмет), и ровно от этого введён `kindCount`.
+    generated.add(`${rel} :: ${path}`);
     return;
   }
   defects.push(`${rel}: в собранном дереве пути нет — ${path} (опечатка либо предмет ушёл)`);
@@ -652,6 +817,17 @@ for (const md of files) {
     /^[^\S\n]*```[\s\S]*?^[^\S\n]*```/gm,
     (block) => block.replace(/[^\n]/g, ' '),
   );
+
+  // ГОЛЫЙ SHA («точный коммит — `1ca16003…`») формой ссылки не является и содержимого не
+  // называет, поэтому гейт его НЕ проверяет. Но учитывать его обязательно: без этого объявление
+  // на такой SHA объявлялось «мёртвым» («на этот SHA не ссылается ни один артефакт») при живой
+  // ссылке в двух строках выше — то есть уже потерянное свидетельство нельзя было ни увидеть, ни
+  // легально объявить. Учёт делает объявление законным, а недостижимые голые SHA — названным
+  // вслух числом, а не молчаливой слепой зоной.
+  for (const m of text.matchAll(/\b[0-9a-f]{40}\b/g)) {
+    bareRevisions.set(m[0], rel);
+    seenRevisions.add(m[0]);
+  }
 
   // Сначала собираем все code spans с их положением, затем решаем, что из них ссылка, а что
   // фрагмент к предыдущей ссылке. Фрагментом считается ТОЛЬКО span, который сам не выглядит
@@ -748,6 +924,24 @@ for (const md of files) {
         process.exit(2);
       }
       if (revisionSharedInOrigin(revSpec)) {
+        if (branchOnlyUndeclared(rel, revSpec, `${path}@${revSpec}`)) continue;
+        // Имя ветки и ОПЕЧАТКА В ПУТИ здесь неотличимы на глаз, но различимы измерением: если
+        // первый сегмент существует в корне репозитория, это записан путь, а не ref, — и тогда
+        // он обязан существовать на названной ревизии (один вызов `git cat-file -e`). Без этой
+        // проверки класс «только по ревизии» легализовал любую опечатку одной строкой реестра:
+        // измерено ревью — `web/src/lib/typo-here@aa7678cf` давал код 0, хотя такого пути нет
+        // ни на одной ревизии. Ровно тот дефект, от которого предостерегает шапка скрипта.
+        if (path.includes('/') && existsSync(join(ROOT, path.split('/')[0]))) {
+          if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
+            defects.push(
+              `${rel}: на ревизии ${revSpec} нет пути ${path} — первый сегмент «${path.split('/')[0]}» ` +
+                'существует в репозитории, значит это записанный путь, а не имя ветки',
+            );
+            continue;
+          }
+          pathOnly += 1;
+          continue;
+        }
         revisionRefs += 1;
         // Поимённо — иначе верную ссылку можно бесшумно понизить до этой формы: она проверяема
         // только на существование ревизии, а числовой счётчик такой подмены не показывает.
@@ -836,6 +1030,25 @@ for (const md of files) {
         // change, существование почти тривиально, и складывать это с проверкой путей по дереву
         // значило бы снова раздуть «проверено».
         localNames += 1;
+      } else if (local.wrongCase) {
+        // Расхождение регистра громко ловится для полного пути и БЕСШУМНО проваливалось для
+        // короткого имени: `local.wrongCase` уходил в общий `continue`. На Linux-раннере такая
+        // ссылка не открывается, то есть предмет ошибки одинаков в обеих формах записи.
+        defects.push(
+          `${rel}: регистр имени не совпадает — ${path}, в репозитории ` +
+            `${local.wrongCase.slice(ROOT.length + 1)}`,
+        );
+      } else if (local.ambiguous) {
+        // Неоднозначное короткое имя — не расхождение (в проекте так пишут `spec.md` соседнего
+        // change), но и не «проверено»: соответствие выбирает читатель, а не гейт. Класс идёт в
+        // поимённый реестр — тогда его рост виден, а бесшумной подмены точной ссылки на
+        // неоднозначную больше нет.
+        unmeasurable.set(`${rel} :: ${path}`, {
+          kind: 'ambiguous',
+          text:
+            `${rel}: короткое имя ${path} подходит к ${local.ambiguous.length} файлам — ` +
+            'какой имелся в виду, гейт не решает; уточните путь',
+        });
       } else if (SCHEMA_ARTIFACTS.has(path) && rel.startsWith('openspec/changes/')) {
         absentSeen.set(
           `${rel} :: ${path}`,
@@ -864,9 +1077,12 @@ for (const md of files) {
       if (!revOk && externalRevisionDeclared(rel, revSpec)) {
         // Свидетельство живёт вне `main` (мокапы и ветки открытых PR). Пока ревизия достижима,
         // ссылка проверяется по содержимому; когда ветку удалят, гейт говорит «проверить нечем»
-        // и merge НЕ блокирует. Важно, что такая ссылка не попадает в храповик долга: иначе
-        // «не блокирует» превращалось бы в «блокирует по росту долга» — прошлая редакция ровно
-        // этим и кончилась, проверено мутацией.
+        // и РАСХОЖДЕНИЯ не даёт. Точная формулировка важна, прежняя была неверна: запись в
+        // поимённый реестр КЛАДЁТСЯ (`kind:'unreachable'`), и это нужно — иначе верную ссылку
+        // можно бесшумно понизить до непроверяемой. Identity одинакова в обеих ветвях, поэтому
+        // переход «достижима → объявлена» реестр не рвёт; но НОВАЯ такая ссылка требует и строки
+        // реестра, то есть до её добавления гейт красный. «Не блокирует» относится к исчезновению
+        // ветки под уже описанной ссылкой, а не к добавлению новой.
         unreachableDeclared += 1;
         unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
           kind: 'unreachable',
@@ -889,6 +1105,7 @@ for (const md of files) {
         defects.push(`${rel}: ревизия ${revSpec} не достижима ни из одного refs/remotes/origin/* — ${path}`);
         continue;
       }
+      if (branchOnlyUndeclared(rel, revSpec, `${path}@${revSpec}`)) continue;
       if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
         defects.push(`${rel}: на ревизии ${revSpec} нет пути ${path}`);
         continue;
@@ -1070,6 +1287,13 @@ console.log(
     `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
     `${defects.length}`,
 );
+if (branchOnlyDeclared > 0) {
+  console.log(
+    `  ревизий вне ${MAINLINE_REF}, объявлено заранее: ${branchOnlyDeclared} — пока ветка жива, ` +
+      'содержимое сверяется; после её удаления гейт скажет «проверить нечем» и merge не заблокирует',
+  );
+}
+
 if (unreachableDeclared > 0) {
   console.log(
     `  ревизий недостижимо, объявлено вне main: ${unreachableDeclared} — merge это не блокирует`,
@@ -1078,8 +1302,33 @@ if (unreachableDeclared > 0) {
 if (revisionRefs > 0) {
   console.log(`  ссылок «ref@sha» без пути (проверена только достижимость ревизии): ${revisionRefs}`);
 }
-if (generated > 0) {
-  console.log(`  сборочный вывод проверен в собранном дереве: ${generated}`);
+
+// Голые SHA не проверяются гейтом, и молчать об этом нельзя: «расхождений 0» иначе читается как
+// «все свидетельства проверяемы». Печатается именно ПОТЕРЯ — сколько из них уже недостижимо, то
+// есть сколько свидетельств читатель проверить не сможет никаким способом.
+const bareUnreachable = [...bareRevisions.entries()].filter(
+  ([sha]) => !revisionSharedInOrigin(sha) && !mainlineCache.get(sha),
+);
+if (bareRevisions.size > 0) {
+  console.log(
+    `  голых SHA вне формы ссылки: ${bareRevisions.size}, из них недостижимо из origin — ` +
+      `${bareUnreachable.length}. Гейт их не проверяет: свидетельство, которое должно быть ` +
+      'проверяемым, пишется формой `<ref>@<sha>` или `<путь>@<sha>:<строка>`',
+  );
+  for (const [sha, where] of bareUnreachable.slice(0, 5)) {
+    console.log(`    ${sha} — ${where}`);
+  }
+}
+if (unbuiltRoots.size > 0) {
+  // Непроверенное называется вслух: иначе джоб, где собран только один пакет, печатал бы «0
+  // расхождений» и это читалось бы как «ссылки в сборочный вывод проверены».
+  for (const [root, n] of [...unbuiltRoots.entries()].sort()) {
+    console.log(`  ${root} в этом прогоне не собран — ${n} ссылок туда НЕ проверено`);
+  }
+}
+
+if (generated.size > 0) {
+  console.log(`  сборочный вывод проверен в собранном дереве: ${generated.size}`);
 }
 
 let failed = false;
@@ -1112,12 +1361,16 @@ if (gone.length > 0) {
 }
 
 // Объявление, на предмет которого никто не ссылается, — мёртвая строка: она разрешает то, чего
-// нет, и «оживёт» без ревью, когда кто-нибудь случайно совпадёт с этим SHA. Проверяется только
-// для ключей по SHA: для путей ту же роль играет обратная сверка ниже.
+// нет, и «оживёт» без ревью, когда кто-нибудь случайно совпадёт с этим SHA. Проверяется у ОБЕИХ
+// форм ключа: прежняя редакция смотрела только на `* ::`, а форма `<артефакт> :: <sha>` не
+// проверялась ни здесь, ни обратной сверкой ниже (она исключает все `external-revision`) — то
+// есть у неё не было ни одной проверки вовсе. Для путей роль этой проверки играет обратная
+// сверка, поэтому здесь отбор идёт по причине, а не по написанию ключа.
 const declaredShaUnused = [...absentDeclared.entries()]
-  .filter(([key, reason]) => reason === 'external-revision' && key.startsWith('* :: '))
-  .map(([key]) => key.slice('* :: '.length))
-  .filter((sha) => !seenRevisions.has(sha));
+  .filter(([, reason]) => reason === 'external-revision')
+  .map(([key]) => key.slice(key.indexOf(' :: ') + ' :: '.length))
+  .filter((sha) => !seenRevisions.has(sha))
+  .sort();
 
 const absentNew = currentAbsent.filter((k) => !absentDeclared.has(k));
 const absentStale = [...absentDeclared.keys()]
