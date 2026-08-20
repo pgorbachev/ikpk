@@ -90,6 +90,14 @@ function run(dir: string, specBody: string): { code: number; out: string } {
   return { code: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
+/** Пишет текст в артефакт CHANGE (а не принятой спеки) и возвращает вердикт. Нужен потому, что
+ *  проверка коротких имён артефактов схемы срабатывает только внутри `openspec/changes/**`, и без
+ *  такого входа её можно было отключить, не уронив ни один тест. */
+function runInChange(dir: string, body: string): { code: number; out: string } {
+  writeFileSync(join(dir, 'openspec', 'changes', 'demo-change', 'tasks.md'), body);
+  return run(dir, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+}
+
 beforeAll(() => {
   sandbox = makeRepo();
 });
@@ -495,6 +503,48 @@ describe('гейт ссылок: исходы по классам', () => {
     expect(r.status, `${r.stdout}${r.stderr}`).toBe(2);
     expect(`${r.stdout}${r.stderr}`).toMatch(/refs\/remotes\/origin/);
     rmSync(lonely, { recursive: true, force: true });
+  });
+
+  it('удалённый артефакт схемы, на который ссылается change, — код 1', () => {
+    // Эту ветвь можно было отключить (`SCHEMA_ARTIFACTS.has(path)` → false), и все 38 тестов
+    // оставались зелёными: ни один не писал текст в артефакт change.
+    const design = join(sandbox, 'openspec', 'changes', 'demo-change', 'design.md');
+    const saved = readFileSync(design, 'utf8');
+    rmSync(design);
+    const r = runInChange(sandbox, '# tasks\n\nСм. `design.md`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/артефакт схемы не существует/);
+    writeFileSync(design, saved);
+    writeFileSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'tasks.md'), '# tasks.md\n');
+  });
+
+  it('--check-built: путь есть в собранном дереве — код 0, нет — код 1', () => {
+    writeFileSync(join(sandbox, 'web', 'package.json'), '{"name":"w","private":true}\n');
+    writeFileSync(join(sandbox, '.gitignore'), 'dist/\ndist-demo/\n');
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/dist/index.html\n',
+    );
+    const body = '## P\n\nВывод: `web/dist/index.html`.\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n';
+    run(sandbox, body);
+    const gate = join(sandbox, 'bin', 'check-spec-refs');
+    const withoutBuild = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    expect(withoutBuild.status, `${withoutBuild.stdout}${withoutBuild.stderr}`).toBe(1);
+    expect(`${withoutBuild.stdout}${withoutBuild.stderr}`).toMatch(/в собранном дереве пути нет/);
+    mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
+    writeFileSync(join(sandbox, 'web', 'dist', 'index.html'), '<html></html>\n');
+    const withBuild = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    expect(withBuild.status, `${withBuild.stdout}${withBuild.stderr}`).toBe(0);
+    expect(`${withBuild.stdout}${withBuild.stderr}`).toMatch(/проверен в собранном дереве/);
+  });
+
+  it('корень сборочного вывода перестал игнорироваться — код 2', () => {
+    // Сверку перечня корней с .gitignore тоже можно было отключить без единого падения.
+    writeFileSync(join(sandbox, 'web', 'package.json'), '{"name":"w","private":true}\n');
+    writeFileSync(join(sandbox, '.gitignore'), 'nothing-relevant/\n');
+    const r = run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(2);
+    expect(r.out).toMatch(/перечень корней сборочного вывода/);
   });
 
   it('ссылка без номера строки и без фрагмента идёт в храповик, а не в «проверено»', () => {
