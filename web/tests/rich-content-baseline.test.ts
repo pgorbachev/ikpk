@@ -254,8 +254,9 @@ describe('rich-content baseline: пересечения', () => {
   });
 
   it('online-payment-flow пересекается через oplata.astro и не меняет normalizeLegacyControls', () => {
+    // online-payment-flow заархивирован 2026-08-21 — путь теперь под openspec/changes/archive/.
     const proposal = readFileSync(
-      join(REPO_ROOT, 'openspec', 'changes', 'online-payment-flow', 'proposal.md'),
+      join(REPO_ROOT, 'openspec', 'changes', 'archive', '2026-08-21-online-payment-flow', 'proposal.md'),
       'utf-8',
     );
     expect(proposal).toMatch(/normalizeLegacyControls[`\s]*не меняется/);

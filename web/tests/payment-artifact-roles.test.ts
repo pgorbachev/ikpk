@@ -1,8 +1,8 @@
 /**
  * ПРОВОДКА браузерных наборов оплаты по РОЛИ АРТЕФАКТА (задача 6.15).
  *
- * Источник требования: `openspec/changes/online-payment-flow/tasks.md`, задача 6.15
- * (решение владельца от 2026-08-19, находка D3): `payment-form-demo.spec.ts` — артефакт роли
+ * Источник требования: `openspec/changes/archive/2026-08-21-online-payment-flow/tasks.md`,
+ * задача 6.15 (решение владельца от 2026-08-19, находка D3): `payment-form-demo.spec.ts` — артефакт роли
  * `preview`, `payment-form.spec.ts` — артефакт роли `stand`, конфигурации Playwright для них
  * разведены (прежде `playwright.demo.config.ts` противопоставлялся основному по `DEMO_FORMS`
  * — признаку форм ЗАЯВКИ, а не по роли артефакта).
