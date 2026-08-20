@@ -13,10 +13,41 @@ jobs:
     name: Record merged pull request
     runs-on: ubuntu-latest
     steps:
-      - name: Validate server event without writing
+      - name: Create typed signal without writing
         env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIGNAL_ACTION: ${{ github.event.action }}
+          SIGNAL_ACTOR: ${{ github.actor }}
+          SIGNAL_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SIGNAL_MERGED: ${{ github.event.pull_request.merged }}
+          SIGNAL_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
         run: |
-          test "$PR_NUMBER" -eq "$PR_NUMBER"
-          test "${#HEAD_SHA}" -eq 40
+          test "$SIGNAL_PR_NUMBER" -eq "$SIGNAL_PR_NUMBER"
+          test "${#SIGNAL_HEAD_SHA}" -eq 40
+          case "$SIGNAL_MERGED" in true | false) ;; *) exit 1 ;; esac
+          jq -cn \
+            --arg schema 'dependabot-rebase-signal/v1' \
+            --arg action "$SIGNAL_ACTION" \
+            --arg actor "$SIGNAL_ACTOR" \
+            --arg headSha "$SIGNAL_HEAD_SHA" \
+            --argjson merged "$SIGNAL_MERGED" \
+            --argjson prNumber "$SIGNAL_PR_NUMBER" \
+            --argjson sourceRunAttempt "$SOURCE_RUN_ATTEMPT" \
+            --argjson sourceRunId "$SOURCE_RUN_ID" \
+            '{schema:$schema, sourceRunId:$sourceRunId, sourceRunAttempt:$sourceRunAttempt,
+              action:$action, actor:$actor, prNumber:$prNumber, headSha:$headSha,
+              merged:$merged}' \
+            > dependabot-rebase-signal.json
+
+      # Связь run→PR для закрытого PR площадка не сохраняет: у настоящего run
+      # 32146430416 массив `pull_requests` пуст, поэтому dispatcher не мог опознать PR
+      # вовсе. Номер PR передаётся типизированным artifact — тем же доверенным путём,
+      # что и в сигнале авто-слияния, — а не выводится из состояния run.
+      - name: Upload typed signal
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dependabot-rebase-signal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dependabot-rebase-signal.json
+          if-no-files-found: error
+          retention-days: 7
