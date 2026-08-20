@@ -2131,10 +2131,12 @@ approve владельца → тесты в отдельной сессии с 
 поставкой `60b53cc40777f4bfbd220b26fe4d1f2dc1ed967f`, негативная проверка мутацией
 реализации — запись в `docs/tech-debt.md`, TD-34.
 
-Гейты после всех правок: `web` (`lint`, `typecheck`, три конфигурации `vitest` — main
-940/943 (3 известных красных из-за TD-34), build 136/141+5 skip, demo 37/37 — оба
-e2e-набора `payment-preview` 7/7, `payment-stand` 58/58, `audit:prod`), `payments`
-(`lint`, `typecheck`), `scripts` (`lint`) — зелёные.
+Гейты после всех правок (полный прогон 2026-08-20 на
+`33b2ac69407823527c5c2e191d7fadf6c77eb6f0`, после O-1..O-4 и закрытия TD-34): `web`
+(`lint`, `typecheck`, `vitest` main 955/955 + render 9/9, build 136/141+5 skip,
+demo 37/37 — оба e2e-набора `payment-preview` 7/7, `payment-stand` 58/58, `audit:prod`),
+`payments` (`lint`, `typecheck`), `scripts` (`lint`) — зелёные, красных нет: прежние «3
+известных красных из-за TD-34» закрыты поставкой `60b53cc`.
 
 - [ ] 7.1 Локальные quality gates в `web/`: `lint`, `typecheck`, `build`, `test:build`
 - [ ] 7.2 Тесты раздела 3 зелёные; предъявить оба состояния — красный прогон до

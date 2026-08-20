@@ -460,6 +460,18 @@ describe('ревью владельца 2026-08-20: признаки актив�
     });
     expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
   });
+
+  // Оговорка closure-check (Codex, 2026-08-20): вторая форма с признаком, но без
+  // эндпоинта, РЯДОМ с исправной — та же ветвь forms_without_endpoint, другой вход.
+  it('вторая форма с признаком без эндпоинта рядом с исправной — отказ', async () => {
+    const dist = mkDist({
+      'index.html':
+        '<!doctype html><html data-payment-role="stand"><body>' +
+        `<form data-payment-form data-payment-endpoint="${PAYMENT_ENDPOINT_BASE.stand}" hidden></form>` +
+        '<form data-payment-form hidden></form></body></html>',
+    });
+    expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
+  });
 });
 
 /**
