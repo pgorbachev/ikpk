@@ -2151,10 +2151,14 @@ approve владельца → тесты в отдельной сессии с 
 реализации — запись в `docs/tech-debt.md`, TD-34.
 
 Гейты после всех правок (полный прогон 2026-08-20 на
-`33b2ac69407823527c5c2e191d7fadf6c77eb6f0`, после O-1..O-4 и закрытия TD-34): `web`
-(`lint`, `typecheck`, `vitest` main 955/955 + render 9/9, build 136/141+5 skip,
-demo 37/37 — оба e2e-набора `payment-preview` 7/7, `payment-stand` 58/58, `audit:prod`),
-`payments` (`lint`, `typecheck`), `scripts` (`lint`) — зелёные, красных нет: прежние «3
+`dbfb3c2` — донастройка O-4 в `deploy-web.sh` и перенос наблюдения о
+`payment-role-dist.test.ts` из спеки в эту задачу, после O-1..O-4 и закрытия
+TD-34): `web` (`lint`, `typecheck`, `vitest` main 956/956 + render 9/9, build
+136/141+5 skip, demo 37/37 — оба e2e-набора `payment-preview` 7/7,
+`payment-stand` 58/58; `audit:prod` не перезапускался — зависимости не
+менялись), `payments` (`lint`, `typecheck`), `scripts` (`lint`),
+`./bin/openspec validate online-payment-flow --strict --no-interactive` —
+зелёные, красных нет: прежние «3
 известных красных из-за TD-34» закрыты поставкой `60b53cc`.
 
 - [ ] 7.1 Локальные quality gates в `web/`: `lint`, `typecheck`, `build`, `test:build`
