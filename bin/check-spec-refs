@@ -305,6 +305,12 @@ function insideRepo(abs) {
   }
 }
 
+/** Корень change или принятой спеки, которому принадлежит артефакт. */
+function changeRootOf(mdPath) {
+  const rel = mdPath.slice(ROOT.length + 1).split('/');
+  return rel.length >= 3 ? join(ROOT, rel[0], rel[1], rel[2]) : dirname(mdPath);
+}
+
 function resolveRef(path, mdPath) {
   // Расхождение регистра определяется по ИНДЕКСУ git, а не по попытке открыть файл. Прежняя
   // редакция узнавала о нём только через `existsSync`, то есть только на регистро-НЕзависимой ФС:
@@ -314,6 +320,21 @@ function resolveRef(path, mdPath) {
   const literalCase = caseIndex.get(path.toLowerCase());
   if (literalCase !== undefined && literalCase !== path) {
     return { wrongCase: join(ROOT, literalCase) };
+  }
+  // СОКРАЩЁННЫЙ путь (`src/lib/Data.ts`) — тоже по индексу, а не по попытке открыть файл. На
+  // macOS такой span разрешался кандидатом `web/<путь>` и давал «регистр», на Linux-раннере тот
+  // же span не находился вовсе и уходил в «ссылка в пустоту» — то есть в двух средах один
+  // артефакт получал разные классы, и в одной из них расхождение можно было ОБЪЯВИТЬ вместо
+  // исправления.
+  if (path.includes('/')) {
+    const exactTail = allTracked.some((t) => t === path || t.endsWith(`/${path}`));
+    if (!exactTail) {
+      const lower = path.toLowerCase();
+      const wrong = allTracked.find(
+        (t) => t.toLowerCase() === lower || t.toLowerCase().endsWith(`/${lower}`),
+      );
+      if (wrong) return { wrongCase: join(ROOT, wrong) };
+    }
   }
   if (!path.includes('/')) {
     const byLower = [...caseIndex.entries()].find(
@@ -568,8 +589,12 @@ const originRefsPresent =
 const sharedRevisionCache = new Map();
 /** Все SHA, на которые ссылаются артефакты — для поиска мёртвых объявлений. */
 const seenRevisions = new Set();
-/** Голые SHA (вне формы ссылки): SHA -> первый артефакт, где встретился. */
+/** Все 40-hex, встреченные в тексте: SHA -> первый артефакт, где встретился. */
 const bareRevisions = new Map();
+/** SHA, встреченные именно в ссылках (`путь@sha`, `ref@sha`). */
+const spanRevisions = new Set();
+/** Артефакт -> SHA, на которые он ссылается. Для обратной сверки объявлений по артефакту. */
+const revisionsByArtifact = new Map();
 
 function revisionSharedInOrigin(revSpec) {
   if (sharedRevisionCache.has(revSpec)) return sharedRevisionCache.get(revSpec);
@@ -723,6 +748,8 @@ const generated = new Set();
 const unbuiltRoots = new Map();
 let localNames = 0;
 let dirRefs = 0;
+/** Спаны без расширения, отброшенные как проза: identity -> первый сегмент. */
+const skippedExtensionless = new Map();
 
 /**
  * Ссылка в сборочный вывод. Всегда идёт в поимённый реестр — и в режиме `--check-built` тоже:
@@ -914,7 +941,15 @@ for (const md of files) {
       continue;
     }
     const [, path, revSpec, lineSpec] = spans[i].parsed;
-    if (revSpec) seenRevisions.add(revSpec);
+    if (revSpec) {
+      seenRevisions.add(revSpec);
+      spanRevisions.add(revSpec);
+      // Привязка «артефакт → SHA» нужна обратной сверке объявлений: объявление вида
+      // `<артефакт> :: <sha>` обязано проверяться ПО ЭТОМУ артефакту, иначе упоминание того же
+      // SHA в другом файле бесшумно держит устаревшее разрешение живым.
+      if (!revisionsByArtifact.has(rel)) revisionsByArtifact.set(rel, new Set());
+      revisionsByArtifact.get(rel).add(revSpec);
+    }
     // Фрагмент отличается от ссылки ФОРМОЙ, а не тем, «разобрался ли он как путь». Прежняя
     // редакция считала фрагментом только span, не подходящий под `PATH_SPAN`, — а под него
     // подходит любой идентификатор (`defineConfig`, `initialQuery`, `ab`). Из-за этого гейт
@@ -1028,7 +1063,29 @@ for (const md of files) {
         // каталог `bin` не убирает. **Известное ограничение:** если исчезнет весь первый
         // каталог, ссылки в него перестанут проверяться; событие такого размера ломает и сам
         // гейт (он живёт в `bin/`), поэтому здесь это принято, а не замаскировано.
-        if (!existsSync(join(ROOT, firstSegment))) continue;
+        // Отбрасывать прозу можно только после того, как исчерпаны все способы РАЗРЕШИТЬ путь.
+        // Прежняя редакция решала это по первому сегменту раньше классификации сборочного
+        // вывода и каталогов, поэтому `dist/` уходила в «прозу» вместо класса «сборочный вывод»,
+        // а `specs/<capability>/` внутри change — вместо существующего каталога. Порядок «сначала
+        // отбросить, потом классифицировать» превращал в тишину настоящие ссылки.
+        const resolvableElsewhere =
+          isGeneratedOutput(path) ||
+          [
+            join(ROOT, path.replace(/\/$/, '')),
+            join(ROOT, 'web', path.replace(/\/$/, '')),
+            join(ROOT, 'openspec', 'changes', path.replace(/\/$/, '')),
+            join(ROOT, 'openspec', 'specs', path.replace(/\/$/, '')),
+            join(dirname(md), path.replace(/\/$/, '')),
+            join(changeRootOf(md), path.replace(/\/$/, '')),
+          ].some((c) => existsSync(c));
+        if (!existsSync(join(ROOT, firstSegment)) && !resolvableElsewhere) {
+          // Признак грубее предмета намеренно, но ПОТЕРЯ теперь считается: если исчезнет весь
+          // первый каталог, ссылки в него перестанут проверяться — и раньше это происходило
+          // молча, то есть отсутствие сигнала выдавалось за отсутствие проблемы. Класс печатается
+          // отдельным числом с примерами: тогда рост «прозы» видно, и видно, что именно выпало.
+          skippedExtensionless.set(`${rel} :: ${path}`, firstSegment);
+          continue;
+        }
       } else if (!(existsSync(join(ROOT, path)) && statSync(join(ROOT, path)).isFile())) {
         // Короткое имя без расширения — ссылка только если в корне есть такой ФАЙЛ
         // (`Dockerfile`, `Makefile`). Каталог здесь не годится: `web`, `cms`, `scripts` в
@@ -1051,9 +1108,36 @@ for (const md of files) {
     // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
     // это не файл: ни строки, ни фрагмента у неё быть не может. Проверяется существование
     // каталога, и считается она своим числом, чтобы не смешиваться с проверкой файлов.
-    const asDir = [path, `web/${path}`].map((c) => join(ROOT, c.replace(/\/$/, '')));
+    // Кандидаты те же, что у разрешения файлов: `specs/request-form-transport/` внутри change
+    // означает каталог ЭТОГО change, а не одноимённый в корне. Без артефактных корней такие
+    // ссылки отбрасывались как проза — измерено: три вхождения на одном каталоге.
+    const dirCandidates = [
+      join(ROOT, path.replace(/\/$/, '')),
+      join(ROOT, 'web', path.replace(/\/$/, '')),
+      join(ROOT, 'openspec', 'changes', path.replace(/\/$/, '')),
+      join(ROOT, 'openspec', 'specs', path.replace(/\/$/, '')),
+      join(dirname(md), path.replace(/\/$/, '')),
+      join(changeRootOf(md), path.replace(/\/$/, '')),
+    ];
+    const asDir = dirCandidates;
     const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
     if (dirHit && (path.endsWith('/') || !hasExt)) {
+      // Регистр каталога сверяется так же, как регистр файла: `WEB/` на macOS «существует», на
+      // Linux-раннере нет, и без сверки один и тот же артефакт получал разные вердикты в двух
+      // средах. Признак — индекс git: каталог считается существующим, если в индексе есть путь,
+      // начинающийся с него, ровно в этом написании.
+      const dirRel = dirHit.slice(ROOT.length + 1);
+      const dirExact = allTracked.some((t) => t === dirRel || t.startsWith(`${dirRel}/`));
+      if (!dirExact) {
+        const real = allTracked.find((t) => t.toLowerCase().startsWith(`${dirRel.toLowerCase()}/`));
+        if (real) {
+          defects.push(
+            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
+              `${real.slice(0, dirRel.length)})`,
+          );
+          continue;
+        }
+      }
       if (lineSpec) {
         // Прежняя редакция номер молча выбрасывала: ссылка «каталог:строка» выглядела
         // проверенной, хотя проверить в ней нечего.
@@ -1373,15 +1457,33 @@ if (revisionRefs > 0) {
   console.log(`  ссылок «ref@sha» без пути (проверена только достижимость ревизии): ${revisionRefs}`);
 }
 
+if (skippedExtensionless.size > 0) {
+  const bySeg = new Map();
+  for (const seg of skippedExtensionless.values()) bySeg.set(seg, (bySeg.get(seg) ?? 0) + 1);
+  console.log(
+    `  спанов без расширения отброшено как проза: ${skippedExtensionless.size} ` +
+      `(первый сегмент не существует в корне: ${[...bySeg.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([seg, n]) => `${seg}×${n}`)
+        .join(', ')})`,
+  );
+}
+
 // Голые SHA не проверяются гейтом, и молчать об этом нельзя: «расхождений 0» иначе читается как
 // «все свидетельства проверяемы». Печатается именно ПОТЕРЯ — сколько из них уже недостижимо, то
 // есть сколько свидетельств читатель проверить не сможет никаким способом.
-const bareUnreachable = [...bareRevisions.entries()].filter(
+// «Голый» — значит НЕ входящий ни в одну ссылку. Прежняя редакция печатала все 40-hex подряд,
+// включая SHA внутри `путь@sha` и `ref@sha`: получалось 28 вместо 14 и «недостижимо 4» вместо 3 —
+// в потерю попадала ревизия, которая как раз проверяется. Число, завышенное вдвое, обесценивает
+// сам сигнал.
+const bareOnly = [...bareRevisions.entries()].filter(([sha]) => !spanRevisions.has(sha));
+const bareUnreachable = bareOnly.filter(
   ([sha]) => !revisionSharedInOrigin(sha) && !mainlineCache.get(sha),
 );
-if (bareRevisions.size > 0) {
+if (bareOnly.length > 0) {
   console.log(
-    `  голых SHA вне формы ссылки: ${bareRevisions.size}, из них недостижимо из origin — ` +
+    `  голых SHA вне формы ссылки: ${bareOnly.length}, из них недостижимо из origin — ` +
       `${bareUnreachable.length}. Гейт их не проверяет: свидетельство, которое должно быть ` +
       'проверяемым, пишется формой `<ref>@<sha>` или `<путь>@<sha>:<строка>`',
   );
@@ -1438,8 +1540,16 @@ if (gone.length > 0) {
 // сверка, поэтому здесь отбор идёт по причине, а не по написанию ключа.
 const declaredShaUnused = [...absentDeclared.entries()]
   .filter(([, reason]) => reason === 'external-revision')
-  .map(([key]) => key.slice(key.indexOf(' :: ') + ' :: '.length))
-  .filter((sha) => !seenRevisions.has(sha))
+  .filter(([key]) => {
+    const owner = key.slice(0, key.indexOf(' :: '));
+    const sha = key.slice(key.indexOf(' :: ') + ' :: '.length);
+    // Ключ `* :: <sha>` — намеренный wildcard, он проверяется по всему дереву артефактов. Ключ
+    // `<артефакт> :: <sha>` обязан проверяться ПО СВОЕМУ артефакту: прежняя редакция теряла
+    // владельца и искала SHA глобально, поэтому упоминание того же SHA в любом другом файле
+    // держало устаревшее разрешение живым — то есть узкий ключ работал как wildcard.
+    return owner === '*' ? !seenRevisions.has(sha) : !revisionsByArtifact.get(owner)?.has(sha);
+  })
+  .map(([key]) => key)
   .sort();
 
 const absentNew = currentAbsent.filter((k) => !absentDeclared.has(k));

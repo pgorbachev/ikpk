@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync, symlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -621,6 +621,12 @@ describe('гейт ссылок: исходы по классам', () => {
       join(sandbox, 'openspec', '.spec-ref-absent'),
       `# пусто\nopenspec/specs/demo/spec.md :: ${sha} :: external-revision\n`,
     );
+    // Объявленная ссылка требует И строки реестра: членство в реестре определяется объявлением,
+    // а не достижимостью, иначе удаление ветки создаёт новую запись и красит гейт.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}\n`,
+    );
     const ok = run(sandbox, body);
     expect(ok.code, ok.out).toBe(0);
     expect(ok.out).toMatch(/объявлено заранее: 1/);
@@ -843,5 +849,136 @@ describe('гейт ссылок: исходы по классам', () => {
     const r = run(sandbox, '## P\n\nСсылка: `THING.ts`.\n');
     expect(r.code, r.out).toBe(1);
     expect(r.out).toMatch(/регистр имени не совпадает/);
+  });
+
+  it('удаление ветки под ОБЪЯВЛЕННОЙ ревизией не меняет реестр и не красит гейт', () => {
+    // Главная гарантия объявления: переход «ветка жива → удалена» при НЕИЗМЕННЫХ реестрах.
+    // Прежде запись в реестр делалась только в состоянии «недостижима», поэтому переход
+    // создавал новую запись и давал код 1 — тесты проверяли два состояния порознь, а переход
+    // не проверял никто.
+    const sha = makeBranchOnlyRevision(sandbox, 'onSideT');
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      `# пусто\nopenspec/specs/demo/spec.md :: ${sha} :: external-revision\n`,
+    );
+    const body = `## P\n\nСсылка: \`web/src/thing.ts@${sha}:3\`, \`const onSideT\`.\n`;
+    // Пока ветка жива запись в реестре обязана быть — иначе её появление после удаления ветки
+    // и есть тот самый разрыв храповика.
+    const alive = run(sandbox, body);
+    expect(alive.code, alive.out).toBe(1);
+    expect(alive.out).toMatch(/НОВЫЕ НЕИЗМЕРИМЫЕ/);
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}\n`,
+    );
+    const registered = run(sandbox, body);
+    expect(registered.code, registered.out).toBe(0);
+    // Ветка удалена — реестры не тронуты, вердикт не изменился.
+    execFileSync('git', ['-C', sandbox, 'push', '-q', 'origin', '--delete', 'side']);
+    execFileSync('git', ['-C', sandbox, 'fetch', '-q', '--prune', 'origin']);
+    const afterDelete = run(sandbox, body);
+    expect(afterDelete.code, afterDelete.out).toBe(0);
+    expect(afterDelete.out).toMatch(/объявлено вне main/);
+  });
+
+  it('негодная ревизия — расхождение, а не тихий пропуск', () => {
+    // PATH_SPAN принимает 7–40 строчных hex: шесть символов, 41, верхний регистр и нехекс-опечатка
+    // давали parsed=null и выпадали целиком. Измерено на дереве: три таких ссылки — код 0.
+    for (const rev of [
+      '45297b',
+      '45297bg',
+      '45297B4DD90F1F174553F9840F3A69DF9D38F252',
+      '45297b4dd90f1f174553f9840f3a69df9d38f2521',
+    ]) {
+      const r = run(sandbox, `## P\n\nСсылка: \`web/src/thing.ts@${rev}:1\`, \`marker\`.\n`);
+      expect(r.code, `${rev}: ${r.out}`).toBe(1);
+      expect(r.out, rev).toMatch(/сокращённо|не полным 40-символьным/);
+    }
+  });
+
+  it('версии и адреса почты в класс ревизий не попадают', () => {
+    // Ложные попадания отсекает требование к ЛЕВОЙ части (она обязана выглядеть путём), а не
+    // класс символов: иначе `node@20` стал бы «негодной ревизией».
+    const r = run(
+      sandbox,
+      '## P\n\nНе ссылки: `node@20`, `astro@7.2.0`, `someone@example.com`. Ссылка: `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(r.code, r.out).toBe(0);
+  });
+
+  it('выход за пределы репозитория по symlink — код 1, а не «сверено»', () => {
+    // statSync и readFileSync идут по символической ссылке: repo-путь сверялся по содержимому
+    // внешнего файла, и счётчик «сверено» РОС. Для проверки, существующей ради доказуемости
+    // ссылок, это худший исход — она подтверждает то, чего в репозитории нет.
+    const outside = join(sandbox, '..', `outside-${'probe'}.txt`);
+    writeFileSync(outside, 'секрет снаружи\n');
+    symlinkSync(outside, join(sandbox, 'web', 'src', 'link.ts'));
+    try {
+      const r = run(sandbox, '## P\n\nСсылка: `web/src/link.ts:1`, `секрет снаружи`.\n');
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toMatch(/за пределы репозитория по символической ссылке/);
+      expect(r.out).toMatch(/содержимое сверено у 0/);
+    } finally {
+      rmSync(join(sandbox, 'web', 'src', 'link.ts'), { force: true });
+      rmSync(outside, { force: true });
+      execFileSync('git', ['-C', sandbox, 'add', '-A']);
+      execFileSync('git', ['-C', sandbox, 'commit', '-q', '-m', 'cleanup', '--allow-empty']);
+    }
+  });
+
+  it('объявление по артефакту проверяется ПО СВОЕМУ артефакту, а не глобально', () => {
+    // Обратная сверка теряла владельца ключа: упоминание того же SHA в другом файле держало
+    // устаревшее разрешение живым, то есть узкий ключ работал как wildcard.
+    const sha = makeBranchOnlyRevision(sandbox, 'onSideOwner');
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      `# пусто\nopenspec/changes/demo-change/tasks.md :: ${sha} :: external-revision\n`,
+    );
+    // SHA упомянут в ДРУГОМ артефакте (принятой спеке), а объявление привязано к tasks.md.
+    const r = run(sandbox, `## P\n\nФакт найден на \`side@${sha}\`, ссылка \`web/src/thing.ts:1\`, \`marker\`.\n`);
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/МЁРТВЫЕ ОБЪЯВЛЕНИЯ РЕВИЗИЙ/);
+  });
+
+  it('голые SHA считаются без тех, что входят в ссылки', () => {
+    // Прежде печатались все 40-hex подряд, включая SHA внутри `путь@sha` — число было завышено
+    // вдвое, а в «потерю» попадала ревизия, которая как раз проверяется.
+    const sha = execFileSync('git', ['-C', sandbox, 'rev-parse', 'refs/remotes/origin/main'], {
+      encoding: 'utf8',
+    }).trim();
+    const r = run(
+      sandbox,
+      `## P\n\nСсылка: \`web/src/thing.ts@${sha}:1\`, \`marker\`. Точный коммит — ${sha}.\n`,
+    );
+    expect(r.code, r.out).toBe(0);
+    // Тот же SHA и в ссылке, и голым: голым он не считается вовсе.
+    expect(r.out).not.toMatch(/голых SHA/);
+  });
+
+  it('`dist/` попадает в сборочный вывод, а не в отброшенную прозу', () => {
+    // Отбрасывание прозы стояло РАНЬШЕ классификации: ссылка на сборочный вывод без расширения
+    // уходила в тишину, потому что первого сегмента нет в корне.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/\n',
+    );
+    const r = run(sandbox, '## P\n\nВывод: `dist/`.\n');
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/в сборочный вывод/);
+  });
+
+  it('отброшенная как проза ссылка без расширения называется числом', () => {
+    const r = run(sandbox, '## P\n\nТип `text/html`, ссылка `web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/отброшено как проза: 1/);
+  });
+
+  it('регистр каталога и сокращённого пути — по индексу git, одинаково в любой среде', () => {
+    const dir = run(sandbox, '## P\n\nКаталог `WEB/`, ссылка `web/src/thing.ts:1`, `marker`.\n');
+    expect(dir.code, dir.out).toBe(1);
+    expect(dir.out).toMatch(/регистр каталога не совпадает/);
+    const short = run(sandbox, '## P\n\nСсылка `src/Thing.ts`, а также `web/src/thing.ts:1`, `marker`.\n');
+    expect(short.code, short.out).toBe(1);
+    expect(short.out).toMatch(/регистр/);
   });
 });

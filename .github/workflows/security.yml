@@ -104,12 +104,13 @@ jobs:
             // отчёта читать нельзя.
             const bad = levels.filter((k) => !Number.isInteger(v[k]) || v[k] < 0);
             if (bad.length) { console.error('поля не целые неотрицательные: ' + bad.join(', ')); process.exit(1); }
-            // Если отчёт объявляет total, он обязан совпадать с суммой уровней: расхождение —
-            // признак усечённого или склеенного отчёта.
-            if (v.total !== undefined) {
-              const sum = levels.reduce((a, k) => a + v[k], 0);
-              if (v.total !== sum) { console.error('total ' + v.total + ' не равен сумме уровней ' + sum); process.exit(1); }
-            }
+            // total ОБЯЗАТЕЛЕН и обязан совпадать с суммой уровней. Прежняя редакция сверяла его
+            // только при наличии — то есть отчёт без total принимался, а именно так выглядит
+            // усечённый или собранный не тем инструментом вывод. Проверка, которая пропускает
+            // отсутствие поля, стережёт согласованность только у тех отчётов, что и так в порядке.
+            if (!Number.isInteger(v.total) || v.total < 0) { console.error('нет metadata.vulnerabilities.total или оно не целое неотрицательное'); process.exit(1); }
+            const sum = levels.reduce((a, k) => a + v[k], 0);
+            if (v.total !== sum) { console.error('total ' + v.total + ' не равен сумме уровней ' + sum); process.exit(1); }
           " || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
           echo "npm audit exit=${audit_status:-0} (ненулевой код здесь означает найденные advisory)"
 

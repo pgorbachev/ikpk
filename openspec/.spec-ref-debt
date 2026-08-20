@@ -70,6 +70,7 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
+openspec/changes/online-payment-flow/design.md :: dist/
 openspec/changes/online-payment-flow/design.md :: main@d7e9b025d885610b80b405112f53e8d2c5cdd85d
 openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:50-52
 openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:63
@@ -87,6 +88,7 @@ openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:3
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: dist/oplata/index.html
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850
 openspec/changes/online-payment-flow/tasks.md :: design/trust-and-verification-mockups@c924da54e94675673d1bd40720fa375d90ba2fd0
+openspec/changes/online-payment-flow/tasks.md :: dist/
 openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md@c924da54e94675673d1bd40720fa375d90ba2fd0
 openspec/changes/online-payment-flow/tasks.md :: main@90003af89e2a6fc4a122ef18cfd821c61e401a34
 openspec/changes/online-payment-flow/tasks.md :: spec.md
@@ -98,6 +100,4 @@ openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
-openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/[slug].astro:119
-openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/[slug].astro:141
 openspec/specs/schedule-month-filter/spec.md :: origin/main@aa7678cff3d7a63aeeac581ff36b901ca2ea9a70
