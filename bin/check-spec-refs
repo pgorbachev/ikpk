@@ -77,8 +77,13 @@ const WRITE_ABSENT = process.argv.includes('--write-absent');
 // репозитории убирало класс `.conf` целиком, то есть проверка исчезала вместе с проверяемым.
 // Поймано негативной проверкой: `git rm deploy/nginx-redirects.conf` оставлял гейт зелёным.
 const SPAN = /`([^`\n]+)`/g;
-// Путь с расширением и необязательным номером строки либо перечнем номеров.
-const PATH_SPAN = /^([A-Za-z0-9_\-./[\]]+\.[A-Za-z0-9]+)(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?$/;
+// Путь и необязательный номер строки либо перечень номеров. Символы пути — БУКВЫ ЛЮБОГО
+// АЛФАВИТА (`\p{L}`), а не `A-Za-z`: в репозитории лежит
+// `web/public/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf`, и ссылка на
+// него прежней регуляркой не распознавалась вовсе — то есть его удаление гейт не увидел бы.
+// Расширение необязательно: путь без расширения (`bin/openspec`) — тоже ссылка, см. ниже.
+const PATH_SPAN =
+  /^([\p{L}\p{N}_\-./[\]]+)(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?$/u;
 
 const DEBT_HEADER = `# Поимённый долг неизмеримых ссылок: каждая строка — ссылка «путь:строка» БЕЗ фрагмента
 # в кавычках, то есть не проверяемая по содержимому. Формат: <артефакт> :: <путь>:<строки>.
@@ -104,10 +109,11 @@ const ABSENT_HEADER = `# Объявленные ссылки в пустоту: 
 #   2. осознанная цитата на УДАЛЁННОЕ — каталог \`openspec/changes/payment-request-flow/\` снесён
 #      решением владельца тем же PR, что слит \`online-payment-flow\`, а ссылки на него оставлены
 #      как указание на происхождение принятых решений;
-#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН — у нас это
-#      \`docs/security-audit-2026-08-08.md\`: он лежит в рабочем дереве автора и отсутствует в
-#      репозитории, поэтому для любого другого читателя ссылка ведёт в пустоту. Это долг, а не
-#      намерение: правильный исход — закоммитить документ и убрать строки отсюда.
+#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН. Таких два, и оба — долг, а не
+#      намерение; правильный исход — закоммитить документ и убрать строки отсюда:
+#      \`docs/security-audit-2026-08-08.md\` (лежит в рабочем дереве автора, в репозитории его нет)
+#      и \`docs/design/mockups/trust-and-verification/README.md\` (каталога \`docs/design/mockups/\`
+#      в репозитории нет вовсе, а активный change ссылается на его строки \`:68\` и \`:273\`).
 #
 # Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
 # объявленная разрешилась или исчезла из текста — тоже отказ с требованием обновить файл
@@ -126,7 +132,12 @@ function walk(dir) {
 
 /** Индекс файлов репозитория по базовому имени — для разрешения коротких ссылок. */
 function buildBasenameIndex() {
-  const out = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' });
+  // `core.quotePath=false` обязателен: по умолчанию git отдаёт не-ASCII пути в escape-виде
+  // (`\320\237...`), и такой индекс не совпал бы ни с одной ссылкой в тексте. Здесь настройка
+  // репозитория уже такая, но полагаться на неё нельзя — гейт не должен зависеть от конфига.
+  const out = execFileSync('git', ['-C', ROOT, '-c', 'core.quotePath=false', 'ls-files'], {
+    encoding: 'utf8',
+  });
   const idx = new Map();
   for (const rel of out.split('\n')) {
     if (!rel) continue;
@@ -138,7 +149,11 @@ function buildBasenameIndex() {
 }
 
 const byBasename = buildBasenameIndex();
-const allTracked = execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' })
+const allTracked = execFileSync(
+  'git',
+  ['-C', ROOT, '-c', 'core.quotePath=false', 'ls-files'],
+  { encoding: 'utf8' },
+)
   .split('\n')
   .filter(Boolean);
 
@@ -155,7 +170,11 @@ function bySuffix(path) {
  * собранном дереве.
  */
 function isGeneratedOutput(path) {
-  const candidates = [path, join('web', path)];
+  // Проверяются и форма с косой чертой на конце: `.gitignore` содержит `web/dist/`, и
+  // `git check-ignore web/dist` (без слэша) НЕ совпадает, а `web/dist/` совпадает. Без этого
+  // ссылка на каталог сборки выглядела бы сломанной ссылкой.
+  const bare = path.replace(/\/$/, '');
+  const candidates = [bare, `${bare}/`, join('web', bare), `${join('web', bare)}/`];
   return candidates.some((c) => {
     const r = spawnSync('git', ['-C', ROOT, 'check-ignore', '-q', c]);
     return r.status === 0;
@@ -204,6 +223,58 @@ function resolveRef(path, mdPath) {
   return { ambiguous: cands };
 }
 
+/**
+ * Базовые имена артефактов, которые схема OpenSpec требует от КАЖДОГО change. Берутся из CLI
+ * (`status --json`), то есть из схемы, а НЕ из списка существующих файлов: удаление
+ * `design.md` не убирает `design` из схемы, поэтому признак не исчезает вместе с предметом —
+ * ровно та ошибка, которую пришлось исправлять дважды.
+ *
+ * Зачем это здесь: ссылку «см. `design.md`» внутри change нельзя проверять «по факту наличия» —
+ * тогда удаление файла превращает ссылку в прозу и гейт зеленеет. А отличить прозу от ссылки для
+ * ПРОИЗВОЛЬНОГО короткого имени нельзя вовсе: в артефактах так пишут и домены (`ikpk.su`), и
+ * поля (`author.email`), и методы (`page.goto`). Для артефактов схемы двусмысленности нет.
+ *
+ * Ограничение названо прямо: файл внутри change, не входящий в схему (например `evidence.md`),
+ * этим правилом не покрыт — чтобы его удаление ловилось, ссылку надо писать путём.
+ */
+function schemaArtifactBasenames() {
+  const changes = existsSync(join(ROOT, 'openspec', 'changes'))
+    ? readdirSync(join(ROOT, 'openspec', 'changes'), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name !== 'archive')
+        .map((e) => e.name)
+    : [];
+  if (changes.length === 0) return new Set();
+  const cli = spawnSync(
+    join(ROOT, 'bin', 'openspec'),
+    ['status', '--change', changes[0], '--json'],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+  if (cli.status !== 0) {
+    console.error(
+      'check-spec-refs: не удалось спросить у OpenSpec состав артефактов схемы ' +
+        `(./bin/openspec status --change ${changes[0]} --json): без него ссылка «см. \`design.md\`» ` +
+        'проверялась бы по факту наличия файла, то есть исчезала бы вместе с ним',
+    );
+    process.exit(2);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(cli.stdout);
+  } catch {
+    console.error('check-spec-refs: ответ OpenSpec не разобрался как JSON — состав артефактов не измерен');
+    process.exit(2);
+  }
+  const names = new Set();
+  for (const info of Object.values(parsed.artifactPaths ?? {})) {
+    const out = info?.resolvedOutputPath;
+    // Глоб (`specs/**/*.md`) базового имени не даёт — такие артефакты правилом не покрываются.
+    if (typeof out === 'string' && !out.includes('*')) names.add(basename(out));
+  }
+  return names;
+}
+
+const SCHEMA_ARTIFACTS = schemaArtifactBasenames();
+
 const defects = [];
 const unmeasurable = new Map(); // identity -> человекочитаемое пояснение
 const absentSeen = new Map(); // identity -> человекочитаемое пояснение
@@ -211,6 +282,7 @@ let pathOnly = 0;
 let contentVerified = 0;
 let generated = 0;
 let localNames = 0;
+let dirRefs = 0;
 
 const files = [join(ROOT, 'openspec', 'changes'), join(ROOT, 'openspec', 'specs')].flatMap(walk);
 
@@ -238,23 +310,50 @@ for (const md of files) {
     const between = next ? text.slice(span.end, next.start) : '';
     const snippet =
       next && !next.parsed && /^[^\S\n]*,[^\S\n]*$/.test(between) ? next.body : undefined;
-    // Расширение обязательно: без него «`web/src`» неотличимо от каталога, а «`npm run build`»
-    // от команды. Само расширение при этом ничем не ограничено.
-    if (!/\.[A-Za-z0-9]+$/.test(path.replace(/:.*$/, ''))) continue;
     if (path.startsWith('/')) continue;
     if (path.includes('node_modules/')) continue;
 
-    // Короткое имя без номера строки: если рядом с артефактом или в корне его change такой файл
-    // есть — это ссылка («см. `proposal.md`»), и существование проверяется. Если нет — это имя в
-    // прозе («`pagefind-entry.json` — манифест»), и придумывать ему адрес по всему репозиторию
-    // нельзя: прежняя редакция обещала локальное разрешение в комментарии, а на деле отбрасывала
-    // такие имена безусловно.
+    const hasExt = /\.[\p{L}\p{N}]+$/u.test(path);
+    const firstSegment = path.split('/')[0];
+
+    // Путь БЕЗ расширения (`bin/openspec`, `.github/workflows`) — тоже ссылка, но только если его
+    // первый сегмент — существующая запись верхнего уровня репозитория. Без этой оговорки в
+    // ссылки попали бы `text/html`, `application/xml` и прочая проза с косой чертой (измерено:
+    // таких span в артефактах больше, чем настоящих путей без расширения). Признак грубее
+    // предмета намеренно: удаление `bin/session-cost` каталог `bin` не убирает, поэтому проверка
+    // не исчезает вместе с проверяемым — в отличие от двух прежних редакций.
+    if (!hasExt) {
+      if (!path.includes('/') || !existsSync(join(ROOT, firstSegment))) continue;
+    }
+
+    // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
+    // это не файл: ни строки, ни фрагмента у неё быть не может. Проверяется существование
+    // каталога, и считается она своим числом, чтобы не смешиваться с проверкой файлов.
+    const asDir = [path, `web/${path}`].map((c) => join(ROOT, c.replace(/\/$/, '')));
+    const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
+    if (dirHit && (path.endsWith('/') || !hasExt)) {
+      dirRefs += 1;
+      continue;
+    }
+
+    // Короткое имя без номера строки. Двусмысленность здесь настоящая: так пишут и файлы, и
+    // домены (`ikpk.su`), и поля (`author.email`), и методы (`page.goto`) — измерено на дереве.
+    // Поэтому строго проверяются только имена артефактов СХЕМЫ (`proposal.md`, `design.md`,
+    // `tasks.md`): для них двусмысленности нет, а их исчезновение молчаливо не ловит даже
+    // строгая валидация OpenSpec (проверено: удалённый `design.md` даёт 12/12 passed).
     if (!path.includes('/') && !lineSpec) {
       const local = resolveRef(path, md);
-      // Считается отдельным числом, а не вместе с остальными: для артефакта, ссылающегося на
-      // соседний файл своего же change, существование почти тривиально, и складывать это с
-      // проверкой путей по всему дереву значило бы снова раздуть «проверено».
-      if (local.hit) localNames += 1;
+      if (local.hit) {
+        // Считается отдельным числом: для артефакта, ссылающегося на соседний файл своего же
+        // change, существование почти тривиально, и складывать это с проверкой путей по дереву
+        // значило бы снова раздуть «проверено».
+        localNames += 1;
+      } else if (SCHEMA_ARTIFACTS.has(path) && rel.startsWith('openspec/changes/')) {
+        absentSeen.set(
+          `${rel} :: ${path}`,
+          `${rel}: артефакт схемы не существует в этом change — ${path}`,
+        );
+      }
       continue;
     }
 
@@ -412,7 +511,8 @@ const absentDeclared = readDeclared(
 // существование пути, у второй — содержимое. Их сумма выдала бы неизмеренное за измеренное.
 console.log(
   `check-spec-refs: содержимое сверено у ${contentVerified}, существование пути — ещё у ` +
-    `${pathOnly}, имён соседних артефактов — ещё у ${localNames}, неизмеримых ` +
+    `${pathOnly}, каталогов — ещё у ${dirRefs}, имён соседних артефактов — ещё у ` +
+    `${localNames}, неизмеримых ` +
     `${unmeasurable.size} (в долге ${debt.size}), объявленных ` +
     `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), ссылок в ` +
     `сгенерированный вывод ${generated} (проверяемы только на собранном дереве), расхождений ` +

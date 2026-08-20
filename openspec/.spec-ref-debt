@@ -49,7 +49,6 @@ openspec/changes/online-payment-flow/proposal.md :: web/src/lib/html-cleaner.ts:
 openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:18-31
 openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:36
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: web/src/pages/oplata.astro:18-31
-openspec/changes/online-payment-flow/tasks.md :: web/src/lib/html-cleaner.ts:601
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
@@ -58,4 +57,5 @@ openspec/specs/article-catalog/spec.md :: web/src/lib/data.ts:264-267
 openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/[slug].astro:119
 openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:114-130
 openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:13-20
+openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:375-379
 openspec/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191

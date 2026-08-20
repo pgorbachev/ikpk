@@ -8,10 +8,11 @@
 #   2. осознанная цитата на УДАЛЁННОЕ — каталог `openspec/changes/payment-request-flow/` снесён
 #      решением владельца тем же PR, что слит `online-payment-flow`, а ссылки на него оставлены
 #      как указание на происхождение принятых решений;
-#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН — у нас это
-#      `docs/security-audit-2026-08-08.md`: он лежит в рабочем дереве автора и отсутствует в
-#      репозитории, поэтому для любого другого читателя ссылка ведёт в пустоту. Это долг, а не
-#      намерение: правильный исход — закоммитить документ и убрать строки отсюда.
+#   3. документ, на который ссылаются, но который НЕ ЗАКОММИЧЕН. Таких два, и оба — долг, а не
+#      намерение; правильный исход — закоммитить документ и убрать строки отсюда:
+#      `docs/security-audit-2026-08-08.md` (лежит в рабочем дереве автора, в репозитории его нет)
+#      и `docs/design/mockups/trust-and-verification/README.md` (каталога `docs/design/mockups/`
+#      в репозитории нет вовсе, а активный change ссылается на его строки `:68` и `:273`).
 #
 # Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
 # объявленная разрешилась или исчезла из текста — тоже отказ с требованием обновить файл
@@ -21,8 +22,12 @@ openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro
 openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md
+openspec/changes/online-payment-flow/design.md :: openspec/changes/payment-request-flow/
 openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md
+openspec/changes/online-payment-flow/proposal.md :: openspec/changes/payment-request-flow/
 openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md
 openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md
+openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/
 openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md
+openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md
 openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md
