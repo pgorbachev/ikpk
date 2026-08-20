@@ -123,14 +123,20 @@ payment_endpoint_matches() {
     return 1
   fi
 
-  # Опознавательный признак формы (условие (1) спеки «Активная форма» — независимо от
-  # объявленного эндпоинта): найдено независимым ревью (F-3, 2026-08-20). Прежняя
-  # редакция проверяла только `data-payment-role`/`data-payment-endpoint`, которые могли
-  # оказаться на ЛЮБОМ элементе, а не именно на `<form>` — то есть артефакт, объявляющий
-  # роль и эндпоинт без единой формы на странице, проходил бы гейт.
-  local forms rc_form
+  # Признаки активной формы (условия (1) и (2) спеки «Активная форма») проверяются НА
+  # ОДНОМ элементе <form>: найдено независимым ревью (F-3, 2026-08-20), ужесточено по
+  # находке ревью владельца (P1, 2026-08-20). Прежняя редакция считала формы и эндпоинты
+  # РАЗДЕЛЬНО — форма без эндпоинта плюс `data-payment-endpoint` на любом другом элементе
+  # складывались в проход. Теперь эндпоинт извлекается только изнутри тега формы с
+  # `data-payment-form`, а КАЖДОЕ вхождение признака эндпоинта в HTML обязано лежать в
+  # таком теге: расхождение счётчиков — признак на чужом элементе, отказ.
+  # Извлечение построчное (тег формы целиком на одной строке — как в реальной сборке);
+  # многострочный тег не прошёл бы молча: он не попал бы в form_tags, и гейт упал бы
+  # либо по «ноль форм», либо по расхождению счётчиков — отказ, а не ложный проход.
+  local form_tags rc_form
   set +e
-  forms=$(grep -roh -E '<form\b[^>]*\bdata-payment-form\b' "$dist" --include='*.html' 2>/dev/null)
+  form_tags=$(grep -roh -E '<form\b[^>]*>' "$dist" --include='*.html' 2>/dev/null \
+    | grep -E '\bdata-payment-form\b')
   rc_form="${PIPESTATUS[0]}"
   set -e
   if (( rc_form > 1 )); then
@@ -138,18 +144,30 @@ payment_endpoint_matches() {
     return 1
   fi
   local form_count
-  form_count=$(printf '%s\n' "$forms" | grep -c . || true)
+  form_count=$(printf '%s\n' "$form_tags" | grep -c . || true)
 
-  local endpoints rc_e
+  local endpoint_all rc_e
   set +e
-  endpoints=$(grep -roh 'data-payment-endpoint="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
-    | sed 's/^data-payment-endpoint="//; s/"$//' | sort -u)
+  endpoint_all=$(grep -roh 'data-payment-endpoint="[^"]*"' "$dist" --include='*.html' 2>/dev/null)
   rc_e="${PIPESTATUS[0]}"
   set -e
   if (( rc_e > 1 )); then
     echo "не удалось прочитать $dist при поиске эндпоинта (grep код $rc_e) — проверка не выполнена" >&2
     return 1
   fi
+  local endpoint_total
+  endpoint_total=$(printf '%s\n' "$endpoint_all" | grep -c . || true)
+
+  # Вхождения эндпоинта внутри тегов активной формы — и формы, объявленные без него.
+  local endpoints_in_forms forms_without_endpoint
+  endpoints_in_forms=$(printf '%s\n' "$form_tags" | grep -oh 'data-payment-endpoint="[^"]*"' || true)
+  # Сначала отбросить пустые строки: `grep -c -v` на пустом входе насчитал бы 1.
+  forms_without_endpoint=$(printf '%s\n' "$form_tags" | grep . | grep -c -v 'data-payment-endpoint="' || true)
+  local endpoint_in_form_count
+  endpoint_in_form_count=$(printf '%s\n' "$endpoints_in_forms" | grep -c . || true)
+
+  local endpoints
+  endpoints=$(printf '%s\n' "$endpoints_in_forms" | sed 's/^data-payment-endpoint="//; s/"$//' | sort -u)
   local endpoint_count
   endpoint_count=$(printf '%s\n' "$endpoints" | grep -c . || true)
 
@@ -157,9 +175,9 @@ payment_endpoint_matches() {
   # ожидаемый артефакт целиком»): найденный адрес — тоже отказ, даже мок-адрес preview,
   # потому что он всё равно обещает контур, которого в артефакте нет.
   if [[ "$expect_role" == "ci" ]]; then
-    if (( endpoint_count != 0 || form_count != 0 )); then
+    if (( endpoint_total != 0 || form_count != 0 )); then
       echo "роль ci не несёт формы и объявленного эндпоинта по контракту роли, а сборка объявляет:" >&2
-      printf '%s\n' "$endpoints" | head -5 >&2
+      printf '%s\n' "$endpoint_all" | sort -u | head -5 >&2
       (( form_count != 0 )) && echo "форм с data-payment-form: $form_count" >&2
       return 1
     fi
@@ -167,13 +185,22 @@ payment_endpoint_matches() {
     return 0
   fi
 
-  if (( endpoint_count == 0 )); then
-    echo "в сборке роли $expect_role нет ни одного data-payment-endpoint — проверять нечего" >&2
-    echo "ожидался адрес: $expect_endpoint" >&2
+  if (( form_count == 0 )); then
+    echo "в сборке роли $expect_role нет ни одной формы с data-payment-form — проверять нечего" >&2
+    echo "ожидался адрес на форме: $expect_endpoint" >&2
     return 1
   fi
-  if (( form_count == 0 )); then
-    echo "в сборке роли $expect_role объявлен эндпоинт, но опознавательного признака формы (data-payment-form) нет ни на одном <form> — проверять нечего" >&2
+  if (( forms_without_endpoint != 0 )); then
+    echo "в сборке роли $expect_role форм(ы) с data-payment-form без data-payment-endpoint НА ТОМ ЖЕ теге: $forms_without_endpoint — признаки активной формы обязаны быть на одном элементе" >&2
+    return 1
+  fi
+  if (( endpoint_total != endpoint_in_form_count )); then
+    echo "data-payment-endpoint найден вне тега активной формы: всего вхождений $endpoint_total, внутри форм $endpoint_in_form_count — признак на чужом элементе останавливает публикацию" >&2
+    return 1
+  fi
+  if (( endpoint_count == 0 )); then
+    echo "в сборке роли $expect_role нет ни одного data-payment-endpoint на форме — проверять нечего" >&2
+    echo "ожидался адрес: $expect_endpoint" >&2
     return 1
   fi
 
@@ -199,15 +226,26 @@ payment_endpoint_matches() {
 # ожидаемого контура, а не отсутствие отрицательного»).
 payment_readiness_matches() {
   local url="${1:-}" expect_mode="${2:-}" expect_shop="${3:-}"
-  local raw code body
-  raw="$(curl -sS --max-time 10 -w $'\n%{http_code}' "$url" 2>/dev/null)" || {
+  local raw meta code ctype body
+  raw="$(curl -sS --max-time 10 -w $'\n%{http_code}\t%{content_type}' "$url" 2>/dev/null)" || {
     echo "payment_readiness_matches: запрос к $url не выполнен" >&2
     return 1
   }
-  code="${raw##*$'\n'}"
+  meta="${raw##*$'\n'}"
   body="${raw%$'\n'*}"
+  code="${meta%%$'\t'*}"
+  ctype="${meta#*$'\t'}"
   if [[ "$code" != "200" ]]; then
     echo "payment_readiness_matches: $url вернул ${code:-<нет ответа>}, ожидался 200" >&2
+    return 1
+  fi
+  # Content-Type — часть контракта readiness (найдено ревью владельца, P1, 2026-08-20):
+  # корректный JSON под text/plain — это ДРУГОЙ сервис или прокси-заглушка, а не
+  # подтверждение контура. Параметры (`; charset=...`) допустимы, подмена типа — нет.
+  local ctype_lc
+  ctype_lc=$(printf '%s' "$ctype" | tr '[:upper:]' '[:lower:]')
+  if [[ "$ctype_lc" != "application/json" && "$ctype_lc" != application/json\;* ]]; then
+    echo "payment_readiness_matches: $url ответил Content-Type «${ctype:-<пусто>}», ожидался application/json" >&2
     return 1
   fi
   # Разбор — в node, а не sed/grep: состав ответа проверяется ИСЧЕРПЫВАЮЩЕ (ровно три
@@ -237,11 +275,22 @@ payment_readiness_matches() {
 # запрос браузер не сверяет с CORS вовсе. Аргументы: <объявленная база API> <origin сайта>.
 payment_cors_allows() {
   local base="${1:-}" origin="${2:-}"
-  local headers allow
-  headers="$(curl -sS --max-time 10 -X OPTIONS -H "Origin: ${origin}" -D - -o /dev/null "${base}/payments" 2>/dev/null)" || {
+  local raw headers code allow
+  # Код ответа и заголовок проверяются НА ОДНОМ запросе с Origin (найдено ревью
+  # владельца, P2, 2026-08-20): прежде 204 утверждала другая проба БЕЗ Origin
+  # (payment_endpoint_reachable), и фактический preflight, падающий 403 с правильным
+  # Access-Control-Allow-Origin, складывался в зелёный гейт.
+  raw="$(curl -sS --max-time 10 -X OPTIONS -H "Origin: ${origin}" -D - -o /dev/null \
+    -w $'\n__HTTP_CODE__\t%{http_code}' "${base}/payments" 2>/dev/null)" || {
     echo "payment_cors_allows: запрос OPTIONS к ${base}/payments не выполнен" >&2
     return 1
   }
+  code="${raw##*$'\t'}"
+  headers="${raw%$'\n'__HTTP_CODE__*}"
+  if [[ "$code" != "204" ]]; then
+    echo "payment_cors_allows: OPTIONS с Origin ${origin} к ${base}/payments вернул ${code:-<нет ответа>}, ожидался 204 — preflight фактически не пройден" >&2
+    return 1
+  fi
   allow=$(printf '%s' "$headers" | tr -d '\r' | grep -i '^access-control-allow-origin:' \
     | sed -E 's/^[Aa]ccess-[Cc]ontrol-[Aa]llow-[Oo]rigin:[[:space:]]*//' | tail -1)
   if [[ -z "$allow" ]]; then

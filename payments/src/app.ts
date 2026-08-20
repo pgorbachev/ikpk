@@ -255,14 +255,30 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
     );
   }
 
-  // PAYMENT_RETURN_BASE обязана разбираться как origin: посетитель стенда обязан
-  // вернуться на /oplata ЭТОГО ЖЕ контура, а неразбираемое значение проявилось бы только
-  // на последнем шаге оплаты у живого посетителя.
+  // PAYMENT_RETURN_BASE обязана быть КАНОНИЧЕСКИМ http(s)-origin: посетитель стенда
+  // обязан вернуться на /oplata ЭТОГО ЖЕ контура, а неразбираемое значение проявилось бы
+  // только на последнем шаге оплаты у живого посетителя. «Ненулевого origin» мало
+  // (найдено ревью владельца, P1, 2026-08-20): https://ikpk.su/foo разбирался и давал
+  // /foo/oplata — страницу, которой нет. Путь, query, fragment и credentials — отказ;
+  // хвостовой слэш — законная запись того же origin (pathname «/» у обеих форм).
+  let returnBase: URL | undefined;
   try {
-    const origin = new URL(env.PAYMENT_RETURN_BASE!).origin;
-    if (!origin || origin === 'null') throw new Error('no origin');
+    returnBase = new URL(env.PAYMENT_RETURN_BASE!);
   } catch {
-    fail(`PAYMENT_RETURN_BASE must be a valid origin, got ${JSON.stringify(env.PAYMENT_RETURN_BASE ?? '')}`);
+    returnBase = undefined;
+  }
+  if (
+    !returnBase ||
+    (returnBase.protocol !== 'http:' && returnBase.protocol !== 'https:') ||
+    returnBase.username !== '' ||
+    returnBase.password !== '' ||
+    returnBase.pathname !== '/' ||
+    returnBase.search !== '' ||
+    returnBase.hash !== ''
+  ) {
+    fail(
+      `PAYMENT_RETURN_BASE must be a canonical http(s) origin without credentials, path, query or hash, got ${JSON.stringify(env.PAYMENT_RETURN_BASE ?? '')}`,
+    );
   }
 
   const receipt = env.RECEIPT_ENABLED;
@@ -521,13 +537,13 @@ export function createPaymentService(opts: ServiceOpts) {
       capture: true,
       confirmation: {
         type: 'redirect',
-        // Задача 5.10e: PAYMENT_RETURN_BASE обязательна и провалидирована как origin ДО
-        // открытия порта (validateProdEnv) для любого режима, в котором этот код исполним
-        // (test|prod — demo возвращается из handlePost раньше). Умолчание на боевой сайт
-        // здесь означало бы ровно тот дефект, который 5.10e устраняет: посетитель стенда
-        // после оплаты вернулся бы на чужой origin, если гейт валидации когда-нибудь
-        // ослабят — не оставляем такому умолчанию места.
-        return_url: `${env.PAYMENT_RETURN_BASE!}/oplata?paymentRequest=${body.requestId}`,
+        // Задача 5.10e: PAYMENT_RETURN_BASE обязательна и провалидирована как
+        // канонический origin ДО открытия порта (validateProdEnv) для любого режима, в
+        // котором этот код исполним (test|prod — demo возвращается из handlePost раньше).
+        // Умолчание на боевой сайт здесь означало бы ровно тот дефект, который 5.10e
+        // устраняет. Адрес строится от РАЗОБРАННОГО origin, не от сырой строки: сырой
+        // «https://host/» дал бы «//oplata» (ревью владельца, P1, 2026-08-20).
+        return_url: `${new URL(env.PAYMENT_RETURN_BASE!).origin}/oplata?paymentRequest=${body.requestId}`,
       },
       description: `Оплата за семинар: ${body.seminar}, ${body.firstName} ${body.lastName}`,
       metadata: { requestId: body.requestId, source: CHANNEL_SOURCE },
