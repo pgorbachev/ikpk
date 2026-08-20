@@ -186,7 +186,7 @@ curl: (28) Connection timed out after 25002 milliseconds
 
 `docs/zet-nmo-data-audit.md` — **в `main`**, коммит
 `cff82de72281a11c85f237a4f3ccae29c0d746a6` (PR #82, слит 2026-08-11). В первой редакции
-документ жил только в ветке `origin/docs/zet-nmo-audit@2ccee7b` и назывался внешней
+документ жил только в ветке `origin/docs/zet-nmo-audit@2ccee7b131cf5512672686271f8647dea50af683` и назывался внешней
 зависимостью; теперь это файл репозитория на базе этого change.
 
 Оттуда существенное для соответствия:

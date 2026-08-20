@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -77,6 +77,25 @@ function run(dir: string, specBody: string): { code: number; out: string } {
 
 beforeAll(() => {
   sandbox = makeRepo();
+});
+
+/**
+ * Каждая проверка начинается с чистого состояния. Без этого падение одной проверки уносило
+ * восстановление файлов в её конце, и следующие падали каскадом по чужой причине — то есть
+ * атрибуция ломалась ровно там, где она и нужна.
+ */
+beforeEach(() => {
+  writeFileSync(join(sandbox, 'openspec', '.spec-ref-debt'), '# пусто\n');
+  writeFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  for (const stray of [
+    join(sandbox, 'web', 'other'),
+    join(sandbox, 'web', 'dist'),
+    join(sandbox, 'web', 'package.json'),
+    join(sandbox, '.gitignore'),
+  ]) {
+    rmSync(stray, { recursive: true, force: true });
+  }
+  writeFileSync(join(sandbox, 'web', 'src', 'thing.ts'), 'export const marker = 1;\nconst second = 2;\n');
 });
 
 afterAll(() => {
@@ -245,6 +264,164 @@ describe('гейт ссылок: исходы по классам', () => {
     const r = run(sandbox, '## Purpose\n\nСсылка: `web/src/thing.ts`.\n');
     expect(r.code, r.out).toBe(2);
     writeFileSync(stub, saved, { mode: 0o755 });
+  });
+
+  it('недостижимая ревизия без объявления — код 1', () => {
+    const r = run(
+      sandbox,
+      '## P\n\n`web/src/thing.ts@0123456789abcdef0123456789abcdef01234567:1`, `marker`.\n',
+    );
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/ревизии .* нет/);
+  });
+
+  it('недостижимая ревизия, объявленная как external-revision, merge не блокирует', () => {
+    // Главная находка второго круга: прежний механизм кладл такую ссылку в храповик долга, и
+    // «не блокирует» превращалось в «блокирует по росту долга».
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\n* :: 0123456789abcdef0123456789abcdef01234567 :: external-revision\n',
+    );
+    const r = run(
+      sandbox,
+      '## P\n\n`web/src/thing.ts@0123456789abcdef0123456789abcdef01234567:1`, `marker`.\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/объявлено вне main/);
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  });
+
+  it('форма «ветка@sha» без пути: недостижимая ревизия — код 1, объявленная — код 0', () => {
+    const bad = run(
+      sandbox,
+      '## P\n\nФакт найден на `feat/whatever@0123456789abcdef0123456789abcdef01234567`, а ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(bad.code, bad.out).toBe(1);
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\n* :: 0123456789abcdef0123456789abcdef01234567 :: external-revision\n',
+    );
+    const ok = run(
+      sandbox,
+      '## P\n\nФакт найден на `feat/whatever@0123456789abcdef0123456789abcdef01234567`, а ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(ok.code, ok.out).toBe(0);
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  });
+
+  it('сокращённая ревизия — код 1, а не тихий пропуск', () => {
+    const r = run(sandbox, '## P\n\n`web/src/thing.ts@45297b4:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/сокращённо/);
+  });
+
+  it('исчезнувшая запись долга — код 1 (обратная сверка храповика)', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts:1\n',
+    );
+    const r = run(sandbox, '## P\n\n`web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/ЗАПИСИ ДОЛГА БОЛЬШЕ НЕ НАХОДЯТСЯ/);
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-debt'), '# пусто\n');
+  });
+
+  it('устаревшее объявление отсутствующей ссылки — код 1', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/gone.ts :: will-create\n',
+    );
+    const r = run(sandbox, '## P\n\n`web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/БОЛЬШЕ НЕ ОТСУТСТВУЮТ/);
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  });
+
+  it('повторяющийся ключ в реестре — код 2', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/gone.ts :: will-create\n' +
+        'openspec/specs/demo/spec.md :: web/src/gone.ts :: external-revision\n',
+    );
+    const r = run(sandbox, '## P\n\n`web/src/gone.ts`.\n');
+    expect(r.code, r.out).toBe(2);
+    expect(r.out).toMatch(/повторяющиеся ключи/);
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), '# пусто\n');
+  });
+
+  it('неверный регистр пути — код 1 (важно для Linux-раннера)', () => {
+    const r = run(sandbox, '## P\n\n`web/src/THING.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/регистр пути|путь не существует/);
+  });
+
+  it('неоднозначное короткое имя с номером строки — код 1', () => {
+    mkdirSync(join(sandbox, 'web', 'other'), { recursive: true });
+    writeFileSync(join(sandbox, 'web', 'other', 'thing.ts'), 'export const x = 1;\n');
+    const r = run(sandbox, '## P\n\n`thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/неоднозначно/);
+    rmSync(join(sandbox, 'web', 'other'), { recursive: true, force: true });
+  });
+
+  it('ссылка в сборочный вывод идёт в реестр и не зависит от наличия сборки', () => {
+    writeFileSync(join(sandbox, 'web', 'package.json'), '{"name":"w","private":true}\n');
+    // Перечень корней сборки сверяется с .gitignore целиком, поэтому в песочнице надо
+    // игнорировать все корни, чьи пакеты объявлены, — иначе сработает та самая сверка.
+    writeFileSync(join(sandbox, '.gitignore'), 'dist/\ndist-demo/\n');
+    const body = '## P\n\nВывод: `web/dist/index.html`.\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n';
+    const before = run(sandbox, body);
+    expect(before.code, before.out).toBe(1);
+    expect(before.out).toMatch(/сборочный вывод/);
+    // Реестр принял запись — и теперь наличие сборки НЕ меняет вердикт.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/dist/index.html\n',
+    );
+    const clean = run(sandbox, body);
+    expect(clean.code, clean.out).toBe(0);
+    mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
+    writeFileSync(join(sandbox, 'web', 'dist', 'index.html'), '<html></html>\n');
+    const built = run(sandbox, body);
+    expect(built.code, built.out).toBe(0);
+    rmSync(join(sandbox, 'web', 'dist'), { recursive: true, force: true });
+    writeFileSync(join(sandbox, 'openspec', '.spec-ref-debt'), '# пусто\n');
+    rmSync(join(sandbox, 'web', 'package.json'));
+    rmSync(join(sandbox, '.gitignore'));
+  });
+
+  it('перечень строк проверяется на попадание в файл', () => {
+    const ok = run(sandbox, '## P\n\n`web/src/thing.ts:1,2`.\n');
+    expect(ok.code, ok.out).toBe(1);
+    expect(ok.out).toMatch(/перечень строк/);
+    const bad = run(sandbox, '## P\n\n`web/src/thing.ts:1,999`.\n');
+    expect(bad.code, bad.out).toBe(1);
+    expect(bad.out).toMatch(/в файле \d+ строк/);
+  });
+
+  it('слишком короткий фрагмент — не «сверено», а храповик', () => {
+    const r = run(sandbox, '## P\n\n`web/src/thing.ts:1`, `ab`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/слишком короткий/);
+  });
+
+  it('тройная кавычка внутри строки не гасит участок', () => {
+    const r = run(
+      sandbox,
+      '## P\n\nФорма `a```b` в прозе, затем `web/src/no-such.ts:1`, `нет`.\n',
+    );
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/путь не существует/);
+  });
+
+  it('ни одного .openspec.yaml при наличии change — код 2', () => {
+    const yml = join(sandbox, 'openspec', 'changes', 'demo-change', '.openspec.yaml');
+    const saved = readFileSync(yml, 'utf8');
+    rmSync(yml);
+    const r = run(sandbox, '## P\n\n`web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(2);
+    expect(r.out).toMatch(/\.openspec\.yaml/);
+    writeFileSync(yml, saved);
   });
 
   it('ссылка без номера строки и без фрагмента идёт в храповик, а не в «проверено»', () => {
