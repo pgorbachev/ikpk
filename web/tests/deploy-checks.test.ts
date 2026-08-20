@@ -5,6 +5,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'path';
+import { PAYMENT_ENDPOINT_BASE } from './helpers/payment-contract';
 
 const execFileAsync = promisify(execFile);
 
@@ -223,74 +224,60 @@ describe('health_check — фактический ответ сайта', () => 
   });
 });
 
-// ─── Гейты платёжной формы: адрес и секреты (задачи 6.1, 6.2; негативная 6.4) ──
+// ─── payment_endpoint_matches — блок СНЯТ задачей 6.14 ─────────────────────────
 //
-// Проверяется ПОВЕДЕНИЕ функций на подставных каталогах сборки, а не текст скрипта:
-// греп исходника утверждал бы, что гейт написан, но не что он что-то ловит. Каждая
-// ветка отказа пройдена хотя бы раз — непройденная ветка такое же обещание, как
-// непроверенный гейт.
-describe('payment_endpoint_matches — адрес платёжной формы в сборке', () => {
-  const mkDist = (html: string | null): string => {
-    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-'));
-    if (html !== null) writeFileSync(join(dir, 'index.html'), html, 'utf-8');
+// Прежний блок (до этой правки — describe «payment_endpoint_matches — адрес платёжной
+// формы в сборке») проверял функцию по УСТАРЕВШЕЙ матрице: третий аргумент — булев
+// `data-payment-demo`, признак решением владельца 2026-08-18 удалён (design.md,
+// Решение 13). Сама функция теперь ожидает РОЛЬ (`ci|preview|stand|prod`) третьим
+// аргументом — прежние фикстуры (`data-payment-demo="..."`, без `data-payment-role`)
+// сверяются с новым контрактом ошибочно: артефакт без объявленной роли — непройденная
+// проверка при любой ожидаемой роли, поэтому «верный адрес» здесь стал бы отказом не по
+// адресу, а по потерянной роли.
+//
+// Дублировать поведение здесь и там нельзя (AGENTS.md: «если над тем же предметом есть
+// другая проверка, их ответы обязаны совпадать, либо расхождение названо») — полное,
+// более строгое покрытие той же функции по НОВОЙ матрице уже есть в
+// `deploy-checks-payment-role.test.ts` (роль в артефакте, роль не объявлена, ноль форм в
+// установленном контуре, прежний булев признак без роли и т.д.), поэтому блок снят, а не
+// переписан на месте.
+//
+// ДВА СЛУЧАЯ ИЗ СНЯТОГО БЛОКА ВОССТАНОВЛЕНЫ НИЖЕ под новой сигнатурой — не как копия, а
+// потому что независимое ревью (2026-08-20) нашло у каждого предмет, для которого в
+// `deploy-checks-payment-role.test.ts` нет отдельного случая, а этот файл — не защищённый
+// красный тест этого change, и его можно расширять:
+//  - F-13: буквальное сравнение адреса (`grep -vxF`), а не по образцу хоста — снятый блок
+//    проверял это фикстурой-«двойником» (`https://api.ikpk.su.evil.example`); в новом
+//    файле такого случая нет вовсе, только сравнение с ПОЛНОСТЮ другим доменом;
+//  - F-3: опознавательный признак формы (`data-payment-form`) проверяется НЕЗАВИСИМО от
+//    роли и эндпоинта — прежняя редакция читала только `data-payment-role`/
+//    `data-payment-endpoint`, которые могли стоять на любом элементе без единой формы на
+//    странице.
+describe('payment_endpoint_matches — восстановленные случаи (F-3, F-13, независимое ревью)', () => {
+  const mkDist = (html: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-dist-role-'));
+    writeFileSync(join(dir, 'index.html'), html, 'utf-8');
     return dir;
   };
-  const page = (endpoint: string, demo: string) =>
-    `<!doctype html><form data-payment-form data-payment-endpoint="${endpoint}" data-payment-demo="${demo}"></form>`;
+  const withForm = (base: string, role: string) =>
+    `<!doctype html><html data-payment-role="${role}"><body>` +
+    `<form data-payment-form data-payment-endpoint="${base}" hidden></form></body></html>`;
 
-  it('верный адрес и признак режима проходят', async () => {
-    const dist = mkDist(page('https://api.ikpk.su', 'false'));
+  it('F-13: похожий адрес (домен-двойник с суффиксом) не проходит — сверка буквальная, не по образцу хоста', async () => {
+    const dist = mkDist(withForm(`${PAYMENT_ENDPOINT_BASE.stand}.evil.example`, 'stand'));
     expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
-    ).toBe(0);
-  });
-
-  it('чужой адрес не проходит', async () => {
-    const dist = mkDist(page('https://evil.example/pay', 'false'));
-    expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+      await runFn(`payment_endpoint_matches '${dist}' '${PAYMENT_ENDPOINT_BASE.stand}' 'stand'`),
     ).not.toBe(0);
   });
 
-  it('демо-адрес в боевом режиме не проходит', async () => {
-    const dist = mkDist(page('https://demo-api.ikpk.invalid', 'true'));
+  it('F-3: роль и эндпоинт объявлены НЕ на <form> без единой формы на странице — отказ, а не проход', async () => {
+    const dist = mkDist(
+      `<!doctype html><html data-payment-role="stand"><body>` +
+        `<div data-payment-endpoint="${PAYMENT_ENDPOINT_BASE.stand}"></div>` +
+        `<p>формы нет вовсе</p></body></html>`,
+    );
     expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
-    ).not.toBe(0);
-  });
-
-  it('похожий адрес не проходит: сверка буквальная, а не по образцу хоста', async () => {
-    const dist = mkDist(page('https://api.ikpk.su.evil.example', 'false'));
-    expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
-    ).not.toBe(0);
-  });
-
-  it('верный адрес при неверном data-payment-demo не проходит', async () => {
-    const dist = mkDist(page('https://api.ikpk.su', 'true'));
-    expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
-    ).not.toBe(0);
-  });
-
-  it('НЕТ атрибута вовсе — отказ, а не проход: проверять нечего', async () => {
-    const dist = mkDist('<!doctype html><p>страница без формы оплаты</p>');
-    expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
-    ).not.toBe(0);
-  });
-
-  it('каталога сборки нет — отказ', async () => {
-    expect(
-      await runFn(`payment_endpoint_matches '/nonexistent-dist-ikpk' 'https://api.ikpk.su' 'false'`),
-    ).not.toBe(0);
-  });
-
-  it('один верный адрес не покрывает второй неверный', async () => {
-    const dist = mkDist(page('https://api.ikpk.su', 'false'));
-    writeFileSync(join(dist, 'other.html'), page('https://evil.example/pay', 'false'), 'utf-8');
-    expect(
-      await runFn(`payment_endpoint_matches '${dist}' 'https://api.ikpk.su' 'false'`),
+      await runFn(`payment_endpoint_matches '${dist}' '${PAYMENT_ENDPOINT_BASE.stand}' 'stand'`),
     ).not.toBe(0);
   });
 });

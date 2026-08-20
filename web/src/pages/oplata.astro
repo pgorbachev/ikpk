@@ -3,11 +3,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import PaymentForm from '../components/payment/PaymentForm.astro';
 import { getPage, cleanBodyHtml, rewriteSafeRichHtml } from '../lib/data';
+import { paymentRole } from '../lib/forms';
 import RichContent from '../components/RichContent.astro';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
 const description = page?.seo_description || 'Информация об оплате обучения в ИКПК.';
+
+// Задача 5.10d: описание пути оплаты SHALL ехать вместе с формой. Предмет здесь — есть ли
+// НА СТРАНИЦЕ форма, которую можно заполнить (роль `ci` её не несёт вовсе; design.md,
+// Решение 13), а не строгая деплой-гейтовая «активная форма» (только `stand`/`prod`,
+// буквальное равенство базы): `preview` несёт форму, ведущую на mock, и клиентские сценарии
+// (`demo-payment-form.test.ts`, 3.12c) ожидают то же описание, что у рабочего контура. Без
+// формы обещание «заполните форму на этой странице» — обещание без исполнителя, хуже
+// отсутствия возможности.
+const hasPaymentForm = paymentRole() !== 'ci';
 
 function withPaymentCopy(html: string): string {
   return html
@@ -19,6 +29,11 @@ function withPaymentCopy(html: string): string {
       /Подать заявку на интересующий вас курс через сайт[\s\S]{0,500}?стоимости участия\./g,
       'Оплатите семинар банковской картой на этой странице: заполните форму и подтвердите платёж.',
     );
+}
+
+/** Тождественная функция — предмету 5.10d нечего переписывать без активной формы. */
+function identity(html: string): string {
+  return html;
 }
 
 ---
@@ -49,7 +64,7 @@ function withPaymentCopy(html: string): string {
       {page?.body_html ? (
         <div class="payment-content rich-content">
           <RichContent
-            html={rewriteSafeRichHtml(cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz'), withPaymentCopy)}
+            html={rewriteSafeRichHtml(cleanBodyHtml(page.body_html, Astro.url.pathname, '#oplata-svyaz'), hasPaymentForm ? withPaymentCopy : identity)}
             sinkId="static-page-oplata"
           />
         </div>

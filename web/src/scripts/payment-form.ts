@@ -56,7 +56,11 @@ if (form) boot(form);
 
 function boot(formEl: HTMLFormElement) {
   const endpoint = formEl.getAttribute('data-payment-endpoint') ?? '';
-  const isDemoBuild = formEl.getAttribute('data-payment-demo') === 'true';
+  // Признак прежней матрицы (`data-payment-demo`) удалён решением владельца 2026-08-18;
+  // роль сборки объявляется `data-payment-role` на корневом элементе диалога (задача
+  // 5.10a). У роли `preview` удержание не создаётся (design.md, Решение 13, таблица
+  // «семантика по ролям»); `stand`/`prod` работают как прежний «не демо».
+  const isDemoBuild = document.getElementById('payment-dialog-root')?.getAttribute('data-payment-role') === 'preview';
   const root = document.getElementById('payment-dialog-root')!;
   const dialog = document.querySelector<HTMLElement>('.payment-dialog')!;
   const stateHost = document.querySelector<HTMLElement>('[data-payment-state-host]')!;

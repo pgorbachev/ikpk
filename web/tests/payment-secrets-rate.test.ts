@@ -200,17 +200,32 @@ describe('3.5 / 3.5a лимит частоты', () => {
     expect(third.status, 'подмена XFF открыла новое ведро').toBe(429);
   });
 
-  it('nginx не берёт клиентский X-Forwarded-For как единственный источник', async () => {
-    const { readFileSync } = await import('node:fs');
+  // Обобщено по независимому ревью (находка F-7, 2026-08-20): было привязано к
+  // литеральному `nginx-api.conf` (прод, отдельный host) и не покрывало
+  // `nginx-stand-api.conf` (задача 5.10c) — POST-лимит стенда зависит от того же
+  // заголовка. Перечисляются ВСЕ `.conf` каталога развёртывания, а не по имени файла
+  // (AGENTS.md: «не перечислять частные случаи того, что проверяешь»), и предикат
+  // проверяется на КАЖДОМ файле отдельно — конкатенация замаскировала бы нарушение в
+  // одном файле совпадением в другом.
+  it('nginx не берёт клиентский X-Forwarded-For как единственный источник — на каждом файле проксирования', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
     const { join } = await import('node:path');
     const { repoRoot } = await import('./helpers/payment-contract');
-    const conf = readFileSync(join(repoRoot, 'payments/deploy/nginx-api.conf'), 'utf8');
-    const headers = conf
-      .split('\n')
-      .filter((line) => /^\s*proxy_set_header\s/.test(line))
-      .join('\n');
-    expect(headers).not.toMatch(/\$proxy_add_x_forwarded_for/);
-    expect(headers).toMatch(/X-Forwarded-For\s+\$remote_addr/);
-    expect(headers).toMatch(/X-Real-IP\s+\$remote_addr/);
+    const deployDir = join(repoRoot, 'payments/deploy');
+    const confFiles = readdirSync(deployDir).filter((f) => f.endsWith('.conf'));
+    expect(confFiles.length, 'конфигураций nginx в payments/deploy нет — проверять нечего').toBeGreaterThan(0);
+    for (const file of confFiles) {
+      const conf = readFileSync(join(deployDir, file), 'utf8');
+      const headers = conf
+        .split('\n')
+        .filter((line) => /^\s*proxy_set_header\s/.test(line))
+        .join('\n');
+      if (!headers) continue; // файл без proxy_set_header (например, чисто internal-блок) — не его предмет
+      expect(headers, `${file}: proxy_add_x_forwarded_for оставляет клиентский XFF левым hop`).not.toMatch(
+        /\$proxy_add_x_forwarded_for/,
+      );
+      expect(headers, `${file}: X-Forwarded-For не зафиксирован на $remote_addr`).toMatch(/X-Forwarded-For\s+\$remote_addr/);
+      expect(headers, `${file}: X-Real-IP не зафиксирован на $remote_addr`).toMatch(/X-Real-IP\s+\$remote_addr/);
+    }
   });
 });

@@ -94,7 +94,14 @@ export function prodEnv(overrides: Record<string, string | undefined> = {}): Rec
   const base: Record<string, string> = {
     PAYMENT_MODE: 'prod',
     RECEIPT_ENABLED: 'false',
-    YOOKASSA_SHOP_ID: 'test-shop',
+    // Задача 4.10: `prod` стартует только с боевым магазином, а `PAYMENT_RETURN_BASE`
+    // обязательна в test|prod (задача 5.10e). Прежнее `'test-shop'` было произвольной
+    // фикстурой, не привязанной к спеке; теперь фикстура сама обязана быть валидным
+    // prod-контуром — иначе десятки уже зелёных тестов этого файла (payment-post,
+    // payment-fingerprint, payment-webhook, payment-startup и др.), стартующие сервис через
+    // `prodEnv()` без переопределения этих двух полей, перестали бы подниматься.
+    YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.prod,
+    PAYMENT_RETURN_BASE: PAYMENT_RETURN_BASE_PROD,
     YOOKASSA_SECRET_KEY: TEST_YOOKASSA_SECRET,
     HMAC_KEY_CURRENT: TEST_HMAC_CURRENT,
     HMAC_KEY_CURRENT_VERSION: TEST_HMAC_CURRENT_VERSION,

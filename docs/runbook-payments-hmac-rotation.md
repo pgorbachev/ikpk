@@ -55,28 +55,38 @@ TTL оставляют в хранилище записи трёх версий,
 
 ## Процедура
 
+**Обновлено задачей 4.10 (матрица контуров): две УСТАНОВЛЕННЫЕ инстанции.** Стенд и
+production — раздельные `systemd`-инстансы шаблонного юнита `ikpk-payments@.service`
+(`ikpk-payments@stand`, `ikpk-payments@prod`), у каждой свой env-файл, каталог состояния и
+canary-журнал. Процедура ниже выполняется **на каждый контур отдельно** — ротация одного не
+переносится на другой автоматически.
+
 ```bash
-# 0. Убедиться, что предыдущая ротация была не позже 14 суток назад.
-grep -o 'HMAC_KEY_CURRENT_VERSION=.*' /etc/ikpk-payments/env
-ls -l --time-style=long-iso /etc/ikpk-payments/env
+# 0. Контур: stand либо prod.
+CONTOUR=stand   # или prod
+ENV_FILE="/etc/ikpk-payments/${CONTOUR}.env"
+
+# 0а. Убедиться, что предыдущая ротация ЭТОГО контура была не позже 14 суток назад.
+grep -o 'HMAC_KEY_CURRENT_VERSION=.*' "$ENV_FILE"
+ls -l --time-style=long-iso "$ENV_FILE"
 
 # 1. Сгенерировать новый материал (32 байта, hex) и выбрать НОВУЮ версию.
 openssl rand -hex 32            # значение не печатать в общий канал
 NEW_VERSION=2026-08-v2          # ранее не использованная метка
 
 # 2. Прежний ключ переносится в PREVIOUS вместе со своей версией.
-#    Правка env-файла — атомарной подменой, не редактором на месте.
+#    Правка env-файла ЭТОГО контура — атомарной подменой, не редактором на месте.
 umask 077
-cp /etc/ikpk-payments/env /etc/ikpk-payments/env.new
-# в env.new: HMAC_KEY_PREVIOUS/_VERSION := прежние CURRENT/_VERSION,
-#            HMAC_KEY_CURRENT/_VERSION := новые
-chown root:root /etc/ikpk-payments/env.new && chmod 0600 /etc/ikpk-payments/env.new
-mv /etc/ikpk-payments/env.new /etc/ikpk-payments/env
+cp "$ENV_FILE" "${ENV_FILE}.new"
+# в *.new: HMAC_KEY_PREVIOUS/_VERSION := прежние CURRENT/_VERSION,
+#          HMAC_KEY_CURRENT/_VERSION := новые
+chown root:root "${ENV_FILE}.new" && chmod 0600 "${ENV_FILE}.new"
+mv "${ENV_FILE}.new" "$ENV_FILE"
 
-# 3. Перезапуск. Canary проверится при старте; если материал не совпал с версией —
-#    сервис НЕ поднимется, и это верное поведение.
-systemctl restart ikpk-payments
-systemctl status ikpk-payments --no-pager | head -20
+# 3. Перезапуск ИНСТАНЦИИ этого контура. Canary проверится при старте; если материал
+#    не совпал с версией — сервис НЕ поднимется, и это верное поведение.
+systemctl restart "ikpk-payments@${CONTOUR}"
+systemctl status "ikpk-payments@${CONTOUR}" --no-pager | head -20
 ```
 
 ## Свидетельство, которое надо приложить
@@ -95,9 +105,9 @@ systemctl status ikpk-payments --no-pager | head -20
 то есть не раньше TTL (14 суток) с момента ротации. Проверять по хранилищу, а не по календарю:
 
 ```bash
-python3 - <<'EOF'
+python3 - <<EOF
 import json
-r=json.load(open('/var/lib/ikpk-payments/payments.json'))['records']
+r=json.load(open('/var/lib/ikpk-payments/${CONTOUR}/payments.json'))['records']
 from collections import Counter
 print(Counter(x['keyVersion'] for x in r))
 EOF

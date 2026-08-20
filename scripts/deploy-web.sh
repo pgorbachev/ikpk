@@ -95,6 +95,12 @@ case "$DEPLOY_MODE" in
     ;;
 esac
 export DEMO_FORMS
+# Роль клиентской сборки (задачи 5.10, 6.14): DEPLOY_MODE и PAYMENT_ROLE совпадают по
+# имени случайно (оба значения — stand|prod), но это РАЗНЫЕ переключатели — DEMO_FORMS
+# управляет формами ЗАЯВКИ (CRM Bitrix24), PAYMENT_ROLE — платёжным контуром. Без явного
+# экспорта здесь `npm run build` собрал бы роль `ci` (умолчание при отсутствии
+# переменной) — безопасную CI-сборку без формы, а не заказанный контур.
+export PAYMENT_ROLE="$DEPLOY_MODE"
 npm --prefix "$WEB_DIR" ci
 npm --prefix "$WEB_DIR" run build
 
@@ -188,21 +194,28 @@ echo "[deploy] Проверка форм: ${form_count} различных ад�
 # Сама механика — в `scripts/lib/deploy-checks.sh`, потому что этот блок стоит ПОСЛЕ
 # ssh-загрузки релиза: запуском скрипта до него не дойти без реального хоста, и без
 # выноса у гейтов был бы только греп исходника. Так же вынесены preflight и health-check.
+# Приведено к матрице ролей (задачи 6.13, 6.14): роль сборки — тот же DEPLOY_MODE
+# (stand|prod), третий аргумент payment_endpoint_matches — она, а не булев признак
+# «демо». Адрес стенда — своя база `<origin стенда>/api`, а не недостижимый `.invalid`
+# прежней матрицы (design.md, Решение 13): mock-адрес закреплён за ролью `preview`,
+# которая через этот скрипт не публикуется вовсе.
 case "$DEPLOY_MODE" in
   prod)
     EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_PROD:-https://api.ikpk.su}"
-    EXPECT_DEMO_FLAG=false
+    EXPECT_SERVICE_MODE="prod"
+    EXPECT_SHOP_ID="409285"
     ;;
   stand)
-    EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_DEMO:-https://demo-api.ikpk.invalid}"
-    EXPECT_DEMO_FLAG=true
+    EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_STAND:-http://193.124.115.99/api}"
+    EXPECT_SERVICE_MODE="test"
+    EXPECT_SHOP_ID="1440249"
     ;;
 esac
 
-echo "[deploy] Проверка адреса платёжной формы (режим ${DEPLOY_MODE})"
-if ! payment_endpoint_matches "$DIST_DIR" "$EXPECT_ENDPOINT" "$EXPECT_DEMO_FLAG"; then
-  echo "Загрузка отменена: в режиме stand это отправило бы боевые платежи с демо-стенда," >&2
-  echo "в режиме prod — увело бы оплату на неверный адрес." >&2
+echo "[deploy] Проверка роли и адреса платёжной формы (роль ${DEPLOY_MODE})"
+if ! payment_endpoint_matches "$DIST_DIR" "$EXPECT_ENDPOINT" "$DEPLOY_MODE"; then
+  echo "Загрузка отменена: артефакт не несёт активную форму заказанного контура —" >&2
+  echo "либо адрес не тот, либо роль не объявлена/не та." >&2
   exit 1
 fi
 
@@ -272,6 +285,46 @@ vhost и снесёт конфигурацию certbot):
 После этого повторите деплой. Резервная копия остаётся в *.bak.
 PREFLIGHT
   exit 1
+fi
+
+# ── Гейт установленного контура: readiness, доступность, CORS (задача 6.13). ────
+#
+# ДО ПУБЛИКАЦИИ (до переключения symlink): спека требует доказать, что объявленный
+# эндпоинт достижим и сервер сообщает ожидаемые несекретные признаки режима и shopId —
+# совпадение адреса само по себе ничего не доказывает (design.md, Решение 13).
+#
+# readiness — ТОЛЬКО изнутри host (`/readyz` наружу не публикуется, задача 5.10c):
+# исходник `deploy-checks.sh` со вставленным вызовом уходит по ssh и исполняется прямо
+# на хосте, где `127.0.0.1:8787` разрешается на установленный сервис. Так гейт
+# ОСТАЁТСЯ ОДНИМ (та же `payment_readiness_matches`, что и в `deploy-checks-payment-role.test.ts`),
+# а не копией её разбора JSON здесь.
+echo "[deploy] Проверка readiness установленного контура (изнутри host)"
+if ! { cat "${SCRIPT_DIR}/lib/deploy-checks.sh"; printf 'payment_readiness_matches http://127.0.0.1:8787/readyz "$1" "$2"\n'; } \
+  | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" "bash -s -- '${EXPECT_SERVICE_MODE}' '${EXPECT_SHOP_ID}'"
+then
+  echo "Загрузка отменена: readiness установленного контура (роль ${DEPLOY_MODE}) не подтвердил" >&2
+  echo "режим ${EXPECT_SERVICE_MODE} и магазин ${EXPECT_SHOP_ID} — сервис не тот или не тем магазином." >&2
+  exit 1
+fi
+
+# Доступность ПУБЛИЧНОГО пути — отдельная проба, ничего не создающая (OPTIONS, не POST):
+# совпадение адреса и работающий readiness — про разные предметы, ни один не заменяет
+# другой (спека, Requirement «Личность контура сообщается несекретным readiness-ответом»).
+echo "[deploy] Проверка доступности объявленного эндпоинта (OPTIONS ${EXPECT_ENDPOINT}/payments)"
+if ! payment_endpoint_reachable "$EXPECT_ENDPOINT"; then
+  echo "Загрузка отменена: объявленный платёжный эндпоинт недостижим снаружи." >&2
+  exit 1
+fi
+
+# CORS — только для контура, у которого API раздаётся на origin, отличном от origin
+# сайта (спека, Requirement «CORS ограничен доменом сайта»). У стенда его нет: same-origin
+# запрос браузер с CORS не сверяет вовсе.
+if [[ "$DEPLOY_MODE" == "prod" ]]; then
+  echo "[deploy] Проверка CORS для origin боевого сайта"
+  if ! payment_cors_allows "$EXPECT_ENDPOINT" "https://ikpk.su"; then
+    echo "Загрузка отменена: CORS платёжного API не разрешает origin боевого сайта." >&2
+    exit 1
+  fi
 fi
 
 echo "[deploy] Switching current symlink and reloading nginx"

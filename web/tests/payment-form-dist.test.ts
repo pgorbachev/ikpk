@@ -5,19 +5,60 @@ import { dist, readPage, walkHtml } from './helpers/dist-pages';
 import {
   PAYMENT_ENDPOINT_ATTR,
   PAYMENT_FORM_ATTR,
+  PAYMENT_ROLE_ATTR,
   TEST_HMAC_CURRENT,
   TEST_HMAC_PREVIOUS,
   TEST_YOOKASSA_SECRET,
   repoRoot,
 } from './helpers/payment-contract';
 
+// ── Приведено к матрице ролей задачей 6.14 ───────────────────────────────────
+//
+// Этот файл написан под ПРЕЖНУЮ матрицу, когда форма присутствовала в сборке
+// безусловно: он требовал ровно одну форму на `/oplata` в любом артефакте. После
+// задачи 5.10 у роли `ci` (обычная сборка без `PAYMENT_ROLE`, в т.ч. `npm run build`,
+// которым собирается `dist` для этого же прогона) формы нет по контракту роли — «ноль
+// форм» и «нет активной формы» разные наблюдения (дельта `deploy-gating`,
+// `payment-role-dist.test.ts` уже проверяет это по роли). Предмет этого файла — то, что
+// не переехало туда: подписи текста, отсутствие секретов, отсутствие несвязанных с
+// формой утечек, — и то, что имеет смысл только при наличии формы, ветвится по роли.
+//
+// «Роль не объявлена» — НЕПРОЙДЕННАЯ проверка, а не «предмета нет» (независимое ревью,
+// находка F-1, 2026-08-20): первая редакция этой правки возвращала `null` и молча
+// пропускала («return») тесты при потерянной роли — то есть ровно тот дефект, который
+// дельта `deploy-gating` называет прямо. `artifactRole` теперь бросает, если роль не
+// объявлена или неоднозначна (как в `payment-role-dist.test.ts`), и это читается ДО
+// какого-либо ветвления по роли — ветвление по роли остаётся только для случаев, где
+// роль ЕСТЬ, но не та, к которой относится конкретная проверка.
+//
+// Ветвление на «роль без формы = не мой предмет» — того же ЛЕГИТИМНОГО рода, что и в
+// `payment-role-dist.test.ts`/`preview-role-dist.test.ts`, но означает, что при роли `ci`
+// (умалчиваемый `npm run build`, единственная роль в обязательном прогоне) часть тестов
+// этого файла неисполнима НИКОГДА в этом прогоне — их предмет целиком в `payment-role-dist
+// .test.ts`. Отмечено `it.skipIf`, а не бессловесным `return`: отчёт показывает «skip», а
+// не «pass» там, где предмета для роли `ci` нет (AGENTS.md: «либо падать, либо говорить о
+// вакуумности вслух»).
+function artifactRole(html: string): string {
+  const values = [...new Set([...html.matchAll(new RegExp(`\\b${PAYMENT_ROLE_ATTR}="([^"]*)"`, 'gi'))].map((m) => m[1]!))];
+  if (values.length !== 1) {
+    throw new Error(
+      `артефакт не объявляет ровно одну роль ${PAYMENT_ROLE_ATTR} на /oplata (найдено: ${values.length}) — ` +
+        'проверка не пройдена, а не «предмета нет»',
+    );
+  }
+  return values[0]!;
+}
+
 function paymentForms(html: string): string[] {
   const re = new RegExp(`<form\\b[^>]*\\b${PAYMENT_FORM_ATTR}\\b[^>]*>`, 'gi');
   return [...html.matchAll(re)].map((m) => m[0]);
 }
 
+const role = artifactRole(readPage('/oplata'));
+const hasActiveRole = role === 'stand' || role === 'prod';
+
 describe('3.8 / 3.8a подписи и устаревшая подводка', () => {
-  it('3.8 подписи формы говорят про оплату, а не про заявку', () => {
+  it.skipIf(!hasActiveRole)('3.8 подписи формы говорят про оплату, а не про заявку', () => {
     const html = readPage('/oplata');
     const forms = paymentForms(html);
     expect(forms.length, 'формы оплаты нет в сборке').toBeGreaterThan(0);
@@ -25,10 +66,11 @@ describe('3.8 / 3.8a подписи и устаревшая подводка', (
     expect(html).not.toMatch(/записывайтесь к нам на обучение/i);
   });
 
-  it('3.8a устаревшая подводка отсутствует', () => {
-    const html = readPage('/oplata').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  it.skipIf(!hasActiveRole)('3.8a устаревшая подводка отсутствует', () => {
+    const html = readPage('/oplata');
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     expect(
-      html.includes('выбирайте направление и записывайтесь к нам на обучение'),
+      text.includes('выбирайте направление и записывайтесь к нам на обучение'),
       'устаревшая подводка всё ещё в сборке',
     ).toBe(false);
   });
@@ -36,8 +78,8 @@ describe('3.8 / 3.8a подписи и устаревшая подводка', (
 
 describe('3.11 секреты не в dist', () => {
   it('ни секрет ЮKassa, ни ключи HMAC не встречаются в собранном сайте', () => {
-    const html = readPage('/oplata');
-    expect(paymentForms(html).length, 'формы нет — гейт секретов нечего проверять').toBeGreaterThan(0);
+    // Не привязано к наличию формы: секретов в статическом артефакте не бывает независимо
+    // от роли, и проверка этого не должна отключаться потерей предмета в другом месте.
     const needles = [TEST_YOOKASSA_SECRET, TEST_HMAC_CURRENT, TEST_HMAC_PREVIOUS];
     const hits: string[] = [];
     for (const file of walkHtml()) {
@@ -50,9 +92,8 @@ describe('3.11 секреты не в dist', () => {
   });
 
   it('keyVersion в записях не является хешем/префиксом ключа; canary не стоит ни в записях, ни как keyVersion', () => {
-    const html = readPage('/oplata');
-    expect(paymentForms(html).length, 'формы нет — структурная проверка canary без предмета').toBeGreaterThan(0);
-    // Хранилище сервера в dist быть не должно. Если в сборке всплыли JSON-записи — это дефект.
+    // Хранилище сервера в dist быть не должно ни при какой роли. Если в сборке всплыли
+    // JSON-записи — это дефект.
     const leaked = [...walkHtml()].filter((f) => {
       const t = readFileSync(f, 'utf8');
       return /"keyVersion"\s*:/.test(t) || /"fingerprint"\s*:/.test(t);
@@ -62,7 +103,10 @@ describe('3.11 секреты не в dist', () => {
 });
 
 describe('3.12 форма в сборке скрыта, со своим признаком и адресом', () => {
-  it('форма есть, скрыта, признак не href, адрес — буквальное равенство боевому контуру', () => {
+  // Предмет — буквальный боевой адрес: применим только к роли prod. Роль ci (умалчиваемая
+  // `npm run build`) формы не несёт по контракту роли — предмет переехал в
+  // `payment-role-dist.test.ts`, а не потерялся.
+  it.skipIf(role !== 'prod')('форма есть, скрыта, признак не href, адрес — буквальное равенство боевому контуру', () => {
     const html = readPage('/oplata');
     const forms = paymentForms(html);
     expect(forms.length).toBe(1);
@@ -78,7 +122,8 @@ describe('3.12 форма в сборке скрыта, со своим приз
 });
 
 describe('3a.2 форма в собранной странице до скриптов', () => {
-  it('форма скрыта, со своим признаком и адресом; признак не на ArticleFilterBar и LeadMagnet', () => {
+  // У ci формы нет, у preview — не этот предмет (mock, не боевая семантика).
+  it.skipIf(!hasActiveRole)('форма скрыта, со своим признаком и адресом; признак не на ArticleFilterBar и LeadMagnet', () => {
     const html = readPage('/oplata');
     const forms = paymentForms(html);
     expect(forms.length).toBe(1);
@@ -93,19 +138,18 @@ describe('3a.2 форма в собранной странице до скрип
 });
 
 describe('3.12c описание порядка оплаты соответствует форме', () => {
-  it('ветвь (1) формы нет → описание не обещает оплату на сайте', () => {
+  // Ветвление по РОЛИ, а не по числу форм (независимое ревью, находка F-2): предикат
+  // проверки не должен зависеть от того же предмета, который проверка исследует —
+  // иначе дефект, обнуливший форму НЕ по контракту роли, читался бы как «ветвь (1)».
+  it.skipIf(hasActiveRole)('ветвь (1) формы нет → описание не обещает оплату на сайте', () => {
     const html = readPage('/oplata');
-    const forms = paymentForms(html);
-    if (forms.length > 0) return; // ветви (2)/(3) — после появления формы
     const page = html.replace(/\s+/g, ' ');
     const how = page.match(/Как оплатить\?[\s\S]{0,1200}/i)?.[0] ?? page;
     expect(how).not.toMatch(/оплат\w* на сайте|банковской картой через/i);
   });
 
-  it('ветвь (2) боевая сборка с формой → описание называет оплату на сайте, не сводит к заявке со звонком', () => {
+  it.skipIf(!hasActiveRole)('ветвь (2) боевая сборка с формой → описание называет оплату на сайте, не сводит к заявке со звонком', () => {
     const html = readPage('/oplata');
-    const forms = paymentForms(html);
-    expect(forms.length, 'формы нет — ветвь (2) красная до реализации').toBeGreaterThan(0);
     const page = html.replace(/\s+/g, ' ');
     expect(page).toMatch(/оплат/i);
     expect(page).not.toMatch(/Подать заявку на интересующий вас курс через сайт/i);
