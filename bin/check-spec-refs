@@ -56,7 +56,7 @@
 // `--write-absent` так же перезаписывает openspec/.spec-ref-absent списком ненайденных
 // ссылок на артефакты — применять только после того, как каждая строка прочитана глазами.
 
-import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 
@@ -287,6 +287,24 @@ function caseExact(absPath) {
   return exact === undefined || exact === rel;
 }
 
+/**
+ * Путь остаётся ВНУТРИ репозитория после разыменования символических ссылок. `statSync` и
+ * `readFileSync` идут по symlink, поэтому отслеживаемая ссылка наружу превращала гейт в
+ * читателя чужих файлов: измерено — repo-путь `web/src/lib/probe-link.ts` был «сверен по
+ * содержимому» с файлом в `/private/tmp`, счётчик показал 21 вместо 20, код 0. Для проверки,
+ * которая существует ради доказуемости ссылок, это худший исход: она подтверждает то, чего в
+ * репозитории нет.
+ */
+const REAL_ROOT = realpathSync(ROOT);
+function insideRepo(abs) {
+  try {
+    const real = realpathSync(abs);
+    return real === REAL_ROOT || real.startsWith(`${REAL_ROOT}/`);
+  } catch {
+    return false;
+  }
+}
+
 function resolveRef(path, mdPath) {
   // Расхождение регистра определяется по ИНДЕКСУ git, а не по попытке открыть файл. Прежняя
   // редакция узнавала о нём только через `existsSync`, то есть только на регистро-НЕзависимой ФС:
@@ -311,6 +329,10 @@ function resolveRef(path, mdPath) {
     // openspec/changes/<name>/... либо openspec/specs/<name>/...
     return rel.length >= 3 ? join(ROOT, rel[0], rel[1], rel[2]) : mdDir;
   })();
+  const escaping = [join(mdDir, path), join(changeRoot, path), join(ROOT, path)].find(
+    (c) => existsSync(c) && !insideRepo(c),
+  );
+  if (escaping) return { outside: escaping };
   const local = [join(mdDir, path), join(changeRoot, path)].find(
     (c) => existsSync(c) && statSync(c).isFile(),
   );
@@ -866,7 +888,31 @@ for (const md of files) {
         parsed: [span.body, carry.path, carry.rev, span.lineOnly[1]],
       };
     }
-    if (!spans[i].parsed) continue;
+    // Негодная ревизия НЕ ДОЛЖНА исчезать из проверки вместе с неразобранным span. `PATH_SPAN`
+    // принимает только 7–40 строчных hex, поэтому `@45297b` (шесть), `@45297bg`, 41 символ и
+    // верхний регистр давали `parsed = null` и молча выпадали целиком — измерено: три таких
+    // ссылки дали код 0 и не сдвинули ни одного счётчика. Отказ по неполному SHA ниже
+    // достигался только ПОСЛЕ успешного разбора, то есть строгость правила зависела от того,
+    // угадал ли автор длину. Признак здесь по ФОРМЕ: «что-то, потом @, потом шесть и больше
+    // hex-символов». Порог в шесть отсекает версии (`node@20`, `npm@11`), а точки в
+    // `astro@7.2.0` не попадают в класс hex вовсе.
+    if (!spans[i].parsed) {
+      // Класс символов ШИРЕ hex: опечатка `@45297bg` не является hex вовсе, и узкий класс её
+      // пропускал — то есть проверка исчезала ровно на испорченной записи. Ложные попадания
+      // отсекает не класс, а требование к ЛЕВОЙ части: она обязана выглядеть путём (расширение
+      // либо косая черта). Тогда `user@localhost` и адреса почты в класс не попадают, а
+      // `web/src/lib/data.ts@45297bg` попадает.
+      const shaLike = /^(.+)@([0-9a-zA-Z]{4,})(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
+      const leftLooksLikePath =
+        shaLike && (/\.[a-z0-9]{1,5}$/i.test(shaLike[1]) || shaLike[1].includes('/'));
+      if (shaLike && leftLooksLikePath && !/^[0-9a-f]{40}$/.test(shaLike[2])) {
+        defects.push(
+          `${rel}: ревизия записана не полным 40-символьным SHA в нижнем регистре ` +
+            `(${shaLike[2]}, ${shaLike[2].length} симв.) — ${spans[i].body}`,
+        );
+      }
+      continue;
+    }
     const [, path, revSpec, lineSpec] = spans[i].parsed;
     if (revSpec) seenRevisions.add(revSpec);
     // Фрагмент отличается от ссылки ФОРМОЙ, а не тем, «разобрался ли он как путь». Прежняя
@@ -956,7 +1002,7 @@ for (const md of files) {
         // свидетельства.
         unreachableDeclared += 1;
         unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
-          kind: 'unreachable',
+          kind: 'external',
           text: `${rel}: ${path}@${revSpec} — ревизия вне общего репозитория, объявлена`,
         });
       } else {
@@ -1074,20 +1120,28 @@ for (const md of files) {
       // проверено, что `git show deadbeef:путь` выходит НУЛЁМ с пустым выводом, и такая ссылка
       // выглядела «файлом в одну строку» вместо «ревизии не существует».
       const revOk = revisionSharedInOrigin(revSpec);
+      // Ссылка на ОБЪЯВЛЕННУЮ внешнюю ревизию попадает в поимённый реестр НЕЗАВИСИМО от того,
+      // жива ли ещё ветка. Прежняя редакция добавляла её только когда ревизия становилась
+      // недостижимой — то есть членство в реестре зависело от состояния чужой ветки, и переход
+      // «жива → удалена» создавал НОВУЮ запись долга и красил обязательный гейт кодом 1. Ровно
+      // та гарантия, ради которой объявление и существует, не выполнялась: тесты проверяли два
+      // состояния порознь, а переход при неизменных реестрах не проверял никто.
+      if (externalRevisionDeclared(rel, revSpec)) {
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'external',
+          text:
+            `${rel}: ${path}@${revSpec} — ревизия объявлена внешней; пока достижима, ` +
+            'содержимое сверяется, после удаления ветки проверять нечем',
+        });
+      }
       if (!revOk && externalRevisionDeclared(rel, revSpec)) {
         // Свидетельство живёт вне `main` (мокапы и ветки открытых PR). Пока ревизия достижима,
         // ссылка проверяется по содержимому; когда ветку удалят, гейт говорит «проверить нечем»
-        // и РАСХОЖДЕНИЯ не даёт. Точная формулировка важна, прежняя была неверна: запись в
-        // поимённый реестр КЛАДЁТСЯ (`kind:'unreachable'`), и это нужно — иначе верную ссылку
-        // можно бесшумно понизить до непроверяемой. Identity одинакова в обеих ветвях, поэтому
-        // переход «достижима → объявлена» реестр не рвёт; но НОВАЯ такая ссылка требует и строки
-        // реестра, то есть до её добавления гейт красный. «Не блокирует» относится к исчезновению
-        // ветки под уже описанной ссылкой, а не к добавлению новой.
+        // и РАСХОЖДЕНИЯ не даёт. Запись в реестре сделана выше — по факту ОБЪЯВЛЕНИЯ, а не по
+        // достижимости, поэтому удаление ветки состав реестра не меняет и код выхода не портит.
+        // Новая объявленная ссылка по-прежнему требует своей строки реестра: бесшумно понизить
+        // верную ссылку до непроверяемой нельзя.
         unreachableDeclared += 1;
-        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
-          kind: 'unreachable',
-          text: `${rel}: ${path}@${revSpec} — ревизия вне общего репозитория, объявлена`,
-        });
         continue;
       }
       if (!revOk) {
@@ -1156,6 +1210,21 @@ for (const md of files) {
       // предупреждением, то есть переименование проходило зелёным. Признак, зависящий от
       // существования предмета, для этой задачи не годится в принципе.
       absentSeen.set(`${rel} :: ${path}`, `${rel}: путь не существует — ${path}`);
+      continue;
+    }
+    if (r.outside) {
+      // Гейт существует ради доказуемости ссылок, поэтому «сверено по содержимому файла вне
+      // репозитория» — худший из возможных исходов: он подтверждает то, чего в репозитории нет.
+      defects.push(
+        `${rel}: ${path} уходит за пределы репозитория по символической ссылке ` +
+          `(${r.outside.slice(ROOT.length + 1)} → ${(() => {
+            try {
+              return realpathSync(r.outside);
+            } catch {
+              return 'неразрешимо';
+            }
+          })()}) — содержимое такой ссылки доказательством не является`,
+      );
       continue;
     }
     if (r.wrongCase) {
@@ -1282,8 +1351,9 @@ console.log(
     `${pathOnly}, каталогов — ещё у ${dirRefs}, имён соседних артефактов — ещё у ` +
     `${localNames}, неизмеримых ` +
     `${kindCount('no-snippet')} без фрагмента + ${kindCount('build')} в сборочный вывод + ` +
-    `${kindCount('revision-only')} только по ревизии + ${kindCount('unreachable')} вне общего ` +
-    `репозитория (в реестре ${debt.size}), объявленных ` +
+    `${kindCount('revision-only')} только по ревизии + ${kindCount('external')} на объявленной ` +
+    `внешней ревизии + ${kindCount('ambiguous')} по неоднозначному имени ` +
+    `(всего ${unmeasurable.size}, в реестре ${debt.size}), объявленных ` +
     `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
     `${defects.length}`,
 );

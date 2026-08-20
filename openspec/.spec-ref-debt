@@ -87,6 +87,7 @@ openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:3
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: dist/oplata/index.html
 openspec/changes/online-payment-flow/specs/online-payment/spec.md :: main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850
 openspec/changes/online-payment-flow/tasks.md :: design/trust-and-verification-mockups@c924da54e94675673d1bd40720fa375d90ba2fd0
+openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md@c924da54e94675673d1bd40720fa375d90ba2fd0
 openspec/changes/online-payment-flow/tasks.md :: main@90003af89e2a6fc4a122ef18cfd821c61e401a34
 openspec/changes/online-payment-flow/tasks.md :: spec.md
 openspec/changes/online-payment-flow/tasks.md :: web/dist/oplata/index.html
