@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -813,6 +813,30 @@ describe('гейт ссылок: исходы по классам', () => {
     const r = run(sandbox, '## P\n\nСсылка: `twin.md`.\n');
     expect(r.code, r.out).toBe(1);
     expect(r.out).toMatch(/подходит к 2 файлам/);
+  });
+
+  it('регистр определяется индексом git, а не файловой системой', () => {
+    // Вход, не зависящий от ФС: путь есть в ИНДЕКСЕ, но на диске его нет — ровно то состояние, в
+    // котором оказывается ссылка с неверным регистром на Linux-раннере (индекс знает одно
+    // написание, попытка открыть другое проваливается). Без такого входа ветвь непроверяема на
+    // macOS: там `existsSync` находит файл при любом регистре и предмет мутации не исчезает —
+    // прогон остаётся зелёным не потому, что проверка декоративна, а потому, что мутация не
+    // убрала предмет. Различать эти два случая обязательно.
+    writeFileSync(join(sandbox, 'web', 'src', 'case-probe.ts'), 'export const probe = 1;\n');
+    // Состояние публикуется, пока файл ещё существует: `run()` делает `git add -A`, поэтому
+    // удалять его надо ПОСЛЕ фиксации — иначе удаление попадёт в индекс и предмет исчезнет
+    // вместе с диском (ровно на этом первая редакция теста и упала).
+    run(sandbox, '## P\n\nСсылка: `web/src/CASE-PROBE.ts:1`, `probe`.\n');
+    rmSync(join(sandbox, 'web', 'src', 'case-probe.ts'), { force: true });
+    expect(existsSync(join(sandbox, 'web', 'src', 'case-probe.ts'))).toBe(false);
+    const tracked = execFileSync('git', ['-C', sandbox, 'ls-files', 'web/src/case-probe.ts'], {
+      encoding: 'utf8',
+    }).trim();
+    expect(tracked).toBe('web/src/case-probe.ts');
+    const g = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
+    const out = `${g.stdout ?? ''}${g.stderr ?? ''}`;
+    expect(g.status, out).toBe(1);
+    expect(out).toMatch(/регистр пути/);
   });
 
   it('неверный регистр КОРОТКОГО имени — код 1, а не тишина', () => {
