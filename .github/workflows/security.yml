@@ -98,9 +98,18 @@ jobs:
           node -e "
             const v = require('./audit-report.json')?.metadata?.vulnerabilities;
             const levels = ['critical', 'high', 'moderate', 'low', 'info'];
-            if (!v || typeof v !== 'object') process.exit(1);
-            const missing = levels.filter((k) => typeof v[k] !== 'number');
-            if (missing.length) { console.error('нет числовых полей: ' + missing.join(', ')); process.exit(1); }
+            if (!v || typeof v !== 'object') { console.error('нет metadata.vulnerabilities'); process.exit(1); }
+            // Счётчик advisory — целое неотрицательное. Дробное или отрицательное значение
+            // означает, что отчёт не тот, за который себя выдаёт, и «0 critical» из такого
+            // отчёта читать нельзя.
+            const bad = levels.filter((k) => !Number.isInteger(v[k]) || v[k] < 0);
+            if (bad.length) { console.error('поля не целые неотрицательные: ' + bad.join(', ')); process.exit(1); }
+            // Если отчёт объявляет total, он обязан совпадать с суммой уровней: расхождение —
+            // признак усечённого или склеенного отчёта.
+            if (v.total !== undefined) {
+              const sum = levels.reduce((a, k) => a + v[k], 0);
+              if (v.total !== sum) { console.error('total ' + v.total + ' не равен сумме уровней ' + sum); process.exit(1); }
+            }
           " || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
           echo "npm audit exit=${audit_status:-0} (ненулевой код здесь означает найденные advisory)"
 

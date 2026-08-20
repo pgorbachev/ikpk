@@ -22,15 +22,16 @@
 #
 # Список сверяется поимённо и в ОБЕ стороны: появилась необъявленная ссылка в пустоту — отказ;
 # объявленная разрешилась или исчезла из текста — тоже отказ (`--write-absent`).
-openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro
-openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt
-openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro
-openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md
-openspec/changes/online-payment-flow/design.md :: openspec/changes/payment-request-flow/
-openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md
-openspec/changes/online-payment-flow/proposal.md :: openspec/changes/payment-request-flow/
-openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md
-openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md
-openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/
-openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md
-openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md
+openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :: will-create
+openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
+openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create
+openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md :: not-committed
+openspec/changes/online-payment-flow/design.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
+openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md :: deleted-deliberately
+openspec/changes/online-payment-flow/proposal.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
+openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md :: deleted-deliberately
+openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md :: deleted-deliberately
+openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
+openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md :: deleted-deliberately
+openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md :: not-committed
+openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md :: external-revision

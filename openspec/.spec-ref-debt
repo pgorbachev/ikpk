@@ -10,11 +10,17 @@
 # проекте форма, её несут и уже слитые спеки. Требовать разом переписать все было бы
 # запретом на существующее состояние вместо защиты от регресса. Новая ссылка обязана нести
 # фрагмент: `web/src/lib/data.ts:45`, `const ENTITIES_DIR =`
+openspec/changes/article-list-pagination/proposal.md :: dist/statyi/index.html
+openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:103
+openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:61
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:87
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
+openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
+openspec/changes/education-trust-and-admission-clarity/design.md :: dist/sotrudnichestvo-s-nami/index.html
 openspec/changes/education-trust-and-admission-clarity/design.md :: sotrudnichestvo-s-nami.astro:19
 openspec/changes/education-trust-and-admission-clarity/design.md :: svedeniya-ob-obrazovatelnoy-organizatsii.astro:26
+openspec/changes/education-trust-and-admission-clarity/design.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/components/home/sections/Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/components/home/sections/InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/components/home/sections/Programs.astro:26
@@ -25,6 +31,9 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: content-quality.test.ts:474
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/index.html
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/sotrudnichestvo-s-nami/index.html
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
@@ -35,25 +44,31 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: Approach.astr
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: TrustBar.astro:22
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/index.html
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/institut-apledzhera/index.html
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/institut-barralya/index.html
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/institut-klinicheskoy-prikladnoy-kineziologii/index.html
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/oplata/index.html
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: dist/sotrudnichestvo-s-nami/index.html
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: html-cleaner.ts:316-387
+openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
 openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:50-52
 openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:63
+openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:93
 openspec/changes/online-payment-flow/proposal.md :: html-cleaner.ts:601-619
 openspec/changes/online-payment-flow/proposal.md :: oplata.astro:34
 openspec/changes/online-payment-flow/proposal.md :: scripts/deploy-web.sh:50-52
 openspec/changes/online-payment-flow/proposal.md :: web/src/lib/html-cleaner.ts:601
 openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:18-31
 openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:36
-openspec/changes/online-payment-flow/specs/online-payment/spec.md :: web/src/pages/oplata.astro:18-31
+openspec/changes/online-payment-flow/specs/online-payment/spec.md :: dist/oplata/index.html
+openspec/changes/online-payment-flow/tasks.md :: web/dist/oplata/index.html
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
 openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
-openspec/specs/article-catalog/spec.md :: web/src/lib/data.ts:264-267
+openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
 openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/[slug].astro:119
-openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:114-130
-openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:13-20
-openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/index.astro:375-379
-openspec/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
+openspec/specs/article-catalog/spec.md :: web/src/pages/statyi/[slug].astro:141
