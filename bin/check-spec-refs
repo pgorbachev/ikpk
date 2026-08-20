@@ -314,6 +314,8 @@ function schemaArtifactBasenames() {
   return names;
 }
 
+verifyBuildRoots();
+
 const SCHEMA_ARTIFACTS = schemaArtifactBasenames();
 
 const defects = [];
