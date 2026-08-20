@@ -3,6 +3,12 @@
 Задача 4.3a, Решение 4а. Предмет — **состояние**, а не код: по нему сервис отличает
 «платёж уже создан» от «создаём впервые». Пересборка его не восстанавливает.
 
+**Объём — только production** (задача 4.3a, решение владельца 2026-08-18): на демо-стенде
+резервное копирование не настраивается намеренно. После задачи 4.10 (матрица контуров,
+две установленные инстанции) каталог состояния — `/var/lib/ikpk-payments/prod`, а не общий
+`/var/lib/ikpk-payments`; юнит сервиса — `ikpk-payments@prod` (шаблонный
+`payments/deploy/ikpk-payments@.service`), не безымянный `ikpk-payments`.
+
 ## Что копируется
 
 | файл | зачем |
@@ -67,24 +73,26 @@ systemctl list-timers ikpk-payments-backup.timer   # проверить след
 состояние старым.
 
 ```bash
-systemctl stop ikpk-payments
+DATA_DIR=/var/lib/ikpk-payments/prod
+
+systemctl stop ikpk-payments@prod
 
 ls -1t /var/backups/ikpk-payments/*.payments.json | head -5   # выбрать метку
 STAMP=20260818T120000Z
 
 # Сохранить повреждённое состояние ДО подмены: оно понадобится для разбора,
 # и это единственный экземпляр.
-mkdir -p /var/lib/ikpk-payments/broken-$STAMP
-mv /var/lib/ikpk-payments/*.json /var/lib/ikpk-payments/broken-$STAMP/ 2>/dev/null || true
+mkdir -p "$DATA_DIR/broken-$STAMP"
+mv "$DATA_DIR"/*.json "$DATA_DIR/broken-$STAMP/" 2>/dev/null || true
 
 for name in payments verification-journal hmac-canary duplicate-tokens; do
   src=/var/backups/ikpk-payments/$STAMP.$name.json
   [ -f "$src" ] && install -o ikpk-payments -g ikpk-payments -m 0600 "$src" \
-    /var/lib/ikpk-payments/$name.json
+    "$DATA_DIR/$name.json"
 done
 
-systemctl start ikpk-payments
-systemctl status ikpk-payments --no-pager | head -20
+systemctl start ikpk-payments@prod
+systemctl status ikpk-payments@prod --no-pager | head -20
 ```
 
 **Что проверить после восстановления и записать в отчёт:**

@@ -70,7 +70,6 @@ describe('3.10c-1 повреждённое хранилище — fail-closed', 
         PAYMENT_STORAGE_PATH: join(okDir, 'payments.json'),
         PAYMENT_LISTEN_PORT: '18771',
       }),
-      waitMs: 2500,
     });
     expect(ok.listening, '{records:[]} отвергнут как пустое хранилище').toBe(true);
   });

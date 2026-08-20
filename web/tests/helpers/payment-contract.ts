@@ -94,7 +94,14 @@ export function prodEnv(overrides: Record<string, string | undefined> = {}): Rec
   const base: Record<string, string> = {
     PAYMENT_MODE: 'prod',
     RECEIPT_ENABLED: 'false',
-    YOOKASSA_SHOP_ID: 'test-shop',
+    // Задача 4.10: `prod` стартует только с боевым магазином, а `PAYMENT_RETURN_BASE`
+    // обязательна в test|prod (задача 5.10e). Прежнее `'test-shop'` было произвольной
+    // фикстурой, не привязанной к спеке; теперь фикстура сама обязана быть валидным
+    // prod-контуром — иначе десятки уже зелёных тестов этого файла (payment-post,
+    // payment-fingerprint, payment-webhook, payment-startup и др.), стартующие сервис через
+    // `prodEnv()` без переопределения этих двух полей, перестали бы подниматься.
+    YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.prod,
+    PAYMENT_RETURN_BASE: PAYMENT_RETURN_BASE_PROD,
     YOOKASSA_SECRET_KEY: TEST_YOOKASSA_SECRET,
     HMAC_KEY_CURRENT: TEST_HMAC_CURRENT,
     HMAC_KEY_CURRENT_VERSION: TEST_HMAC_CURRENT_VERSION,
@@ -144,3 +151,80 @@ export type VerificationJournalEntry = {
   at: string;
   reason: string;
 };
+
+// ── Матрица контуров (release modes) ─────────────────────────────────────────
+//
+// Значения нормативны: спека change `online-payment-flow`
+// (`specs/online-payment/spec.md`, Requirements «Роль сборки объявлена перечислением…»,
+// «Личность контура сообщается несекретным readiness-ответом», «Установленные платёжные
+// контуры нельзя публиковать выключенными или перепутанными») и решения владельца от
+// 2026-08-18. Магазины закреплены: тестовый `1440249`, боевой `409285`.
+
+/**
+ * Роль КЛИЕНТСКОЙ сборки: ЧЕТЫРЕ значения, а не булев признак «демо».
+ *
+ * `preview` выделена из `ci` решением владельца от 2026-08-19 (находка D1 сессии красных
+ * тестов): прежние три роли давали `ci` два несовместимых смысла — сборка без формы и сборка
+ * с mock-формой, — а ожидание гейта требуется выводить ИЗ РОЛИ. Спека прямо запрещает
+ * уточняющий второй признак рядом с ролью.
+ */
+export const PAYMENT_ROLE_ATTR = 'data-payment-role';
+export const PAYMENT_ROLES = ['ci', 'preview', 'stand', 'prod'] as const;
+export type PaymentRole = (typeof PAYMENT_ROLES)[number];
+
+/** Признак прежней матрицы: удалён решением владельца 2026-08-18 (задачи 5.10a, 6.14). */
+export const RETIRED_DEMO_ATTR = 'data-payment-demo';
+
+/**
+ * Объявляемая БАЗА эндпоинта по роли. Клиент дописывает `/payments` сам.
+ *
+ * У роли `ci` записи здесь нет намеренно: по спеке объявленного эндпоинта у неё нет вовсе, и
+ * «ожидаемое значение» для неё — отсутствие атрибута, а не какая-то строка.
+ */
+// `prod` — тестовое значение, а не адрес, принятый этим change: production endpoint не
+// выбран (`proposal.md`, Развилка 1, не принята решением владельца 2026-08-20/21; выбор —
+// объём `production-payment-rollout`). Тесты, использующие эту запись, проверяют, что
+// `paymentEndpoint()` возвращает ЯВНО заданное значение буквально — не то, что это
+// значение является умолчанием кода: умолчания у роли `prod` больше нет.
+export const PAYMENT_ENDPOINT_BASE: Record<'preview' | 'stand' | 'prod', string> = {
+  preview: 'https://demo-api.ikpk.invalid',
+  stand: 'http://193.124.115.99/api',
+  prod: 'https://payments-prod.ikpk.invalid',
+};
+
+/**
+ * Адрес mock-обработчика. Тот же, что прежде выдавался за стендовый: решением владельца от
+ * 2026-08-18 он объявлен НЕ представляющим стенд (`.invalid` недостижим по построению), а
+ * решением от 2026-08-19 закреплён за ролью `preview`.
+ */
+export const PREVIEW_MOCK_ENDPOINT = PAYMENT_ENDPOINT_BASE.preview;
+/** Прежнее имя того же значения — оставлено, чтобы старые ссылки читались однозначно. */
+export const RETIRED_STAND_ENDPOINT = PREVIEW_MOCK_ENDPOINT;
+
+/**
+ * Отображение роли сборки на режим серверного процесса. У `ci` процесса нет вовсе —
+ * поэтому `null`, а не какое-то значение режима.
+ */
+export const ROLE_TO_SERVICE_MODE: Record<PaymentRole, 'demo' | 'test' | 'prod' | null> = {
+  ci: null,
+  preview: 'demo',
+  stand: 'test',
+  prod: 'prod',
+};
+
+/** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */
+export const PAYMENT_RETURN_BASE_STAND = 'http://193.124.115.99';
+export const PAYMENT_RETURN_BASE_PROD = 'https://ikpk.su';
+
+/** Режим УСТАНОВЛЕННОГО сервиса и закреплённый за ним магазин. */
+export const SERVICE_SHOP_ID: Record<'test' | 'prod', string> = {
+  test: '1440249',
+  prod: '409285',
+};
+
+/** Loopback-адрес инстанции стенда: наружу открыт только путь через обратный прокси. */
+export const STAND_BIND_HOST = '127.0.0.1';
+export const STAND_BIND_PORT = '8787';
+/** Гейт публикации спрашивает readiness изнутри host, не через публичный эндпоинт. */
+export const READYZ_PATH = '/readyz';
+export const READYZ_INTERNAL_URL = `http://${STAND_BIND_HOST}:${STAND_BIND_PORT}${READYZ_PATH}`;

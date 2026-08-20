@@ -12,6 +12,12 @@ const YOOKASSA_TIMEOUT_MS = 8000;
 const CHANNEL_SOURCE = 'ikpk-site';
 const CANARY_CONSTANT = 'ikpk-hmac-canary-constant';
 const ALLOWED_ORIGIN = 'https://ikpk.su';
+// Решение 13 (design.md): роль установленного сервиса `test|prod` привязана к
+// закреплённому магазину ЮKassa намертво — совпадение проверяется на старте (задача 4.10).
+const YOOKASSA_TEST_SHOP_ID = '1440249';
+const YOOKASSA_PROD_SHOP_ID = '409285';
+const SERVICE_MODES = ['demo', 'test', 'prod'] as const;
+type ServiceMode = (typeof SERVICE_MODES)[number];
 
 export type PaymentRecord = {
   requestId: string;
@@ -217,10 +223,11 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function validateProdEnv(env: NodeJS.ProcessEnv): void {
-  const mode = env.PAYMENT_MODE;
-  if (mode !== 'prod' && mode !== 'demo') {
-    fail(`PAYMENT_MODE must be demo or prod, got ${JSON.stringify(mode ?? '')}`);
+  const modeRaw = env.PAYMENT_MODE;
+  if (!(SERVICE_MODES as readonly string[]).includes(modeRaw ?? '')) {
+    fail(`PAYMENT_MODE must be one of ${SERVICE_MODES.join('|')}, got ${JSON.stringify(modeRaw ?? '')}`);
   }
+  const mode = modeRaw as ServiceMode;
   if (mode === 'demo') return;
 
   const required = [
@@ -229,10 +236,51 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
     'HMAC_KEY_CURRENT',
     'HMAC_KEY_CURRENT_VERSION',
     'RECEIPT_ENABLED',
+    // Задача 5.10e: адрес возврата — свойство контура, умолчание на боевой сайт для
+    // стенда недопустимо. Тот же единственный исход, что у любого другого недостающего
+    // обязательного значения — порт не открыт до всякого запроса посетителя.
+    'PAYMENT_RETURN_BASE',
   ];
   for (const name of required) {
-    if (!env[name]) fail(`${name} is required when PAYMENT_MODE=prod`);
+    if (!env[name]) fail(`${name} is required when PAYMENT_MODE=${mode}`);
   }
+
+  // Роль сервиса привязана к закреплённому магазину намертво (design.md, Решение 13):
+  // `test` — только 1440249, `prod` — только 409285. Сверка буквальная, без trim: пробел
+  // или префикс уводят запрос в чужой магазин так же надёжно, как другое число.
+  const expectedShopId = mode === 'test' ? YOOKASSA_TEST_SHOP_ID : YOOKASSA_PROD_SHOP_ID;
+  if (env.YOOKASSA_SHOP_ID !== expectedShopId) {
+    fail(
+      `YOOKASSA_SHOP_ID must be ${expectedShopId} when PAYMENT_MODE=${mode}, got ${JSON.stringify(env.YOOKASSA_SHOP_ID ?? '')}`,
+    );
+  }
+
+  // PAYMENT_RETURN_BASE обязана быть КАНОНИЧЕСКИМ http(s)-origin: посетитель стенда
+  // обязан вернуться на /oplata ЭТОГО ЖЕ контура, а неразбираемое значение проявилось бы
+  // только на последнем шаге оплаты у живого посетителя. «Ненулевого origin» мало
+  // (найдено ревью владельца, P1, 2026-08-20): https://ikpk.su/foo разбирался и давал
+  // /foo/oplata — страницу, которой нет. Путь, query, fragment и credentials — отказ;
+  // хвостовой слэш — законная запись того же origin (pathname «/» у обеих форм).
+  let returnBase: URL | undefined;
+  try {
+    returnBase = new URL(env.PAYMENT_RETURN_BASE!);
+  } catch {
+    returnBase = undefined;
+  }
+  if (
+    !returnBase ||
+    (returnBase.protocol !== 'http:' && returnBase.protocol !== 'https:') ||
+    returnBase.username !== '' ||
+    returnBase.password !== '' ||
+    returnBase.pathname !== '/' ||
+    returnBase.search !== '' ||
+    returnBase.hash !== ''
+  ) {
+    fail(
+      `PAYMENT_RETURN_BASE must be a canonical http(s) origin without credentials, path, query or hash, got ${JSON.stringify(env.PAYMENT_RETURN_BASE ?? '')}`,
+    );
+  }
+
   const receipt = env.RECEIPT_ENABLED;
   if (receipt !== 'true' && receipt !== 'false') {
     fail(`RECEIPT_ENABLED must be true or false, got ${JSON.stringify(receipt)}`);
@@ -261,7 +309,7 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
   }
   for (const name of ['PAYMENT_POST_RATE_LIMIT'] as const) {
     const raw = env[name];
-    if (!raw) fail(`${name} is required when PAYMENT_MODE=prod`);
+    if (!raw) fail(`${name} is required when PAYMENT_MODE=${mode}`);
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0) {
       fail(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
@@ -269,7 +317,7 @@ function validateProdEnv(env: NodeJS.ProcessEnv): void {
   }
   {
     const raw = env.PAYMENT_GET_RATE_LIMIT;
-    if (!raw) fail('PAYMENT_GET_RATE_LIMIT is required when PAYMENT_MODE=prod');
+    if (!raw) fail(`PAYMENT_GET_RATE_LIMIT is required when PAYMENT_MODE=${mode}`);
     const n = Number(raw);
     if (!Number.isInteger(n) || n < 5) {
       fail(`PAYMENT_GET_RATE_LIMIT must be an integer >= 5, got ${JSON.stringify(raw)}`);
@@ -489,7 +537,13 @@ export function createPaymentService(opts: ServiceOpts) {
       capture: true,
       confirmation: {
         type: 'redirect',
-        return_url: `${env.PAYMENT_RETURN_BASE ?? 'https://ikpk.su'}/oplata?paymentRequest=${body.requestId}`,
+        // Задача 5.10e: PAYMENT_RETURN_BASE обязательна и провалидирована как
+        // канонический origin ДО открытия порта (validateProdEnv) для любого режима, в
+        // котором этот код исполним (test|prod — demo возвращается из handlePost раньше).
+        // Умолчание на боевой сайт здесь означало бы ровно тот дефект, который 5.10e
+        // устраняет. Адрес строится от РАЗОБРАННОГО origin, не от сырой строки: сырой
+        // «https://host/» дал бы «//oplata» (ревью владельца, P1, 2026-08-20).
+        return_url: `${new URL(env.PAYMENT_RETURN_BASE!).origin}/oplata?paymentRequest=${body.requestId}`,
       },
       description: `Оплата за семинар: ${body.seminar}, ${body.firstName} ${body.lastName}`,
       metadata: { requestId: body.requestId, source: CHANNEL_SOURCE },
@@ -901,6 +955,18 @@ export function createPaymentService(opts: ServiceOpts) {
         return;
       }
 
+      // Задача 4.10a: несекретный readiness-ответ, ровно три поля. Наружу этот маршрут не
+      // публикуется (5.10c) — гейт спрашивает его изнутри host. `demo`/`ci` (нет процесса
+      // вовсе) не выдают себя за установленный контур: тот же ответ, что на неизвестный путь.
+      if (req.method === 'GET' && url.pathname === '/readyz') {
+        if (env.PAYMENT_MODE === 'test' || env.PAYMENT_MODE === 'prod') {
+          send(200, { status: 'ready', mode: env.PAYMENT_MODE, shopId: env.YOOKASSA_SHOP_ID });
+        } else {
+          send(404, { status: 'not_found' });
+        }
+        return;
+      }
+
       if (req.method === 'POST' && url.pathname === '/payments') {
         const result = await exclusive(() => handlePost(req));
         send(result.status, result.body);
@@ -924,7 +990,10 @@ export function createPaymentService(opts: ServiceOpts) {
   }
 
   function checkCanary(): void {
-    if (env.PAYMENT_MODE !== 'prod') return;
+    // Задача 4.10: `test` — такой же реальный платёжный режим, как `prod` (свой ключ
+    // отпечатка, свои записи идемпотентности), и защита canary обязана работать для обоих.
+    // Пропускается только `demo` — там ни HMAC-ключа, ни хранилища отпечатков не бывает.
+    if (env.PAYMENT_MODE === 'demo') return;
     mkdirSync(dirname(canaryPath), { recursive: true });
     let canary: Record<string, string> | null = null;
     if (existsSync(canaryPath)) {

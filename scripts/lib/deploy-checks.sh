@@ -76,58 +76,251 @@ health_check() {
 # БУКВАЛЬНОЕ равенство, а не regex по образцу хоста: у нашего эндпоинта один
 # канонический адрес, в отличие от нескольких порталов Bitrix24.
 #
-# Аргументы: <каталог сборки> <ожидаемый адрес> <ожидаемое значение data-payment-demo>.
-# Ноль найденных атрибутов — ОТКАЗ: это «проверить не удалось», а не «всё верно».
+# Аргументы: <каталог сборки> <ожидаемый адрес> <ожидаемая роль ci|preview|stand|prod>.
+#
+# ПЕРЕПИСАНО по Решению 13 (design.md) и задачам 6.13/6.14: булев признак
+# `data-payment-demo` удалён решением владельца 2026-08-18, третий аргумент — РОЛЬ
+# сборки, а не флаг. Роль определяет ожидаемый артефакт целиком: у `ci` эндпоинта нет
+# вовсе (ноль — законное состояние, а не «проверить не удалось»), у остальных трёх ролей
+# ожидается ровно набор адресов, буквально равных `expect_endpoint`.
+#
+# Ноль найденных атрибутов РОЛИ — ОТКАЗ при любой ожидаемой роли: «роль не объявлена» —
+# непройденная проверка, а не «предмета нет» (спека `deploy-gating`, сценарий «роль не
+# объявлена»). Проверяется ОТДЕЛЬНЫМ явным счётчиком, а не через `grep -vxF` по
+# ожидаемому значению — F1 (сессия красных тестов 2026-08-19): пустой список после
+# `grep -vxF` даёт пустую строку после подстановки команды (трейлинг-перевод строки
+# срезается), и «проверять нечего» читался бы как «совпало».
 payment_endpoint_matches() {
-  local dist="${1:-}" expect_endpoint="${2:-}" expect_demo="${3:-}"
+  local dist="${1:-}" expect_endpoint="${2:-}" expect_role="${3:-}"
   if [[ ! -d "$dist" ]]; then
     echo "каталога сборки нет: $dist — проверка платёжного эндпоинта не выполнена" >&2
     return 1
   fi
 
-  local endpoints demo_flags rc_e rc_d
+  local roles rc_r
   set +e
-  endpoints=$(grep -roh 'data-payment-endpoint="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
-    | sed 's/^data-payment-endpoint="//; s/"$//' | sort -u)
-  rc_e=$?
-  demo_flags=$(grep -roh 'data-payment-demo="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
-    | sed 's/^data-payment-demo="//; s/"$//' | sort -u)
-  rc_d=$?
+  roles=$(grep -roh 'data-payment-role="[^"]*"' "$dist" --include='*.html' 2>/dev/null \
+    | sed 's/^data-payment-role="//; s/"$//' | sort -u)
+  rc_r="${PIPESTATUS[0]}"
   set -e
-  # У grep 0 — нашёл, 1 — не нашёл, 2+ — ошибка чтения. Третий случай нельзя путать
-  # со вторым: именно там проверка сломана сильнее всего.
-  if (( rc_e > 1 || rc_d > 1 )); then
-    echo "не удалось прочитать $dist (grep коды $rc_e/$rc_d) — проверка не выполнена" >&2
+  if (( rc_r > 1 )); then
+    echo "не удалось прочитать $dist при поиске роли (grep код $rc_r) — проверка не выполнена" >&2
     return 1
   fi
-
-  local count
-  count=$(printf '%s\n' "$endpoints" | grep -c . || true)
-  if (( count == 0 )); then
-    echo "в сборке нет ни одного data-payment-endpoint — проверять нечего" >&2
-    echo "ожидался ровно один адрес: $expect_endpoint" >&2
+  local role_count
+  role_count=$(printf '%s\n' "$roles" | grep -c . || true)
+  if (( role_count == 0 )); then
+    echo "в сборке не объявлена ни одна роль (data-payment-role) — проверять нечего" >&2
+    echo "ожидалась роль: $expect_role" >&2
     return 1
   fi
 
   local wrong
+  wrong=$(printf '%s\n' "$roles" | grep -vxF "$expect_role" || true)
+  if [[ -n "$wrong" ]]; then
+    echo "объявленная роль не равна ожидаемой ($expect_role):" >&2
+    printf '%s\n' "$wrong" | head -5 >&2
+    return 1
+  fi
+
+  # Признаки активной формы (условия (1) и (2) спеки «Активная форма») проверяются НА
+  # ОДНОМ элементе <form>: найдено независимым ревью (F-3, 2026-08-20), ужесточено по
+  # находке ревью владельца (P1, 2026-08-20). Прежняя редакция считала формы и эндпоинты
+  # РАЗДЕЛЬНО — форма без эндпоинта плюс `data-payment-endpoint` на любом другом элементе
+  # складывались в проход. Теперь эндпоинт извлекается только изнутри тега формы с
+  # `data-payment-form`, а КАЖДОЕ вхождение признака эндпоинта в HTML обязано лежать в
+  # таком теге: расхождение счётчиков — признак на чужом элементе, отказ.
+  # Извлечение построчное (тег формы целиком на одной строке — как в реальной сборке);
+  # многострочный тег не прошёл бы молча: он не попал бы в form_tags, и гейт упал бы
+  # либо по «ноль форм», либо по расхождению счётчиков — отказ, а не ложный проход.
+  local form_tags rc_form
+  set +e
+  form_tags=$(grep -roh -E '<form\b[^>]*>' "$dist" --include='*.html' 2>/dev/null \
+    | grep -E '\bdata-payment-form\b')
+  rc_form="${PIPESTATUS[0]}"
+  set -e
+  if (( rc_form > 1 )); then
+    echo "не удалось прочитать $dist при поиске признака формы (grep код $rc_form) — проверка не выполнена" >&2
+    return 1
+  fi
+  local form_count
+  form_count=$(printf '%s\n' "$form_tags" | grep -c . || true)
+
+  local endpoint_all rc_e
+  set +e
+  endpoint_all=$(grep -roh 'data-payment-endpoint="[^"]*"' "$dist" --include='*.html' 2>/dev/null)
+  rc_e="${PIPESTATUS[0]}"
+  set -e
+  if (( rc_e > 1 )); then
+    echo "не удалось прочитать $dist при поиске эндпоинта (grep код $rc_e) — проверка не выполнена" >&2
+    return 1
+  fi
+  local endpoint_total
+  endpoint_total=$(printf '%s\n' "$endpoint_all" | grep -c . || true)
+
+  # Вхождения эндпоинта внутри тегов активной формы — и формы, объявленные без него.
+  local endpoints_in_forms forms_without_endpoint
+  endpoints_in_forms=$(printf '%s\n' "$form_tags" | grep -oh 'data-payment-endpoint="[^"]*"' || true)
+  # Сначала отбросить пустые строки: `grep -c -v` на пустом входе насчитал бы 1.
+  forms_without_endpoint=$(printf '%s\n' "$form_tags" | grep . | grep -c -v 'data-payment-endpoint="' || true)
+  local endpoint_in_form_count
+  endpoint_in_form_count=$(printf '%s\n' "$endpoints_in_forms" | grep -c . || true)
+
+  local endpoints
+  endpoints=$(printf '%s\n' "$endpoints_in_forms" | sed 's/^data-payment-endpoint="//; s/"$//' | sort -u)
+  local endpoint_count
+  endpoint_count=$(printf '%s\n' "$endpoints" | grep -c . || true)
+
+  # Роль `ci` не несёт эндпоинта по контракту роли (Requirement «Роль определяет
+  # ожидаемый артефакт целиком»): найденный адрес — тоже отказ, даже мок-адрес preview,
+  # потому что он всё равно обещает контур, которого в артефакте нет.
+  if [[ "$expect_role" == "ci" ]]; then
+    if (( endpoint_total != 0 || form_count != 0 )); then
+      echo "роль ci не несёт формы и объявленного эндпоинта по контракту роли, а сборка объявляет:" >&2
+      printf '%s\n' "$endpoint_all" | sort -u | head -5 >&2
+      (( form_count != 0 )) && echo "форм с data-payment-form: $form_count" >&2
+      return 1
+    fi
+    printf 'платёжная роль: %s, формы и эндпоинта нет — по контракту роли\n' "$expect_role"
+    return 0
+  fi
+
+  if (( form_count == 0 )); then
+    echo "в сборке роли $expect_role нет ни одной формы с data-payment-form — проверять нечего" >&2
+    echo "ожидался адрес на форме: $expect_endpoint" >&2
+    return 1
+  fi
+  if (( forms_without_endpoint != 0 )); then
+    echo "в сборке роли $expect_role форм(ы) с data-payment-form без data-payment-endpoint НА ТОМ ЖЕ теге: $forms_without_endpoint — признаки активной формы обязаны быть на одном элементе" >&2
+    return 1
+  fi
+  if (( endpoint_total != endpoint_in_form_count )); then
+    echo "data-payment-endpoint найден вне тега активной формы: всего вхождений $endpoint_total, внутри форм $endpoint_in_form_count — признак на чужом элементе останавливает публикацию" >&2
+    return 1
+  fi
+  if (( endpoint_count == 0 )); then
+    echo "в сборке роли $expect_role нет ни одного data-payment-endpoint на форме — проверять нечего" >&2
+    echo "ожидался адрес: $expect_endpoint" >&2
+    return 1
+  fi
+
   wrong=$(printf '%s\n' "$endpoints" | grep -vxF "$expect_endpoint" || true)
   if [[ -n "$wrong" ]]; then
     echo "адрес платёжного эндпоинта не равен ожидаемому ($expect_endpoint):" >&2
     printf '%s\n' "$wrong" | head -5 >&2
     return 1
   fi
+  printf 'платёжная роль: %s, форм: %d, эндпоинт: %d адрес(ов), все равны %s\n' \
+    "$expect_role" "$form_count" "$endpoint_count" "$expect_endpoint"
+}
 
-  # Признак режима клиента сверяется отдельно: рассогласование «адрес боевой, а клиент
-  # считает себя демонстрационным» по одному адресу не видно, а исход у него скверный —
-  # демо-клиент трактует боевой ответ как ошибку адресата, и наоборот.
-  wrong=$(printf '%s\n' "$demo_flags" | grep -vxF "$expect_demo" || true)
-  if [[ -n "$wrong" ]]; then
-    echo "data-payment-demo не равен ожидаемому ($expect_demo):" >&2
-    printf '%s\n' "$wrong" | head -5 >&2
+# ── Гейт readiness установленного контура (задача 6.13) ─────────────────────
+#
+# Единственное доказательство личности контура, которое принимает гейт (спека,
+# Requirement «Личность контура сообщается несекретным readiness-ответом»): совпадение
+# адреса ничего не доказывает — за ним может стоять другой процесс или другой магазин.
+# Аргументы: <адрес /readyz, изнутри host> <ожидаемый mode> <ожидаемый shopId>.
+#
+# «Ответил, но не тем» и «не ответил вовсе» не различаются намеренно — оба
+# останавливают публикацию тем же способом (спека: «гейту нужен положительный признак
+# ожидаемого контура, а не отсутствие отрицательного»).
+payment_readiness_matches() {
+  local url="${1:-}" expect_mode="${2:-}" expect_shop="${3:-}"
+  local raw meta code ctype body
+  raw="$(curl -sS --max-time 10 -w $'\n%{http_code}\t%{content_type}' "$url" 2>/dev/null)" || {
+    echo "payment_readiness_matches: запрос к $url не выполнен" >&2
+    return 1
+  }
+  meta="${raw##*$'\n'}"
+  body="${raw%$'\n'*}"
+  code="${meta%%$'\t'*}"
+  ctype="${meta#*$'\t'}"
+  if [[ "$code" != "200" ]]; then
+    echo "payment_readiness_matches: $url вернул ${code:-<нет ответа>}, ожидался 200" >&2
     return 1
   fi
-  printf 'платёжный эндпоинт: %d адрес(ов), все равны %s, data-payment-demo=%s\n' \
-    "$count" "$expect_endpoint" "$expect_demo"
+  # Content-Type — часть контракта readiness (найдено ревью владельца, P1, 2026-08-20):
+  # корректный JSON под text/plain — это ДРУГОЙ сервис или прокси-заглушка, а не
+  # подтверждение контура. Параметры (`; charset=...`) допустимы, подмена типа — нет.
+  local ctype_lc
+  ctype_lc=$(printf '%s' "$ctype" | tr '[:upper:]' '[:lower:]')
+  if [[ "$ctype_lc" != "application/json" && "$ctype_lc" != application/json\;* ]]; then
+    echo "payment_readiness_matches: $url ответил Content-Type «${ctype:-<пусто>}», ожидался application/json" >&2
+    return 1
+  fi
+  # Разбор — в node, а не sed/grep: состав ответа проверяется ИСЧЕРПЫВАЮЩЕ (ровно три
+  # поля, лишнее — тоже отказ), и это надёжнее делать структурным разбором JSON, чем
+  # текстовым совпадением, которое не отличит лишнее поле от значения внутри строки.
+  if ! node -e '
+      const [body, mode, shop] = process.argv.slice(1);
+      let parsed;
+      try { parsed = JSON.parse(body); } catch { process.exit(1); }
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) process.exit(1);
+      const keys = Object.keys(parsed).sort();
+      if (JSON.stringify(keys) !== JSON.stringify(["mode", "shopId", "status"])) process.exit(1);
+      if (parsed.status !== "ready" || parsed.mode !== mode || parsed.shopId !== shop) process.exit(1);
+    ' "$body" "$expect_mode" "$expect_shop"
+  then
+    echo "payment_readiness_matches: $url ответил, но не подтвердил mode=$expect_mode shopId=$expect_shop:" >&2
+    printf '%s\n' "$body" | head -c 300 >&2
+    echo >&2
+    return 1
+  fi
+}
+
+# ── Гейт CORS кросс-origin контура (задача 6.13) ─────────────────────────────
+#
+# Только для контура, у которого API раздаётся на origin, отличном от origin сайта
+# (спека, Requirement «CORS ограничен доменом сайта»); у стенда его нет — same-origin
+# запрос браузер не сверяет с CORS вовсе. Аргументы: <объявленная база API> <origin сайта>.
+payment_cors_allows() {
+  local base="${1:-}" origin="${2:-}"
+  local raw headers code allow
+  # Код ответа и заголовок проверяются НА ОДНОМ запросе с Origin (найдено ревью
+  # владельца, P2, 2026-08-20): прежде 204 утверждала другая проба БЕЗ Origin
+  # (payment_endpoint_reachable), и фактический preflight, падающий 403 с правильным
+  # Access-Control-Allow-Origin, складывался в зелёный гейт.
+  raw="$(curl -sS --max-time 10 -X OPTIONS -H "Origin: ${origin}" -D - -o /dev/null \
+    -w $'\n__HTTP_CODE__\t%{http_code}' "${base}/payments" 2>/dev/null)" || {
+    echo "payment_cors_allows: запрос OPTIONS к ${base}/payments не выполнен" >&2
+    return 1
+  }
+  code="${raw##*$'\t'}"
+  headers="${raw%$'\n'__HTTP_CODE__*}"
+  if [[ "$code" != "204" ]]; then
+    echo "payment_cors_allows: OPTIONS с Origin ${origin} к ${base}/payments вернул ${code:-<нет ответа>}, ожидался 204 — preflight фактически не пройден" >&2
+    return 1
+  fi
+  allow=$(printf '%s' "$headers" | tr -d '\r' | grep -i '^access-control-allow-origin:' \
+    | sed -E 's/^[Aa]ccess-[Cc]ontrol-[Aa]llow-[Oo]rigin:[[:space:]]*//' | tail -1)
+  if [[ -z "$allow" ]]; then
+    echo "payment_cors_allows: ${base}/payments не вернул Access-Control-Allow-Origin — отказ, а не «проверять нечего»" >&2
+    return 1
+  fi
+  if [[ "$allow" != "$origin" ]]; then
+    echo "payment_cors_allows: Access-Control-Allow-Origin=$allow, ожидался $origin" >&2
+    return 1
+  fi
+}
+
+# ── Проба доступности публичного пути (задача 6.13) ──────────────────────────
+#
+# `OPTIONS <объявленная база>/payments` → `204`: проба SHALL NOT создавать запись,
+# расходовать попытку оплаты или обращаться к ЮKassa (спека, Requirement «Установленные
+# платёжные контуры нельзя публиковать выключенными или перепутанными») — поэтому POST и
+# GET .../status здесь не годятся, ровно один запрос методом OPTIONS. Функция сама
+# дописывает `/payments`: в артефакте объявлена БАЗА (клиент дописывает путь так же).
+payment_endpoint_reachable() {
+  local base="${1:-}"
+  local code
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X OPTIONS "${base}/payments" 2>/dev/null) || {
+    echo "payment_endpoint_reachable: запрос OPTIONS к ${base}/payments не выполнен" >&2
+    return 1
+  }
+  if [[ "$code" != "204" ]]; then
+    echo "payment_endpoint_reachable: ${base}/payments ответил ${code:-<нет ответа>}, ожидался 204" >&2
+    return 1
+  fi
 }
 
 # ── Гейт секретов в артефакте (задача 6.2) ───────────────────────────────────

@@ -25,14 +25,30 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { viewport: { width: 1280, height: 720 } },
-      // Демо-сценарии (3.9, 3.10a-2b) — отдельный project против DEMO_FORMS,
-      // playwright.demo.config.ts. На боевом dist клиент трактует created_demo как ошибку.
-      testIgnore: ['**/compat.spec.ts', '**/payment-form-demo.spec.ts'],
+      // Наборы оплаты разведены по РОЛИ АРТЕФАКТА (задача 6.15) и здесь не идут вовсе:
+      // `payment-form-demo.spec.ts` — роль `preview` (`dist-demo`,
+      // playwright.preview.config.ts); `payment-form.spec.ts`, `payment-transport.spec.ts` и
+      // `payment-contour.spec.ts` — роль `stand` (`dist-stand`, playwright.stand.config.ts).
+      // Этот config раздаёт `dist`, у которого после 5.10 роль `ci` и формы нет: набор,
+      // оставленный тут, потерял бы предмет молча.
+      testIgnore: [
+        '**/compat.spec.ts',
+        '**/payment-form-demo.spec.ts',
+        '**/payment-form.spec.ts',
+        '**/payment-transport.spec.ts',
+        '**/payment-contour.spec.ts',
+      ],
     },
     {
       name: 'mobile',
       use: { viewport: { width: 375, height: 812 } },
-      testIgnore: ['**/compat.spec.ts', '**/payment-form-demo.spec.ts'],
+      testIgnore: [
+        '**/compat.spec.ts',
+        '**/payment-form-demo.spec.ts',
+        '**/payment-form.spec.ts',
+        '**/payment-transport.spec.ts',
+        '**/payment-contour.spec.ts',
+      ],
     },
     {
       name: 'compat-chrome-desktop',

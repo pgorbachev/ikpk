@@ -5,11 +5,20 @@
 
 ## Хранение
 
-Секрет живёт **только** в переменных окружения процесса, читаемых из файла:
+**Обновлено задачей 4.10 (матрица контуров): две УСТАНОВЛЕННЫЕ инстанции, не одна.**
+Стенд и production — разные `systemd`-инстансы шаблонного юнита
+`payments/deploy/ikpk-payments@.service` (`ikpk-payments@stand`, `ikpk-payments@prod`), и у
+каждой свой env-файл:
 
 ```
-/etc/ikpk-payments/env    владелец root:root, права 0600
+/etc/ikpk-payments/stand.env    владелец root:root, права 0600
+/etc/ikpk-payments/prod.env     владелец root:root, права 0600
 ```
+
+Ниже везде, где раньше стоял единственный `/etc/ikpk-payments/env` и команда
+`systemctl … ikpk-payments`, подставляется контур явно: `<contour>` — `stand` либо `prod`,
+файл — `/etc/ikpk-payments/<contour>.env`, юнит — `ikpk-payments@<contour>`. Секрет ротируется
+**отдельно для каждого контура** — рутинная ротация одного не подразумевает ротацию другого.
 
 **Почему `root:root`, а не сервисный пользователь** (решение владельца 2026-08-18, заменяет
 в этой части решение от 2026-08-12): systemd читает `EnvironmentFile=` **до** понижения
@@ -17,10 +26,11 @@
 скомпрометированный сервис не может подменить постоянную конфигурацию, в том числе адрес
 API оператора платежей.
 
-Изменяемые данные сервиса при этом принадлежат `ikpk-payments` **отдельно**:
+Изменяемые данные сервиса при этом принадлежат `ikpk-payments` **отдельно и по контурам**:
 
 ```
-/var/lib/ikpk-payments    владелец ikpk-payments:ikpk-payments
+/var/lib/ikpk-payments/stand    владелец ikpk-payments:ikpk-payments
+/var/lib/ikpk-payments/prod     владелец ikpk-payments:ikpk-payments
 ```
 
 **Обычный деплой env-файл не получает и не перезаписывает.** Он обновляет код и unit;
@@ -49,19 +59,23 @@ API оператора платежей.
 пройти по старому. Поэтому свидетельство составное.
 
 ```bash
+# 0. Контур: stand либо prod — процедура выполняется на КАЖДЫЙ отдельно.
+CONTOUR=stand   # или prod
+ENV_FILE="/etc/ikpk-payments/${CONTOUR}.env"
+
 # 1. Новый ключ выпущен в кабинете ЮKassa (магазин 409285 для prod, 1440249 для стенда).
 
-# 2. Атомарная замена env-файла.
+# 2. Атомарная замена env-файла ЭТОГО контура.
 umask 077
-cp /etc/ikpk-payments/env /etc/ikpk-payments/env.new
+cp "$ENV_FILE" "${ENV_FILE}.new"
 # правка: YOOKASSA_SECRET_KEY := новый
-chown root:root /etc/ikpk-payments/env.new && chmod 0600 /etc/ikpk-payments/env.new
-mv /etc/ikpk-payments/env.new /etc/ikpk-payments/env
-stat -c '%y %U:%G %a' /etc/ikpk-payments/env      # время замены, владелец, права
+chown root:root "${ENV_FILE}.new" && chmod 0600 "${ENV_FILE}.new"
+mv "${ENV_FILE}.new" "$ENV_FILE"
+stat -c '%y %U:%G %a' "$ENV_FILE"      # время замены, владелец, права
 
-# 3. Перезапуск.
-systemctl restart ikpk-payments
-systemctl show -p MainPID -p ActiveEnterTimestamp ikpk-payments
+# 3. Перезапуск ИНСТАНЦИИ этого контура — соседний контур не трогается.
+systemctl restart "ikpk-payments@${CONTOUR}"
+systemctl show -p MainPID -p ActiveEnterTimestamp "ikpk-payments@${CONTOUR}"
 ```
 
 **Факт 1 — новый материал действительно в файле, без вывода секрета.** Одноразовый HMAC от
@@ -72,8 +86,8 @@ systemctl show -p MainPID -p ActiveEnterTimestamp ikpk-payments
 CHALLENGE=$(openssl rand -hex 16); echo "challenge: $CHALLENGE"
 # ожидаемое значение считает тот, кто выпускал ключ, у себя:
 #   printf %s "$CHALLENGE" | openssl dgst -sha256 -hmac "<новый ключ>" -r | cut -d' ' -f1
-# на хосте:
-set -a; . /etc/ikpk-payments/env; set +a
+# на хосте, из env-файла ЭТОГО контура:
+set -a; . "$ENV_FILE"; set +a
 printf %s "$CHALLENGE" | openssl dgst -sha256 -hmac "$YOOKASSA_SECRET_KEY" -r | cut -d' ' -f1
 ```
 

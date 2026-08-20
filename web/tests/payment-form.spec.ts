@@ -1,7 +1,36 @@
+/**
+ * Браузерный набор АРТЕФАКТА РОЛИ `stand` (задача 6.15; конфигурация —
+ * `playwright.stand.config.ts`, артефакт — `dist-stand`).
+ *
+ * ПОЧЕМУ ИМЕННО РОЛЬ `stand`. Рабочая семантика контура — удержание незавершённой попытки,
+ * сверка, продолжение попытки, подтверждение дубля, несколько удержаний — есть ТОЛЬКО у
+ * установленных ролей (`specs/online-payment/spec.md`, Requirement «Роли `ci` и `preview` не
+ * создают платежей, а развёрнутый стенд работает с тестовым магазином»: на артефакте
+ * `preview` эти сценарии проверить нельзя, потому что удержания там нет по норме). Раньше
+ * набор шёл на `dist` — сборке без объявленной роли; после задачи 5.10 у неё роль `ci` и
+ * формы нет вовсе, то есть предмет исчез бы молча.
+ *
+ * ЖИВАЯ ЮKASSA НЕ УЧАСТВУЕТ, весь платёжный API перехвачен Playwright, и это закрыто
+ * fail-closed guard'ом (`helpers/payment-network-guard.ts`) плюс мёртвым прокси в
+ * конфигурации набора. Секреты ЮKassa этому прогону не нужны и в CI не передаются.
+ *
+ * ПЕРЕХВАТ НЕ МЕНЯЕТ ПРЕДМЕТ: ни `data-payment-role`, ни объявленную базу, ни ответы
+ * продукта тесты не переписывают — роль и база читаются из артефакта как есть (первые две
+ * проверки ниже), а перехват живёт только в транспорте.
+ *
+ * ОЖИДАНИЕ ПО ЦВЕТУ на `b4e80e7`: проверки роли и объявленной базы КРАСНЫЕ — артефакт роли
+ * не объявляет вовсе (в разметке булев `data-payment-demo`), а объявленный адрес равен
+ * боевому `https://api.ikpk.su`, тогда как роли `stand` полагается `http://193.124.115.99/api`.
+ * Самопроверка взведённости guard'а ЗЕЛЁНАЯ: механизм перехвата от продукта не зависит.
+ * Остальные проверки файла к 6.15 отношения не имеют и лишь переехали на свой артефакт.
+ */
 import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import {
   PAYMENT_CONFIRM_DUPLICATE_ATTR,
+  PAYMENT_ENDPOINT_ATTR,
+  PAYMENT_ENDPOINT_BASE,
+  PAYMENT_ROLE_ATTR,
   PAYMENT_CONTINUE_ATTR,
   PAYMENT_ENTRY_ATTR,
   PAYMENT_FORM_ATTR,
@@ -11,6 +40,12 @@ import {
   PAYMENT_SUMMARY_ATTR,
   RETURN_PARAM,
 } from './helpers/payment-contract';
+import {
+  expectNoEscapes,
+  installFailClosedGuard,
+  takeEscapes,
+  type FailClosedGuard,
+} from './helpers/payment-network-guard';
 import {
   gotoOplata,
   interceptYooKassaNavigation,
@@ -53,8 +88,94 @@ async function mockApi(page: Page, handler: (req: { method: string; url: string;
   });
 }
 
+/** Объявленная база роли `stand` (решение владельца 2026-08-18): origin стенда плюс `/api`. */
+const STAND_BASE = PAYMENT_ENDPOINT_BASE.stand;
+
+let guard: FailClosedGuard;
+
 test.beforeEach(async ({ page }) => {
+  // Guard ставится ПЕРВЫМ. Playwright применяет маршруты в обратном порядке регистрации:
+  // моки конкретного теста, поставленные позже, забирают свои запросы, а guard видит ровно
+  // то, что не забрал никто. Обратный порядок сделал бы guard'ом первый же мок.
+  guard = await installFailClosedGuard(page, 'stand');
   await interceptYooKassaNavigation(page);
+});
+
+// Fail-closed постусловие КАЖДОГО теста файла: пропущенный мок роняет тест, а не уходит на
+// живой контур молча. Зелёный тест с утечкой — это ложное зелёное: его исход получен не от
+// того адресата, о котором он говорит.
+test.afterEach(() => {
+  expectNoEscapes(guard);
+});
+
+test.describe('6.15 артефакт набора: роль stand, её база и полнота перехвата', () => {
+  test('артефакт объявляет роль stand, и другой роли в нём нет', async ({ page }) => {
+    await openForm(page);
+    const declared = await page.evaluate(
+      (attr) => [...document.querySelectorAll(`[${attr}]`)].map((el) => el.getAttribute(attr)),
+      PAYMENT_ROLE_ATTR,
+    );
+    // «Роль не объявлена» — это НЕПРОЙДЕННАЯ проверка, а не «нарушений не найдено»: без роли
+    // предмет набора неизвестен, и любой его зелёный исход ничего не значит.
+    expect(
+      declared,
+      `страница не объявляет ${PAYMENT_ROLE_ATTR} — предмет набора не подтверждён, проверка не пройдена`,
+    ).not.toEqual([]);
+    expect([...new Set(declared)]).toEqual(['stand']);
+  });
+
+  test('объявленная база остаётся http://193.124.115.99/api, и перехват её не меняет', async ({ page }) => {
+    const posts: string[] = [];
+    await page.route(/\/payments(\/|$)/, async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') posts.push(request.url());
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'pending' }),
+      });
+    });
+
+    await openForm(page);
+    const before = await page.locator(FORM).getAttribute(PAYMENT_ENDPOINT_ATTR);
+    expect(before, 'форма не объявляет базу эндпоинта — проверка не пройдена').toBe(STAND_BASE);
+
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect.poll(() => posts.length).toBe(1);
+
+    // Клиент дописывает `/payments` к БАЗЕ. `/api/payments` в качестве базы дало бы
+    // `/api/payments/payments` — спека запрещает это прямо.
+    expect(posts).toEqual([`${STAND_BASE}/payments`]);
+    // Перехват не переписывает объявленный адрес: после отправки он тот же.
+    expect(await page.locator(FORM).getAttribute(PAYMENT_ENDPOINT_ATTR)).toBe(STAND_BASE);
+  });
+
+  test('перехват полон: неперехваченный запрос к базе стенда и к живой ЮKassa останавливается и назван', async ({
+    page,
+  }) => {
+    await gotoOplata(page);
+    // Намеренные запросы БЕЗ мока — единственный способ проверить, что fail-closed взведён.
+    // Обычный прогон такого не производит, поэтому «утечек нет» без этой проверки означало бы
+    // лишь «никто не пробовал».
+    const reached = await page.evaluate(async (urls) => {
+      const out: string[] = [];
+      for (const url of urls) {
+        try {
+          await fetch(url, { method: 'POST', body: '{}' });
+          out.push('дошёл');
+        } catch {
+          out.push('остановлен');
+        }
+      }
+      return out;
+    }, [`${STAND_BASE}/payments`, 'https://api.yookassa.ru/v3/payments']);
+
+    expect(reached).toEqual(['остановлен', 'остановлен']);
+    // Судить по НАЗВАННОМУ предмету, а не по факту сетевого отказа: отказ даёт и мёртвый
+    // прокси (слой 1), а назвать предмет умеет только перехват (слой 2).
+    expect(takeEscapes(guard).map((e) => e.subject)).toEqual(['объявленная база роли', 'живая ЮKassa']);
+  });
 });
 
 test.describe('3.8 клиент: подписи про оплату', () => {
@@ -102,6 +223,37 @@ test.describe('5.4 created: немедленный переход и ссылк�
       href: 'https://yookassa.test/c',
     });
     expect(page.url()).not.toMatch(/yookassa\.test/);
+  });
+});
+
+test.describe('r15 requestId без crypto.randomUUID (небезопасный контекст)', () => {
+  test('отправка создаёт requestId резервным способом, когда crypto.randomUUID недоступен', async ({ page }) => {
+    // Найдено живой приёмкой на стенде (`http://193.124.115.99`, без TLS, решение владельца
+    // от 2026-08-13 — design.md, Решение 1): `crypto.randomUUID` — часть Web Crypto API,
+    // недоступная в non-secure context. Браузер отдаёт для него `undefined` на любом origin,
+    // кроме `https:` и loopback (`localhost`/`127.0.0.1`) — а весь остальной набор гоняется
+    // именно на `127.0.0.1` (`playwright.stand.config.ts`), поэтому эту находку не мог
+    // поймать НИ ОДИН из 65 существующих тестов файла: у них секьюрность контекста не
+    // варьируется. Прежний код звал `crypto.randomUUID()` без проверки — на стенде это
+    // синхронный `TypeError`, пойманный catch-ом обработчика отправки, и КАЖДАЯ попытка
+    // оплаты падала в состояние `unknown` без единого сетевого запроса.
+    await page.addInitScript(() => {
+      delete (Crypto.prototype as { randomUUID?: unknown }).randomUUID;
+    });
+    let capturedRequestId: string | undefined;
+    await mockApi(page, ({ postData }) => {
+      capturedRequestId = postData ? (JSON.parse(postData) as { requestId?: string }).requestId : undefined;
+      return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
+    });
+    await openForm(page);
+    const randomUUIDType = await page.evaluate(() => typeof crypto.randomUUID);
+    expect(randomUUIDType, 'стенд эмулирует недоступность crypto.randomUUID').toBe('undefined');
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await expect.poll(() => capturedRequestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    await expect(page.locator(STATE('unknown'))).toHaveCount(0);
   });
 });
 
@@ -390,6 +542,12 @@ test.describe('3.10a-2a удержание с момента отправки', 
       await new Promise((r) => setTimeout(r, 60_000));
       await route.abort();
     });
+    // Проверка статуса после перезагрузки перехвачена ЯВНО (задача 6.15). Прежде этот GET
+    // мока не имел и уходил в живую сеть: удержание сохранялось потому, что запрос падал
+    // на разрешении имени боевого API. С базой установленного контура (`http://193.124.115.99/api`)
+    // тот же запрос ушёл бы на живую машину, а исход теста продолжал бы зависеть от сети.
+    // Отказ транспорта задан здесь тем же наблюдаемым, каким он был: запрос не доходит.
+    await page.route(/\/payments\/[^/]+\/status$/, (route) => route.abort('failed'));
     await openForm(page);
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click({ timeout: 2000 }).catch(() => undefined);
