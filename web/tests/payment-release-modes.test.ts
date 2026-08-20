@@ -226,8 +226,9 @@ describe('3.16(2)/5.10e стенд создаёт платёж в 1440249 и в�
     const res = await postPayments(s.url, validPayload());
     // 201 — первое создание по свежему requestId (design.md, Решение 2, таблица
     // HTTP-кодов; 200 — только повтор). Исправлено решением владельца 2026-08-20
-    // (закрытие TD-34): прежнее ожидание 200 расходилось с контрактом и с зелёным
-    // payment-post.test.ts того же обязательного набора.
+    // (закрытие TD-36 — номер перенесён при слиянии с main, был TD-34): прежнее
+    // ожидание 200 расходилось с контрактом и с зелёным payment-post.test.ts того
+    // же обязательного набора.
     expect(res.status, `создание платежа не прошло: ${await res.text()}`).toBe(201);
     expect(s.yookassa.creates.length).toBe(1);
     const auth = s.yookassa.creates[0]!.headers.authorization ?? '';
@@ -240,7 +241,8 @@ describe('3.16(2)/5.10e стенд создаёт платёж в 1440249 и в�
     const s = await startContour('test');
     const payload = validPayload();
     const res = await postPayments(s.url, payload);
-    // 201: первое создание (TD-34 закрыт решением владельца 2026-08-20).
+    // 201: первое создание (TD-36 закрыт решением владельца 2026-08-20; номер
+    // перенесён при слиянии с main, был TD-34).
     expect(res.status).toBe(201);
     const body = s.yookassa.creates[0]!.body as { confirmation?: { return_url?: string } };
     const returnUrl = body.confirmation?.return_url ?? '';
@@ -268,7 +270,8 @@ describe('3.16(6) одинаковый requestId в двух контурах а
 
     const payload = validPayload();
     const created = await postPayments(stand.url, payload);
-    // 201: первое создание (TD-34 закрыт решением владельца 2026-08-20).
+    // 201: первое создание (TD-36 закрыт решением владельца 2026-08-20; номер
+    // перенесён при слиянии с main, был TD-34).
     expect(created.status).toBe(201);
     expect(stand.readRecords().map((r) => r.requestId)).toContain(payload.requestId);
 

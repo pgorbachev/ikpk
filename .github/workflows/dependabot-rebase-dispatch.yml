@@ -29,6 +29,12 @@ jobs:
         run: |
           set -euo pipefail
           source_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          SOURCE_ACTOR="$(jq -er '.actor.login | select(type == "string" and length > 0)' <<<"$source_run")"
+          # Связь run→PR здесь НЕ проверяется, и это измеренное ограничение площадки, а
+          # не ослабление: для закрытого PR GitHub оставляет `pull_requests` пустым.
+          # Живой след — source run 32146430416 с `pull_requests: []` и упавший на этом
+          # dispatcher 32146446224. Номер PR берётся из типизированного artifact ниже и
+          # затем перечитывается из API, поэтому доверия к состоянию run не требуется.
           jq -e \
             --argjson id "$SOURCE_RUN_ID" \
             --argjson attempt "$SOURCE_RUN_ATTEMPT" \
@@ -36,17 +42,54 @@ jobs:
             '.id == $id and .run_attempt == $attempt and
              ((.path | split("@")[0]) == ".github/workflows/dependabot-rebase.yml") and
              .repository.full_name == $repository and .event == "pull_request_target" and
-             .conclusion == "success" and (.pull_requests | type == "array" and length == 1) and
-             (.pull_requests[0].number | type == "number") and
-             (.pull_requests[0].head.sha | test("^[0-9a-f]{40}$"))' \
+             .conclusion == "success"' \
             <<<"$source_run" >/dev/null
-          pr_number="$(jq -er '.pull_requests[0].number' <<<"$source_run")"
-          head_sha="$(jq -er '.pull_requests[0].head.sha' <<<"$source_run")"
-          current="$(gh api "repos/$SOURCE_REPOSITORY/pulls/$pr_number")"
-          jq -e --arg head_sha "$head_sha" \
-            '.head.sha == $head_sha and .merged == true and (.merged_at | type == "string")' \
+
+          artifact_name="dependabot-rebase-signal-${SOURCE_RUN_ID}-${SOURCE_RUN_ATTEMPT}"
+          artifacts="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?name=$artifact_name&per_page=100")"
+          test "$(jq -er '.total_count' <<<"$artifacts")" -eq 1
+          test "$(jq -er '.artifacts | length' <<<"$artifacts")" -eq 1
+          artifact_id="$(jq -er '.artifacts[0].id' <<<"$artifacts")"
+          ARTIFACT_DIGEST="$(jq -er '.artifacts[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' <<<"$artifacts")"
+          jq -e --argjson run_id "$SOURCE_RUN_ID" \
+            '.artifacts[0].expired == false and .artifacts[0].workflow_run.id == $run_id' \
+            <<<"$artifacts" >/dev/null
+
+          archive="$RUNNER_TEMP/dependabot-rebase-signal.zip"
+          gh api "repos/$SOURCE_REPOSITORY/actions/artifacts/$artifact_id/zip" >"$archive"
+          test "sha256:$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARTIFACT_DIGEST"
+          ARCHIVE_MEMBERS="$(zipinfo -1 "$archive")"
+          test "$ARCHIVE_MEMBERS" = dependabot-rebase-signal.json
+          unzip -p "$archive" dependabot-rebase-signal.json >"$RUNNER_TEMP/dependabot-rebase-signal.json"
+
+          signal="$(jq -ce '.' "$RUNNER_TEMP/dependabot-rebase-signal.json")"
+          test "$(jq -er '.schema' <<<"$signal")" = dependabot-rebase-signal/v1
+          SIGNAL_PR_NUMBER="$(jq -er '.prNumber | select(type == "number")' <<<"$signal")"
+          SIGNAL_HEAD_SHA="$(jq -er '.headSha | select(test("^[0-9a-f]{40}$"))' <<<"$signal")"
+          SIGNAL_MERGED="$(jq -er '.merged | select(type == "boolean") | tostring' <<<"$signal")"
+          jq -e \
+            --argjson run_id "$SOURCE_RUN_ID" \
+            --argjson run_attempt "$SOURCE_RUN_ATTEMPT" \
+            --arg actor "$SOURCE_ACTOR" \
+            '.sourceRunId == $run_id and .sourceRunAttempt == $run_attempt and
+             .actor == $actor and .action == "closed"' \
+            <<<"$signal" >/dev/null
+
+          # Свежий authoritative снимок: artifact сообщает, ЧТО читать, а факт слияния
+          # берётся из API. Расхождение — несогласованность, а не обычное закрытие.
+          current="$(gh api "repos/$SOURCE_REPOSITORY/pulls/$SIGNAL_PR_NUMBER")"
+          jq -e --arg head_sha "$SIGNAL_HEAD_SHA" \
+            '.state == "closed" and .head.sha == $head_sha' \
             <<<"$current" >/dev/null
-          echo 'merged=true' >>"$GITHUB_OUTPUT"
+          API_MERGED="$(jq -er 'if has("merged") then (.merged == true | tostring) else error("missing merged") end' <<<"$current")"
+          test "$API_MERGED" = "$SIGNAL_MERGED"
+          if [ "$API_MERGED" = true ]; then
+            jq -e '(.merged_at | type == "string")' <<<"$current" >/dev/null
+          fi
+          {
+            echo "merged=$API_MERGED"
+            echo "pr-number=$SIGNAL_PR_NUMBER"
+          } >>"$GITHUB_OUTPUT"
 
   policy:
     name: Policy
