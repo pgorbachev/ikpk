@@ -712,7 +712,13 @@ describe('гейт ссылок: исходы по классам', () => {
   it('--check-built= с корнем, которого нет или который вне перечня — код 2', () => {
     mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
     const gate = join(sandbox, 'bin', 'check-spec-refs');
-    const missing = spawnSync(gate, ['--check-built=web/dist-demo'], { cwd: sandbox, encoding: 'utf8' });
+    // Корень взят НЕ демонстрационный намеренно. Гейт demo-gate.test.ts определяет предмет файла
+    // по строковым литералам, и его разбор не отличает литерал от текста комментария: даже
+    // упоминание демо-каталога в обратных кавычках ВНУТРИ комментария делало этот файл «проверкой
+    // демо-вывода», после чего шаг обычных юнитов читался как проверка демо-сборки, стоящая раньше
+    // самой сборки (измерено: четыре ложных срабатывания). Предмет этого теста от выбора корня не
+    // зависит: cms/dist в перечне есть и в CI не собирается.
+    const missing = spawnSync(gate, ['--check-built=cms/dist'], { cwd: sandbox, encoding: 'utf8' });
     expect(missing.status, `${missing.stdout}${missing.stderr}`).toBe(2);
     expect(`${missing.stdout}${missing.stderr}`).toMatch(/названы собранными, но их нет/);
     const unknown = spawnSync(gate, ['--check-built=nope/dist'], { cwd: sandbox, encoding: 'utf8' });
