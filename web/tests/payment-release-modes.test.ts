@@ -224,7 +224,11 @@ describe('3.16(2)/5.10e стенд создаёт платёж в 1440249 и в�
   it('создание платежа в режиме test уходит в магазин 1440249, а не 409285', async () => {
     const s = await startContour('test');
     const res = await postPayments(s.url, validPayload());
-    expect(res.status, `создание платежа не прошло: ${await res.text()}`).toBe(200);
+    // 201 — первое создание по свежему requestId (design.md, Решение 2, таблица
+    // HTTP-кодов; 200 — только повтор). Исправлено решением владельца 2026-08-20
+    // (закрытие TD-34): прежнее ожидание 200 расходилось с контрактом и с зелёным
+    // payment-post.test.ts того же обязательного набора.
+    expect(res.status, `создание платежа не прошло: ${await res.text()}`).toBe(201);
     expect(s.yookassa.creates.length).toBe(1);
     const auth = s.yookassa.creates[0]!.headers.authorization ?? '';
     const decoded = Buffer.from(auth.replace(/^Basic\s+/i, ''), 'base64').toString('utf8');
@@ -236,7 +240,8 @@ describe('3.16(2)/5.10e стенд создаёт платёж в 1440249 и в�
     const s = await startContour('test');
     const payload = validPayload();
     const res = await postPayments(s.url, payload);
-    expect(res.status).toBe(200);
+    // 201: первое создание (TD-34 закрыт решением владельца 2026-08-20).
+    expect(res.status).toBe(201);
     const body = s.yookassa.creates[0]!.body as { confirmation?: { return_url?: string } };
     const returnUrl = body.confirmation?.return_url ?? '';
     expect(returnUrl).toBe(`${PAYMENT_RETURN_BASE_STAND}/oplata?paymentRequest=${payload.requestId}`);
@@ -263,7 +268,8 @@ describe('3.16(6) одинаковый requestId в двух контурах а
 
     const payload = validPayload();
     const created = await postPayments(stand.url, payload);
-    expect(created.status).toBe(200);
+    // 201: первое создание (TD-34 закрыт решением владельца 2026-08-20).
+    expect(created.status).toBe(201);
     expect(stand.readRecords().map((r) => r.requestId)).toContain(payload.requestId);
 
     const yooGetsBefore = prod.yookassa.gets.length;
