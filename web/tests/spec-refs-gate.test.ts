@@ -983,17 +983,23 @@ describe('гейт ссылок: исходы по классам', () => {
     // регистра каталога оказалась ложнозелёной — она сидела внутри ветви «каталог найден на
     // диске», поэтому на macOS ловила расхождение, а на Linux-раннере span молча уходил в
     // «прозу». Локально было зелено, поймал собственный тест в CI: там `WEB/` не находится.
-    mkdirSync(join(sandbox, 'web', 'CaseDir'), { recursive: true });
-    writeFileSync(join(sandbox, 'web', 'CaseDir', 'x.ts'), 'export const x = 1;\n');
+    // Каталог ВЕРХНЕГО уровня: именно он воспроизводит Linux на macOS. Прежняя редакция теста
+    // брала `web/CaseDir`, у которого первый сегмент (`web`) существует, поэтому span доживал до
+    // проверки в любой среде — и та же ошибка «предмет исчезает раньше проверки» осталась
+    // ненайденной ДВАЖДЫ: на Linux `WEB/` отбрасывается ветвью прозы, потому что первого сегмента
+    // нет в корне. Здесь каталог есть в индексе git и отсутствует на диске, то есть первый
+    // сегмент не находится ни при какой чувствительности ФС к регистру.
+    mkdirSync(join(sandbox, 'TopCase', 'inner'), { recursive: true });
+    writeFileSync(join(sandbox, 'TopCase', 'inner', 'x.ts'), 'export const x = 1;\n');
     run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
-    rmSync(join(sandbox, 'web', 'CaseDir'), { recursive: true, force: true });
-    expect(existsSync(join(sandbox, 'web', 'CaseDir'))).toBe(false);
+    rmSync(join(sandbox, 'TopCase'), { recursive: true, force: true });
+    expect(existsSync(join(sandbox, 'TopCase'))).toBe(false);
     const gone = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
     // Дерево уже не содержит каталога, но индекс содержит — расхождение регистра обязано
     // называться и здесь, иначе вердикт зависит от файловой системы исполнителя.
     writeFileSync(
       join(sandbox, 'openspec', 'specs', 'demo', 'spec.md'),
-      '## P\n\nКаталог `web/casedir/`, ссылка `web/src/thing.ts:1`, `marker`.\n',
+      '## P\n\nКаталог `topcase/`, ссылка `web/src/thing.ts:1`, `marker`.\n',
     );
     const idx = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
     const idxOut = `${idx.stdout ?? ''}${idx.stderr ?? ''}`;

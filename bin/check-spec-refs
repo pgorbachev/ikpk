@@ -1050,6 +1050,40 @@ for (const md of files) {
       continue;
     }
 
+    // Регистр КАТАЛОГА сверяется по индексу git и ДО любого обращения к файловой системе.
+    // Прежняя редакция делала это внутри ветви «каталог найден на диске», то есть проверка
+    // требовала, чтобы ФС сама нашла каталог: на macOS `WEB/` находился и расхождение ловилось, а
+    // на Linux-раннере не находился вовсе — span уходил в «прозу» молча. Дефект, ради которого
+    // проверка и вводилась, на обязательной среде оставался. Поймано собственным тестом в CI,
+    // локально было зелено.
+    // Косая черта в самом span обязательна: без неё под признак попадает односегментная ПРОЗА —
+    // имя обязательного прогона `Tests` совпало с `web/tests` без учёта регистра и дало восемь
+    // ложных расхождений (прежде этот span отбрасывала ветвь короткого имени, и перенос проверки
+    // выше её обнажил). Каталог в артефактах всегда пишут с чертой: `WEB/`, `web/casedir/`,
+    // `.github/workflows`.
+    if (path.includes('/') && (path.endsWith('/') || !hasExt)) {
+      const dirRel = path.replace(/\/$/, '');
+      const prefixes = [dirRel, `web/${dirRel}`];
+      const exactInIndex = allTracked.some((t) =>
+        prefixes.some((pre) => t === pre || t.startsWith(`${pre}/`)),
+      );
+      if (!exactInIndex) {
+        const wrong = allTracked.find((t) =>
+          prefixes.some((pre) => t.toLowerCase().startsWith(`${pre.toLowerCase()}/`)),
+        );
+        if (wrong) {
+          const width = wrong.toLowerCase().startsWith(`web/${dirRel.toLowerCase()}/`)
+            ? `web/${dirRel}`.length
+            : dirRel.length;
+          defects.push(
+            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
+              `${wrong.slice(0, width)})`,
+          );
+          continue;
+        }
+      }
+    }
+
     // Путь БЕЗ расширения (`bin/openspec`, `.github/workflows`) — тоже ссылка, но только если его
     // первый сегмент — существующая запись верхнего уровня репозитория. Без этой оговорки в
     // ссылки попали бы `text/html`, `application/xml` и прочая проза с косой чертой (измерено:
@@ -1108,35 +1142,6 @@ for (const md of files) {
     // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
     // это не файл: ни строки, ни фрагмента у неё быть не может. Проверяется существование
     // каталога, и считается она своим числом, чтобы не смешиваться с проверкой файлов.
-    // Регистр КАТАЛОГА сверяется по индексу git и ДО любого обращения к файловой системе.
-    // Прежняя редакция делала это внутри ветви «каталог найден на диске», то есть проверка
-    // требовала, чтобы ФС сама нашла каталог: на macOS `WEB/` находился и расхождение ловилось, а
-    // на Linux-раннере не находился вовсе — span уходил в «прозу» молча. Дефект, ради которого
-    // проверка и вводилась, на обязательной среде оставался. Поймано собственным тестом в CI,
-    // локально было зелено.
-    if (path.endsWith('/') || !hasExt) {
-      const dirRel = path.replace(/\/$/, '');
-      const prefixes = [dirRel, `web/${dirRel}`];
-      const exactInIndex = allTracked.some((t) =>
-        prefixes.some((pre) => t === pre || t.startsWith(`${pre}/`)),
-      );
-      if (!exactInIndex) {
-        const wrong = allTracked.find((t) =>
-          prefixes.some((pre) => t.toLowerCase().startsWith(`${pre.toLowerCase()}/`)),
-        );
-        if (wrong) {
-          const width = wrong.toLowerCase().startsWith(`web/${dirRel.toLowerCase()}/`)
-            ? `web/${dirRel}`.length
-            : dirRel.length;
-          defects.push(
-            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
-              `${wrong.slice(0, width)})`,
-          );
-          continue;
-        }
-      }
-    }
-
     // Кандидаты те же, что у разрешения файлов: `specs/request-form-transport/` внутри change
     // означает каталог ЭТОГО change, а не одноимённый в корне. Без артефактных корней такие
     // ссылки отбрасывались как проза — измерено: три вхождения на одном каталоге.
