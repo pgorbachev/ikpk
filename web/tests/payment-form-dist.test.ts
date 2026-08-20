@@ -116,8 +116,15 @@ describe('3.12 форма в сборке скрыта, со своим приз
     expect(endpoint, 'нет data-payment-endpoint').toBeTruthy();
     expect(endpoint).not.toMatch(/yookassa|ykassa/i);
     expect(/hidden|aria-hidden="true"|inert/.test(tag) || html.includes('hidden')).toBe(true);
-    const expected = process.env.PAYMENT_ENDPOINT_PROD ?? 'https://api.ikpk.su';
-    expect(endpoint).toBe(expected);
+    // Роль prod не имеет умолчания адреса (решение владельца 2026-08-20/21) — сборка,
+    // давшая этот dist, не могла завершиться без явного PAYMENT_ENDPOINT_PROD. Совпадение
+    // отсутствия переменной здесь — «не смогли проверить», а не «всё верно» (AGENTS.md).
+    expect(
+      process.env.PAYMENT_ENDPOINT_PROD,
+      'PAYMENT_ENDPOINT_PROD не задан в окружении прогона теста — ожидание непроверяемо, ' +
+        'а не подтверждено умолчанием',
+    ).toBeTruthy();
+    expect(endpoint).toBe(process.env.PAYMENT_ENDPOINT_PROD);
   });
 });
 

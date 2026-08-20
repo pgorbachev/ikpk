@@ -201,7 +201,18 @@ echo "[deploy] Проверка форм: ${form_count} различных ад�
 # которая через этот скрипт не публикуется вовсе.
 case "$DEPLOY_MODE" in
   prod)
-    EXPECT_ENDPOINT="${PAYMENT_ENDPOINT_PROD:-https://api.ikpk.su}"
+    # Умолчания у роли `prod` больше нет (решение владельца 2026-08-20/21): production
+    # endpoint этим change не выбран (`proposal.md`, Развилка 1, не принята — выбор
+    # адреса и топологии — объём `production-payment-rollout`). Раньше здесь был
+    # захардкоженный `https://api.ikpk.su`, из-за чего деплой мог тихо сверяться с
+    # адресом, которого никто не подтверждал.
+    if [[ -z "${PAYMENT_ENDPOINT_PROD:-}" ]]; then
+      echo "Не задан PAYMENT_ENDPOINT_PROD. У роли prod нет умолчания адреса: production" >&2
+      echo "endpoint этим change не выбран (proposal.md, Развилка 1). Передайте адрес явно:" >&2
+      echo "  PAYMENT_ENDPOINT_PROD=<адрес> DEPLOY_MODE=prod $0 <host>" >&2
+      exit 2
+    fi
+    EXPECT_ENDPOINT="$PAYMENT_ENDPOINT_PROD"
     EXPECT_SERVICE_MODE="prod"
     EXPECT_SHOP_ID="409285"
     ;;

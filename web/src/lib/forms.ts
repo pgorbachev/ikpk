@@ -48,8 +48,6 @@ export function isExternalFormHref(href: string): boolean {
   return /^https?:\/\//.test(href);
 }
 
-/** Боевой origin платёжного API (без пути /payments). */
-export const PAYMENT_ENDPOINT_PROD = 'https://api.ikpk.su';
 /** Демонстрационный (mock) адрес — не боевой и не ЮKassa; закреплён за ролью `preview`. */
 export const PAYMENT_ENDPOINT_DEMO = 'https://demo-api.ikpk.invalid';
 /** База стенда: `<origin стенда>/api` (design.md, Решение 13). */
@@ -107,8 +105,23 @@ export function paymentEndpoint(): string | null {
     const custom = (import.meta.env.PAYMENT_ENDPOINT_STAND ?? '').trim();
     return custom || PAYMENT_ENDPOINT_STAND;
   }
-  const custom = (import.meta.env.PAYMENT_ENDPOINT_PROD ?? '').trim();
-  return custom || PAYMENT_ENDPOINT_PROD;
+  // Роль `prod` NOT NULL умолчания не имеет (решение владельца 2026-08-20/21):
+  // production endpoint этим change не выбран (`proposal.md`, Развилка 1, не принята) —
+  // раньше здесь был захардкоженный `https://api.ikpk.su`, из-за чего production-сборка
+  // публиковала форму на несуществующий адрес молча. Дочитывается из `process.env` тем же
+  // способом, что и `paymentRole()` (см. её комментарий): реальная сборка Astro прокидывает
+  // переменную в `import.meta.env`, а vitest без плагина Astro — только в `process.env`.
+  const fromMeta = (import.meta as ImportMeta & { env?: { PAYMENT_ENDPOINT_PROD?: unknown } }).env
+    ?.PAYMENT_ENDPOINT_PROD;
+  const custom = String(fromMeta ?? process.env.PAYMENT_ENDPOINT_PROD ?? '').trim();
+  if (!custom) {
+    throw new Error(
+      'роль сборки prod требует явно заданный PAYMENT_ENDPOINT_PROD — умолчания нет ' +
+        '(production endpoint не выбран этим change, см. proposal.md, «Развилка 1», ' +
+        'и tasks.md, «Future work», production-payment-rollout)',
+    );
+  }
+  return custom;
 }
 
 export { PROD_FORM_HOST, DEMO_STUB_PATH };

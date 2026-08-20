@@ -181,10 +181,15 @@ export const RETIRED_DEMO_ATTR = 'data-payment-demo';
  * У роли `ci` записи здесь нет намеренно: по спеке объявленного эндпоинта у неё нет вовсе, и
  * «ожидаемое значение» для неё — отсутствие атрибута, а не какая-то строка.
  */
+// `prod` — тестовое значение, а не адрес, принятый этим change: production endpoint не
+// выбран (`proposal.md`, Развилка 1, не принята решением владельца 2026-08-20/21; выбор —
+// объём `production-payment-rollout`). Тесты, использующие эту запись, проверяют, что
+// `paymentEndpoint()` возвращает ЯВНО заданное значение буквально — не то, что это
+// значение является умолчанием кода: умолчания у роли `prod` больше нет.
 export const PAYMENT_ENDPOINT_BASE: Record<'preview' | 'stand' | 'prod', string> = {
   preview: 'https://demo-api.ikpk.invalid',
   stand: 'http://193.124.115.99/api',
-  prod: 'https://api.ikpk.su',
+  prod: 'https://payments-prod.ikpk.invalid',
 };
 
 /**

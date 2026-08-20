@@ -107,9 +107,20 @@ describe('5.10a роль сборки — перечисление из четы
 });
 
 describe('5.10 объявляемый адрес соответствует роли', () => {
-  it('prod объявляет базу боевого API буквально', async () => {
-    const mod = await loadWithRole('prod');
+  it('prod объявляет явно заданную базу боевого API буквально', async () => {
+    vi.resetModules();
+    vi.stubEnv('PAYMENT_ROLE', 'prod');
+    vi.stubEnv('PAYMENT_ENDPOINT_PROD', PAYMENT_ENDPOINT_BASE.prod);
+    const mod = (await import(MODULE)) as FormsModule;
     expect(endpoint(mod)()).toBe(PAYMENT_ENDPOINT_BASE.prod);
+  });
+
+  // Внесено решением владельца 2026-08-20/21: production endpoint не выбран этим change,
+  // поэтому у роли `prod` не может быть неявного умолчания — раньше здесь молча
+  // подставлялся захардкоженный `https://api.ikpk.su`.
+  it('prod без явного PAYMENT_ENDPOINT_PROD — отказ, а не умолчание', async () => {
+    const mod = await loadWithRole('prod');
+    expect(() => endpoint(mod)()).toThrow(/PAYMENT_ENDPOINT_PROD/);
   });
 
   it('stand объявляет базу на своём origin, а не недостижимый .invalid прежней матрицы', async () => {
@@ -151,6 +162,7 @@ describe('5.10 объявляемый адрес соответствует ро
     vi.resetModules();
     vi.stubEnv('DEMO_FORMS', 'stub');
     vi.stubEnv('PAYMENT_ROLE', 'prod');
+    vi.stubEnv('PAYMENT_ENDPOINT_PROD', PAYMENT_ENDPOINT_BASE.prod);
     const mod = (await import(MODULE)) as FormsModule;
     expect(role(mod)()).toBe('prod');
     expect(endpoint(mod)()).toBe(PAYMENT_ENDPOINT_BASE.prod);
