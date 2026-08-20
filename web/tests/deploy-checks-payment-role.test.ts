@@ -431,3 +431,115 @@ describe('payment_endpoint_reachable — безопасная проба пуб�
     expect(await probe('http://127.0.0.1:1')).not.toBe(0);
   });
 });
+
+/**
+ * Находки ревью владельца 2026-08-20 по реализации `a8a4bba` (red/green: каждый случай
+ * ниже был у гейта зелёным, тесты написаны ДО исправления, фикс — отдельным коммитом).
+ *
+ * P1: спека («Активная форма», условия 1–2) требует оба признака НА ОДНОМ элементе
+ * `<form>`, а гейт считал формы и эндпоинты раздельно — форма без эндпоинта плюс
+ * эндпоинт на любом другом элементе складывались в проход.
+ */
+describe('ревью владельца 2026-08-20: признаки активной формы на одном элементе', () => {
+  it('форма без эндпоинта плюс эндпоинт на <div> — отказ, а не сумма раздельных признаков', async () => {
+    const dist = mkDist({
+      'index.html':
+        '<!doctype html><html data-payment-role="stand"><body>' +
+        '<form data-payment-form hidden></form>' +
+        `<div data-payment-endpoint="${PAYMENT_ENDPOINT_BASE.stand}"></div></body></html>`,
+    });
+    expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
+  });
+
+  it('эндпоинт вне формы при исправной активной форме рядом — тоже отказ', async () => {
+    const dist = mkDist({
+      'index.html':
+        '<!doctype html><html data-payment-role="stand"><body>' +
+        `<form data-payment-form data-payment-endpoint="${PAYMENT_ENDPOINT_BASE.stand}" hidden></form>` +
+        `<div data-payment-endpoint="${PAYMENT_ENDPOINT_BASE.stand}"></div></body></html>`,
+    });
+    expect(await gate(dist, PAYMENT_ENDPOINT_BASE.stand, 'stand')).not.toBe(0);
+  });
+});
+
+/**
+ * P1: readiness-гейт разбирал код и JSON-тело, но терял Content-Type — `200 text/plain`
+ * с корректным JSON проходил, хотя контракт readiness требует `application/json`.
+ */
+describe('ревью владельца 2026-08-20: readiness требует application/json', () => {
+  let server: Server;
+  let port = 0;
+  let type = 'application/json';
+
+  beforeAll(async () => {
+    await requireFn('payment_readiness_matches');
+    server = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': type });
+      res.end(JSON.stringify({ status: 'ready', mode: 'test', shopId: SERVICE_SHOP_ID.test }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  const check = () =>
+    runFn(
+      `payment_readiness_matches 'http://127.0.0.1:${port}${READYZ_PATH}' 'test' '${SERVICE_SHOP_ID.test}'`,
+    );
+
+  it('корректное JSON-тело с Content-Type: text/plain — отказ', async () => {
+    type = 'text/plain';
+    expect(await check()).not.toBe(0);
+  });
+
+  it('application/json с параметром charset — проходит (положительный контроль)', async () => {
+    type = 'application/json; charset=utf-8';
+    expect(await check()).toBe(0);
+  });
+});
+
+/**
+ * P2: код `204` проверялся ДРУГИМ `OPTIONS` без `Origin` (`payment_endpoint_reachable`),
+ * а `payment_cors_allows` смотрел только заголовок — фактический preflight, падающий
+ * с `403` при правильном `Access-Control-Allow-Origin`, складывался в зелёный гейт.
+ * Код и заголовок обязаны проверяться НА ОДНОМ запросе с `Origin`.
+ */
+describe('ревью владельца 2026-08-20: CORS-код и заголовок на одном preflight', () => {
+  let server: Server;
+  let port = 0;
+  let status = 204;
+  let allowOrigin: string | null = 'https://ikpk.su';
+
+  beforeAll(async () => {
+    await requireFn('payment_cors_allows');
+    server = createServer((_req, res) => {
+      const headers: Record<string, string> = {};
+      if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
+      res.writeHead(status, headers);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  const check = () => runFn(`payment_cors_allows 'http://127.0.0.1:${port}' 'https://ikpk.su'`);
+
+  it('403 с ПРАВИЛЬНЫМ Access-Control-Allow-Origin — отказ: preflight фактически не пройден', async () => {
+    status = 403;
+    allowOrigin = 'https://ikpk.su';
+    expect(await check()).not.toBe(0);
+  });
+
+  it('204 с правильным заголовком — проходит (положительный контроль)', async () => {
+    status = 204;
+    allowOrigin = 'https://ikpk.su';
+    expect(await check()).toBe(0);
+  });
+});

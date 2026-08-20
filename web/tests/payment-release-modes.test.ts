@@ -275,3 +275,43 @@ describe('3.16(6) одинаковый requestId в двух контурах а
     expect(stand.readRecords().length).toBe(1);
   });
 });
+
+/**
+ * Находка ревью владельца 2026-08-20 по реализации `a8a4bba` (red/green: тесты написаны
+ * ДО исправления, фикс — отдельным коммитом).
+ *
+ * P1: валидация 5.10e требовала лишь ненулевой `URL.origin`, а `return_url` строился от
+ * ИСХОДНОЙ строки. `https://ikpk.su/foo` проходил валидацию и давал
+ * `/foo/oplata?...` — страницу, которой нет; спека же требует `/oplata` непосредственно
+ * на origin контура. База возврата обязана быть каноническим HTTP(S)-origin — без
+ * credentials, пути, query и fragment, — а `return_url` формироваться от РАЗОБРАННОГО
+ * origin, не от сырой строки.
+ */
+describe('5.10e ревью владельца 2026-08-20: база возврата — канонический origin', () => {
+  it.each([
+    ['путём', 'https://ikpk.su/foo'],
+    ['query', 'https://ikpk.su/?x=1'],
+    ['fragment', 'https://ikpk.su/#f'],
+    ['credentials', 'https://user:pass@ikpk.su'],
+    ['не-HTTP(S) схемой', 'ftp://ikpk.su'],
+  ])('PAYMENT_RETURN_BASE с %s не открывает порт', async (what, base) => {
+    await expectFailClosedStart(
+      `PAYMENT_RETURN_BASE с ${what} (${base})`,
+      contourEnv('test', { PAYMENT_RETURN_BASE: base }),
+      REASON.returnBase,
+    );
+  });
+
+  // Хвостовой слэш — законная запись того же origin, и именно на ней видно сырую
+  // конкатенацию: `https://host/` + `/oplata` = `//oplata`.
+  it('хвостовой слэш канонизируется: return_url без «//oplata»', async () => {
+    const s = await startContour('test', { PAYMENT_RETURN_BASE: `${PAYMENT_RETURN_BASE_STAND}/` });
+    const payload = validPayload();
+    const res = await postPayments(s.url, payload);
+    expect(res.status, `создание платежа не прошло: ${await res.text()}`).toBe(201);
+    const body = s.yookassa.creates[0]!.body as { confirmation?: { return_url?: string } };
+    expect(body.confirmation?.return_url).toBe(
+      `${PAYMENT_RETURN_BASE_STAND}/oplata?paymentRequest=${payload.requestId}`,
+    );
+  });
+});
