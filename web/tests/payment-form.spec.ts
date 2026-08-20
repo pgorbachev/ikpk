@@ -226,6 +226,37 @@ test.describe('5.4 created: немедленный переход и ссылк�
   });
 });
 
+test.describe('r15 requestId без crypto.randomUUID (небезопасный контекст)', () => {
+  test('отправка создаёт requestId резервным способом, когда crypto.randomUUID недоступен', async ({ page }) => {
+    // Найдено живой приёмкой на стенде (`http://193.124.115.99`, без TLS, решение владельца
+    // от 2026-08-13 — design.md, Решение 1): `crypto.randomUUID` — часть Web Crypto API,
+    // недоступная в non-secure context. Браузер отдаёт для него `undefined` на любом origin,
+    // кроме `https:` и loopback (`localhost`/`127.0.0.1`) — а весь остальной набор гоняется
+    // именно на `127.0.0.1` (`playwright.stand.config.ts`), поэтому эту находку не мог
+    // поймать НИ ОДИН из 65 существующих тестов файла: у них секьюрность контекста не
+    // варьируется. Прежний код звал `crypto.randomUUID()` без проверки — на стенде это
+    // синхронный `TypeError`, пойманный catch-ом обработчика отправки, и КАЖДАЯ попытка
+    // оплаты падала в состояние `unknown` без единого сетевого запроса.
+    await page.addInitScript(() => {
+      delete (Crypto.prototype as { randomUUID?: unknown }).randomUUID;
+    });
+    let capturedRequestId: string | undefined;
+    await mockApi(page, ({ postData }) => {
+      capturedRequestId = postData ? (JSON.parse(postData) as { requestId?: string }).requestId : undefined;
+      return { status: 201, body: { status: 'created', confirmationUrl: 'https://yookassa.test/c' } };
+    });
+    await openForm(page);
+    const randomUUIDType = await page.evaluate(() => typeof crypto.randomUUID);
+    expect(randomUUIDType, 'стенд эмулирует недоступность crypto.randomUUID').toBe('undefined');
+    await fillValid(page);
+    await page.locator(`${FORM} [type="submit"]`).click({ noWaitAfter: true });
+    await expect.poll(() => capturedRequestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    await expect(page.locator(STATE('unknown'))).toHaveCount(0);
+  });
+});
+
 test.describe('3.10 возврат с параметром запускает опрос', () => {
   test('открытие /oplata?paymentRequest= запускает GET status и показывает исход без webhook', async ({ page }) => {
     const id = randomUUID();

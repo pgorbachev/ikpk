@@ -2209,6 +2209,30 @@ TD-36 (была TD-34)): `web` (`lint`, `typecheck`, `vitest` main 956/956 + ren
       демо-стенде страница и API на одном origin (`design.md`, Решение 1) — браузер не
       применяет CORS к запросу в пределах одного origin вовсе, поэтому демо-приёмка
       зелёная даже при неработающем CORS на проде
+
+      **Найден и исправлен реальный дефект живой приёмкой 2026-08-20 (не проблема
+      окружения).** `web/src/scripts/payment-form.ts:452` звал `crypto.randomUUID()` без
+      проверки доступности. Это часть Web Crypto API, ограниченная secure context
+      (`https:` либо loopback `localhost`/`127.0.0.1`) — на любом другом `http:` origin
+      браузер отдаёт `undefined`. Стенд обслуживается по `http://193.124.115.99` без TLS
+      намеренно (решение владельца от 2026-08-13, design.md Решение 1), поэтому КАЖДАЯ
+      попытка отправки формы падала в состояние `unknown` синхронным `TypeError` до
+      единого сетевого запроса — воспроизведено вживую в браузере (ноль записей в
+      `list_network_requests`, ноль записей в `payments.json` на сервере, инструментированный
+      `Storage.prototype`/`fetch` подтвердил throw до вызова `fetch`). **Ни один из 65
+      существующих e2e тестов файлов `payment-form.spec.ts`/`payment-form-demo.spec.ts` не
+      мог поймать эту находку**: оба конфига (`playwright.stand.config.ts`,
+      `playwright.preview.config.ts`) гоняются против `127.0.0.1`, а loopback — единственное
+      исключение из требования secure context для НЕ-`https:` origin. Красный тест
+      добавлен в `payment-form.spec.ts` (`page.addInitScript` удаляет
+      `Crypto.prototype.randomUUID`, эмулируя недоступность), красный прогон предъявлен
+      (запрос не уходил, requestId не захватывался). Исправлено функцией
+      `generateRequestId()`: при недоступности `crypto.randomUUID` — резервный путь через
+      `crypto.getRandomValues()` (секьюрность контекста не требует), UUID v4 собирается
+      вручную по RFC 4122. Зелёный прогон предъявлен (тест проходит, requestId — валидный
+      UUID v4, `payment-stand` 59/59, `payment-preview` 7/7). Рёбра сборки поменяли хеш
+      (`DjXBT6Ml`→`BHEZKEm2`), фикстура `output-occurrence-registry.json` обновлена
+      механически (два вхождения, `production`/`demo`)
 - [ ] 7.3a **Внесено по находке MAJOR-2 ревью #97 (владелец) — раздел 7 не содержал ни
       одной проверки настоящей пары origin.** Ручная приёмка настоящим браузером с
       прод-страницы `https://ikpk.su` к развёрнутому прод-API. **Отнесено к прод-фазе

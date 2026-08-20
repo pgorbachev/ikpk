@@ -51,6 +51,26 @@ function attemptTimeLabel(createdAt: number): string {
   });
 }
 
+/**
+ * `crypto.randomUUID()` — часть Web Crypto API, доступная только в secure context (`https:`
+ * либо loopback `localhost`/`127.0.0.1`); на любом другом `http:` origin браузер отдаёт для
+ * него `undefined`. Стенд обслуживается по HTTP без TLS намеренно (design.md, Решение 1,
+ * решение владельца от 2026-08-13), поэтому без резервного пути КАЖДАЯ отправка формы на
+ * стенде падала бы в состояние `unknown` синхронным `TypeError` до единого сетевого запроса —
+ * найдено живой приёмкой 2026-08-20, не поймано ни одним из существующих тестов, потому что
+ * они выполняются на `127.0.0.1` (secure context по исключению для loopback).
+ * `crypto.getRandomValues()` секьюрность контекста не требует — это резервный путь: те же 122
+ * бита случайности, версия и вариант ставятся вручную по RFC 4122.
+ */
+function generateRequestId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0'));
+  return [hex.slice(0, 4).join(''), hex.slice(4, 6).join(''), hex.slice(6, 8).join(''), hex.slice(8, 10).join(''), hex.slice(10, 16).join('')].join('-');
+}
+
 const form = document.querySelector<HTMLFormElement>('[data-payment-form]');
 if (form) boot(form);
 
@@ -449,7 +469,7 @@ function boot(formEl: HTMLFormElement) {
         unlockSubmit();
         return;
       }
-      if (!activeRequestId) activeRequestId = crypto.randomUUID();
+      if (!activeRequestId) activeRequestId = generateRequestId();
       const extra: Record<string, unknown> = {};
       if (opts.confirmDuplicate && pendingToken) {
         extra.duplicateConfirmationToken = pendingToken;
