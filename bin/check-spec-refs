@@ -1108,6 +1108,35 @@ for (const md of files) {
     // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
     // это не файл: ни строки, ни фрагмента у неё быть не может. Проверяется существование
     // каталога, и считается она своим числом, чтобы не смешиваться с проверкой файлов.
+    // Регистр КАТАЛОГА сверяется по индексу git и ДО любого обращения к файловой системе.
+    // Прежняя редакция делала это внутри ветви «каталог найден на диске», то есть проверка
+    // требовала, чтобы ФС сама нашла каталог: на macOS `WEB/` находился и расхождение ловилось, а
+    // на Linux-раннере не находился вовсе — span уходил в «прозу» молча. Дефект, ради которого
+    // проверка и вводилась, на обязательной среде оставался. Поймано собственным тестом в CI,
+    // локально было зелено.
+    if (path.endsWith('/') || !hasExt) {
+      const dirRel = path.replace(/\/$/, '');
+      const prefixes = [dirRel, `web/${dirRel}`];
+      const exactInIndex = allTracked.some((t) =>
+        prefixes.some((pre) => t === pre || t.startsWith(`${pre}/`)),
+      );
+      if (!exactInIndex) {
+        const wrong = allTracked.find((t) =>
+          prefixes.some((pre) => t.toLowerCase().startsWith(`${pre.toLowerCase()}/`)),
+        );
+        if (wrong) {
+          const width = wrong.toLowerCase().startsWith(`web/${dirRel.toLowerCase()}/`)
+            ? `web/${dirRel}`.length
+            : dirRel.length;
+          defects.push(
+            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
+              `${wrong.slice(0, width)})`,
+          );
+          continue;
+        }
+      }
+    }
+
     // Кандидаты те же, что у разрешения файлов: `specs/request-form-transport/` внутри change
     // означает каталог ЭТОГО change, а не одноимённый в корне. Без артефактных корней такие
     // ссылки отбрасывались как проза — измерено: три вхождения на одном каталоге.
@@ -1122,22 +1151,6 @@ for (const md of files) {
     const asDir = dirCandidates;
     const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
     if (dirHit && (path.endsWith('/') || !hasExt)) {
-      // Регистр каталога сверяется так же, как регистр файла: `WEB/` на macOS «существует», на
-      // Linux-раннере нет, и без сверки один и тот же артефакт получал разные вердикты в двух
-      // средах. Признак — индекс git: каталог считается существующим, если в индексе есть путь,
-      // начинающийся с него, ровно в этом написании.
-      const dirRel = dirHit.slice(ROOT.length + 1);
-      const dirExact = allTracked.some((t) => t === dirRel || t.startsWith(`${dirRel}/`));
-      if (!dirExact) {
-        const real = allTracked.find((t) => t.toLowerCase().startsWith(`${dirRel.toLowerCase()}/`));
-        if (real) {
-          defects.push(
-            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
-              `${real.slice(0, dirRel.length)})`,
-          );
-          continue;
-        }
-      }
       if (lineSpec) {
         // Прежняя редакция номер молча выбрасывала: ссылка «каталог:строка» выглядела
         // проверенной, хотя проверить в ней нечего.

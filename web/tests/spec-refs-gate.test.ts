@@ -974,6 +974,26 @@ describe('гейт ссылок: исходы по классам', () => {
   });
 
   it('регистр каталога и сокращённого пути — по индексу git, одинаково в любой среде', () => {
+    // Вход, не зависящий от ФС: каталог есть в ИНДЕКСЕ, на диске его нет. Без него проверка
+    // регистра каталога оказалась ложнозелёной — она сидела внутри ветви «каталог найден на
+    // диске», поэтому на macOS ловила расхождение, а на Linux-раннере span молча уходил в
+    // «прозу». Локально было зелено, поймал собственный тест в CI: там `WEB/` не находится.
+    mkdirSync(join(sandbox, 'web', 'CaseDir'), { recursive: true });
+    writeFileSync(join(sandbox, 'web', 'CaseDir', 'x.ts'), 'export const x = 1;\n');
+    run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    rmSync(join(sandbox, 'web', 'CaseDir'), { recursive: true, force: true });
+    expect(existsSync(join(sandbox, 'web', 'CaseDir'))).toBe(false);
+    const gone = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
+    // Дерево уже не содержит каталога, но индекс содержит — расхождение регистра обязано
+    // называться и здесь, иначе вердикт зависит от файловой системы исполнителя.
+    writeFileSync(
+      join(sandbox, 'openspec', 'specs', 'demo', 'spec.md'),
+      '## P\n\nКаталог `web/casedir/`, ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    const idx = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
+    const idxOut = `${idx.stdout ?? ''}${idx.stderr ?? ''}`;
+    expect(idx.status, `${idxOut}\n(контроль без ссылки: ${gone.status})`).toBe(1);
+    expect(idxOut).toMatch(/регистр каталога не совпадает/);
     const dir = run(sandbox, '## P\n\nКаталог `WEB/`, ссылка `web/src/thing.ts:1`, `marker`.\n');
     expect(dir.code, dir.out).toBe(1);
     expect(dir.out).toMatch(/регистр каталога не совпадает/);
