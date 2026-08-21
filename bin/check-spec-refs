@@ -103,11 +103,16 @@ const PATH_SPAN =
 // не попадал.
 const LINE_ONLY_SPAN = /^:(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/;
 
-const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Два класса, и оба здесь:
+const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Пять классов, и все здесь:
 #   1. ссылка «путь:строка» БЕЗ фрагмента в кавычках — содержимое сверить нечем;
 #   2. ссылка в СБОРОЧНЫЙ ВЫВОД (\`web/dist/…\`) — её предмет появляется только после сборки,
 #      поэтому обязательный гейт её не проверяет вовсе; проверка идёт отдельным шагом
-#      \`--check-built\` в джобе, где оба дерева уже собраны.
+#      \`--check-built\` в джобе, где оба дерева уже собраны;
+#   3. форма \`<ref>@<sha>\` без пути — проверена только достижимость ревизии;
+#   4. ссылка на ОБЪЯВЛЕННУЮ внешнюю ревизию — членство здесь определяется объявлением, а не
+#      достижимостью, иначе удаление чужой ветки меняло бы состав реестра;
+#   5. форма без расширения, отброшенная как проза — в реестре затем, чтобы исчезновение
+#      предмета (\`specs/<capability>/\` удалён) не переводило ссылку в прозу молча.
 # Формат: <артефакт> :: <путь>[:<строки>].
 #
 # Гейт ./bin/check-spec-refs сравнивает текущий набор с этим ПОИМЁННО и падает в обе стороны:
@@ -311,6 +316,17 @@ function changeRootOf(mdPath) {
   return rel.length >= 3 ? join(ROOT, rel[0], rel[1], rel[2]) : dirname(mdPath);
 }
 
+/**
+ * Единственная точка, через которую возвращается найденный путь. Прежняя редакция проверяла
+ * `insideRepo` только у трёх первых кандидатов, поэтому сокращённый путь (`src/link.ts`,
+ * разрешаемый по хвосту) и symlink-КАТАЛОГ уходили наружу без повторной проверки — внешний файл
+ * снова можно было выдать за проверенный. Признак обязан стоять на выходе, а не у части входов.
+ */
+function hitInside(abs) {
+  if (!insideRepo(abs)) return { outside: abs };
+  return caseExact(abs) ? { hit: abs } : { wrongCase: abs };
+}
+
 function resolveRef(path, mdPath) {
   // Расхождение регистра определяется по ИНДЕКСУ git, а не по попытке открыть файл. Прежняя
   // редакция узнавала о нём только через `existsSync`, то есть только на регистро-НЕзависимой ФС:
@@ -357,13 +373,26 @@ function resolveRef(path, mdPath) {
   const local = [join(mdDir, path), join(changeRoot, path)].find(
     (c) => existsSync(c) && statSync(c).isFile(),
   );
-  if (local) return caseExact(local) ? { hit: local } : { wrongCase: local };
+  if (local) return hitInside(local);
 
   if (path.includes('/')) {
     const archived = existsSync(join(ROOT, 'openspec', 'changes', 'archive'))
       ? readdirSync(join(ROOT, 'openspec', 'changes', 'archive'), { withFileTypes: true })
           .filter((e) => e.isDirectory())
-          .map((e) => join(ROOT, 'openspec', 'changes', 'archive', e.name, path))
+          .flatMap((e) => {
+            const dir = join(ROOT, 'openspec', 'changes', 'archive', e.name);
+            const out = [join(dir, path)];
+            // Форма `<имя-change>/<артефакт>` — самая частая запись меж-change ссылки. При
+            // архивировании каталог получает датовый префикс (`2026-08-21-online-payment-flow`),
+            // поэтому склейка `archive/<dir>/<имя-change>/<артефакт>` не находит ничего: путь
+            // удваивает имя change. Измерено сразу после архивирования `online-payment-flow` —
+            // три ссылки из чужого change стали «ссылками в пустоту», хотя файлы существуют.
+            const [head, ...restParts] = path.split('/');
+            if (restParts.length > 0 && e.name.endsWith(`-${head}`)) {
+              out.push(join(dir, restParts.join('/')));
+            }
+            return out;
+          })
       : [];
     const hit = [
       join(ROOT, path),
@@ -378,17 +407,17 @@ function resolveRef(path, mdPath) {
       // дату, поэтому перечисляются фактические каталоги, а не собирается предполагаемое имя.
       ...archived,
     ].find((c) => existsSync(c) && statSync(c).isFile());
-    if (hit) return caseExact(hit) ? { hit } : { wrongCase: hit };
+    if (hit) return hitInside(hit);
     // Сокращённый путь с каталогом — принятая в артефактах форма: `statyi/index.astro`,
     // `ui/PageHeader.astro`. Разрешается совпадением по хвосту пути в индексе репозитория;
     // несколько совпадений — неоднозначность, а не выбор наугад.
     const tail = bySuffix(path);
-    if (tail.length === 1) return { hit: join(ROOT, tail[0]) };
+    if (tail.length === 1) return hitInside(join(ROOT, tail[0]));
     if (tail.length > 1) return { ambiguous: tail };
     return { missing: true };
   }
   const cands = byBasename.get(path) ?? [];
-  if (cands.length === 1) return { hit: join(ROOT, cands[0]) };
+  if (cands.length === 1) return hitInside(join(ROOT, cands[0]));
   if (cands.length === 0) return { missing: true };
   return { ambiguous: cands };
 }
@@ -518,6 +547,14 @@ function readAbsentDeclared() {
     const row = line.trim();
     if (!row || row.startsWith('#')) continue;
     const parts = row.split(' :: ').map((x) => x.trim());
+    // Заполнитель причины отвергается обычным прогоном, но НЕ режимами записи: чтение выходит
+    // раньше записи, поэтому `--write-absent` был неприменим ровно в том состоянии, для которого
+    // он нужен — файл с заполнителем нельзя было ни принять, ни перезаписать. Курица и яйцо
+    // внутри собственного инструмента.
+    if (parts.length === 3 && parts[2] === 'ТРЕБУЕТСЯ-ПРИЧИНА' && (WRITE_ABSENT || WRITE_DEBT)) {
+      out.set(`${parts[0]} :: ${parts[1]}`, parts[2]);
+      continue;
+    }
     if (parts.length !== 3 || !ABSENT_REASONS.has(parts[2])) {
       bad.push(row);
       continue;
@@ -783,7 +820,21 @@ function buildOutputRef({ rel, path, lineSpec }) {
     unbuiltRoots.set(root, (unbuiltRoots.get(root) ?? 0) + 1);
     return;
   }
-  const built = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
+  // Проверяется РОД записи, а не только существование: каталог с именем `index.html` прежде
+  // сходил за найденную страницу. Ссылка со слэшем на конце — каталог, без него — файл.
+  const wantDir = path.endsWith('/');
+  const built = [join(ROOT, path), join(ROOT, 'web', path)].find(
+    (c) => existsSync(c) && (wantDir ? statSync(c).isDirectory() : statSync(c).isFile()),
+  );
+  const wrongKind = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
+  if (!built && wrongKind) {
+    defects.push(
+      `${rel}: в собранном дереве ${path} есть, но это ${
+        statSync(wrongKind).isDirectory() ? 'каталог' : 'файл'
+      }, а ссылка требует ${wantDir ? 'каталог' : 'файл'}`,
+    );
+    return;
+  }
   if (built) {
     // ИДЕНТИЧНОСТИ, а не вхождения: тот же счётчик уже однажды разошёлся с картой (31 против 17
     // в одной строке вывода про один и тот же предмет), и ровно от этого введён `kindCount`.
@@ -929,10 +980,26 @@ for (const md of files) {
       // отсекает не класс, а требование к ЛЕВОЙ части: она обязана выглядеть путём (расширение
       // либо косая черта). Тогда `user@localhost` и адреса почты в класс не попадают, а
       // `web/src/lib/data.ts@45297bg` попадает.
-      const shaLike = /^(.+)@([0-9a-zA-Z]{4,})(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
+      // Хвост НЕ ограничен классом символов: `@abc` (три), `@dead-beef`, `@dead_beef` прежде
+      // выпадали, потому что признак требовал 4+ буквенно-цифровых. Решает форма ЛЕВОЙ части: если
+      // слева путь (расширение либо косая черта), то после `@` может стоять только ревизия — иначе
+      // ссылка бессмысленна. Для НЕпутевой левой части (`main@…`) признак отдельный: хвост,
+      // начинающийся с hex-символа и состоящий из hex, `-` и `_` длиной от шести, — это испорченный
+      // SHA, а не версия (`node@20`, `astro@7.2.0` под него не попадают).
+      const shaLike = /^(.+)@([^@\s:]+)(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
       const leftLooksLikePath =
         shaLike && (/\.[a-z0-9]{1,5}$/i.test(shaLike[1]) || shaLike[1].includes('/'));
-      if (shaLike && leftLooksLikePath && !/^[0-9a-f]{40}$/.test(shaLike[2])) {
+      const tailLooksLikeSha = shaLike && /^[0-9a-fA-F][0-9a-fA-F_-]{5,}$/.test(shaLike[2]);
+      // В SHA косой черты не бывает, а `dependabot-auto-merge.yml@refs/heads/main` — законная
+      // запись ссылки на workflow у GitHub Actions. Без этой оговорки признак объявил её
+      // испорченной ревизией (поймано на реальном дереве сразу после расширения признака).
+      const tailIsRefName = shaLike && shaLike[2].includes('/');
+      if (
+        shaLike &&
+        !tailIsRefName &&
+        (leftLooksLikePath || tailLooksLikeSha) &&
+        !/^[0-9a-f]{40}$/.test(shaLike[2])
+      ) {
         defects.push(
           `${rel}: ревизия записана не полным 40-символьным SHA в нижнем регистре ` +
             `(${shaLike[2]}, ${shaLike[2].length} симв.) — ${spans[i].body}`,
@@ -955,6 +1022,10 @@ for (const md of files) {
     // подходит любой идентификатор (`defineConfig`, `initialQuery`, `ab`). Из-за этого гейт
     // требовал фрагмент, который уже написан рядом, и одна такая ссылка успела попасть в реестр
     // неизмеримых как «без фрагмента».
+    // Только цифры и точки — это адрес (`127.0.0.1`) или версия, а не путь: `.1` подходило под
+    // признак расширения, и адрес уходил в «ссылки в пустоту», требуя объявления причины.
+    if (/^[\d.]+$/.test(path)) continue;
+
     const looksLikePath = (body) =>
       /\.[a-z0-9]{1,5}$/i.test(body) ||
       (body.includes('/') && existsSync(join(ROOT, body.split('/')[0])));
@@ -996,6 +1067,25 @@ for (const md of files) {
     // (`AGENTS.md`). Прежняя редакция такие span молча пропускала: имя ветки путём не является,
     // и SHA в них мог быть любым — 12 таких ссылок в артефактах не проверялись вовсе. Теперь
     // проверяется то единственное, что здесь проверяемо: ревизия существует.
+    // Регистр сверяется ДО того, как span будет объявлен формой «где найден факт». Иначе
+    // `WEB/src/thing@<sha>` на Linux (пути нет) уходит в класс «только по ревизии», а на macOS
+    // (путь «есть») краснеет как расхождение регистра — снова два вердикта в двух средах.
+    if (revSpec && !existsSync(join(ROOT, path)) && path.includes('/')) {
+      const exactTail = allTracked.some((t) => t === path || t.endsWith(`/${path}`));
+      if (!exactTail) {
+        const lower = path.toLowerCase();
+        const wrong = allTracked.find(
+          (t) => t.toLowerCase() === lower || t.toLowerCase().endsWith(`/${lower}`),
+        );
+        if (wrong) {
+          defects.push(
+            `${rel}: регистр пути не совпадает с репозиторием — ${path}@${revSpec} (в git: ${wrong})`,
+          );
+          continue;
+        }
+      }
+    }
+
     if (revSpec && !lineSpec && !existsSync(join(ROOT, path)) && !hasExt) {
       if (isShallow) {
         console.error(
@@ -1117,10 +1207,26 @@ for (const md of files) {
           // первый каталог, ссылки в него перестанут проверяться — и раньше это происходило
           // молча, то есть отсутствие сигнала выдавалось за отсутствие проблемы. Класс печатается
           // отдельным числом с примерами: тогда рост «прозы» видно, и видно, что именно выпало.
+          // В ПОИМЁННЫЙ реестр, а не только в печать. Печатаемое число ловит рост класса, но не
+          // ловит подмену: удалённый `specs/<capability>/` тихо переходил из «каталогов» в «прозу»
+          // при том же итоговом коде 0 — то есть исчезновение предмета ссылки не блокировало
+          // ничего. Ровно тот случай, от которого весь раздел про гейты: отсутствие сигнала
+          // выдавалось за отсутствие проблемы. Цена решения названа честно: сюда попадает и
+          // настоящая проза (MIME-типы, github-actions), поэтому реестр разом вырос.
           skippedExtensionless.set(`${rel} :: ${path}`, firstSegment);
+          unmeasurable.set(`${rel} :: ${path}`, {
+            kind: 'prose',
+            text: `${rel}: ${path} — отброшено как проза (первый сегмент «${firstSegment}» не существует)`,
+          });
           continue;
         }
       } else if (!(existsSync(join(ROOT, path)) && statSync(join(ROOT, path)).isFile())) {
+        // Односегментная форма БЕЗ косой черты в храповик НЕ идёт, и это измеренное решение:
+        // сюда попадает любой идентификатор в обратных кавычках (`defineConfig`, `marker`), то
+        // есть 841 запись против 27 у формы с чертой — реестр перестал бы что-либо означать.
+        // Цена признана: удалённый корневой `Dockerfile` останется незамеченным. Отличить его от
+        // прозы по одному имени нечем, и выдумывать список известных корневых файлов нельзя —
+        // такой список отстаёт от предмета молча. Записано как известное ограничение.
         // Короткое имя без расширения — ссылка только если в корне есть такой ФАЙЛ
         // (`Dockerfile`, `Makefile`). Каталог здесь не годится: `web`, `cms`, `scripts` в
         // артефактах называют пакеты, и, приняв их за ссылки, гейт насчитал бы 105 проверок,
@@ -1155,6 +1261,15 @@ for (const md of files) {
     ];
     const asDir = dirCandidates;
     const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
+    // Каталог-symlink наружу — тот же обход, что и файловый: `statSync` идёт по ссылке, и ссылка
+    // на «каталог репозитория» подтверждалась чужим деревом.
+    if (dirHit && !insideRepo(dirHit)) {
+      defects.push(
+        `${rel}: каталог ${path} уходит за пределы репозитория по символической ссылке — ` +
+          'существование такого каталога доказательством не является',
+      );
+      continue;
+    }
     if (dirHit && (path.endsWith('/') || !hasExt)) {
       if (lineSpec) {
         // Прежняя редакция номер молча выбрасывала: ссылка «каталог:строка» выглядела
@@ -1229,11 +1344,16 @@ for (const md of files) {
       // та гарантия, ради которой объявление и существует, не выполнялась: тесты проверяли два
       // состояния порознь, а переход при неизменных реестрах не проверял никто.
       if (externalRevisionDeclared(rel, revSpec)) {
-        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+        // Номер строки ВХОДИТ в идентичность: без него разные участки одного внешнего файла
+        // схлопывались в одну запись реестра, и `README@c924…:68` с `:273` были представлены
+        // одной строкой — третья ссылка после удаления ветки прошла бы, не изменив реестр.
+        // Идентичность одинакова в обеих ветвях достижимости, иначе рвётся храповик.
+        const id = `${rel} :: ${path}@${revSpec}${lineSpec ? `:${lineSpec}` : ''}`;
+        unmeasurable.set(id, {
           kind: 'external',
           text:
-            `${rel}: ${path}@${revSpec} — ревизия объявлена внешней; пока достижима, ` +
-            'содержимое сверяется, после удаления ветки проверять нечем',
+            `${rel}: ${path}@${revSpec}${lineSpec ? `:${lineSpec}` : ''} — ревизия объявлена ` +
+            'внешней; пока достижима, содержимое сверяется, после удаления ветки проверять нечем',
         });
       }
       if (!revOk && externalRevisionDeclared(rel, revSpec)) {
@@ -1415,8 +1535,12 @@ if (WRITE_ABSENT) {
       .join('')}`,
     'utf8',
   );
+  // Сообщается ФАКТИЧЕСКИ записанное: прежде печаталось только число найденных путей (12), а в
+  // файл уходило 17 строк вместе с сохранёнными объявлениями по SHA. Число, не совпадающее с
+  // содержимым файла, — это то же «не смогла измерить», выданное за измерение.
   console.log(
-    `check-spec-refs: в openspec/.spec-ref-absent записано ${currentAbsent.length} ссылок`,
+    `check-spec-refs: в openspec/.spec-ref-absent записано ${rows.length} строк ` +
+      `(${currentAbsent.length} ненайденных путей + ${keepExternal.length} объявлений по ревизии)`,
   );
 }
 // После записи реестра выполнение НЕ прерывается: дальше идёт обычная сверка, и она видит и
@@ -1454,7 +1578,8 @@ console.log(
     `${localNames}, неизмеримых ` +
     `${kindCount('no-snippet')} без фрагмента + ${kindCount('build')} в сборочный вывод + ` +
     `${kindCount('revision-only')} только по ревизии + ${kindCount('external')} на объявленной ` +
-    `внешней ревизии + ${kindCount('ambiguous')} по неоднозначному имени ` +
+    `внешней ревизии + ${kindCount('ambiguous')} по неоднозначному имени + ` +
+    `${kindCount('prose')} отброшено как проза ` +
     `(всего ${unmeasurable.size}, в реестре ${debt.size}), объявленных ` +
     `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
     `${defects.length}`,

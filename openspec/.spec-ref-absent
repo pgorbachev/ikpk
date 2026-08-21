@@ -36,18 +36,8 @@
 # Список сверяется поимённо и в обе стороны (`--write-absent`).
 * :: 2ccee7b131cf5512672686271f8647dea50af683 :: external-revision
 * :: 3d10129265f183e2b746a5823012f42a0c115f73 :: external-revision
-* :: c924da54e94675673d1bd40720fa375d90ba2fd0 :: external-revision
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :: will-create
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create
 openspec/changes/dependabot-auto-merge/design.md :: e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3 :: external-revision
-openspec/changes/online-payment-flow/design.md :: docs/security-audit-2026-08-08.md :: not-committed
-openspec/changes/online-payment-flow/design.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
-openspec/changes/online-payment-flow/design.md :: payment-request-flow/design.md :: deleted-deliberately
-openspec/changes/online-payment-flow/proposal.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
-openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/design.md :: deleted-deliberately
-openspec/changes/online-payment-flow/proposal.md :: payment-request-flow/proposal.md :: deleted-deliberately
-openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/ :: deleted-deliberately
-openspec/changes/online-payment-flow/specs/request-form-transport/spec.md :: openspec/changes/payment-request-flow/specs/request-form-transport/spec.md :: deleted-deliberately
-openspec/changes/online-payment-flow/tasks.md :: docs/security-audit-2026-08-08.md :: not-committed
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision

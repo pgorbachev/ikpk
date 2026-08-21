@@ -1,8 +1,13 @@
-# Поимённый долг ссылок, которые гейт проверить не может. Два класса, и оба здесь:
+# Поимённый долг ссылок, которые гейт проверить не может. Пять классов, и все здесь:
 #   1. ссылка «путь:строка» БЕЗ фрагмента в кавычках — содержимое сверить нечем;
 #   2. ссылка в СБОРОЧНЫЙ ВЫВОД (`web/dist/…`) — её предмет появляется только после сборки,
 #      поэтому обязательный гейт её не проверяет вовсе; проверка идёт отдельным шагом
-#      `--check-built` в джобе, где оба дерева уже собраны.
+#      `--check-built` в джобе, где оба дерева уже собраны;
+#   3. форма `<ref>@<sha>` без пути — проверена только достижимость ревизии;
+#   4. ссылка на ОБЪЯВЛЕННУЮ внешнюю ревизию — членство здесь определяется объявлением, а не
+#      достижимостью, иначе удаление чужой ветки меняло бы состав реестра;
+#   5. форма без расширения, отброшенная как проза — в реестре затем, чтобы исчезновение
+#      предмета (`specs/<capability>/` удалён) не переводило ссылку в прозу молча.
 # Формат: <артефакт> :: <путь>[:<строки>].
 #
 # Гейт ./bin/check-spec-refs сравнивает текущий набор с этим ПОИМЁННО и падает в обе стороны:
@@ -17,16 +22,32 @@
 openspec/changes/architecture-frame-prototypes/design.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
 openspec/changes/architecture-frame-prototypes/proposal.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
 openspec/changes/article-list-pagination/proposal.md :: dist/statyi/index.html
+openspec/changes/article-list-pagination/proposal.md :: feat/demo-mode-and-hero-photo
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:103
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:61
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:87
+openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
+openspec/changes/article-list-pagination/tasks.md :: shared/
+openspec/changes/dependabot-auto-merge/design.md :: dependabot/fetch-metadata
 openspec/changes/dependabot-auto-merge/design.md :: feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3
 openspec/changes/dependabot-auto-merge/design.md :: package.json
+openspec/changes/dependabot-auto-merge/design.md :: pgorbachev/ikpk
+openspec/changes/dependabot-auto-merge/design.md :: refs/heads/main
+openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: actions/download-artifact
+openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: dependabot/fetch-metadata
+openspec/changes/dependabot-auto-merge/evidence/repository-prerequisites.md :: pgorbachev/ikpk
+openspec/changes/dependabot-auto-merge/specs/dependency-update-automation/spec.md :: refs/heads/main
+openspec/changes/dependabot-auto-merge/tasks.md :: actions/download-artifact
+openspec/changes/dependabot-auto-merge/tasks.md :: dependabot/fetch-metadata
+openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/sotrudnichestvo-s-nami/index.html
 openspec/changes/education-trust-and-admission-clarity/design.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
+openspec/changes/education-trust-and-admission-clarity/design.md :: institut-apledzhera/
+openspec/changes/education-trust-and-admission-clarity/design.md :: institut-barralya/
+openspec/changes/education-trust-and-admission-clarity/design.md :: institut-klinicheskoy-prikladnoy-kineziologii/
 openspec/changes/education-trust-and-admission-clarity/design.md :: origin/docs/zet-nmo-audit@2ccee7b131cf5512672686271f8647dea50af683
 openspec/changes/education-trust-and-admission-clarity/design.md :: origin/main@a35b4051a7f707c2c89f373f83e61e4799a3f248
 openspec/changes/education-trust-and-admission-clarity/design.md :: sotrudnichestvo-s-nami.astro:19
@@ -51,6 +72,7 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/co
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/oplata.astro:36
+openspec/changes/education-trust-and-admission-clarity/specs/organization-license-identity/spec.md :: Л035-01271-78/00330375
 openspec/changes/education-trust-and-admission-clarity/specs/verifiable-public-claims/spec.md :: web/src/components/home/sections/Approach.astro:23-36
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: .gitignore
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: Advantages.astro:25
@@ -70,34 +92,22 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
-openspec/changes/online-payment-flow/design.md :: dist/
-openspec/changes/online-payment-flow/design.md :: main@d7e9b025d885610b80b405112f53e8d2c5cdd85d
-openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:50-52
-openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:63
-openspec/changes/online-payment-flow/design.md :: scripts/deploy-web.sh:93
-openspec/changes/online-payment-flow/proposal.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
-openspec/changes/online-payment-flow/proposal.md :: html-cleaner.ts:601-619
-openspec/changes/online-payment-flow/proposal.md :: main@26483e579b17dd6235205ca05496874708b00395
-openspec/changes/online-payment-flow/proposal.md :: main@490b10fd867955b48bf4bebf72c34fa38ec91178
-openspec/changes/online-payment-flow/proposal.md :: main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850
-openspec/changes/online-payment-flow/proposal.md :: oplata.astro:34
-openspec/changes/online-payment-flow/proposal.md :: scripts/deploy-web.sh:50-52
-openspec/changes/online-payment-flow/proposal.md :: web/src/lib/html-cleaner.ts:601
-openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:18-31
-openspec/changes/online-payment-flow/proposal.md :: web/src/pages/oplata.astro:36
-openspec/changes/online-payment-flow/specs/online-payment/spec.md :: dist/oplata/index.html
-openspec/changes/online-payment-flow/specs/online-payment/spec.md :: main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850
-openspec/changes/online-payment-flow/tasks.md :: design/trust-and-verification-mockups@c924da54e94675673d1bd40720fa375d90ba2fd0
-openspec/changes/online-payment-flow/tasks.md :: dist/
-openspec/changes/online-payment-flow/tasks.md :: docs/design/mockups/trust-and-verification/README.md@c924da54e94675673d1bd40720fa375d90ba2fd0
-openspec/changes/online-payment-flow/tasks.md :: main@90003af89e2a6fc4a122ef18cfd821c61e401a34
-openspec/changes/online-payment-flow/tasks.md :: spec.md
-openspec/changes/online-payment-flow/tasks.md :: web/dist/oplata/index.html
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
+openspec/changes/visual-regression-gate/design.md :: mcr.microsoft.com/playwright
 openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
+openspec/specs/online-payment/spec.md :: design.md
+openspec/specs/online-payment/spec.md :: dist/oplata/index.html
+openspec/specs/online-payment/spec.md :: proposal.md
+openspec/specs/online-payment/spec.md :: tasks.md
 openspec/specs/schedule-month-filter/spec.md :: origin/main@aa7678cff3d7a63aeeac581ff36b901ca2ea9a70
+openspec/specs/static-serving/spec.md :: application/javascript
+openspec/specs/static-serving/spec.md :: application/octet-stream
+openspec/specs/static-serving/spec.md :: application/xml
+openspec/specs/static-serving/spec.md :: text/html
+openspec/specs/static-serving/spec.md :: text/javascript
+openspec/specs/static-serving/spec.md :: text/xml
