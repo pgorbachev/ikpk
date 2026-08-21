@@ -1,10 +1,10 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "99f660a6a54852517575037109ca4dfbf601b96e",
+  "generatedFromSha": "fe952cf886de164eed4eaf9c362a1add6f2ba361",
   "distRoots": [
-    "/private/tmp/wt-payment-ux/web/dist",
-    "/private/tmp/wt-payment-ux/web/dist-demo"
+    "/Users/pgorbachev/projects/private/ikpk-payment-form/web/dist",
+    "/Users/pgorbachev/projects/private/ikpk-payment-form/web/dist-demo"
   ],
   "ciMustNotRegenerate": true,
   "slotIds": [
@@ -73,8 +73,8 @@
     "src:components/institutes/InstituteTeacherCard.astro:L33:C1:style",
     "src:components/MotionScript.astro:L11:C1:script",
     "src:components/NewsletterSignup.astro:L44:C1:style",
-    "src:components/payment/PaymentForm.astro:L104:C1:script",
-    "src:components/payment/PaymentForm.astro:L108:C1:style",
+    "src:components/payment/PaymentForm.astro:L126:C1:script",
+    "src:components/payment/PaymentForm.astro:L130:C1:style",
     "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
     "src:components/schedule/ScheduleEventCard.astro:L123:C1:style",
     "src:components/schedule/ScheduleFilters.astro:L105:C1:style",
@@ -111,8 +111,8 @@
     "src:pages/aktsii-i-skidki.astro:L50:C1:style",
     "src:pages/demo-zayavka/[...rest].astro:L48:C1:style",
     "src:pages/kontakty.astro:L68:C1:style",
-    "src:pages/oplata.astro:L36:C11:svg",
-    "src:pages/oplata.astro:L63:C1:style",
+    "src:pages/oplata.astro:L51:C11:svg",
+    "src:pages/oplata.astro:L78:C1:style",
     "src:pages/preview/[variant].astro:L118:C3:script",
     "src:pages/preview/[variant].astro:L133:C1:style",
     "src:pages/preview/[variant]/schedule.astro:L146:C1:style",
@@ -33483,7 +33483,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/oplata.ClXnhCWI.css|rel=stylesheet",
+      "identity": "link|href=/_astro/oplata.SK9G3Y1h.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
