@@ -89,7 +89,8 @@ function boot(formEl: HTMLFormElement) {
   const attemptList = document.querySelector<HTMLElement>('[data-payment-attempt-list]')!;
   const actions = document.querySelector<HTMLElement>('[data-payment-actions]')!;
   const closeBtn = document.querySelector<HTMLButtonElement>('[data-payment-close]');
-  if (!root || !dialog || !stateHost || !chrome || !attemptsWrap || !attemptList || !actions) return;
+  const panel = document.querySelector<HTMLElement>('.payment-dialog-panel')!;
+  if (!root || !dialog || !stateHost || !chrome || !attemptsWrap || !attemptList || !actions || !panel) return;
 
   const fieldsTemplate = formEl.cloneNode(true) as HTMLFormElement;
   let activeRequestId = '';
@@ -107,6 +108,12 @@ function boot(formEl: HTMLFormElement) {
     void onSubmit();
   });
   closeBtn?.addEventListener('click', () => closeDialog());
+  // Поворот телефона, поднятая экранная клавиатура и изменение масштаба меняют и высоту
+  // панели, и высоту футера — решение «места нет» надо пересчитывать, а не брать
+  // однажды при открытии.
+  window.addEventListener('resize', () => {
+    if (!dialog.hidden) syncFooterBand();
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -148,6 +155,9 @@ function boot(formEl: HTMLFormElement) {
     dialog.hidden = false;
     formEl.hidden = !formEl.querySelector('[name="firstName"]') ? formEl.hidden : false;
     setBackgroundInert(true);
+    // До первой валидации ошибок нет, но путь Tab между полями работает уже сейчас, и
+    // полоса футера должна быть известна браузеру с самого открытия.
+    syncFooterBand();
     const focusable = dialog.querySelector<HTMLElement>('input, button, [href], textarea, select');
     focusable?.focus();
   }
@@ -371,6 +381,59 @@ function boot(formEl: HTMLFormElement) {
     stateHost.replaceChildren(box);
   }
 
+  // ── Липкий футер не должен закрывать поле, к которому уводится фокус ────────
+  //
+  // Браузер прокручивает элемент «в видимую область» и про липкий слой поверх неё не
+  // знает: поле формально внутри scrollport, поэтому прокрутки не происходит вовсе.
+  // Измерено на артефакте роли `stand`, ширина 390: при высоте окна 900 сфокусированное
+  // `amount` лежало под футером при scrollTop = 0, при 400 под футером оказывались и
+  // поле, и его сообщение.
+  //
+  // Три средства, потому что закрываются три разных случая, и ни одно из них не
+  // покрывает остальные (проверено измерением каждого по отдельности):
+  //
+  //   `scroll-padding-bottom` — путь БРАУЗЕРА (Tab между полями): он сам перестаёт
+  //       считать полосу футера видимой областью. Только этого мало: при высоте окна
+  //       500 браузер уводил в видимую область сам `input`, а сообщение об ошибке лежит
+  //       НИЖЕ него и снова попадало под футер;
+  //   явная прокрутка БЛОКА поля (`.payment-field` целиком — подпись, поле, сообщение) —
+  //       путь валидации;
+  //   снятие прилипания, когда места нет физически — при высоте окна 360 футер занимает
+  //       237 из 328 доступных, и никакая прокрутка не покажет блок поля высотой 102.
+  //       Без этой ветви гарантия «поле и сообщение видимы» была бы невыполнима, а тест
+  //       на неё — заведомо красным на низких окнах.
+  function tallestFieldHeight(): number {
+    const fields = [...formEl.querySelectorAll<HTMLElement>('.payment-field')];
+    return fields.reduce((max, el) => Math.max(max, el.offsetHeight), 0);
+  }
+
+  /** Синхронизирует полосу, закрытую футером, и решает, можно ли его вообще прилеплять. */
+  function syncFooterBand(): HTMLElement | null {
+    const footer = formEl.querySelector<HTMLElement>('.payment-footer');
+    if (!footer) {
+      panel.classList.remove('payment-panel-cramped');
+      panel.style.removeProperty('--payment-footer-height');
+      return null;
+    }
+    // Мерить надо на неприлепленном футере: у прилепленного `offsetHeight` тот же, а
+    // вот решение «места нет» должно приниматься по той же величине в обе стороны,
+    // иначе состояние начнёт колебаться между двумя решениями на одной геометрии.
+    const cramped = panel.clientHeight - footer.offsetHeight < tallestFieldHeight();
+    panel.classList.toggle('payment-panel-cramped', cramped);
+    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${footer.offsetHeight}px`);
+    return footer;
+  }
+
+  /** Показывает блок поля целиком — вместе с подписью и сообщением об ошибке. */
+  function revealField(el: HTMLElement) {
+    const footer = syncFooterBand();
+    // Согласие живёт в самом футере: закрыть себя футер не может, а прокрутка к нему
+    // сдвинула бы панель без причины.
+    if (footer?.contains(el)) return;
+    const field = (el.closest('.payment-field') ?? el) as HTMLElement;
+    field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   function clearErrors() {
     for (const err of formEl.querySelectorAll<HTMLElement>('.payment-error')) {
       err.hidden = true;
@@ -418,7 +481,10 @@ function boot(formEl: HTMLFormElement) {
       showFieldError('consent', 'Отметьте передачу данных оператору платежей');
       firstInvalid ??= consent;
     }
-    firstInvalid?.focus();
+    if (firstInvalid) {
+      firstInvalid.focus();
+      revealField(firstInvalid);
+    }
     return !firstInvalid;
   }
 

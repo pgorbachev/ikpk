@@ -133,6 +133,116 @@ test.describe('3a.3 доступность полей и ошибок', () => {
   });
 });
 
+// ─── 3a.3a та же ошибка, но на НИЗКОМ экране ─────────────────────────────────
+//
+// Отдельные describe, потому что нужен свой viewport: тест выше идёт на 1280×720, где
+// липкий футер занимает малую долю панели и перекрыть поле не может. Дефект найден
+// владельцем на ревью PR #151 и живёт в геометрии: ошибка согласия увеличивает футер,
+// панель ограничена `calc(100vh - 2rem)`, и на низком экране футер накрывает
+// сфокусированное поле вместе с его сообщением. Браузер при этом не прокручивает ничего:
+// поле формально внутри scrollport, а про липкий слой поверх него он не знает.
+//
+// Высоты не произвольные, и их ДВЕ, потому что у продукта здесь две ветви, а непройденная
+// ветвь — такое же обещание, как непроверенный гейт:
+//
+//   390×400 — телефон в landscape (у iPhone 12/13/14 короткая сторона 390 CSS px) и он же
+//       в portrait с поднятой экранной клавиатурой. Места хватает, футер остаётся липким,
+//       и поле выводится из-под него прокруткой;
+//   390×320 — landscape iPhone SE. Места нет физически: футер с ошибкой согласия занимает
+//       237 px из 288 доступных при блоке поля 102 px. Прилипание снимается — иначе
+//       требование «поле и сообщение видимы» невыполнимо ни при какой прокрутке.
+//
+// Каждый тест ЗАЯВЛЯЕТ ожидаемую ветвь (`cramped`), а не только исход: без этого оба
+// прошли бы по одной и той же ветви, и вторая осталась бы непроверенной при зелёном
+// наборе — ровно тот случай, когда зелёный цвет получен не от того, о чём тест говорит.
+//
+// Про сам предмет: `toBeVisible` у Playwright видит элемент под непрозрачным слоем как
+// видимый (он занимает место и не `display: none`), поэтому здесь два независимых
+// измерения — попадание курсора и геометрия. Первое отвечает «увидит ли посетитель»,
+// второе даёт числа для сообщения об ошибке.
+const LOW_VIEWPORTS = [
+  { label: 'места хватает — футер остаётся липким', height: 400, cramped: false },
+  { label: 'места нет — футер перестаёт прилипать', height: 320, cramped: true },
+] as const;
+
+for (const vp of LOW_VIEWPORTS) {
+  test.describe(`3a.3a первая ошибка видима при 390×${vp.height} (${vp.label})`, () => {
+    test.use({ viewport: { width: 390, height: vp.height } });
+
+    test('сфокусированное невалидное поле и его сообщение не закрыты футером', async ({ page }) => {
+      await openForm(page);
+      await page.locator(`${FORM} [type="submit"]`).click();
+
+      // Поле берётся то, которое СКРИПТ счёл первым ошибочным, а не названное по имени:
+      // иначе проверка сторожила бы порядок полей, а не видимость ошибки.
+      // Результат размечен дискриминантом `ok`: «прибор не смог измерить» и «измерено» —
+      // разные исходы, и различать их проверкой на `undefined` у одного из чисел нельзя.
+      // Именно так отсутствие сигнала и выдаётся за отсутствие проблемы.
+      const probe = await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const form = document.querySelector('[data-payment-form]');
+        if (!active || !form?.contains(active)) {
+          return { ok: false as const, reason: 'после отправки пустой формы фокус не внутри формы' };
+        }
+        const err = document.getElementById(active.getAttribute('aria-describedby') ?? '');
+        const footer = document.querySelector('.payment-footer');
+        const panel = document.querySelector('.payment-dialog-panel');
+        if (!active.closest('.payment-field') || !err || err.hidden || !footer || !panel) {
+          return { ok: false as const, reason: 'нет блока поля, сообщения об ошибке, футера или панели' };
+        }
+        const box = (el: Element) => {
+          const r = el.getBoundingClientRect();
+          return { top: +r.top.toFixed(1), bottom: +r.bottom.toFixed(1) };
+        };
+        // Попадание курсора: если в центре поля или сообщения лежит футер (или его
+        // потомок), посетитель их не видит. Это про фактическую отрисовку, не про рамки.
+        const coveredByFooter = (el: Element) => {
+          const r = el.getBoundingClientRect();
+          const at = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+          return Boolean(at && footer.contains(at));
+        };
+        return {
+          ok: true as const,
+          name: (active as HTMLInputElement).name,
+          input: box(active),
+          error: box(err),
+          footer: box(footer),
+          panel: box(panel),
+          inputCovered: coveredByFooter(active),
+          errorCovered: coveredByFooter(err),
+          cramped: panel.classList.contains('payment-panel-cramped'),
+        };
+      });
+
+      if (!probe.ok) {
+        expect(probe.ok, `прибор не смог измерить: ${probe.reason}`).toBe(true);
+        return;
+      }
+
+      const geometry = `поле ${probe.name} y=${probe.input.top}–${probe.input.bottom}, `
+        + `сообщение y=${probe.error.top}–${probe.error.bottom}, `
+        + `футер y=${probe.footer.top}–${probe.footer.bottom}, `
+        + `панель y=${probe.panel.top}–${probe.panel.bottom}`;
+
+      // Ветвь заявлена, а не выведена из исхода: если продукт выберет другую, тест
+      // покраснеет даже при видимом поле — потому что тогда он проверил не то, о чём
+      // говорит, и вторая ветвь осталась непройденной.
+      expect(probe.cramped, `ожидалась ветвь cramped=${vp.cramped} (${geometry})`).toBe(vp.cramped);
+
+      expect(probe.inputCovered, `сфокусированное поле закрыто футером (${geometry})`).toBe(false);
+      expect(probe.errorCovered, `сообщение об ошибке закрыто футером (${geometry})`).toBe(false);
+      // Геометрия отдельно от попадания курсора: поле может выглядывать краем, и тогда
+      // курсор в центр ещё попадает, а прочитать подпись и сообщение уже нельзя.
+      expect(probe.input.bottom, `низ поля ниже верха футера (${geometry})`).toBeLessThanOrEqual(probe.footer.top);
+      expect(probe.error.bottom, `низ сообщения ниже верха футера (${geometry})`).toBeLessThanOrEqual(probe.footer.top);
+      // И то и другое должно лежать в видимой части панели, а не быть уведено за её край
+      // прокруткой: «не закрыто футером» само по себе достижимо и вывозом за кадр.
+      expect(probe.input.top, `верх поля выше верха панели (${geometry})`).toBeGreaterThanOrEqual(probe.panel.top);
+      expect(probe.error.bottom, `низ сообщения ниже низа панели (${geometry})`).toBeLessThanOrEqual(probe.panel.bottom);
+    });
+  });
+}
+
 test.describe('3a.4 согласие на ПДн', () => {
   test('при открытии не отмечено; без отметки не уходит; цель названа; ссылка на нашем домене отвечает', async ({ page }) => {
     const posts: string[] = [];
