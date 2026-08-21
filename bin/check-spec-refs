@@ -822,10 +822,14 @@ function buildOutputRef({ rel, path, lineSpec }) {
   }
   // Проверяется РОД записи, а не только существование: каталог с именем `index.html` прежде
   // сходил за найденную страницу. Ссылка со слэшем на конце — каталог, без него — файл.
-  const wantDir = path.endsWith('/');
-  const built = [join(ROOT, path), join(ROOT, 'web', path)].find(
-    (c) => existsSync(c) && (wantDir ? statSync(c).isDirectory() : statSync(c).isFile()),
-  );
+  // Род требуется только там, где он ЗАДАН формой ссылки: слэш на конце — каталог, расширение —
+  // файл, всё остальное (`web/dist`, `dist/client`) может быть и тем и другим. Первая редакция
+  // требовала файл от любой ссылки без слэша и объявила расхождением семь верных ссылок на
+  // `web/dist` — поймано в CI, локально не проверялось с собранным деревом.
+  const wantDir = path.endsWith('/') ? true : /\.[a-z0-9]{1,5}$/i.test(path) ? false : null;
+  const kindOk = (c) =>
+    wantDir === null ? true : wantDir ? statSync(c).isDirectory() : statSync(c).isFile();
+  const built = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c) && kindOk(c));
   const wrongKind = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
   if (!built && wrongKind) {
     defects.push(
