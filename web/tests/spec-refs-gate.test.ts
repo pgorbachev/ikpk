@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync, symlinkSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  cpSync,
+  existsSync,
+  symlinkSync,
+  unlinkSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -147,6 +157,18 @@ beforeEach(() => {
     rmSync(stray, { recursive: true, force: true });
   }
   writeFileSync(join(sandbox, 'web', 'src', 'thing.ts'), 'export const marker = 1;\nconst second = 2;\n');
+  // Артефакты демо-change тоже сбрасываются: тест, писавший в `tasks.md`, оставлял свою ссылку
+  // всем последующим — одна запись класса «проза» протекала в десять проверок и ломала их по
+  // чужой причине. Ровно та же ошибка атрибуции, из-за которой в этом файле появился `beforeEach`.
+  writeFileSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'tasks.md'), '# tasks.md\n');
+  rmSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'specs'), { recursive: true, force: true });
+  rmSync(join(sandbox, 'openspec', 'changes', 'archive'), { recursive: true, force: true });
+  // Сброс КОММИТИТСЯ, иначе он живёт только в рабочем дереве: `git checkout -B side` внутри
+  // `makeBranchOnlyRevision` восстанавливает файлы из коммита и возвращает чужую ссылку обратно.
+  // Утечка между тестами шла именно через историю, а не через диск — по одному прогону это
+  // выглядело как «тест зависит от порядка», хотя причина в неполном сбросе.
+  execFileSync('git', ['-C', sandbox, 'add', '-A']);
+  execFileSync('git', ['-C', sandbox, 'commit', '-q', '-m', 'reset', '--allow-empty']);
 });
 
 afterAll(() => {
@@ -340,7 +362,7 @@ describe('гейт ссылок: исходы по классам', () => {
     // реестра открывала бы неограниченный класс непроверяемых ссылок.
     writeFileSync(
       join(sandbox, 'openspec', '.spec-ref-debt'),
-      '# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@0123456789abcdef0123456789abcdef01234567\n',
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@0123456789abcdef0123456789abcdef01234567:1\n',
     );
     const r = run(
       sandbox,
@@ -630,7 +652,7 @@ describe('гейт ссылок: исходы по классам', () => {
     // а не достижимостью, иначе удаление ветки создаёт новую запись и красит гейт.
     writeFileSync(
       join(sandbox, 'openspec', '.spec-ref-debt'),
-      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}\n`,
+      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}:3\n`,
     );
     const ok = run(sandbox, body);
     expect(ok.code, ok.out).toBe(0);
@@ -874,7 +896,7 @@ describe('гейт ссылок: исходы по классам', () => {
     expect(alive.out).toMatch(/НОВЫЕ НЕИЗМЕРИМЫЕ/);
     writeFileSync(
       join(sandbox, 'openspec', '.spec-ref-debt'),
-      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}\n`,
+      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}:3\n`,
     );
     const registered = run(sandbox, body);
     expect(registered.code, registered.out).toBe(0);
@@ -972,10 +994,18 @@ describe('гейт ссылок: исходы по классам', () => {
     expect(r.out).toMatch(/в сборочный вывод/);
   });
 
-  it('отброшенная как проза ссылка без расширения называется числом', () => {
-    const r = run(sandbox, '## P\n\nТип `text/html`, ссылка `web/src/thing.ts:1`, `marker`.\n');
-    expect(r.code, r.out).toBe(0);
-    expect(r.out).toMatch(/отброшено как проза: 1/);
+  it('отброшенная как проза ссылка без расширения идёт в храповик и печатается числом', () => {
+    const body = '## P\n\nТип `text/html`, ссылка `web/src/thing.ts:1`, `marker`.\n';
+    const fresh = run(sandbox, body);
+    expect(fresh.code, fresh.out).toBe(1);
+    expect(fresh.out).toMatch(/отброшено как проза/);
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: text/html\n',
+    );
+    const registered = run(sandbox, body);
+    expect(registered.code, registered.out).toBe(0);
+    expect(registered.out).toMatch(/1 отброшено как проза/);
   });
 
   it('регистр каталога и сокращённого пути — по индексу git, одинаково в любой среде', () => {
@@ -1011,5 +1041,171 @@ describe('гейт ссылок: исходы по классам', () => {
     const short = run(sandbox, '## P\n\nСсылка `src/Thing.ts`, а также `web/src/thing.ts:1`, `marker`.\n');
     expect(short.code, short.out).toBe(1);
     expect(short.out).toMatch(/регистр/);
+  });
+
+  it('symlink наружу не обходится сокращённым путём', () => {
+    // Проверка стояла у части входов: сокращённый путь разрешается по хвосту ПОЗЖЕ, и внешний
+    // файл снова выдавался за проверенный. Теперь признак на выходе разрешения.
+    const outside = join(sandbox, '..', 'outside-tail.txt');
+    writeFileSync(outside, 'снаружи по хвосту\n');
+    symlinkSync(outside, join(sandbox, 'web', 'src', 'tail-link.ts'));
+    try {
+      const r = run(sandbox, '## P\n\nСсылка: `src/tail-link.ts:1`, `снаружи по хвосту`.\n');
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toMatch(/за пределы репозитория по символической ссылке/);
+    } finally {
+      rmSync(join(sandbox, 'web', 'src', 'tail-link.ts'), { force: true });
+      rmSync(outside, { force: true });
+    }
+  });
+
+  it('symlink на КАТАЛОГ наружу — тоже расхождение', () => {
+    const outsideDir = join(sandbox, '..', 'outside-dir');
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(join(outsideDir, 'x.txt'), 'x\n');
+    symlinkSync(outsideDir, join(sandbox, 'web', 'linked-dir'));
+    try {
+      const r = run(sandbox, '## P\n\nКаталог `web/linked-dir/`, ссылка `web/src/thing.ts:1`, `marker`.\n');
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toMatch(/каталог .* уходит за пределы репозитория/);
+    } finally {
+      // Символическую ссылку НА КАТАЛОГ снимает `unlinkSync`: `rmSync` без `recursive` даёт
+      // EISDIR, и уборка теста падала после успешной проверки — красное по своей же причине.
+      unlinkSync(join(sandbox, 'web', 'linked-dir'));
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('исчезновение предмета extensionless-ссылки видно храповику', () => {
+    // Прежде удалённый `specs/<capability>/` тихо переходил из класса каталогов в класс прозы, и
+    // код оставался 0: печатаемое число ловит рост класса, но не подмену.
+    mkdirSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'specs', 'cap'), { recursive: true });
+    writeFileSync(
+      join(sandbox, 'openspec', 'changes', 'demo-change', 'specs', 'cap', 'spec.md'),
+      '## Requirement: X\n\nТекст.\n',
+    );
+    const body = '## P\n\nКаталог `specs/cap/`, ссылка `web/src/thing.ts:1`, `marker`.\n';
+    writeFileSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'tasks.md'), body);
+    const before = run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    expect(before.code, before.out).toBe(0);
+    // Предмет исчез — гейт обязан это заметить, а не молча переклассифицировать ссылку.
+    rmSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'specs'), { recursive: true, force: true });
+    const after = run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    expect(after.code, after.out).toBe(1);
+    expect(after.out).toMatch(/отброшено как проза/);
+  });
+
+  it('номер строки входит в идентичность внешней ссылки', () => {
+    // Без него разные участки одного внешнего файла схлопывались в одну запись реестра.
+    const sha = makeBranchOnlyRevision(sandbox, 'onSideLines');
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      `# пусто\nopenspec/specs/demo/spec.md :: ${sha} :: external-revision\n`,
+    );
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      `# пусто\nopenspec/specs/demo/spec.md :: web/src/thing.ts@${sha}:3\n`,
+    );
+    const one = run(sandbox, `## P\n\nСсылка: \`web/src/thing.ts@${sha}:3\`, \`const onSideLines\`.\n`);
+    expect(one.code, one.out).toBe(0);
+    // Вторая ссылка на ДРУГУЮ строку того же файла — новая запись реестра, а не та же самая.
+    const two = run(
+      sandbox,
+      `## P\n\nСсылки: \`web/src/thing.ts@${sha}:3\`, \`const onSideLines\` и \`web/src/thing.ts@${sha}:1\`, \`export const marker\`.\n`,
+    );
+    expect(two.code, two.out).toBe(1);
+    expect(two.out).toMatch(/НОВЫЕ НЕИЗМЕРИМЫЕ/);
+  });
+
+  it('негодная ревизия: любая форма, но не законная запись workflow и не версия', () => {
+    for (const span of [
+      'web/src/thing.ts@abc:1',
+      'web/src/thing.ts@dead-beef',
+      'web/src/thing.ts@dead_beef',
+      'main@d7e9b0',
+    ]) {
+      const r = run(sandbox, `## P\n\nСсылка: \`${span}\`.\n`);
+      expect(r.code, `${span}: ${r.out}`).toBe(1);
+      expect(r.out, span).toMatch(/не полным 40-символьным|сокращённо/);
+    }
+    const legit = run(
+      sandbox,
+      '## P\n\nЗаконные: `dependabot-auto-merge.yml@refs/heads/main`, `node@20`, `astro@7.2.0`, `@astrojs/react`. Ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(legit.code, legit.out).toBe(0);
+  });
+
+  it('--check-built различает файл и каталог с тем же именем', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/index.html\n',
+    );
+    run(sandbox, '## P\n\nСтраница: `dist/index.html`.\n');
+    // Каталог с именем страницы прежде сходил за найденную страницу: проверялось только
+    // существование записи, а не её род.
+    mkdirSync(join(sandbox, 'web', 'dist', 'index.html'), { recursive: true });
+    const gate = join(sandbox, 'bin', 'check-spec-refs');
+    const asDir = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    const asDirOut = `${asDir.stdout ?? ''}${asDir.stderr ?? ''}`;
+    expect(asDir.status, asDirOut).toBe(1);
+    expect(asDirOut).toMatch(/это каталог, а ссылка требует файл/);
+    rmSync(join(sandbox, 'web', 'dist', 'index.html'), { recursive: true, force: true });
+    writeFileSync(join(sandbox, 'web', 'dist', 'index.html'), '<html></html>\n');
+    const asFile = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    expect(asFile.status, `${asFile.stdout}${asFile.stderr}`).toBe(0);
+  });
+
+  it('ссылка на артефакт заархивированного change разрешается по датовому префиксу', () => {
+    // Каталог архива получает датовый префикс, поэтому склейка archive/<dir>/<имя>/<артефакт>
+    // удваивала имя change: три ссылки чужого change стали «ссылками в пустоту» при существующих
+    // файлах. Измерено сразу после архивирования online-payment-flow.
+    const arch = join(sandbox, 'openspec', 'changes', 'archive', '2026-08-21-gone-change');
+    mkdirSync(arch, { recursive: true });
+    writeFileSync(join(arch, 'proposal.md'), '# proposal\n');
+    const r = run(sandbox, '## P\n\nСсылка: `gone-change/proposal.md`.\n');
+    expect(r.code, r.out).toBe(0);
+  });
+
+  it('регистр пути с ревизией сверяется до классификации «ref@sha»', () => {
+    // Форма `WEB/src/thing@<sha>` на Linux (пути нет) уходила в класс «только по ревизии», а на
+    // macOS краснела как расхождение регистра — снова два вердикта в двух средах. Вход не зависит
+    // от ФС: путь есть в индексе, на диске его нет.
+    writeFileSync(join(sandbox, 'web', 'src', 'probe-case.ts'), 'export const p = 1;\n');
+    run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    rmSync(join(sandbox, 'web', 'src', 'probe-case.ts'), { force: true });
+    const sha = execFileSync('git', ['-C', sandbox, 'rev-parse', 'refs/remotes/origin/main'], {
+      encoding: 'utf8',
+    }).trim();
+    writeFileSync(
+      join(sandbox, 'openspec', 'specs', 'demo', 'spec.md'),
+      `## P\n\nФакт найден в \`web/src/PROBE-CASE.ts@${sha}\`.\n`,
+    );
+    const r = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    expect(r.status, out).toBe(1);
+    expect(out).toMatch(/регистр пути не совпадает/);
+  });
+
+  it('адрес и версия путём не считаются', () => {
+    const r = run(sandbox, '## P\n\nСтенд `127.0.0.1`, порт `8080`, ссылка `web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(0);
+  });
+
+  it('--write-absent применим к файлу с заполнителем причины', () => {
+    // Чтение отвергало ТРЕБУЕТСЯ-ПРИЧИНА кодом 2 раньше записи, поэтому режим был неприменим
+    // ровно в том состоянии, для которого он нужен.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/gone.ts :: ТРЕБУЕТСЯ-ПРИЧИНА\n',
+    );
+    run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    const w = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--write-absent'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+    });
+    const out = `${w.stdout ?? ''}${w.stderr ?? ''}`;
+    expect(out).toMatch(/записано \d+ строк/);
+    // Строка без предмета из файла ушла: перезапись состоялась.
+    expect(readFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), 'utf8')).not.toMatch(/gone\.ts/);
   });
 });
