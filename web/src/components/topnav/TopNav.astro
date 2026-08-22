@@ -233,6 +233,17 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-bar { gap: 0.5rem; padding: 0.6rem 0.7rem; }
     .topnav-actions { gap: 0.5rem; }
     .topnav-cta { padding: 0.5rem 0.8rem; }
+  }
+
+  /* Подпись CTA стала длиннее («Записаться» → «Выбрать программу», решение
+     заказчика D10), и в одну строку рядом с логотипом, инструментами и бургером
+     она не влезает: шапке требуется 407 CSS-px при вьюпорте 375, страница
+     уезжает по горизонтали на каждой странице сайта. Разрешаем блоку действий
+     сжиматься, а подписи — переноситься: кнопка становится двухстрочной вместо
+     того, чтобы распирать вьюпорт. Замерено, а не подобрано на глаз. */
+  @media (max-width: 430px) {
+    .topnav-actions { flex-shrink: 1; min-width: 0; }
+    .topnav-cta { min-width: 0; padding: 0.4rem 0.7rem; text-align: center; line-height: 1.2; }
     .topnav-mobile { display: block; position: relative; }
     .topnav-mobile > summary {
       list-style: none;
