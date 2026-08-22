@@ -1016,8 +1016,19 @@ for (const md of files) {
       // `refs/heads/main` (нехекс-буквы), `20` и `11` (короче трёх символов — это версии).
       const shaLike = /^(.+)@([^@\s:]+)(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
       const tail = shaLike?.[2] ?? '';
+      // Два признака вместо одного, потому что одного не хватает ни в ту, ни в другую сторону.
+      // Чистый hex-класс ловит `abc` и `dead/beef`, но пропускает опечатку `45297bg`: буква `g`
+      // выводит хвост из класса, и формально он становится неотличим от имени ветки `main`.
+      // Различает их ДОЛЯ hex-символов: у испорченного SHA она близка к единице (6 из 7), у
+      // ветки — низкая (`main` — 1 из 4, `refs/heads/main` — 7 из 15). Точка исключает адреса и
+      // версии (`example.com`, `7.2.0`), длина от трёх — короткие версии (`v4`, `20`, `11`).
+      const hexChars = (tail.match(/[0-9a-fA-F]/g) ?? []).length;
       const tailIsShaShaped =
-        /^[0-9a-fA-F_/-]{3,}$/.test(tail) && (tail.match(/[0-9a-fA-F]/g) ?? []).length >= 2;
+        !tail.includes('.') &&
+        tail.length >= 3 &&
+        /^[0-9a-zA-Z_/-]+$/.test(tail) &&
+        (/^[0-9a-fA-F_/-]+$/.test(tail) || hexChars / tail.length >= 0.7) &&
+        hexChars >= 2;
       if (shaLike && tailIsShaShaped && !/^[0-9a-f]{40}$/.test(tail)) {
         defects.push(
           `${rel}: ревизия записана не полным 40-символьным SHA в нижнем регистре ` +

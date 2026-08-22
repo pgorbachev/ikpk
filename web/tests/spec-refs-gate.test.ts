@@ -1216,4 +1216,110 @@ describe('гейт ссылок: исходы по классам', () => {
     // Строка без предмета из файла ушла: перезапись состоялась.
     expect(readFileSync(join(sandbox, 'openspec', '.spec-ref-absent'), 'utf8')).not.toMatch(/gone\.ts/);
   });
+
+  it('признак ревизии: hex-подобный хвост ловится, законные ссылки — нет', () => {
+    // Прежняя редакция решала по ЛЕВОЙ части и объявляла негодными законные записи (измерено три
+    // расхождения: actions/checkout@v4, docker/build-push-action@main, first.last@example.com),
+    // а хвосты с косой чертой исключала целиком и пропускала @dead/beef.
+    for (const span of [
+      'web/src/thing.ts@abc:1',
+      'web/src/thing.ts@dead-beef',
+      'web/src/thing.ts@dead_beef',
+      'web/src/thing.ts@dead/beef',
+      'main@d7e9b0',
+    ]) {
+      const r = run(sandbox, `## P\n\nСсылка: \`${span}\`.\n`);
+      expect(r.code, `${span}: ${r.out}`).toBe(1);
+      expect(r.out, span).toMatch(/не полным 40-символьным|сокращённо/);
+    }
+    const legit = run(
+      sandbox,
+      '## P\n\nЗаконные: `actions/checkout@v4`, `docker/build-push-action@main`, ' +
+        '`first.last@example.com`, `dependabot-auto-merge.yml@refs/heads/main`, `node@20`, ' +
+        '`astro@7.2.0`. Ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(legit.code, legit.out).toBe(0);
+  });
+
+  it('symlink наружу внутри собранного дерева — расхождение, а не «проверено»', () => {
+    const outside = join(sandbox, '..', 'outside-built.html');
+    writeFileSync(outside, '<html>снаружи</html>\n');
+    mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
+    symlinkSync(outside, join(sandbox, 'web', 'dist', 'index.html'));
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/index.html\n',
+    );
+    try {
+      run(sandbox, '## P\n\nСтраница: `dist/index.html`.\n');
+      const r = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--check-built'], {
+        cwd: sandbox,
+        encoding: 'utf8',
+      });
+      const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+      expect(r.status, out).toBe(1);
+      expect(out).toMatch(/уходит за пределы репозитория/);
+    } finally {
+      unlinkSync(join(sandbox, 'web', 'dist', 'index.html'));
+      rmSync(outside, { force: true });
+    }
+  });
+
+  it('ссылка `./имя` на корневой файл проверяема, в отличие от голого имени', () => {
+    // Обход ограничения односегментной формы: `./Dockerfile` однозначен, проза так не пишет.
+    writeFileSync(join(sandbox, 'Dockerfile'), 'FROM scratch\n');
+    const present = run(sandbox, '## P\n\nСборка описана в `./Dockerfile`.\n');
+    expect(present.code, present.out).toBe(0);
+    // Предмет исчез — ссылка обязана перестать быть зелёной, в отличие от голого `Dockerfile`.
+    rmSync(join(sandbox, 'Dockerfile'), { force: true });
+    const gone = run(sandbox, '## P\n\nСборка описана в `./Dockerfile`.\n');
+    expect(gone.code, gone.out).toBe(1);
+    expect(gone.out).toMatch(/путь не существует|НЕСУЩЕСТВУЮЩИЕ/);
+  });
+
+  it('регистр каталога внутри change сверяется относительно корня change', () => {
+    mkdirSync(join(sandbox, 'openspec', 'changes', 'demo-change', 'specs', 'cap'), { recursive: true });
+    writeFileSync(
+      join(sandbox, 'openspec', 'changes', 'demo-change', 'specs', 'cap', 'spec.md'),
+      '## Requirement: X\n\nТекст.\n',
+    );
+    writeFileSync(
+      join(sandbox, 'openspec', 'changes', 'demo-change', 'tasks.md'),
+      '## Задача\n\nКаталог `Specs/cap/`.\n',
+    );
+    const r = run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/регистр каталога не совпадает/);
+  });
+
+  it('--check-built не принимает каталог с длинным расширением за файл', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/manifest.webmanifest\n',
+    );
+    run(sandbox, '## P\n\nМанифест: `dist/manifest.webmanifest`.\n');
+    mkdirSync(join(sandbox, 'web', 'dist', 'manifest.webmanifest'), { recursive: true });
+    const r = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--check-built'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+    });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    expect(r.status, out).toBe(1);
+    expect(out).toMatch(/это каталог, а ссылка требует файл/);
+  });
+
+  it('--write-debt не зеленит файл причин с заполнителем', () => {
+    // Прежде режим записи выходил нулём, оставляя состояние, которое обычный прогон отвергает
+    // кодом 2: «команда прошла» читалось как «гейт зелёный».
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/src/gone.ts :: ТРЕБУЕТСЯ-ПРИЧИНА\n',
+    );
+    run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    const w = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--write-debt'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+    });
+    expect(w.status, `${w.stdout}${w.stderr}`).toBe(2);
+  });
 });
