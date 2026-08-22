@@ -109,13 +109,16 @@ describe('демо-вывод: ни одной ссылки в CRM заказч�
   // `redirectFormLinksInDemo` принимает и одинарные кавычки, и пробелы вокруг `=`
   // (`html-cleaner.ts`), то есть проверяющий с более узким языком оставлял бы щель
   // ровно между собой и им (находка ревью F6).
-  const ATTR_URL = /(?:href|src|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^"'>\s]+))/g;
+  // Флаг `i` и обрезка значения — находка владельца на 3604de4: имена атрибутов в HTML
+  // регистронезависимы, а ведущий пробел не мешает браузеру перейти по адресу. Без них
+  // `HREF="…"` и `href="  https://…"` проходили мимо признака при живой ссылке.
+  const ATTR_URL = /(?:href|src|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^"'>\s]+))/gi;
 
   it('ни на одной странице нет ссылки на портал Bitrix24', () => {
     const offenders: string[] = [];
     for (const [path, html] of sources) {
       for (const m of html.matchAll(ATTR_URL)) {
-        const url = m[1] ?? m[2] ?? m[3] ?? '';
+        const url = (m[1] ?? m[2] ?? m[3] ?? '').trim();
         if (BITRIX_HOST.test(url)) offenders.push(`${path} → ${url}`);
       }
     }
@@ -130,6 +133,24 @@ describe('демо-вывод: ни одной ссылки в CRM заказч�
   // тривиально зелёной на выводе, где ссылок форм нет вообще — например если
   // `registrationHref` начнёт возвращать пустую строку. Заглушка обязана быть на месте
   // и в товарном количестве.
+  // Находка владельца на 3604de4: те же щели, что у гейта деплоя, были и здесь —
+  // признак носителя не имел флага `i`, а значение не нормализовалось. Проверяется на
+  // фикстурах, а не на сборке: собранный вывод такой разметки не содержит, но
+  // расхождение двух гейтов над одним предметом запрещено само по себе.
+  it('признак носителя видит верхний регистр и пробелы в значении', () => {
+    const markup = [
+      `<a HREF="https://b24-cbqwqo.bitrix24site.ru/news/">x</a>`,
+      `<a href="  https://b24-cbqwqo.bitrix24site.ru/news/">x</a>`,
+      `<a HrEf="\nhttps://b24-kbo5ls.bitrix24site.ru/crm_form_iciwb/">x</a>`,
+    ].join('\n');
+    const found: string[] = [];
+    for (const m of markup.matchAll(ATTR_URL)) {
+      const url = (m[1] ?? m[2] ?? m[3] ?? '').trim();
+      if (BITRIX_HOST.test(url)) found.push(url);
+    }
+    expect(found.length, `признак увидел ${found.length} из 3 носителей`).toBe(3);
+  });
+
   it('ссылки форм заменены заглушкой, а не потеряны', () => {
     const stubs = [...sources.values()].reduce(
       (n, html) => n + (html.match(/href="[^"]*\/demo-zayavka(?:[/?#"])/g) ?? []).length,

@@ -91,4 +91,23 @@ describe('контентные ссылки на CRM заказчика заме
     expect(out).toContain('https://example.org/');
     expect(out).not.toContain('/demo-zayavka');
   });
+
+  // Находка владельца на 3604de4 (P2): признак сопоставлялся с ПОДСТРОКОЙ по всему URL,
+  // поэтому чужая ссылка с адресом портала в query-параметре подменялась заглушкой.
+  // Это зеркало находки F3 в гейте деплоя — там я этот класс закрыла, а в самом
+  // переписывателе оставила, расширив ему домен. Проверять надо hostname.
+  const foreign: [string, string][] = [
+    ['адрес портала в query', 'https://example.org/go?to=bitrix24.ru'],
+    ['адрес портала во фрагменте', 'https://example.org/page#bitrix24site.ru'],
+    ['адрес портала в пути', 'https://example.org/bitrix24site.ru/x'],
+    ['похожий домен-приманка', 'https://bitrix24site.ru.evil.example/x'],
+  ];
+
+  for (const [what, url] of foreign) {
+    it(`чужая ссылка не подменяется заглушкой: ${what}`, () => {
+      const out = clean(`<p><a href="${url}">x</a></p>`);
+      expect(out, `подменена чужая ссылка ${url}`).not.toContain('/demo-zayavka');
+      expect(out).toContain(url);
+    });
+  }
 });
