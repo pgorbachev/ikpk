@@ -833,6 +833,39 @@ const skippedExtensionless = new Map();
  * дерева не кладла путь в реестр, из-за чего **все** его записи класса «сборка» объявлялись
  * исчезнувшими, и режим был структурно всегда красным — то есть непроходимой ветвью.
  */
+/**
+ * Существование пути в собранном дереве — ПО ИМЕНАМ КАТАЛОГА, а не через `existsSync`. Причина та
+ * же, по которой предикаты рабочего дерева сидят на индексе git: `existsSync` на macOS находит
+ * `web/dist/index.html` по обращению `web/dist/INDEX.HTML`, а Linux CI его не находит — один и тот
+ * же коммит даёт разные вердикты, и локальный зелёный ничего не обещает. Регистр КОРНЯ проверяется
+ * отдельно и раньше (корень задан перечнем, а не деревом); здесь проверяется каждый сегмент ВНУТРИ
+ * корня. Измерено на 6327602: проба `web/dist/INDEX.HTML` при единственном строчном файле
+ * увеличивала счётчик проверенного с 6 до 7 и расхождения не давала, тогда как контрольная проба
+ * `web/dist/NOPE.HTML` расхождение давала — то есть проверка работала и была слепа именно к регистру.
+ */
+function resolveBuiltExact(relPath) {
+  const segments = relPath.replace(/\/$/, '').split('/').filter(Boolean);
+  let abs = ROOT;
+  for (const seg of segments) {
+    let names;
+    try {
+      names = readdirSync(abs);
+    } catch {
+      // Промежуточный сегмент не читается как каталог: предмета нет. Расхождение по регистру здесь
+      // не утверждается — оно требует доказательства в виде НАЙДЕННОГО соседа с другим регистром.
+      return { found: false };
+    }
+    if (names.includes(seg)) {
+      abs = join(abs, seg);
+      continue;
+    }
+    const other = names.find((n) => n.toLowerCase() === seg.toLowerCase());
+    if (other) return { found: false, caseMismatch: `${seg} ≠ ${other}` };
+    return { found: false };
+  }
+  return { found: true, abs };
+}
+
 function buildOutputRef({ rel, path, lineSpec }) {
   // Регистр корня сборки проверяется ДО всего остального: он не требует собранного дерева, а
   // прежняя редакция стояла после раннего выхода `if (!CHECK_BUILT) return` — то есть в обычном
@@ -882,17 +915,27 @@ function buildOutputRef({ rel, path, lineSpec }) {
   // `[ROOT/<путь>, ROOT/web/<путь>]` позволял корневому `dist/index.html` подтвердить ссылку,
   // относящуюся к `web/dist`, — то есть чужой файл закрывал исчезнувший.
   const candidate = hit ? join(ROOT, hit.inside) : join(ROOT, path);
+  // Регистр КАЖДОГО сегмента внутри корня, а не только самого корня. Прежняя редакция проверяла
+  // регистр корня и дальше полагалась на `existsSync` — на macOS этого достаточно, чтобы
+  // `web/dist/INDEX.HTML` попал в проверенное, а на Linux CI тот же коммит дал бы расхождение.
+  const exact = resolveBuiltExact(hit ? hit.inside : path);
+  if (exact.caseMismatch) {
+    defects.push(
+      `${rel}: регистр в собранном дереве не совпадает — ${path} (${exact.caseMismatch})`,
+    );
+    return;
+  }
   // Инвариант «не выходить за пределы репозитория» действует и на сборочный вывод: symlink
   // `web/dist/index.html → /outside` проходил `existsSync` и засчитывался в проверенное.
-  if (existsSync(candidate) && !insideRepo(candidate)) {
+  if (exact.found && !insideRepo(candidate)) {
     defects.push(
       `${rel}: ${path} в собранном дереве уходит за пределы репозитория по символической ссылке — ` +
         'такой предмет доказательством не является',
     );
     return;
   }
-  const built = existsSync(candidate) && kindOk(candidate) ? candidate : undefined;
-  const wrongKind = existsSync(candidate) ? candidate : undefined;
+  const built = exact.found && kindOk(candidate) ? candidate : undefined;
+  const wrongKind = exact.found ? candidate : undefined;
   if (!built && wrongKind) {
     defects.push(
       `${rel}: в собранном дереве ${path} есть, но это ${
@@ -1068,24 +1111,44 @@ for (const md of files) {
       // распознавался как ссылка на ревизию вовсе и уходил в тишину, тогда как его строчный
       // близнец давал расхождение. Регистр здесь не предмет — предмет в том, что справа стоит
       // не SHA; расхождение регистра ловит отдельный страж, когда span разбирается.
-      const leftIsRepoFile =
-        shaLike &&
-        [shaLike[1].toLowerCase(), `web/${shaLike[1]}`.toLowerCase()].some((c) =>
-          allTracked.some((t) => {
-            const lower = t.toLowerCase();
-            return lower === c || lower.endsWith(`/${c}`);
-          }),
-        );
+      const leftMatches = shaLike
+        ? (() => {
+            const cands = [shaLike[1].toLowerCase(), `web/${shaLike[1]}`.toLowerCase()];
+            return allTracked.filter((t) => {
+              const lower = t.toLowerCase();
+              return cands.some((c) => lower === c || lower.endsWith(`/${c}`));
+            });
+          })()
+        : [];
+      const leftIsRepoFile = leftMatches.length > 0;
       const leftIsKnownRef = shaLike && KNOWN_REFS.has(shaLike[1]);
+      // Исключение для `refs/` СУЖЕНО до workflow GitHub Actions и названо поимённо. Прежняя
+      // редакция исключала любой хвост, начинающийся с `refs/`, — и `web/src/lib/data.ts@refs/heads/main`
+      // исчезал из проверки целиком: измерено на 6327602, вывод гейта с двумя пробами совпал с
+      // базовым ПОБАЙТОВО, ни один счётчик не сдвинулся. Между тем это ровно тот случай, который
+      // правила запрещают: имя ветки идентификатором не является. Законная запись остаётся одна —
+      // `.github/workflows/<файл>.yml@refs/heads/main`, где предмет и есть ref, а не снимок; она
+      // распознаётся по МЕСТУ файла в индексе, а не по совпадению имени, и не по существованию ref
+      // в текущем клоне (в CI `refs/heads/main` может отсутствовать вовсе — проверка по нему дала бы
+      // ровно то расхождение локального и CI, от которого весь этот класс правок).
+      const leftIsWorkflowFile = leftMatches.some((t) =>
+        /^\.github\/workflows\/[^/]+\.ya?ml$/.test(t),
+      );
       // Хвост обязан состоять из символов, которыми вообще записывают ревизию (буквы, цифры,
       // `_`, `-`, `/`). Это отсекает прозу: в правилах стоит `main@…` как ПРИМЕР негодной формы,
       // и многоточие ревизией быть не может — иначе гейт краснел на собственной документации
       // (поймано сразу после смены признака).
-      const tailIsWritable = /^[0-9A-Za-z_/-]+$/.test(tail);
+      // Точка в классе допущена намеренно: без неё `web/src/thing.ts@not.a.sha` не распознавался
+      // как ссылка на ревизию и уходил в тишину. Проза этим не задета — она отсекается не классом
+      // символов, а требованием «слева файл репозитория либо известный ref»: `astro@7.2.0`,
+      // `node@20` и `first.last@example.com` в класс не попадают, потому что слева не файл и не ref.
+      // Многоточие `…` в классе отсутствует, поэтому пример негодной формы `main@…` из правил
+      // по-прежнему не краснит гейт на собственной документации.
+      const tailIsWritable = /^[0-9A-Za-z_./-]+$/.test(tail);
       if (
         shaLike &&
         tailIsWritable &&
-        !tail.startsWith('refs/') &&
+        !(tail.startsWith('refs/') && leftIsWorkflowFile) &&
         (leftIsRepoFile || leftIsKnownRef) &&
         !/^[0-9a-f]{40}$/.test(tail)
       ) {

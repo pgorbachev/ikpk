@@ -1429,4 +1429,84 @@ describe('гейт ссылок: исходы по классам', () => {
     const listed = (header.match(/^#\s+\d\./gm) ?? []).length;
     expect(listed, header.slice(0, 600)).toBe(6);
   });
+  it('файл репозитория при имени ветки справа — расхождение, а не тишина', () => {
+    // Правила прямо запрещают имя ветки как идентификатор состояния: она сдвигается, а
+    // неопубликованная исчезает. Прежняя редакция исключала ЛЮБОЙ хвост на `refs/`, поэтому такая
+    // ссылка выпадала из проверки целиком — измерено на реальном репозитории: вывод гейта с двумя
+    // такими пробами совпал с базовым побайтово, ни один счётчик не сдвинулся.
+    const r = run(
+      sandbox,
+      '## P\n\nСсылка: `web/src/thing.ts@refs/heads/main`, и проверяемая `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/не полным 40-символьным SHA/);
+  });
+
+  it('точка в хвосте не выводит ссылку из проверки', () => {
+    // `not.a.sha` отсекался классом символов хвоста, где точки не было, — и ссылка на РЕВИЗИЮ
+    // молча уходила в прозу. Проза отсекается не классом символов, а требованием «слева файл
+    // репозитория либо известный ref», и следующий тест это подтверждает.
+    const r = run(
+      sandbox,
+      '## P\n\nСсылка: `web/src/thing.ts@not.a.sha`, и проверяемая `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/not\.a\.sha/);
+  });
+
+  it('запись workflow на ref остаётся законной — и проверка на этом не вакуумна', () => {
+    // Единственное названное исключение для `refs/`. Тест обязан быть непустым: без файла в
+    // индексе `dependabot-auto-merge.yml` не является файлом репозитория, и запись проходила бы
+    // не благодаря исключению, а потому что в класс не попадает вовсе.
+    mkdirSync(join(sandbox, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(sandbox, '.github', 'workflows', 'dependabot-auto-merge.yml'), 'name: x\n');
+    // Проверяемая ссылка в тексте обязательна: сама по себе законная запись workflow ссылкой не
+    // является, и прогон без единой проверяемой ссылки гейт объявляет вакуумным (код 2) — верно
+    // по существу, но тогда тест доказывал бы не то, что назван доказывать.
+    const legit = run(
+      sandbox,
+      '## P\n\nЗапись: `dependabot-auto-merge.yml@refs/heads/main`. Ссылка: `web/src/thing.ts:1`, `marker`.\n',
+    );
+    const tracked = execFileSync('git', ['-C', sandbox, 'ls-files', '.github/workflows'], {
+      encoding: 'utf8',
+    });
+    expect(tracked).toMatch(/dependabot-auto-merge\.yml/);
+    expect(legit.code, legit.out).toBe(0);
+    // А тот же ref у файла НЕ из `.github/workflows` — расхождение: исключение сужено по месту
+    // файла в индексе, а не по совпадению имени.
+    const other = run(
+      sandbox,
+      '## P\n\nСсылка: `web/src/thing.ts@refs/heads/main`, и проверяемая `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(other.code, other.out).toBe(1);
+  });
+
+  it('--check-built сверяет регистр каждого сегмента внутри корня, а не только корень', () => {
+    // На macOS `existsSync` находит `web/dist/index.html` по обращению `web/dist/INDEX.HTML`, на
+    // Linux CI — нет. Один коммит, два вердикта: ровно тот класс, из-за которого предикаты рабочего
+    // дерева переведены на индекс git.
+    mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
+    writeFileSync(join(sandbox, 'web', 'dist', 'index.html'), '<html></html>\n');
+    const gate = join(sandbox, 'bin', 'check-spec-refs');
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/dist/INDEX.HTML\n',
+    );
+    run(sandbox, '## P\n\nСтраница: `web/dist/INDEX.HTML`.\n');
+    const wrong = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    const wrongOut = `${wrong.stdout ?? ''}${wrong.stderr ?? ''}`;
+    expect(wrong.status, wrongOut).toBe(1);
+    expect(wrongOut).toMatch(/регистр в собранном дереве не совпадает/);
+    // Контроль: точный регистр остаётся проверенным — иначе проверка краснела бы на всём подряд и
+    // о регистре не говорила ничего.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/dist/index.html\n',
+    );
+    run(sandbox, '## P\n\nСтраница: `web/dist/index.html`.\n');
+    const right = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    const rightOut = `${right.stdout ?? ''}${right.stderr ?? ''}`;
+    expect(right.status, rightOut).toBe(0);
+    expect(rightOut).toMatch(/сборочный вывод проверен в собранном дереве: 1/);
+  });
 });
