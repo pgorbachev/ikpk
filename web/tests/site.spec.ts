@@ -446,18 +446,29 @@ test.describe('Навигация видима на любой ширине', ()
       // сторожей сразу: бургер виден, атрибут `open` переключается, ссылки лежат
       // в DOM. Предмет заявлен как «есть чем перейти» — значит нужна видимая
       // ссылка, а не видимая обёртка.
-      if (menuVisible) {
-        await expect(
-          page.locator('.topnav-menu a').first(),
-          `на ${width}px меню видно, а пункты в нём — нет`,
-        ).toBeVisible();
-      } else {
+      const link = menuVisible
+        ? page.locator('.topnav-menu a').first()
+        : page.locator('.topnav-drawer .drawer-link').first();
+
+      if (!menuVisible) {
         await page.locator('details.topnav-mobile > summary').click();
-        await expect(
-          page.locator('.topnav-drawer .drawer-link').first(),
-          `на ${width}px бургер виден, но панель меню не открывает ни одной ссылки`,
-        ).toBeVisible();
       }
+
+      await expect(
+        link,
+        menuVisible
+          ? `на ${width}px меню видно, а пункты в нём — нет`
+          : `на ${width}px бургер виден, но панель меню не открывает ни одной ссылки`,
+      ).toBeVisible();
+
+      // Видимость — ещё не достижимость. `pointer-events: none` (а равно `inert`,
+      // перекрывающий слой или нулевая hit-area) оставляет ссылку видимой, но
+      // некликабельной, и проверка видимости этого не различает — показано
+      // мутацией на ревью. В этом репозитории класс не гипотетический: `inert`
+      // уже ломал hit-testing при видимых элементах (PR #151). `trial: true`
+      // прогоняет проверки применимости, включая попадание в цель, но самого
+      // перехода не делает — гейт остаётся про навигацию, а не про маршруты.
+      await link.click({ trial: true, timeout: 5000 });
     });
   }
 });
