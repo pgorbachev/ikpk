@@ -361,6 +361,95 @@ test.describe('3a.3a-3 признак «места нет» снимается �
   });
 });
 
+// ─── 3a.1a кнопка закрытия действительно оформлена ────────────────────────────
+//
+// У `.payment-dialog-close` класс в разметке стоял, а НИ ОДНОГО правила не было: браузер
+// рисовал кнопку по умолчанию, и в тёмной теме это белый прямоугольник с рамкой. Заметил
+// владелец на стенде, сверив с утверждённым мокапом варианта B, — то есть расхождение
+// облика с утверждённым не стерёг никто. Ни один существующий гейт этого поймать не мог:
+// визуальные эталоны снимаются со страницы, а диалог на ней закрыт.
+//
+// Проверяется не «стиль совпал с эталоном» (эталона у диалога нет), а то, что контрол
+// ПОЛУЧИЛ оформление компонента вместо UA-умолчания, и что он различим на своей подложке
+// в обеих темах. Признак — вычисленные свойства, а не наличие класса в разметке: класс
+// как раз был на месте всё это время.
+test.describe('3a.1a кнопка закрытия оформлена, а не UA-умолчание', () => {
+  const MIN_RATIO = 3;
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`кнопка закрытия оформлена и различима в теме ${theme}`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      await openForm(page);
+      if (theme === 'dark') {
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      }
+
+      const probe = await page.evaluate(() => {
+        const btn = document.querySelector<HTMLElement>('[data-payment-close]');
+        const head = btn?.parentElement;
+        if (!btn || !head) return { ok: false as const, reason: 'кнопки закрытия или головы диалога нет' };
+        const cs = getComputedStyle(btn);
+        // Подложка берётся у ближайшего непрозрачного предка: у самой кнопки она задана,
+        // но если правило потеряется, `transparent` нужно сравнивать с тем, что под ней.
+        let behind = '';
+        for (let el: Element | null = head; el; el = el.parentElement) {
+          const c = getComputedStyle(el).backgroundColor;
+          if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) {
+            behind = c;
+            break;
+          }
+        }
+        const r = btn.getBoundingClientRect();
+        return {
+          ok: true as const,
+          name: btn.getAttribute('aria-label') ?? btn.textContent?.trim() ?? '',
+          radius: cs.borderTopLeftRadius,
+          background: cs.backgroundColor,
+          color: cs.color,
+          behind,
+          borderStyle: cs.borderTopStyle,
+          width: +r.width.toFixed(1),
+          height: +r.height.toFixed(1),
+        };
+      });
+
+      if (!probe.ok) {
+        expect(probe.ok, `прибор не смог измерить: ${probe.reason}`).toBe(true);
+        return;
+      }
+
+      // Доступное имя сохранено: по нему кнопку ищет проверка 3a.1, и глиф без
+      // `aria-label` её сломал бы.
+      expect(probe.name, 'у кнопки закрытия нет доступного имени «Закрыть»').toMatch(/закрыть/i);
+      // Оформление получено: у UA-умолчания рамка есть, а скругления в половину высоты нет.
+      expect(probe.borderStyle, 'у кнопки закрытия рамка UA-умолчания').toBe('none');
+      expect(
+        parseFloat(probe.radius),
+        `скругление ${probe.radius} — кнопка не круглая, оформление компонента не применилось`,
+      ).toBeGreaterThanOrEqual(probe.height / 2 - 0.5);
+      expect(probe.width, 'кнопка закрытия не квадратная').toBeCloseTo(probe.height, 0);
+      // Различима: и подложка кнопки от подложки панели, и глиф от подложки кнопки.
+      const glyph = contrastRatio(parseRgb(probe.color), parseRgb(probe.background));
+      const plate = contrastRatio(parseRgb(probe.background), parseRgb(probe.behind));
+      expect(
+        glyph,
+        `глиф ${probe.color} на ${probe.background} даёт ${glyph.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(MIN_RATIO);
+      expect(
+        plate,
+        `подложка кнопки ${probe.background} на ${probe.behind} даёт ${plate.toFixed(2)}:1 — `
+          + 'кнопка сливается с панелью',
+      ).toBeGreaterThan(1.02);
+    });
+  }
+});
+
 // ─── 3a.3b текст ошибки читаем в ОБЕИХ темах ──────────────────────────────────
 //
 // Дефект найден на ревью PR #151 и существовал до него: `.payment-error` был задан
