@@ -150,27 +150,26 @@ describe('гигиена репозитория', () => {
       .filter((line) => !line.trimStart().startsWith('#'))
       .join('\n');
 
-    // Артефакт сверяется по ВСЕМУ набору адресов форм и против заказанного режима:
-    // подсчёт файлов этого не доказывал — заглушку могла внести сама служебная
-    // страница, а прод-проверке хватало одного совпадения.
+    // Артефакт сверяется по ВСЕМУ набору адресов форм и против заказанного режима.
+    // ЧТО именно сверяется — предмет поведенческого теста
+    // (web/tests/deploy-form-links.test.ts): здесь утверждается только, что вызов
+    // есть и стоит до необратимого шага. Прежняя редакция грепала внутренности
+    // гейта (`form_links=`, `EXPECT_RE`, `DEMO_FORMS" == "stub"`) прямо в этом
+    // файле — то есть утверждала о ТЕКСТЕ реализации, а не о её поведении, и
+    // ломалась от любого выноса кода, ничего при этом не проверив по существу.
+    // Проверяются ВСЕ ТРИ аргумента, а не только каталог. Находка ревью (F6): якорь
+    // по одному `"$DIST_DIR"` оставался бы зелёным при захардкоженном режиме
+    // (`form_links_match_mode "$DIST_DIR" prod ""`), тогда как текст отказа обещает
+    // проверку «по заказанному режиму». Сообщение утверждало больше, чем признак.
     expect(
-      /form_links=/.test(code) && /EXPECT_RE/.test(code),
-      'набор адресов форм не извлекается и не сверяется с ожидаемым',
-    ).toBe(true);
-    expect(
-      /form_count == 0/.test(code),
-      'вакуумный результат (ноль ссылок на формы) не считается провалом',
-    ).toBe(true);
-    // Режимы различаются: stub, кастомный host и прод — три разных ожидания.
-    expect(
-      /DEMO_FORMS" == "stub"/.test(code) && /bitrix24site/.test(code),
-      'режимы stub и кастомного портала не различаются',
+      /form_links_match_mode "\$DIST_DIR" "\$DEPLOY_MODE" "\$DEMO_FORMS"/.test(code),
+      'гейт ссылок на формы не вызывается по заказанному режиму и режиму форм',
     ).toBe(true);
 
     // Preflight по развёрнутой конфигурации, а не по загруженному файлу.
     expect(/nginx -T/.test(code), 'нет preflight по развёрнутой конфигурации nginx').toBe(true);
 
-    const posArtifact = code.indexOf('form_links=');
+    const posArtifact = code.indexOf(String.raw`form_links_match_mode "$DIST_DIR" "$DEPLOY_MODE" "$DEMO_FORMS"`);
     const posPreflight = code.indexOf('nginx -T');
     const posSwitch = code.indexOf('Switching current symlink');
     expect(posArtifact, 'сверки артефакта нет').toBeGreaterThan(0);

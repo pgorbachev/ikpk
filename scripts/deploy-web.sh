@@ -128,66 +128,13 @@ echo "[deploy] Uploading nginx redirects ($(grep -c '^location' "$REDIRECTS_SRC"
 
 # ── Артефакт сверяется с ЗАКАЗАННЫМ режимом, а не с самим собой.
 #
-# Проверка `DEPLOY_MODE` выше сторожит вызов; собрать при этом можно другое:
-# `web/.env` (он в .gitignore, то есть невидим в ревью), экспорт из профиля оболочки
-# или правка `src/lib/forms.ts`. Существующий build-гейт определяет режим ПО
-# артефакту, поэтому «собрано не то, что заказано» он увидеть не может по построению.
-#
-# Смотрим на то, что реально уедет на сервер, и требуем непустой результат: ноль
-# найденных ссылок на формы — это «проверить не удалось», а не «всё верно».
-# Проверяется ВЕСЬ набор ссылок на формы, а не наличие хотя бы одного файла.
-#
-# Первая редакция считала файлы с `/demo-zayavka` и с боевым хостом: этого мало —
-# заглушку в набор могла внести сама служебная страница, а прод-проверке хватало
-# одного совпадения, и остальные формы могли вести куда угодно. Кастомный
-# `DEMO_FORMS=<host>` не сверялся вовсе.
-#
-# Признак ссылки на форму: `crm_form` (формы Bitrix24, в том числе на своём портале)
-# либо путь заглушки. Коды grep разбираются явно — 0 нашёл, 1 не нашёл, 2+ ошибка.
-# Порталов Bitrix24 у заказчика НЕСКОЛЬКО: в данных встречаются b24-cbqwqo и
-# b24-kbo5ls (проверка это и обнаружила — привязка к одному хосту отвергала
-# законную боевую сборку). Поэтому в прод-режиме признак общий: адрес формы на
-# портале Bitrix24, а не конкретный поддомен. Заглушка при этом запрещена, и чужой
-# домен тоже не пройдёт.
-case "$DEPLOY_MODE" in
-  prod) EXPECT_RE='^https://b24-[a-z0-9]+\.bitrix24site\.ru/crm_form_' ; EXPECT_HUMAN='https://b24-*.bitrix24site.ru/crm_form_*' ;;
-  stand)
-    if [[ "$DEMO_FORMS" == "stub" ]]; then
-      EXPECT_RE='^(/demo-zayavka|https://[^/]+/demo-zayavka)$'
-      EXPECT_HUMAN='/demo-zayavka'
-    else
-      EXPECT_RE="^https://${DEMO_FORMS}/crm_form_"
-      EXPECT_HUMAN="https://${DEMO_FORMS}/crm_form_*"
-    fi
-    ;;
-esac
-
-set +e
-form_links=$(grep -roh 'href="[^"]*\(crm_form\|demo-zayavka\)[^"]*"' "$DIST_DIR" --include='*.html' 2>/dev/null \
-  | sed 's/^href="//; s/"$//' | sort -u)
-grep_rc=$?
-set -e
-if (( grep_rc > 1 )); then
-  echo "не удалось прочитать $DIST_DIR (grep код $grep_rc) — проверка форм не выполнена" >&2
+# Механика — `form_links_match_mode` в `scripts/lib/deploy-checks.sh`: блок стоит
+# после `npm run build` и после ssh-загрузки релиза, поэтому запуском самого скрипта
+# до него не дойти без реального хоста, и поведенческий тест возможен только у
+# вынесенной функции (web/tests/deploy-form-links.test.ts).
+if ! form_links_match_mode "$DIST_DIR" "$DEPLOY_MODE" "$DEMO_FORMS"; then
   exit 1
 fi
-
-form_count=$(printf '%s\n' "$form_links" | grep -c . || true)
-if (( form_count == 0 )); then
-  echo "В сборке нет ни одной ссылки на форму заявки — проверять нечего, загрузка отменена." >&2
-  echo "Ожидался набор вида ${EXPECT_HUMAN}." >&2
-  exit 1
-fi
-
-wrong=$(printf '%s\n' "$form_links" | grep -vE "$EXPECT_RE" || true)
-if [[ -n "$wrong" ]]; then
-  echo "Ссылки форм не соответствуют режиму ${DEPLOY_MODE} (ожидалось ${EXPECT_HUMAN}):" >&2
-  printf '%s\n' "$wrong" | head -5 >&2
-  echo "Загрузка отменена: в режиме stand это увело бы заявки в CRM заказчика," >&2
-  echo "в режиме prod — потеряло бы обращения клиентов." >&2
-  exit 1
-fi
-echo "[deploy] Проверка форм: ${form_count} различных адресов, все соответствуют ${EXPECT_HUMAN}"
 
 # ── Гейты платёжной формы: адрес и секреты (задачи 6.1 и 6.2).
 #
