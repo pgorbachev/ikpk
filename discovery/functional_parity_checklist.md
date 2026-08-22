@@ -9,7 +9,7 @@
 ## 1. Global — Header & Navigation
 
 - [ ] **Logo** — ИКПК logo in header, links to `/`
-- [ ] **Phone number** — `+7 (812) 646-54-50` displayed in header, clickable `tel:` link
+- [ ] **Phone number** — `+7 (812) 646-54-50` **и** `+7 981 038-77-97` displayed in header, clickable `tel:` links _(изменено решением заказчика 2026-08-19, D12: показываем оба номера, а не один. Паритет с живым сайтом этот пункт больше не задаёт.)_
 - [ ] **Main menu** — 15 items in exact order, grouped under sections:
   1. Главная → `/`
   2. Акции и скидки → `/aktsii-i-skidki`
@@ -93,7 +93,7 @@
 ### 7.1 Hero Section
 - [ ] **Heading** — "Институт клинической прикладной кинезиологии"
 - [ ] **Subheading text** — 20+ years of postgraduate education, Upledger & Barral partnership
-- [ ] **CTA button** — "Записаться на обучение" → `/raspisanie-i-tseny`
+- [ ] **CTA button** — "Выбрать программу" → `/raspisanie-i-tseny` _(изменено решением заказчика 2026-08-19, D10: подпись CTA на главной. Паритет с живым сайтом этот пункт больше не задаёт.)_
 
 ### 7.2 Advantages Section ("Наши преимущества")
 - [ ] **6 advantage cards**, each with title + description:
@@ -106,11 +106,11 @@
 
 ### 7.3 CTA Block (mid-page)
 - [ ] **"Готовы к нам присоединиться?"** text block
-- [ ] **CTA button** — "Записаться на обучение" → `/raspisanie-i-tseny`
+- [ ] **CTA button** — "Выбрать программу" → `/raspisanie-i-tseny` _(изменено решением заказчика 2026-08-19, D10: подпись CTA на главной. Паритет с живым сайтом этот пункт больше не задаёт.)_
 
 ### 7.4 Approach Section ("Наш подход к обучению")
 - [ ] **Description text** about practical skill development
-- [ ] **CTA button** — "Записаться на обучение" → `/raspisanie-i-tseny`
+- [ ] **CTA button** — "Выбрать программу" → `/raspisanie-i-tseny` _(изменено решением заказчика 2026-08-19, D10: подпись CTA на главной. Паритет с живым сайтом этот пункт больше не задаёт.)_
 
 ### 7.5 Statistics Section
 - [ ] **3 counters** (animated or static):
@@ -118,7 +118,7 @@
   - `> 20 лет` — обучаем новых специалистов
   - `1 500+` — получили государственную аккредитацию
 
-### 7.6 News Section ("Новости")
+### 7.6 News Section ("Предложения") _(изменено решением заказчика 2026-08-19, D21: заголовок секции; «Акции и скидки» остаётся отдельной. Паритет с живым сайтом этот пункт больше не задаёт.)_
 - [ ] **4 news cards**, each with:
   - Thumbnail image (from Yandex Cloud Storage via `/_next/image`)
   - Title (headline)

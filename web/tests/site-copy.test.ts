@@ -69,6 +69,28 @@ function contactBlockBySubtitle(html: string, subtitle: string): Element {
   return only(blocks, `блок контактов «${subtitle}»`);
 }
 
+
+/** Разобранные блоки JSON-LD страницы. Текст скрипта берём сырым: `textOf` его пропускает. */
+function jsonLd(html: string): unknown[] {
+  const out: unknown[] = [];
+  for (const el of findAll(html, (e) => e.tagName === 'script' && attr(e, 'type') === 'application/ld+json')) {
+    const raw = (el.childNodes[0] as { value?: string } | undefined)?.value ?? '';
+    if (!raw.trim()) continue;
+    out.push(JSON.parse(raw));
+  }
+  return out;
+}
+
+/** Все объекты дерева JSON — telephone может лежать и во вложенном contactPoint. */
+function* jsonNodes(value: unknown): Generator<Record<string, unknown>> {
+  if (Array.isArray(value)) {
+    for (const v of value) yield* jsonNodes(v);
+  } else if (value && typeof value === 'object') {
+    yield value as Record<string, unknown>;
+    for (const v of Object.values(value as Record<string, unknown>)) yield* jsonNodes(v);
+  }
+}
+
 // ─── D12: два номера везде, где сайт показывает свой телефон ─────────────────
 
 describe('D12 — сайт показывает оба номера телефона', () => {
@@ -145,6 +167,29 @@ describe('D12 — сайт показывает оба номера телефо
       expect.arrayContaining([CITY_TEL, MOBILE_TEL]),
     );
     expect(textOf(block)).toContain(MOBILE_PHONE);
+  });
+
+  it('структурированные данные называют оба номера там, где вообще называют телефон', () => {
+    // Разметка страницы и её же машинное описание не должны расходиться: /kontakty
+    // показывает два номера, а JSON-LD объявлял один. Признак — наличие поля
+    // `telephone`, а не список страниц: появится новое место — попадёт под гейт само.
+    const offenders: string[] = [];
+    let declared = 0;
+    for (const { path, html } of pages()) {
+      for (const block of jsonLd(html)) {
+        for (const node of jsonNodes(block)) {
+          if (!('telephone' in node)) continue;
+          declared += 1;
+          const list = (Array.isArray(node.telephone) ? node.telephone : [node.telephone]).map(String);
+          const digits = list.map((v) => v.replace(/[^\d+]/g, ''));
+          if (!digits.includes('+78126465450') || !digits.includes('+79810387797')) {
+            offenders.push(`${path}: telephone=${JSON.stringify(node.telephone)}`);
+          }
+        }
+      }
+    }
+    expect(declared, 'ни одна страница не объявляет telephone — гейт измерил бы пустоту').toBeGreaterThan(0);
+    expect(offenders.slice(0, 5), offenders.slice(0, 5).join('\n')).toEqual([]);
   });
 });
 
