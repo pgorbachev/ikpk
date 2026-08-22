@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "fe952cf886de164eed4eaf9c362a1add6f2ba361",
+  "generatedFromSha": "109592c99c4a7dacbb678e3891d611c3226910ad",
   "distRoots": [
     "/Users/pgorbachev/projects/private/ikpk-payment-form/web/dist",
     "/Users/pgorbachev/projects/private/ikpk-payment-form/web/dist-demo"
@@ -33342,7 +33342,7 @@
       "slotId": "src:components/contacts/ContactShell.astro:L127:C3:script",
       "route": "/oplata",
       "placement": "after:#payment-dialog-title",
-      "identity": "script|src=/_astro/PaymentForm.astro_astro_type_script_index_0_lang.BHEZKEm2.js|type=module|body:e3b0c44298fc1c14",
+      "identity": "script|src=/_astro/PaymentForm.astro_astro_type_script_index_0_lang.CopIzHsg.js|type=module|body:e3b0c44298fc1c14",
       "count": 1,
       "builds": [
         "production"
@@ -33352,7 +33352,7 @@
       "slotId": "src:components/contacts/ContactShell.astro:L127:C3:script",
       "route": "/oplata",
       "placement": "after:#payment-err-consent",
-      "identity": "script|src=/_astro/PaymentForm.astro_astro_type_script_index_0_lang.BHEZKEm2.js|type=module|body:e3b0c44298fc1c14",
+      "identity": "script|src=/_astro/PaymentForm.astro_astro_type_script_index_0_lang.CopIzHsg.js|type=module|body:e3b0c44298fc1c14",
       "count": 1,
       "builds": [
         "demo"
@@ -33483,7 +33483,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/oplata.SK9G3Y1h.css|rel=stylesheet",
+      "identity": "link|href=/_astro/oplata.CFlIUsNO.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
