@@ -1,0 +1,97 @@
+# Негативная проверка постусловия «кнопка чата нарисована на снимке»
+#
+# Правило: гейт, не проверенный негативно, гейтом не считается (AGENTS.md).
+# Здесь сохранён сам красный прогон, а не пересказ о нём.
+
+## Мутация (точная команда)
+
+    cd web/dist-a && python3 -c "
+    p='index.html'; s=open(p,encoding='utf-8').read()
+    s=s.replace('</head>','<style>.chatw{visibility:hidden}</style></head>',1)
+    open(p,'w',encoding='utf-8').write(s)"
+
+Мутация задевает ТОЛЬКО главную: файл один. Это и делает её различающей —
+семинарские кадры обязаны остаться зелёными, и они остались.
+
+## Контрольная сумма дерева web/dist-a
+
+    find . -type f -exec shasum {} + | sort | shasum
+
+    до мутации:          d8b74993f64e0927f5c2bb54a485e6423fd3cb69
+    после восстановления: d8b74993f64e0927f5c2bb54a485e6423fd3cb69
+
+Совпадение сумм ДО МУТАЦИИ и ПОСЛЕ ВОССТАНОВЛЕНИЯ доказывает, что дерево
+возвращено побайтово. git status здесь слеп: web/dist-* в .gitignore, и
+созданный внутри файл он не показывает вовсе.
+
+## Команда прогона
+
+    node scripts/shoot-mockups.mjs --dist dist-a --variant a --out /tmp/negcheck3 --port 4416
+
+## Результат: код выхода 1, 14 кадров не прошли — все главная, ни одного семинарского
+
+ПОСТУСЛОВИЕ НЕ ВЫПОЛНЕНО (14):
+    variant-a/home-1280-03-reviews-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280-05-footer-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280-06-reviews-chat-open.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280-07-footer-chat-open.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280-08-footer-chat-offline.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-768-03-reviews-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-768-05-footer-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-375-03-reviews-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-375-05-footer-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-375-06-reviews-chat-open.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-375-07-footer-chat-open.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-375-08-footer-chat-offline.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280d-03-reviews-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+    variant-a/home-1280d-05-footer-viewport.png: в рамке кнопки 0% пикселей цвета чата (порог 25%), кнопка не нарисована
+код выхода: 1
+
+код выхода: 1
+
+================================================================
+## Вторая ветвь: «кнопки чата нет в DOM»
+
+Прогон против опорной сборки её не проверяет: там нет и секции отзывов, и
+скрипт падает раньше по таймауту локатора. Это «не смогла проверить», а не
+красный гейт, поэтому ветвь пройдена отдельной мутацией — переименованием
+признака, по которому проверка ищет кнопку.
+
+### Мутация
+
+    cd web/dist-a && perl -pi -e 's/data-mockup-chat-button/data-mockup-chat-button-removed/g' index.html
+
+### Контрольная сумма дерева web/dist-a
+
+    до мутации:           d8b74993f64e0927f5c2bb54a485e6423fd3cb69
+    после восстановления: d8b74993f64e0927f5c2bb54a485e6423fd3cb69
+
+### Команда прогона
+
+    node scripts/shoot-mockups.mjs --dist dist-a --variant a --out /tmp/negcheck5 --port 4420
+
+### Результат: код выхода 1, 14 кадров — все главная, ни одного семинарского
+
+ПОСТУСЛОВИЕ НЕ ВЫПОЛНЕНО (14):
+    variant-a/home-1280-03-reviews-viewport.png: кнопки чата нет в DOM
+    variant-a/home-1280-05-footer-viewport.png: кнопки чата нет в DOM
+    variant-a/home-1280-06-reviews-chat-open.png: кнопки чата нет в DOM
+    variant-a/home-1280-07-footer-chat-open.png: кнопки чата нет в DOM
+    variant-a/home-1280-08-footer-chat-offline.png: кнопки чата нет в DOM
+    variant-a/home-768-03-reviews-viewport.png: кнопки чата нет в DOM
+    variant-a/home-768-05-footer-viewport.png: кнопки чата нет в DOM
+    variant-a/home-375-03-reviews-viewport.png: кнопки чата нет в DOM
+    variant-a/home-375-05-footer-viewport.png: кнопки чата нет в DOM
+    variant-a/home-375-06-reviews-chat-open.png: кнопки чата нет в DOM
+    variant-a/home-375-07-footer-chat-open.png: кнопки чата нет в DOM
+    variant-a/home-375-08-footer-chat-offline.png: кнопки чата нет в DOM
+    variant-a/home-1280d-03-reviews-viewport.png: кнопки чата нет в DOM
+    variant-a/home-1280d-05-footer-viewport.png: кнопки чата нет в DOM
+код выхода: 1
+
+код выхода: 1
+
+### Что осталось непройденным
+
+Ветвь «рамка кнопки вне кадра» не срабатывала ни разу: сценария, который её
+вызывает, в наборе нет. Названо, а не умолчано.

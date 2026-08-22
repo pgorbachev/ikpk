@@ -553,14 +553,14 @@ index 0000000..7c2247a
 +</style>
 diff --git a/web/src/components/mockup/ReviewsSection.astro b/web/src/components/mockup/ReviewsSection.astro
 new file mode 100644
-index 0000000..debf437
+index 0000000..8545e05
 --- /dev/null
 +++ b/web/src/components/mockup/ReviewsSection.astro
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,178 @@
 +---
 +/** Секция отзывов на главной. Три раскладки — по одной на вариант. */
 +import ReviewsWidget from './ReviewsWidget.astro';
-+import { REVIEWS, REVIEWS_LINE, REVIEWS_COUNT_LINE } from '../../lib/mockup';
++import { REVIEWS, REVIEWS_LINE } from '../../lib/mockup';
 +
 +interface Props {
 +  layout: 'split' | 'compact' | 'centered';
@@ -609,7 +609,9 @@ index 0000000..debf437
 +            к себе. Карточка справа обновляется сама.
 +          </p>
 +          <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
-+            Читать все {REVIEWS_COUNT_LINE} на Яндекс.Картах →
++            {/* Без числа намеренно: рядом стоит карточка виджета со своим «33 отзыва»,
++                и наша копия числа протухла бы отдельно от неё. */}
++            Читать отзывы на Яндекс.Картах →
 +          </a>
 +        </div>
 +        <div class="reviews-widget-slot" data-mockup-widget-slot>
@@ -1281,10 +1283,10 @@ index 0000000..edd39ba
 +</style>
 diff --git a/web/scripts/shoot-mockups.mjs b/web/scripts/shoot-mockups.mjs
 new file mode 100644
-index 0000000..2e2d8e8
+index 0000000..f5d31ef
 --- /dev/null
 +++ b/web/scripts/shoot-mockups.mjs
-@@ -0,0 +1,415 @@
+@@ -0,0 +1,427 @@
 +/**
 + * Съёмка мокапов S2. Живёт только в одноразовом worktree.
 + *
@@ -1608,6 +1610,15 @@ index 0000000..2e2d8e8
 +
 +  if (VARIANT === 'main' || vp.light) return;
 +
++  // Отсутствие секции отзывов в неопорной сборке — это отказ проверки, а не
++  // повод молча пропустить проходы 3 и 4. Первая редакция падала здесь по
++  // таймауту локатора, и разобрать по сообщению, что именно случилось, было
++  // нельзя.
++  if (!hasReviews) {
++    problems.push(`${dir}: вариант ${VARIANT}, но секции отзывов в сборке нет — проходы с раскрытым чатом не выполнены`);
++    return;
++  }
++
 +  // ── Проход 3: чат раскрыт. ────────────────────────────────────────────────
 +  await load(page, `${url}?chat=open`);
 +  await reviews.scrollIntoViewIfNeeded();
@@ -1698,5 +1709,8 @@ index 0000000..2e2d8e8
 +console.log(
 +  chatChecks.length
 +    ? `готово: ${VARIANT} — постусловие выполнено на ${chatChecks.length} снимках экрана`
-+    : `готово: ${VARIANT} — постусловие НЕ ПРИМЕНЯЛОСЬ: чата в этой сборке нет по построению (опорный набор), проверок ноль`
++    // Причину вакуумности здесь НЕ называем: «в опорном наборе чата нет» — это
++    // догадка, а не измерение, и на прогоне варианта она солгала бы. Говорим
++    // только то, что известно: измерений ноль.
++    : `готово: ${VARIANT} — постусловие НИЧЕГО НЕ ИЗМЕРИЛО: снимков экрана с ожидаемой кнопкой чата не было (0 проверок). Для опорного набора это норма; для варианта — отказ проверки, а не её успех`
 +);
