@@ -103,7 +103,7 @@ const PATH_SPAN =
 // не попадал.
 const LINE_ONLY_SPAN = /^:(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/;
 
-const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Пять классов, и все здесь:
+const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Шесть классов, и все здесь:
 #   1. ссылка «путь:строка» БЕЗ фрагмента в кавычках — содержимое сверить нечем;
 #   2. ссылка в СБОРОЧНЫЙ ВЫВОД (\`web/dist/…\`) — её предмет появляется только после сборки,
 #      поэтому обязательный гейт её не проверяет вовсе; проверка идёт отдельным шагом
@@ -256,25 +256,37 @@ function verifyBuildRoots() {
   }
 }
 
-/** Корень сборочного вывода, к которому относится путь (или null). Кандидат `web/<путь>` нужен
- *  потому, что `dist/client/**` пишут без префикса пакета. */
+/**
+ * Корень сборочного вывода и НОРМАЛИЗОВАННЫЙ путь внутри него. Возвращать один корень было
+ * недостаточно: `dist/index.html` относится к `web/dist`, а поиск шёл по списку
+ * `[ROOT/dist/index.html, ROOT/web/dist/index.html]` — то есть корневой `dist/index.html`,
+ * лежащий вне сборки `web`, мог подтвердить ссылку вместо исчезнувшего файла. Теперь предмет
+ * ищется строго внутри найденного корня.
+ *
+ * Сравнение регистро-НЕзависимое, а расхождение регистра называется отдельно: `WEB/dist/...`
+ * прежде не распознавалось как сборочный вывод вовсе, и на macOS такая ссылка открывалась как
+ * обычный путь, а на Linux нет — снова разные классы в двух средах. Каталоги сборки не
+ * отслеживаются git, поэтому индекс здесь не помощник: признаком служит сам перечень корней.
+ */
 function buildRootOf(path) {
   const bare = path.replace(/\/$/, '');
   for (const c of [bare, join('web', bare)]) {
     const norm = c.split('/').filter(Boolean).join('/');
-    const hit = BUILD_OUTPUT_ROOTS.find((root) => norm === root || norm.startsWith(`${root}/`));
-    if (hit) return hit;
+    const lower = norm.toLowerCase();
+    const hit = BUILD_OUTPUT_ROOTS.find(
+      (root) => lower === root.toLowerCase() || lower.startsWith(`${root.toLowerCase()}/`),
+    );
+    if (hit) {
+      const rest = norm.slice(hit.length).replace(/^\//, '');
+      const exactCase = norm.slice(0, hit.length) === hit;
+      return { root: hit, rest, inside: rest ? `${hit}/${rest}` : hit, exactCase };
+    }
   }
   return null;
 }
 
 function isGeneratedOutput(path) {
-  const bare = path.replace(/\/$/, '');
-  const candidates = [bare, join('web', bare)];
-  return candidates.some((c) => {
-    const norm = c.split('/').filter(Boolean).join('/');
-    return BUILD_OUTPUT_ROOTS.some((root) => norm === root || norm.startsWith(`${root}/`));
-  });
+  return buildRootOf(path) !== null;
 }
 
 /**
@@ -628,6 +640,27 @@ const originRefsPresent =
     encoding: 'utf8',
   }).trim().length > 0;
 
+/**
+ * Имена рефов репозитория (ветки, теги, remote-ветки). Нужны, чтобы отличить форму «где найден
+ * факт» (`main@<sha>`) от версии пакета (`node@20`): первое слева — существующий ref, второе — нет.
+ * Порог по доле hex-символов, стоявший здесь раньше, был угадыванием и ошибался в обе стороны:
+ * `web/src/thing.ts@not-a-sha` пропускался, а `actions/cache@beta` и `feature@feedback`
+ * объявлялись испорченными SHA (измерено — два ложных расхождения на одном прогоне).
+ */
+const KNOWN_REFS = new Set(
+  (
+    spawnSync(
+      'git',
+      ['-C', ROOT, 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes', 'refs/tags'],
+      { encoding: 'utf8' },
+    ).stdout ?? ''
+  )
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .flatMap((r) => (r.startsWith('origin/') ? [r, r.slice('origin/'.length)] : [r])),
+);
+
 const sharedRevisionCache = new Map();
 /** Все SHA, на которые ссылаются артефакты — для поиска мёртвых объявлений. */
 const seenRevisions = new Set();
@@ -818,42 +851,46 @@ function buildOutputRef({ rel, path, lineSpec }) {
   // Прежняя редакция объявляла отсутствие такого дерева расхождением — то есть законная по всем
   // документированным правилам ссылка на `cms/dist/**` проходила проверку ветки и валила ГЕЙТ
   // ПУБЛИКАЦИИ боевого сайта, причём автор узнавал об этом только из CI.
-  const root = buildRootOf(path);
-  if (root && !BUILT_ROOTS.includes(root)) {
-    // Дерева нет — «не проверено», а не «дефект». Молчать об этом нельзя: класс печатается ниже
-    // отдельной строкой, иначе «расхождений 0» читалось бы как «все ссылки в сборку проверены».
-    unbuiltRoots.set(root, (unbuiltRoots.get(root) ?? 0) + 1);
+  const hit = buildRootOf(path);
+  if (hit && !hit.exactCase) {
+    // Регистр корня сборки не совпадает: `WEB/dist/...` прежде не распознавался как сборочный
+    // вывод ВООБЩЕ, и на macOS такая ссылка открывалась как обычный путь, а на Linux нет.
+    defects.push(
+      `${rel}: регистр каталога сборки не совпадает — ${path} (в перечне: ${hit.root})`,
+    );
     return;
   }
-  // Проверяется РОД записи, а не только существование: каталог с именем `index.html` прежде
-  // сходил за найденную страницу. Ссылка со слэшем на конце — каталог, без него — файл.
-  // Род требуется только там, где он ЗАДАН формой ссылки: слэш на конце — каталог, расширение —
-  // файл, всё остальное (`web/dist`, `dist/client`) может быть и тем и другим. Первая редакция
-  // требовала файл от любой ссылки без слэша и объявила расхождением семь верных ссылок на
-  // `web/dist` — поймано в CI, локально не проверялось с собранным деревом.
-  // Расширение — до ДВЕНАДЦАТИ символов: предел в пять принимал каталог `manifest.webmanifest`
-  // за подходящий предмет, потому что «расширения» длиной 11 для него не существовало.
-  const wantDir = path.endsWith('/') ? true : /\.[a-z0-9]{1,12}$/i.test(path) ? false : null;
+  if (hit && !BUILT_ROOTS.includes(hit.root)) {
+    // Дерева нет — «не проверено», а не «дефект». Молчать об этом нельзя: класс печатается ниже
+    // отдельной строкой, иначе «расхождений 0» читалось бы как «все ссылки в сборку проверены».
+    unbuiltRoots.set(hit.root, (unbuiltRoots.get(hit.root) ?? 0) + 1);
+    return;
+  }
+  // Род записи требуется только там, где он ЗАДАН формой ссылки: слэш на конце — каталог, ТОЧКА
+  // в последнем сегменте — файл, всё остальное (`web/dist`, `dist/client`) может быть и тем и
+  // другим. Признак по точке, а не по длине расширения: предел «до пяти» принимал каталог
+  // `manifest.webmanifest` за подходящий предмет, а сдвиг до двенадцати просто отодвинул границу —
+  // каталог `name.abcdefghijklmn` или с Unicode-расширением проходил снова. Длина расширения
+  // предметом не является, наличие точки — является.
+  const lastSegment = path.replace(/\/$/, '').split('/').pop() ?? '';
+  const wantDir = path.endsWith('/') ? true : /\.[^./]+$/u.test(lastSegment) ? false : null;
   const kindOk = (c) =>
     wantDir === null ? true : wantDir ? statSync(c).isDirectory() : statSync(c).isFile();
+  // Предмет ищется СТРОГО внутри найденного корня. Прежний список кандидатов
+  // `[ROOT/<путь>, ROOT/web/<путь>]` позволял корневому `dist/index.html` подтвердить ссылку,
+  // относящуюся к `web/dist`, — то есть чужой файл закрывал исчезнувший.
+  const candidate = hit ? join(ROOT, hit.inside) : join(ROOT, path);
   // Инвариант «не выходить за пределы репозитория» действует и на сборочный вывод: symlink
-  // `web/dist/index.html → /outside` (или symlink самого `web/dist/`) проходил `existsSync` и
-  // засчитывался в проверенное. Гейт, который так «подтверждает» страницу, подтверждает чужой
-  // файл — то же самое, что было закрыто для обычного разрешения, но забыто здесь.
-  const built = [join(ROOT, path), join(ROOT, 'web', path)].find(
-    (c) => existsSync(c) && insideRepo(c) && kindOk(c),
-  );
-  const escapes = [join(ROOT, path), join(ROOT, 'web', path)].find(
-    (c) => existsSync(c) && !insideRepo(c),
-  );
-  if (escapes) {
+  // `web/dist/index.html → /outside` проходил `existsSync` и засчитывался в проверенное.
+  if (existsSync(candidate) && !insideRepo(candidate)) {
     defects.push(
       `${rel}: ${path} в собранном дереве уходит за пределы репозитория по символической ссылке — ` +
         'такой предмет доказательством не является',
     );
     return;
   }
-  const wrongKind = [join(ROOT, path), join(ROOT, 'web', path)].find((c) => existsSync(c));
+  const built = existsSync(candidate) && kindOk(candidate) ? candidate : undefined;
+  const wrongKind = existsSync(candidate) ? candidate : undefined;
   if (!built && wrongKind) {
     defects.push(
       `${rel}: в собранном дереве ${path} есть, но это ${
@@ -1007,29 +1044,37 @@ for (const md of files) {
       // отсекает не класс, а требование к ЛЕВОЙ части: она обязана выглядеть путём (расширение
       // либо косая черта). Тогда `user@localhost` и адреса почты в класс не попадают, а
       // `web/src/lib/data.ts@45297bg` попадает.
-      // Признак — ХВОСТ, а не левая часть. Требование «слева путь» давало ложные расхождения на
-      // законных записях: `actions/checkout@v4`, `docker/build-push-action@main`,
-      // `first.last@example.com` (измерено — три расхождения на одном прогоне), а исключение
-      // хвостов с косой чертой заодно пропускало `@dead/beef`. Теперь класс символов хвоста и
-      // решает: SHA состоит только из hex, а порча добавляет `-`, `_` или `/`. Что НЕ попадает в
-      // класс: `v4` и `main` (нехекс-буквы), `example.com` и `7.2.0` (точки),
-      // `refs/heads/main` (нехекс-буквы), `20` и `11` (короче трёх символов — это версии).
+      // Признак — ПРЕДМЕТ СЛЕВА, а не форма хвоста. `X@Y` считается ссылкой на ревизию, только
+      // если слева существующий ФАЙЛ репозитория либо известное имя ref: тогда после `@` по
+      // определению стоит ревизия, и она обязана быть полным 40-символьным SHA в нижнем регистре.
+      // Прежняя редакция угадывала по доле hex-символов в хвосте — порог 70 % ошибался в обе
+      // стороны: `@not-a-sha` проходил, `actions/cache@beta` и `feature@feedback` объявлялись
+      // испорченными. Здесь порогов нет: `actions/cache` и `feature` не являются ни файлом, ни
+      // ref, поэтому в класс не попадают вовсе.
+      //
+      // Единственное исключение — хвост, начинающийся с `refs/`: это git-путь до ref, принятая
+      // запись GitHub Actions (`workflow.yml@refs/heads/main`), а не ревизия. Признак точный:
+      // ревизия так не пишется никогда.
       const shaLike = /^(.+)@([^@\s:]+)(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
       const tail = shaLike?.[2] ?? '';
-      // Два признака вместо одного, потому что одного не хватает ни в ту, ни в другую сторону.
-      // Чистый hex-класс ловит `abc` и `dead/beef`, но пропускает опечатку `45297bg`: буква `g`
-      // выводит хвост из класса, и формально он становится неотличим от имени ветки `main`.
-      // Различает их ДОЛЯ hex-символов: у испорченного SHA она близка к единице (6 из 7), у
-      // ветки — низкая (`main` — 1 из 4, `refs/heads/main` — 7 из 15). Точка исключает адреса и
-      // версии (`example.com`, `7.2.0`), длина от трёх — короткие версии (`v4`, `20`, `11`).
-      const hexChars = (tail.match(/[0-9a-fA-F]/g) ?? []).length;
-      const tailIsShaShaped =
-        !tail.includes('.') &&
-        tail.length >= 3 &&
-        /^[0-9a-zA-Z_/-]+$/.test(tail) &&
-        (/^[0-9a-fA-F_/-]+$/.test(tail) || hexChars / tail.length >= 0.7) &&
-        hexChars >= 2;
-      if (shaLike && tailIsShaShaped && !/^[0-9a-f]{40}$/.test(tail)) {
+      const leftIsRepoFile =
+        shaLike &&
+        [join(ROOT, shaLike[1]), join(ROOT, 'web', shaLike[1])].some(
+          (c) => existsSync(c) && statSync(c).isFile(),
+        );
+      const leftIsKnownRef = shaLike && KNOWN_REFS.has(shaLike[1]);
+      // Хвост обязан состоять из символов, которыми вообще записывают ревизию (буквы, цифры,
+      // `_`, `-`, `/`). Это отсекает прозу: в правилах стоит `main@…` как ПРИМЕР негодной формы,
+      // и многоточие ревизией быть не может — иначе гейт краснел на собственной документации
+      // (поймано сразу после смены признака).
+      const tailIsWritable = /^[0-9A-Za-z_/-]+$/.test(tail);
+      if (
+        shaLike &&
+        tailIsWritable &&
+        !tail.startsWith('refs/') &&
+        (leftIsRepoFile || leftIsKnownRef) &&
+        !/^[0-9a-f]{40}$/.test(tail)
+      ) {
         defects.push(
           `${rel}: ревизия записана не полным 40-символьным SHA в нижнем регистре ` +
             `(${tail}, ${tail.length} симв.) — ${spans[i].body}`,
@@ -1188,7 +1233,19 @@ for (const md of files) {
       // репозитория и `web/`, то есть на macOS находился по ФС, а на Linux уходил в прозу —
       // снова два вердикта в двух средах.
       const changeRel = changeRootOf(md).slice(ROOT.length + 1);
-      const prefixes = [dirRel, `web/${dirRel}`, `${changeRel}/${dirRel}`];
+      const mdRel = dirname(md).slice(ROOT.length + 1);
+      // Кандидаты те же, что у РАЗРЕШЕНИЯ ссылки, иначе классы расходятся по средам: относительный
+      // каталог OpenSpec разрешался через каталог артефакта, `openspec/changes` и `openspec/specs`,
+      // а предварительная проверка регистра о них не знала — на macOS путь находился по ФС, на
+      // Linux уходил в прозу.
+      const prefixes = [
+        dirRel,
+        `web/${dirRel}`,
+        `${changeRel}/${dirRel}`,
+        `${mdRel}/${dirRel}`,
+        `openspec/changes/${dirRel}`,
+        `openspec/specs/${dirRel}`,
+      ];
       const exactInIndex = allTracked.some((t) =>
         prefixes.some((pre) => t === pre || t.startsWith(`${pre}/`)),
       );
@@ -1743,8 +1800,14 @@ const declaredShaUnused = [...absentDeclared.entries()]
   .map(([key]) => key)
   .sort();
 
-const absentNew = currentAbsent.filter((k) => !absentDeclared.has(k));
-const absentStale = [...absentDeclared.keys()]
+// В режиме записи обратная сверка идёт по СВЕЖЕМУ составу, а не по карте, прочитанной до записи:
+// иначе первый запуск после снятия устаревшей записи всё равно выходил кодом 1, и «перезаписал»
+// требовало второго прогона, чтобы стать «зелено». Команда, которой нужно два запуска, приучает
+// запускать её дважды не думая — а это уже способ не заметить настоящую находку.
+const absentNew = WRITE_ABSENT ? [] : currentAbsent.filter((k) => !absentDeclared.has(k));
+const absentStale = WRITE_ABSENT
+  ? []
+  : [...absentDeclared.keys()]
   .filter((k) => !absentSeen.has(k) && absentDeclared.get(k) !== 'external-revision')
   .sort();
 
