@@ -532,8 +532,8 @@
     "file": "components/payment/PaymentForm.astro",
     "nodeKind": "element",
     "locator": "components/payment/PaymentForm.astro:L130:C1:style",
-    "fingerprint": "e5d43537a2979a608e493d7ba6d26478e80f3f14f940be2edfdca51899ece953",
-    "identity": "style|body:da34850f44b465d7"
+    "fingerprint": "a3a3ab0e9cccf11dd98eebf4972aa852d0ecf2771acb0e934ee9ea1bc329cce1",
+    "identity": "style|body:a1f8e00c3d2d9798"
   },
   {
     "slotId": "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
