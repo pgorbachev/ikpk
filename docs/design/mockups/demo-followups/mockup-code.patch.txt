@@ -1,0 +1,1632 @@
+# Код мокапа: НЕ для копирования в реализацию.
+#
+# Лежит здесь только ради воспроизводимости снимков: по этому патчу их можно
+# снять заново и проверить числа. Реализация идёт по спеке — в мокапе нет ни
+# настоящего виджета Яндекса, ни настоящего виджета Bitrix24, ни чтения
+# /published-at.json, ни официальных фирменных марок соцсетей.
+#
+# База: e0c4d1d (origin/main на 2026-08-22). Сборка: MOCKUP_VARIANT=a|b|c npx astro build --outDir dist-<v>
+# Съёмка: node scripts/shoot-mockups.mjs --dist dist-<v> --variant <v>
+#
+diff --git a/web/src/components/Footer.astro b/web/src/components/Footer.astro
+index c8b3a23..be76a69 100644
+--- a/web/src/components/Footer.astro
++++ b/web/src/components/Footer.astro
+@@ -1,10 +1,17 @@
+ ---
+ import { SOCIAL_LINKS } from '../lib/social';
++// --- МОКАП (одноразовый worktree): иконки соцсетей и строка публикации ---
++import { MOCKUP_VARIANT, isMockup } from '../lib/mockup';
++import SocialIcons from './mockup/SocialIcons.astro';
++import PublishedAt from './mockup/PublishedAt.astro';
++
++const socialTreatment = MOCKUP_VARIANT === 'c' ? 'brand' : MOCKUP_VARIANT === 'b' ? 'plain' : 'circle';
++const dropSocialColumn = MOCKUP_VARIANT === 'c';
+ ---
+ 
+ <footer class="footer">
+   <div class="footer-inner container">
+-    <div class="footer-grid">
++    <div class:list={["footer-grid", dropSocialColumn && "footer-grid-3"]}>
+       <div class="footer-col">
+         <a href="/" class="footer-logo-link" aria-label="ИКПК — Главная">
+           <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
+@@ -42,19 +49,31 @@ import { SOCIAL_LINKS } from '../lib/social';
+         </ul>
+       </div>
+ 
+-      <div class="footer-col">
+-        <h2 class="footer-heading">Подписывайтесь</h2>
+-        <ul class="footer-links footer-social">
+-          {SOCIAL_LINKS.map((link) => (
+-            <li>
+-              <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
+-            </li>
+-          ))}
+-        </ul>
+-      </div>
++      {!dropSocialColumn && (
++        <div class="footer-col">
++          <h2 class="footer-heading">Подписывайтесь</h2>
++          {isMockup ? (
++            <SocialIcons treatment={socialTreatment} />
++          ) : (
++            <ul class="footer-links footer-social">
++              {SOCIAL_LINKS.map((link) => (
++                <li>
++                  <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
++                </li>
++              ))}
++            </ul>
++          )}
++        </div>
++      )}
+     </div>
+ 
+-    <div class="footer-bottom">
++    <div class:list={["footer-bottom", isMockup && `footer-bottom-${MOCKUP_VARIANT}`]}>
++      {dropSocialColumn && (
++        <div class="footer-social-strip">
++          <span class="footer-social-caption">Подписывайтесь</span>
++          <SocialIcons treatment={socialTreatment} />
++        </div>
++      )}
+       <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
+       {/* Документ обязателен, и на старом сайте ссылка на него была в футере
+           каждой страницы. При переносе она потерялась: файл в сборку попал,
+@@ -66,6 +85,7 @@ import { SOCIAL_LINKS } from '../lib/social';
+           rel="noopener noreferrer"
+         >Пользовательское соглашение и политика конфиденциальности</a>
+       </p>
++      {isMockup && <PublishedAt variant={MOCKUP_VARIANT === 'b' ? 'inline' : 'row'} />}
+     </div>
+   </div>
+ </footer>
+@@ -169,7 +189,39 @@ import { SOCIAL_LINKS } from '../lib/social';
+     color: #fff;
+   }
+ 
++  .footer-grid-3 { grid-template-columns: repeat(3, 1fr); }
++
++  /* вариант B: нижняя полоса в одну строку — копирайт, соглашение, метка */
++  .footer-bottom-b {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 1rem;
++    flex-wrap: wrap;
++    text-align: left;
++  }
++  .footer-bottom-b .footer-legal { margin-top: 0; }
++
++  /* вариант C: иконки и метка живут в нижней полосе */
++  .footer-social-strip {
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 0.6rem;
++    padding-bottom: 1.25rem;
++    margin-bottom: 1.25rem;
++    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
++  }
++  .footer-social-caption {
++    color: var(--color-light-100);
++    font-size: 0.94rem;
++    font-weight: 600;
++  }
++
+   @media (max-width: 768px) {
++    .footer-grid-3 { grid-template-columns: 1fr 1fr; }
++    .footer-bottom-b { justify-content: center; text-align: center; }
++
+     .footer-grid {
+       grid-template-columns: 1fr 1fr;
+     }
+diff --git a/web/src/layouts/BaseLayout.astro b/web/src/layouts/BaseLayout.astro
+index 8062c30..789052a 100644
+--- a/web/src/layouts/BaseLayout.astro
++++ b/web/src/layouts/BaseLayout.astro
+@@ -16,6 +16,9 @@ import Footer from '../components/Footer.astro';
+ import NewsletterSignup from '../components/NewsletterSignup.astro';
+ import Analytics from '../components/Analytics.astro';
+ import { isDemoForms } from '../lib/forms';
++// --- МОКАП: плавающий чат-виджет (Q22) ---
++import { MOCKUP_VARIANT, isMockup } from '../lib/mockup';
++import ChatWidget from '../components/mockup/ChatWidget.astro';
+ import '../styles/global.css';
+ 
+ const {
+@@ -64,6 +67,8 @@ const {
+         демонстрации в живые Метрику и Mail.ru заказчика — портили статистику,
+         цели и вебвизор боевого сайта. Гейт по тому же признаку, что у форм. */}
+     {!isDemoForms && <Analytics />}
++
++    {isMockup && <ChatWidget side={MOCKUP_VARIANT === 'c' ? 'left' : 'right'} />}
+   </body>
+ </html>
+ 
+diff --git a/web/src/pages/[institute]/[courseGroup]/[seminar].astro b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
+index 27bd361..5aba59d 100644
+--- a/web/src/pages/[institute]/[courseGroup]/[seminar].astro
++++ b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
+@@ -15,6 +15,10 @@ import {
+ import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
+ import RichContent from '../../../components/RichContent.astro';
+ import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
++// --- МОКАП: расписание, поднятое вверх (D3) ---
++import { MOCKUP_VARIANT } from '../../../lib/mockup';
++import SeminarNextBar from '../../../components/mockup/SeminarNextBar.astro';
++import SeminarScheduleAside from '../../../components/mockup/SeminarScheduleAside.astro';
+ import type { GetStaticPaths } from 'astro';
+ 
+ export const getStaticPaths: GetStaticPaths = () => {
+@@ -154,20 +158,37 @@ const seminarSchema =
+       ]}
+     />
+ 
+-    <article class="section seminar-detail">
++    <article class:list={['section', 'seminar-detail', MOCKUP_VARIANT !== 'off' && `seminar-mockup-${MOCKUP_VARIANT}`]}>
+       <h1 class="page-title">{seminar.name}</h1>
+ 
+-      {seminarBodyHtml ? (
+-        <div class="seminar-content rich-content">
+-          <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
+-        </div>
+-      ) : seminar.description_text && (
+-        <div class="seminar-content rich-content">
+-          <p>{seminar.description_text}</p>
++      {MOCKUP_VARIANT === 'a' && (
++        <div class="seminar-schedule-top">
++          <SeminarScheduleSection rows={scheduleRows} />
+         </div>
+       )}
++      {MOCKUP_VARIANT === 'b' && <SeminarNextBar rows={scheduleRows} />}
++
++      <div class="seminar-cols">
++        <div class="seminar-main">
++          {seminarBodyHtml ? (
++            <div class="seminar-content rich-content">
++              <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
++            </div>
++          ) : seminar.description_text && (
++            <div class="seminar-content rich-content">
++              <p>{seminar.description_text}</p>
++            </div>
++          )}
+ 
+-      <SeminarScheduleSection rows={scheduleRows} />
++          {(MOCKUP_VARIANT === 'off' || MOCKUP_VARIANT === 'b') && (
++            <div id="raspisanie">
++              <SeminarScheduleSection rows={scheduleRows} />
++            </div>
++          )}
++        </div>
++
++        {MOCKUP_VARIANT === 'c' && <SeminarScheduleAside rows={scheduleRows} />}
++      </div>
+     </article>
+   </div>
+ </BaseLayout>
+@@ -183,4 +204,25 @@ const seminarSchema =
+     margin-bottom: 0;
+     line-height: 1.75;
+   }
++
++  /* --- МОКАП --- */
++  .seminar-schedule-top { margin-bottom: 2.5rem; }
++  .seminar-schedule-top :global(.seminar-schedule) { margin-top: 0; }
++
++  /* align-items НЕ start: при start колонка расписания получает высоту своего
++     содержимого, и sticky внутри неё уезжает вместе с ней после первого экрана —
++     на снимке правая колонка оказывалась пустой. Растянутая колонка даёт sticky
++     полный ход. */
++  .seminar-mockup-c .seminar-cols {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 21rem;
++    gap: 2.5rem;
++    align-items: stretch;
++  }
++
++  @media (max-width: 1024px) {
++    .seminar-mockup-c .seminar-cols { grid-template-columns: 1fr; }
++    .seminar-mockup-c :global(.sched-aside) { order: -1; margin-bottom: 2rem; }
++    .seminar-mockup-c :global(.sched-aside-inner) { position: static; max-height: none; }
++  }
+ </style>
+diff --git a/web/src/pages/index.astro b/web/src/pages/index.astro
+index c2514aa..fac36f2 100644
+--- a/web/src/pages/index.astro
++++ b/web/src/pages/index.astro
+@@ -13,6 +13,9 @@ import Teachers from '../components/home/sections/Teachers.astro';
+ import News from '../components/home/sections/News.astro';
+ import CtaBand from '../components/home/sections/CtaBand.astro';
+ import { getPage } from '../lib/data';
++// --- МОКАП: секция отзывов (Q7/Q13/Q24) ---
++import { MOCKUP_VARIANT } from '../lib/mockup';
++import ReviewsSection from '../components/mockup/ReviewsSection.astro';
+ 
+ const homepage = getPage('homepage');
+ const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
+@@ -38,11 +41,14 @@ const schema = {
+ <BaseLayout title={title} description={description} schema={schema}>
+   <HeroHybrid />
+   <Advantages />
++  {MOCKUP_VARIANT === 'b' && <ReviewsSection layout="compact" />}
+   <Approach />
+   <Programs />
+   <Segments />
+   <UpcomingSeminars />
+   <Teachers />
++  {MOCKUP_VARIANT === 'a' && <ReviewsSection layout="split" />}
+   <News />
++  {MOCKUP_VARIANT === 'c' && <ReviewsSection layout="centered" />}
+   <CtaBand />
+ </BaseLayout>
+diff --git a/web/src/lib/mockup.ts b/web/src/lib/mockup.ts
+new file mode 100644
+index 0000000..3d616fb
+--- /dev/null
++++ b/web/src/lib/mockup.ts
+@@ -0,0 +1,56 @@
++/**
++ * Реквизит мокапов доделок после демо 2026-08-19 (пункт 9 «Пакетов для OpenSpec»).
++ *
++ * Живёт ТОЛЬКО в одноразовом worktree: в ветку мокапов уходят снимки и текст,
++ * а не этот код. Реализация пойдёт по спеке, а не копированием отсюда.
++ *
++ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c).
++ */
++
++export type MockupVariant = 'off' | 'a' | 'b' | 'c';
++
++const raw = (process.env.MOCKUP_VARIANT || 'off').toLowerCase();
++export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c'].includes(raw) ? raw : 'off') as MockupVariant;
++export const isMockup = MOCKUP_VARIANT !== 'off';
++
++/**
++ * Метка публикации. В продукте её пишет сборка в /published-at.json, а подвал
++ * подтягивает на клиенте (решение Q28). В мокапе значение ЗАФИКСИРОВАНО, иначе
++ * снимки разных вариантов различались бы минутами и сравнение бы врало.
++ */
++export const PUBLISHED_AT_SAMPLE = '21.08.2026, 03:40';
++
++/**
++ * Числа отзывов — из раздела «Факты» решений: организация 112883331290,
++ * 4.9 из 5, 33 отзыва, 66 оценок, бейдж «Хорошее место 2026» (снято 2026-08-20).
++ */
++export const REVIEWS = {
++  orgId: '112883331290',
++  rating: '4,9',
++  ratingNumeric: 4.9,
++  reviews: 33,
++  ratings: 66,
++  badge: 'Хорошее место 2026',
++  orgName: 'Институт клинической прикладной кинезиологии',
++  mapsUrl: 'https://yandex.ru/maps/org/112883331290/',
++  widgetUrl: 'https://yandex.ru/maps-reviews-widget/112883331290?comments',
++};
++
++/** Четыре сети после снятия Instagram и Facebook (решение D16). */
++export interface MockupSocial {
++  label: string;
++  href: string;
++  icon: 'vk' | 'youtube' | 'telegram' | 'rutube';
++}
++
++export const MOCKUP_SOCIAL_LINKS: MockupSocial[] = [
++  { label: 'ВКонтакте', href: 'https://vk.com/clubikpk', icon: 'vk' },
++  { label: 'Youtube', href: 'https://www.youtube.com/user/TheKinesiology', icon: 'youtube' },
++  { label: 'Telegram', href: 'https://t.me/ikpk_spb', icon: 'telegram' },
++  { label: 'Rutube', href: 'https://rutube.ru/channel/30422569/', icon: 'rutube' },
++];
++
++/** Часы работы менеджера (D14) — источник поведения чата «вне часов». */
++export const WORK_HOURS = 'пн–пт 10:00–18:00';
++export const PHONE_PRIMARY = '+7 (812) 646-54-50';
++export const PHONE_MOBILE = '+7 (981) 038-77-97';
+diff --git a/web/src/components/mockup/ChatWidget.astro b/web/src/components/mockup/ChatWidget.astro
+new file mode 100644
+index 0000000..464bd7e
+--- /dev/null
++++ b/web/src/components/mockup/ChatWidget.astro
+@@ -0,0 +1,171 @@
++---
++/**
++ * ЗАМЕНА плавающего чат-виджета Bitrix24 (решение Q22), а не сам виджет.
++ *
++ * Настоящий виджет — сторонний скрипт с домена заказчика: в мокапе он создавал
++ * бы живой канал обращений и недетерминированные снимки. Здесь воспроизведена
++ * геометрия типового виджета: круглая кнопка 60×60 с отступом 24px, раскрытая
++ * панель 400×620, на узком экране — почти во весь экран.
++ *
++ * ЧИСЛА — ДОПУЩЕНИЕ. При внедрении их снимают с живого виджета; здесь они
++ * названы, чтобы вывод о столкновениях можно было пересчитать под другой размер.
++ *
++ * Состояния переключаются параметром адреса, чтобы снимать их без пересборки:
++ *   ?chat=open     — раскрытая панель в рабочие часы
++ *   ?chat=offline  — раскрытая панель вне часов работы (D14)
++ */
++import { WORK_HOURS, PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
++
++interface Props {
++  side?: 'right' | 'left';
++}
++const { side = 'right' } = Astro.props;
++---
++
++<div class="chatw" data-mockup-chat={side} data-chat-side={side}>
++  <button type="button" class="chatw-btn" data-mockup-chat-button aria-label="Открыть онлайн-чат">
++    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
++      <path
++        fill="currentColor"
++        d="M12 3C6.9 3 3 6.6 3 11c0 2.3 1.1 4.3 2.9 5.7-.1 1-.6 2.4-1.7 3.6 1.9-.2 3.6-1 4.8-1.9 1 .3 2 .4 3 .4 5.1 0 9-3.6 9-8s-3.9-8-9-8Z"
++      />
++    </svg>
++  </button>
++
++  <div class="chatw-panel" data-mockup-chat-panel hidden>
++    <div class="chatw-head">
++      <span class="chatw-avatar" aria-hidden="true">В</span>
++      <span class="chatw-head-text">
++        <span class="chatw-title">Онлайн-чат</span>
++        <span class="chatw-sub" data-chat-status>Вера · обычно отвечает за 5 минут</span>
++      </span>
++      <span class="chatw-close" aria-hidden="true">×</span>
++    </div>
++
++    <div class="chatw-body">
++      <div class="chatw-msg" data-chat-online>
++        Здравствуйте! Подскажем по программам, датам и оплате. Что вас интересует?
++      </div>
++      <div class="chatw-msg chatw-msg-offline" data-chat-offline hidden>
++        Сейчас мы не в сети. Менеджер работает {WORK_HOURS}; в выходные семинары идут,
++        но менеджер не отвечает. Позвоните {PHONE_PRIMARY} или {PHONE_MOBILE} — либо
++        оставьте сообщение, ответим в рабочие часы.
++      </div>
++    </div>
++
++    <div class="chatw-foot">
++      <div class="chatw-input" aria-hidden="true">Ваше сообщение…</div>
++      <p class="chatw-consent">
++        Отправляя сообщение, вы соглашаетесь с&#32;<a href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf">политикой конфиденциальности</a>
++      </p>
++    </div>
++  </div>
++</div>
++
++<script is:inline>
++  (function () {
++    var mode = new URLSearchParams(location.search).get('chat');
++    var panel = document.querySelector('[data-mockup-chat-panel]');
++    if (!panel || (mode !== 'open' && mode !== 'offline')) return;
++    panel.hidden = false;
++    if (mode === 'offline') {
++      document.querySelector('[data-chat-online]').hidden = true;
++      document.querySelector('[data-chat-offline]').hidden = false;
++      document.querySelector('[data-chat-status]').textContent = 'Не в сети · ответим в рабочие часы';
++    }
++  })();
++</script>
++
++<style>
++  .chatw {
++    --chatw-size: 60px;
++    --chatw-gap: 24px;
++    position: fixed;
++    bottom: var(--chatw-gap);
++    z-index: 120;
++  }
++  .chatw[data-chat-side='right'] { right: var(--chatw-gap); }
++  .chatw[data-chat-side='left'] { left: var(--chatw-gap); }
++
++  .chatw-btn {
++    width: var(--chatw-size);
++    height: var(--chatw-size);
++    border-radius: 50%;
++    border: none;
++    background: #2fc7f7;
++    color: #fff;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
++    cursor: pointer;
++  }
++
++  .chatw-panel {
++    position: fixed;
++    bottom: calc(var(--chatw-gap) + var(--chatw-size) + 12px);
++    width: 400px;
++    height: 620px;
++    display: flex;
++    flex-direction: column;
++    background: #fff;
++    border-radius: 12px;
++    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
++    overflow: hidden;
++    color: #1a1a1a;
++  }
++  .chatw[data-chat-side='right'] .chatw-panel { right: var(--chatw-gap); }
++  .chatw[data-chat-side='left'] .chatw-panel { left: var(--chatw-gap); }
++  .chatw-panel[hidden] { display: none; }
++
++  .chatw-head {
++    display: flex;
++    align-items: center;
++    gap: 10px;
++    padding: 14px 16px;
++    background: #2fc7f7;
++    color: #fff;
++  }
++  .chatw-avatar {
++    width: 34px; height: 34px; border-radius: 50%;
++    background: rgba(255, 255, 255, 0.28);
++    display: inline-flex; align-items: center; justify-content: center;
++    font-weight: 700;
++  }
++  .chatw-head-text { display: flex; flex-direction: column; flex: 1; }
++  .chatw-title { font-weight: 600; font-size: 15px; }
++  .chatw-sub { font-size: 12px; opacity: 0.9; }
++  .chatw-close { font-size: 22px; line-height: 1; opacity: 0.9; }
++
++  .chatw-body { flex: 1; padding: 16px; background: #f5f7f9; }
++  .chatw-msg {
++    background: #fff;
++    border-radius: 12px;
++    padding: 12px 14px;
++    font-size: 14px;
++    line-height: 1.5;
++    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
++  }
++  .chatw-msg-offline { background: #fff8e6; }
++  .chatw-msg[hidden] { display: none; }
++
++  .chatw-foot { padding: 12px 16px 14px; border-top: 1px solid #e8ebee; }
++  .chatw-input {
++    border: 1px solid #d8dde2;
++    border-radius: 8px;
++    padding: 10px 12px;
++    color: #8b9199;
++    font-size: 14px;
++  }
++  .chatw-consent { margin-top: 8px; font-size: 11px; line-height: 1.4; color: #6b7278; }
++  .chatw-consent a { color: #2f6fd0; }
++
++  @media (max-width: 480px) {
++    .chatw-panel {
++      width: calc(100vw - 16px);
++      height: calc(100vh - var(--chatw-gap) - var(--chatw-size) - 24px);
++      left: 8px;
++      right: 8px;
++    }
++  }
++</style>
+diff --git a/web/src/components/mockup/PublishedAt.astro b/web/src/components/mockup/PublishedAt.astro
+new file mode 100644
+index 0000000..7c2247a
+--- /dev/null
++++ b/web/src/components/mockup/PublishedAt.astro
+@@ -0,0 +1,29 @@
++---
++/**
++ * Строка «Опубликовано: <дата, время>» в подвале (решение Q28).
++ *
++ * В продукте значение приходит из /published-at.json и подставляется на
++ * клиенте; здесь оно ЗАФИКСИРОВАНО, иначе снимки вариантов различались бы
++ * минутами. Разметка повторяет ту, что понадобится в продукте: пустой
++ * <time data-published-at> и подпись рядом.
++ */
++import { PUBLISHED_AT_SAMPLE } from '../../lib/mockup';
++
++interface Props {
++  variant?: 'row' | 'inline';
++}
++const { variant = 'row' } = Astro.props;
++---
++
++<p class:list={['pub', `pub-${variant}`]} data-mockup-published>
++  Опубликовано: <time data-published-at datetime="2026-08-21T03:40:00+03:00">{PUBLISHED_AT_SAMPLE}</time>
++</p>
++
++<style>
++  .pub {
++    color: var(--color-gray-400);
++    font-size: var(--font-xs);
++  }
++  .pub-row { margin-top: 0.5rem; }
++  .pub-inline { margin: 0; }
++</style>
+diff --git a/web/src/components/mockup/ReviewsSection.astro b/web/src/components/mockup/ReviewsSection.astro
+new file mode 100644
+index 0000000..d9e7c96
+--- /dev/null
++++ b/web/src/components/mockup/ReviewsSection.astro
+@@ -0,0 +1,173 @@
++---
++/** Секция отзывов на главной. Три раскладки — по одной на вариант. */
++import ReviewsWidget from './ReviewsWidget.astro';
++import { REVIEWS } from '../../lib/mockup';
++
++interface Props {
++  layout: 'split' | 'compact' | 'centered';
++}
++const { layout } = Astro.props;
++---
++
++<section
++  class:list={['reviews section', `reviews-${layout}`, layout !== 'compact' && 'section-alt']}
++  data-mockup-reviews={layout}
++  aria-labelledby="reviews-title"
++>
++  <div class="container">
++    {layout === 'split' && (
++      <div class="rv-split">
++        <div class="reviews-summary">
++          <h2 class="section-title" id="reviews-title">Отзывы</h2>
++          <p class="reviews-lead">
++            Отзывы собираются на Яндекс.Картах. Мы их не редактируем и не отбираем —
++            блок ниже показывает всё, что написали посетители.
++          </p>
++          <div class="reviews-figure">
++            <span class="reviews-rating">{REVIEWS.rating}</span>
++            <span class="reviews-figure-side">
++              <span class="reviews-stars" aria-hidden="true">★★★★★</span>
++              <span class="reviews-count">{REVIEWS.reviews} отзыва · {REVIEWS.ratings} оценки</span>
++            </span>
++          </div>
++          <p class="reviews-badge">{REVIEWS.badge}</p>
++          <a class="btn btn-primary reviews-cta" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++            Смотреть на Яндекс.Картах
++          </a>
++        </div>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="comments" />
++        </div>
++      </div>
++    )}
++
++    {layout === 'compact' && (
++      <div class="rv-bar">
++        <div class="reviews-bar-text">
++          <h2 class="rv-bar-title" id="reviews-title">Что о нас пишут</h2>
++          <p class="reviews-lead">
++            Оценку и отзывы держит Яндекс: мы их не редактируем, не отбираем и не переносим
++            к себе. Карточка справа обновляется сама.
++          </p>
++          <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++            Читать все {REVIEWS.reviews} отзыва на Яндекс.Картах →
++          </a>
++        </div>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="rating" width={420} />
++        </div>
++      </div>
++    )}
++
++    {layout === 'centered' && (
++      <div class="rv-centered">
++        <h2 class="section-title" id="reviews-title">Отзывы на Яндекс.Картах</h2>
++        <div class="reviews-figure reviews-figure-inline reviews-figure-center">
++          <span class="reviews-rating">{REVIEWS.rating}</span>
++          <span class="reviews-figure-side">
++            <span class="reviews-stars" aria-hidden="true">★★★★★</span>
++            <span class="reviews-count">{REVIEWS.reviews} отзыва · {REVIEWS.ratings} оценки</span>
++          </span>
++          <span class="reviews-badge reviews-badge-inline">{REVIEWS.badge}</span>
++        </div>
++        <div class="reviews-widget-slot reviews-widget-center" data-mockup-widget-slot>
++          <ReviewsWidget mode="comments" />
++        </div>
++        <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++          Открыть карточку организации на Яндекс.Картах →
++        </a>
++      </div>
++    )}
++  </div>
++</section>
++
++<style>
++  .rv-split {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 560px;
++    gap: 3rem;
++    align-items: center;
++  }
++
++  .reviews-lead {
++    color: var(--text-body);
++    line-height: 1.6;
++    max-width: 42ch;
++    margin-bottom: 1.5rem;
++  }
++
++  .reviews-figure {
++    display: flex;
++    align-items: center;
++    gap: 0.75rem;
++  }
++
++  .reviews-rating {
++    font-size: 3.5rem;
++    font-weight: 700;
++    line-height: 1;
++    color: var(--text-primary);
++  }
++
++  .reviews-figure-side { display: flex; flex-direction: column; gap: 0.2rem; }
++  .reviews-stars { color: #f5a623; font-size: 1.05rem; letter-spacing: 2px; }
++  .reviews-count { color: var(--text-body); font-size: var(--font-s); }
++
++  .reviews-badge {
++    display: inline-block;
++    margin-top: 1rem;
++    background: var(--color-warning-50);
++    color: var(--color-warning-700);
++    border-radius: var(--radius-pill);
++    padding: 0.3rem 0.85rem;
++    font-size: var(--font-s);
++    font-weight: 600;
++  }
++
++  .reviews-cta { margin-top: 1.5rem; }
++
++  .reviews-link {
++    display: inline-block;
++    margin-top: 1rem;
++    color: var(--color-accent-700);
++    font-weight: 500;
++    text-decoration: none;
++  }
++  .reviews-link:hover { text-decoration: underline; }
++
++  /* compact */
++  .reviews-compact { padding: 2rem 0; }
++  .rv-bar {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 420px;
++    gap: 2.5rem;
++    align-items: center;
++    border: 1px solid var(--border-default);
++    border-radius: var(--radius-container);
++    background: var(--surface-raised);
++    padding: 1.75rem 2rem;
++  }
++  .rv-bar-title { font-size: var(--font-xxl); margin-bottom: 0.9rem; }
++  .reviews-figure-inline { gap: 0.9rem; }
++  .rv-bar .reviews-rating { font-size: 2.75rem; }
++  .rv-bar .reviews-badge { margin-top: 0.85rem; }
++
++  /* centered */
++  .rv-centered { text-align: center; }
++  .reviews-figure-center { justify-content: center; margin-bottom: 1.75rem; }
++  .reviews-badge-inline { margin-top: 0; margin-left: 0.5rem; }
++  .reviews-widget-center { display: flex; justify-content: center; }
++  .rv-centered :global(.ymw-note) { text-align: center; }
++
++  @media (max-width: 1024px) {
++    .rv-split,
++    .rv-bar { grid-template-columns: 1fr; }
++    .rv-bar { gap: 1.5rem; }
++  }
++
++  @media (max-width: 640px) {
++    .rv-split { gap: 2rem; }
++    .reviews-rating { font-size: 2.75rem; }
++    .rv-bar { padding: 1.25rem; }
++  }
++</style>
+diff --git a/web/src/components/mockup/ReviewsWidget.astro b/web/src/components/mockup/ReviewsWidget.astro
+new file mode 100644
+index 0000000..c1a4625
+--- /dev/null
++++ b/web/src/components/mockup/ReviewsWidget.astro
+@@ -0,0 +1,193 @@
++---
++/**
++ * ЗАМЕНА официального виджета отзывов Яндекс.Карт, а не сам виджет.
++ *
++ * Почему замена: настоящий виджет — <iframe> на yandex.ru, его содержимое
++ * приходит из сети. В мокапе он дал бы недетерминированные снимки и утащил бы
++ * запрос к Яндексу в каждую сборку. Здесь воспроизведены ГЕОМЕТРИЯ и хром
++ * виджета; тексты отзывов заменены полосами-заглушками намеренно — выдумывать
++ * чужие отзывы нельзя, а решение Q19 прямо запрещает переносить их к себе.
++ *
++ * Размер 560×800 — типовой размер встраивания Яндекса с комментариями;
++ * 560×256 — он же без комментариев. Точные числа при внедрении снимаются с
++ * фактического кода встраивания, здесь это НАЗВАННОЕ допущение.
++ */
++import { REVIEWS } from '../../lib/mockup';
++
++interface Props {
++  mode?: 'comments' | 'rating';
++  width?: number;
++}
++const { mode = 'comments', width = 560 } = Astro.props;
++const height = mode === 'comments' ? 800 : 256;
++const items = mode === 'comments' ? [0, 1, 2, 3, 4] : [];
++const barWidths = [
++  ['96%', '88%', '54%'],
++  ['92%', '61%'],
++  ['97%', '90%', '83%', '38%'],
++  ['86%', '49%'],
++  ['94%', '77%', '62%'],
++];
++---
++
++<div class="ymw" data-mockup-widget={mode} style={`--ymw-w:${width}px;--ymw-h:${height}px`}>
++  <div class="ymw-frame">
++    <div class="ymw-head">
++      <div class="ymw-org">
++        <span class="ymw-org-name">{REVIEWS.orgName}</span>
++        <span class="ymw-org-cat">Учебный центр</span>
++      </div>
++      <div class="ymw-rate">
++        <span class="ymw-rate-value">{REVIEWS.rating}</span>
++        <span class="ymw-stars" aria-hidden="true">★★★★★</span>
++        <span class="ymw-rate-count">{REVIEWS.ratings} оценки</span>
++      </div>
++      <span class="ymw-badge">{REVIEWS.badge}</span>
++    </div>
++
++    {mode === 'comments' ? (
++      <>
++        <div class="ymw-tabs">
++          <span class="ymw-tab ymw-tab-on">Отзывы {REVIEWS.reviews}</span>
++          <span class="ymw-tab">Сначала новые</span>
++        </div>
++        <div class="ymw-list">
++          {items.map((i) => (
++            <div class="ymw-item">
++              <div class="ymw-item-head">
++                <span class="ymw-avatar" aria-hidden="true"></span>
++                <span class="ymw-item-meta">
++                  <span class="ymw-bar ymw-bar-name"></span>
++                  <span class="ymw-item-sub">
++                    <span class="ymw-stars ymw-stars-s" aria-hidden="true">★★★★★</span>
++                    <span class="ymw-bar ymw-bar-date"></span>
++                  </span>
++                </span>
++              </div>
++              {barWidths[i].map((w) => <span class="ymw-bar ymw-bar-text" style={`width:${w}`}></span>)}
++            </div>
++          ))}
++        </div>
++      </>
++    ) : (
++      <div class="ymw-compact">
++        <span class="ymw-compact-line">{REVIEWS.reviews} отзыва на Яндекс.Картах</span>
++        <span class="ymw-compact-cta">Читать отзывы</span>
++      </div>
++    )}
++
++    <div class="ymw-foot">
++      <span class="ymw-y" aria-hidden="true">Я</span>
++      <span>Яндекс&nbsp;Карты</span>
++    </div>
++  </div>
++  <p class="ymw-note">
++    Заглушка вместо виджета: воспроизведены размер {width}×{height} и хром,
++    тексты отзывов подтягивает Яндекс
++  </p>
++</div>
++
++<style>
++  .ymw { width: min(100%, var(--ymw-w)); }
++
++  .ymw-frame {
++    height: var(--ymw-h);
++    display: flex;
++    flex-direction: column;
++    box-sizing: border-box;
++    border: 1px solid #e6e6e6;
++    border-radius: 8px;
++    background: #fff;
++    overflow: hidden;
++    font-size: 13px;
++    color: #21201f;
++  }
++
++  .ymw-head {
++    padding: 14px 16px 12px;
++    border-bottom: 1px solid #f0f0f0;
++    display: grid;
++    gap: 6px;
++  }
++
++  .ymw-org-name { display: block; font-size: 15px; font-weight: 600; line-height: 1.25; }
++  .ymw-org-cat { display: block; color: #7a7a7a; font-size: 12px; margin-top: 2px; }
++
++  .ymw-rate { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
++  .ymw-rate-value { font-size: 22px; font-weight: 700; line-height: 1; }
++  .ymw-stars { color: #fc0; letter-spacing: 1px; font-size: 15px; }
++  .ymw-stars-s { font-size: 11px; }
++  .ymw-rate-count { color: #7a7a7a; font-size: 12px; }
++
++  .ymw-badge {
++    justify-self: start;
++    background: #fff2cc;
++    color: #7a5c00;
++    border-radius: 4px;
++    padding: 3px 8px;
++    font-size: 11px;
++    font-weight: 600;
++  }
++
++  .ymw-tabs {
++    display: flex;
++    gap: 16px;
++    padding: 10px 16px;
++    border-bottom: 1px solid #f0f0f0;
++    font-size: 12px;
++    color: #7a7a7a;
++  }
++  .ymw-tab-on { color: #21201f; font-weight: 600; }
++
++  .ymw-list { flex: 1; overflow: hidden; padding: 4px 16px 0; }
++
++  .ymw-item { padding: 14px 0; border-bottom: 1px solid #f4f4f4; }
++  .ymw-item-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
++  .ymw-avatar { width: 32px; height: 32px; border-radius: 50%; background: #e8e8e8; flex: none; }
++  .ymw-item-meta { display: block; }
++  .ymw-item-sub { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
++
++  .ymw-bar { display: block; height: 9px; border-radius: 4px; background: #ececec; }
++  .ymw-bar-name { width: 118px; height: 11px; }
++  .ymw-bar-date { width: 64px; height: 8px; }
++  .ymw-bar-text { margin-top: 7px; }
++
++  .ymw-compact {
++    flex: 1;
++    display: flex;
++    flex-direction: column;
++    justify-content: center;
++    gap: 10px;
++    padding: 0 16px;
++  }
++  .ymw-compact-line { color: #4a4a4a; }
++  .ymw-compact-cta {
++    align-self: start;
++    border: 1px solid #d9d9d9;
++    border-radius: 6px;
++    padding: 7px 14px;
++    font-weight: 600;
++  }
++
++  .ymw-foot {
++    display: flex;
++    align-items: center;
++    gap: 6px;
++    padding: 9px 16px;
++    border-top: 1px solid #f0f0f0;
++    color: #7a7a7a;
++    font-size: 12px;
++  }
++  .ymw-y {
++    width: 16px; height: 16px; border-radius: 50%;
++    background: #fc3f1d; color: #fff; font-weight: 700; font-size: 11px;
++    display: inline-flex; align-items: center; justify-content: center;
++  }
++
++  .ymw-note {
++    margin-top: 8px;
++    font-size: var(--font-xs);
++    color: var(--text-muted);
++    line-height: 1.4;
++  }
++</style>
+diff --git a/web/src/components/mockup/SeminarNextBar.astro b/web/src/components/mockup/SeminarNextBar.astro
+new file mode 100644
+index 0000000..3461fb1
+--- /dev/null
++++ b/web/src/components/mockup/SeminarNextBar.astro
+@@ -0,0 +1,102 @@
++---
++/** Мокап, вариант B страницы семинара: полоса ближайшей даты сразу под заголовком. */
++import { formatDate, formatPrice } from '../../lib/data';
++import { registrationHref, isExternalFormHref } from '../../lib/forms';
++import { PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
++import type { ScheduleEntry } from '../../lib/data';
++
++interface Row {
++  entry: ScheduleEntry;
++  teachers: { fullName: string; href: string }[];
++}
++const { rows = [] } = Astro.props as { rows?: Row[] };
++const first = rows[0];
++const rest = Math.max(0, rows.length - 1);
++const href = first ? registrationHref(first.entry.registrationFormLink) || '/raspisanie-i-tseny' : null;
++const external = href ? isExternalFormHref(href) : false;
++
++function plural(n: number, one: string, few: string, many: string) {
++  const m10 = n % 10, m100 = n % 100;
++  if (m10 === 1 && m100 !== 11) return one;
++  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
++  return many;
++}
++---
++
++<div class="nextbar" data-mockup-nextbar={first ? 'dated' : 'empty'}>
++  {first ? (
++    <>
++      <div class="nextbar-main">
++        <span class="nextbar-label">Ближайшая дата</span>
++        <span class="nextbar-date">
++          {formatDate(first.entry.startAt)}
++          {first.entry.startAt !== first.entry.endAt && <> — {formatDate(first.entry.endAt)}</>}
++        </span>
++        <span class="nextbar-meta">
++          {first.entry.city?.name || '—'}
++          {first.teachers.length > 0 && <> · {first.teachers.map((t) => t.fullName).join(', ')}</>}
++        </span>
++      </div>
++      <div class="nextbar-price">
++        {first.entry.isFree ? 'Бесплатно' : formatPrice(first.entry.newPrice)}
++      </div>
++      <div class="nextbar-actions">
++        <a
++          class="btn btn-primary"
++          href={href!}
++          target={external ? '_blank' : undefined}
++          rel={external ? 'noopener noreferrer' : undefined}
++        >Записаться на семинар</a>
++        {rest > 0 && (
++          <a class="nextbar-more" href="#raspisanie">
++            ещё {rest} {plural(rest, 'дата', 'даты', 'дат')} ниже ↓
++          </a>
++        )}
++      </div>
++    </>
++  ) : (
++    <div class="nextbar-empty">
++      <span class="nextbar-label">Расписание</span>
++      <span class="nextbar-date">Даты пока не назначены</span>
++      <span class="nextbar-meta">
++        Уточняйте у менеджера: <a href="tel:+78126465450">{PHONE_PRIMARY}</a>,&#32;<a href="tel:+79810387797">{PHONE_MOBILE}</a>
++      </span>
++    </div>
++  )}
++</div>
++
++<style>
++  .nextbar {
++    display: flex;
++    align-items: center;
++    gap: 1.5rem;
++    flex-wrap: wrap;
++    margin: 0 0 2rem;
++    padding: 1.1rem 1.35rem;
++    border: 1px solid var(--border-default);
++    border-left: 4px solid var(--color-accent-500);
++    border-radius: var(--radius-container);
++    background: var(--surface-subtle);
++  }
++  .nextbar-main { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 15rem; }
++  .nextbar-label {
++    font-size: var(--font-xs);
++    text-transform: uppercase;
++    letter-spacing: 0.06em;
++    color: var(--text-muted);
++  }
++  .nextbar-date { font-size: var(--font-l); font-weight: 600; color: var(--text-primary); }
++  .nextbar-meta { font-size: var(--font-s); color: var(--text-body); }
++  .nextbar-price { font-size: var(--font-xl); font-weight: 700; white-space: nowrap; }
++  .nextbar-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
++  .nextbar-more { font-size: var(--font-s); color: var(--color-accent-700); text-decoration: none; }
++  .nextbar-more:hover { text-decoration: underline; }
++  .nextbar-empty { display: flex; flex-direction: column; gap: 0.2rem; }
++  .nextbar-empty a { color: var(--color-accent-700); }
++
++  @media (max-width: 640px) {
++    .nextbar { align-items: stretch; gap: 0.9rem; }
++    .nextbar-actions { align-items: stretch; }
++    .nextbar-actions .btn { width: 100%; }
++  }
++</style>
+diff --git a/web/src/components/mockup/SeminarScheduleAside.astro b/web/src/components/mockup/SeminarScheduleAside.astro
+new file mode 100644
+index 0000000..cfcfe18
+--- /dev/null
++++ b/web/src/components/mockup/SeminarScheduleAside.astro
+@@ -0,0 +1,109 @@
++---
++/** Мокап, вариант C страницы семинара: расписание карточками в липкой колонке. */
++import { formatDate, formatPrice } from '../../lib/data';
++import { registrationHref, isExternalFormHref } from '../../lib/forms';
++import { PHONE_PRIMARY } from '../../lib/mockup';
++import type { ScheduleEntry } from '../../lib/data';
++
++interface Row {
++  entry: ScheduleEntry;
++  teachers: { fullName: string; href: string }[];
++}
++const { rows = [] } = Astro.props as { rows?: Row[] };
++---
++
++<aside class="sched-aside" data-mockup-aside={rows.length > 0 ? 'dated' : 'empty'} aria-labelledby="sched-aside-title">
++  <div class="sched-aside-inner">
++    <div class="sched-aside-head">
++      <h2 id="sched-aside-title">Расписание</h2>
++      <a href="/raspisanie-i-tseny">Все даты</a>
++    </div>
++
++    {rows.length > 0 ? (
++      <ol class="sched-cards">
++        {rows.map(({ entry, teachers }) => {
++          const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
++          const external = isExternalFormHref(href);
++          return (
++            <li class="sched-card">
++              <div class="sched-card-date">
++                {formatDate(entry.startAt)}
++                {entry.startAt !== entry.endAt && <> — {formatDate(entry.endAt)}</>}
++              </div>
++              <div class="sched-card-meta">{entry.city?.name || '—'}</div>
++              {teachers.length > 0 && (
++                <div class="sched-card-meta sched-card-teachers">
++                  {teachers.map((t, i) => (
++                    <>{i > 0 && ', '}<a href={t.href}>{t.fullName}</a></>
++                  ))}
++                </div>
++              )}
++              <div class="sched-card-foot">
++                <span class="sched-card-price">{entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}</span>
++                <a
++                  class="sched-card-cta"
++                  href={href}
++                  target={external ? '_blank' : undefined}
++                  rel={external ? 'noopener noreferrer' : undefined}
++                >Записаться</a>
++              </div>
++            </li>
++          );
++        })}
++      </ol>
++    ) : (
++      <p class="sched-aside-empty">
++        Даты пока не назначены. Уточняйте у менеджера: <a href="tel:+78126465450">{PHONE_PRIMARY}</a>
++      </p>
++    )}
++  </div>
++</aside>
++
++<style>
++  .sched-aside-inner {
++    position: sticky;
++    top: calc(var(--header-height) + 1rem);
++    border: 1px solid var(--border-default);
++    border-radius: var(--radius-container);
++    background: var(--surface-raised);
++    padding: 1.15rem 1.15rem 0.5rem;
++    max-height: calc(100vh - var(--header-height) - 2rem);
++    overflow: auto;
++  }
++  .sched-aside-head {
++    display: flex;
++    align-items: baseline;
++    justify-content: space-between;
++    gap: 0.75rem;
++    margin-bottom: 0.85rem;
++  }
++  .sched-aside-head h2 { margin: 0; font-size: var(--font-xl); }
++  .sched-aside-head a { font-size: var(--font-s); color: var(--color-accent-700); text-decoration: none; }
++
++  .sched-cards { list-style: none; margin: 0; padding: 0; }
++  .sched-card { padding: 0.85rem 0; border-top: 1px solid var(--border-subtle); }
++  .sched-card:first-child { border-top: none; padding-top: 0; }
++  .sched-card-date { font-weight: 600; }
++  .sched-card-meta { font-size: var(--font-s); color: var(--text-body); margin-top: 0.15rem; }
++  .sched-card-teachers a { color: var(--color-accent-700); text-decoration: none; }
++  .sched-card-foot {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.75rem;
++    margin-top: 0.6rem;
++  }
++  .sched-card-price { font-weight: 700; }
++  .sched-card-cta {
++    background: var(--cta-bg);
++    color: var(--cta-text);
++    border-radius: var(--radius-control);
++    padding: 0.4rem 0.8rem;
++    font-size: var(--font-s);
++    font-weight: 600;
++    text-decoration: none;
++    white-space: nowrap;
++  }
++  .sched-aside-empty { font-size: var(--font-s); color: var(--text-body); padding-bottom: 0.75rem; }
++  .sched-aside-empty a { color: var(--color-accent-700); }
++</style>
+diff --git a/web/src/components/mockup/SocialIcons.astro b/web/src/components/mockup/SocialIcons.astro
+new file mode 100644
+index 0000000..edd39ba
+--- /dev/null
++++ b/web/src/components/mockup/SocialIcons.astro
+@@ -0,0 +1,116 @@
++---
++/**
++ * Соцсети иконками вместо текста (пожелание владельца W1) и в составе из
++ * четырёх (решение D16: Instagram и Facebook сняты).
++ *
++ * Глифы нарисованы здесь и НЕ являются официальными фирменными знаками:
++ * они годятся, чтобы оценить размер, плотность и трактовку, но при внедрении
++ * берутся официальные марки — с проверкой условий использования.
++ */
++import { MOCKUP_SOCIAL_LINKS } from '../../lib/mockup';
++
++interface Props {
++  treatment: 'circle' | 'plain' | 'brand';
++  size?: number;
++}
++const { treatment, size = treatment === 'brand' ? 32 : 24 } = Astro.props;
++
++const BRAND: Record<string, string> = {
++  vk: '#0077ff',
++  youtube: '#ff0000',
++  telegram: '#29a5e3',
++  rutube: '#e11e6a',
++};
++---
++
++<ul class:list={['soc', `soc-${treatment}`]} data-mockup-social={treatment}>
++  {MOCKUP_SOCIAL_LINKS.map((link) => (
++    <li>
++      <a
++        href={link.href}
++        target="_blank"
++        rel="noopener noreferrer"
++        aria-label={link.label}
++        title={link.label}
++        data-mockup-social-link={link.icon}
++        style={treatment === 'brand' ? `--soc-brand:${BRAND[link.icon]}` : undefined}
++      >
++        <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
++          {link.icon === 'vk' && (
++            <>
++              <rect x="1" y="1" width="30" height="30" rx="8" class="soc-plate" />
++              <text x="16" y="21.5" text-anchor="middle" class="soc-glyph-text">VK</text>
++            </>
++          )}
++          {link.icon === 'youtube' && (
++            <>
++              <rect x="1" y="6" width="30" height="20" rx="6" class="soc-plate" />
++              <path d="M13 12.2 21 16l-8 3.8Z" class="soc-knockout" />
++            </>
++          )}
++          {link.icon === 'telegram' && (
++            <>
++              <circle cx="16" cy="16" r="15" class="soc-plate" />
++              <path d="M23.4 9.6 7.9 15.6c-.7.3-.7.8 0 1l3.9 1.2 1.5 4.5c.2.5.4.6.8.2l2.1-2 4 3c.5.3.9.1 1-.5l2.9-13c.1-.6-.2-.9-.7-.7Zm-3.1 3.1-6.6 6-.3 3-1.2-3.6 8.1-5.4Z" class="soc-knockout" />
++            </>
++          )}
++          {link.icon === 'rutube' && (
++            <>
++              <rect x="1" y="1" width="30" height="30" rx="10" class="soc-plate" />
++              <path d="M12.5 10.5 22 16l-9.5 5.5Z" class="soc-knockout" />
++            </>
++          )}
++        </svg>
++      </a>
++    </li>
++  ))}
++</ul>
++
++<style>
++  .soc { display: flex; gap: 0.6rem; list-style: none; margin: 0; padding: 0; }
++  .soc a {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    text-decoration: none;
++    color: inherit;
++  }
++  .soc svg { display: block; }
++
++  /* Монохром: пластина — контур, глиф — вырез цветом фона подвала */
++  .soc-circle a,
++  .soc-plain a { color: var(--color-gray-300); }
++  .soc-circle a:hover,
++  .soc-plain a:hover { color: var(--color-light-100); }
++
++  .soc-circle .soc-plate,
++  .soc-plain .soc-plate { fill: none; stroke: currentColor; stroke-width: 1.6; }
++  .soc-circle .soc-knockout,
++  .soc-plain .soc-knockout { fill: currentColor; }
++  .soc-circle .soc-glyph-text,
++  .soc-plain .soc-glyph-text {
++    fill: currentColor;
++    font-size: 12px;
++    font-weight: 700;
++    letter-spacing: 0.5px;
++  }
++
++  .soc-circle { gap: 0.5rem; }
++  .soc-circle a {
++    width: 40px;
++    height: 40px;
++    border-radius: 50%;
++    border: 1px solid rgba(255, 255, 255, 0.18);
++  }
++  .soc-circle a:hover { border-color: rgba(255, 255, 255, 0.5); }
++
++  .soc-plain { gap: 0.9rem; }
++
++  /* Фирменные цвета: пластина залита, глиф выбит белым */
++  .soc-brand { gap: 0.7rem; }
++  .soc-brand .soc-plate { fill: var(--soc-brand); }
++  .soc-brand .soc-knockout { fill: #fff; }
++  .soc-brand .soc-glyph-text { fill: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
++  .soc-brand a { opacity: 0.95; }
++  .soc-brand a:hover { opacity: 1; }
++</style>
+diff --git a/web/scripts/shoot-mockups.mjs b/web/scripts/shoot-mockups.mjs
+new file mode 100644
+index 0000000..091d2e8
+--- /dev/null
++++ b/web/scripts/shoot-mockups.mjs
+@@ -0,0 +1,289 @@
++/**
++ * Съёмка мокапов S2. Живёт только в одноразовом worktree.
++ *
++ *   node scripts/shoot-mockups.mjs --dist dist-a --variant a --out ../docs/design/mockups/demo-followups
++ *
++ * Числа считает браузер (getBoundingClientRect), не глаз. Пересечения считаются
++ * в координатах вьюпорта на конкретной позиции прокрутки — иначе fixed-элемент
++ * и содержимое страницы сравнивать нельзя.
++ */
++import { createServer } from 'node:http';
++import { readFile, mkdir, writeFile } from 'node:fs/promises';
++import { existsSync, statSync } from 'node:fs';
++import { extname, join, resolve } from 'node:path';
++import { chromium } from '@playwright/test';
++
++const arg = (n, d) => {
++  const i = process.argv.indexOf(`--${n}`);
++  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : d;
++};
++const DIST = resolve(arg('dist', 'dist'));
++const VARIANT = arg('variant', 'main');
++const OUT = resolve(arg('out', '../docs/design/mockups/demo-followups'));
++const PORT = Number(arg('port', '4399'));
++
++const MIME = {
++  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
++  '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
++  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
++  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
++  '.avif': 'image/avif', '.woff2': 'font/woff2', '.ico': 'image/x-icon',
++  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.pdf': 'application/pdf',
++};
++
++function resolveFile(pathname) {
++  const clean = decodeURIComponent(pathname.split('?')[0]).replace(/\/+$/, '') || '/index.html';
++  const candidates = [join(DIST, clean), join(DIST, clean, 'index.html'), `${join(DIST, clean)}.html`];
++  for (const c of candidates) {
++    if (existsSync(c) && statSync(c).isFile()) return c;
++  }
++  return null;
++}
++
++const server = createServer(async (req, res) => {
++  const file = resolveFile(req.url || '/');
++  if (!file) {
++    res.writeHead(404, { 'content-type': 'text/plain' });
++    res.end('not found');
++    return;
++  }
++  const body = await readFile(file);
++  res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
++  res.end(body);
++});
++
++const VIEWPORTS = [
++  { name: '1280', width: 1280, height: 800 },
++  { name: '375', width: 375, height: 812 },
++];
++
++const SEMINARS = {
++  dated: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
++  single: '/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii',
++  undated: '/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1',
++};
++
++const log = [];
++const note = (key, value) => {
++  log.push(`${VARIANT}/${key}: ${JSON.stringify(value)}`);
++  console.log(`${VARIANT}/${key}`, JSON.stringify(value));
++};
++
++/** Прямоугольники именованных селекторов в координатах вьюпорта + пересечения с fixed-слоем. */
++const MEASURE = (selectors) => {
++  const rect = (el) => {
++    if (!el) return null;
++    const r = el.getBoundingClientRect();
++    if (r.width === 0 && r.height === 0) return null;
++    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
++  };
++  const out = {};
++  for (const [name, sel] of Object.entries(selectors)) out[name] = rect(document.querySelector(sel));
++  const overlap = (a, b) => {
++    if (!a || !b) return 0;
++    const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
++    const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
++    return w * h;
++  };
++  const chatBtn = out.chatButton;
++  const chatPanel = out.chatPanel;
++  const cover = {};
++  for (const [name, r] of Object.entries(out)) {
++    if (name === 'chatButton' || name === 'chatPanel' || !r) continue;
++    const area = r.w * r.h;
++    const byBtn = overlap(chatBtn, r);
++    const byPanel = overlap(chatPanel, r);
++    if (byBtn || byPanel) {
++      cover[name] = {
++        coveredByButtonPx: byBtn,
++        coveredByButtonPct: area ? Math.round((byBtn / area) * 100) : 0,
++        coveredByPanelPx: byPanel,
++        coveredByPanelPct: area ? Math.round((byPanel / area) * 100) : 0,
++      };
++    }
++  }
++  return { rects: out, cover, scrollY: Math.round(window.scrollY), docHeight: Math.round(document.documentElement.scrollHeight) };
++};
++
++
++/**
++ * Снимок ЭЛЕМЕНТА делается с временно скрытыми плавающими слоями (липкая шапка и
++ * сам чат): Playwright прокручивает элемент в вид и режет по его рамке, а шапка
++ * при этом ложится поверх — на снимке блока верх оказывался закрыт. Скрываем по
++ * ВЫЧИСЛЕННОМУ position (fixed и sticky), а не по списку известных селекторов:
++ * первая редакция проверяла только fixed, а шапка у нас sticky — счётчик
++ * показывал «скрыто 2», и шапка всё равно оставалась на снимке. Снимки экрана
++ * (viewport) плавающие слои сохраняют — именно на них и смотрят столкновения.
++ */
++async function withFixedHidden(page, fn) {
++  const count = await page.evaluate(() => {
++    window.__hiddenFixed = [];
++    for (const el of document.querySelectorAll('body *')) {
++      const cs = getComputedStyle(el);
++      if ((cs.position === 'fixed' || cs.position === 'sticky') && cs.visibility !== 'hidden') {
++        window.__hiddenFixed.push([el, el.style.visibility]);
++        el.style.visibility = 'hidden';
++      }
++    }
++    return window.__hiddenFixed.length;
++  });
++  try {
++    await fn();
++  } finally {
++    await page.evaluate(() => {
++      for (const [el, v] of window.__hiddenFixed || []) el.style.visibility = v;
++      window.__hiddenFixed = [];
++    });
++  }
++  return count;
++}
++
++const HOME_SELECTORS = {
++  chatButton: '[data-mockup-chat-button]',
++  chatPanel: '[data-mockup-chat-panel]:not([hidden])',
++  reviewsSection: '[data-mockup-reviews]',
++  reviewsWidget: '[data-mockup-widget]',
++  reviewsCta: '[data-mockup-reviews] .reviews-cta, [data-mockup-reviews] .reviews-link',
++  socialRow: '[data-mockup-social]',
++  socialTextList: '.footer-social',
++  socialColumn: '.footer-grid > .footer-col:last-child',
++  socialLast: '[data-mockup-social] li:last-child a',
++  publishedLine: '[data-mockup-published]',
++  footerLegal: '.footer-legal a',
++  footer: '.footer',
++  ctaBandBtn: '.cta-band .btn',
++  newsletter: '.newsletter, [class*="newsletter"]',
++};
++
++async function shootHome(page, vp, dir) {
++  const url = `http://127.0.0.1:${PORT}/`;
++
++  // 1. Страница целиком, чат закрыт
++  await page.goto(url, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(500);
++  await page.evaluate(() => window.scrollTo(0, 0));
++  await page.waitForTimeout(400);
++  await page.screenshot({ path: join(dir, `home-${vp.name}-01-full.png`), fullPage: true });
++
++  const base = await page.evaluate(MEASURE, HOME_SELECTORS);
++  note(`${vp.name} главная, документ`, {
++    pageHeight: base.docHeight,
++    reviewsTop: base.rects.reviewsSection ? base.rects.reviewsSection.y + 0 : null,
++    reviewsHeight: base.rects.reviewsSection?.h ?? null,
++    footerHeight: base.rects.footer?.h ?? null,
++  });
++
++  // 2. Секция отзывов элементом
++  const reviews = page.locator('[data-mockup-reviews]');
++  if (await reviews.count()) {
++    await reviews.scrollIntoViewIfNeeded();
++    await page.waitForTimeout(350);
++    const hidden1 = await withFixedHidden(page, () =>
++      reviews.screenshot({ path: join(dir, `home-${vp.name}-02-reviews-block.png`) })
++    );
++    note(`${vp.name} снимок блока отзывов: скрыто плавающих слоёв`, hidden1);
++    await page.screenshot({ path: join(dir, `home-${vp.name}-03-reviews-viewport.png`) });
++    note(`${vp.name} отзывы, чат закрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++  }
++
++  // 3. Подвал: элементом и экраном
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(400);
++  const hidden2 = await withFixedHidden(page, () =>
++    page.locator('.footer').screenshot({ path: join(dir, `home-${vp.name}-04-footer-block.png`) })
++  );
++  note(`${vp.name} снимок подвала: скрыто плавающих слоёв`, hidden2);
++  await page.screenshot({ path: join(dir, `home-${vp.name}-05-footer-viewport.png`) });
++  note(`${vp.name} подвал, чат закрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  if (VARIANT === 'main') return;
++
++  // 4. Чат раскрыт на секции отзывов
++  await page.goto(`${url}?chat=open`, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await page.locator('[data-mockup-reviews]').scrollIntoViewIfNeeded();
++  await page.waitForTimeout(350);
++  await page.screenshot({ path: join(dir, `home-${vp.name}-06-reviews-chat-open.png`) });
++  note(`${vp.name} отзывы, чат раскрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  // 5. Чат раскрыт на подвале
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(400);
++  await page.screenshot({ path: join(dir, `home-${vp.name}-07-footer-chat-open.png`) });
++  note(`${vp.name} подвал, чат раскрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  // 6. Чат вне часов работы
++  await page.goto(`${url}?chat=offline`, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(400);
++  await page.screenshot({ path: join(dir, `home-${vp.name}-08-footer-chat-offline.png`) });
++}
++
++const SEM_SELECTORS = {
++  chatButton: '[data-mockup-chat-button]',
++  chatPanel: '[data-mockup-chat-panel]:not([hidden])',
++  h1: '.page-title',
++  scheduleBlock: '[data-testid="seminar-schedule"]',
++  nextBar: '[data-mockup-nextbar]',
++  aside: '[data-mockup-aside]',
++  firstRegister: '.seminar-register-link, .nextbar-actions .btn, .sched-card-cta',
++  contentStart: '.seminar-content',
++};
++
++async function shootSeminar(page, vp, dir, key, path) {
++  await page.goto(`http://127.0.0.1:${PORT}${path}`, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await page.screenshot({ path: join(dir, `seminar-${key}-${vp.name}-01-top.png`) });
++  const m = await page.evaluate(MEASURE, SEM_SELECTORS);
++  const extra = await page.evaluate(() => {
++    const vh = window.innerHeight;
++    const reg = document.querySelector('.seminar-register-link, .nextbar-actions .btn, .sched-card-cta');
++    const regTop = reg ? Math.round(reg.getBoundingClientRect().top + window.scrollY) : null;
++    const content = document.querySelector('.seminar-content');
++    const rows = document.querySelectorAll('.seminar-schedule-item, .sched-card').length;
++    const table = document.querySelector('.seminar-schedule-list');
++    return {
++      viewportHeight: vh,
++      firstRegisterAbsoluteTop: regTop,
++      firstRegisterOnFirstScreen: regTop !== null ? regTop < vh : null,
++      contentStartAbsoluteTop: content ? Math.round(content.getBoundingClientRect().top + window.scrollY) : null,
++      scheduleRows: rows,
++      tableScrollWidth: table ? Math.round(table.scrollWidth) : null,
++      tableClientWidth: table ? Math.round(table.clientWidth) : null,
++      pageHeight: Math.round(document.documentElement.scrollHeight),
++    };
++  });
++  note(`${vp.name} семинар ${key}`, { ...extra, rects: m.rects, cover: m.cover });
++
++  await page.screenshot({ path: join(dir, `seminar-${key}-${vp.name}-02-full.png`), fullPage: true });
++
++  if (key === 'dated') {
++    await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight * 0.45)));
++    await page.waitForTimeout(350);
++    await page.screenshot({ path: join(dir, `seminar-${key}-${vp.name}-03-mid.png`) });
++  }
++}
++
++await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
++await mkdir(OUT, { recursive: true });
++const browser = await chromium.launch();
++for (const vp of VIEWPORTS) {
++  const ctx = await browser.newContext({
++    viewport: { width: vp.width, height: vp.height },
++    deviceScaleFactor: 1,
++    reducedMotion: 'reduce',
++  });
++  const page = await ctx.newPage();
++  const dir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
++  await mkdir(dir, { recursive: true });
++  await shootHome(page, vp, dir);
++  for (const [key, path] of Object.entries(SEMINARS)) await shootSeminar(page, vp, dir, key, path);
++  await ctx.close();
++}
++await browser.close();
++server.close();
++await writeFile(join(OUT, `shot-log-${VARIANT}.txt`), log.join('\n') + '\n', 'utf-8');
++console.log('готово:', VARIANT);
+diff --git a/web/scripts/measure-text.mjs b/web/scripts/measure-text.mjs
+new file mode 100644
+index 0000000..dd3ddd9
+--- /dev/null
++++ b/web/scripts/measure-text.mjs
+@@ -0,0 +1,70 @@
++/**
++ * Доизмерение: рамка ТЕКСТА, а не блока. Строка «Опубликовано» — блок во всю
++ * ширину контейнера, поэтому пересечение с кнопкой чата по РАМКЕ БЛОКА говорит
++ * лишь о том, что кнопка попала в пустую часть строки. Предмет вопроса —
++ * закрыт ли сам текст, а его рамку даёт Range по содержимому узла.
++ */
++import { createServer } from 'node:http';
++import { readFile } from 'node:fs/promises';
++import { existsSync, statSync } from 'node:fs';
++import { extname, join, resolve } from 'node:path';
++import { chromium } from '@playwright/test';
++
++const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i !== -1 && process.argv[i+1] ? process.argv[i+1] : d; };
++const DIST = resolve(arg('dist', 'dist-a'));
++const VARIANT = arg('variant', 'a');
++const PORT = Number(arg('port', '4405'));
++const MIME = { '.html':'text/html; charset=utf-8', '.css':'text/css', '.js':'text/javascript', '.svg':'image/svg+xml', '.png':'image/png', '.webp':'image/webp', '.avif':'image/avif', '.woff2':'font/woff2', '.ico':'image/x-icon', '.json':'application/json' };
++const srv = createServer(async (req, res) => {
++  const p = decodeURIComponent((req.url || '/').split('?')[0]).replace(/\/+$/, '') || '/index.html';
++  for (const c of [join(DIST, p), join(DIST, p, 'index.html'), `${join(DIST, p)}.html`]) {
++    if (existsSync(c) && statSync(c).isFile()) {
++      const b = await readFile(c);
++      res.writeHead(200, { 'content-type': MIME[extname(c)] || 'application/octet-stream' });
++      return res.end(b);
++    }
++  }
++  res.writeHead(404); res.end('x');
++});
++await new Promise((r) => srv.listen(PORT, '127.0.0.1', r));
++const browser = await chromium.launch();
++for (const vp of [{ n: '1280', w: 1280, h: 800 }, { n: '375', w: 375, h: 812 }]) {
++  const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
++  const page = await ctx.newPage();
++  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(400);
++  const out = await page.evaluate(() => {
++    const textRect = (sel) => {
++      const el = document.querySelector(sel);
++      if (!el) return null;
++      const r = document.createRange();
++      r.selectNodeContents(el);
++      const b = r.getBoundingClientRect();
++      return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) };
++    };
++    const box = (sel) => { const el = document.querySelector(sel); if (!el) return null; const b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; };
++    const inter = (a, b) => { if (!a || !b) return 0; const w = Math.max(0, Math.min(a.x+a.w, b.x+b.w) - Math.max(a.x, b.x)); const h = Math.max(0, Math.min(a.y+a.h, b.y+b.h) - Math.max(a.y, b.y)); return w*h; };
++    const gapX = (a, b) => { if (!a || !b) return null; return Math.max(a.x, b.x) - Math.min(a.x+a.w, b.x+b.w); };
++    const pub = textRect('[data-mockup-published]');
++    const legal = box('.footer-legal a');
++    const social = box('[data-mockup-social]');
++    const btn = box('[data-mockup-chat-button]');
++    const copy = textRect('.footer-bottom > p:not(.footer-legal):not(.pub)');
++    return {
++      publishedText: pub, legalLink: legal, socialRow: social, chatButton: btn, copyrightText: copy,
++      publishedTextCoveredByButtonPx: inter(pub, btn),
++      publishedTextCoveredByButtonPct: pub && pub.w*pub.h ? Math.round(inter(pub, btn)/(pub.w*pub.h)*100) : 0,
++      legalCoveredByButtonPx: inter(legal, btn),
++      legalCoveredByButtonPct: legal && legal.w*legal.h ? Math.round(inter(legal, btn)/(legal.w*legal.h)*100) : 0,
++      horizontalGapPublishedToButton: gapX(pub, btn),
++      verticalGapSocialToPublished: social && pub ? Math.round(pub.y - (social.y + social.h)) : null,
++      socialOverlapsPublished: inter(social, pub),
++    };
++  });
++  console.log(`${VARIANT}/${vp.n} подвал, текстовые рамки: ${JSON.stringify(out)}`);
++  await ctx.close();
++}
++await browser.close();
++srv.close();
