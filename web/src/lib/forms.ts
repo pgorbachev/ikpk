@@ -19,7 +19,21 @@ const PROD_FORM_HOST = 'b24-cbqwqo.bitrix24site.ru';
 // без завершающего слэша: сайт адресует страницы как старый (см. trailingSlash)
 const DEMO_STUB_PATH = '/demo-zayavka';
 
-const mode = String((import.meta as ImportMeta & { env?: { DEMO_FORMS?: unknown } }).env?.DEMO_FORMS ?? '').trim();
+// Читается из ОБОИХ источников — тем же способом и по той же причине, что `paymentRole()`
+// ниже (см. её комментарий): реальная сборка Astro прокидывает переменную в
+// `import.meta.env`, а `vitest` без плагина Astro (`vi.stubEnv`) пишет только
+// `process.env`. Пока источник был один, демо-режим нельзя было включить в юнит-тесте
+// вовсе, и переписывание контентных ссылок проверялось лишь косвенно — на собранном
+// `dist-demo`, где всё покрытие держалось на одной ссылке из датированных данных
+// семинаров (находка независимого ревью F7).
+//
+// `typeof process` проверяется намеренно: модуль экспортирует и константы платёжного
+// контура, поэтому может попасть в клиентский бандл, где `process` не существует.
+// В боевой сборке значение то же самое — источник добавлен, а не заменён.
+const demoFormsEnv =
+  (import.meta as ImportMeta & { env?: { DEMO_FORMS?: unknown } }).env?.DEMO_FORMS ??
+  (typeof process !== 'undefined' ? process.env?.DEMO_FORMS : undefined);
+const mode = String(demoFormsEnv ?? '').trim();
 
 /** Режим демо-форм активен (нужно для баннера на стенде и для гейтов). */
 export const isDemoForms = mode.length > 0;

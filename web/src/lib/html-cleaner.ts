@@ -581,12 +581,19 @@ export function relForExternalUrl(url: string): string[] | undefined {
  * В данных таких порталов два: b24-cbqwqo и b24-kbo5ls. В прод-сборке
  * (DEMO_FORMS не задана) функция ничего не делает.
  */
+// Домен — `bitrix24site.ru` ИЛИ портальный `bitrix24.ru`, в любом регистре. Прежде и
+// быстрый выход, и признак ссылки требовали буквально `bitrix24site.ru`, то есть
+// портальные публичные формы вида `<портал>.bitrix24.ru/pub/form/<id>/` переписыватель
+// не трогал вовсе. Гейт деплоя такую ссылку теперь ловит (находка ревью F9), поэтому
+// расхождение стоило бы остановленной выкладки, а не утечки, — но чинить надо источник.
+const BITRIX_PORTAL_RE = /bitrix24(site)?\.ru/i;
+
 function redirectFormLinksInDemo(html: string): string {
-  if (!isDemoForms || !html.includes('bitrix24site.ru')) return html;
+  if (!isDemoForms || !BITRIX_PORTAL_RE.test(html)) return html;
   return html.replace(/<a\b[^>]*>/gi, (tag) => {
     const href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
     const url = href?.[1] ?? href?.[2];
-    if (!url || !/bitrix24site\.ru/i.test(url)) return tag;
+    if (!url || !BITRIX_PORTAL_RE.test(url)) return tag;
     const replaced = registrationHref(url);
     let out = tag.replace(url, replaced);
     // на локальную заглушку не нужен новый таб

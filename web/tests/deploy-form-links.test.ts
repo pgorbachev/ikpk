@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -42,6 +42,17 @@ function dist(pages: Record<string, string[]>): string {
     const file = join(dir, rel);
     mkdirSync(join(file, '..'), { recursive: true });
     const body = hrefs.map((h) => `<a href="${h}">Записаться</a>`).join('\n');
+    writeFileSync(file, `<!doctype html><html><body>\n${body}\n</body></html>\n`);
+  }
+  return dir;
+}
+
+/** Каталог сборки из готовой разметки — когда предмет проверки сам носитель ссылки. */
+function distRaw(pages: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'ikpk-form-links-raw-'));
+  for (const [rel, body] of Object.entries(pages)) {
+    const file = join(dir, rel);
+    mkdirSync(join(file, '..'), { recursive: true });
     writeFileSync(file, `<!doctype html><html><body>\n${body}\n</body></html>\n`);
   }
   return dir;
@@ -180,6 +191,80 @@ describe('form_links_match_mode — боевой режим', () => {
   });
 });
 
+describe('form_links_match_mode — ссылка ловится не только в href="…"', () => {
+  // Находка ревью F6: переписыватель `redirectFormLinksInDemo` принимает
+  // `href\s*=\s*("…"|'…')`, а гейт принимал только `href="…"`. Проверяющий, у которого
+  // язык уже, чем у переписывателя, оставляет щель ровно между ними.
+  const cases: [string, string][] = [
+    ['одинарные кавычки', `<a href='${CUSTOMER}/news/'>x</a>`],
+    ['пробелы вокруг =', `<a href = "${CUSTOMER}/news/">x</a>`],
+    ['без кавычек', `<a href=${CUSTOMER}/umac1/>x</a>`],
+    ['iframe src', `<iframe src="${CUSTOMER}/crm_form_ve1op/"></iframe>`],
+    ['form action', `<form action="${CUSTOMER}/news/"></form>`],
+  ];
+
+  for (const [what, markup] of cases) {
+    it(`утечка через «${what}» останавливает выкладку стенда`, async () => {
+      const d = distRaw({ 'index.html': `<a href="/demo-zayavka">s</a>\n${markup}` });
+      const r = await gate(d, 'stand', 'stub');
+      expect(r.code, `носитель «${what}» прошёл мимо признака`).toBe(1);
+    });
+  }
+});
+
+describe('form_links_match_mode — признак назначения не перечисляет частные случаи', () => {
+  // Находка ревью F9: список доменов и чувствительность к регистру отстают от предмета
+  // молча — это то же «перечисление частных случаев», что и прежний список путей.
+  const leaks: [string, string][] = [
+    ['апекс-домен без поддомена', 'https://bitrix24site.ru/x'],
+    ['верхний регистр хоста', 'https://B24-CBQWQO.BITRIX24SITE.RU/news/'],
+    ['портальный домен bitrix24.ru', 'https://b24-x.bitrix24.ru/pub/form/1_a/'],
+  ];
+
+  for (const [what, url] of leaks) {
+    it(`${what} считается утечкой`, async () => {
+      const d = dist({ 'index.html': ['/demo-zayavka', url] });
+      expect((await gate(d, 'stand', 'stub')).code, `${url} прошёл мимо признака`).toBe(1);
+    });
+  }
+
+  it('crm_form в query-параметре чужого домена НЕ является нарушением', async () => {
+    // Находка ревью F3, зеркало предыдущих: голая подстрока `crm_form` давала ложный
+    // ОТКАЗ и останавливала исправную выкладку. Признак смотрит на путь, не на query.
+    const d = dist({ 'index.html': ['/demo-zayavka', 'https://example.org/go?src=crm_form'] });
+    const r = await gate(d, 'stand', 'stub');
+    expect(r.code, r.stderr).toBe(0);
+  });
+});
+
+describe('form_links_match_mode — значение DEMO_FORMS проверяется до подстановки', () => {
+  // Находка ревью F1, единственная дававшая ложное ЗЕЛЁНОЕ на живой утечке: значение
+  // из окружения попадало в ERE как есть. Невалидная регулярка → grep код 2 → `|| true`
+  // → «нарушений нет», и стенд выкладывался со ссылками в CRM заказчика.
+  const bad: [string, string][] = [
+    ['несбалансированная скобка', 'b24-x(.bitrix24site.ru'],
+    ['регулярка «что угодно»', '.*'],
+    ['завершающий слэш', 'b24-x.bitrix24site.ru/'],
+    ['пустое значение', ''],
+    ['схема вместо хоста', 'https://b24-x.bitrix24site.ru'],
+  ];
+
+  for (const [what, value] of bad) {
+    it(`${what} — отказ, а не молчаливый пропуск утечки`, async () => {
+      const d = dist({ 'index.html': [`${CUSTOMER}/news/`] });
+      const r = await gate(d, 'stand', value);
+      expect(r.code, `DEMO_FORMS='${value}' не остановил утечку`).toBe(1);
+      expect(r.stderr).toContain('проверка форм не выполнена');
+    });
+  }
+
+  it('нормальное имя хоста работает', async () => {
+    const d = dist({ 'index.html': [`https://${OWN_TEST_PORTAL}/news/`] });
+    const r = await gate(d, 'stand', OWN_TEST_PORTAL);
+    expect(r.code, r.stderr).toBe(0);
+  });
+});
+
 describe('form_links_match_mode — отличает «нарушений нет» от «проверить не удалось»', () => {
   it('сборка без единой ссылки на форму — отказ, а не успех', async () => {
     const d = dist({ 'index.html': ['/kontakty', '/statyi'] });
@@ -188,10 +273,28 @@ describe('form_links_match_mode — отличает «нарушений нет
     expect(r.stderr).toContain('проверять нечего');
   });
 
-  it('нечитаемый каталог сборки — отказ с объяснением', async () => {
+  it('несуществующий каталог — отказ «проверять нечего»', async () => {
+    // Находка ревью F5: прежняя редакция принимала ЛЮБОЕ из двух сообщений
+    // (`не удалось прочитать|проверять нечего`) и потому исполняла разные ветви на
+    // разных платформах: BSD grep на macOS отдаёт для отсутствующего каталога 1,
+    // GNU grep на ubuntu — 2. Одно имя теста, две ветви, различить нельзя. Теперь
+    // каждый случай проверяет СВОЁ сообщение, а ветвь `grep код 2+` закрыта
+    // следующей проверкой, которая воспроизводится одинаково везде.
     const r = await gate(join(tmpdir(), 'ikpk-form-links-нет-такого'), 'stand', 'stub');
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/не удалось прочитать|проверять нечего/);
+    expect(r.stderr).toContain('проверять нечего');
+  });
+
+  it('нечитаемый файл внутри каталога — отказ «проверка не выполнена»', async () => {
+    const d = dist({ 'index.html': ['/demo-zayavka'] });
+    chmodSync(join(d, 'index.html'), 0o000);
+    try {
+      const r = await gate(d, 'stand', 'stub');
+      expect(r.code, 'сбой чтения выдан за отсутствие нарушений').toBe(1);
+      expect(r.stderr).toContain('проверка форм не выполнена');
+    } finally {
+      chmodSync(join(d, 'index.html'), 0o644);
+    }
   });
 
   it('неизвестный режим — отказ, а не молчаливый пропуск', async () => {
