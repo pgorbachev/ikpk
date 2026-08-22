@@ -366,3 +366,68 @@ dist_has_no_secret_values() {
   fi
   printf 'секреты в сборке: искали %d значени(й), ни одного не найдено\n' "$#"
 }
+
+# ── Гейт ссылок на формы заявки ──────────────────────────────────────────────
+#
+# Артефакт сверяется с ЗАКАЗАННЫМ режимом, а не с самим собой. Проверка
+# `DEPLOY_MODE` в `deploy-web.sh` сторожит вызов; собрать при этом можно другое:
+# `web/.env` (он в .gitignore, то есть невидим в ревью), экспорт из профиля оболочки
+# или правка `src/lib/forms.ts`. Build-гейт определяет режим ПО артефакту, поэтому
+# «собрано не то, что заказано» он увидеть не может по построению.
+#
+# Вынесен сюда из `deploy-web.sh` по той же причине, что и соседние проверки: блок
+# стоит ПОСЛЕ `npm run build` и ПОСЛЕ ssh-загрузки релиза, то есть запуском самого
+# скрипта до него не дойти без реального хоста. До выноса у гейта не было
+# поведенческого теста вовсе — только греп исходника в repo-hygiene.test.ts, то есть
+# утверждение о тексте, а не о поведении.
+#
+# Аргументы: <каталог сборки> <режим stand|prod> [<DEMO_FORMS>].
+# Ноль найденных ссылок — «проверить не удалось», а не «всё верно».
+form_links_match_mode() {
+  local dist="${1:-}" mode="${2:-}" demo="${3:-}"
+  local form_links grep_rc form_count wrong expect_re expect_human
+
+  case "$mode" in
+    prod) expect_re='^https://b24-[a-z0-9]+\.bitrix24site\.ru/crm_form_' ; expect_human='https://b24-*.bitrix24site.ru/crm_form_*' ;;
+    stand)
+      if [[ "$demo" == "stub" ]]; then
+        expect_re='^(/demo-zayavka|https://[^/]+/demo-zayavka)$'
+        expect_human='/demo-zayavka'
+      else
+        expect_re="^https://${demo}/crm_form_"
+        expect_human="https://${demo}/crm_form_*"
+      fi
+      ;;
+    *)
+      echo "form_links_match_mode: неизвестный режим ${mode@Q} — проверка форм не выполнена" >&2
+      return 1
+      ;;
+  esac
+
+  set +e
+  form_links=$(grep -roh 'href="[^"]*\(crm_form\|demo-zayavka\)[^"]*"' "$dist" --include='*.html' 2>/dev/null \
+    | sed 's/^href="//; s/"$//' | sort -u)
+  grep_rc=$?
+  set -e
+  if (( grep_rc > 1 )); then
+    echo "не удалось прочитать $dist (grep код $grep_rc) — проверка форм не выполнена" >&2
+    return 1
+  fi
+
+  form_count=$(printf '%s\n' "$form_links" | grep -c . || true)
+  if (( form_count == 0 )); then
+    echo "В сборке нет ни одной ссылки на форму заявки — проверять нечего, загрузка отменена." >&2
+    echo "Ожидался набор вида ${expect_human}." >&2
+    return 1
+  fi
+
+  wrong=$(printf '%s\n' "$form_links" | grep -vE "$expect_re" || true)
+  if [[ -n "$wrong" ]]; then
+    echo "Ссылки форм не соответствуют режиму ${mode} (ожидалось ${expect_human}):" >&2
+    printf '%s\n' "$wrong" | head -5 >&2
+    echo "Загрузка отменена: в режиме stand это увело бы заявки в CRM заказчика," >&2
+    echo "в режиме prod — потеряло бы обращения клиентов." >&2
+    return 1
+  fi
+  echo "[deploy] Проверка форм: ${form_count} различных адресов, все соответствуют ${expect_human}"
+}
