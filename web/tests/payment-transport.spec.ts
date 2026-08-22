@@ -302,6 +302,63 @@ test.describe('3a.3a-3 признак «места нет» снимается �
         + 'до поворота экрана или переоткрытия окна',
     ).toBe(false);
   });
+
+  // Второй тест того же перехода, и он не дубль. Первый смотрит состояние ПОСЛЕ ответа
+  // контура, а к тому моменту форма успевает пересобраться (`restoreFieldsDom`), которая
+  // полосу пересчитывает тоже, — то есть он не различает, какой из двух пересчётов
+  // сработал. Проверено мутацией: с пересчётом, убранным обратно в ветвь `firstInvalid`,
+  // первый тест остаётся ЗЕЛЁНЫМ.
+  //
+  // Здесь предмет — окно, пока запрос в полёте: `clearErrors()` уже уменьшил футер,
+  // валидация прошла, ответа ещё нет и форма не пересобиралась. Признак «места нет»
+  // обязан быть снят уже в этот момент, и снять его может только безусловный пересчёт в
+  // самой валидации.
+  test('признак снят уже пока запрос в полёте, до ответа контура', async ({ page }) => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/payments$/, async (route) => {
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'already_paid' }),
+      });
+    });
+    await openForm(page);
+
+    const cramped = () =>
+      page.evaluate(() =>
+        document.querySelector('.payment-dialog-panel')?.classList.contains('payment-panel-cramped') ?? null,
+      );
+
+    await page.locator(`${FORM} [type="submit"]`).click();
+    expect(await cramped(), 'признак не появился — снимать нечего').toBe(true);
+
+    await page.locator(`${FORM} [name="firstName"]`).fill('Иван');
+    await page.locator(`${FORM} [name="lastName"]`).fill('Петров');
+    await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 1');
+    await page.locator(`${FORM} [name="amount"]`).fill('1');
+    await page.locator(`${FORM} [name="email"]`).fill('ivan@example.com');
+    await page.locator(`${FORM} [name="phone"]`).fill('79111234567');
+    await page.locator(`${FORM} [name="consent"]`).check();
+    // Момент «запрос в полёте» берётся у самого запроса, а не таймаутом и не признаком
+    // кнопки: `aria-busy` скрипт ставит на кнопку ВХОДА, а не на submit — первая редакция
+    // этого теста ждала его на submit и падала на ожидании, ничего не измерив.
+    const inFlight = page.waitForRequest(/\/payments$/);
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await inFlight;
+    const duringFlight = await cramped();
+    release();
+    await expect(page.locator('[data-payment-state="already_paid"]')).toBeVisible();
+
+    expect(
+      duringFlight,
+      'пока запрос в полёте признак «места нет» ещё висит: валидация уменьшила футер, но '
+        + 'полосу не пересчитала — состояние починится только пересборкой формы',
+    ).toBe(false);
+  });
 });
 
 // ─── 3a.3b текст ошибки читаем в ОБЕИХ темах ──────────────────────────────────
