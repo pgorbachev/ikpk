@@ -57,7 +57,17 @@ function sectionByHeading(html: string, heading: string): Element {
     [...walk(section)].some((el) => el.tagName === 'h2' && textOf(el) === heading),
   );
   expect(sections.length, `секция с заголовком «${heading}» не найдена`).toBeGreaterThan(0);
-  // Самая внутренняя из вложенных: она и есть блок этого заголовка.
+  // Кандидаты бывают вложенными — внешняя секция содержит внутреннюю, и нужна
+  // самая внутренняя. Но два НЕВЛОЖЕННЫХ кандидата — это неоднозначность, и молча
+  // брать последний по документу нельзя: гейт проверил бы не то, что назван
+  // проверять, и об этом никто бы не узнал.
+  const outermost = sections.filter(
+    (s) => !sections.some((other) => other !== s && [...walk(other)].includes(s)),
+  );
+  expect(
+    outermost.length,
+    `секций с заголовком «${heading}» несколько и они не вложены друг в друга — гейт неоднозначен`,
+  ).toBe(1);
   return sections[sections.length - 1];
 }
 
@@ -110,7 +120,10 @@ describe('D12 — сайт показывает оба номера телефо
     expect(offenders.slice(0, 5), offenders.slice(0, 5).join('\n')).toEqual([]);
   });
 
-  it('шапка каждой страницы сопровождает городской номер мобильным', () => {
+  it('шапка даёт оба номера и в строке действий, и в мобильном меню', () => {
+    // Привязка к МЕСТУ, а не к счёту: пара «мобильных не меньше, чем городских»
+    // формально проходится, если положить мобильный дважды в десктопную строку и
+    // не положить в drawer — на телефоне второго номера при этом не будет.
     const offenders: string[] = [];
     for (const { path, html } of pages()) {
       // Именно шапка сайта: <header> встречается и внутри контента страниц.
@@ -119,14 +132,21 @@ describe('D12 — сайт показывает оба номера телефо
         offenders.push(`${path}: шапок .topnav ${headers.length}, ожидалась 1`);
         continue;
       }
-      const hrefs = telHrefs(headers[0]);
-      const city = hrefs.filter((h) => h === CITY_TEL).length;
-      const mobile = hrefs.filter((h) => h === MOBILE_TEL).length;
-      // Городской показан в шапке дважды — в строке действий и в мобильном меню.
-      // Считаем именно парами: иначе один номер в скрытом меню читался бы как
-      // «оба номера показаны», а на телефоне второго не было бы.
-      expect(city, `${path}: городского номера нет в шапке`).toBeGreaterThan(0);
-      if (mobile < city) offenders.push(`${path}: городской ×${city}, мобильный ×${mobile}`);
+      const places: [string, string][] = [
+        ['строка действий', 'topnav-phones'],
+        ['мобильное меню', 'topnav-drawer'],
+      ];
+      for (const [name, className] of places) {
+        const blocks = [...walk(headers[0])].filter((el) => hasClass(el, className));
+        if (blocks.length !== 1) {
+          offenders.push(`${path}: блоков «${name}» (.${className}) ${blocks.length}, ожидался 1`);
+          continue;
+        }
+        const hrefs = telHrefs(blocks[0]);
+        if (!hrefs.includes(CITY_TEL) || !hrefs.includes(MOBILE_TEL)) {
+          offenders.push(`${path}: в «${name}» tel-ссылки ${JSON.stringify(hrefs)}`);
+        }
+      }
     }
     expect(offenders.slice(0, 5), offenders.slice(0, 5).join('\n')).toEqual([]);
   });

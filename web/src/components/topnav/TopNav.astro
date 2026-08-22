@@ -212,7 +212,11 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   }
   .dropdown a:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
 
-  .topnav-actions { display: flex; align-items: center; gap: 0.9rem; flex-shrink: 0; }
+  /* Блок действий сжимаем, а не фиксируем: подпись CTA стала длиннее («Записаться»
+     → «Выбрать программу», решение заказчика D10), и жёсткий flex-shrink: 0 заставлял
+     шапку распирать вьюпорт вместо того, чтобы поджать кнопку. min-width: 0 нужен,
+     чтобы flex-элемент мог уйти ниже min-content и перенести подпись. */
+  .topnav-actions { display: flex; align-items: center; gap: 0.9rem; flex-shrink: 1; min-width: 0; }
   .topnav-phones { display: flex; flex-direction: column; line-height: 1.25; }
   .topnav-phone { font-size: var(--font-s); font-weight: 600; color: var(--color-dark-700); text-decoration: none; white-space: nowrap; }
   .topnav-cta { padding: 0.5rem 1.1rem; }
@@ -233,17 +237,6 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-bar { gap: 0.5rem; padding: 0.6rem 0.7rem; }
     .topnav-actions { gap: 0.5rem; }
     .topnav-cta { padding: 0.5rem 0.8rem; }
-  }
-
-  /* Подпись CTA стала длиннее («Записаться» → «Выбрать программу», решение
-     заказчика D10), и в одну строку рядом с логотипом, инструментами и бургером
-     она не влезает: шапке требуется 407 CSS-px при вьюпорте 375, страница
-     уезжает по горизонтали на каждой странице сайта. Разрешаем блоку действий
-     сжиматься, а подписи — переноситься: кнопка становится двухстрочной вместо
-     того, чтобы распирать вьюпорт. Замерено, а не подобрано на глаз. */
-  @media (max-width: 430px) {
-    .topnav-actions { flex-shrink: 1; min-width: 0; }
-    .topnav-cta { min-width: 0; padding: 0.4rem 0.7rem; text-align: center; line-height: 1.2; }
     .topnav-mobile { display: block; position: relative; }
     .topnav-mobile > summary {
       list-style: none;
@@ -297,6 +290,16 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .drawer-theme[aria-checked='true'] .drawer-theme-thumb { transform: translateX(18px); }
     .drawer-cta { display: block; text-align: center; margin: 0.8rem 0 0.5rem; }
     .drawer-phone { display: block; text-align: center; font-weight: 600; color: var(--color-dark-700); text-decoration: none; padding: 0.4rem; }
+  }
+
+  /* На узком мобильном подпись CTA не влезает в строку рядом с логотипом,
+     инструментами и бургером: до этой правки шапке требовалось 407 CSS-px при
+     вьюпорте 375, и уезжали ВСЕ страницы сайта. Кнопке разрешено переносить
+     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤900 намеренно: правила
+     мобильного меню живут в том блоке, и любое вложение их сюда оставило бы
+     зону 431–900 без навигации вовсе. */
+  @media (max-width: 430px) {
+    .topnav-cta { min-width: 0; padding: 0.4rem 0.7rem; text-align: center; line-height: 1.2; }
   }
 
   /* Совсем узкие экраны (старые iPhone SE / компактный Android): логотип,
