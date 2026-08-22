@@ -89,7 +89,8 @@ function boot(formEl: HTMLFormElement) {
   const attemptList = document.querySelector<HTMLElement>('[data-payment-attempt-list]')!;
   const actions = document.querySelector<HTMLElement>('[data-payment-actions]')!;
   const closeBtn = document.querySelector<HTMLButtonElement>('[data-payment-close]');
-  if (!root || !dialog || !stateHost || !chrome || !attemptsWrap || !attemptList || !actions) return;
+  const panel = document.querySelector<HTMLElement>('.payment-dialog-panel')!;
+  if (!root || !dialog || !stateHost || !chrome || !attemptsWrap || !attemptList || !actions || !panel) return;
 
   const fieldsTemplate = formEl.cloneNode(true) as HTMLFormElement;
   let activeRequestId = '';
@@ -107,6 +108,36 @@ function boot(formEl: HTMLFormElement) {
     void onSubmit();
   });
   closeBtn?.addEventListener('click', () => closeDialog());
+  // Поворот телефона, поднятая экранная клавиатура и изменение масштаба меняют и высоту
+  // панели, и высоту футера — решение «места нет» надо пересчитывать, а не брать однажды
+  // при открытии.
+  //
+  // Подписок ДВЕ, и вторая не для симметрии. iOS Safari при поднятой экранной клавиатуре
+  // размер окна НЕ меняет и события `resize` на `window` не даёт вовсе — меняется только
+  // visual viewport. А экранная клавиатура названа прямо в дефекте, из-за которого весь
+  // этот пересчёт и появился, то есть без второй подписки починка не работала бы ровно в
+  // одном из перечисленных в дефекте случаев. Android Chrome, наоборот, меняет само окно.
+  //
+  // Оговорка про доказательство: сама платформа здесь не проверяется — iOS Safari в наборах
+  // нет, есть только Chromium. Автоматический гейт стережёт ПРОВОДКУ (событие visual
+  // viewport пересчитывает полосу), а не поведение iOS; поведение проверяется на стенде
+  // руками.
+  //
+  // Пересчёт склеен через `requestAnimationFrame`: обработчик читает `clientHeight` и
+  // `offsetHeight` каждого поля, то есть форсирует синхронную раскладку. На повороте
+  // телефона это одно событие, а на протяжке окна мышью — поток событий, и без склейки
+  // раскладка считалась бы на каждом.
+  let bandPending = false;
+  const recomputeFooterBand = () => {
+    if (dialog.hidden || bandPending) return;
+    bandPending = true;
+    requestAnimationFrame(() => {
+      bandPending = false;
+      if (!dialog.hidden) syncFooterBand();
+    });
+  };
+  window.addEventListener('resize', recomputeFooterBand);
+  window.visualViewport?.addEventListener('resize', recomputeFooterBand);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -148,6 +179,9 @@ function boot(formEl: HTMLFormElement) {
     dialog.hidden = false;
     formEl.hidden = !formEl.querySelector('[name="firstName"]') ? formEl.hidden : false;
     setBackgroundInert(true);
+    // До первой валидации ошибок нет, но путь Tab между полями работает уже сейчас, и
+    // полоса футера должна быть известна браузеру с самого открытия.
+    syncFooterBand();
     const focusable = dialog.querySelector<HTMLElement>('input, button, [href], textarea, select');
     focusable?.focus();
   }
@@ -241,6 +275,15 @@ function boot(formEl: HTMLFormElement) {
       formEl.replaceChildren(...[...fieldsTemplate.childNodes].map((node) => node.cloneNode(true)));
     }
     formEl.hidden = false;
+    // Пересчёта полосы футера здесь СОЗНАТЕЛЬНО НЕТ, и это результат измерения, а не
+    // упущение. Ревью предложило пересчитывать «после любой перерисовки формы», и первая
+    // редакция так и делала — но мутация показала, что ни одна проверка от снятия этого
+    // вызова не краснеет, то есть он был непроверяемым кодом. Причина в том, что
+    // достижимого сценария нет: восстановленная форма несёт футер БЕЗ ошибок, а ровно эту
+    // геометрию уже посчитала валидация (`validate` пересчитывает безусловно), открытие
+    // окна и обработчик resize. Держать защиту, для которой не удалось построить путь,
+    // значит держать код, про который никто не узнает, когда он сломается. Если путь
+    // назовут — вызов вернётся вместе с тестом на него.
   }
 
   function stripFieldsDom() {
@@ -371,6 +414,59 @@ function boot(formEl: HTMLFormElement) {
     stateHost.replaceChildren(box);
   }
 
+  // ── Липкий футер не должен закрывать поле, к которому уводится фокус ────────
+  //
+  // Браузер прокручивает элемент «в видимую область» и про липкий слой поверх неё не
+  // знает: поле формально внутри scrollport, поэтому прокрутки не происходит вовсе.
+  // Измерено на артефакте роли `stand`, ширина 390: при высоте окна 900 сфокусированное
+  // `amount` лежало под футером при scrollTop = 0, при 400 под футером оказывались и
+  // поле, и его сообщение.
+  //
+  // Три средства, потому что закрываются три разных случая, и ни одно из них не
+  // покрывает остальные (проверено измерением каждого по отдельности):
+  //
+  //   `scroll-padding-bottom` — путь БРАУЗЕРА (Tab между полями): он сам перестаёт
+  //       считать полосу футера видимой областью. Только этого мало: при высоте окна
+  //       500 браузер уводил в видимую область сам `input`, а сообщение об ошибке лежит
+  //       НИЖЕ него и снова попадало под футер;
+  //   явная прокрутка БЛОКА поля (`.payment-field` целиком — подпись, поле, сообщение) —
+  //       путь валидации;
+  //   снятие прилипания, когда места нет физически — при высоте окна 360 футер занимает
+  //       237 из 328 доступных, и никакая прокрутка не покажет блок поля высотой 102.
+  //       Без этой ветви гарантия «поле и сообщение видимы» была бы невыполнима, а тест
+  //       на неё — заведомо красным на низких окнах.
+  function tallestFieldHeight(): number {
+    const fields = [...formEl.querySelectorAll<HTMLElement>('.payment-field')];
+    return fields.reduce((max, el) => Math.max(max, el.offsetHeight), 0);
+  }
+
+  /** Синхронизирует полосу, закрытую футером, и решает, можно ли его вообще прилеплять. */
+  function syncFooterBand(): HTMLElement | null {
+    const footer = formEl.querySelector<HTMLElement>('.payment-footer');
+    if (!footer) {
+      panel.classList.remove('payment-panel-cramped');
+      panel.style.removeProperty('--payment-footer-height');
+      return null;
+    }
+    // Мерить надо на неприлепленном футере: у прилепленного `offsetHeight` тот же, а
+    // вот решение «места нет» должно приниматься по той же величине в обе стороны,
+    // иначе состояние начнёт колебаться между двумя решениями на одной геометрии.
+    const cramped = panel.clientHeight - footer.offsetHeight < tallestFieldHeight();
+    panel.classList.toggle('payment-panel-cramped', cramped);
+    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${footer.offsetHeight}px`);
+    return footer;
+  }
+
+  /** Показывает блок поля целиком — вместе с подписью и сообщением об ошибке. */
+  function revealField(el: HTMLElement) {
+    const footer = syncFooterBand();
+    // Согласие живёт в самом футере: закрыть себя футер не может, а прокрутка к нему
+    // сдвинула бы панель без причины.
+    if (footer?.contains(el)) return;
+    const field = (el.closest('.payment-field') ?? el) as HTMLElement;
+    field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   function clearErrors() {
     for (const err of formEl.querySelectorAll<HTMLElement>('.payment-error')) {
       err.hidden = true;
@@ -418,7 +514,22 @@ function boot(formEl: HTMLFormElement) {
       showFieldError('consent', 'Отметьте передачу данных оператору платежей');
       firstInvalid ??= consent;
     }
-    firstInvalid?.focus();
+    // Пересчёт БЕЗУСЛОВНЫЙ, а не в ветви `firstInvalid`, и это находка ревью (P2):
+    // `validate()` начинается с `clearErrors()`, от которого футер уменьшается, поэтому
+    // геометрия меняется и на успешном проходе. С пересчётом только для ошибочного поля
+    // признак «места нет» оставался висеть после «сначала ошиблись, потом исправили», и
+    // футер не прилипал до поворота экрана или переоткрытия окна.
+    //
+    // Порядок важен и здесь: считаем ПОСЛЕ показа/снятия ошибок (иначе меряем прошлую
+    // высоту футера) и ДО перевода фокуса. `focus()` прокручивает панель сам, по текущей
+    // `scroll-padding-bottom`, и со старым значением уводит поле не туда — `revealField`
+    // потом лишь исправляет последствия. Повторный вызов внутри `revealField` безвреден:
+    // функция идемпотентна.
+    syncFooterBand();
+    if (firstInvalid) {
+      firstInvalid.focus();
+      revealField(firstInvalid);
+    }
     return !firstInvalid;
   }
 

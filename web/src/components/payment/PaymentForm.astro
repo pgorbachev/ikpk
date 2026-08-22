@@ -49,56 +49,72 @@ const hasForm = role !== 'ci';
             <input id="payment-honeypot" name="website" tabindex="-1" autocomplete="off" />
           </div>
 
-          <div class="payment-field">
-            <label for="payment-firstName">Имя</label>
-            <input id="payment-firstName" name="firstName" type="text" maxlength="100" required autocomplete="given-name" />
-            <p id="payment-err-firstName" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-lastName">Фамилия</label>
-            <input id="payment-lastName" name="lastName" type="text" maxlength="100" required autocomplete="family-name" />
-            <p id="payment-err-lastName" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-seminar">Семинар</label>
-            <input id="payment-seminar" name="seminar" type="text" maxlength="300" required />
-            <p id="payment-err-seminar" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-amount">Сумма, ₽</label>
-            <input id="payment-amount" name="amount" type="number" min="1" step="1" required inputmode="numeric" />
-            <p id="payment-err-amount" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-startDate">Дата начала</label>
-            <input id="payment-startDate" name="startDate" type="date" />
-            <p id="payment-err-startDate" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-venue">Место проведения</label>
-            <input id="payment-venue" name="venue" type="text" maxlength="300" />
-            <p id="payment-err-venue" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-email">Электронная почта</label>
-            <input id="payment-email" name="email" type="email" required autocomplete="email" />
-            <p id="payment-err-email" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field">
-            <label for="payment-phone">Телефон</label>
-            <input id="payment-phone" name="phone" type="tel" required autocomplete="tel" />
-            <p id="payment-err-phone" class="payment-error" hidden></p>
-          </div>
-          <div class="payment-field payment-consent">
-            <label for="payment-consent">
-              <input id="payment-consent" name="consent" type="checkbox" required />
-              Согласен на обработку персональных данных и передачу их оператору платежей для проведения оплаты.
-              <a href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf">Политика конфиденциальности</a>
-            </label>
-            <p id="payment-err-consent" class="payment-error" hidden></p>
+          <div class="payment-group" role="group" aria-labelledby="payment-group-participant">
+            <p class="payment-group-label" id="payment-group-participant">Участник</p>
+            <div class="payment-row2">
+              <div class="payment-field">
+                <label for="payment-firstName">Имя</label>
+                <input id="payment-firstName" name="firstName" type="text" maxlength="100" required autocomplete="given-name" />
+                <p id="payment-err-firstName" class="payment-error" hidden></p>
+              </div>
+              <div class="payment-field">
+                <label for="payment-lastName">Фамилия</label>
+                <input id="payment-lastName" name="lastName" type="text" maxlength="100" required autocomplete="family-name" />
+                <p id="payment-err-lastName" class="payment-error" hidden></p>
+              </div>
+            </div>
+            <div class="payment-field">
+              <label for="payment-email">Электронная почта</label>
+              <input id="payment-email" name="email" type="email" required autocomplete="email" />
+              <p id="payment-err-email" class="payment-error" hidden></p>
+            </div>
+            <div class="payment-field">
+              <label for="payment-phone">Телефон</label>
+              <input id="payment-phone" name="phone" type="tel" required autocomplete="tel" />
+              <p id="payment-err-phone" class="payment-error" hidden></p>
+            </div>
           </div>
 
-          <button type="submit" data-payment-submit>Оплатить</button>
+          <div class="payment-group" role="group" aria-labelledby="payment-group-seminar">
+            <p class="payment-group-label" id="payment-group-seminar">Семинар и сумма</p>
+            <div class="payment-field">
+              <label for="payment-seminar">Семинар</label>
+              <input id="payment-seminar" name="seminar" type="text" maxlength="300" required />
+              <p id="payment-err-seminar" class="payment-error" hidden></p>
+            </div>
+            <div class="payment-row2">
+              <div class="payment-field">
+                <label for="payment-startDate">Дата начала</label>
+                <input id="payment-startDate" name="startDate" type="date" />
+                <p id="payment-err-startDate" class="payment-error" hidden></p>
+              </div>
+              <div class="payment-field">
+                <label for="payment-amount">Сумма, ₽</label>
+                <input id="payment-amount" name="amount" type="number" min="1" step="1" required inputmode="numeric" />
+                <p id="payment-err-amount" class="payment-error" hidden></p>
+              </div>
+            </div>
+            <div class="payment-field">
+              <label for="payment-venue">Место проведения</label>
+              <input id="payment-venue" name="venue" type="text" maxlength="300" />
+              <p id="payment-err-venue" class="payment-error" hidden></p>
+            </div>
+          </div>
+
+          <div class="payment-footer">
+            <div class="payment-consent">
+              <label for="payment-consent">
+                <input id="payment-consent" name="consent" type="checkbox" required />
+                <span>
+                  Согласен на обработку персональных данных и передачу их оператору платежей для проведения оплаты.
+                  <a href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf">Политика конфиденциальности</a>
+                </span>
+              </label>
+              <p id="payment-err-consent" class="payment-error" hidden></p>
+            </div>
+
+            <button type="submit" class="payment-submit" data-payment-submit>Оплатить</button>
+          </div>
         </form>
       )}
 
@@ -115,7 +131,14 @@ const hasForm = role !== 'ci';
   .payment-dialog {
     position: fixed;
     inset: 0;
-    z-index: 80;
+    /* Выше залипающей шапки (`header.topnav`, z-index 100) и её выпадающих панелей
+       (`HeaderTools`, 90). При 80 голова диалога — заголовок и «Закрыть» — уходила под
+       шапку, как только форма оказывалась выше окна: панель прижимается к `top: 16`, а
+       шапка занимает первые 74 px и рисуется поверх.
+       Курсором это не проверяется: скрипт ставит на шапку `inert`, и Chrome убирает
+       inert-поддерево из hit-testing, хотя рисовать его продолжает. Предмет — порядок
+       отрисовки, поэтому его и сторожит гейт «панель лежит выше шапки». */
+    z-index: 200;
     display: grid;
     place-items: center;
     background: rgba(0, 0, 0, 0.45);
@@ -132,8 +155,19 @@ const hasForm = role !== 'ci';
     max-height: calc(100vh - 2rem);
     overflow: auto;
     border-radius: var(--radius-m);
-    padding: 1.25rem 1.5rem;
+    /* Названы переменными, потому что липкий футер ниже обязан знать эти два
+       значения: он гасит горизонтальный паддинг отрицательным отступом и уходит
+       на величину вертикального ниже края содержимого. */
+    --payment-panel-pad-x: 1.5rem;
+    --payment-panel-pad-y: 1.25rem;
+    padding: var(--payment-panel-pad-y) var(--payment-panel-pad-x);
     box-shadow: var(--shadow-m);
+    /* Полоса, которую закрывает липкий футер. Браузер про неё не знает: уводя фокус
+       «в видимую область», он считает полем видимым и то, что лежит под липким слоем,
+       и потому не прокручивает вовсе. Величину ставит скрипт по фактической высоте
+       футера — она зависит от переноса текста согласия и от того, показано ли
+       сообщение об ошибке согласия (замерено: 186 px против 237 px). */
+    scroll-padding-bottom: var(--payment-footer-height, 0px);
   }
   .payment-dialog-head {
     display: flex;
@@ -146,25 +180,184 @@ const hasForm = role !== 'ci';
     margin: 0;
     font-size: var(--font-xl);
   }
+  .payment-lead {
+    margin: 0 0 1.25rem;
+    font-size: var(--font-s);
+    color: var(--text-body);
+  }
+
+  /* ── Группы полей ────────────────────────────────────────────────────────────
+   *
+   * Вариант B мокапа: восемь полей разбиты на две смысловые группы, парные поля
+   * стоят в сетке. Группа объявлена `role="group"` с `aria-labelledby` — просто
+   * div с текстом не связывал бы подпись с полями программно, и скринридер
+   * объявлял бы восемь полей подряд без разделения.
+   *
+   * НЕ `fieldset`/`legend`, хотя семантически это они. `fieldset` — элемент,
+   * связанный с формой, и `:invalid` матчит его, когда внутри есть незаполненное
+   * обязательное поле. Из-за этого `${FORM} :invalid` в
+   * `payment-transport.spec.ts:127` выбирал первым не поле, а группу, и проверка
+   * «фокус на первом ошибочном» падала: тест ждал поле, скрипт фокусировал поле,
+   * а локатор указывал на `fieldset`. Проверено: с `role="group"` тот же локатор
+   * снова выбирает `#payment-firstName`. */
+  .payment-group + .payment-group {
+    margin-top: 1.5rem;
+  }
+  .payment-group-label {
+    padding: 0 0 0.5rem;
+    margin-bottom: 0.9rem;
+    font-size: var(--font-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  /* Пара полей в строке. `auto-fit` вместо жёстких `1fr 1fr` плюс медиазапрос:
+     ширина панели ограничена 32rem, но на узком экране она равна ширине окна, и
+     двум полям там не хватает места — `date` в Chrome не сжимается ниже своей
+     внутренней ширины и вылезал бы за панель. `min(100%, …)` страхует случай,
+     когда сама панель уже 9.5rem. */
+  .payment-row2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+    gap: 0.9rem;
+  }
+
   .payment-field {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.75rem;
+    gap: 0.35rem;
+    margin-bottom: 0.9rem;
+    min-width: 0;
   }
-  .payment-consent {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-start;
+  .payment-field:last-child {
+    margin-bottom: 0;
   }
+  .payment-row2 .payment-field {
+    margin-bottom: 0.9rem;
+  }
+  .payment-field label {
+    font-size: var(--font-s);
+    font-weight: 600;
+    color: var(--color-dark-700);
+  }
+
+  /* Дочерний селектор, а не любой вложенный `input`: отметка согласия лежит внутри
+     своей подписи и правил размера/фона поля ввода получать не должна. */
+  .payment-field > input {
+    width: 100%;
+    min-width: 0;
+    font-size: var(--font-m);
+    padding: 0.6rem 0.75rem;
+    background: var(--surface-page);
+    /* Не `--text-primary`: в тёмной теме эта роль указывает на `--color-light-100`
+       (#171a17), то есть совпадает с фоном поля. Панель диалога уже берёт
+       `--color-dark-700`, который инвертируется правильно. */
+    color: var(--color-dark-700);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-control);
+    transition: border-color var(--dur-base) var(--ease-out);
+  }
+  .payment-field > input:hover {
+    border-color: var(--border-strong);
+  }
+  /* Кольцо фокуса НЕ переопределяется: глобальное правило в `base.css` даёт
+     `outline: 2px solid var(--color-accent-500)` и специально устроено так, чтобы
+     работать и на Safari 14. Мокап рисовал вместо него тень
+     `0 0 0 3px var(--color-accent-50)` — бледную настолько, что как единственный
+     индикатор она не проходит по контрасту. Здесь остаётся системный outline, а
+     от мокапа берётся только позеленение рамки. */
+  .payment-field > input:focus {
+    border-color: var(--color-accent-500);
+  }
+
   .payment-error {
-    color: #8a1f1f;
+    /* Роль, а не литерал: `#8a1f1f` стоял здесь напрямую и в тёмной теме ложился на
+       подложку панели `#1f241f` — 1.73:1 при требуемых 4.5:1. В светлой теме роль
+       разворачивается в тот же самый цвет, поэтому облик светлой темы не меняется. */
+    color: var(--text-error);
     font-size: var(--font-s);
     margin: 0;
   }
-  .payment-lead {
+
+  /* ── Футер: согласие и кнопка ────────────────────────────────────────────────
+   *
+   * Липкий, чтобы при прокрутке длинной формы внутри панели
+   * (`max-height: calc(100vh - 2rem); overflow: auto`) оба элемента оставались
+   * видны. Отрицательные горизонтальные отступы гасят паддинг панели: граница
+   * сверху должна идти во всю её ширину, а не отступать от краёв.
+   *
+   * `bottom` отсчитывается от низа СОДЕРЖИМОГО панели, а не от её нижнего края:
+   * при `bottom: 0` полоса замирала на 20 px выше края (замерено в Chrome: низ
+   * футера 769 при низе панели 789), и в этой щели ехало содержимое формы —
+   * подпись и текст ошибки поля «Место проведения» были видны под кнопкой
+   * «Оплатить». Отрицательное смещение на нижний паддинг панели убирает щель. */
+  .payment-footer {
+    position: sticky;
+    bottom: calc(-1 * var(--payment-panel-pad-y));
+    margin: 1.5rem calc(-1 * var(--payment-panel-pad-x)) 0;
+    padding: 1.1rem var(--payment-panel-pad-x) var(--payment-panel-pad-y);
+    background: var(--surface-raised);
+    border-top: 1px solid var(--border-subtle);
+  }
+  /* Места нет физически: футер выше, чем остаток панели за вычетом самого высокого
+     блока поля. Прилипание в этом случае снимается — иначе поле с сообщением показать
+     нельзя никакой прокруткой. Замерено при окне 390x360: футер 237 из 328 доступных
+     при блоке поля 102. Признак ставит скрипт, потому что в CSS ни высота футера, ни
+     высота блока поля не выразимы: обе зависят от переноса текста. */
+  .payment-dialog-panel.payment-panel-cramped .payment-footer {
+    position: static;
+  }
+  .payment-consent {
     margin-bottom: 1rem;
   }
+  .payment-consent label {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-size: var(--font-xs);
+    font-weight: 400;
+    color: var(--text-body);
+  }
+  .payment-consent input {
+    width: auto;
+    flex-shrink: 0;
+    margin: 0.15rem 0 0;
+    accent-color: var(--color-accent-500);
+  }
+  .payment-consent .payment-error {
+    margin-top: 0.35rem;
+  }
+
+  /* Не `.btn .btn-primary` из `utilities.css`: та кнопка меньше кеглем, тоньше
+     начертанием и скруглена по контейнеру (`--radius-m`), а здесь по мокапу
+     основное действие во всю ширину, скруглено как контрол рядом с ним. Взять
+     общий класс и переопределить пять свойств из шести — не переиспользование. */
+  .payment-submit {
+    display: block;
+    width: 100%;
+    padding: 0.85rem 1.5rem;
+    font-size: var(--font-m);
+    font-weight: 700;
+    color: var(--cta-text);
+    background: var(--cta-bg);
+    border: 1px solid var(--cta-bg);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    transition: background var(--dur-base) var(--ease-out),
+      border-color var(--dur-base) var(--ease-out);
+  }
+  .payment-submit:hover:not(:disabled) {
+    background: var(--cta-bg-hover);
+    border-color: var(--cta-bg-hover);
+  }
+  .payment-submit:disabled {
+    cursor: progress;
+    opacity: 0.65;
+  }
+
   .payment-actions {
     display: flex;
     flex-wrap: wrap;
