@@ -157,15 +157,19 @@ describe('гигиена репозитория', () => {
     // гейта (`form_links=`, `EXPECT_RE`, `DEMO_FORMS" == "stub"`) прямо в этом
     // файле — то есть утверждала о ТЕКСТЕ реализации, а не о её поведении, и
     // ломалась от любого выноса кода, ничего при этом не проверив по существу.
+    // Проверяются ВСЕ ТРИ аргумента, а не только каталог. Находка ревью (F6): якорь
+    // по одному `"$DIST_DIR"` оставался бы зелёным при захардкоженном режиме
+    // (`form_links_match_mode "$DIST_DIR" prod ""`), тогда как текст отказа обещает
+    // проверку «по заказанному режиму». Сообщение утверждало больше, чем признак.
     expect(
-      /form_links_match_mode "\$DIST_DIR"/.test(code),
-      'гейт ссылок на формы не вызывается по заказанному режиму',
+      /form_links_match_mode "\$DIST_DIR" "\$DEPLOY_MODE" "\$DEMO_FORMS"/.test(code),
+      'гейт ссылок на формы не вызывается по заказанному режиму и режиму форм',
     ).toBe(true);
 
     // Preflight по развёрнутой конфигурации, а не по загруженному файлу.
     expect(/nginx -T/.test(code), 'нет preflight по развёрнутой конфигурации nginx').toBe(true);
 
-    const posArtifact = code.indexOf('form_links_match_mode "$DIST_DIR"');
+    const posArtifact = code.indexOf(String.raw`form_links_match_mode "$DIST_DIR" "$DEPLOY_MODE" "$DEMO_FORMS"`);
     const posPreflight = code.indexOf('nginx -T');
     const posSwitch = code.indexOf('Switching current symlink');
     expect(posArtifact, 'сверки артефакта нет').toBeGreaterThan(0);
