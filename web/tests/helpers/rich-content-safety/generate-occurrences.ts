@@ -3,7 +3,7 @@
  * CI MUST NOT invoke this. Run from web/: npx tsx tests/helpers/rich-content-safety/generate-occurrences.ts
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { walkFiles } from '../walk.js';
 import {
   collectOccurrences,
@@ -13,7 +13,7 @@ import {
   stripMarkedRegions,
   type OccurrenceRule,
 } from './hazard-scan.js';
-import { FIXTURES_DIR, WEB_ROOT } from './paths.js';
+import { FIXTURES_DIR, REPO_ROOT, WEB_ROOT } from './paths.js';
 import type { ExecutableSlot } from './ast-sinks.js';
 import { assertCleanGitWorktree } from './git-clean.js';
 
@@ -146,7 +146,14 @@ function main(): void {
     const right = `${b.route}\t${b.slotId}\t${b.placement}`;
     return left.localeCompare(right);
   });
-  writeOccurrenceRegistry(occurrences, { generatedFromSha: sha, distRoots: roots.map((r) => r.path) });
+  // Пути ОТ КОРНЯ РЕПОЗИТОРИЯ, а не абсолютные: абсолютные привязывают фикстуру к машине
+  // сборщика и расходятся молча — в committed реестре месяцами лежал
+  // `/private/tmp/wt-payment-ux` (worktree чужой сессии), и заметить это было нечем.
+  // Гейт «distRoots — пути внутри репозитория» теперь этого не пропустит.
+  writeOccurrenceRegistry(occurrences, {
+    generatedFromSha: sha,
+    distRoots: roots.map((r) => relative(REPO_ROOT, r.path).split(sep).join('/')),
+  });
   console.log(`wrote ${occurrences.length} occurrence rules from ${roots.map((r) => r.path).join(', ')}`);
 }
 

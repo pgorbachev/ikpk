@@ -20,6 +20,8 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { contrastRatio, parseRgb } from './helpers/contrast';
 import { PAYMENT_FORM_ATTR } from './helpers/payment-contract';
 import { gotoOplata, interceptYooKassaNavigation } from './helpers/yookassa-navigation';
 import {
@@ -100,6 +102,69 @@ test.describe('3a.1 модальность и клавиатура', () => {
     );
     expect(inert).toBe(true);
   });
+
+  // ── Панель модального окна должна лежать ВЫШЕ шапки страницы ───────────────
+  //
+  // Дефект найден на ревью PR #151 и существовал до него. `.payment-dialog` объявляет
+  // `z-index: 80`, а `header.topnav` — 100 при высоте 74 px. Форма выше окна, поэтому
+  // панель прижимается к `top: 16`, и её «голова» — заголовок диалога и кнопка «Закрыть» —
+  // уходит под шапку.
+  //
+  // ПОПАДАНИЕМ КУРСОРА ЭТОТ ДЕФЕКТ НЕ ИЗМЕРЯЕТСЯ, и первая редакция теста была из-за
+  // этого зелёной на всех проверках кроме сравнения слоёв. При открытии диалога скрипт
+  // ставит `inert` на элементы вне диалога, а Chrome исключает inert-поддерево из
+  // hit-testing целиком: `elementsFromPoint` в точке заголовка не содержит шапку вовсе,
+  // хотя `visibility: visible` и `opacity: 1` — то есть шапка ПО-ПРЕЖНЕМУ рисуется
+  // поверх. Измерено: стек в точке заголовка начинается с `H2`, шапки в нём нет.
+  // Поэтому предмет здесь — порядок ОТРИСОВКИ, а он задаётся `z-index` двух соседних
+  // контекстов наложения; числа читаются из вычисленного стиля, а не из написания в CSS.
+  test('панель лежит выше шапки: голова диалога не под ней', async ({ page }) => {
+    await openForm(page);
+    const probe = await page.evaluate(() => {
+      const dialog = document.querySelector('.payment-dialog');
+      const head = document.querySelector('.payment-dialog-head');
+      const header = document.querySelector('header.topnav');
+      if (!dialog || !head || !header) {
+        return { ok: false as const, reason: 'нет панели, головы диалога или шапки' };
+      }
+      const layer = (el: Element) => {
+        const z = getComputedStyle(el).zIndex;
+        return z === 'auto' ? Number.NaN : Number(z);
+      };
+      const hd = head.getBoundingClientRect();
+      const hr = header.getBoundingClientRect();
+      return {
+        ok: true as const,
+        head: { top: +hd.top.toFixed(1), bottom: +hd.bottom.toFixed(1) },
+        header: { top: +hr.top.toFixed(1), bottom: +hr.bottom.toFixed(1) },
+        overlaps: hd.top < hr.bottom && hd.bottom > hr.top,
+        dialogZ: layer(dialog),
+        headerZ: layer(header),
+        headerPainted: getComputedStyle(header).visibility === 'visible'
+          && Number(getComputedStyle(header).opacity) > 0,
+      };
+    });
+
+    if (!probe.ok) {
+      expect(probe.ok, `прибор не смог измерить: ${probe.reason}`).toBe(true);
+      return;
+    }
+
+    const geometry = `голова y=${probe.head.top}–${probe.head.bottom}, шапка y=${probe.header.top}–${probe.header.bottom}, `
+      + `z-index ${probe.dialogZ} против ${probe.headerZ}`;
+
+    // Голова в кадре — иначе «не под шапкой» достижимо вывозом за верхнюю кромку окна.
+    expect(probe.head.top, `голова диалога выше верхней кромки окна (${geometry})`).toBeGreaterThanOrEqual(0);
+    // Условие теста заявлено, а не выведено из исхода: проверка имеет смысл только когда
+    // голова и шапка действительно пересекаются. Если геометрия изменится и пересечения
+    // не станет, тест обязан покраснеть и потребовать пересмотра, а не тихо проверять
+    // пустое множество.
+    expect(probe.overlaps, `голова и шапка не пересекаются — предмет проверки исчез (${geometry})`).toBe(true);
+    expect(probe.headerPainted, `шапка не рисуется — сравнивать слои незачем (${geometry})`).toBe(true);
+    expect(probe.dialogZ, `у панели нет числового z-index (${geometry})`).not.toBeNaN();
+    expect(probe.headerZ, `у шапки нет числового z-index (${geometry})`).not.toBeNaN();
+    expect(probe.dialogZ, `шапка рисуется поверх головы диалога (${geometry})`).toBeGreaterThan(probe.headerZ);
+  });
 });
 
 test.describe('3a.3 доступность полей и ошибок', () => {
@@ -131,6 +196,79 @@ test.describe('3a.3 доступность полей и ошибок', () => {
     const msg = page.locator(`#${described}`);
     await expect(msg).toBeVisible();
   });
+});
+
+// ─── 3a.3b текст ошибки читаем в ОБЕИХ темах ──────────────────────────────────
+//
+// Дефект найден на ревью PR #151 и существовал до него: `.payment-error` был задан
+// литералом `#8a1f1f`, который в тёмной теме ложится на подложку панели `#1f241f` и даёт
+// 1.73:1 при требуемых по WCAG 1.4.3 4.5:1 для обычного текста. В светлой теме тот же
+// цвет даёт 9.14:1 — то есть дефект жил ровно в одной теме, и гейт по одной теме его бы
+// не увидел. Отсюда обе темы в цикле.
+//
+// Мерится ВЫЧИСЛЕННЫЙ цвет, а не написание токена: в проекте уже был гейт, сверявший
+// литерал и не замечавший переопределения темой. Подложка тоже берётся вычисленной у
+// панели, а не предполагается белой.
+test.describe('3a.3b контраст текста ошибки', () => {
+  const MIN_RATIO = 4.5;
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`сообщение об ошибке поля читаемо в теме ${theme}`, async ({ page }) => {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим — тест просто пройдёт по светлой теме */
+        }
+      }, theme);
+      await openForm(page);
+      // Тема применена фактически, а не только запрошена: иначе «тёмная» проверка мерила
+      // бы светлую и была бы зелёной вдвойне впустую.
+      if (theme === 'dark') {
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      } else {
+        await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
+      }
+      await page.locator(`${FORM} [type="submit"]`).click();
+
+      const probe = await page.evaluate(() => {
+        const err = [...document.querySelectorAll<HTMLElement>('.payment-error')].find((el) => !el.hidden);
+        const panel = document.querySelector('.payment-dialog-panel');
+        if (!err || !err.textContent?.trim() || !panel) {
+          return { ok: false as const, reason: 'на форме нет показанного сообщения об ошибке или панели' };
+        }
+        // Фон ищем у ближайшего предка с непрозрачной заливкой: у самого абзаца её нет,
+        // и `transparent` как подложка дал бы бессмысленное число.
+        let bg = '';
+        for (let el: Element | null = err; el; el = el.parentElement) {
+          const c = getComputedStyle(el).backgroundColor;
+          if (c && c !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(c)) {
+            bg = c;
+            break;
+          }
+        }
+        return {
+          ok: true as const,
+          text: err.textContent.trim(),
+          color: getComputedStyle(err).color,
+          background: bg,
+          panelBackground: getComputedStyle(panel).backgroundColor,
+        };
+      });
+
+      if (!probe.ok) {
+        expect(probe.ok, `прибор не смог измерить: ${probe.reason}`).toBe(true);
+        return;
+      }
+      expect(probe.background, 'непрозрачной подложки под сообщением не нашлось').toBeTruthy();
+
+      const value = contrastRatio(parseRgb(probe.color), parseRgb(probe.background));
+      expect(
+        value,
+        `«${probe.text}» ${probe.color} на ${probe.background} даёт ${value.toFixed(2)}:1 при требуемых ${MIN_RATIO}:1`,
+      ).toBeGreaterThanOrEqual(MIN_RATIO);
+    });
+  }
 });
 
 // ─── 3a.3a та же ошибка, но на НИЗКОМ экране ─────────────────────────────────
@@ -242,6 +380,79 @@ for (const vp of LOW_VIEWPORTS) {
     });
   });
 }
+
+// ─── 3a.3c axe над самим диалогом ─────────────────────────────────────────────
+//
+// Форму оплаты не проверял ни один a11y-гейт, и это не оговорка, а следствие устройства
+// наборов: `a11y.spec.ts` идёт по боевому `dist`, то есть по артефакту роли `ci`, у
+// которого формы нет вовсе (`hasForm = role !== 'ci'`). Прогнать axe по `/oplata` там
+// можно, и он зеленел — но диалога в разметке нет, и проверялась страница без предмета.
+// Плюс сам диалог закрыт (`hidden`), а axe скрытое поддерево не разбирает.
+//
+// Поэтому гейт живёт здесь, на артефакте роли `stand`, и проверяет ДВА состояния: только
+// что открытое окно и окно после неудачной отправки. Второе отдельно потому, что именно
+// в нём появляются `aria-invalid` и `aria-describedby` — связи, которых в первом нет, и
+// сломать их можно не тронув разметку полей.
+//
+// Обе темы: контраст текста — правило axe, и дефект `.payment-error` жил ровно в тёмной.
+test.describe('3a.3c axe над окном оплаты', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  const analyze = (page: Page) =>
+    new AxeBuilder({ page })
+      // Только само окно: страница под ним при открытом диалоге помечена `inert`, её
+      // нарушения — предмет `a11y.spec.ts`, и смешивать два предмета в одном гейте значит
+      // получить красный цвет, по которому не понять, что именно сломано.
+      .include('[role="dialog"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const state of ['открытое окно', 'после неудачной отправки'] as const) {
+      test(`${state}, тема ${theme}: нет critical/serious нарушений`, async ({ page }) => {
+        await page.addInitScript((t) => {
+          try {
+            localStorage.setItem('ikpk.theme', t);
+          } catch {
+            /* приватный режим */
+          }
+        }, theme);
+        await openForm(page);
+        if (theme === 'dark') {
+          await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+        }
+        if (state === 'после неудачной отправки') {
+          await page.locator(`${FORM} [type="submit"]`).click();
+          await expect(page.locator(`${FORM} [aria-invalid="true"]`).first()).toBeVisible();
+        }
+
+        // Предмет на месте: без этой проверки axe разобрал бы пустой диалог и выдал ноль
+        // нарушений — «нечего проверять» прочиталось бы как «нарушений нет». Ровно так
+        // гейт axe в проекте уже проверял страницу 404 вместо шаблонов.
+        const fields = await page.locator(`${FORM} input:not([tabindex="-1"])`).count();
+        expect(fields, 'в окне нет полей формы — axe проверил бы пустой диалог').toBe(9);
+
+        const results = await analyze(page);
+        // Прибор действительно работал: если ни одно правило не применилось, ноль
+        // нарушений ничего не значит.
+        expect(
+          results.passes.length + results.violations.length + results.incomplete.length,
+          'axe не применил ни одного правила — измерять было нечем',
+        ).toBeGreaterThan(0);
+
+        const blocking = results.violations.filter(
+          (v) => v.impact === 'critical' || v.impact === 'serious',
+        );
+        expect(
+          blocking,
+          blocking
+            .map((v) => `[${v.impact}] ${v.id}: ${v.help} (${v.nodes.length} узлов)`)
+            .join('\n'),
+        ).toEqual([]);
+      });
+    }
+  }
+});
 
 test.describe('3a.4 согласие на ПДн', () => {
   test('при открытии не отмечено; без отметки не уходит; цель названа; ссылка на нашем домене отвечает', async ({ page }) => {
