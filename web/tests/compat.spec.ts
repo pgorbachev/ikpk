@@ -38,20 +38,48 @@ test.describe('Compatibility smoke', () => {
     expect(await details.count()).toBeGreaterThan(0);
   });
 
+  // Профили, где мобильного меню нет ПО ЗАМЫСЛУ, — только полноразмерные десктопные.
+  // Список поимённый и должен совпадать с проектами из playwright.config.ts: любой
+  // профиль уже́ мобильного размера обязан показывать бургер.
+  const DESKTOP_PROFILES = new Set([
+    'compat-chrome-desktop',
+    'compat-firefox-desktop',
+    'compat-safari-desktop',
+  ]);
+
   // Дефект пришёл с iPhone 14 Pro: меню открывается, щелчок рядом его не
   // закрывает. Причина не в устройстве — drawer это нативный <details>, а он по
   // внешнему щелчку не закрывается ни в одном браузере. Проверка здесь нужна
   // именно потому, что здесь настоящие профили iOS и Android, а не эмуляция
   // размера окна.
-  test('мобильное меню закрывается щелчком вне себя', async ({ page }) => {
+  test('мобильное меню закрывается щелчком вне себя', async ({ page }, testInfo) => {
     const response = await page.goto('/');
     expect(response?.status(), 'страница не отдалась').toBe(200);
 
     const drawer = page.locator('details.topnav-mobile');
     const summary = drawer.locator('> summary');
-    if (!(await summary.isVisible().catch(() => false))) {
-      test.skip(true, 'в этом профиле мобильного меню нет по замыслу');
+    const burgerVisible = await summary.isVisible().catch(() => false);
+
+    // Условие пропуска раньше читало САМ ПРЕДМЕТ: «бургер не виден — значит в этом
+    // профиле меню нет по замыслу». Такой признак исчезает вместе с предметом, и
+    // регресс, спрятавший бургер, тихо превращался в пропуск вместо падения —
+    // ровно это и случилось на `compat-ios-ipad` (810×1080), когда правила
+    // мобильного меню уехали в медиазапрос ≤430 (ревью PR #153). Поэтому профили
+    // без мобильного меню перечислены ПОИМЁННО, а во всех остальных отсутствие
+    // бургера — отказ.
+    if (DESKTOP_PROFILES.has(testInfo.project.name)) {
+      expect(
+        burgerVisible,
+        `${testInfo.project.name}: десктопный профиль, мобильного меню быть не должно`,
+      ).toBe(false);
+      test.skip(true, `${testInfo.project.name}: мобильного меню нет по замыслу`);
     }
+
+    expect(
+      burgerVisible,
+      `${testInfo.project.name} (${page.viewportSize()?.width}px): бургер не виден, ` +
+        'а горизонтальное меню в этой ширине скрыто — навигации в шапке нет вовсе',
+    ).toBe(true);
 
     await summary.click();
     await expect(drawer, 'меню не открылось').toHaveAttribute('open', '');
