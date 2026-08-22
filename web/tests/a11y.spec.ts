@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { contrastRatio, parseRgb } from './helpers/contrast';
 
 // ─── Accessibility (axe-core) ────────────────────────────
 // PR-гейт плана 004 (Этап 0): 0 critical/serious нарушений на 4 шаблонах
@@ -297,19 +298,10 @@ test.describe('Якоря под шапкой', () => {
 test.describe('Нетекстовый контраст контролов', () => {
   const MIN_RATIO = 3;
 
-  const luminance = ([r, g, b]: number[]): number => {
-    const f = (c: number): number => {
-      const v = c / 255;
-      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-  };
-  const ratio = (a: number[], b: number[]): number => {
-    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-  };
-  const parse = (color: string): number[] =>
-    (color.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).slice(0, 3).map(Number);
+  // Формулы переехали в `helpers/contrast.ts`: над контрастом теперь два гейта в разных
+  // наборах, и вторая копия формулы разошлась бы с этой молча.
+  const ratio = contrastRatio;
+  const parse = parseRgb;
 
   for (const theme of ['light', 'dark'] as const) {
     test(`тумблер темы отделяется от шапки (${theme})`, async ({ page }) => {
