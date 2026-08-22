@@ -1322,4 +1322,111 @@ describe('гейт ссылок: исходы по классам', () => {
     });
     expect(w.status, `${w.stdout}${w.stderr}`).toBe(2);
   });
+
+  it('ревизия: признак по предмету слева, без порогов', () => {
+    // Порог по доле hex-символов ошибался в обе стороны. Теперь: слева файл или известный ref ⇒
+    // справа обязана быть ревизия; иначе span не наш. Обе стороны контракта в одном тесте.
+    for (const span of [
+      'web/src/thing.ts@not-a-sha',
+      'web/src/thing.ts@abc:1',
+      'web/src/thing.ts@45297bg',
+      'web/src/thing.ts@dead/beef',
+    ]) {
+      const r = run(sandbox, `## P\n\nСсылка: \`${span}\`.\n`);
+      expect(r.code, `${span}: ${r.out}`).toBe(1);
+      expect(r.out, span).toMatch(/не полным 40-символьным|сокращённо/);
+    }
+    const legit = run(
+      sandbox,
+      '## P\n\nЗаконные: `actions/cache@beta`, `feature@feedback`, `actions/checkout@v4`, ' +
+        '`docker/build-push-action@main`, `first.last@example.com`, `node@20`, `astro@7.2.0`, ' +
+        '`main@…`. Ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(legit.code, legit.out).toBe(0);
+  });
+
+  it('известное имя ветки слева делает хвост ревизией', () => {
+    // Форма «где найден факт»: `<ref>@<sha>`. Ветка `side` в песочнице существует, поэтому
+    // испорченный хвост при ней — расхождение, а при несуществующем имени — нет.
+    makeBranchOnlyRevision(sandbox, 'onSideRef');
+    const known = run(sandbox, '## P\n\nФакт найден на `side@d7e9b0`.\n');
+    expect(known.code, known.out).toBe(1);
+    expect(known.out).toMatch(/не полным 40-символьным/);
+    const unknown = run(
+      sandbox,
+      '## P\n\nПакет `nosuchref@d7e9b0`, ссылка `web/src/thing.ts:1`, `marker`.\n',
+    );
+    expect(unknown.code, unknown.out).toBe(0);
+  });
+
+  it('--check-built ищет предмет строго внутри корня сборки', () => {
+    // Чужой файл не должен закрывать исчезнувший: `dist/index.html` относится к `web/dist`, а
+    // прежний список кандидатов принимал и корневой `dist/index.html`.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/index.html\n',
+    );
+    run(sandbox, '## P\n\nСтраница: `dist/index.html`.\n');
+    mkdirSync(join(sandbox, 'web', 'dist'), { recursive: true });
+    mkdirSync(join(sandbox, 'dist'), { recursive: true });
+    writeFileSync(join(sandbox, 'dist', 'index.html'), '<html>чужой</html>\n');
+    const gate = join(sandbox, 'bin', 'check-spec-refs');
+    const r = spawnSync(gate, ['--check-built'], { cwd: sandbox, encoding: 'utf8' });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    expect(r.status, out).toBe(1);
+    expect(out).toMatch(/в собранном дереве пути нет/);
+    rmSync(join(sandbox, 'dist'), { recursive: true, force: true });
+  });
+
+  it('регистр корня сборки называется расхождением', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: WEB/dist/index.html\n',
+    );
+    const r = run(sandbox, '## P\n\nСтраница: `WEB/dist/index.html`.\n');
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toMatch(/регистр каталога сборки не совпадает/);
+  });
+
+  it('род записи в сборке определяется точкой, а не длиной расширения', () => {
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-debt'),
+      '# пусто\nopenspec/specs/demo/spec.md :: dist/name.abcdefghijklmn\n',
+    );
+    run(sandbox, '## P\n\nФайл: `dist/name.abcdefghijklmn`.\n');
+    mkdirSync(join(sandbox, 'web', 'dist', 'name.abcdefghijklmn'), { recursive: true });
+    const r = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--check-built'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+    });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    expect(r.status, out).toBe(1);
+    expect(out).toMatch(/это каталог, а ссылка требует файл/);
+  });
+
+  it('--write-absent приводит реестр в приемлемое состояние за ОДИН прогон', () => {
+    // Прежде обратная сверка шла по карте, прочитанной до записи, и первый прогон после снятия
+    // устаревшей записи всё равно выходил кодом 1.
+    writeFileSync(
+      join(sandbox, 'openspec', '.spec-ref-absent'),
+      '# пусто\nopenspec/specs/demo/spec.md :: web/nope.ts :: will-create\n',
+    );
+    const before = run(sandbox, '## P\n\nСсылка: `web/src/thing.ts:1`, `marker`.\n');
+    expect(before.code, before.out).toBe(1);
+    const w = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--write-absent'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+    });
+    expect(w.status, `${w.stdout}${w.stderr}`).toBe(0);
+    const after = spawnSync(join(sandbox, 'bin', 'check-spec-refs'), { cwd: sandbox, encoding: 'utf8' });
+    expect(after.status, `${after.stdout}${after.stderr}`).toBe(0);
+  });
+
+  it('заголовок реестра называет шесть классов', () => {
+    spawnSync(join(sandbox, 'bin', 'check-spec-refs'), ['--write-debt'], { cwd: sandbox });
+    const header = readFileSync(join(sandbox, 'openspec', '.spec-ref-debt'), 'utf8');
+    expect(header).toMatch(/Шесть классов/);
+    const listed = (header.match(/^#\s+\d\./gm) ?? []).length;
+    expect(listed, header.slice(0, 600)).toBe(6);
+  });
 });
