@@ -185,5 +185,11 @@ describe('form_links_match_mode — отличает «нарушений нет
     const d = dist({ 'index.html': ['/demo-zayavka'] });
     const r = await gate(d, 'preview', '');
     expect(r.code, 'неизвестный режим прошёл гейт').toBe(1);
+    // Проверяется СООБЩЕНИЕ, а не только код выхода. Первая редакция ветки писала
+    // `${mode@Q}` — синтаксис bash 4.4+, — и под системным bash 3.2 (macOS) падала
+    // с `bad substitution`. Код выхода совпадал, поэтому проверка была зелёной, ни
+    // разу не выполнив ветку по назначению.
+    expect(r.stderr).toContain("неизвестный режим 'preview'");
+    expect(r.stderr).not.toContain('bad substitution');
   });
 });
