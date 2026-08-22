@@ -422,7 +422,7 @@ const NAV_WIDTHS = [375, 430, 431, 600, 768, 900, 901, 1100, 1280];
 
 test.describe('Навигация видима на любой ширине', () => {
   for (const width of NAV_WIDTHS) {
-    test(`${width}px: видно меню или бургер`, async ({ page }) => {
+    test(`${width}px: навигация видна и открывается`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       const response = await page.goto('/raspisanie-i-tseny');
       expect(response?.status(), 'страница не отдалась — измерять нечего').toBe(200);
@@ -433,6 +433,24 @@ test.describe('Навигация видима на любой ширине', ()
         menuVisible || burgerVisible,
         `на ${width}px не видно ни горизонтального меню, ни бургера — перейти некуда`,
       ).toBe(true);
+
+      // Видимого контейнера мало. Первая редакция гейта проверяла только его, и
+      // правило `.topnav-drawer { display: none }` оставило бы зелёными всех трёх
+      // сторожей сразу: бургер виден, атрибут `open` переключается, ссылки лежат
+      // в DOM. Предмет заявлен как «есть чем перейти» — значит нужна видимая
+      // ссылка, а не видимая обёртка.
+      if (menuVisible) {
+        await expect(
+          page.locator('.topnav-menu a').first(),
+          `на ${width}px меню видно, а пункты в нём — нет`,
+        ).toBeVisible();
+      } else {
+        await page.locator('details.topnav-mobile > summary').click();
+        await expect(
+          page.locator('.topnav-drawer .drawer-link').first(),
+          `на ${width}px бургер виден, но панель меню не открывает ни одной ссылки`,
+        ).toBeVisible();
+      }
     });
   }
 });
