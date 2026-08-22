@@ -248,6 +248,62 @@ test.describe('3a.3a-2 проводка пересчёта полосы футе
   });
 });
 
+// ─── 3a.3a-3 состояние «места нет» снимается, когда место появилось ───────────
+//
+// Находка независимого ревью (P2). `validate()` начинается с `clearErrors()`, от которого
+// футер УМЕНЬШАЕТСЯ, но пересчёт полосы стоял только в ветви `firstInvalid` — то есть
+// после «сначала ошиблись, потом исправили» признак `payment-panel-cramped` оставался
+// висеть, и футер не прилипал до поворота экрана или переоткрытия окна.
+//
+// Почему этого не поймали 68 проверок набора: все они либо не доходят до валидной
+// отправки на низком окне, либо смотрят на видимость поля, а здесь предмет — ОСТАВШЕЕСЯ
+// состояние, которое само по себе ничего не портит немедленно. Порча наступает позже,
+// когда посетитель вернётся к форме.
+//
+// Проверяются оба конца перехода: что признак сначала действительно появился (иначе тест
+// зелен вакуумно — снимать было бы нечего) и что после валидной отправки он снят.
+test.describe('3a.3a-3 признак «места нет» снимается после исправления полей', () => {
+  test.use({ viewport: { width: 390, height: 320 } });
+
+  test('признак снят после валидной отправки с терминальным ответом', async ({ page }) => {
+    await page.route(/\/payments$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'already_paid' }),
+      });
+    });
+    await openForm(page);
+
+    const cramped = () =>
+      page.evaluate(() =>
+        document.querySelector('.payment-dialog-panel')?.classList.contains('payment-panel-cramped') ?? null,
+      );
+
+    await page.locator(`${FORM} [type="submit"]`).click();
+    expect(
+      await cramped(),
+      'после отправки пустой формы признак не появился — снимать нечего, проверка вакуумна',
+    ).toBe(true);
+
+    await page.locator(`${FORM} [name="firstName"]`).fill('Иван');
+    await page.locator(`${FORM} [name="lastName"]`).fill('Петров');
+    await page.locator(`${FORM} [name="seminar"]`).fill('Модуль 1');
+    await page.locator(`${FORM} [name="amount"]`).fill('1');
+    await page.locator(`${FORM} [name="email"]`).fill('ivan@example.com');
+    await page.locator(`${FORM} [name="phone"]`).fill('79111234567');
+    await page.locator(`${FORM} [name="consent"]`).check();
+    await page.locator(`${FORM} [type="submit"]`).click();
+    await expect(page.locator('[data-payment-state="already_paid"]')).toBeVisible();
+
+    expect(
+      await cramped(),
+      'ошибки убраны и футер стал ниже, но признак «места нет» остался — футер не прилипает '
+        + 'до поворота экрана или переоткрытия окна',
+    ).toBe(false);
+  });
+});
+
 // ─── 3a.3b текст ошибки читаем в ОБЕИХ темах ──────────────────────────────────
 //
 // Дефект найден на ревью PR #151 и существовал до него: `.payment-error` был задан
