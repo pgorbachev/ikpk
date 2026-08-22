@@ -381,21 +381,52 @@ dist_has_no_secret_values() {
 # поведенческого теста вовсе — только греп исходника в repo-hygiene.test.ts, то есть
 # утверждение о тексте, а не о поведении.
 #
+# ПРИЗНАК — НАЗНАЧЕНИЕ ССЫЛКИ, А НЕ ФОРМА ЕЁ ПУТИ.
+#
+# Прежняя редакция отбирала кандидатов по слову `crm_form` в пути (либо по пути
+# заглушки) и затем требовала от отобранного пути опять-таки `crm_form_`. Отбор и
+# признак совпадали, поэтому гейт подтверждал собственный выбор и покраснеть по
+# построению не мог: ссылка на портал заказчика с любым другим путём в набор не
+# попадала вовсе. Это ровно тот случай, о котором AGENTS.md говорит «не перечислять
+# частные случаи того, что проверяешь» — список форм пути отстаёт от предмета молча.
+#
+# Что перечисление уже пропускало в прод-сборке на 2026-08-22: из 35 различных адресов
+# Bitrix24 четыре без `crm_form` — `/news/` (267 страниц, подписка в футере), `/umac1/`,
+# `/fpnz/`, `/doshi/` (по 2 страницы, ссылки записи из данных расписания). Сегодня их
+# переписывает `registrationHref`, то есть утечки нет; гейт не увидел бы её и тогда,
+# когда она появится, — а он стоит именно ради этого случая.
+#
+# Отсюда: кандидатом считается ссылка, ведущая на портал Bitrix24 (по ХОСТУ, а не по
+# подстроке — иначе адрес портала в query-параметре чужого домена давал бы ложный
+# отказ), на заглушку, либо содержащая `crm_form` (кастомный демо-портал может жить и
+# не на `bitrix24site.ru`). Требование к пути снято во всех режимах: `/news/` — такой
+# же законный боевой адрес формы, как и `/crm_form_*`.
+#
 # Аргументы: <каталог сборки> <режим stand|prod> [<DEMO_FORMS>].
 # Ноль найденных ссылок — «проверить не удалось», а не «всё верно».
 form_links_match_mode() {
   local dist="${1:-}" mode="${2:-}" demo="${3:-}"
-  local form_links grep_rc form_count wrong expect_re expect_human
+  local all_links form_links grep_rc form_count wrong expect_re expect_human
+
+  # Кандидат: хост на портале Bitrix24 (в том числе protocol-relative `//host/…`),
+  # путь заглушки, либо `crm_form` в адресе.
+  local candidate_re='^(https?:)?//[^/?#]*\.bitrix24site\.ru([/?#]|$)|^(https?://[^/?#]+)?/demo-zayavka([/?#]|$)|crm_form'
 
   case "$mode" in
-    prod) expect_re='^https://b24-[a-z0-9]+\.bitrix24site\.ru/crm_form_' ; expect_human='https://b24-*.bitrix24site.ru/crm_form_*' ;;
+    prod)
+      # Портал заказчика; конкретный поддомен не перечисляется — их несколько
+      # (b24-cbqwqo и b24-kbo5ls в данных), и привязка к одному отвергала бы
+      # законную боевую сборку. Заглушка сюда не попадает, чужой домен тоже.
+      expect_re='^https://b24-[a-z0-9]+\.bitrix24site\.ru([/?#]|$)'
+      expect_human='https://b24-*.bitrix24site.ru/*'
+      ;;
     stand)
       if [[ "$demo" == "stub" ]]; then
-        expect_re='^(/demo-zayavka|https://[^/]+/demo-zayavka)$'
+        expect_re='^(https?://[^/?#]+)?/demo-zayavka([/?#]|$)'
         expect_human='/demo-zayavka'
       else
-        expect_re="^https://${demo}/crm_form_"
-        expect_human="https://${demo}/crm_form_*"
+        expect_re="^https://${demo}([/?#]|$)"
+        expect_human="https://${demo}/*"
       fi
       ;;
     *)
@@ -405,10 +436,13 @@ form_links_match_mode() {
   esac
 
   set +e
-  form_links=$(grep -roh 'href="[^"]*\(crm_form\|demo-zayavka\)[^"]*"' "$dist" --include='*.html' 2>/dev/null \
-    | sed 's/^href="//; s/"$//' | sort -u)
+  all_links=$(grep -rohE 'href="[^"]*"' "$dist" --include='*.html' 2>/dev/null)
   grep_rc=$?
   set -e
+  form_links=$(printf '%s\n' "$all_links" \
+    | sed 's/^href="//; s/"$//' \
+    | grep -E "$candidate_re" \
+    | sort -u || true)
   if (( grep_rc > 1 )); then
     echo "не удалось прочитать $dist (grep код $grep_rc) — проверка форм не выполнена" >&2
     return 1
