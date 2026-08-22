@@ -109,11 +109,35 @@ function boot(formEl: HTMLFormElement) {
   });
   closeBtn?.addEventListener('click', () => closeDialog());
   // Поворот телефона, поднятая экранная клавиатура и изменение масштаба меняют и высоту
-  // панели, и высоту футера — решение «места нет» надо пересчитывать, а не брать
-  // однажды при открытии.
-  window.addEventListener('resize', () => {
-    if (!dialog.hidden) syncFooterBand();
-  });
+  // панели, и высоту футера — решение «места нет» надо пересчитывать, а не брать однажды
+  // при открытии.
+  //
+  // Подписок ДВЕ, и вторая не для симметрии. iOS Safari при поднятой экранной клавиатуре
+  // размер окна НЕ меняет и события `resize` на `window` не даёт вовсе — меняется только
+  // visual viewport. А экранная клавиатура названа прямо в дефекте, из-за которого весь
+  // этот пересчёт и появился, то есть без второй подписки починка не работала бы ровно в
+  // одном из перечисленных в дефекте случаев. Android Chrome, наоборот, меняет само окно.
+  //
+  // Оговорка про доказательство: сама платформа здесь не проверяется — iOS Safari в наборах
+  // нет, есть только Chromium. Автоматический гейт стережёт ПРОВОДКУ (событие visual
+  // viewport пересчитывает полосу), а не поведение iOS; поведение проверяется на стенде
+  // руками.
+  //
+  // Пересчёт склеен через `requestAnimationFrame`: обработчик читает `clientHeight` и
+  // `offsetHeight` каждого поля, то есть форсирует синхронную раскладку. На повороте
+  // телефона это одно событие, а на протяжке окна мышью — поток событий, и без склейки
+  // раскладка считалась бы на каждом.
+  let bandPending = false;
+  const recomputeFooterBand = () => {
+    if (dialog.hidden || bandPending) return;
+    bandPending = true;
+    requestAnimationFrame(() => {
+      bandPending = false;
+      if (!dialog.hidden) syncFooterBand();
+    });
+  };
+  window.addEventListener('resize', recomputeFooterBand);
+  window.visualViewport?.addEventListener('resize', recomputeFooterBand);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -482,6 +506,13 @@ function boot(formEl: HTMLFormElement) {
       firstInvalid ??= consent;
     }
     if (firstInvalid) {
+      // Полосу футера считаем ДО перевода фокуса. `focus()` сам прокручивает панель, и
+      // делает это по текущей `scroll-padding-bottom`: ошибки только что показаны, футер
+      // от них вырос, а значение осталось прежним — то есть браузер уводит поле не туда, и
+      // `revealField` потом лишь исправляет последствия. Со счётом наперёд результат не
+      // зависит от того, чья прокрутка случилась первой. Повторный вызов внутри
+      // `revealField` безвреден: функция идемпотентна.
+      syncFooterBand();
       firstInvalid.focus();
       revealField(firstInvalid);
     }

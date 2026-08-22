@@ -198,6 +198,56 @@ test.describe('3a.3 доступность полей и ошибок', () => {
   });
 });
 
+// ─── 3a.3a-2 пересчёт полосы футера подписан и на visual viewport ─────────────
+//
+// ЭТО ГЕЙТ НА ПРОВОДКУ, А НЕ НА ПОВЕДЕНИЕ ПЛАТФОРМЫ, и путать одно с другим нельзя.
+// Предмет: экранная клавиатура названа прямо в дефекте про липкий футер, а iOS Safari при
+// её поднятии размер окна не меняет и `resize` на `window` не даёт вовсе — меняется только
+// visual viewport. Проверить сам iOS здесь нечем: в наборах только Chromium. Поэтому
+// проверяется то, что проверить можно — что событие visual viewport ведёт к пересчёту, —
+// а поведение iOS остаётся на стендовой проверке руками. Гейт, названный «работает на
+// iOS», был бы ложным.
+//
+// Прибор: значение полосы намеренно портится, затем шлётся событие. Если подписки нет,
+// испорченное значение остаётся — то есть красное здесь означает именно потерянную
+// подписку, а не что-нибудь ещё.
+test.describe('3a.3a-2 проводка пересчёта полосы футера', () => {
+  test.use({ viewport: { width: 390, height: 700 } });
+
+  test('событие visual viewport пересчитывает полосу футера', async ({ page }) => {
+    await openForm(page);
+    const probe = await page.evaluate(async () => {
+      const panel = document.querySelector<HTMLElement>('.payment-dialog-panel');
+      if (!panel) return { ok: false as const, reason: 'нет панели диалога' };
+      if (!window.visualViewport) {
+        return { ok: false as const, reason: 'в этом браузере нет visualViewport — проводку проверять нечем' };
+      }
+      const before = panel.style.getPropertyValue('--payment-footer-height');
+      panel.style.setProperty('--payment-footer-height', '-1px');
+      window.visualViewport.dispatchEvent(new Event('resize'));
+      // Два кадра: пересчёт склеен через requestAnimationFrame.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        ok: true as const,
+        before,
+        after: panel.style.getPropertyValue('--payment-footer-height'),
+      };
+    });
+
+    if (!probe.ok) {
+      expect(probe.ok, `прибор не смог измерить: ${probe.reason}`).toBe(true);
+      return;
+    }
+    // Значение до порчи осмысленно: иначе «после совпало с до» означало бы, что обе
+    // величины пусты, и подписки могло не быть вовсе.
+    expect(probe.before, 'полоса футера не выставлена при открытии — портить нечего').toMatch(/^\d+(\.\d+)?px$/);
+    expect(
+      probe.after,
+      `событие visual viewport не пересчитало полосу футера: осталось ${probe.after} вместо ${probe.before}`,
+    ).toBe(probe.before);
+  });
+});
+
 // ─── 3a.3b текст ошибки читаем в ОБЕИХ темах ──────────────────────────────────
 //
 // Дефект найден на ревью PR #151 и существовал до него: `.payment-error` был задан
