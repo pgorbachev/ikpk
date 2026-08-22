@@ -4,6 +4,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 import ContactShell from '../components/contacts/ContactShell.astro';
 import PageHeader from '../components/ui/PageHeader.astro';
 import { getPage } from '../lib/data';
+import { PHONE, MOBILE_PHONE, MANAGER_HOURS_NOTE } from '../lib/navigation';
 
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
@@ -47,10 +48,13 @@ const mapSrc = `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent('Са
         addressLabel="Санкт-Петербург"
         hoursWeekdays="10:00 - 18:00"
         hoursWeekend="выходной"
-        institutePhone="+7 (812) 646-54-50"
+        institutePhone={PHONE}
+        instituteMobilePhone={MOBILE_PHONE}
+        hoursNote={MANAGER_HOURS_NOTE}
         email="info@ikpk.su"
         storeUrl="https://kinezio.shop"
         clinicPhone="+7 (812) 646-54-60"
+        clinicMobilePhone={MOBILE_PHONE}
         clinicUrl="https://mudriydoctor.ru"
         requisites={[
           'ООО «Институт клинической прикладной кинезиологии»',

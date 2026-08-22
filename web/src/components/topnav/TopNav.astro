@@ -19,7 +19,7 @@
 //     поэтому ссылка вне меню срабатывает с первого касания;
 //   * Escape возвращает фокус на кнопку меню, иначе он остаётся на исчезнувшем
 //     содержимом.
-import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
+import { primaryNav, CTA_HREF, PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../../lib/navigation';
 import HeaderTools from './HeaderTools.astro';
 
 // rel берём из navigation.ts как есть (уже 'noopener noreferrer' — согласовано
@@ -63,9 +63,12 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     </nav>
 
     <div class="topnav-actions">
-      <a href={PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${PHONE}`}>{PHONE}</a>
+      <div class="topnav-phones">
+        <a href={PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${PHONE}`}>{PHONE}</a>
+        <a href={MOBILE_PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${MOBILE_PHONE}`}>{MOBILE_PHONE}</a>
+      </div>
       <div class="topnav-tools"><HeaderTools /></div>
-      <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Записаться</a>
+      <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Выбрать программу</a>
 
       <!-- Мобильное меню: нативный details; внешний щелчок и Escape закрывает скрипт ниже -->
       <details class="topnav-mobile">
@@ -95,8 +98,9 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
               <span class="drawer-theme-track" aria-hidden="true"><i class="tt-icon" data-state="sun"></i><i class="tt-icon" data-state="moon"></i><span class="drawer-theme-thumb"></span></span>
             </button>
           </div>
-          <a href={CTA_HREF} class="btn btn-primary drawer-cta" data-cta="drawer">Записаться на обучение</a>
+          <a href={CTA_HREF} class="btn btn-primary drawer-cta" data-cta="drawer">Выбрать программу</a>
           <a href={PHONE_HREF} class="drawer-phone">{PHONE}</a>
+          <a href={MOBILE_PHONE_HREF} class="drawer-phone">{MOBILE_PHONE}</a>
         </div>
       </details>
     </div>
@@ -209,19 +213,20 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   .dropdown a:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
 
   .topnav-actions { display: flex; align-items: center; gap: 0.9rem; flex-shrink: 0; }
+  .topnav-phones { display: flex; flex-direction: column; line-height: 1.25; }
   .topnav-phone { font-size: var(--font-s); font-weight: 600; color: var(--color-dark-700); text-decoration: none; white-space: nowrap; }
   .topnav-cta { padding: 0.5rem 1.1rem; }
 
   .topnav-mobile { display: none; }
 
-  /* На средних десктопах телефон уходит (он есть в футере и в CTA) — чтобы
-     кнопка «Записаться» всегда влезала */
+  /* На средних десктопах телефоны уходят (они есть в футере и в CTA) — чтобы
+     кнопка действия всегда влезала */
   @media (max-width: 1180px) {
-    .topnav-phone { display: none; }
+    .topnav-phones { display: none; }
   }
 
   @media (max-width: 900px) {
-    .topnav-menu, .topnav-phone { display: none; }
+    .topnav-menu, .topnav-phones { display: none; }
     /* дескриптор под лого не помещается рядом с CTA+бургером на узком
        мобильном — прячем, чтобы шапка не распирала вьюпорт */
     .topnav-logo-desc { display: none; }

@@ -91,9 +91,10 @@ describe('D12 — сайт показывает оба номера телефо
   it('шапка каждой страницы сопровождает городской номер мобильным', () => {
     const offenders: string[] = [];
     for (const { path, html } of pages()) {
-      const headers = findAll(html, (el) => el.tagName === 'header');
+      // Именно шапка сайта: <header> встречается и внутри контента страниц.
+      const headers = byClass(html, 'topnav');
       if (headers.length !== 1) {
-        offenders.push(`${path}: элементов <header> ${headers.length}, ожидался 1`);
+        offenders.push(`${path}: шапок .topnav ${headers.length}, ожидалась 1`);
         continue;
       }
       const hrefs = telHrefs(headers[0]);

@@ -1,6 +1,6 @@
 ---
 // Финальная CTA-полоса.
-import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
+import { CTA_HREF, PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../../../lib/navigation';
 ---
 <section class="cta-band">
   <div class="container cta-band-inner">
@@ -10,7 +10,10 @@ import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
     </div>
     <div class="cta-band-actions">
       <a href={CTA_HREF} class="btn btn-light" data-cta="band">Выбрать программу</a>
-      <a href={PHONE_HREF} class="cta-band-phone">{PHONE}</a>
+      <div class="cta-band-phones">
+        <a href={PHONE_HREF} class="cta-band-phone">{PHONE}</a>
+        <a href={MOBILE_PHONE_HREF} class="cta-band-phone">{MOBILE_PHONE}</a>
+      </div>
     </div>
   </div>
 </section>
@@ -32,5 +35,6 @@ import { CTA_HREF, PHONE, PHONE_HREF } from '../../../lib/navigation';
      держим светлыми/тёмно-зелёными вне зависимости от темы. */
   .btn-light:hover { background: #eef2ee; }
   :root[data-theme='dark'] .btn-light { color: var(--color-accent-100); }
+  .cta-band-phones { display: flex; flex-direction: column; gap: 0.1rem; }
   .cta-band-phone { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
 </style>
