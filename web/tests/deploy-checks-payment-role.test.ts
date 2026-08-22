@@ -56,6 +56,9 @@ const LIB = join(repoRoot, 'scripts', 'lib', 'deploy-checks.sh');
 
 async function runFn(script: string): Promise<number> {
   const child = execFileAsync('bash', ['-c', `set -uo pipefail; source '${LIB}'; ${script}`]);
+  // См. пояснение в deploy-checks.test.ts: запись в stdin уже завершившегося процесса
+  // даёт EPIPE, а без подписки на ошибку это роняет ШАГ CI при зелёных тестах.
+  child.child.stdin?.on('error', () => {});
   child.child.stdin?.end('');
   try {
     await child;
