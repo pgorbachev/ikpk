@@ -1201,10 +1201,10 @@ index 0000000..837dded
 +</style>
 diff --git a/web/src/components/mockup/ReviewsWidget.astro b/web/src/components/mockup/ReviewsWidget.astro
 new file mode 100644
-index 0000000..a76b6b8
+index 0000000..a296efa
 --- /dev/null
 +++ b/web/src/components/mockup/ReviewsWidget.astro
-@@ -0,0 +1,304 @@
+@@ -0,0 +1,306 @@
 +---
 +/**
 + * ЗАМЕНА официального виджета отзывов Яндекс.Карт, а не сам виджет.
@@ -1276,8 +1276,8 @@ index 0000000..a76b6b8
 +      <span class="yw-mark">Виджет отзывов</span>
 +    </div>
 +    <p class="ymw-note">
-+      Заглушка вместо виджета: воспроизведена форма широкой ленты (как на kkpk.pro),
-+      тексты и имена подтягивает Яндекс
++      Заглушка: широкая лента из четырёх отзывов в ряд. Такой раскладки официальный виджет
++      Яндекса не даёт — форму подсмотрели у конкурента, и её выводит сторонний сервис
 +    </p>
 +  </div>
 +) : (
