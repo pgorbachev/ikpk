@@ -8947,13 +8947,13 @@
     "jsonPath": "collapsible_panels.json$[\"/svedeniya-ob-obrazovatelnoy-organizatsii\"][\"Основные сведения\"]",
     "selectorId": "collapsible_panels.json",
     "entityId": "collapsible_panels.json",
-    "byteLength": 2723,
-    "sha256": "2a07ae01a084f86cef848101256c8b6804b02f2ac34142bcb51fc30588b7fa90",
-    "textHash": "978e5360206ef3f4fa828ef37210efd847e142c55b12b701aa520ec6fce9a54e",
+    "byteLength": 2741,
+    "sha256": "54527ad1ac278ac8496c6f74944bba240cac037b75347f6328545cb4755a7965",
+    "textHash": "ae5c8271041495808992c148734005cb40c46d2c1766f6d1aef37ae9e7ef90db",
     "headings": [],
     "lists": [],
     "tables": [
-      "978e5360206ef3f4"
+      "ae5c827104149580"
     ],
     "times": [],
     "links": [

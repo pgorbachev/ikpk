@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readPage } from './helpers/dist-pages';
+import { attr, findAll, walk } from './helpers/dom';
 import { PAYMENT_ENTRY_ATTR } from './helpers/payment-contract';
 
 /**
@@ -33,9 +34,15 @@ describe('3.7 точка входа на /oplata не переписана в р
 describe('3.7b блок контактов сохраняется', () => {
   it('собранная /oplata содержит #oplata-svyaz', () => {
     const html = readPage('/oplata');
-    expect(html).toMatch(/id="oplata-svyaz"/);
-    const block = html.match(/id="oplata-svyaz"[\s\S]{0,800}/)?.[0] ?? '';
-    expect(block).toMatch(/tel:/);
-    expect(block).toMatch(/mailto:/);
+    // Границей блока служит сам элемент, а не окно в 800 символов после якоря:
+    // второй номер телефона (D12) отодвинул mailto за окно при целом блоке —
+    // мера расстояния предметом проверки не является.
+    const blocks = findAll(html, (el) => attr(el, 'id') === 'oplata-svyaz');
+    expect(blocks.length, 'на /oplata нет блока #oplata-svyaz').toBe(1);
+    const hrefs = [...walk(blocks[0])]
+      .filter((el) => el.tagName === 'a')
+      .map((el) => attr(el, 'href') ?? '');
+    expect(hrefs.some((h) => h.startsWith('tel:')), hrefs.join(' ')).toBe(true);
+    expect(hrefs.some((h) => h.startsWith('mailto:')), hrefs.join(' ')).toBe(true);
   });
 });

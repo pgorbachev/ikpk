@@ -290,12 +290,23 @@ test.describe('Homepage content parity', () => {
     expect(links.some(l => l.includes('institut-barralya'))).toBe(true);
   });
 
-  test('has news section', async ({ page }) => {
+  // Секция переименована в «Предложения» решением заказчика (D21 списка после демо
+  // 2026-08-19), и паритет с живым сайтом этот пункт больше не задаёт.
+  //
+  // Прежняя редакция искала «Новости» ИЛИ подстроку «новост» по всему тексту
+  // страницы — и после переименования оставалась зелёной на ЧУЖОМ свидетельстве:
+  // подстроку даёт заголовок формы подписки «Подпишитесь на наши новости», а не
+  // секция. Проверка перестала измерять свой предмет, не покраснев ни разу.
+  test('has offers section', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
-    const text = await page.locator('body').textContent() ?? '';
-    // Should have news items or news heading
-    const hasNews = text.includes('Новости') || text.includes('новост');
-    expect(hasNews, 'Homepage should have a news section').toBe(true);
+    const heading = page.getByRole('heading', { name: /^Предложения$/ });
+    await expect(heading, 'на главной нет секции «Предложения»').toBeVisible();
+
+    const section = heading.locator('xpath=ancestor::section[1]');
+    expect(
+      await section.locator('.news-card').count(),
+      'секция «Предложения» пуста — заголовок есть, карточек нет',
+    ).toBeGreaterThan(0);
   });
 
   test('has newsletter subscription form', async ({ page }) => {

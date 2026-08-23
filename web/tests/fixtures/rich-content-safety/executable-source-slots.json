@@ -40,67 +40,59 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L108:C9:svg",
+    "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L108:C9:svg",
-    "fingerprint": "2d5528c769af0f29595cf7fceb86aca02076d3c7a1336609f171e5dc760a55b7",
+    "locator": "components/contacts/ContactShell.astro:L121:C9:svg",
+    "fingerprint": "032dd6017b5d83d3b92af96046447f4b149264ae060b2a1fe3eced59937514e8",
     "identity": "svg|height=quoted:34|viewBox=quoted:0 0 24 24|width=quoted:34"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L119:C5:iframe",
+    "slotId": "src:components/contacts/ContactShell.astro:L132:C5:iframe",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L119:C5:iframe",
-    "fingerprint": "a9ca5a71e4c6a66ff768c754bf8ef5b08470bbbe7b845da82d49490ebd8a8fb4",
+    "locator": "components/contacts/ContactShell.astro:L132:C5:iframe",
+    "fingerprint": "3ab38da780608f3fd6aad675d8a03077c1060202bd2a857ff344f7c43193bc5a",
     "identity": "iframe|referrerpolicy=quoted:no-referrer-when-downgrade|src=expression:mapSrc|style=quoted:width:100%;height:100%;border:0|title=quoted:Карта ИКПК"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L127:C3:script",
+    "slotId": "src:components/contacts/ContactShell.astro:L140:C3:script",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L127:C3:script",
-    "fingerprint": "2c78ee6f38b99dc79172b04fe19375470fe36bdb33ed2ce1d8bd839c2ad2f677",
+    "locator": "components/contacts/ContactShell.astro:L140:C3:script",
+    "fingerprint": "c50c91dade65f0926aeebd310a5ea4def37222f77db56369b72d6ae13bc7b743",
     "identity": "script|body:251fde1e2c57db79"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L155:C1:style",
+    "slotId": "src:components/contacts/ContactShell.astro:L168:C1:style",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L155:C1:style",
-    "fingerprint": "ab1f482f6cbec483bac04db7bc8526b290ca068200e097f41579b8b00ae3621f",
-    "identity": "style|body:f72251632731db5b"
+    "locator": "components/contacts/ContactShell.astro:L168:C1:style",
+    "fingerprint": "dca6edfeb7e60fef6cb4edfeb6254b7fc167f6bed4f93707c8eb2c395277c547",
+    "identity": "style|body:28673b7134c43cdc"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L38:C11:svg",
+    "slotId": "src:components/contacts/ContactShell.astro:L44:C11:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L38:C11:svg",
-    "fingerprint": "9713c65fb6448c6171e0254763b3fef70b9dfcbf3d0d81e47a1b00146a7065e6",
+    "locator": "components/contacts/ContactShell.astro:L44:C11:svg",
+    "fingerprint": "523bfbeb391e5e62ece6705d46b2bcd75b6b581667bb70178d9221bf6a9570e9",
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L46:C11:svg",
+    "slotId": "src:components/contacts/ContactShell.astro:L52:C11:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L46:C11:svg",
-    "fingerprint": "ed9ae86af03c8ea1a0a5c58e982712da3abb11d9a7ef4b3b91718ac24df761e9",
+    "locator": "components/contacts/ContactShell.astro:L52:C11:svg",
+    "fingerprint": "b66b6d907634d0ab96fa3fb33591fd4ab4945f74a5b8cfce2184cc62ddc7e8b7",
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L54:C11:svg",
+    "slotId": "src:components/contacts/ContactShell.astro:L61:C11:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L54:C11:svg",
-    "fingerprint": "03939e452ef3c97ca123e8a54385d65013d1c6c89e17e488110fe90fabcd363d",
-    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
-  },
-  {
-    "slotId": "src:components/contacts/ContactShell.astro:L60:C11:svg",
-    "file": "components/contacts/ContactShell.astro",
-    "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L60:C11:svg",
-    "fingerprint": "a25a64e9b6d4ede4bdfcac3155a5a92453eecec7ab8ac8e0a41bf0d9dfbf8ba8",
+    "locator": "components/contacts/ContactShell.astro:L61:C11:svg",
+    "fingerprint": "5cbcab7536c3f81c9c73dc5962ee9c983940a3ac087b06380f90e3cda23a1974",
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
@@ -120,11 +112,19 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/contacts/ContactShell.astro:L86:C11:svg",
+    "slotId": "src:components/contacts/ContactShell.astro:L90:C11:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
-    "locator": "components/contacts/ContactShell.astro:L86:C11:svg",
-    "fingerprint": "17494f8716b9dea0f0db0ae0520b5fb366623bbe333a554cb77cbf9c06abf617",
+    "locator": "components/contacts/ContactShell.astro:L90:C11:svg",
+    "fingerprint": "3e7521ab2c1c645dc0aa59050f3be4d94dc18ccc954c60aa3e5a16b7de05293c",
+    "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
+  },
+  {
+    "slotId": "src:components/contacts/ContactShell.astro:L99:C11:svg",
+    "file": "components/contacts/ContactShell.astro",
+    "nodeKind": "element",
+    "locator": "components/contacts/ContactShell.astro:L99:C11:svg",
+    "fingerprint": "cba74c2a14c6e337cc82e59918ba4e61026a91cf151ad2eb5c6f7b1778af50a8",
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
@@ -136,11 +136,11 @@
     "identity": "style|body:81fa0a5c4b7caea0"
   },
   {
-    "slotId": "src:components/Footer.astro:L73:C1:style",
+    "slotId": "src:components/Footer.astro:L75:C1:style",
     "file": "components/Footer.astro",
     "nodeKind": "element",
-    "locator": "components/Footer.astro:L73:C1:style",
-    "fingerprint": "7535ff0a2684e94b55131c418299edbf756887078955a40a0809615ce6060508",
+    "locator": "components/Footer.astro:L75:C1:style",
+    "fingerprint": "ee84981c8087e4381d0fc225aac94f0e4f81714de9364e9ff4e3fc8d253fb312",
     "identity": "style|body:593dde412ec88922"
   },
   {
@@ -232,12 +232,12 @@
     "identity": "style|body:6b293cc238ebedf0"
   },
   {
-    "slotId": "src:components/home/sections/CtaBand.astro:L18:C1:style",
+    "slotId": "src:components/home/sections/CtaBand.astro:L21:C1:style",
     "file": "components/home/sections/CtaBand.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/CtaBand.astro:L18:C1:style",
-    "fingerprint": "c16bd4f7dac8b1a98673ad439d4e56127be1779313973b4911947fa6104c4db0",
-    "identity": "style|body:7f61663a5dabeda1"
+    "locator": "components/home/sections/CtaBand.astro:L21:C1:style",
+    "fingerprint": "8da04e2272ea7717c7c71d10e0e92908c54d429060f15d422c8550bc4983dcd5",
+    "identity": "style|body:156d5bc8760e4106"
   },
   {
     "slotId": "src:components/home/sections/CtaEditorial.astro:L15:C1:style",
@@ -288,12 +288,12 @@
     "identity": "style|body:1a345e867bb189d0"
   },
   {
-    "slotId": "src:components/home/sections/HeroHybrid.astro:L66:C1:style",
+    "slotId": "src:components/home/sections/HeroHybrid.astro:L70:C1:style",
     "file": "components/home/sections/HeroHybrid.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/HeroHybrid.astro:L66:C1:style",
-    "fingerprint": "4e8380fe08ff99136372d894d35968b3120c37ed884698b600f7f308797e620f",
-    "identity": "style|body:fa7b43e48b93805a"
+    "locator": "components/home/sections/HeroHybrid.astro:L70:C1:style",
+    "fingerprint": "35d45493b0581e009ba39888a611a7877102bc1d98d55134bfc58cad7d4788cb",
+    "identity": "style|body:b3b9d716d04a6a3f"
   },
   {
     "slotId": "src:components/home/sections/HeroModular.astro:L62:C1:style",
@@ -328,35 +328,35 @@
     "identity": "style|body:71aa7fc0dcb8bca4"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L132:C1:script",
+    "slotId": "src:components/home/sections/News.astro:L134:C1:script",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L132:C1:script",
-    "fingerprint": "90e32b406e7b9b56350ed2cfc6d3beb30c617422c5de030eb89eb0b48c9e2bb0",
+    "locator": "components/home/sections/News.astro:L134:C1:script",
+    "fingerprint": "1f4f8d79ee814d96c936f823d2ff06ceae91a64ffdb9e4d592137578ba3dd24c",
     "identity": "script|body:7edde442e5505427"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L15:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L17:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L15:C11:svg",
-    "fingerprint": "a889277255ab7f0f23b31244f68e89ebfef6ff6f0db3408bedfa6c00582f85dc",
+    "locator": "components/home/sections/News.astro:L17:C11:svg",
+    "fingerprint": "fc6508477cfe6a0a28610260f2c1770e35b51b92d88153e6586c51df339f7926",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L40:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L42:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L40:C11:svg",
-    "fingerprint": "3d233fa3ab2ee1d38160220920e7f0044e965564cd60ca64127355133db4dad5",
+    "locator": "components/home/sections/News.astro:L42:C11:svg",
+    "fingerprint": "ad414d956c7a9e7557ab224cafddc4784fa0d1211c314344bcd340647e1b1ef1",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L49:C1:style",
+    "slotId": "src:components/home/sections/News.astro:L51:C1:style",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L49:C1:style",
-    "fingerprint": "adf62403b4de7cb9893dd536c1bfaef320aa2d6606239b307ad9d80c9bb149d6",
+    "locator": "components/home/sections/News.astro:L51:C1:style",
+    "fingerprint": "da0cc88ad3802f4695dc7ae84a78d5b2d347527637eac8900cfc86281d2fc4fc",
     "identity": "style|body:0d672d6c6bc3ac6f"
   },
   {
@@ -632,20 +632,20 @@
     "identity": "style|is:global=empty:|body:def58a97cd57778e"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L107:C1:script",
+    "slotId": "src:components/topnav/TopNav.astro:L111:C1:script",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L107:C1:script",
-    "fingerprint": "06db8b40affa3e5a5993a510d74ad6394824554892c72f60a6c0a2b5ae9e01bf",
+    "locator": "components/topnav/TopNav.astro:L111:C1:script",
+    "fingerprint": "7c853c2a1fba04d26d11cdb05e86e129bd56f4e13c4b3674ca5a6b21d9956ca3",
     "identity": "script|body:6dbed8a11dc1048e"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L123:C1:style",
+    "slotId": "src:components/topnav/TopNav.astro:L127:C1:style",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L123:C1:style",
-    "fingerprint": "6afe00433288a461f58d5a40238ba96eafd4c44e2f152e19c75bd08040720cd7",
-    "identity": "style|body:94c500b5873bca8d"
+    "locator": "components/topnav/TopNav.astro:L127:C1:style",
+    "fingerprint": "ddb64d3d681438d16fa84b65c3fb684665060f232d0d7ff2fe84ddb0bdfe6fa0",
+    "identity": "style|body:ba94c15092980111"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
@@ -656,11 +656,11 @@
     "identity": "svg|aria-hidden=quoted:true|class=quoted:chev|viewBox=quoted:0 0 12 12"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L90:C15:svg",
+    "slotId": "src:components/topnav/TopNav.astro:L93:C15:svg",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L90:C15:svg",
-    "fingerprint": "97dbdc9f13f1305038533df12cfb3d93994cbf09c18a6e6bac8de1f33c67d9c4",
+    "locator": "components/topnav/TopNav.astro:L93:C15:svg",
+    "fingerprint": "546846126ad83d183c72db6b35c71163eddb4c6ebd0dea2ad28d4df0eb97c158",
     "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:18|stroke-width=quoted:1.6|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:18"
   },
   {
@@ -816,27 +816,27 @@
     "identity": "style|body:47ced6b9b1982cfe"
   },
   {
-    "slotId": "src:pages/kontakty.astro:L68:C1:style",
+    "slotId": "src:pages/kontakty.astro:L72:C1:style",
     "file": "pages/kontakty.astro",
     "nodeKind": "element",
-    "locator": "pages/kontakty.astro:L68:C1:style",
-    "fingerprint": "7bcc971763e1a2f86479134a3082a6e772c1394e80a473fbe27f30cf02b6e00b",
+    "locator": "pages/kontakty.astro:L72:C1:style",
+    "fingerprint": "402ba607405380effa9fffe8b52e0a50915b89cda8de005793df951430548fcf",
     "identity": "style|body:e301e6bb69eb1046"
   },
   {
-    "slotId": "src:pages/oplata.astro:L51:C11:svg",
+    "slotId": "src:pages/oplata.astro:L52:C11:svg",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L51:C11:svg",
-    "fingerprint": "a97bc5fbd3d7a598e09e80ccf962e1f0bceee90b57d2cf214da812f9729f70e6",
+    "locator": "pages/oplata.astro:L52:C11:svg",
+    "fingerprint": "ec546ba4bb17c3ccfb04086665d89d98cd1cb1ebd1161ef34e9c539761155305",
     "identity": "svg|fill=quoted:none|height=quoted:24|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:24"
   },
   {
-    "slotId": "src:pages/oplata.astro:L78:C1:style",
+    "slotId": "src:pages/oplata.astro:L83:C1:style",
     "file": "pages/oplata.astro",
     "nodeKind": "element",
-    "locator": "pages/oplata.astro:L78:C1:style",
-    "fingerprint": "c5d8b177c7289c3479232d359991ff9b90108dbca01bedf59fc304842feec1df",
+    "locator": "pages/oplata.astro:L83:C1:style",
+    "fingerprint": "e9c3c6a8c263022c183faf0b3179f7e089c6f2a3b000c20d73a386e23d3b150c",
     "identity": "style|body:d38013dcebc69356"
   },
   {
@@ -912,27 +912,35 @@
     "identity": "style|body:a5a70f423abc1970"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L34:C13:svg",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L34:C13:svg",
-    "fingerprint": "0d4b1bc146d4a8c31b73938c7afca6dfb7dd60e189522dc98f574032736fa9c6",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L35:C13:svg",
+    "fingerprint": "54ffe11571d22069fb2e0e19e0cb9c15b669b5a56ac7f1a9ad32ee3802f05d91",
     "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L38:C13:svg",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L39:C13:svg",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L38:C13:svg",
-    "fingerprint": "6e826da2ed3ee7283f760ae43c258322bbd6946e0f8d0002c933bdc1eb1c8846",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L39:C13:svg",
+    "fingerprint": "29f22f9fcca3bc4f742becca97f48300f964d94f795d699bdafc3ac02babed0b",
     "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
   },
   {
-    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L48:C1:style",
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L43:C13:svg",
     "file": "pages/sotrudnichestvo-s-nami.astro",
     "nodeKind": "element",
-    "locator": "pages/sotrudnichestvo-s-nami.astro:L48:C1:style",
-    "fingerprint": "8296dc72d2fe8c95455fcc443fd16d5ed5168716f3ac94eaf7912d94620ad4bf",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L43:C13:svg",
+    "fingerprint": "4c72034bd2bd79d3489e32b8e8742f16dae8f7693edfa5fdc870bbb946ff61df",
+    "identity": "svg|fill=quoted:none|height=quoted:20|stroke-linecap=quoted:round|stroke-linejoin=quoted:round|stroke-width=quoted:2|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:20"
+  },
+  {
+    "slotId": "src:pages/sotrudnichestvo-s-nami.astro:L53:C1:style",
+    "file": "pages/sotrudnichestvo-s-nami.astro",
+    "nodeKind": "element",
+    "locator": "pages/sotrudnichestvo-s-nami.astro:L53:C1:style",
+    "fingerprint": "6923aa7af89d6447685d8054ab04b2977e90b8037f14fa76d3cf27b3ec4fe9dd",
     "identity": "style|body:751713f467cb168e"
   },
   {

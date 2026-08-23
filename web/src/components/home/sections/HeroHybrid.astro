@@ -33,6 +33,10 @@ const next = getUpcomingSeminars(1)[0];
       {next && (
         <a class="hero-d-next" href={next.href}>
           <span class="hero-d-next-label">Ближайший семинар</span>
+          {/* Название есть в данных (`title` в lib/home.ts), но в разметку не
+              попадало: строка «14–16 авг · Санкт-Петербург · 45 000 ₽» не
+              говорит, на что записываться (D2 списка после демо 2026-08-19). */}
+          <span class="hero-d-next-title">{next.title}</span>
           <span class="hero-d-next-value">
             {next.dateLabel} · {next.cityName} · {next.priceLabel}
           </span>
@@ -93,6 +97,7 @@ const next = getUpcomingSeminars(1)[0];
   }
   .hero-d-next:hover { box-shadow: 0 4px 14px rgb(53 122 56 / 18%); }
   .hero-d-next-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-accent-600); }
+  .hero-d-next-title { font-size: var(--font-m); font-weight: 700; color: var(--color-dark-700); }
   .hero-d-next-value { font-size: var(--font-m); font-weight: 600; color: var(--color-dark-700); }
 
   .hero-d-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
