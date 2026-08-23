@@ -8,7 +8,11 @@ const pages = [
 
 for (const path of pages) {
   test.describe(`Seminar parity ${path}`, () => {
-    test('uses production-like content flow', async ({ page }) => {
+    // `aside.seminar-sidebar` — селектор РАЗМЕТКИ СТАРОГО САЙТА, а не утверждение
+    // «боковой колонки нет»: с D3 расписание живёт именно в боковой колонке, и своя
+    // у нас `aside.seminar-schedule`. Название теста уточнено там же, где и в
+    // `parity-compare.test.ts`.
+    test('renders our own markup, without legacy seminar sidebar', async ({ page }) => {
       await gotoAttachedPath(page, path);
 
       await expect(page.locator('h1')).toBeVisible();

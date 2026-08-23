@@ -96,14 +96,7 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
-openspec/changes/prod-serving-on-nginx/design.md :: mc.yandex.ru/watch/39506315
-openspec/changes/prod-serving-on-nginx/design.md :: web/dist
-openspec/changes/prod-serving-on-nginx/proposal.md :: shared/
-openspec/changes/prod-serving-on-nginx/specs/static-serving/spec.md :: application/xml
-openspec/changes/prod-serving-on-nginx/specs/static-serving/spec.md :: text/html
-openspec/changes/prod-serving-on-nginx/specs/static-serving/spec.md :: text/xml
-openspec/changes/prod-serving-on-nginx/tasks.md :: mc.yandex.ru/watch/39506315
-openspec/changes/prod-serving-on-nginx/tasks.md :: web/dist
+openspec/changes/social-accounts/tasks.md :: web/dist
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
