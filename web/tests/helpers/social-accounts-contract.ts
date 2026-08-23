@@ -152,7 +152,10 @@ export function retiredMentions(html: string): Array<{ name: string; where: 'с�
   const links = allLinks(html);
   const out: Array<{ name: string; where: 'ссылка' | 'текст вывода' }> = [];
   for (const { name, host } of RETIRED_NETWORKS) {
-    if (links.some((href) => hostOf(href).endsWith(host))) out.push({ name, where: 'ссылка' });
+    // Хост сверяется целиком или как поддомен, а не суффиксом строки: `notinstagram.com`
+    // суффиксную сверку прошёл бы и дал ложное расхождение.
+    const isHost = (h: string): boolean => h === host || h.endsWith(`.${host}`);
+    if (links.some((href) => isHost(hostOf(href)))) out.push({ name, where: 'ссылка' });
     else if (html.includes(host)) out.push({ name, where: 'текст вывода' });
   }
   return out;
