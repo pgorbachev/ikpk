@@ -337,3 +337,249 @@
 (падение с этой причиной), а не «нарушений нет». Первый прогон черновика PR даёт ответ: если в
 логе стоит «pdftotext недоступен», реализации нужен шаг установки `poppler-utils` в джобе
 обязательного прогона.
+
+## Негативные мутации: поимённо для каждого зелёного-по-замыслу гейта
+
+Правило проекта: гейт, не проверенный негативно, гейтом не считается, и судить надо по
+ИМЕНИ покрасневшего теста, а не по цвету прогона. Красные тесты в мутации не нуждаются —
+их свидетельство это красный прогон черновика PR; ниже только те, что зелены по замыслу.
+
+Мутации выполнены в этом worktree, фикс закоммичен ДО мутации (`7c746efe8abbaf3a6943e61bb3808745e30ea499`),
+восстановление подтверждено постусловием под предмет: для отслеживаемых файлов — пустой
+`git status --porcelain`, для генерируемого вывода (`web/dist`, `web/dist-demo`) —
+контрольная сумма дерева по относительным путям с сортировкой, потому что `git status`
+созданный внутри игнорируемого каталога файл не показывает вовсе.
+
+Каждая мутация записана точной командой и двумя числами — до и после. Две из них
+**не удались с первого раза**, и это записано, а не спрятано: зелёный прогон после
+мутации значит либо декоративность проверки, либо неудавшуюся мутацию, и различать
+обязательно.
+
+```
+### M1 реестр с пустым списком вхождений
+мутация:      python3 -c "import json;p='web/tests/fixtures/rich-content-safety/output-occurrence-registry.json';d=json.load(open(p));d['occurrences']=[];json.dump(d,open(p,'w'))"
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M2 один корень сборки вместо двух
+мутация:      python3 -c "import json;p='web/tests/fixtures/rich-content-safety/output-occurrence-registry.json';d=json.load(open(p));d['distRoots']=d['distRoots'][:1];json.dump(d,open(p,'w'))"
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M3 реестр только по исходникам
+мутация:      python3 -c "import json;p='web/tests/fixtures/rich-content-safety/output-occurrence-registry.json';d=json.load(open(p));d['status']='source-inventory-only';json.dump(d,open(p,'w'))"
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M4 слот убран из реестра
+мутация:      python3 -c "import json;p='web/tests/fixtures/rich-content-safety/output-occurrence-registry.json';d=json.load(open(p));d['slotIds']=d['slotIds'][1:];json.dump(d,open(p,'w'))"
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M5 файл убран из исключений основного прогона
+мутация:      perl -0pi -e "s/      'tests\/external-widgets-dist.test.ts',\n      'tests\/external-widgets-demo.test.ts',\n//" web/vitest.config.ts
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M6 браузерная проверка объявлена долгом
+мутация:      perl -0pi -e "s/  'compare.spec.ts',/  'compare.spec.ts',\n  'external-widgets.spec.ts',/" web/tests/browser-test-gating.test.ts
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M7 скрипт пакета удалён
+мутация:      perl -0pi -e 's/,\n    "test:e2e:widgets": [^\n]*\n  \},/\n  },/' web/package.json
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M8 один файл в обеих конфигурациях
+мутация:      perl -0pi -e "s/      'tests\/external-widgets-demo.test.ts',/      'tests\/external-widgets-demo.test.ts',\n      'tests\/external-widgets-dist.test.ts',/" web/vitest.demo.config.ts
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M9 четвёртый аргумент у гейта ссылок
+мутация:      perl -0pi -e 's/form_links_match_mode "\$DIST_DIR" "\$DEPLOY_MODE" "\$DEMO_FORMS"/form_links_match_mode "\$DIST_DIR" "\$DEPLOY_MODE" "\$DEMO_FORMS" "\$CHAT_LOADER_SRC"/' scripts/deploy-web.sh
+до:           Tests  1 passed | 11 skipped (12)
+после:        Tests  1 failed | 11 skipped (12)
+восстановлено: Tests  1 passed | 11 skipped (12)
+
+### M10 запрет разрешения имён во всех конфигурациях
+мутация:      perl -0pi -e "s/    viewport: \{ width: 1280, height: 720 \},\n  \},\n  timeout: 10000,/    viewport: { width: 1280, height: 720 },\n    launchOptions: { args: ['--host-resolver-rules=MAP * ~NOTFOUND'] },\n  },\n  timeout: 10000,/" web/playwright.config.ts
+до:           Tests  1 passed | 12 skipped (13)
+после:        Tests  1 passed | 12 skipped (13)
+восстановлено: Tests  1 passed | 12 skipped (13)
+
+### M11 модуль перехвата убран
+мутация:      mv web/tests/helpers/third-party-guard.ts web/tests/helpers/third-party-guard.ts.moved
+до:           Tests  1 passed | 12 skipped (13)
+после:        Tests  1 failed | 12 skipped (13)
+восстановлено: Tests  1 passed | 12 skipped (13)
+
+### M12 подмена продолжает запрос наружу
+мутация:      perl -0pi -e 's/      await route.fulfill\(\{ status: 204, body: .. \}\);/      await route.continue();/' web/tests/helpers/third-party-guard.ts
+до:           Tests  1 passed | 12 skipped (13)
+после:        Tests  1 failed | 12 skipped (13)
+восстановлено: Tests  1 passed | 12 skipped (13)
+
+### M13 идентификаторы счётчиков совпали
+мутация:      perl -0pi -e "s/export const FOREIGN_METRIKA_ID = '57020224';/export const FOREIGN_METRIKA_ID = '39506315';/" web/tests/helpers/external-widgets.ts
+до:           Tests  1 passed | 24 skipped (25)
+после:        Tests  1 failed | 24 skipped (25)
+восстановлено: Tests  1 passed | 24 skipped (25)
+
+### M10 запрет разрешения имён появился во ВСЕХ конфигурациях
+мутация:      launchOptions с --host-resolver-rules добавлен в ОБА конфига без него (playwright.config.ts и playwright.attached.config.ts)
+до:           Tests  1 passed | 12 skipped (13)
+после:        Tests  1 failed | 12 skipped (13)
+восстановлено: Tests  1 passed | 12 skipped (13)
+примечание:   первая попытка патчила ОДИН конфиг — прогон остался зелёным. Это была
+              неудавшаяся мутация, а не декоративный гейт: предмет (конфигурация без
+              запрета) оставался на месте, потому что их два.
+
+### M14 отдельная страница отзывов появилась в выводе
+мутация:      mkdir -p web/dist/otzyvy && printf '<!doctype html><html lang="ru"><body>отзывы</body></html>' > web/dist/otzyvy/index.html
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+сумма дерева web/dist: 978eae7a97379c62a57000062686c360ba5e0e1f → 978eae7a97379c62a57000062686c360ba5e0e1f (совпала)
+
+### M15 признак сводки знает сегодняшние числа
+мутация:      perl -0pi -e "s/const NUMBER = [^;]*;/const NUMBER = \/(4,9|33|66)\/;/" web/tests/helpers/external-widgets.ts
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M16 признак сводки ловит любое число
+мутация:      perl -0pi -e "s/const SUMMARY_STEMS = [^;]*;/const SUMMARY_STEMS = \/./g;/" web/tests/helpers/external-widgets.ts
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 passed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M17 признак иерархии заголовков ничего не находит
+мутация:      perl -0pi -e 's/  const problems: string\[\] = \[\];/  const problems: string[] = [];\n  return problems;/' web/tests/external-widgets-dist.test.ts
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M18 бюджет времени блокировки ослаблен
+мутация:      perl -0pi -e "s/maxNumericValue: 200/maxNumericValue: 400/" web/lighthouserc.cjs
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M23 сторож непустоты не падает на пустом каталоге
+мутация:      perl -0pi -e 's/  if \(pages.size === 0\)\n    throw new Error\(`предмета проверки нет: html-страниц в .\$\{root\}. нет`\);/  if (false) throw new Error(root);/' web/tests/external-widgets-dist.test.ts
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M16 признак сводки перестал требовать слово-основу
+мутация:      SUMMARY_STEMS = /отзыв|оцен|рейтинг/gi → /[а-яё]/gi (любая буква считается основой)
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+примечание:   первая попытка мутации через perl не применилась вовсе (незакрытая
+              регулярка в замене), и прогон остался зелёным. Это была неудавшаяся
+              мутация, а не декоративный гейт — различено проверкой применения патча.
+
+### M19 адрес виджета вернулся в демо-вывод
+мутация:      python3 -c "
+p='web/dist-demo/index.html'
+s=open(p).read()
+assert '<body' in s
+open(p,'w').write(s.replace('<body','<body data-reviews-embed=\"https://yandex.ru/maps-reviews-widget/112883331290?comments\"',1))
+print('мутация применена')"
+до:           Tests  1 passed | 10 skipped (11)
+после:        Tests  1 failed | 10 skipped (11)
+восстановлено: Tests  1 passed | 10 skipped (11)
+сумма дерева web/dist-demo: 39ee59f018c053d4b7908ccc939516bfcc0d2df7 → 39ee59f018c053d4b7908ccc939516bfcc0d2df7 (совпала)
+
+### M20 разметка чата вернулась в демо-вывод
+мутация:      python3 -c "
+p='web/dist-demo/index.html'
+s=open(p).read()
+assert '</body>' in s
+open(p,'w').write(s.replace('</body>','<div data-chat-facade data-chat-trigger></div></body>',1))
+print('мутация применена')"
+до:           Tests  1 passed | 10 skipped (11)
+после:        Tests  1 failed | 10 skipped (11)
+восстановлено: Tests  1 passed | 10 skipped (11)
+сумма дерева web/dist-demo: 39ee59f018c053d4b7908ccc939516bfcc0d2df7 → 39ee59f018c053d4b7908ccc939516bfcc0d2df7 (совпала)
+
+### M21 признак смотрит только на src и href
+мутация:      python3 -c "
+p='web/tests/helpers/external-widgets.ts'
+s=open(p).read()
+old='  return attributeValues(html).filter(({ value }) => {'
+new='  return attributeValues(html).filter(({ name, value }) => {\n    if (name !== \"src\" && name !== \"href\") return false;'
+assert old in s
+open(p,'w').write(s.replace(old,new,1))
+print('мутация применена')"
+до:           Tests  1 passed | 10 skipped (11)
+после:        Tests  1 failed | 10 skipped (11)
+восстановлено: Tests  1 passed | 10 skipped (11)
+
+### M25 признак кандидата сузился до одной заглушки
+мутация:      candidate_re в scripts/lib/deploy-checks.sh → "demo-zayavka" (хост портала убран)
+до:           Tests  1 passed | 14 skipped (15)
+после:        Tests  1 failed | 14 skipped (15)
+восстановлено: Tests  1 passed | 14 skipped (15)
+
+### M26 признак кандидата расширен до «что угодно»
+мутация:      candidate_re → "." (любое извлечённое значение считается ссылкой формы)
+до:           Tests  1 passed | 14 skipped (15)
+после:        Tests  1 failed | 14 skipped (15)
+восстановлено: Tests  1 passed | 14 skipped (15)
+смысл:        двусторонняя граница. M25 показывает, что сужение признака теряет живую
+              утечку; M26 — что расширение начинает отвергать прозу. Ни одна из двух
+              зелёных проверок не декоративна.
+
+### M17b признак иерархии заголовков краснеет всегда
+мутация:      headingProblems() безусловно добавляет проблему
+до:           Tests  1 passed | 27 skipped (28)
+после:        Tests  1 failed | 27 skipped (28)
+восстановлено: Tests  1 passed | 27 skipped (28)
+
+### M27 расширенный признак кандидата НЕ задевает законный загрузчик — и это не декоративность
+мутация:      candidate_re → "." (та же, что M26), предмет — «загрузчик виджета в боевой сборке не принят за ссылку формы»
+до:           Tests  1 passed | 14 skipped (15)
+после:        Tests  1 passed | 14 skipped (15)
+восстановлено: Tests  1 passed | 14 skipped (15)
+разбор:       мутация НЕ убрала предмет, и это установлено, а не предположено. Адрес
+              загрузчика лежит в атрибуте `data-chat-loader`, а извлечение требует, чтобы
+              имя атрибута ЗАКАНЧИВАЛОСЬ на href/src/action непосредственно перед знаком
+              равенства, — значит адрес не попадает в набор кандидатов вовсе, каким бы
+              широким ни был признак отбора. Расширять candidate_re здесь бессмысленно по
+              построению.
+              Настоящая мутация этого гейта — переименование носителя в `data-chat-src`, и
+              она вынесена в ОТДЕЛЬНЫЙ тест «загрузчик в атрибуте, чьё имя кончается на
+              `src`, боевую выкладку не отвергает». Он КРАСНЫЙ: гейт отвергает боевую
+              выкладку (код 1, «Ссылки форм не соответствуют режиму prod»). То есть
+              зелёный цвет пары выше держится не на признаке назначения, а на слепоте
+              извлечения к имени атрибута — ровно то, что требование и велит исправить.
+
+```
+
+### Гейты без своей мутации — и чем закрыты вместо неё
+
+- **demo, «в выводе есть собранные страницы сайта»** и **«страниц демо-вывода перечислено
+  достаточно»** — сторожи сторожей. Их мутация встроена в соседний тест «проверка, не
+  нашедшая собранных страниц, считается НЕпройденной»: он ВЫЗЫВАЕТ перечисление на пустом
+  каталоге и требует падения, а на непустом — прохождения. Первое без второго прошло бы и
+  для функции, падающей всегда.
+- **demo, «признак ловит встраивание в выводе, где признаков аналитики нет вовсе»** —
+  реддится той же мутацией M21 (признак сужен до `src`/`href`): фикстура несёт адрес в
+  атрибуте данных.
+- **deploy, «на ПОРТАЛЬНОМ поддомене»** и **«стенд с одними заглушками и загрузчиком
+  чата проходит»** — тот же разбор, что у M27: их зелёный цвет держится на слепоте
+  извлечения к имени атрибута, и это установлено отдельным КРАСНЫМ тестом, а не
+  предположено.
+- **dist, «признак ловит заголовок раньше первого уровня»** — реддится мутацией M17
+  (признак ничего не находит) наравне с «признак ловит пропуск уровня»: предикат один.
