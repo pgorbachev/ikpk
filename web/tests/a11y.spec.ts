@@ -16,6 +16,14 @@ const TEMPLATES: Array<{ name: string; path: string }> = [
     name: 'seminar',
     path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej',
   },
+  // Шаблон семинара выше — БЕЗ дат, и это не мелочь: axe на нём не видит ни одной
+  // карточки расписания, ни кнопки записи, ни ссылки на преподавателя, ни цены, то
+  // есть проверяет пустую панель. Датированный шаблон добавлен отдельной строкой, а
+  // не заменой: недатированных страниц 81 из 126, и терять их покрытие нельзя.
+  // Что страница действительно датирована, утверждается ниже кодом, а не надеждой:
+  // даты уходят от хода времени, и молча опустевший шаблон вернул бы ровно тот
+  // «проверено впустую», из-за которого строка и появилась.
+  { name: 'seminar-dated', path: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1' },
   { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme' },
   // варианты редизайна b/c/d и architecture-прототипы собираются только при
   // DEMO_FORMS (build:demo). Job Playwright smoke строит прод → эти пути дают
@@ -62,6 +70,15 @@ test.describe('Accessibility', () => {
         response?.status(),
         `${path}: страница не отдалась — axe проверил бы страницу 404, а не шаблон`,
       ).toBe(200);
+
+      // Предмет датированного шаблона — заполненная панель расписания. Пустая
+      // проходит axe всегда, поэтому её отсутствие объявляется отказом проверки.
+      if (name === 'seminar-dated') {
+        expect(
+          await page.locator('[data-seminar-schedule-card]').count(),
+          `${path}: в расписании нет ни одной записи — axe проверил бы пустую панель`,
+        ).toBeGreaterThan(0);
+      }
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -558,7 +575,14 @@ test.describe('Контраст тумблера темы в обеих тема
 // каталогом медиа и редиректами включён `trailingSlash: 'never'`, и форма со
 // слэшем там отдаёт 404. Тест на переполнение на странице 404 прошёл бы молча —
 // «нарушений нет» вместо «проверять нечего», поэтому код ответа проверяется ниже.
-const ZOOM_PATHS = ['/', '/statyi', '/raspisanie-i-tseny'];
+// Страница семинара добавлена вместе с раскладкой D3: у неё жёсткая дорожка грида
+// 21rem и перелом в px, то есть ровно тот предмет, ради которого проверка и заведена.
+const ZOOM_PATHS = [
+  '/',
+  '/statyi',
+  '/raspisanie-i-tseny',
+  '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
+];
 
 // Опущенное закрытым <details> содержимое (мобильный дровер шапки) остаётся в
 // layout-дереве ради scroll-вычислений, но не окрашивается и не видно
