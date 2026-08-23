@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "18d59905c727d10b0b1cd0bfb70e4db523685c38",
+  "generatedFromSha": "eacef9ef85b70f2ea04b765a5f87f29e479b7bd7",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -82,7 +82,7 @@
     "src:components/schedule/SchedulePage.astro:L61:C1:style",
     "src:components/schedule/SchedulePageHeader.astro:L17:C1:style",
     "src:components/seminars/SeminarArchitectureHeader.astro:L213:C1:style",
-    "src:components/seminars/SeminarSchedulePanel.astro:L131:C1:style",
+    "src:components/seminars/SeminarSchedulePanel.astro:L141:C1:style",
     "src:components/topnav/HeaderTools.astro:L106:C1:script",
     "src:components/topnav/HeaderTools.astro:L15:C5:svg",
     "src:components/topnav/HeaderTools.astro:L39:C1:style",
@@ -1208,7 +1208,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -1558,7 +1558,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2083,7 +2083,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2258,7 +2258,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2433,7 +2433,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2608,7 +2608,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2783,7 +2783,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -2958,7 +2958,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -3133,7 +3133,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -3308,7 +3308,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -3483,7 +3483,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -3658,7 +3658,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -4008,7 +4008,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/mozg/mozg-govorit-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -4183,7 +4183,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/mozg/mozg-govorit-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -4533,7 +4533,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -4708,7 +4708,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -4883,7 +4883,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -6808,7 +6808,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -6983,7 +6983,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -7158,7 +7158,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -7333,7 +7333,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -7508,7 +7508,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -7683,7 +7683,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -7858,7 +7858,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -8208,7 +8208,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -8383,7 +8383,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -8558,7 +8558,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -8733,7 +8733,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -8908,7 +8908,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -9083,7 +9083,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -9619,7 +9619,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -9794,7 +9794,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -9969,7 +9969,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -10144,7 +10144,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -10319,7 +10319,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -10669,7 +10669,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -10844,7 +10844,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -11019,7 +11019,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -11894,7 +11894,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -12069,7 +12069,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -12419,7 +12419,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -12769,7 +12769,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13119,7 +13119,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13294,7 +13294,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13469,7 +13469,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13644,7 +13644,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13819,7 +13819,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -13994,7 +13994,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -14169,7 +14169,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki/taz",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -14705,7 +14705,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/bezopasnost-kak-bazovaya-potrebnost-cheloveka",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -14880,7 +14880,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -15055,7 +15055,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -15230,7 +15230,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -15405,7 +15405,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -15580,7 +15580,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -15755,7 +15755,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -16105,7 +16105,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -16280,7 +16280,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -16455,7 +16455,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -16805,7 +16805,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -16980,7 +16980,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -17155,7 +17155,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -17505,7 +17505,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -17680,7 +17680,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -17855,7 +17855,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -18030,7 +18030,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -18205,7 +18205,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -18380,7 +18380,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -18730,7 +18730,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -18905,7 +18905,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -19080,7 +19080,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -19255,7 +19255,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -19605,7 +19605,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -19780,7 +19780,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -19955,7 +19955,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -20130,7 +20130,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -20305,7 +20305,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -20480,7 +20480,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -20655,7 +20655,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -20830,7 +20830,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -24330,7 +24330,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -24505,7 +24505,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -24680,7 +24680,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -24855,7 +24855,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25030,7 +25030,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25205,7 +25205,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25380,7 +25380,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25555,7 +25555,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25730,7 +25730,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -25905,7 +25905,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -26080,7 +26080,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -26255,7 +26255,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -26605,7 +26605,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -26780,7 +26780,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -26955,7 +26955,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -27130,7 +27130,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -27305,7 +27305,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -27480,7 +27480,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -27655,7 +27655,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -27830,7 +27830,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -28005,7 +28005,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -28180,7 +28180,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/proshenie",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -28355,7 +28355,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -28530,7 +28530,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -28705,7 +28705,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29055,7 +29055,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29230,7 +29230,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/endokrinotoksichnost",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29405,7 +29405,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29580,7 +29580,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29755,7 +29755,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -29930,7 +29930,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30105,7 +30105,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30280,7 +30280,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30455,7 +30455,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30630,7 +30630,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30805,7 +30805,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -30980,7 +30980,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -31155,7 +31155,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -31330,7 +31330,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -31680,7 +31680,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -31855,7 +31855,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -32030,7 +32030,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-endokrinotoksichnost-vneshnej-sredy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -32205,7 +32205,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -32380,7 +32380,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -32730,7 +32730,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
@@ -32905,7 +32905,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
       "placement": "doc-order:6:style",
-      "identity": "style|body:aa1dc1deab98a0fb",
+      "identity": "style|body:680f48b0fd8339aa",
       "count": 1,
       "builds": [
         "production",
