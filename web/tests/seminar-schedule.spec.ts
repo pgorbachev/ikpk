@@ -334,6 +334,47 @@ test.describe('Расписание семинара на десктопе', () 
     ).toEqual([]);
   });
 
+  // Дата и цена — самые важные данные карточки, и они обязаны нести акцентные
+  // чернила, а не краску обычного абзаца. Признак сравнительный, а не «конкретный
+  // hex»: значения ролевых токенов разные в светлой и тёмной теме, а требование одно
+  // — `--text-primary` у даты и цены против `--text-body` у пояснений. Проверка
+  // появилась после того, как переезд из таблицы в карточку тихо уравнял их с прозой
+  // (было `rgb(26,26,26)`, стало `rgb(112,112,112)`) при проходящем контрасте AA:
+  // пропала не читаемость, а иерархия, и не краснел ни один гейт.
+  test('дата и цена несут акцентные чернила, а не краску прозы @d3-primary-data-ink', async ({ page }) => {
+    await openSeminar(page, MOST_DATES.path);
+
+    const ink = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const resolve = (name: string) => {
+        const probe = document.createElement('span');
+        probe.style.color = root.getPropertyValue(name).trim();
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      };
+      const colorOf = (selector: string) => {
+        const node = document.querySelector(selector);
+        return node ? getComputedStyle(node).color : null;
+      };
+      return {
+        primary: resolve('--text-primary'),
+        body: resolve('--text-body'),
+        date: colorOf('.schedule-date'),
+        price: colorOf('.schedule-price'),
+        meta: colorOf('.schedule-meta'),
+      };
+    });
+
+    expect(ink.primary, 'токен --text-primary не разрешился — сравнивать было нечем').toBeTruthy();
+    expect(ink.primary, 'акцентные чернила совпали с краской прозы — признак вырожден')
+      .not.toBe(ink.body);
+    expect(ink.date, 'у даты краска прозы, а не акцентные чернила').toBe(ink.primary);
+    expect(ink.price, 'у цены краска прозы, а не акцентные чернила').toBe(ink.primary);
+    expect(ink.meta, 'пояснительная строка должна остаться краской прозы').toBe(ink.body);
+  });
+
   // В печати колонка обязана отпускаться: `max-height` в единицах экрана с
   // `overflow: auto` обрезал бы список, и лишние даты исчезли бы с бумаги совсем —
   // прокрутить её нечем. До переноса расписание печаталось целиком, так что это

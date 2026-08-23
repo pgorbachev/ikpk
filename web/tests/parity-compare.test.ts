@@ -236,7 +236,14 @@ describe('Parity audit against original site', () => {
     expect(html).toContain('"@type":"Article"');
   });
 
-  it('seminar page keeps inline schedule structure and rich content', () => {
+  // Название и первые два утверждения переформулированы 23.08.2026: расписание
+  // переехало в боковую колонку (D3), поэтому «inline schedule» и «сайдбара нет»
+  // читались бы как замысел, которому продукт противоречит. Предмет этих двух
+  // проверок и раньше был другой — не «нет сайдбара», а «нет РАЗМЕТКИ СТАРОГО САЙТА»:
+  // `seminar-sidebar` и `sidebar-price` — классы живого ikpk.su, и совпадение по имени
+  // класса ничего не говорит о том, есть ли у нас боковая колонка. Теперь это
+  // написано, а не подразумевается.
+  it('seminar page keeps schedule block and rich content, without legacy markup', () => {
     const html = readLocal(SEMINAR_PATH).html;
     expect(html).not.toContain('seminar-sidebar');
     expect(html).not.toContain('sidebar-price');
