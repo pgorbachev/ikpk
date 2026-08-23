@@ -95,6 +95,7 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
 openspec/changes/external-widgets/proposal.md :: main@8e93aceabae99f0e31776f25e6967d3edb12cbb1
+openspec/changes/external-widgets/specs/external-widgets/spec.md :: main@b44e600fb55dfbf529ee615375c154b94b29e08e
 openspec/changes/prod-serving-on-nginx/design.md :: mc.yandex.ru/watch/39506315
 openspec/changes/prod-serving-on-nginx/design.md :: web/dist
 openspec/changes/prod-serving-on-nginx/proposal.md :: shared/
