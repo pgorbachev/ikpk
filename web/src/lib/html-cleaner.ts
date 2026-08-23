@@ -53,6 +53,18 @@ export function contextForSafeRichHtml(value: SafeRichHtml): SanitizeContext | u
   return context ? { ...context } : undefined;
 }
 
+/** Текстовая правка уже очищенного HTML без смены режима доверия. */
+export function rewriteSafeRichHtml(value: SafeRichHtml, rewrite: (html: string) => string): SafeRichHtml {
+  if (!isSafeRichHtml(value)) {
+    throw new Error('rewriteSafeRichHtml: вход не аутентифицирован');
+  }
+  const ctx = contextForSafeRichHtml(value);
+  if (!ctx) {
+    throw new Error('rewriteSafeRichHtml: нет контекста');
+  }
+  return authenticate(terminalSanitize(rewrite(value.html), 'authenticated', ctx), ctx);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Core HTML utilities
 // ─────────────────────────────────────────────────────────────────────────────
@@ -569,12 +581,46 @@ export function relForExternalUrl(url: string): string[] | undefined {
  * В данных таких порталов два: b24-cbqwqo и b24-kbo5ls. В прод-сборке
  * (DEMO_FORMS не задана) функция ничего не делает.
  */
+// Домен — `bitrix24site.ru` ИЛИ портальный `bitrix24.ru`, в любом регистре. Прежде и
+// быстрый выход, и признак ссылки требовали буквально `bitrix24site.ru`, то есть
+// портальные публичные формы вида `<портал>.bitrix24.ru/pub/form/<id>/` переписыватель
+// не трогал вовсе. Гейт деплоя такую ссылку теперь ловит (находка ревью F9), поэтому
+// расхождение стоило бы остановленной выкладки, а не утечки, — но чинить надо источник.
+const BITRIX_DOMAINS = ['bitrix24site.ru', 'bitrix24.ru'];
+/** Дешёвый предфильтр по всему документу: ложное срабатывание стоит одного лишнего прохода. */
+const BITRIX_MENTION_RE = /bitrix24(site)?\.ru/i;
+
+/**
+ * Ссылка ведёт на портал Bitrix24 — по HOSTNAME, а не по подстроке.
+ *
+ * Найдено владельцем на 3604de4: признак сопоставлялся со всем URL, поэтому чужая
+ * ссылка `https://example.org/go?to=bitrix24.ru` подменялась заглушкой — адрес
+ * подменяется у постороннего сайта, то есть посетитель демо-стенда просто не попадает
+ * туда, куда вела ссылка. Это зеркало находки F3 в гейте деплоя: там тот же класс уже
+ * был закрыт, а здесь остался и стал шире, когда я добавила второй домен.
+ *
+ * Сопоставление `hostname === d || endsWith('.' + d)` — тот же способ, что у
+ * `relForExternalUrl` ниже: без точки-разделителя домен-приманка вида
+ * `bitrix24site.ru.evil.example` прошёл бы как свой.
+ */
+function isBitrixPortalUrl(url: string): boolean {
+  let hostname: string;
+  try {
+    // protocol-relative (`//host/…`) и относительные пути резолвим относительно своего
+    // происхождения: у относительного пути хост будет наш, то есть портáлом он не станет.
+    hostname = new URL(url, 'https://ikpk.su').hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return BITRIX_DOMAINS.some((d) => hostname === d || hostname.endsWith('.' + d));
+}
+
 function redirectFormLinksInDemo(html: string): string {
-  if (!isDemoForms || !html.includes('bitrix24site.ru')) return html;
+  if (!isDemoForms || !BITRIX_MENTION_RE.test(html)) return html;
   return html.replace(/<a\b[^>]*>/gi, (tag) => {
     const href = tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
-    const url = href?.[1] ?? href?.[2];
-    if (!url || !/bitrix24site\.ru/i.test(url)) return tag;
+    const url = href?.[1]?.trim() ?? href?.[2]?.trim();
+    if (!url || !isBitrixPortalUrl(url)) return tag;
     const replaced = registrationHref(url);
     let out = tag.replace(url, replaced);
     // на локальную заглушку не нужен новый таб

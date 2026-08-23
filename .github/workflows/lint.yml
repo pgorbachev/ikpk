@@ -30,6 +30,9 @@ jobs:
           - package: scripts
             node-version: 22
             typecheck-script: typecheck
+          - package: payments
+            node-version: 22
+            typecheck-script: typecheck
 
     defaults:
       run:
@@ -63,6 +66,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Ссылки, привязанные к ревизии (`путь@<sha>:строка`), проверяются чтением файла
+          # из этой ревизии, а при `fetch-depth: 1` её в клоне нет вовсе — гейт тогда честно
+          # выходит кодом 2 «не смогла измерить». Полная история нужна ему, а не «на всякий
+          # случай».
+          fetch-depth: 0
 
       - name: Check for bare openspec calls
         run: ./bin/check-openspec-integration
+
+      - name: Check file references in OpenSpec artifacts
+        run: ./bin/check-spec-refs

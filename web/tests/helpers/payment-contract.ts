@@ -1,0 +1,230 @@
+/**
+ * Наблюдаемый контракт оплаты для тестов раздела 3 / 3a.
+ *
+ * Имена атрибутов и путей — из `design.md` (Решение 2, 8) и спеки. Поля ЮKassa
+ * (`vat_code`, `payment_subject`, `payment_mode`, имя флага одностадийности) сюда
+ * не входят: задача 2.2a не закрыта, выдумывать их нельзя.
+ */
+
+import { createHmac, randomUUID } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+export const repoRoot = join(here, '..', '..', '..');
+
+/** Точка входа сервера, которого ещё нет — отсутствие файла делает серверные тесты красными. */
+export const PAYMENT_SERVICE_ENTRY = join(repoRoot, 'payments', 'src', 'app.ts');
+export const PAYMENT_SERVICE_MAIN = join(repoRoot, 'payments', 'src', 'main.ts');
+
+export const PAYMENT_FORM_ATTR = 'data-payment-form';
+export const PAYMENT_ENDPOINT_ATTR = 'data-payment-endpoint';
+export const PAYMENT_ENTRY_ATTR = 'data-payment-entry';
+export const PAYMENT_STATE_ATTR = 'data-payment-state';
+export const PAYMENT_CONTINUE_ATTR = 'data-payment-continue';
+export const PAYMENT_OTHER_SEMINAR_ATTR = 'data-payment-other-seminar';
+export const PAYMENT_COPY_ID_ATTR = 'data-payment-copy-id';
+export const PAYMENT_CONFIRM_DUPLICATE_ATTR = 'data-payment-confirm-duplicate';
+export const PAYMENT_ATTEMPTS_ATTR = 'data-payment-attempts';
+export const PAYMENT_HOLD_WARNING_ATTR = 'data-payment-hold-warning';
+export const PAYMENT_SUMMARY_ATTR = 'data-payment-summary';
+export const RETURN_PARAM = 'paymentRequest';
+
+export const STALE_LEAD_IN_COPY =
+  'Готовы произвести оплату за семинар? Кликайте на кнопку, выбирайте направление и записывайтесь к нам на обучение!';
+
+export const TEST_YOOKASSA_SECRET = 'test-yookassa-secret-DO-NOT-SHIP';
+export const TEST_HMAC_CURRENT = 'test-hmac-current-material-v1';
+export const TEST_HMAC_PREVIOUS = 'test-hmac-previous-material-v0';
+export const TEST_HMAC_CURRENT_VERSION = '2026-08-01';
+export const TEST_HMAC_PREVIOUS_VERSION = '2026-07-01';
+
+export const CHANNEL_SOURCE_KEY = 'source';
+
+export type PaymentPayload = {
+  requestId: string;
+  firstName: string;
+  lastName: string;
+  seminar: string;
+  amount: number;
+  startDate: string | null;
+  venue: string | null;
+  email: string;
+  phone: string;
+  consent: true;
+  duplicateConfirmed?: boolean;
+  duplicateConfirmationToken?: string;
+};
+
+export function validPayload(overrides: Partial<PaymentPayload> = {}): PaymentPayload {
+  return {
+    requestId: randomUUID(),
+    firstName: 'Иван',
+    lastName: 'Петров',
+    seminar: 'Прикладная кинезиология, модуль 1',
+    amount: 1,
+    startDate: '2026-09-01',
+    venue: 'Санкт-Петербург',
+    email: 'ivan.petrov@example.com',
+    phone: '79111234567',
+    consent: true,
+    ...overrides,
+  };
+}
+
+/** Канон из design.md, Решение 3а: фиксированный порядок, null вместо отсутствующих. */
+export function canonicalFingerprintSource(body: PaymentPayload): string {
+  return JSON.stringify({
+    firstName: body.firstName,
+    lastName: body.lastName,
+    seminar: body.seminar,
+    amount: body.amount,
+    startDate: body.startDate,
+    venue: body.venue,
+    email: body.email,
+    phone: body.phone,
+  });
+}
+
+export function fingerprintOf(body: PaymentPayload, key: string): string {
+  return createHmac('sha256', key).update(canonicalFingerprintSource(body)).digest('hex');
+}
+
+export function prodEnv(overrides: Record<string, string | undefined> = {}): Record<string, string> {
+  const base: Record<string, string> = {
+    PAYMENT_MODE: 'prod',
+    RECEIPT_ENABLED: 'false',
+    // Задача 4.10: `prod` стартует только с боевым магазином, а `PAYMENT_RETURN_BASE`
+    // обязательна в test|prod (задача 5.10e). Прежнее `'test-shop'` было произвольной
+    // фикстурой, не привязанной к спеке; теперь фикстура сама обязана быть валидным
+    // prod-контуром — иначе десятки уже зелёных тестов этого файла (payment-post,
+    // payment-fingerprint, payment-webhook, payment-startup и др.), стартующие сервис через
+    // `prodEnv()` без переопределения этих двух полей, перестали бы подниматься.
+    YOOKASSA_SHOP_ID: SERVICE_SHOP_ID.prod,
+    PAYMENT_RETURN_BASE: PAYMENT_RETURN_BASE_PROD,
+    YOOKASSA_SECRET_KEY: TEST_YOOKASSA_SECRET,
+    HMAC_KEY_CURRENT: TEST_HMAC_CURRENT,
+    HMAC_KEY_CURRENT_VERSION: TEST_HMAC_CURRENT_VERSION,
+    PAYMENT_POST_RATE_LIMIT: '1000',
+    PAYMENT_GET_RATE_LIMIT: '1000',
+    PAYMENT_RATE_LIMIT_WINDOW_MS: '60000',
+    // Фикстура, а не решение: какой код НДС верен для ИКПК — ответ заказчика
+    // (`tasks.md`, 2.9), и в продукте значение приходит из окружения. Наблюдением
+    // 17.08.2026 на тестовом магазине подтверждено лишь то, что чек без `vat_code`
+    // отвергается (`400 invalid_request`, `parameter: receipt.items[0].vat_code`).
+    RECEIPT_VAT_CODE: '1',
+  };
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === undefined) delete base[k];
+    else base[k] = v;
+  }
+  return base;
+}
+
+export const LEAD_ID_FIELD_NAMES = [
+  'leadId',
+  'lead_id',
+  'dealId',
+  'deal_id',
+  'bitrixId',
+  'bitrix_id',
+  'crmId',
+  'applicationId',
+  'zayavkaId',
+  'userId',
+] as const;
+
+export type PaymentRecord = {
+  requestId: string;
+  yookassaPaymentId: string | null;
+  status: string;
+  fingerprint: string;
+  keyVersion: string;
+  createdAt: string;
+  confirmedAt?: string | null;
+  verificationAt?: string | null;
+  verificationReason?: string | null;
+};
+
+export type VerificationJournalEntry = {
+  requestId: string;
+  at: string;
+  reason: string;
+};
+
+// ── Матрица контуров (release modes) ─────────────────────────────────────────
+//
+// Значения нормативны: спека change `online-payment-flow`
+// (`specs/online-payment/spec.md`, Requirements «Роль сборки объявлена перечислением…»,
+// «Личность контура сообщается несекретным readiness-ответом», «Установленные платёжные
+// контуры нельзя публиковать выключенными или перепутанными») и решения владельца от
+// 2026-08-18. Магазины закреплены: тестовый `1440249`, боевой `409285`.
+
+/**
+ * Роль КЛИЕНТСКОЙ сборки: ЧЕТЫРЕ значения, а не булев признак «демо».
+ *
+ * `preview` выделена из `ci` решением владельца от 2026-08-19 (находка D1 сессии красных
+ * тестов): прежние три роли давали `ci` два несовместимых смысла — сборка без формы и сборка
+ * с mock-формой, — а ожидание гейта требуется выводить ИЗ РОЛИ. Спека прямо запрещает
+ * уточняющий второй признак рядом с ролью.
+ */
+export const PAYMENT_ROLE_ATTR = 'data-payment-role';
+export const PAYMENT_ROLES = ['ci', 'preview', 'stand', 'prod'] as const;
+export type PaymentRole = (typeof PAYMENT_ROLES)[number];
+
+/** Признак прежней матрицы: удалён решением владельца 2026-08-18 (задачи 5.10a, 6.14). */
+export const RETIRED_DEMO_ATTR = 'data-payment-demo';
+
+/**
+ * Объявляемая БАЗА эндпоинта по роли. Клиент дописывает `/payments` сам.
+ *
+ * У роли `ci` записи здесь нет намеренно: по спеке объявленного эндпоинта у неё нет вовсе, и
+ * «ожидаемое значение» для неё — отсутствие атрибута, а не какая-то строка.
+ */
+// `prod` — тестовое значение, а не адрес, принятый этим change: production endpoint не
+// выбран (`proposal.md`, Развилка 1, не принята решением владельца 2026-08-20/21; выбор —
+// объём `production-payment-rollout`). Тесты, использующие эту запись, проверяют, что
+// `paymentEndpoint()` возвращает ЯВНО заданное значение буквально — не то, что это
+// значение является умолчанием кода: умолчания у роли `prod` больше нет.
+export const PAYMENT_ENDPOINT_BASE: Record<'preview' | 'stand' | 'prod', string> = {
+  preview: 'https://demo-api.ikpk.invalid',
+  stand: 'http://193.124.115.99/api',
+  prod: 'https://payments-prod.ikpk.invalid',
+};
+
+/**
+ * Адрес mock-обработчика. Тот же, что прежде выдавался за стендовый: решением владельца от
+ * 2026-08-18 он объявлен НЕ представляющим стенд (`.invalid` недостижим по построению), а
+ * решением от 2026-08-19 закреплён за ролью `preview`.
+ */
+export const PREVIEW_MOCK_ENDPOINT = PAYMENT_ENDPOINT_BASE.preview;
+/** Прежнее имя того же значения — оставлено, чтобы старые ссылки читались однозначно. */
+export const RETIRED_STAND_ENDPOINT = PREVIEW_MOCK_ENDPOINT;
+
+/**
+ * Отображение роли сборки на режим серверного процесса. У `ci` процесса нет вовсе —
+ * поэтому `null`, а не какое-то значение режима.
+ */
+export const ROLE_TO_SERVICE_MODE: Record<PaymentRole, 'demo' | 'test' | 'prod' | null> = {
+  ci: null,
+  preview: 'demo',
+  stand: 'test',
+  prod: 'prod',
+};
+
+/** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */
+export const PAYMENT_RETURN_BASE_STAND = 'http://193.124.115.99';
+export const PAYMENT_RETURN_BASE_PROD = 'https://ikpk.su';
+
+/** Режим УСТАНОВЛЕННОГО сервиса и закреплённый за ним магазин. */
+export const SERVICE_SHOP_ID: Record<'test' | 'prod', string> = {
+  test: '1440249',
+  prod: '409285',
+};
+
+/** Loopback-адрес инстанции стенда: наружу открыт только путь через обратный прокси. */
+export const STAND_BIND_HOST = '127.0.0.1';
+export const STAND_BIND_PORT = '8787';
+/** Гейт публикации спрашивает readiness изнутри host, не через публичный эндпоинт. */
+export const READYZ_PATH = '/readyz';
+export const READYZ_INTERNAL_URL = `http://${STAND_BIND_HOST}:${STAND_BIND_PORT}${READYZ_PATH}`;

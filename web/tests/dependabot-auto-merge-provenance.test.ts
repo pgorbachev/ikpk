@@ -73,6 +73,17 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
       .toBe(false);
   });
 
+  // Ветвь «действующее лицо не определено» существует в модуле (`actor` допускает
+  // `null`), но ни одним тестом не проходилась. Непройденная ветвь гейта — такое же
+  // обещание, как непроверенный гейт: подпись платформы здесь верная, поэтому
+  // отвергнуть вершину обязано именно отсутствие субъекта.
+  it('rejects a platform-signed head whose event actor could not be established', async () => {
+    const { evaluateHead } = await loadDependabotAutoMerge();
+    const result = evaluateHead(head({ actor: null }));
+    expect(result.gate.ok).toBe(false);
+    expect(result.evidence).toMatchObject({ conclusion: 'negative' });
+  });
+
   it('accepts a real Dependabot shape signed by the platform service account', async () => {
     const { evaluateHead } = await loadDependabotAutoMerge();
     const result = evaluateHead(head());

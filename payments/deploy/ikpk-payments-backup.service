@@ -1,0 +1,20 @@
+[Unit]
+Description=IKPK payments state backup (task 4.3a)
+# Копия состояния, а не кода: восстановление из неё — явное действие оператора,
+# описанное в docs/runbook-payments-backup.md.
+#
+# Объём ограничен prod-контуром (задача 4.3a, решение владельца 2026-08-18): на
+# демо-стенде резервное копирование не настраивается намеренно. Каталог состояния —
+# инстанции prod (задача 4.10: два каталога, /var/lib/ikpk-payments/{stand,prod}), не
+# общий родительский путь — механизм остаётся написанным под ОДНУ инстанцию и
+# приспосабливать его к двум каталогам состояния не требуется.
+
+[Service]
+Type=oneshot
+# root: каталог состояния принадлежит ikpk-payments, каталог копий — отдельный,
+# и right на чтение обоих проще держать у root, чем раздавать сервисному пользователю
+# доступ к каталогу резервных копий.
+User=root
+Environment=PAYMENT_DATA_DIR=/var/lib/ikpk-payments/prod
+Environment=BACKUP_DIR=/var/backups/ikpk-payments
+ExecStart=/opt/ikpk-payments/deploy/ikpk-payments-backup.sh

@@ -1,0 +1,1947 @@
+#!/usr/bin/env node
+// Проверяет ссылки на файлы внутри OpenSpec-артефактов: существование пути, попадание
+// номера строки в файл и — если рядом приведён фрагмент — совпадение фрагмента с этой
+// строкой или диапазоном.
+//
+// Зачем: спека переживает код. Ссылка вида `web/src/lib/data.ts:31` верна в день написания
+// и молча становится ложной после сдвига файла; строгая валидация OpenSpec её не смотрит, а
+// её зелёный цвет читается как «спека в порядке».
+//
+// ДВЕ ПРЕДЫДУЩИЕ РЕДАКЦИИ ЭТОГО СКРИПТА БЫЛИ ЛОЖНОЗЕЛЁНЫМИ, и это главный довод за нынешнее
+// устройство:
+//   1. Первая печатала «128 ссылок, расхождений нет», проверяя по содержимому ДВЕ: короткие
+//      ссылки (`index.astro:375-379`) отбрасывались целиком, а полные без фрагмента
+//      проверялись только на то, что номер строки не больше длины файла.
+//   2. Вторая печатала «проверено по содержимому 146» — и это была та же ошибка в подсчёте,
+//      а не в проверке: в 146 попали 142 ссылки, у которых проверено ТОЛЬКО существование
+//      пути. Ссылок с номером И фрагментом на том дереве было ЧЕТЫРЕ. Заодно она пропускала
+//      ровно тот пример, ради которого писалась: `online-payment-flow/proposal.md:215-235`
+//      не разрешался относительно `openspec/changes/`, а любая ненайденная ссылка из
+//      активного change объявлялась предупреждением — гейт выходил нулём при уехавшем на
+//      254-ю строку разделе.
+// Отсюда правило вывода: числа печатаются по КЛАССАМ проверки и не складываются в одно
+// «проверено». Сумма разных по силе проверок — это способ выдать неизмеренное за измеренное.
+//
+// Классы исхода — их пять, и они печатаются по отдельности:
+//   РАСХОЖДЕНИЕ  — номер строки за концом файла, фрагмент на этой строке не найден, ссылка
+//                  разрешается неоднозначно, путь не существует и не объявлен;
+//   НЕИЗМЕРИМО   — ссылка с номером строки, но без фрагмента: содержимое проверить нечем.
+//                  Такие не выдаются за проверенные, а сравниваются с ПОИМЁННЫМ долгом
+//                  (openspec/.spec-ref-debt). Поимённым, а не числом: при сравнении чисел
+//                  снятие одной старой ссылки открывает место новой при том же итоге —
+//                  храповик, который проворачивается;
+//   ПРОВЕРЕНО    — путь разрешён; отдельно считается, у скольких сверено содержимое, и отдельно
+//                  — имена соседних артефактов («см. `proposal.md`»), где существование почти
+//                  тривиально;
+//   СГЕНЕРИРОВАНО — путь ведёт в игнорируемый git вывод (`dist/**`): ссылка верна, но проверить
+//                  её можно только на собранном дереве. Считается, не enforced.
+//
+// **Класса «предупреждение» больше нет, и это третье исправление подряд в одном месте.**
+// Сначала любая ненайденная ссылка из `openspec/changes/**` считалась нормой («change создаст
+// файл сам»), и на этом проходила устаревшая цитата на соседний change. Потом гейт стал
+// угадывать артефактные ссылки по набору базовых имён, снятому с СУЩЕСТВУЮЩИХ файлов — и
+// переименование нестандартного артефакта (`evidence.md`) уносило признак вместе с файлом:
+// ссылка снова становилась предупреждением. Признак, зависящий от существования предмета,
+// для этой задачи не годится в принципе.
+// Поэтому теперь: **любая** ненайденная ссылка либо объявлена в openspec/.spec-ref-absent,
+// либо расхождение. Объявление — утверждение автора, гейт его не выводит из текста.
+//   - openspec/changes/archive/** не проверяется вовсе: архив описывает своё время.
+//
+// Коды выхода: 0 — чисто; 1 — расхождения либо расхождение с поимённым долгом; 2 — измерить
+// не удалось (нет артефактов, нет ни одной ссылки, нет файла долга). Третий код обязателен:
+// «ссылок не найдено» — это не «ссылки верны».
+//
+// `--write-debt` перезаписывает openspec/.spec-ref-debt текущим списком неизмеримых ссылок.
+// Это не способ узаконить рост: рост виден в диффе файла поимённо, а не как «54 → 56».
+// `--write-absent` так же перезаписывает openspec/.spec-ref-absent списком ненайденных
+// ссылок на артефакты — применять только после того, как каждая строка прочитана глазами.
+
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync, realpathSync } from 'node:fs';
+import { join, resolve, dirname, basename } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+
+const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..');
+const DEBT_FILE = join(ROOT, 'openspec', '.spec-ref-debt');
+const ABSENT_FILE = join(ROOT, 'openspec', '.spec-ref-absent');
+const WRITE_DEBT = process.argv.includes('--write-debt');
+const WRITE_ABSENT = process.argv.includes('--write-absent');
+// Проверять пути в собранном дереве — отдельный режим: см. комментарий у isGeneratedOutput.
+const CHECK_BUILT = process.argv.some((a) => a === '--check-built' || a.startsWith('--check-built='));
+/** Корни, которые вызывающий объявляет собранными: `--check-built=web/dist,web/dist-demo`. Пустой
+ *  список означает «взять все, что есть на диске», и тогда пустой диск — код 2, а не зелёный. */
+const CLAIMED_BUILT_ROOTS = (process.argv.find((a) => a.startsWith('--check-built=')) ?? '')
+  .split('=')
+  .slice(1)
+  .join('=')
+  .split(',')
+  .map((x) => x.trim())
+  .filter(Boolean);
+
+// Что считать ссылкой, а что прозой, определяется ФОРМОЙ span, и ни в одну сторону не зависит от
+// того, существует ли предмет:
+//   - есть каталог в пути и есть расширение → это ссылка ВСЕГДА (`deploy/nginx-redirects.conf`);
+//   - нет каталога → ссылкой считается только то, что разрешается (иначе «5.51.2» и подобное
+//     ушло бы в расхождения).
+// Прежние две редакции этого места зависели от предмета и обе давали ложное зелёное: сначала
+// набор базовых имён артефактов снимался с дерева (переименование уносило признак вместе с
+// файлом), потом так же снимался набор РАСШИРЕНИЙ — и удаление единственного `.conf` в
+// репозитории убирало класс `.conf` целиком, то есть проверка исчезала вместе с проверяемым.
+// Поймано негативной проверкой: `git rm deploy/nginx-redirects.conf` оставлял гейт зелёным.
+const SPAN = /`([^`\n]+)`/g;
+// Путь и необязательный номер строки либо перечень номеров. Символы пути — БУКВЫ ЛЮБОГО
+// АЛФАВИТА (`\p{L}`), а не `A-Za-z`: в репозитории лежит
+// `web/public/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf`, и ссылка на
+// него прежней регуляркой не распознавалась вовсе — то есть его удаление гейт не увидел бы.
+// Расширение необязательно: путь без расширения (`bin/openspec`) — тоже ссылка, см. ниже.
+// Ревизия — ТОЛЬКО полные 40 символов: правило проекта (`AGENTS.md`) требует полного SHA, а
+// сокращённый префикс со временем становится неоднозначным — и тогда обязательный гейт встанет
+// на коллизии, которую никто не создавал намеренно.
+const PATH_SPAN =
+  /^([\p{L}\p{N}_\-./[\]]+)(?:@([0-9a-f]{7,40}))?(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?$/u;
+// Продолжение предыдущей ссылки: `…/README.md:68` и `:273`. Форма уже используется в
+// артефактах, и прежняя редакция её игнорировала молча — второй номер не проверялся и в долг
+// не попадал.
+const LINE_ONLY_SPAN = /^:(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/;
+
+const DEBT_HEADER = `# Поимённый долг ссылок, которые гейт проверить не может. Шесть классов, и все здесь:
+#   1. ссылка «путь:строка» БЕЗ фрагмента в кавычках — содержимое сверить нечем;
+#   2. ссылка в СБОРОЧНЫЙ ВЫВОД (\`web/dist/…\`) — её предмет появляется только после сборки,
+#      поэтому обязательный гейт её не проверяет вовсе; проверка идёт отдельным шагом
+#      \`--check-built\` в джобе, где оба дерева уже собраны;
+#   3. форма \`<ref>@<sha>\` без пути — проверена только достижимость ревизии;
+#   4. ссылка на ОБЪЯВЛЕННУЮ внешнюю ревизию — членство здесь определяется объявлением, а не
+#      достижимостью, иначе удаление чужой ветки меняло бы состав реестра;
+#   5. форма без расширения, отброшенная как проза — в реестре затем, чтобы исчезновение
+#      предмета (\`specs/<capability>/\` удалён) не переводило ссылку в прозу молча;
+#   6. НЕОДНОЗНАЧНОЕ короткое имя (\`spec.md\` подходит к десяткам файлов) — какой файл имелся
+#      в виду, решает читатель, а не гейт.
+# Формат: <артефакт> :: <путь>[:<строки>].
+#
+# Гейт ./bin/check-spec-refs сравнивает текущий набор с этим ПОИМЁННО и падает в обе стороны:
+# появилась новая неизмеримая ссылка — отказ; исчезла записанная — отказ с требованием
+# обновить файл (\`./bin/check-spec-refs --write-debt\`). Сравнение по числу проворачивается:
+# снять одну старую ссылку и добавить новую — то же число и зелёный гейт.
+#
+# Почему долг, а не немедленный запрет: ссылка «путь:строка» без фрагмента — принятая в
+# проекте форма, её несут и уже слитые спеки. Требовать разом переписать все было бы
+# запретом на существующее состояние вместо защиты от регресса. Новая ссылка обязана нести
+# фрагмент: \`web/src/lib/data.ts:45\`, \`const ENTITIES_DIR =\`
+`;
+
+const ABSENT_HEADER = `# Объявленные ссылки в пустоту. Формат: <артефакт> :: <путь или sha> :: <код причины>.
+# Ключом может быть и путь, и САМ SHA (тогда артефакт допускается писать как \`*\`): форма
+# \`<ветка>@<sha>\` пути не содержит вовсе, и объявить её по пути невозможно.
+# Причина ОБЯЗАТЕЛЬНА и гейтом не выводится: \`--write-absent\` вписывает
+# \`ТРЕБУЕТСЯ-ПРИЧИНА\`, и такой файл гейт не принимает (код 2). Иначе один прогон превращал
+# красное в зелёное, а диффом оставалась строка без объяснения — при обязательной проверке это
+# самый дешёвый способ уйти от проблемы вместо её решения.
+#
+# Коды причин:
+#   will-create             — файл, который change ещё создаст;
+#   deleted-deliberately    — осознанная цитата на удалённое (каталог \`payment-request-flow\`
+#                             снесён решением владельца тем же PR, что слит \`online-payment-flow\`);
+#   forbidden-by-invariant  — файла не должно существовать: \`web/public/robots.txt\` перекрыл бы
+#                             генерируемый маршрут и открыл демо-стенд поисковикам, на его
+#                             отсутствие стоит гейт \`web/tests/repo-hygiene.test.ts\`;
+#   external-revision       — объявление можно ставить ЗАРАНЕЕ, пока ревизия ещё достижима: оно
+#                             для того и нужно, чтобы удаление ветки не остановило merge. Поэтому
+#                             «запись есть, а ревизия достижима» — норма, а не мусор; мусор —
+#                             это SHA, на который не ссылается ни один артефакт, и такие строки
+#                             гейт называет мёртвыми и требует убрать.
+#                             Свидетельство живёт вне \`main\`: неслитая ветка либо — хуже —
+#                             коммит, которого нет и в origin вовсе (у нас
+#                             \`2ccee7b131cf5512672686271f8647dea50af683\`, ветка
+#                             \`docs/zet-nmo-audit\` в origin отсутствует, объект есть только в
+#                             клоне автора). Такую ссылку не может проверить никто, кроме него, и
+#                             это надо знать, читая артефакт. Пока ревизия
+#                             достижима, ссылка проверяется по содержимому; когда ветку удалят,
+#                             гейт скажет «проверить нечем» и не заблокирует merge. Такие записи
+#                             терпимы в ОБОИХ состояниях;
+#   not-committed           — документ не в репозитории. У нас это
+#                             \`docs/security-audit-2026-08-08.md\`. Допустимые исходы — только
+#                             **обезличенный** материал или снятие ссылок: коммит сырого аудита в
+#                             публичный репозиторий запрещён решением владельца, и привязка к
+#                             ревизии от этого не спасает — она тоже означает коммит.
+#
+# Список сверяется поимённо и в обе стороны (\`--write-absent\`).
+`;
+
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return walk(p);
+    return e.name.endsWith('.md') ? [p] : [];
+  });
+}
+
+/** Индекс файлов репозитория по базовому имени — для разрешения коротких ссылок. */
+function buildBasenameIndex() {
+  // `core.quotePath=false` обязателен: по умолчанию git отдаёт не-ASCII пути в escape-виде
+  // (`\320\237...`), и такой индекс не совпал бы ни с одной ссылкой в тексте. Здесь настройка
+  // репозитория уже такая, но полагаться на неё нельзя — гейт не должен зависеть от конфига.
+  const out = execFileSync('git', ['-C', ROOT, '-c', 'core.quotePath=false', 'ls-files'], {
+    encoding: 'utf8',
+  });
+  const idx = new Map();
+  for (const rel of out.split('\n')) {
+    if (!rel) continue;
+    const b = basename(rel);
+    if (!idx.has(b)) idx.set(b, []);
+    idx.get(b).push(rel);
+  }
+  return idx;
+}
+
+const byBasename = buildBasenameIndex();
+
+/** Индекс отслеживаемых путей: точный путь по нижнему регистру. Нужен потому, что macOS не
+ *  различает регистр, а Linux-раннер различает: `WEB/src/lib/data.ts` локально «существует», в
+ *  CI — нет. Гейт обязан давать один и тот же вердикт на обеих системах, иначе реестры, снятые
+ *  локально, в CI читаются иначе. */
+function buildCaseIndex() {
+  const idx = new Map();
+  for (const rel of execFileSync(
+    'git',
+    ['-C', ROOT, '-c', 'core.quotePath=false', 'ls-files'],
+    { encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter(Boolean)) {
+    idx.set(rel.toLowerCase(), rel);
+  }
+  return idx;
+}
+const caseIndex = buildCaseIndex();
+const allTracked = execFileSync(
+  'git',
+  ['-C', ROOT, '-c', 'core.quotePath=false', 'ls-files'],
+  { encoding: 'utf8' },
+)
+  .split('\n')
+  .filter(Boolean);
+
+/** Файлы репозитория, чей путь заканчивается на данный сокращённый путь. */
+function bySuffix(path) {
+  return allTracked.filter((rel) => rel.endsWith(`/${path}`));
+}
+
+/**
+ * Корни сборочного вывода — ЗАКРЫТЫЙ перечень, а не «всё, что игнорирует git». Прежняя редакция
+ * спрашивала `git check-ignore`, и под «сгенерированный вывод» попадало всё игнорируемое:
+ * `.env`, `.mcp.json`, `node_modules`, каталоги результатов прогонов и — что хуже — ОПЕЧАТКА
+ * внутри `dist` (`web/dist/statayi/index.html` прошла бы молча). Здесь перечень уместен именно
+ * потому, что предмет закрыт по смыслу: это вывод известных сборок, и новый вывод появляется
+ * вместе с новой сборкой, то есть с правкой этого файла.
+ *
+ * Каждый корень СВЕРЯЕТСЯ с `.gitignore`: если он перестал игнорироваться, значит перечень
+ * разошёлся с репозиторием, и гейт обязан сказать это, а не молчать.
+ */
+const BUILD_OUTPUT_ROOTS = ['web/dist', 'web/dist-demo', 'cms/dist', 'payments/dist'];
+
+function verifyBuildRoots() {
+  const notIgnored = BUILD_OUTPUT_ROOTS.filter((r) => {
+    // Признак «пакет есть» — его манифест, а не просто каталог с таким именем. Первая редакция
+    // смотрела на каталог, и в дереве, где `web/` есть, а сборки нет вовсе (например в
+    // синтетическом репозитории теста), сверка объявляла расхождение на исправном дереве.
+    if (!existsSync(join(ROOT, dirname(r), 'package.json'))) return false;
+    return spawnSync('git', ['-C', ROOT, 'check-ignore', '-q', `${r}/`]).status !== 0;
+  });
+  if (notIgnored.length > 0) {
+    console.error(
+      'check-spec-refs: перечень корней сборочного вывода разошёлся с .gitignore — ' +
+        `${notIgnored.join(', ')} больше не игнорируются; перечень надо обновить`,
+    );
+    process.exit(2);
+  }
+}
+
+/**
+ * Корень сборочного вывода и НОРМАЛИЗОВАННЫЙ путь внутри него. Возвращать один корень было
+ * недостаточно: `dist/index.html` относится к `web/dist`, а поиск шёл по списку
+ * `[ROOT/dist/index.html, ROOT/web/dist/index.html]` — то есть корневой `dist/index.html`,
+ * лежащий вне сборки `web`, мог подтвердить ссылку вместо исчезнувшего файла. Теперь предмет
+ * ищется строго внутри найденного корня.
+ *
+ * Сравнение регистро-НЕзависимое, а расхождение регистра называется отдельно: `WEB/dist/...`
+ * прежде не распознавалось как сборочный вывод вовсе, и на macOS такая ссылка открывалась как
+ * обычный путь, а на Linux нет — снова разные классы в двух средах. Каталоги сборки не
+ * отслеживаются git, поэтому индекс здесь не помощник: признаком служит сам перечень корней.
+ */
+function buildRootOf(path) {
+  const bare = path.replace(/\/$/, '');
+  for (const c of [bare, join('web', bare)]) {
+    const norm = c.split('/').filter(Boolean).join('/');
+    const lower = norm.toLowerCase();
+    const hit = BUILD_OUTPUT_ROOTS.find(
+      (root) => lower === root.toLowerCase() || lower.startsWith(`${root.toLowerCase()}/`),
+    );
+    if (hit) {
+      const rest = norm.slice(hit.length).replace(/^\//, '');
+      const exactCase = norm.slice(0, hit.length) === hit;
+      return { root: hit, rest, inside: rest ? `${hit}/${rest}` : hit, exactCase };
+    }
+  }
+  return null;
+}
+
+function isGeneratedOutput(path) {
+  return buildRootOf(path) !== null;
+}
+
+/**
+ * Разрешение ссылки. Порядок кандидатов важен: сначала рядом с самим артефактом и от корня
+ * его change — «см. proposal.md» и «specs/article-catalog/spec.md» внутри change означают
+ * файлы ЭТОГО change, а не одноимённые в других. Первая редакция искала их по всему
+ * репозиторию и объявляла неоднозначными двенадцать раз подряд. Затем — корень репозитория,
+ * `web/` и корни OpenSpec: `online-payment-flow/proposal.md` пишут без префикса
+ * `openspec/changes/`, и без этих двух кандидатов такая ссылка не проверялась вовсе.
+ */
+/** Точен ли регистр пути относительно индекса git. Для неотслеживаемых путей вопрос не имеет
+ *  смысла, поэтому они считаются точными. */
+function caseExact(absPath) {
+  const rel = absPath.startsWith(`${ROOT}/`) ? absPath.slice(ROOT.length + 1) : null;
+  if (!rel) return true;
+  const exact = caseIndex.get(rel.toLowerCase());
+  return exact === undefined || exact === rel;
+}
+
+/**
+ * Путь остаётся ВНУТРИ репозитория после разыменования символических ссылок. `statSync` и
+ * `readFileSync` идут по symlink, поэтому отслеживаемая ссылка наружу превращала гейт в
+ * читателя чужих файлов: измерено — repo-путь `web/src/lib/probe-link.ts` был «сверен по
+ * содержимому» с файлом в `/private/tmp`, счётчик показал 21 вместо 20, код 0. Для проверки,
+ * которая существует ради доказуемости ссылок, это худший исход: она подтверждает то, чего в
+ * репозитории нет.
+ */
+const REAL_ROOT = realpathSync(ROOT);
+function insideRepo(abs) {
+  try {
+    const real = realpathSync(abs);
+    return real === REAL_ROOT || real.startsWith(`${REAL_ROOT}/`);
+  } catch {
+    return false;
+  }
+}
+
+/** Корень change или принятой спеки, которому принадлежит артефакт. */
+function changeRootOf(mdPath) {
+  const rel = mdPath.slice(ROOT.length + 1).split('/');
+  return rel.length >= 3 ? join(ROOT, rel[0], rel[1], rel[2]) : dirname(mdPath);
+}
+
+/**
+ * Единственная точка, через которую возвращается найденный путь. Прежняя редакция проверяла
+ * `insideRepo` только у трёх первых кандидатов, поэтому сокращённый путь (`src/link.ts`,
+ * разрешаемый по хвосту) и symlink-КАТАЛОГ уходили наружу без повторной проверки — внешний файл
+ * снова можно было выдать за проверенный. Признак обязан стоять на выходе, а не у части входов.
+ */
+function hitInside(abs) {
+  if (!insideRepo(abs)) return { outside: abs };
+  return caseExact(abs) ? { hit: abs } : { wrongCase: abs };
+}
+
+function resolveRef(path, mdPath) {
+  // Расхождение регистра определяется по ИНДЕКСУ git, а не по попытке открыть файл. Прежняя
+  // редакция узнавала о нём только через `existsSync`, то есть только на регистро-НЕзависимой ФС:
+  // на Linux-раннере — а это и есть CI, где гейт обязателен — та же ссылка шла другой ветвью и
+  // получала другое сообщение, а сама ветвь `wrongCase` была недостижима вовсе. Вердикт
+  // обязательной проверки не имеет права зависеть от файловой системы исполнителя.
+  const literalCase = caseIndex.get(path.toLowerCase());
+  if (literalCase !== undefined && literalCase !== path) {
+    return { wrongCase: join(ROOT, literalCase) };
+  }
+  // СОКРАЩЁННЫЙ путь (`src/lib/Data.ts`) — тоже по индексу, а не по попытке открыть файл. На
+  // macOS такой span разрешался кандидатом `web/<путь>` и давал «регистр», на Linux-раннере тот
+  // же span не находился вовсе и уходил в «ссылка в пустоту» — то есть в двух средах один
+  // артефакт получал разные классы, и в одной из них расхождение можно было ОБЪЯВИТЬ вместо
+  // исправления.
+  if (path.includes('/')) {
+    const exactTail = allTracked.some((t) => t === path || t.endsWith(`/${path}`));
+    if (!exactTail) {
+      const lower = path.toLowerCase();
+      const wrong = allTracked.find(
+        (t) => t.toLowerCase() === lower || t.toLowerCase().endsWith(`/${lower}`),
+      );
+      if (wrong) return { wrongCase: join(ROOT, wrong) };
+    }
+  }
+  if (!path.includes('/')) {
+    const byLower = [...caseIndex.entries()].find(
+      ([lower, exact]) => lower.endsWith(`/${path.toLowerCase()}`) && !exact.endsWith(`/${path}`),
+    );
+    if (byLower && (byBasename.get(path) ?? []).length === 0) {
+      return { wrongCase: join(ROOT, byLower[1]) };
+    }
+  }
+  const mdDir = dirname(mdPath);
+  const changeRoot = (() => {
+    const rel = mdPath.slice(ROOT.length + 1).split('/');
+    // openspec/changes/<name>/... либо openspec/specs/<name>/...
+    return rel.length >= 3 ? join(ROOT, rel[0], rel[1], rel[2]) : mdDir;
+  })();
+  const escaping = [join(mdDir, path), join(changeRoot, path), join(ROOT, path)].find(
+    (c) => existsSync(c) && !insideRepo(c),
+  );
+  if (escaping) return { outside: escaping };
+  const local = [join(mdDir, path), join(changeRoot, path)].find(
+    (c) => existsSync(c) && statSync(c).isFile(),
+  );
+  if (local) return hitInside(local);
+
+  if (path.includes('/')) {
+    const archived = existsSync(join(ROOT, 'openspec', 'changes', 'archive'))
+      ? readdirSync(join(ROOT, 'openspec', 'changes', 'archive'), { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .flatMap((e) => {
+            const dir = join(ROOT, 'openspec', 'changes', 'archive', e.name);
+            const out = [join(dir, path)];
+            // Форма `<имя-change>/<артефакт>` — самая частая запись меж-change ссылки. При
+            // архивировании каталог получает датовый префикс (`2026-08-21-online-payment-flow`),
+            // поэтому склейка `archive/<dir>/<имя-change>/<артефакт>` не находит ничего: путь
+            // удваивает имя change. Измерено сразу после архивирования `online-payment-flow` —
+            // три ссылки из чужого change стали «ссылками в пустоту», хотя файлы существуют.
+            const [head, ...restParts] = path.split('/');
+            if (restParts.length > 0 && e.name.endsWith(`-${head}`)) {
+              out.push(join(dir, restParts.join('/')));
+            }
+            return out;
+          })
+      : [];
+    const hit = [
+      join(ROOT, path),
+      join(ROOT, 'web', path),
+      join(ROOT, 'openspec', 'changes', path),
+      join(ROOT, 'openspec', 'specs', path),
+      // Архивирование change — обязательный шаг конвейера, и после него ссылка вида
+      // `online-payment-flow/proposal.md` из СОСЕДНЕГО change указывает на существующий файл,
+      // просто переехавший в `openspec/changes/archive/<дата>-<имя>/`. Прежняя редакция считала
+      // такую ссылку сломанной, то есть архивирование обязывало править чужие артефакты или
+      // записывать существующие файлы в «ссылки в пустоту». Имя архивного каталога содержит
+      // дату, поэтому перечисляются фактические каталоги, а не собирается предполагаемое имя.
+      ...archived,
+    ].find((c) => existsSync(c) && statSync(c).isFile());
+    if (hit) return hitInside(hit);
+    // Сокращённый путь с каталогом — принятая в артефактах форма: `statyi/index.astro`,
+    // `ui/PageHeader.astro`. Разрешается совпадением по хвосту пути в индексе репозитория;
+    // несколько совпадений — неоднозначность, а не выбор наугад.
+    const tail = bySuffix(path);
+    if (tail.length === 1) return hitInside(join(ROOT, tail[0]));
+    if (tail.length > 1) return { ambiguous: tail };
+    return { missing: true };
+  }
+  const cands = byBasename.get(path) ?? [];
+  if (cands.length === 1) return hitInside(join(ROOT, cands[0]));
+  if (cands.length === 0) return { missing: true };
+  return { ambiguous: cands };
+}
+
+/**
+ * Базовые имена артефактов, которые схема OpenSpec требует от КАЖДОГО change. Берутся из CLI
+ * (`status --json`), то есть из схемы, а НЕ из списка существующих файлов: удаление
+ * `design.md` не убирает `design` из схемы, поэтому признак не исчезает вместе с предметом —
+ * ровно та ошибка, которую пришлось исправлять дважды.
+ *
+ * Зачем это здесь: ссылку «см. `design.md`» внутри change нельзя проверять «по факту наличия» —
+ * тогда удаление файла превращает ссылку в прозу и гейт зеленеет. А отличить прозу от ссылки для
+ * ПРОИЗВОЛЬНОГО короткого имени нельзя вовсе: в артефактах так пишут и домены (`ikpk.su`), и
+ * поля (`author.email`), и методы (`page.goto`). Для артефактов схемы двусмысленности нет.
+ *
+ * Ограничение названо прямо: файл внутри change, не входящий в схему (например `evidence.md`),
+ * этим правилом не покрыт — чтобы его удаление ловилось, ссылку надо писать путём.
+ */
+function schemaArtifactBasenames() {
+  // Выбор детерминированный: сортировка плюс требование, чтобы у каталога был `.openspec.yaml`.
+  // По порядку файловой системы любой посторонний каталог, оказавшийся первым, ронял весь гейт.
+  const changes = existsSync(join(ROOT, 'openspec', 'changes'))
+    ? readdirSync(join(ROOT, 'openspec', 'changes'), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name !== 'archive')
+        .map((e) => e.name)
+        .filter((name) => existsSync(join(ROOT, 'openspec', 'changes', name, '.openspec.yaml')))
+        .sort()
+    : [];
+  if (changes.length === 0) {
+    const anyChange = existsSync(join(ROOT, 'openspec', 'changes'))
+      ? readdirSync(join(ROOT, 'openspec', 'changes'), { withFileTypes: true }).some(
+          (e) => e.isDirectory() && e.name !== 'archive',
+        )
+      : false;
+    if (anyChange) {
+      // Changes есть, а `.openspec.yaml` ни у одного — спросить схему не у кого. Прежняя
+      // редакция возвращала пустой набор, и проверка коротких имён артефактов выключалась
+      // БЕСШУМНО: вывод оставался побайтово тем же, что на здоровом дереве.
+      console.error(
+        'check-spec-refs: в openspec/changes есть change, но ни у одного нет .openspec.yaml — ' +
+          'состав артефактов схемы спросить не у кого, проверка коротких имён была бы выключена ' +
+          'молча',
+      );
+      process.exit(2);
+    }
+    return new Set();
+  }
+  const cli = spawnSync(
+    join(ROOT, 'bin', 'openspec'),
+    ['status', '--change', changes[0], '--json'],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+  if (cli.status !== 0) {
+    console.error(
+      'check-spec-refs: не удалось спросить у OpenSpec состав артефактов схемы ' +
+        `(./bin/openspec status --change ${changes[0]} --json): без него ссылка «см. \`design.md\`» ` +
+        'проверялась бы по факту наличия файла, то есть исчезала бы вместе с ним',
+    );
+    process.exit(2);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(cli.stdout);
+  } catch {
+    console.error('check-spec-refs: ответ OpenSpec не разобрался как JSON — состав артефактов не измерен');
+    process.exit(2);
+  }
+  const paths = parsed.artifactPaths;
+  if (!paths || typeof paths !== 'object' || Object.keys(paths).length === 0) {
+    console.error(
+      'check-spec-refs: ответ OpenSpec не содержит artifactPaths — состав артефактов схемы не ' +
+        'измерен. Молча продолжать нельзя: проверка коротких имён артефактов просто перестала ' +
+        'бы работать, оставаясь зелёной',
+    );
+    process.exit(2);
+  }
+  const names = new Set();
+  for (const info of Object.values(paths)) {
+    const out = info?.resolvedOutputPath;
+    // Глоб (`specs/**/*.md`) базового имени не даёт — такие артефакты правилом не покрываются.
+    if (typeof out === 'string' && !out.includes('*')) names.add(basename(out));
+  }
+  if (names.size === 0) {
+    console.error(
+      'check-spec-refs: у схемы не нашлось ни одного артефакта с конкретным именем файла — ' +
+        'проверять короткие имена нечем',
+    );
+    process.exit(2);
+  }
+  return names;
+}
+
+// Усечённый клон определяется один раз: в нём отсутствие ревизии ничего не говорит о ссылке.
+const isShallow =
+  (
+    execFileSync('git', ['-C', ROOT, 'rev-parse', '--is-shallow-repository'], {
+      encoding: 'utf8',
+    }) ?? ''
+  ).trim() === 'true';
+
+/** Разбирает реестр отсутствующих: `<артефакт> :: <путь> :: <код причины>`. Причина обязательна
+ *  и не выводится гейтом: `--write-absent` вписывает `ТРЕБУЕТСЯ-ПРИЧИНА`, и такой файл гейт не
+ *  принимает. Без этого один прогон `--write-absent` превращал красное в зелёное, а диффом
+ *  оставалась строка без объяснения — при обязательной проверке это самый дешёвый способ уйти от
+ *  проблемы. Код `external-revision` означает материал вне `main`: такие записи терпимы в обоих
+ *  состояниях, потому что достижимость ревизии зависит от того, жива ли чужая ветка. */
+const ABSENT_REASONS = new Set([
+  'will-create',
+  'deleted-deliberately',
+  'forbidden-by-invariant',
+  'external-revision',
+  'not-committed',
+]);
+
+function readAbsentDeclared() {
+  if (!existsSync(ABSENT_FILE)) {
+    console.error(
+      'check-spec-refs: нет openspec/.spec-ref-absent — без объявленного списка ссылок в пустоту ' +
+        'гейт не отличит файл, который change ещё создаст, от ссылки, сломанной переименованием',
+    );
+    process.exit(2);
+  }
+  const out = new Map();
+  const bad = [];
+  const dup = [];
+  for (const line of readFileSync(ABSENT_FILE, 'utf8').split('\n')) {
+    const row = line.trim();
+    if (!row || row.startsWith('#')) continue;
+    const parts = row.split(' :: ').map((x) => x.trim());
+    // Заполнитель причины отвергается обычным прогоном, но НЕ режимами записи: чтение выходит
+    // раньше записи, поэтому `--write-absent` был неприменим ровно в том состоянии, для которого
+    // он нужен — файл с заполнителем нельзя было ни принять, ни перезаписать. Курица и яйцо
+    // внутри собственного инструмента.
+    // Заполнитель терпит ТОЛЬКО `--write-absent`: он этот файл и перезаписывает. `--write-debt`
+    // трогает другой реестр и прежде выходил нулём, оставляя состояние, которое обычный прогон
+    // отвергает кодом 2 — то есть один режим записи «зеленил» то, что гейт не принимает.
+    if (parts.length === 3 && parts[2] === 'ТРЕБУЕТСЯ-ПРИЧИНА' && WRITE_ABSENT) {
+      out.set(`${parts[0]} :: ${parts[1]}`, parts[2]);
+      continue;
+    }
+    if (parts.length !== 3 || !ABSENT_REASONS.has(parts[2])) {
+      bad.push(row);
+      continue;
+    }
+    // Ключ по SHA обязан быть 40 hex — и признак берётся по ПРИЧИНЕ, а не по одному из двух
+    // написаний ключа. Прежняя редакция требовала 40 hex только при `* ::`, поэтому
+    // `<артефакт> :: ne-sha-vovse :: external-revision` принимался молча и висел в реестре как
+    // объявление, которое ничего не объявляет (проверено ревью: код 0, «объявлено 16»).
+    if (parts[2] === 'external-revision' && !/^[0-9a-f]{40}$/.test(parts[1])) {
+      bad.push(`${row} (ключ по SHA обязан быть 40 hex)`);
+      continue;
+    }
+    const key = `${parts[0]} :: ${parts[1]}`;
+    if (out.has(key)) {
+      dup.push(key);
+      continue;
+    }
+    out.set(key, parts[2]);
+  }
+  if (dup.length > 0) {
+    // `merge=union` физически создаёт дубли при слиянии двух ветвей, и Map просто перезаписывал
+    // причину последней строкой — то есть слияние могло бесшумно сменить обоснование записи.
+    console.error(
+      'check-spec-refs: в openspec/.spec-ref-absent есть повторяющиеся ключи — после union-слияния ' +
+        'их надо свести руками, иначе причина записи определяется порядком строк',
+    );
+    for (const d of dup.slice(0, 10)) console.error(`  ${d}`);
+    process.exit(2);
+  }
+  if (bad.length > 0) {
+    console.error(
+      'check-spec-refs: в openspec/.spec-ref-absent есть записи без внятной причины — причина ' +
+        `обязательна и должна быть одной из: ${[...ABSENT_REASONS].join(', ')}`,
+    );
+    for (const b of bad.slice(0, 10)) console.error(`  ${b}`);
+    process.exit(2);
+  }
+  return out;
+}
+
+/**
+ * Объявлено ли, что ревизия живёт вне `main`. Ключ — САМ SHA (`<артефакт> :: <sha>`), а не путь:
+ * форма `<ветка>@<sha>` пути не содержит вовсе, и объявление по пути для неё невозможно —
+ * прежняя редакция на этом и не работала.
+ */
+function externalRevisionDeclared(rel, revSpec) {
+  return (
+    absentDeclared.get(`${rel} :: ${revSpec}`) === 'external-revision' ||
+    absentDeclared.get(`* :: ${revSpec}`) === 'external-revision'
+  );
+}
+
+/**
+ * Достижима ли ревизия из ОБЩЕГО репозитория. Мерить локальной базой объектов нельзя: коммит
+ * может лежать в клоне автора и отсутствовать в origin (у нас так с
+ * `2ccee7b131cf5512672686271f8647dea50af683` — ветки `docs/zet-nmo-audit` в origin нет). Тогда
+ * локально гейт сверяет содержимое, а в CI не может — то есть один и тот же артефакт получает
+ * разные проверки в двух средах, и вердикт «сверено» ничего не значит для читателя.
+ *
+ * Поэтому «общая» ревизия — та, что содержится хотя бы в одном `refs/remotes/origin/*`.
+ * Отсутствие origin-рефов вовсе — «не смогла измерить» (код 2), а не «ничего не достижимо»:
+ * иначе среда без remote-рефов объявила бы дефектной каждую ссылку на ревизию.
+ */
+const originRefsPresent =
+  execFileSync('git', ['-C', ROOT, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
+    encoding: 'utf8',
+  }).trim().length > 0;
+
+/**
+ * Имена рефов репозитория (ветки, теги, remote-ветки). Нужны, чтобы отличить форму «где найден
+ * факт» (`main@<sha>`) от версии пакета (`node@20`): первое слева — существующий ref, второе — нет.
+ * Порог по доле hex-символов, стоявший здесь раньше, был угадыванием и ошибался в обе стороны:
+ * `web/src/thing.ts@not-a-sha` пропускался, а `actions/cache@beta` и `feature@feedback`
+ * объявлялись испорченными SHA (измерено — два ложных расхождения на одном прогоне).
+ */
+const KNOWN_REFS = new Set(
+  (
+    spawnSync(
+      'git',
+      ['-C', ROOT, 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes', 'refs/tags'],
+      { encoding: 'utf8' },
+    ).stdout ?? ''
+  )
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .flatMap((r) => (r.startsWith('origin/') ? [r, r.slice('origin/'.length)] : [r])),
+);
+
+const sharedRevisionCache = new Map();
+/** Все SHA, на которые ссылаются артефакты — для поиска мёртвых объявлений. */
+const seenRevisions = new Set();
+/** Все 40-hex, встреченные в тексте: SHA -> первый артефакт, где встретился. */
+const bareRevisions = new Map();
+/** SHA, встреченные именно в ссылках (`путь@sha`, `ref@sha`). */
+const spanRevisions = new Set();
+/** Артефакт -> SHA, на которые он ссылается. Для обратной сверки объявлений по артефакту. */
+const revisionsByArtifact = new Map();
+
+function revisionSharedInOrigin(revSpec) {
+  if (sharedRevisionCache.has(revSpec)) return sharedRevisionCache.get(revSpec);
+  const r = spawnSync(
+    'git',
+    ['-C', ROOT, 'for-each-ref', '--contains', revSpec, '--format=%(refname)', 'refs/remotes/origin'],
+    { encoding: 'utf8' },
+  );
+  // Ненулевой код здесь означает «объекта нет в клоне» — для нашего вопроса это «не общая».
+  const shared = r.status === 0 && (r.stdout ?? '').trim().length > 0;
+  sharedRevisionCache.set(revSpec, shared);
+  return shared;
+}
+
+/**
+ * Достижима ли ревизия из ОСНОВНОЙ ветки. Разница с `revisionSharedInOrigin` не косметическая:
+ * ревизия, лежащая только на чужой ветке, достижима СЕЙЧАС и станет недостижимой в тот день,
+ * когда ветку удалят, — а `main` не сдвигается назад. Правило `AGENTS.md` требует объявлять такую
+ * ссылку **заранее**, пока ревизия ещё достижима, и до этой редакции требование не проверялось
+ * ничем: гейт узнавал о проблеме ровно в момент, когда уборка чужой ветки красила обязательную
+ * проверку на ВСЕХ открытых PR. Измерено на `55f6013`: две ссылки в области действия гейта
+ * (`openspec/specs/article-catalog/spec.md` и `openspec/changes/dependabot-auto-merge/design.md`)
+ * держались на ветках `feat/demo-mode-and-hero-photo` и `feat/sanitize-rich-html-content` без
+ * объявления — то есть бомба уже была заложена, просто ещё не сработала.
+ *
+ * Отсутствие самой основной ветки — «не смогла измерить» (код 2), а не «всё вне main»: иначе
+ * клон без `origin/main` объявил бы дефектной каждую ссылку на ревизию.
+ */
+const MAINLINE_REF = 'refs/remotes/origin/main';
+const mainlinePresent =
+  spawnSync('git', ['-C', ROOT, 'rev-parse', '--verify', '--quiet', MAINLINE_REF], {
+    encoding: 'utf8',
+  }).status === 0;
+
+const mainlineCache = new Map();
+function revisionOnMainline(revSpec) {
+  if (mainlineCache.has(revSpec)) return mainlineCache.get(revSpec);
+  const r = spawnSync('git', ['-C', ROOT, 'merge-base', '--is-ancestor', revSpec, MAINLINE_REF], {
+    encoding: 'utf8',
+  });
+  const onMain = r.status === 0;
+  mainlineCache.set(revSpec, onMain);
+  return onMain;
+}
+
+function originRefsContaining(revSpec) {
+  const r = spawnSync(
+    'git',
+    ['-C', ROOT, 'for-each-ref', '--contains', revSpec, '--format=%(refname:short)', 'refs/remotes/origin'],
+    { encoding: 'utf8' },
+  );
+  return r.status === 0 ? (r.stdout ?? '').trim().split('\n').filter(Boolean) : [];
+}
+
+// Реестр отсутствующих читается ДО обхода: решение «расхождение или объявленная
+// недостижимость» принимается внутри цикла.
+const absentDeclared = readAbsentDeclared();
+
+if (!originRefsPresent) {
+  console.error(
+    'check-spec-refs: в клоне нет ни одного refs/remotes/origin/* — достижимость ревизий из ' +
+      'общего репозитория измерить нечем. Джобу нужен клон с remote-рефами (fetch-depth: 0)',
+  );
+  process.exit(2);
+}
+
+if (!mainlinePresent) {
+  console.error(
+    `check-spec-refs: в клоне нет ${MAINLINE_REF} — отличить ревизию основной ветки от ревизии, ` +
+      'живущей только на чужой ветке, нечем. Джобу нужен клон с remote-рефами (fetch-depth: 0)',
+  );
+  process.exit(2);
+}
+
+verifyBuildRoots();
+
+/** Корни, против которых режим `--check-built` реально что-то проверяет. */
+let BUILT_ROOTS = [];
+if (CHECK_BUILT) {
+  const unknown = CLAIMED_BUILT_ROOTS.filter((r) => !BUILD_OUTPUT_ROOTS.includes(r));
+  if (unknown.length > 0) {
+    console.error(
+      `check-spec-refs: --check-built= назвал корни вне перечня сборочного вывода: ${unknown.join(', ')}`,
+    );
+    process.exit(2);
+  }
+  const missing = CLAIMED_BUILT_ROOTS.filter((r) => !existsSync(join(ROOT, r)));
+  if (missing.length > 0) {
+    // Названный собранным корень обязан существовать: иначе «проверено» означало бы «проверять
+    // было нечего», а именно этот режим стоит в гейте публикации.
+    console.error(
+      `check-spec-refs: корни ${missing.join(', ')} названы собранными, но их нет — проверять ` +
+        'нечем. Соберите дерево либо не называйте этот корень',
+    );
+    process.exit(2);
+  }
+  BUILT_ROOTS =
+    CLAIMED_BUILT_ROOTS.length > 0
+      ? CLAIMED_BUILT_ROOTS
+      : BUILD_OUTPUT_ROOTS.filter((r) => existsSync(join(ROOT, r)));
+  if (BUILT_ROOTS.length === 0) {
+    // Без единого собранного корня режим вакуумен, а вакуумный прогон — «не выполнено», а не
+    // успех: зелёный цвет здесь читался бы как «ссылки в сборочный вывод проверены».
+    console.error(
+      'check-spec-refs: режиму --check-built нужно собранное дерево, ни одного корня из ' +
+        `${BUILD_OUTPUT_ROOTS.join(', ')} на диске нет — проверять нечего`,
+    );
+    process.exit(2);
+  }
+}
+
+const SCHEMA_ARTIFACTS = schemaArtifactBasenames();
+
+const defects = [];
+// Единый ПОИМЁННЫЙ храповик. В него идёт всё, что гейт не может проверить сейчас: ссылки с
+// номером строки без фрагмента и ссылки в сборочный вывод (их нельзя проверить без собранного
+// дерева). Один реестр, потому что механизм нужен один и тот же — сверка в обе стороны; счётчики
+// при этом печатаются по классам, чтобы не сливать разные по природе вещи в одно число.
+const unmeasurable = new Map(); // identity -> { kind, text }
+let revisionRefs = 0;
+let unreachableDeclared = 0;
+let branchOnlyDeclared = 0;
+
+/**
+ * Ссылка на ревизию, которой нет в основной ветке, обязана быть объявлена ЗАРАНЕЕ. Возвращает
+ * true, если объявления нет — тогда это дефект сейчас, а не в день уборки чужой ветки. Так
+ * предикат перестаёт зависеть от предмета: до этой редакции проверка появлялась ровно тогда,
+ * когда исправить ссылку было уже нечем (ревизия исчезла вместе с веткой), и «зелено» означало
+ * лишь «ветка пока жива».
+ */
+function branchOnlyUndeclared(rel, revSpec, spanText) {
+  if (revisionOnMainline(revSpec)) return false;
+  if (externalRevisionDeclared(rel, revSpec)) {
+    branchOnlyDeclared += 1;
+    return false;
+  }
+  const refs = originRefsContaining(revSpec);
+  defects.push(
+    `${rel}: ревизия ${revSpec} в ${MAINLINE_REF} отсутствует и достижима только через ` +
+      `${refs.slice(0, 2).join(', ') || 'ref вне основной ветки'} — ${spanText}. Удаление этой ветки ` +
+      'уронит обязательный гейт на всех PR, поэтому объявите ссылку заранее, пока ревизия ' +
+      `достижима: \`${rel} :: ${revSpec} :: external-revision\` либо \`* :: ${revSpec} :: external-revision\``,
+  );
+  return true;
+}
+const absentSeen = new Map(); // identity -> человекочитаемое пояснение
+let pathOnly = 0;
+let contentVerified = 0;
+const generated = new Set();
+/** Корень сборочного вывода -> сколько ссылок в него не проверено, потому что дерева нет. */
+const unbuiltRoots = new Map();
+let localNames = 0;
+let dirRefs = 0;
+/** Спаны без расширения, отброшенные как проза: identity -> первый сегмент. */
+const skippedExtensionless = new Map();
+
+/**
+ * Ссылка в сборочный вывод. Всегда идёт в поимённый реестр — и в режиме `--check-built` тоже:
+ * состав реестра не должен зависеть от состояния сборки, иначе один и тот же файл не может быть
+ * верным и в CI (не собрано), и локально (собрано). Прежняя редакция в режиме проверки собранного
+ * дерева не кладла путь в реестр, из-за чего **все** его записи класса «сборка» объявлялись
+ * исчезнувшими, и режим был структурно всегда красным — то есть непроходимой ветвью.
+ */
+/**
+ * Существование пути в собранном дереве — ПО ИМЕНАМ КАТАЛОГА, а не через `existsSync`. Причина та
+ * же, по которой предикаты рабочего дерева сидят на индексе git: `existsSync` на macOS находит
+ * `web/dist/index.html` по обращению `web/dist/INDEX.HTML`, а Linux CI его не находит — один и тот
+ * же коммит даёт разные вердикты, и локальный зелёный ничего не обещает. Регистр КОРНЯ проверяется
+ * отдельно и раньше (корень задан перечнем, а не деревом); здесь проверяется каждый сегмент ВНУТРИ
+ * корня. Измерено на 6327602: проба `web/dist/INDEX.HTML` при единственном строчном файле
+ * увеличивала счётчик проверенного с 6 до 7 и расхождения не давала, тогда как контрольная проба
+ * `web/dist/NOPE.HTML` расхождение давала — то есть проверка работала и была слепа именно к регистру.
+ */
+function resolveBuiltExact(relPath) {
+  const segments = relPath.replace(/\/$/, '').split('/').filter(Boolean);
+  let abs = ROOT;
+  for (const seg of segments) {
+    let names;
+    try {
+      names = readdirSync(abs);
+    } catch {
+      // Промежуточный сегмент не читается как каталог: предмета нет. Расхождение по регистру здесь
+      // не утверждается — оно требует доказательства в виде НАЙДЕННОГО соседа с другим регистром.
+      return { found: false };
+    }
+    if (names.includes(seg)) {
+      abs = join(abs, seg);
+      continue;
+    }
+    const other = names.find((n) => n.toLowerCase() === seg.toLowerCase());
+    if (other) return { found: false, caseMismatch: `${seg} ≠ ${other}` };
+    return { found: false };
+  }
+  return { found: true, abs };
+}
+
+function buildOutputRef({ rel, path, lineSpec }) {
+  // Регистр корня сборки проверяется ДО всего остального: он не требует собранного дерева, а
+  // прежняя редакция стояла после раннего выхода `if (!CHECK_BUILT) return` — то есть в обычном
+  // прогоне не работала вовсе, и `WEB/dist/**` тихо считалось сборочным выводом. Поймано
+  // собственным тестом.
+  const hit = buildRootOf(path);
+  if (hit && !hit.exactCase) {
+    defects.push(
+      `${rel}: регистр каталога сборки не совпадает — ${path} (в перечне: ${hit.root})`,
+    );
+    return;
+  }
+  if (lineSpec) {
+    defects.push(
+      `${rel}: ${path}:${lineSpec} — номер строки в сборочном выводе проверить нечем; ` +
+        'ссылайтесь на исходник либо снимите номер',
+    );
+    return;
+  }
+  unmeasurable.set(`${rel} :: ${path}`, {
+    kind: 'build',
+    text: `${rel}: ${path} — сборочный вывод, без собранного дерева не проверяется`,
+  });
+  if (!CHECK_BUILT) return;
+  // Корень, к которому относится ссылка. Нужен потому, что шаг `--check-built` стоит в джобе,
+  // где собирается ТОЛЬКО `web`, а перечень корней включает ещё `cms/dist` и `payments/dist`.
+  // Прежняя редакция объявляла отсутствие такого дерева расхождением — то есть законная по всем
+  // документированным правилам ссылка на `cms/dist/**` проходила проверку ветки и валила ГЕЙТ
+  // ПУБЛИКАЦИИ боевого сайта, причём автор узнавал об этом только из CI.
+  if (hit && !BUILT_ROOTS.includes(hit.root)) {
+    // Дерева нет — «не проверено», а не «дефект». Молчать об этом нельзя: класс печатается ниже
+    // отдельной строкой, иначе «расхождений 0» читалось бы как «все ссылки в сборку проверены».
+    unbuiltRoots.set(hit.root, (unbuiltRoots.get(hit.root) ?? 0) + 1);
+    return;
+  }
+  // Род записи требуется только там, где он ЗАДАН формой ссылки: слэш на конце — каталог, ТОЧКА
+  // в последнем сегменте — файл, всё остальное (`web/dist`, `dist/client`) может быть и тем и
+  // другим. Признак по точке, а не по длине расширения: предел «до пяти» принимал каталог
+  // `manifest.webmanifest` за подходящий предмет, а сдвиг до двенадцати просто отодвинул границу —
+  // каталог `name.abcdefghijklmn` или с Unicode-расширением проходил снова. Длина расширения
+  // предметом не является, наличие точки — является.
+  const lastSegment = path.replace(/\/$/, '').split('/').pop() ?? '';
+  const wantDir = path.endsWith('/') ? true : /\.[^./]+$/u.test(lastSegment) ? false : null;
+  const kindOk = (c) =>
+    wantDir === null ? true : wantDir ? statSync(c).isDirectory() : statSync(c).isFile();
+  // Предмет ищется СТРОГО внутри найденного корня. Прежний список кандидатов
+  // `[ROOT/<путь>, ROOT/web/<путь>]` позволял корневому `dist/index.html` подтвердить ссылку,
+  // относящуюся к `web/dist`, — то есть чужой файл закрывал исчезнувший.
+  const candidate = hit ? join(ROOT, hit.inside) : join(ROOT, path);
+  // Регистр КАЖДОГО сегмента внутри корня, а не только самого корня. Прежняя редакция проверяла
+  // регистр корня и дальше полагалась на `existsSync` — на macOS этого достаточно, чтобы
+  // `web/dist/INDEX.HTML` попал в проверенное, а на Linux CI тот же коммит дал бы расхождение.
+  const exact = resolveBuiltExact(hit ? hit.inside : path);
+  if (exact.caseMismatch) {
+    defects.push(
+      `${rel}: регистр в собранном дереве не совпадает — ${path} (${exact.caseMismatch})`,
+    );
+    return;
+  }
+  // Инвариант «не выходить за пределы репозитория» действует и на сборочный вывод: symlink
+  // `web/dist/index.html → /outside` проходил `existsSync` и засчитывался в проверенное.
+  if (exact.found && !insideRepo(candidate)) {
+    defects.push(
+      `${rel}: ${path} в собранном дереве уходит за пределы репозитория по символической ссылке — ` +
+        'такой предмет доказательством не является',
+    );
+    return;
+  }
+  const built = exact.found && kindOk(candidate) ? candidate : undefined;
+  const wrongKind = exact.found ? candidate : undefined;
+  if (!built && wrongKind) {
+    defects.push(
+      `${rel}: в собранном дереве ${path} есть, но это ${
+        statSync(wrongKind).isDirectory() ? 'каталог' : 'файл'
+      }, а ссылка требует ${wantDir ? 'каталог' : 'файл'}`,
+    );
+    return;
+  }
+  if (built) {
+    // ИДЕНТИЧНОСТИ, а не вхождения: тот же счётчик уже однажды разошёлся с картой (31 против 17
+    // в одной строке вывода про один и тот же предмет), и ровно от этого введён `kindCount`.
+    generated.add(`${rel} :: ${path}`);
+    return;
+  }
+  defects.push(`${rel}: в собранном дереве пути нет — ${path} (опечатка либо предмет ушёл)`);
+}
+
+/**
+ * Сверка содержимого по номерам строк. Вынесена в функцию, потому что вызывается из двух мест:
+ * для рабочего дерева и для файла на указанной ревизии — раньше второго места не было вовсе.
+ */
+function checkContent({ rel, path, lines, lineSpec, snippet }) {
+  // Ссылка бывает перечнем: `test.yml:47,61,99`. Прежняя регулярка такую форму не распознавала
+  // ВОВСЕ — то есть шесть номеров строк молча не проверялись.
+  const ranges = lineSpec.split(',').map((piece) => {
+    const [a, b] = piece.split('-');
+    return { from: Number(a), to: Number(b ?? a) };
+  });
+  const where = lineSpec;
+  const bogus = ranges.find((x) => !(x.from >= 1) || x.from > x.to);
+  if (bogus) {
+    // Ноль и вывернутый диапазон раньше уходили в «неизмеримо», то есть их можно было
+    // узаконить реестром и держать вечно. Строки 0 не существует ни в одном файле.
+    defects.push(
+      `${rel}: ${path}:${lineSpec} — номер строки не существует (${bogus.from}-${bogus.to})`,
+    );
+    return;
+  }
+  const outside = ranges.find((x) => x.to > lines.length);
+  if (outside) {
+    defects.push(
+      `${rel}: ${path}:${where} — в файле ${lines.length} строк, а указана ${outside.to}-я`,
+    );
+    return;
+  }
+  if (ranges.length > 1) {
+    // Фрагмент к перечню не отнести: непонятно, к какой из строк он относится.
+    unmeasurable.set(`${rel} :: ${path}:${where}`, { kind: 'no-snippet', text: `${rel}: ${path}:${where} — перечень строк, фрагмент к нему не отнести; разбейте на ` +
+        'отдельные ссылки с фрагментами' });
+    return;
+  }
+  const { from, to } = ranges[0];
+  if (!snippet) {
+    unmeasurable.set(`${rel} :: ${path}:${where}`, { kind: 'no-snippet', text: `${rel}: ${path}:${where} — номер строки без фрагмента, содержимое не проверено` });
+    return;
+  }
+  const parts = snippet
+    .split(/[…]|\.\.\./)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 6);
+  const needle = parts.sort((a, b) => b.length - a.length)[0];
+  if (!needle) {
+    unmeasurable.set(`${rel} :: ${path}:${where}`, { kind: 'no-snippet', text: `${rel}: ${path}:${where} — фрагмент слишком короткий для сверки` });
+    return;
+  }
+  if (lines.slice(from - 1, to).some((l) => l.includes(needle))) {
+    contentVerified += 1;
+  } else {
+    defects.push(
+      `${rel}: ${path}:${where} — фрагмент «${needle}» там не найден; на ${from}-й строке: ` +
+        `${(lines[from - 1] ?? '').trim().slice(0, 70)}`,
+    );
+  }
+}
+
+const files = [join(ROOT, 'openspec', 'changes'), join(ROOT, 'openspec', 'specs')].flatMap(walk);
+
+for (const md of files) {
+  const rel = md.slice(ROOT.length + 1);
+  if (rel.includes('openspec/changes/archive/')) continue;
+  const isProposal = rel.startsWith('openspec/changes/');
+  // Содержимое огороженных блоков кода гасится пробелами (смещения сохраняются): в блоке живут
+  // ПРИМЕРЫ, в том числе намеренно неверные — спека про сам гейт обязана уметь показать плохую
+  // форму ссылки, не роняя гейт. Прежняя редакция читала блоки как прозу.
+  // Ограда распознаётся ТОЛЬКО с начала строки: тройная кавычка внутри inline-спана (`a```b`)
+  // иначе открывала «блок» и гасила участок текста вместе с расхождениями в нём — молча.
+  const text = readFileSync(md, 'utf8').replace(
+    /^[^\S\n]*```[\s\S]*?^[^\S\n]*```/gm,
+    (block) => block.replace(/[^\n]/g, ' '),
+  );
+
+  // ГОЛЫЙ SHA («точный коммит — `1ca16003…`») формой ссылки не является и содержимого не
+  // называет, поэтому гейт его НЕ проверяет. Но учитывать его обязательно: без этого объявление
+  // на такой SHA объявлялось «мёртвым» («на этот SHA не ссылается ни один артефакт») при живой
+  // ссылке в двух строках выше — то есть уже потерянное свидетельство нельзя было ни увидеть, ни
+  // легально объявить. Учёт делает объявление законным, а недостижимые голые SHA — названным
+  // вслух числом, а не молчаливой слепой зоной.
+  for (const m of text.matchAll(/\b[0-9a-f]{40}\b/g)) {
+    bareRevisions.set(m[0], rel);
+    seenRevisions.add(m[0]);
+  }
+
+  // Сначала собираем все code spans с их положением, затем решаем, что из них ссылка, а что
+  // фрагмент к предыдущей ссылке. Фрагментом считается ТОЛЬКО span, который сам не выглядит
+  // путём с расширением и отделён от ссылки лишь запятой и пробелами в той же строке.
+  const spans = [...text.matchAll(SPAN)].map((m) => ({
+    body: m[1],
+    start: m.index,
+    end: m.index + m[0].length,
+    parsed: PATH_SPAN.exec(m[1]),
+    lineOnly: LINE_ONLY_SPAN.exec(m[1]),
+  }));
+
+  // Ссылка-продолжение (`:273`) наследует путь и ревизию последней ссылки НА ТОЙ ЖЕ СТРОКЕ.
+  // `carry` присваивается ТОЛЬКО после того, как ссылка прошла отсечения: иначе продолжение
+  // наследовало бы путь у span, который сам отброшен (абсолютный адрес, имя из прозы), и уходило
+  // в тишину.
+  let carry = null;
+
+  for (let i = 0; i < spans.length; i += 1) {
+    const span = spans[i];
+    if (span.lineOnly) {
+      // Проза переносится, поэтому продолжение допускается и на следующей строке абзаца.
+      // Границей служит ПУСТАЯ строка: за ней начинается другой предмет, и наследовать путь
+      // через неё значило бы догадываться.
+      const gap = carry ? text.slice(carry.end, span.start) : '';
+      if (!carry || /\n[^\S\n]*\n/.test(gap)) {
+        // Осиротевший номер — не проза: `:273` без предыдущей ссылки на той же строке ничего
+        // не адресует, и промолчать здесь значит потерять предмет проверки.
+        defects.push(
+          `${rel}: номер строки без пути — \`${span.body}\` (нет ссылки на той же строке выше)`,
+        );
+        continue;
+      }
+      spans[i] = {
+        ...span,
+        parsed: [span.body, carry.path, carry.rev, span.lineOnly[1]],
+      };
+    }
+    // Негодная ревизия НЕ ДОЛЖНА исчезать из проверки вместе с неразобранным span. `PATH_SPAN`
+    // принимает только 7–40 строчных hex, поэтому `@45297b` (шесть), `@45297bg`, 41 символ и
+    // верхний регистр давали `parsed = null` и молча выпадали целиком — измерено: три таких
+    // ссылки дали код 0 и не сдвинули ни одного счётчика. Отказ по неполному SHA ниже
+    // достигался только ПОСЛЕ успешного разбора, то есть строгость правила зависела от того,
+    // угадал ли автор длину. Признак здесь по ФОРМЕ: «что-то, потом @, потом шесть и больше
+    // hex-символов». Порог в шесть отсекает версии (`node@20`, `npm@11`), а точки в
+    // `astro@7.2.0` не попадают в класс hex вовсе.
+    if (!spans[i].parsed) {
+      // Класс символов ШИРЕ hex: опечатка `@45297bg` не является hex вовсе, и узкий класс её
+      // пропускал — то есть проверка исчезала ровно на испорченной записи. Ложные попадания
+      // отсекает не класс, а требование к ЛЕВОЙ части: она обязана выглядеть путём (расширение
+      // либо косая черта). Тогда `user@localhost` и адреса почты в класс не попадают, а
+      // `web/src/lib/data.ts@45297bg` попадает.
+      // Признак — ПРЕДМЕТ СЛЕВА, а не форма хвоста. `X@Y` считается ссылкой на ревизию, только
+      // если слева существующий ФАЙЛ репозитория либо известное имя ref: тогда после `@` по
+      // определению стоит ревизия, и она обязана быть полным 40-символьным SHA в нижнем регистре.
+      // Прежняя редакция угадывала по доле hex-символов в хвосте — порог 70 % ошибался в обе
+      // стороны: `@not-a-sha` проходил, `actions/cache@beta` и `feature@feedback` объявлялись
+      // испорченными. Здесь порогов нет: `actions/cache` и `feature` не являются ни файлом, ни
+      // ref, поэтому в класс не попадают вовсе.
+      //
+      // Единственное исключение — хвост, начинающийся с `refs/`: это git-путь до ref, принятая
+      // запись GitHub Actions (`workflow.yml@refs/heads/main`), а не ревизия. Признак точный:
+      // ревизия так не пишется никогда.
+      // Двоеточие из класса хвоста УБРАНО: с ним `web/src/thing.ts@not:sha` не разбирался вовсе и
+      // исчезал из проверки раньше любых предикатов — предмет пропадал не по решению, а по форме
+      // регулярного выражения. Номер строки отделяется тем, что он ЦИФРОВОЙ, а не тем, что двоеточие
+      // встретилось: `…@abc:12-30` даёт хвост `abc` и строки `12-30`, `…@not:sha` — хвост `not:sha`.
+      const shaLike = /^(.+)@([^@\s]+?)(?::(\d[\d,\-]*))?$/.exec(spans[i].body);
+      const tail = shaLike?.[2] ?? '';
+      // Признак берётся по ИНДЕКСУ git, а не по `existsSync`. Своё же ревью нашло здесь ту самую
+      // ошибку, которую три круга подряд чинили в других ветвях: `existsSync` на macOS находит
+      // файл при любом регистре, поэтому `WEB/src/thing.ts@bad` дал бы расхождение на macOS и
+      // тишину на Linux. Индекс отвечает одинаково в любой среде — и заодно видит файл,
+      // удалённый из рабочего дерева, что для ссылки на РЕВИЗИЮ как раз норма.
+      // Сравнение по индексу и БЕЗ учёта регистра: иначе `WEB/src/thing.ts@not-a-sha` не
+      // распознавался как ссылка на ревизию вовсе и уходил в тишину, тогда как его строчный
+      // близнец давал расхождение. Регистр здесь не предмет — предмет в том, что справа стоит
+      // не SHA; расхождение регистра ловит отдельный страж, когда span разбирается.
+      const leftMatches = shaLike
+        ? (() => {
+            const cands = [shaLike[1].toLowerCase(), `web/${shaLike[1]}`.toLowerCase()];
+            return allTracked.filter((t) => {
+              const lower = t.toLowerCase();
+              return cands.some((c) => lower === c || lower.endsWith(`/${c}`));
+            });
+          })()
+        : [];
+      const leftIsRepoFile = leftMatches.length > 0;
+      const leftIsKnownRef = shaLike && KNOWN_REFS.has(shaLike[1]);
+      // Исключение для `refs/` СУЖЕНО до workflow GitHub Actions и названо поимённо. Прежняя
+      // редакция исключала любой хвост, начинающийся с `refs/`, — и `web/src/lib/data.ts@refs/heads/main`
+      // исчезал из проверки целиком: измерено на 6327602, вывод гейта с двумя пробами совпал с
+      // базовым ПОБАЙТОВО, ни один счётчик не сдвинулся. Между тем это ровно тот случай, который
+      // правила запрещают: имя ветки идентификатором не является. Законная запись остаётся одна —
+      // `.github/workflows/<файл>.yml@refs/heads/main`, где предмет и есть ref, а не снимок; она
+      // распознаётся по МЕСТУ файла в индексе, а не по совпадению имени, и не по существованию ref
+      // в текущем клоне (в CI `refs/heads/main` может отсутствовать вовсе — проверка по нему дала бы
+      // ровно то расхождение локального и CI, от которого весь этот класс правок).
+      const leftIsWorkflowFile = leftMatches.some((t) =>
+        /^\.github\/workflows\/[^/]+\.ya?ml$/.test(t),
+      );
+      // Хвост обязан состоять из символов, которыми вообще записывают ревизию (буквы, цифры,
+      // `_`, `-`, `/`). Это отсекает прозу: в правилах стоит `main@…` как ПРИМЕР негодной формы,
+      // и многоточие ревизией быть не может — иначе гейт краснел на собственной документации
+      // (поймано сразу после смены признака).
+      // Точка в классе допущена намеренно: без неё `web/src/thing.ts@not.a.sha` не распознавался
+      // как ссылка на ревизию и уходил в тишину. Проза этим не задета — она отсекается не классом
+      // символов, а требованием «слева файл репозитория либо известный ref»: `astro@7.2.0`,
+      // `node@20` и `first.last@example.com` в класс не попадают, потому что слева не файл и не ref.
+      // Многоточие `…` в классе отсутствует, поэтому пример негодной формы `main@…` из правил
+      // по-прежнему не краснит гейт на собственной документации.
+      const tailIsWritable = /^[0-9A-Za-z_./-]+$/.test(tail);
+      // Сила доказательства слева РАЗНАЯ, и от неё зависит, нужна ли охрана по символам хвоста.
+      //
+      // Отслеживаемый файл — доказательство полное: если слева путь, существующий в индексе, то
+      // после `@` стоит ревизия и ничто иное. Тогда годен ТОЛЬКО полный SHA, а любой другой хвост —
+      // отказ, без перечня допустимых символов. Перечень здесь был очередным списком частных
+      // случаев: `@not!sha`, `@not+sha` и `@not:sha` уходили в тишину (измерено — вывод гейта с
+      // тремя такими пробами совпал с базовым побайтово), и следующая непредусмотренная форма ушла
+      // бы так же.
+      //
+      // Известное имя ref — доказательство слабое: `main`, `feature`, `next` суть обычные слова,
+      // они встречаются в прозе. Поэтому для них охрана по символам остаётся: без неё пример
+      // негодной формы `main@…` в наших же правилах красил бы гейт на собственной документации.
+      const leftProvesRevision = leftIsRepoFile || (leftIsKnownRef && tailIsWritable);
+      if (
+        shaLike &&
+        !(tail.startsWith('refs/') && leftIsWorkflowFile) &&
+        leftProvesRevision &&
+        !/^[0-9a-f]{40}$/.test(tail)
+      ) {
+        defects.push(
+          `${rel}: ревизия записана не полным 40-символьным SHA в нижнем регистре ` +
+            `(${tail}, ${tail.length} симв.) — ${spans[i].body}`,
+        );
+      }
+      continue;
+    }
+    const [, path, revSpec, lineSpec] = spans[i].parsed;
+    if (revSpec) {
+      seenRevisions.add(revSpec);
+      spanRevisions.add(revSpec);
+      // Привязка «артефакт → SHA» нужна обратной сверке объявлений: объявление вида
+      // `<артефакт> :: <sha>` обязано проверяться ПО ЭТОМУ артефакту, иначе упоминание того же
+      // SHA в другом файле бесшумно держит устаревшее разрешение живым.
+      if (!revisionsByArtifact.has(rel)) revisionsByArtifact.set(rel, new Set());
+      revisionsByArtifact.get(rel).add(revSpec);
+    }
+    // Фрагмент отличается от ссылки ФОРМОЙ, а не тем, «разобрался ли он как путь». Прежняя
+    // редакция считала фрагментом только span, не подходящий под `PATH_SPAN`, — а под него
+    // подходит любой идентификатор (`defineConfig`, `initialQuery`, `ab`). Из-за этого гейт
+    // требовал фрагмент, который уже написан рядом, и одна такая ссылка успела попасть в реестр
+    // неизмеримых как «без фрагмента».
+    // Только цифры и точки — это адрес (`127.0.0.1`) или версия, а не путь: `.1` подходило под
+    // признак расширения, и адрес уходил в «ссылки в пустоту», требуя объявления причины.
+    if (/^[\d.]+$/.test(path)) continue;
+
+    const looksLikePath = (body) =>
+      /\.[a-z0-9]{1,5}$/i.test(body) ||
+      (body.includes('/') && existsSync(join(ROOT, body.split('/')[0])));
+    const asSnippet = (cand, gapText) =>
+      cand && !cand.lineOnly && !looksLikePath(cand.body) && /^[^\S\n]*,[^\S\n]*$/.test(gapText)
+        ? cand.body
+        : undefined;
+    const next = spans[i + 1];
+    const prev = i > 0 ? spans[i - 1] : undefined;
+    const snippet =
+      asSnippet(next, next ? text.slice(span.end, next.start) : '') ??
+      // Проза пишет и в обратном порядке: «`defineConfig`, `astro.config.mjs:9`». Смотреть
+      // только вперёд означало требовать фрагмент, который уже стоит слева.
+      asSnippet(prev, prev ? text.slice(prev.end, span.start) : '');
+    // Сокращённая ревизия ОТКЛОНЯЕТСЯ, а не пропускается. Прежняя редакция принимала только 40
+    // символов — и ссылка с семисимвольным префиксом выпадала из проверки целиком, то есть
+    // требование «полный SHA» само создавало ложное зелёное. Теперь форма распознаётся и
+    // называется дефектом.
+    if (revSpec && revSpec.length !== 40) {
+      defects.push(
+        `${rel}: ревизия указана сокращённо (${revSpec}) — нужен полный SHA из 40 символов: ` +
+          `${path}@${revSpec}`,
+      );
+      continue;
+    }
+    if (path.startsWith('/')) continue;
+    if (path.split('/').includes('node_modules')) continue;
+    // `..` уводит проверку за пределы репозитория: `../../etc/passwd` разрешился бы в файл вне
+    // дерева, и «ссылка верна» означало бы «на машине проверяющего что-то нашлось».
+    if (path.split('/').includes('..')) {
+      defects.push(`${rel}: ссылка выходит за пределы репозитория — ${path}`);
+      continue;
+    }
+
+    const hasExt = /\.[\p{L}\p{N}]+$/u.test(path);
+    const firstSegment = path.split('/')[0];
+
+    // Форма `<ветка или ref>@<sha>` БЕЗ пути — принятая в проекте запись «где найден факт»
+    // (`AGENTS.md`). Прежняя редакция такие span молча пропускала: имя ветки путём не является,
+    // и SHA в них мог быть любым — 12 таких ссылок в артефактах не проверялись вовсе. Теперь
+    // проверяется то единственное, что здесь проверяемо: ревизия существует.
+    // Регистр сверяется ДО того, как span будет объявлен формой «где найден факт». Иначе
+    // `WEB/src/thing@<sha>` на Linux (пути нет) уходит в класс «только по ревизии», а на macOS
+    // (путь «есть») краснеет как расхождение регистра — снова два вердикта в двух средах.
+    // БЕЗ оговорки `!existsSync`: она делала проверку зависимой от файловой системы в обратную
+    // сторону — `WEB/...@<плохая ревизия>` на macOS «существует», страж не срабатывал, и span
+    // уходил в тишину, а на Linux давал расхождение регистра. Индекс git отвечает одинаково.
+    if (revSpec && path.includes('/')) {
+      const exactTail = allTracked.some((t) => t === path || t.endsWith(`/${path}`));
+      if (!exactTail) {
+        const lower = path.toLowerCase();
+        const wrong = allTracked.find(
+          (t) => t.toLowerCase() === lower || t.toLowerCase().endsWith(`/${lower}`),
+        );
+        if (wrong) {
+          defects.push(
+            `${rel}: регистр пути не совпадает с репозиторием — ${path}@${revSpec} (в git: ${wrong})`,
+          );
+          continue;
+        }
+      }
+    }
+
+    if (revSpec && !lineSpec && !existsSync(join(ROOT, path)) && !hasExt) {
+      if (isShallow) {
+        console.error(
+          `check-spec-refs: клон усечён, ревизии ${revSpec} в нём нет — проверить ссылку ` +
+            `${path}@${revSpec} нечем. Джобу нужен полный клон: \`fetch-depth: 0\``,
+        );
+        process.exit(2);
+      }
+      if (revisionSharedInOrigin(revSpec)) {
+        if (branchOnlyUndeclared(rel, revSpec, `${path}@${revSpec}`)) continue;
+        // Имя ветки и ОПЕЧАТКА В ПУТИ здесь неотличимы на глаз, но различимы измерением: если
+        // первый сегмент существует в корне репозитория, это записан путь, а не ref, — и тогда
+        // он обязан существовать на названной ревизии (один вызов `git cat-file -e`). Без этой
+        // проверки класс «только по ревизии» легализовал любую опечатку одной строкой реестра:
+        // измерено ревью — `web/src/lib/typo-here@aa7678cf` давал код 0, хотя такого пути нет
+        // ни на одной ревизии. Ровно тот дефект, от которого предостерегает шапка скрипта.
+        if (path.includes('/') && existsSync(join(ROOT, path.split('/')[0]))) {
+          if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
+            defects.push(
+              `${rel}: на ревизии ${revSpec} нет пути ${path} — первый сегмент «${path.split('/')[0]}» ` +
+                'существует в репозитории, значит это записанный путь, а не имя ветки',
+            );
+            continue;
+          }
+          pathOnly += 1;
+          continue;
+        }
+        revisionRefs += 1;
+        // Поимённо — иначе верную ссылку можно бесшумно понизить до этой формы: она проверяема
+        // только на существование ревизии, а числовой счётчик такой подмены не показывает.
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'revision-only',
+          text: `${rel}: ${path}@${revSpec} — только достижимость ревизии, содержимое не сверено`,
+        });
+      } else if (externalRevisionDeclared(rel, revSpec)) {
+        // Форма `<ветка>@<sha>` без пути — самая частая запись «где найден факт», и девять таких
+        // ссылок держались на ветке открытого PR. Без возможности объявить это её удаление
+        // роняло бы обязательный гейт, а единственным «лечением» было бы стирание исторического
+        // свидетельства.
+        unreachableDeclared += 1;
+        unmeasurable.set(`${rel} :: ${path}@${revSpec}`, {
+          kind: 'external',
+          text: `${rel}: ${path}@${revSpec} — ревизия вне общего репозитория, объявлена`,
+        });
+      } else {
+        defects.push(
+          `${rel}: ревизия ${revSpec} не достижима ни из одного refs/remotes/origin/* — ` +
+            `${path}@${revSpec}. Если свидетельство живёт вне общего репозитория, объявите его: ` +
+            '<артефакт> :: <sha> :: external-revision',
+        );
+      }
+      continue;
+    }
+
+    // Регистр КАТАЛОГА сверяется по индексу git и ДО любого обращения к файловой системе.
+    // Прежняя редакция делала это внутри ветви «каталог найден на диске», то есть проверка
+    // требовала, чтобы ФС сама нашла каталог: на macOS `WEB/` находился и расхождение ловилось, а
+    // на Linux-раннере не находился вовсе — span уходил в «прозу» молча. Дефект, ради которого
+    // проверка и вводилась, на обязательной среде оставался. Поймано собственным тестом в CI,
+    // локально было зелено.
+    // Косая черта в самом span обязательна: без неё под признак попадает односегментная ПРОЗА —
+    // имя обязательного прогона `Tests` совпало с `web/tests` без учёта регистра и дало восемь
+    // ложных расхождений (прежде этот span отбрасывала ветвь короткого имени, и перенос проверки
+    // выше её обнажил). Каталог в артефактах всегда пишут с чертой: `WEB/`, `web/casedir/`,
+    // `.github/workflows`.
+    if (path.includes('/') && (path.endsWith('/') || !hasExt)) {
+      const dirRel = path.replace(/\/$/, '');
+      // Каталог внутри change пишут относительно change (`specs/<capability>/`), поэтому в
+      // кандидаты входит и корень change: без него `Specs/cap/` сверялся только с корнем
+      // репозитория и `web/`, то есть на macOS находился по ФС, а на Linux уходил в прозу —
+      // снова два вердикта в двух средах.
+      const changeRel = changeRootOf(md).slice(ROOT.length + 1);
+      const mdRel = dirname(md).slice(ROOT.length + 1);
+      // Кандидаты те же, что у РАЗРЕШЕНИЯ ссылки, иначе классы расходятся по средам: относительный
+      // каталог OpenSpec разрешался через каталог артефакта, `openspec/changes` и `openspec/specs`,
+      // а предварительная проверка регистра о них не знала — на macOS путь находился по ФС, на
+      // Linux уходил в прозу.
+      const prefixes = [
+        dirRel,
+        `web/${dirRel}`,
+        `${changeRel}/${dirRel}`,
+        `${mdRel}/${dirRel}`,
+        `openspec/changes/${dirRel}`,
+        `openspec/specs/${dirRel}`,
+      ];
+      const exactInIndex = allTracked.some((t) =>
+        prefixes.some((pre) => t === pre || t.startsWith(`${pre}/`)),
+      );
+      if (!exactInIndex) {
+        const wrong = allTracked.find((t) =>
+          prefixes.some((pre) => t.toLowerCase().startsWith(`${pre.toLowerCase()}/`)),
+        );
+        if (wrong) {
+          const width = wrong.toLowerCase().startsWith(`web/${dirRel.toLowerCase()}/`)
+            ? `web/${dirRel}`.length
+            : dirRel.length;
+          defects.push(
+            `${rel}: регистр каталога не совпадает с репозиторием — ${path} (в git: ` +
+              `${wrong.slice(0, width)})`,
+          );
+          continue;
+        }
+      }
+    }
+
+    // Путь БЕЗ расширения (`bin/openspec`, `.github/workflows`) — тоже ссылка, но только если его
+    // первый сегмент — существующая запись верхнего уровня репозитория. Без этой оговорки в
+    // ссылки попали бы `text/html`, `application/xml` и прочая проза с косой чертой (измерено:
+    // таких span в артефактах больше, чем настоящих путей без расширения). Признак грубее
+    // предмета намеренно: удаление `bin/session-cost` каталог `bin` не убирает, поэтому проверка
+    // не исчезает вместе с проверяемым — в отличие от двух прежних редакций.
+    if (!hasExt) {
+      if (path.includes('/')) {
+        // Первый сегмент обязан существовать в корне: это отсекает прозу с косой чертой
+        // (`text/html`). Признак грубее предмета намеренно — удаление `bin/session-cost`
+        // каталог `bin` не убирает. **Известное ограничение:** если исчезнет весь первый
+        // каталог, ссылки в него перестанут проверяться; событие такого размера ломает и сам
+        // гейт (он живёт в `bin/`), поэтому здесь это принято, а не замаскировано.
+        // Отбрасывать прозу можно только после того, как исчерпаны все способы РАЗРЕШИТЬ путь.
+        // Прежняя редакция решала это по первому сегменту раньше классификации сборочного
+        // вывода и каталогов, поэтому `dist/` уходила в «прозу» вместо класса «сборочный вывод»,
+        // а `specs/<capability>/` внутри change — вместо существующего каталога. Порядок «сначала
+        // отбросить, потом классифицировать» превращал в тишину настоящие ссылки.
+        const resolvableElsewhere =
+          isGeneratedOutput(path) ||
+          [
+            join(ROOT, path.replace(/\/$/, '')),
+            join(ROOT, 'web', path.replace(/\/$/, '')),
+            join(ROOT, 'openspec', 'changes', path.replace(/\/$/, '')),
+            join(ROOT, 'openspec', 'specs', path.replace(/\/$/, '')),
+            join(dirname(md), path.replace(/\/$/, '')),
+            join(changeRootOf(md), path.replace(/\/$/, '')),
+          ].some((c) => existsSync(c));
+        if (!existsSync(join(ROOT, firstSegment)) && !resolvableElsewhere) {
+          // Признак грубее предмета намеренно, но ПОТЕРЯ теперь считается: если исчезнет весь
+          // первый каталог, ссылки в него перестанут проверяться — и раньше это происходило
+          // молча, то есть отсутствие сигнала выдавалось за отсутствие проблемы. Класс печатается
+          // отдельным числом с примерами: тогда рост «прозы» видно, и видно, что именно выпало.
+          // В ПОИМЁННЫЙ реестр, а не только в печать. Печатаемое число ловит рост класса, но не
+          // ловит подмену: удалённый `specs/<capability>/` тихо переходил из «каталогов» в «прозу»
+          // при том же итоговом коде 0 — то есть исчезновение предмета ссылки не блокировало
+          // ничего. Ровно тот случай, от которого весь раздел про гейты: отсутствие сигнала
+          // выдавалось за отсутствие проблемы. Цена решения названа честно: сюда попадает и
+          // настоящая проза (MIME-типы, github-actions), поэтому реестр разом вырос.
+          skippedExtensionless.set(`${rel} :: ${path}`, firstSegment);
+          unmeasurable.set(`${rel} :: ${path}`, {
+            kind: 'prose',
+            text: `${rel}: ${path} — отброшено как проза (первый сегмент «${firstSegment}» не существует)`,
+          });
+          continue;
+        }
+      } else if (!(existsSync(join(ROOT, path)) && statSync(join(ROOT, path)).isFile())) {
+        // Односегментная форма БЕЗ косой черты в храповик НЕ идёт, и это измеренное решение:
+        // сюда попадает любой идентификатор в обратных кавычках (`defineConfig`, `marker`), то
+        // есть 841 запись против 27 у формы с чертой — реестр перестал бы что-либо означать.
+        // Цена признана: удалённый корневой `Dockerfile` останется незамеченным. Отличить его от
+        // прозы по одному имени нечем, и выдумывать список известных корневых файлов нельзя —
+        // такой список отстаёт от предмета молча. Записано как известное ограничение.
+        // Короткое имя без расширения — ссылка только если в корне есть такой ФАЙЛ
+        // (`Dockerfile`, `Makefile`). Каталог здесь не годится: `web`, `cms`, `scripts` в
+        // артефактах называют пакеты, и, приняв их за ссылки, гейт насчитал бы 105 проверок,
+        // каждая из которых утверждает лишь «каталог пакета существует».
+        continue;
+      }
+    }
+
+    // Сборочный вывод распознаётся РАНЬШЕ каталога: ссылка `web/dist` (форма без расширения) до
+    // сборки попадала в реестр как «сборочный вывод», а после появления каталога — в класс
+    // каталогов, и запись реестра «исчезала». То есть вердикт снова зависел от состояния сборки,
+    // только через другую ветвь. Проверено мутацией `mkdir -p web/dist`: три записи реестра
+    // переставали находиться.
+    if (isGeneratedOutput(path)) {
+      buildOutputRef({ rel, path, lineSpec });
+      continue;
+    }
+
+    // Ссылка на КАТАЛОГ (`web/`, `.github/workflows/`, `openspec/specs/`) — законная форма, но
+    // это не файл: ни строки, ни фрагмента у неё быть не может. Проверяется существование
+    // каталога, и считается она своим числом, чтобы не смешиваться с проверкой файлов.
+    // Кандидаты те же, что у разрешения файлов: `specs/request-form-transport/` внутри change
+    // означает каталог ЭТОГО change, а не одноимённый в корне. Без артефактных корней такие
+    // ссылки отбрасывались как проза — измерено: три вхождения на одном каталоге.
+    const dirCandidates = [
+      join(ROOT, path.replace(/\/$/, '')),
+      join(ROOT, 'web', path.replace(/\/$/, '')),
+      join(ROOT, 'openspec', 'changes', path.replace(/\/$/, '')),
+      join(ROOT, 'openspec', 'specs', path.replace(/\/$/, '')),
+      join(dirname(md), path.replace(/\/$/, '')),
+      join(changeRootOf(md), path.replace(/\/$/, '')),
+    ];
+    const asDir = dirCandidates;
+    const dirHit = asDir.find((c) => existsSync(c) && statSync(c).isDirectory());
+    // Каталог-symlink наружу — тот же обход, что и файловый: `statSync` идёт по ссылке, и ссылка
+    // на «каталог репозитория» подтверждалась чужим деревом.
+    if (dirHit && !insideRepo(dirHit)) {
+      defects.push(
+        `${rel}: каталог ${path} уходит за пределы репозитория по символической ссылке — ` +
+          'существование такого каталога доказательством не является',
+      );
+      continue;
+    }
+    if (dirHit && (path.endsWith('/') || !hasExt)) {
+      if (lineSpec) {
+        // Прежняя редакция номер молча выбрасывала: ссылка «каталог:строка» выглядела
+        // проверенной, хотя проверить в ней нечего.
+        defects.push(`${rel}: у каталога не бывает строки — ${path}:${lineSpec}`);
+        continue;
+      }
+      dirRefs += 1;
+      continue;
+    }
+
+    // Короткое имя без номера строки. Двусмысленность здесь настоящая: так пишут и файлы, и
+    // домены (`ikpk.su`), и поля (`author.email`), и методы (`page.goto`) — измерено на дереве.
+    // Поэтому строго проверяются только имена артефактов СХЕМЫ (`proposal.md`, `design.md`,
+    // `tasks.md`): для них двусмысленности нет, а их исчезновение молчаливо не ловит даже
+    // строгая валидация OpenSpec (проверено: удалённый `design.md` даёт 12/12 passed).
+    if (!path.includes('/') && !lineSpec) {
+      const local = resolveRef(path, md);
+      if (local.hit) {
+        // Считается отдельным числом: для артефакта, ссылающегося на соседний файл своего же
+        // change, существование почти тривиально, и складывать это с проверкой путей по дереву
+        // значило бы снова раздуть «проверено».
+        localNames += 1;
+      } else if (local.wrongCase) {
+        // Расхождение регистра громко ловится для полного пути и БЕСШУМНО проваливалось для
+        // короткого имени: `local.wrongCase` уходил в общий `continue`. На Linux-раннере такая
+        // ссылка не открывается, то есть предмет ошибки одинаков в обеих формах записи.
+        defects.push(
+          `${rel}: регистр имени не совпадает — ${path}, в репозитории ` +
+            `${local.wrongCase.slice(ROOT.length + 1)}`,
+        );
+      } else if (local.ambiguous) {
+        // Неоднозначное короткое имя — не расхождение (в проекте так пишут `spec.md` соседнего
+        // change), но и не «проверено»: соответствие выбирает читатель, а не гейт. Класс идёт в
+        // поимённый реестр — тогда его рост виден, а бесшумной подмены точной ссылки на
+        // неоднозначную больше нет.
+        unmeasurable.set(`${rel} :: ${path}`, {
+          kind: 'ambiguous',
+          text:
+            `${rel}: короткое имя ${path} подходит к ${local.ambiguous.length} файлам — ` +
+            'какой имелся в виду, гейт не решает; уточните путь',
+        });
+      } else if (SCHEMA_ARTIFACTS.has(path) && rel.startsWith('openspec/changes/')) {
+        absentSeen.set(
+          `${rel} :: ${path}`,
+          `${rel}: артефакт схемы не существует в этом change — ${path}`,
+        );
+      }
+      continue;
+    }
+
+    // Ссылка признана путём и прошла все отсечения — только теперь она может быть носителем
+    // продолжения. Присваивать `carry` раньше нельзя: продолжение унаследовало бы путь у span,
+    // который сам отброшен, и ушло бы в тишину.
+    if (!span.lineOnly) carry = { path, rev: revSpec, end: span.end };
+
+    // Ссылка, привязанная к РЕВИЗИИ (`путь@<sha>:строка`), читается из этой ревизии, а не из
+    // рабочего дерева. Без этого гейт был не просто неполон, а ВРЕДЕН: принятая спека
+    // `article-catalog` объявляет, что её ссылки проверены на `main@45297b4`, а гейт, всегда
+    // читающий HEAD, потребовал заменить верные для той ревизии `:62` и `:12-13` на текущие
+    // `:63` и `:10-11` — и я это сделала. Историческое свидетельство было испорчено
+    // инструментом, который его охраняет.
+    if (revSpec) {
+      // Существование ревизии и пути проверяется ОТДЕЛЬНО, а не по коду возврата `git show`:
+      // проверено, что `git show deadbeef:путь` выходит НУЛЁМ с пустым выводом, и такая ссылка
+      // выглядела «файлом в одну строку» вместо «ревизии не существует».
+      const revOk = revisionSharedInOrigin(revSpec);
+      // Ссылка на ОБЪЯВЛЕННУЮ внешнюю ревизию попадает в поимённый реестр НЕЗАВИСИМО от того,
+      // жива ли ещё ветка. Прежняя редакция добавляла её только когда ревизия становилась
+      // недостижимой — то есть членство в реестре зависело от состояния чужой ветки, и переход
+      // «жива → удалена» создавал НОВУЮ запись долга и красил обязательный гейт кодом 1. Ровно
+      // та гарантия, ради которой объявление и существует, не выполнялась: тесты проверяли два
+      // состояния порознь, а переход при неизменных реестрах не проверял никто.
+      if (externalRevisionDeclared(rel, revSpec)) {
+        // Номер строки ВХОДИТ в идентичность: без него разные участки одного внешнего файла
+        // схлопывались в одну запись реестра, и `README@c924…:68` с `:273` были представлены
+        // одной строкой — третья ссылка после удаления ветки прошла бы, не изменив реестр.
+        // Идентичность одинакова в обеих ветвях достижимости, иначе рвётся храповик.
+        const id = `${rel} :: ${path}@${revSpec}${lineSpec ? `:${lineSpec}` : ''}`;
+        unmeasurable.set(id, {
+          kind: 'external',
+          text:
+            `${rel}: ${path}@${revSpec}${lineSpec ? `:${lineSpec}` : ''} — ревизия объявлена ` +
+            'внешней; пока достижима, содержимое сверяется, после удаления ветки проверять нечем',
+        });
+      }
+      if (!revOk && externalRevisionDeclared(rel, revSpec)) {
+        // Свидетельство живёт вне `main` (мокапы и ветки открытых PR). Пока ревизия достижима,
+        // ссылка проверяется по содержимому; когда ветку удалят, гейт говорит «проверить нечем»
+        // и РАСХОЖДЕНИЯ не даёт. Запись в реестре сделана выше — по факту ОБЪЯВЛЕНИЯ, а не по
+        // достижимости, поэтому удаление ветки состав реестра не меняет и код выхода не портит.
+        // Новая объявленная ссылка по-прежнему требует своей строки реестра: бесшумно понизить
+        // верную ссылку до непроверяемой нельзя.
+        unreachableDeclared += 1;
+        continue;
+      }
+      if (!revOk) {
+        // «Ревизии не существует» и «история не выбрана» — РАЗНЫЕ факты, и путать их нельзя:
+        // в усечённом клоне (у `actions/checkout` по умолчанию `fetch-depth: 1`) отсутствуют
+        // почти все ревизии, и объявить это расхождением значило бы объявить дефектом сам
+        // способ клонирования. Поэтому усечённый клон — «не смогла измерить», код 2.
+        if (isShallow) {
+          console.error(
+            `check-spec-refs: клон усечён, ревизии ${revSpec} в нём нет — измерить ссылку ` +
+              `${path} нечем. Джобу нужен полный клон: \`fetch-depth: 0\` у actions/checkout`,
+          );
+          process.exit(2);
+        }
+        defects.push(`${rel}: ревизия ${revSpec} не достижима ни из одного refs/remotes/origin/* — ${path}`);
+        continue;
+      }
+      if (branchOnlyUndeclared(rel, revSpec, `${path}@${revSpec}`)) continue;
+      if (spawnSync('git', ['-C', ROOT, 'cat-file', '-e', `${revSpec}:${path}`]).status !== 0) {
+        defects.push(`${rel}: на ревизии ${revSpec} нет пути ${path}`);
+        continue;
+      }
+      const blob = spawnSync('git', ['-C', ROOT, 'cat-file', 'blob', `${revSpec}:${path}`], {
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      if (blob.status === null) {
+        // Процесс не завершился нормально: превышен буфер или убит. Это «не смогла измерить».
+        console.error(
+          `check-spec-refs: не удалось прочитать ${path} на ревизии ${revSpec} — процесс git не ` +
+            `завершился нормально (${blob.error?.message ?? 'сигнал/буфер'})`,
+        );
+        process.exit(2);
+      }
+      if (blob.status !== 0) {
+        defects.push(
+          `${rel}: не удалось прочитать ${path} на ревизии ${revSpec} — ` +
+            `${(blob.stderr || '').trim().slice(0, 90)}`,
+        );
+        continue;
+      }
+      if (!lineSpec) {
+        // Без номера строки сверять содержимое нечем — проверено, что путь на этой ревизии
+        // существует. Прежняя редакция шла в checkContent с undefined и падала исключением,
+        // причём код выхода был 1: «не смогла измерить» выдавалось за «расхождения».
+        pathOnly += 1;
+        continue;
+      }
+      checkContent({
+        rel,
+        path: `${path}@${revSpec}`,
+        lines: blob.stdout.split('\n'),
+        lineSpec,
+        snippet,
+      });
+      continue;
+    }
+
+    const r = resolveRef(path, md);
+    if (r.missing) {
+      // Ненайденная ссылка не классифицируется гейтом по виду пути: она либо ОБЪЯВЛЕНА в
+      // openspec/.spec-ref-absent (файл, который change ещё создаст; осознанная цитата на
+      // удалённое), либо расхождение. Прежняя редакция угадывала «это артефакт OpenSpec» по
+      // набору базовых имён, снятому с существующих файлов, — и на переименовании
+      // нестандартного артефакта признак пропадал вместе с файлом: ссылка становилась
+      // предупреждением, то есть переименование проходило зелёным. Признак, зависящий от
+      // существования предмета, для этой задачи не годится в принципе.
+      absentSeen.set(`${rel} :: ${path}`, `${rel}: путь не существует — ${path}`);
+      continue;
+    }
+    if (r.outside) {
+      // Гейт существует ради доказуемости ссылок, поэтому «сверено по содержимому файла вне
+      // репозитория» — худший из возможных исходов: он подтверждает то, чего в репозитории нет.
+      defects.push(
+        `${rel}: ${path} уходит за пределы репозитория по символической ссылке ` +
+          `(${r.outside.slice(ROOT.length + 1)} → ${(() => {
+            try {
+              return realpathSync(r.outside);
+            } catch {
+              return 'неразрешимо';
+            }
+          })()}) — содержимое такой ссылки доказательством не является`,
+      );
+      continue;
+    }
+    if (r.wrongCase) {
+      defects.push(
+        `${rel}: регистр пути не совпадает с репозиторием — ${path} (в git: ` +
+          `${caseIndex.get(r.wrongCase.slice(ROOT.length + 1).toLowerCase())}). На macOS такая ` +
+          'ссылка «существует», на Linux-раннере — нет',
+      );
+      continue;
+    }
+    if (r.ambiguous) {
+      // Неоднозначность — не «файла ещё нет», а «непонятно, о каком файле речь»: расхождение
+      // независимо от вида артефакта.
+      defects.push(
+        `${rel}: короткая ссылка ${path} разрешается неоднозначно ` +
+          `(${r.ambiguous.length}: ${r.ambiguous.slice(0, 3).join(', ')}…) — укажите путь целиком`,
+      );
+      continue;
+    }
+
+    if (!lineSpec) {
+      pathOnly += 1;
+      continue;
+    }
+
+    checkContent({
+      rel,
+      path,
+      lines: readFileSync(r.hit, 'utf8').split('\n'),
+      lineSpec,
+      snippet,
+    });
+  }
+}
+
+if (files.length === 0) {
+  console.error('check-spec-refs: не найдено ни одного артефакта в openspec/ — измерить нечего');
+  process.exit(2);
+}
+if (pathOnly + contentVerified + unmeasurable.size + absentSeen.size + defects.length === 0) {
+  console.error(
+    `check-spec-refs: в ${files.length} артефактах не нашлось ни одной проверяемой ссылки — ` +
+      'это не «ссылки верны», а «проверять нечего»',
+  );
+  process.exit(2);
+}
+
+// Прежние причины читаются ДО перезаписи: `--write-absent` не должен стирать уже написанное
+// человеком объяснение — он лишь добавляет новые строки с требованием причины.
+const absentDeclaredBefore = existsSync(ABSENT_FILE)
+  ? new Map(
+      readFileSync(ABSENT_FILE, 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#'))
+        .map((l) => l.split(' :: ').map((x) => x.trim()))
+        .filter((p) => p.length === 3)
+        .map((p) => [`${p[0]} :: ${p[1]}`, p[2]]),
+    )
+  : new Map();
+
+/** Сколько записей храповика данного класса. Считается по самой карте: отдельный счётчик уже
+ *  однажды разошёлся с ней (считал вхождения против уникальных identity). */
+const kindCount = (kind) => [...unmeasurable.values()].filter((v) => v.kind === kind).length;
+
+const current = [...unmeasurable.keys()].sort();
+const currentAbsent = [...absentSeen.keys()].sort();
+
+if (WRITE_DEBT) {
+  writeFileSync(DEBT_FILE, `${DEBT_HEADER}${current.map((k) => `${k}\n`).join('')}`, 'utf8');
+  console.log(`check-spec-refs: в openspec/.spec-ref-debt записано ${current.length} ссылок`);
+}
+if (WRITE_ABSENT) {
+  // Объявления по САМОМУ SHA (`external-revision`) не выводятся из ненайденных путей — они
+  // говорят о ревизии, а не о файле. Поэтому режим записи их СОХРАНЯЕТ: первая редакция их
+  // снесла, и ссылки на неслитые ветки мгновенно стали расхождениями. Реестр, который теряет
+  // часть себя при штатной перезаписи, хуже отсутствующего: он выглядит полным.
+  const keepExternal = [...absentDeclaredBefore.entries()]
+    .filter(([key, reason]) => reason === 'external-revision' && !currentAbsent.includes(key))
+    .map(([key]) => key);
+  const rows = [...currentAbsent, ...keepExternal].sort();
+  writeFileSync(
+    ABSENT_FILE,
+    `${ABSENT_HEADER}${rows
+      .map((k) => `${k} :: ${absentDeclaredBefore.get(k) ?? 'ТРЕБУЕТСЯ-ПРИЧИНА'}\n`)
+      .join('')}`,
+    'utf8',
+  );
+  // Сообщается ФАКТИЧЕСКИ записанное: прежде печаталось только число найденных путей (12), а в
+  // файл уходило 17 строк вместе с сохранёнными объявлениями по SHA. Число, не совпадающее с
+  // содержимым файла, — это то же «не смогла измерить», выданное за измерение.
+  console.log(
+    `check-spec-refs: в openspec/.spec-ref-absent записано ${rows.length} строк ` +
+      `(${currentAbsent.length} ненайденных путей + ${keepExternal.length} объявлений по ревизии)`,
+  );
+  // Режим записи не имеет права закончиться нулём, если файл остался в состоянии, которое
+  // обычный прогон отвергает: иначе «команда прошла» читается как «гейт зелёный».
+  const placeholders = rows.filter(
+    (k) => (absentDeclaredBefore.get(k) ?? 'ТРЕБУЕТСЯ-ПРИЧИНА') === 'ТРЕБУЕТСЯ-ПРИЧИНА',
+  );
+  if (placeholders.length > 0) {
+    console.error(
+      `check-spec-refs: у ${placeholders.length} записей причина не заполнена — гейт такой файл ` +
+        'не принимает, впишите одну из: ' +
+        [...ABSENT_REASONS].join(', '),
+    );
+    process.exit(2);
+  }
+}
+// После записи реестра выполнение НЕ прерывается: дальше идёт обычная сверка, и она видит и
+// расхождения, и второй реестр. Ранний выход был ложнозелёным дважды: сначала он глотал уже
+// найденные расхождения, потом — расхождения ЧУЖОГО реестра (`--write-debt` не смотрел на
+// объявленные отсутствующие, и наоборот). Записанный реестр сверяется сам с собой тривиально,
+// поэтому продолжение безопасно и ничего не прячет.
+
+/** Читает поимённый список. Отсутствие файла — «не измерено», код 2. ПУСТОЙ список при
+ *  существующем файле — законное состояние «долг выплачен»: различает эти два случая само
+ *  наличие файла, а усечение файла ловится обратной сверкой (записи «больше не находятся»). */
+function readDeclared(file, name, why) {
+  if (!existsSync(file)) {
+    console.error(`check-spec-refs: нет ${name} — ${why}`);
+    process.exit(2);
+  }
+  const rows = readFileSync(file, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  return new Set(rows);
+}
+
+const debt = readDeclared(
+  DEBT_FILE,
+  'openspec/.spec-ref-debt',
+  'без зафиксированного поимённого долга гейт не отличит рост неизмеримых ссылок от нормы',
+);
+
+// Числа печатаются по классам и НЕ складываются: у первой группы проверено только
+// существование пути, у второй — содержимое. Их сумма выдала бы неизмеренное за измеренное.
+console.log(
+  `check-spec-refs: содержимое сверено у ${contentVerified}, существование пути — ещё у ` +
+    `${pathOnly}, каталогов — ещё у ${dirRefs}, имён соседних артефактов — ещё у ` +
+    `${localNames}, неизмеримых ` +
+    `${kindCount('no-snippet')} без фрагмента + ${kindCount('build')} в сборочный вывод + ` +
+    `${kindCount('revision-only')} только по ревизии + ${kindCount('external')} на объявленной ` +
+    `внешней ревизии + ${kindCount('ambiguous')} по неоднозначному имени + ` +
+    `${kindCount('prose')} отброшено как проза ` +
+    `(всего ${unmeasurable.size}, в реестре ${debt.size}), объявленных ` +
+    `отсутствующими ${absentSeen.size} (объявлено ${absentDeclared.size}), расхождений ` +
+    `${defects.length}`,
+);
+if (branchOnlyDeclared > 0) {
+  console.log(
+    `  ревизий вне ${MAINLINE_REF}, объявлено заранее: ${branchOnlyDeclared} — пока ветка жива, ` +
+      'содержимое сверяется; после её удаления гейт скажет «проверить нечем» и merge не заблокирует',
+  );
+}
+
+if (unreachableDeclared > 0) {
+  console.log(
+    `  ревизий недостижимо, объявлено вне main: ${unreachableDeclared} — merge это не блокирует`,
+  );
+}
+if (revisionRefs > 0) {
+  console.log(`  ссылок «ref@sha» без пути (проверена только достижимость ревизии): ${revisionRefs}`);
+}
+
+if (skippedExtensionless.size > 0) {
+  const bySeg = new Map();
+  for (const seg of skippedExtensionless.values()) bySeg.set(seg, (bySeg.get(seg) ?? 0) + 1);
+  console.log(
+    `  спанов без расширения отброшено как проза: ${skippedExtensionless.size} ` +
+      `(первый сегмент не существует в корне: ${[...bySeg.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([seg, n]) => `${seg}×${n}`)
+        .join(', ')})`,
+  );
+}
+
+// Голые SHA не проверяются гейтом, и молчать об этом нельзя: «расхождений 0» иначе читается как
+// «все свидетельства проверяемы». Печатается именно ПОТЕРЯ — сколько из них уже недостижимо, то
+// есть сколько свидетельств читатель проверить не сможет никаким способом.
+// «Голый» — значит НЕ входящий ни в одну ссылку. Прежняя редакция печатала все 40-hex подряд,
+// включая SHA внутри `путь@sha` и `ref@sha`: получалось 28 вместо 14 и «недостижимо 4» вместо 3 —
+// в потерю попадала ревизия, которая как раз проверяется. Число, завышенное вдвое, обесценивает
+// сам сигнал.
+const bareOnly = [...bareRevisions.entries()].filter(([sha]) => !spanRevisions.has(sha));
+const bareUnreachable = bareOnly.filter(
+  ([sha]) => !revisionSharedInOrigin(sha) && !mainlineCache.get(sha),
+);
+if (bareOnly.length > 0) {
+  console.log(
+    `  голых SHA вне формы ссылки: ${bareOnly.length}, из них недостижимо из origin — ` +
+      `${bareUnreachable.length}. Гейт их не проверяет: свидетельство, которое должно быть ` +
+      'проверяемым, пишется формой `<ref>@<sha>` или `<путь>@<sha>:<строка>`',
+  );
+  for (const [sha, where] of bareUnreachable.slice(0, 5)) {
+    console.log(`    ${sha} — ${where}`);
+  }
+}
+if (unbuiltRoots.size > 0) {
+  // Непроверенное называется вслух: иначе джоб, где собран только один пакет, печатал бы «0
+  // расхождений» и это читалось бы как «ссылки в сборочный вывод проверены».
+  for (const [root, n] of [...unbuiltRoots.entries()].sort()) {
+    console.log(`  ${root} в этом прогоне не собран — ${n} ссылок туда НЕ проверено`);
+  }
+}
+
+if (generated.size > 0) {
+  console.log(`  сборочный вывод проверен в собранном дереве: ${generated.size}`);
+}
+
+let failed = false;
+
+if (defects.length > 0) {
+  failed = true;
+  console.error('\nРАСХОЖДЕНИЯ:');
+  for (const d of defects) console.error(`  ${d}`);
+}
+
+const added = current.filter((k) => !debt.has(k));
+const gone = [...debt].filter((k) => !unmeasurable.has(k)).sort();
+
+if (added.length > 0) {
+  failed = true;
+  console.error(`\nНОВЫЕ НЕИЗМЕРИМЫЕ ССЫЛКИ (${added.length}), в долге их нет:`);
+  for (const k of added) console.error(`  ${unmeasurable.get(k).text}`);
+  console.error('Ссылка с номером строки обязана приводить рядом фрагмент в кавычках, например:');
+  console.error('  `web/src/lib/data.ts:45`, `const ENTITIES_DIR =`');
+}
+
+if (gone.length > 0) {
+  failed = true;
+  console.error(
+    `\nЗАПИСИ ДОЛГА БОЛЬШЕ НЕ НАХОДЯТСЯ (${gone.length}) — храповик защёлкивается только при ` +
+      'точном списке, иначе снятая ссылка оставляет место новой:',
+  );
+  for (const k of gone) console.error(`  ${k}`);
+  console.error('Обновите файл: ./bin/check-spec-refs --write-debt');
+}
+
+// Объявление, на предмет которого никто не ссылается, — мёртвая строка: она разрешает то, чего
+// нет, и «оживёт» без ревью, когда кто-нибудь случайно совпадёт с этим SHA. Проверяется у ОБЕИХ
+// форм ключа: прежняя редакция смотрела только на `* ::`, а форма `<артефакт> :: <sha>` не
+// проверялась ни здесь, ни обратной сверкой ниже (она исключает все `external-revision`) — то
+// есть у неё не было ни одной проверки вовсе. Для путей роль этой проверки играет обратная
+// сверка, поэтому здесь отбор идёт по причине, а не по написанию ключа.
+const declaredShaUnused = [...absentDeclared.entries()]
+  .filter(([, reason]) => reason === 'external-revision')
+  .filter(([key]) => {
+    const owner = key.slice(0, key.indexOf(' :: '));
+    const sha = key.slice(key.indexOf(' :: ') + ' :: '.length);
+    // Ключ `* :: <sha>` — намеренный wildcard, он проверяется по всему дереву артефактов. Ключ
+    // `<артефакт> :: <sha>` обязан проверяться ПО СВОЕМУ артефакту: прежняя редакция теряла
+    // владельца и искала SHA глобально, поэтому упоминание того же SHA в любом другом файле
+    // держало устаревшее разрешение живым — то есть узкий ключ работал как wildcard.
+    return owner === '*' ? !seenRevisions.has(sha) : !revisionsByArtifact.get(owner)?.has(sha);
+  })
+  .map(([key]) => key)
+  .sort();
+
+// В режиме записи обратная сверка идёт по СВЕЖЕМУ составу, а не по карте, прочитанной до записи:
+// иначе первый запуск после снятия устаревшей записи всё равно выходил кодом 1, и «перезаписал»
+// требовало второго прогона, чтобы стать «зелено». Команда, которой нужно два запуска, приучает
+// запускать её дважды не думая — а это уже способ не заметить настоящую находку.
+const absentNew = WRITE_ABSENT ? [] : currentAbsent.filter((k) => !absentDeclared.has(k));
+const absentStale = WRITE_ABSENT
+  ? []
+  : [...absentDeclared.keys()]
+  .filter((k) => !absentSeen.has(k) && absentDeclared.get(k) !== 'external-revision')
+  .sort();
+
+if (declaredShaUnused.length > 0) {
+  failed = true;
+  console.error(
+    `\nМЁРТВЫЕ ОБЪЯВЛЕНИЯ РЕВИЗИЙ (${declaredShaUnused.length}): на эти SHA не ссылается ни один ` +
+      'артефакт, значит объявление ничего не объявляет — уберите строки из ' +
+      'openspec/.spec-ref-absent:',
+  );
+  for (const sha of declaredShaUnused) console.error(`  ${sha}`);
+}
+
+if (absentNew.length > 0) {
+  failed = true;
+  console.error(
+    `\nССЫЛКИ НА НЕСУЩЕСТВУЮЩИЕ АРТЕФАКТЫ (${absentNew.length}), не объявленные в ` +
+      'openspec/.spec-ref-absent:',
+  );
+  for (const k of absentNew) console.error(`  ${absentSeen.get(k)}`);
+  console.error(
+    'Либо ссылка сломана переименованием — исправьте её; либо она указывает в пустоту ' +
+      'осознанно — объявите: ./bin/check-spec-refs --write-absent',
+  );
+}
+
+if (absentStale.length > 0) {
+  failed = true;
+  console.error(
+    `\nОБЪЯВЛЕННЫЕ ОТСУТСТВУЮЩИМИ БОЛЬШЕ НЕ ОТСУТСТВУЮТ ИЛИ ИСЧЕЗЛИ ИЗ ТЕКСТА ` +
+      `(${absentStale.length}) — объявление, не сверяемое в обе стороны, со временем ` +
+      'разрешает уже сломанную ссылку:',
+  );
+  for (const k of absentStale) console.error(`  ${k}`);
+  console.error('Обновите файл: ./bin/check-spec-refs --write-absent');
+}
+
+if (failed) {
+  console.error('\nСсылка верна в день написания и молча становится ложной после сдвига файла.');
+  process.exit(1);
+}

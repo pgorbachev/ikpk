@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { CHARACTERIZATION_SHA, ENTITIES_DIR, LOCAL_UPLOAD_ORIGINAL, LOCAL_UPLOAD_WEBP, KNOWN_REMOTE_UPLOAD, MEDIA_MANIFEST, REPO_ROOT } from './helpers/rich-content-safety/paths.js';
 import {
   assertDiscoveryMatchesRegistry,
@@ -219,6 +219,58 @@ describe('rich-content baseline: sinks и rendered registry', () => {
   });
 });
 
+describe('rich-content baseline: поля реестра вывода, которые не читал никто', () => {
+  // Оба поля разошлись с репозиторием МОЛЧА и были замечены только глазами на ревью
+  // PR #151. Проверки не было ни одной: `grep` по `tests/` не находил ни единого чтения
+  // ни `slotIds`, ни `distRoots`, поэтому они дрейфовали годами прогонов при зелёном
+  // наборе — `slotIds` перечислял `PaymentForm.astro:L104/L108` и `oplata.astro:L36/L63`,
+  // строк с такими номерами в исходниках не было ни до правки, ни после; `distRoots`
+  // указывал на `/private/tmp/wt-payment-ux` — worktree чужой сессии.
+  //
+  // Это ровно тот класс, о котором AGENTS.md говорит «отсутствие сигнала выдаётся за
+  // отсутствие проблемы»: поле в фикстуре выглядит проверенным ровно потому, что лежит
+  // рядом с проверенными.
+  const occurrences = loadFixture<{ slotIds: string[]; distRoots: string[] }>(
+    'output-occurrence-registry.json',
+  );
+
+  it('slotIds реестра вывода совпадает с committed инвентарём слотов', () => {
+    const inRegistry = [...occurrences.slotIds].sort();
+    const inSlots = slots.map((s) => s.slotId).sort();
+    const onlyInRegistry = inRegistry.filter((id) => !inSlots.includes(id));
+    const onlyInSlots = inSlots.filter((id) => !inRegistry.includes(id));
+    expect(
+      { onlyInRegistry, onlyInSlots },
+      `реестр вывода и инвентарь слотов разошлись:\n  только в реестре: ${onlyInRegistry.join(', ') || '—'}\n  только в инвентаре: ${onlyInSlots.join(', ') || '—'}`,
+    ).toEqual({ onlyInRegistry: [], onlyInSlots: [] });
+  });
+
+  it('distRoots — пути внутри репозитория, а не абсолютные пути чужой машины', () => {
+    // Пустой список — «собрано ни из чего», а не «нарушений нет».
+    expect(
+      occurrences.distRoots.length,
+      'distRoots пуст — реестр собран ни из какого вывода',
+    ).toBeGreaterThan(0);
+    // Признак общий, а не перечень известных каталогов вывода: жёсткий список отставал
+    // бы от предмета молча, стоит появиться третьей роли сборки.
+    //
+    // Имена каталогов здесь намеренно НЕ названы даже в комментарии: `demo-gate` считает
+    // предметом файла любой строковый литерал, чей последний сегмент совпал с именем
+    // каталога вывода, а его извлекатель литералов идёт по сырому тексту и не отличает
+    // код от комментария. Backtick-кавычки, которыми в этом репозитории оформляют
+    // упоминания в комментариях, он читает как границы литерала — и первая редакция
+    // этого гейта получила «читает и боевой, и демо-вывод» из одной поясняющей фразы,
+    // хотя не читает ни один. Слабость разбора вынесена в находки, а не обойдена молча.
+    const foreign = occurrences.distRoots.filter(
+      (p) => isAbsolute(p) || p.split('/')[0] !== 'web' || p.includes('..'),
+    );
+    expect(
+      foreign,
+      `distRoots содержит пути вне репозитория: ${foreign.join(', ')}`,
+    ).toEqual([]);
+  });
+});
+
 describe('rich-content baseline: known deviation media', () => {
   it('локальный webp и manifest entry существуют, remote URL из контента убран миграцией', () => {
     expect(deviation.remoteUrl).toBe(KNOWN_REMOTE_UPLOAD);
@@ -254,8 +306,9 @@ describe('rich-content baseline: пересечения', () => {
   });
 
   it('online-payment-flow пересекается через oplata.astro и не меняет normalizeLegacyControls', () => {
+    // online-payment-flow заархивирован 2026-08-21 — путь теперь под openspec/changes/archive/.
     const proposal = readFileSync(
-      join(REPO_ROOT, 'openspec', 'changes', 'online-payment-flow', 'proposal.md'),
+      join(REPO_ROOT, 'openspec', 'changes', 'archive', '2026-08-21-online-payment-flow', 'proposal.md'),
       'utf-8',
     );
     expect(proposal).toMatch(/normalizeLegacyControls[`\s]*не меняется/);

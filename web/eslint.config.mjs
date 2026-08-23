@@ -11,6 +11,8 @@ export default tseslint.config(
       // строки eslint шёл в собранный бандл и в индекс Pagefind: 1061 ошибка на коде,
       // который мы не писали.
       'dist-demo/**',
+      // Вывод сборки роли `stand` (задача 6.15) — тот же сгенерированный артефакт.
+      'dist-stand/**',
       '.astro/**',
       'node_modules/**',
       'playwright-report/**',
