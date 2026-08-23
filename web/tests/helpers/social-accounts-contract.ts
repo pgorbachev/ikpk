@@ -57,6 +57,131 @@ export const SOCIAL_COLUMN_HEADING = 'Подписывайтесь';
 
 export type AccountName = (typeof ACCEPTED_ACCOUNTS)[number]['name'];
 
+// ─── Реестр применимости марок: сторона ПРОВЕРКИ ────────────────────────────────────────
+// Requirement «Решение о применимости марки зафиксировано в машиночитаемом реестре»
+// (`design.md`, Решение 18). Реестр — продуктовый файл `web/src/lib/social-marks-registry.ts`,
+// который создаёт РЕАЛИЗАЦИЯ; здесь живёт только предикат, читающий его записи, и он
+// написан чистой функцией над переданным перечнем — ровно как проверка состава читает
+// ожидания из этого модуля, а не из продукта.
+//
+// Почему предикат отдельно от реестра: спека требует, чтобы автоматическая проверка
+// ЧИТАЛА решение владельца, иначе законное исключение («одна сеть осталась текстовой
+// ссылкой») неотличимо от потерянной марки. Но сам исход — факт о продукте, а правило его
+// прочтения — требование, и смешивать их в одном файле означало бы снова сдвигать обе
+// стороны сравнения одной правкой.
+
+/** Исход применимости. БИНАРНЫЙ: третьего значения у поля нет (Решение 18). */
+export type MarkOutcome = 'mark' | 'text-link';
+
+/**
+ * Запись реестра о сети. Поля названы требованием; `markFileHash` обязателен для исхода
+ * `mark`, `themeAssets` — необязательная карта «тема → файл» для тем, где применяется
+ * разрешённая правообладателем альтернативная версия марки.
+ */
+export interface MarkRegistryEntry {
+  network: string;
+  outcome: MarkOutcome;
+  decidedAt: string;
+  conditionsSource: string;
+  conditionsOutcome: string;
+  markFileHash?: string;
+  themeAssets?: Record<string, string>;
+}
+
+/** Решение по сети: либо названный реестром исход, либо его отсутствие с причиной. */
+export type MarkDecision =
+  | { outcome: MarkOutcome; entry: MarkRegistryEntry }
+  | { outcome: null; why: string };
+
+/**
+ * Обязательные поля записи.
+ *
+ * Спека называет два триггера неполноты прямо («без источника условий или без даты»), но
+ * перечисляет полный состав полей, и запись без любого перечисленного поля требованию не
+ * удовлетворяет тоже. Предикат взят по ВСЕМУ перечню намеренно: более узкий принимал бы
+ * запись с исходом `mark` без `markFileHash`, а тогда у сверки «файл марки совпадает с
+ * первоисточником» нет второго операнда и она сравнивает файл сам с собой (Решение 17).
+ */
+function missingFields(entry: MarkRegistryEntry): string[] {
+  const required: Array<keyof MarkRegistryEntry> = [
+    'network',
+    'outcome',
+    'decidedAt',
+    'conditionsSource',
+    'conditionsOutcome',
+  ];
+  if (entry.outcome === 'mark') required.push('markFileHash');
+  return required.filter((field) => {
+    const value = entry[field];
+    return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+  });
+}
+
+/**
+ * Исход для сети по реестру.
+ *
+ * `outcome: null` — «решения нет», и по спеке это ОДНО состояние с тремя входами: записи о
+ * сети нет вовсе, запись неполна, реестр не отдаёт перечня. Спека сама их приравнивает
+ * («отсутствие записи о сети равнозначно неполной записи»), поэтому и предикат один, а
+ * причина остаётся в `why` для сообщения проверки.
+ *
+ * Две записи об одной сети — тоже «решения нет»: спека говорит о ЗАПИСИ о сети в
+ * единственном числе, а проверка, молча берущая первую из двух, выбирала бы за читателя.
+ */
+export function markDecision(registry: unknown, network: string): MarkDecision {
+  if (!Array.isArray(registry)) {
+    return { outcome: null, why: 'реестр применимости не отдаёт перечня записей' };
+  }
+  const entries = (registry as MarkRegistryEntry[]).filter((e) => e?.network === network);
+  if (entries.length === 0) return { outcome: null, why: 'записи о сети в реестре нет' };
+  if (entries.length > 1) {
+    return { outcome: null, why: `о сети ${entries.length} записи — какая главная, реестр не говорит` };
+  }
+  const entry = entries[0]!;
+  if (entry.outcome !== 'mark' && entry.outcome !== 'text-link') {
+    return { outcome: null, why: `исход '${String(entry.outcome)}' не из двух допустимых значений` };
+  }
+  const missing = missingFields(entry);
+  if (missing.length > 0) {
+    return { outcome: null, why: `запись неполна: нет ${missing.join(', ')}` };
+  }
+  return { outcome: entry.outcome, entry };
+}
+
+/**
+ * Сети, обязанные нести марку: те, для которых реестр НЕ называет исход `text-link`.
+ *
+ * Формулировка ровно как в сценарии «марка сети показана» после его сужения. Сеть без
+ * решения попадает СЮДА: реестр для неё `text-link` не называет, значит требование о марке
+ * действует. Отдельно от этого её подача не считается выполненной — это `networksWithoutDecision`.
+ */
+export function networksRequiringMark(registry: unknown, networks: readonly string[]): string[] {
+  return networks.filter((n) => markDecision(registry, n).outcome !== 'text-link');
+}
+
+/** Сети, у которых решения нет: их подача не считается выполненной (спека, оба Requirement). */
+export function networksWithoutDecision(
+  registry: unknown,
+  networks: readonly string[],
+): Array<{ network: string; why: string }> {
+  const out: Array<{ network: string; why: string }> = [];
+  for (const network of networks) {
+    const decision = markDecision(registry, network);
+    if (decision.outcome === null) out.push({ network, why: decision.why });
+  }
+  return out;
+}
+
+/**
+ * Порог полноты: исход `text-link` более чем у одной сети — подача НЕ выполнена и
+ * возвращается в change. Возвращает перечень таких сетей, когда порог перейдён, и пустой
+ * перечень, когда нет: одна текстовая ссылка требование не нарушает.
+ */
+export function textLinkOverflow(registry: unknown, networks: readonly string[]): string[] {
+  const textual = networks.filter((n) => markDecision(registry, n).outcome === 'text-link');
+  return textual.length > 1 ? textual : [];
+}
+
 function childElements(node: unknown): Element[] {
   const n = node as { childNodes?: ChildNode[] };
   return (n.childNodes ?? []).filter((c): c is Element => 'tagName' in c);
