@@ -82,7 +82,7 @@
     "src:components/schedule/SchedulePage.astro:L61:C1:style",
     "src:components/schedule/SchedulePageHeader.astro:L17:C1:style",
     "src:components/seminars/SeminarArchitectureHeader.astro:L213:C1:style",
-    "src:components/seminars/SeminarSchedulePanel.astro:L141:C1:style",
+    "src:components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
     "src:components/topnav/HeaderTools.astro:L106:C1:script",
     "src:components/topnav/HeaderTools.astro:L15:C5:svg",
     "src:components/topnav/HeaderTools.astro:L39:C1:style",

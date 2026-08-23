@@ -313,24 +313,49 @@ test.describe('Расписание семинара на десктопе', () 
     ).toBeLessThan(200);
   });
 
-  // Дата не должна рваться посреди себя. В колонке 21 rem диапазон занимает две
-  // строки — это нормально, а «г.» на строке один нет. Признак объективный: каждая
-  // часть даты обязана укладываться в ОДИН прямоугольник переноса.
-  test('дата не переносится посреди себя @d3-date-not-broken', async ({ page }) => {
+  // Требование к дате: год и «г.» никогда не расходятся по строкам. Именно этот
+  // разрыв и был дефектом — неразрывным был только конец диапазона, поэтому перенос
+  // выпадал на пробел перед «г.» начальной даты и строка получалась из одного «г.».
+  //
+  // Проверять это надо там, где перенос ВЫНУЖДЕН, иначе предмета нет: в колонке
+  // 21 rem дата целиком укладывается в строку сама, и любой признак пройдёт. Поэтому
+  // кегль поднимается вдвое — то же состояние, что проверяет гейт роста кегля, — и
+  // отдельно утверждается, что перенос действительно случился.
+  test('год и «г.» не расходятся по строкам при вынужденном переносе @d3-date-not-broken', async ({ page }) => {
     await openSeminar(page, MOST_DATES.path);
 
-    const broken = await page.locator('[data-seminar-schedule-date-part]').evaluateAll((nodes) =>
-      nodes.map((node) => ({
-        text: (node.textContent ?? '').trim(),
-        lines: node.getClientRects().length,
-      })),
-    );
-    expect(broken.length, 'частей даты на странице не нашлось — проверять было нечего')
+    const measured = await page.evaluate(() => {
+      document.documentElement.style.fontSize = '32px';
+      const parts = [...document.querySelectorAll('[data-seminar-schedule-date-part]')];
+      const era = /(\d{4})\u00A0(г\.)/u;
+      const out: { text: string; partLines: number; eraLines: number }[] = [];
+      for (const part of parts) {
+        const node = [...part.childNodes].find((n) => n.nodeType === Node.TEXT_NODE) as Text | undefined;
+        if (!node) continue;
+        const match = era.exec(node.data);
+        if (!match) continue;
+        const range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        out.push({
+          text: node.data,
+          partLines: part.getClientRects().length,
+          eraLines: range.getClientRects().length,
+        });
+      }
+      return out;
+    });
+
+    expect(measured.length, 'ни в одной дате не нашлось группы «год + г.» — проверять было нечего')
       .toBeGreaterThan(0);
-    const split = broken.filter((part) => part.lines !== 1);
+    expect(
+      measured.some((m) => m.partLines > 1),
+      `при двойном кегле ни одна дата не перенеслась — предмета у проверки нет: ${JSON.stringify(measured.slice(0, 2))}`,
+    ).toBe(true);
+    const split = measured.filter((m) => m.eraLines !== 1);
     expect(
       split,
-      `часть даты разорвана переносом: ${split.map((p) => `«${p.text}» на ${p.lines} строк`).join('; ')}`,
+      `год и «г.» разошлись по строкам: ${split.map((m) => `«${m.text}»`).join('; ')}`,
     ).toEqual([]);
   });
 

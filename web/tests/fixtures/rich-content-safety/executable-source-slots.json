@@ -592,12 +592,12 @@
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
-    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L141:C1:style",
+    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarSchedulePanel.astro:L141:C1:style",
-    "fingerprint": "44a669a97b2fcf3d52810afe99c569e9f6b7b4da871b90bd9cd008d1de724d1a",
-    "identity": "style|body:c0eaccb0a90f8470"
+    "locator": "components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
+    "fingerprint": "771a6a27cc678d051334edcc8b02aac3b6efd51788257357b9f060fd48e8c6ea",
+    "identity": "style|body:6d08ab9809844292"
   },
   {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
@@ -780,8 +780,8 @@
     "file": "pages/[institute]/[courseGroup]/[seminar].astro",
     "nodeKind": "element",
     "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L179:C1:style",
-    "fingerprint": "3699309257146ca409ba07fee897e0cd4a9892146d5658632d7a6f65f23ab1bd",
-    "identity": "style|body:72beb63dc10a99c8"
+    "fingerprint": "781ce6facc3162f7eaacffbae265aed9e5f1ffa7ae6d37e23d2e5fac96788bec",
+    "identity": "style|body:a476247d401743c9"
   },
   {
     "slotId": "src:pages/[institute]/prepodavatel/[id].astro:L71:C1:style",
