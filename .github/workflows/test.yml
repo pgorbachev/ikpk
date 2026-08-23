@@ -432,6 +432,17 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
 
+      # Раскладка расписания на странице семинара (D3, вариант C). Отдельным шагом и в
+      # ЭТОМ workflow по той же причине, что и фильтр месяца: публикацию останавливает
+      # только `Tests`, а проверка в файле, который не запускает ни один workflow, зелена
+      # ровно потому, что её никто не выполняет. Узкие ширины задаются внутри теста
+      # (`test.use`), поэтому проект один — иначе каждый сценарий шёл бы дважды и вторая
+      # ширина подменяла бы заявленную.
+      - name: Run seminar schedule layout tests
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-seminar-head.json
+        run: npm run test:e2e:seminar
+
       - name: Download preview-role site
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -503,6 +514,7 @@ jobs:
             PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-smoke-base.json" npm run test:e2e:smoke
             PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-a11y-base.json" npm run test:e2e:a11y
             PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-catalog-base.json" npm run test:e2e:catalog
+            PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/playwright-seminar-base.json" npm run test:e2e:seminar
             npm run test:e2e:schedule
             cp test-results/schedule-month-run.json "$RUNNER_TEMP/playwright-schedule-base.json"
           )
@@ -518,7 +530,7 @@ jobs:
           while IFS= read -r file; do changed_args+=(--changed-file "$file"); done < "$RUNNER_TEMP/browser-changed-files.txt"
           base_args=()
           if [ "$DEPENDENCY_ONLY" = true ] || [ "$AUTO_MERGE_CANDIDATE" = true ]; then
-            for report in smoke a11y catalog schedule; do
+            for report in smoke a11y catalog seminar schedule; do
               base_args+=(--base-report "$RUNNER_TEMP/playwright-${report}-base.json")
             done
           fi
@@ -530,6 +542,7 @@ jobs:
             --head-report "$RUNNER_TEMP/playwright-smoke-head.json" \
             --head-report "$RUNNER_TEMP/playwright-a11y-head.json" \
             --head-report "$RUNNER_TEMP/playwright-catalog-head.json" \
+            --head-report "$RUNNER_TEMP/playwright-seminar-head.json" \
             --head-report "$RUNNER_TEMP/playwright-schedule-head.json" \
             "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
