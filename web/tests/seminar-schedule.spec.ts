@@ -38,13 +38,29 @@ const ITEM = '[data-seminar-schedule-card]';
 const DESCRIPTION = '.seminar-content';
 const REGISTER = '.seminar-register-link';
 
-/** Цена варианта C на узких ширинах, зафиксированная при выборе (finding 15). */
+/**
+ * Цена варианта C на узких ширинах, зафиксированная при выборе (finding 15 мокапов).
+ *
+ * Число названо для СЕМИ дат, и это часть самого числа: измерено, что каждая
+ * дополнительная дата стоит 142 px на 768 и 163 px на 375, тогда как запас до потолка
+ * — 88 и 104 px. То есть одна новая запись в расписании покраснила бы проверку без
+ * всякой правки кода, а истечение дат сделало бы потолок вакуумным. Поэтому число
+ * дат утверждается рядом с потолком: если данные разошлись, проверка обязана сказать
+ * «цену надо переснять», а не тихо пройти и не упасть на раскладку.
+ */
 const NAMED_COST = { 768: 1447, 375: 1608 };
+const NAMED_COST_DATES = 7;
 
 interface SeminarPage {
   path: string;
   /** Актуальных дат на сегодня — столько записей и должно быть в колонке. */
   dates: number;
+  /**
+   * Есть ли у семинара описание. Берётся из данных, а не выясняется на странице:
+   * у пяти семинаров из 126 описания нет в природе, и страница, выбранная без этого
+   * признака, роняла бы измерение рамки описания вместо проверки раскладки.
+   */
+  described: boolean;
 }
 
 const ENTITIES = join(import.meta.dirname, '..', '..', 'discovery', 'entities');
@@ -63,7 +79,12 @@ function entities<T>(file: string): T[] {
 function seminarPages(): SeminarPage[] {
   const institutes = entities<{ slug: string }>('institutes.json');
   const groups = entities<{ slug: string; legacy_id: string; institute_legacy_id: string }>('course_groups.json');
-  const seminars = entities<{ slug: string; course_group_legacy_id: string }>('seminars.json');
+  const seminars = entities<{
+    slug: string;
+    course_group_legacy_id: string;
+    description_html?: string | null;
+    description_text?: string | null;
+  }>('seminars.json');
   const schedule = entities<{
     status: string;
     seminar?: { slug: string };
@@ -88,6 +109,9 @@ function seminarPages(): SeminarPage[] {
     pages.push({
       path: `/${institute.slug}/${group.slug}/${seminar.slug}`,
       dates: perSlug.get(seminar.slug) ?? 0,
+      described: Boolean(
+        (seminar.description_html ?? '').trim() || (seminar.description_text ?? '').trim(),
+      ),
     });
   }
 
@@ -102,8 +126,8 @@ const PAGES = seminarPages();
 const MOST_DATES = PAGES.reduce((best, page) => (page.dates > best.dates ? page : best), PAGES[0]);
 /** Страница ровно с одной датой: короткий список, прокрутки внутри быть не должно. */
 const ONE_DATE = PAGES.find((page) => page.dates === 1);
-/** Страница без дат — их большинство каталога. */
-const NO_DATES = PAGES.find((page) => page.dates === 0);
+/** Страница без дат и С ОПИСАНИЕМ — их большинство каталога. */
+const NO_DATES = PAGES.find((page) => page.dates === 0 && page.described);
 
 /**
  * Открыть страницу семинара и убедиться, что разбирать есть что.
@@ -178,32 +202,31 @@ test.describe('Расписание семинара на десктопе', () 
     ).toBeLessThanOrEqual(description.y + 8);
   });
 
-  test('описание не опускается от числа дат @d3-description-not-pushed', async ({ page }) => {
-    expect(NO_DATES, 'в данных нет семинара без дат — сравнивать было не с чем').toBeDefined();
+  // Требование: расписание НЕ опускает описание — обе колонки начинаются на одной
+  // высоте. Признак сравнивает два блока НА ОДНОЙ странице, а не две разные страницы
+  // между собой. Прежняя редакция сравнивала отступ «заголовок → описание» на
+  // датированной и недатированной странице и была зелена по совпадению: измерено по
+  // всем 126 страницам, этот отступ равен 28 px на 113 из них, 52 px на восьми, а у
+  // пяти описания нет вовсе. Попадись в выборку любая из тринадцати — тест обвинил бы
+  // раскладку в разнице СОДЕРЖИМОГО либо упал на измерении рамки.
+  test('расписание не опускает описание @d3-description-not-pushed', async ({ page }) => {
+    expect(NO_DATES, 'в данных нет семинара без дат и с описанием — сравнивать было не с чем')
+      .toBeDefined();
 
-    const offsets: Record<string, number> = {};
     for (const target of [MOST_DATES, NO_DATES!]) {
       await openSeminar(page, target.path);
-      const heading = await box(page.locator('h1'), 'заголовок');
+      const schedule = await box(page.locator(SCHEDULE), 'расписание');
       const description = await box(page.locator(DESCRIPTION), 'описание');
-      offsets[target.path] = description.y - (heading.y + heading.height);
 
+      expect(
+        Math.abs(description.y - schedule.y),
+        `${target.path} (дат ${target.dates}): описание на ${Math.round(description.y)}, расписание на ${Math.round(schedule.y)} — колонки начинаются не на одной высоте`,
+      ).toBeLessThanOrEqual(2);
       expect(
         description.y,
         `${target.path}: описание начинается на ${Math.round(description.y)} — ниже первого экрана`,
       ).toBeLessThan(720);
-      expect(
-        description.y,
-        `${target.path}: между заголовком и описанием ${Math.round(offsets[target.path])} px — расписание вклинилось`,
-      ).toBeLessThanOrEqual(heading.y + heading.height + 48);
     }
-
-    const withDates = offsets[MOST_DATES.path];
-    const without = offsets[NO_DATES!.path];
-    expect(
-      Math.abs(withDates - without),
-      `отступ описания зависит от числа дат: ${Math.round(withDates)} против ${Math.round(without)}`,
-    ).toBeLessThanOrEqual(4);
   });
 
   test('запись видна на первом экране @d3-cta-first-screen', async ({ page }) => {
@@ -236,15 +259,33 @@ test.describe('Расписание семинара на десктопе', () 
     ).toBeInViewport();
   });
 
-  test('таблица на шесть колонок заменена карточками @d3-card-list-instead-of-table', async ({ page }) => {
+  // Признак — форма разметки, а не имя удалённого класса. Прежняя редакция проверяла
+  // `.seminar-schedule-columns` (заголовок таблицы на шесть колонок), а этой строки
+  // после удаления старого компонента нет в дереве нигде: утверждение не могло упасть
+  // иначе как от возврата ровно того же имени класса. Это то самое «совпадение по
+  // имени CSS-класса», которое эта же работа вычистила из двух гейтов паритета.
+  //
+  // Что проверяется теперь: записей столько же, сколько актуальных дат (и их больше
+  // нуля — иначе признак вырождается в `0 === 0`), а сама колонка выложена списком, а
+  // не шестиколоночной сеткой.
+  test('расписание выложено списком записей по числу дат @d3-card-list-instead-of-table', async ({ page }) => {
     await openSeminar(page, MOST_DATES.path);
 
-    expect(
-      await page.locator('.seminar-schedule-columns').count(),
-      'на странице остался заголовок таблицы на шесть колонок',
-    ).toBe(0);
-    expect(await page.locator(ITEM).count(), 'карточек в колонке не столько, сколько актуальных дат')
+    expect(MOST_DATES.dates, 'у самой заполненной страницы нет дат — проверять было нечего')
+      .toBeGreaterThan(0);
+    expect(await page.locator(ITEM).count(), 'записей в колонке не столько, сколько актуальных дат')
       .toBe(MOST_DATES.dates);
+
+    const columns = await page.locator(PANEL).evaluate((node) =>
+      [...node.querySelectorAll('*')]
+        .map((child) => getComputedStyle(child).gridTemplateColumns)
+        .filter((value) => value && value !== 'none')
+        .map((value) => value.split(/\s+/).length),
+    );
+    expect(
+      columns.filter((count) => count > 2),
+      `внутри колонки осталась сетка на ${columns.filter((c) => c > 2).join(', ')} дорожек — это таблица, а не список`,
+    ).toEqual([]);
   });
 
   test('короткий список не заводит прокрутку внутри колонки @d3-short-list-no-inner-scroll', async ({ page }) => {
@@ -307,6 +348,15 @@ test.describe('Расписание семинара на десктопе', () 
       `страница не прокрутилась (высота ${scrolled.height}) — липкость проверять было нечем`,
     ).toBeGreaterThan(1000);
     const panel = await box(page.locator(PANEL), 'панель расписания');
+    // Граница ДВУСТОРОННЯЯ, и это не педантизм: одно `toBeLessThan(200)` устраивает
+    // панель, уехавшую ВЫШЕ экрана (измерено: при снятой липкости `panel.y = −1572`,
+    // и весь тест оставался зелёным). Соседний `@d3-sticky` пару границ имеет, здесь
+    // она была потеряна — нашло независимое ревью, а не мутация: M1 давала «14 зелёных
+    // из 15», то есть по цвету прогона дыра не видна.
+    expect(
+      panel.y,
+      `переполненная панель уехала выше экрана: верх на ${Math.round(panel.y)}`,
+    ).toBeGreaterThanOrEqual(0);
     expect(
       panel.y,
       `переполненная панель перестала липнуть: верх на ${Math.round(panel.y)} после прокрутки`,
@@ -467,8 +517,31 @@ for (const width of [768, 375] as const) {
     // что она не стала ХУЖЕ названной, всё равно надо: карточки у нас несут больше
     // данных, чем в мокапе (продолжительность), и лишняя строка сдвинула бы описание
     // ниже обещанного.
+    // Инвариант раскладки, не зависящий ни от числа дат, ни от их истечения: описание
+    // начинается сразу под блоком расписания, а не через пустоту. Он и есть постоянная
+    // часть «цены» — переменная часть (высота самого блока) приходит из данных, и
+    // потолок ниже к ней привязан явно.
+    test(`описание начинается сразу под расписанием @d3-narrow-gap-${width}`, async ({ page }) => {
+      await openSeminar(page, MOST_DATES.path);
+
+      const schedule = await box(page.locator(SCHEDULE), 'расписание');
+      const description = await box(page.locator(DESCRIPTION), 'описание');
+      const gap = description.y - (schedule.y + schedule.height);
+      expect(
+        Math.round(gap),
+        `между расписанием и описанием ${Math.round(gap)} px — больше, чем отступ раскладки`,
+      ).toBeLessThanOrEqual(40);
+      expect(Math.round(gap), `описание залезает на расписание: ${Math.round(gap)} px`)
+        .toBeGreaterThanOrEqual(0);
+    });
+
     test(`описание не уезжает ниже названной цены @d3-narrow-named-cost-${width}`, async ({ page }) => {
       await openSeminar(page, MOST_DATES.path);
+
+      expect(
+        MOST_DATES.dates,
+        `цена названа для ${NAMED_COST_DATES} дат, а у самой заполненной страницы их ${MOST_DATES.dates}: при большем числе потолок покраснеет от данных, при меньшем станет вакуумным. Число надо переснять на текущих данных и обновить NAMED_COST`,
+      ).toBe(NAMED_COST_DATES);
 
       const description = await box(page.locator(DESCRIPTION), 'описание');
       expect(
