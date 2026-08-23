@@ -13,6 +13,12 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_vdsina_root}"
 SITE_NAME="${SITE_NAME:-ikpk}"
 WEB_ROOT="${WEB_ROOT:-/var/www/${SITE_NAME}}"
 DOMAIN="${DOMAIN:-_}"
+# Отдельное имя и отдельный сертификат для админки системы управления (не
+# канонические имена сайта — те переключает `prod-serving-on-nginx`). Пустое
+# умолчание запрещено намеренно: `cms._` не является именем, на которое можно
+# выпустить сертификат, — оператор обязан задать ADMIN_DOMAIN явно.
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 
 SSH_ARGS=(
   -i "$SSH_KEY"
@@ -26,25 +32,49 @@ fi
 
 echo "[bootstrap] Connecting to ${SSH_USER}@${HOST}"
 /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
-  "SITE_NAME='${SITE_NAME}' WEB_ROOT='${WEB_ROOT}' DOMAIN='${DOMAIN}' bash -s" <<'REMOTE'
+  "SITE_NAME='${SITE_NAME}' WEB_ROOT='${WEB_ROOT}' DOMAIN='${DOMAIN}' ADMIN_DOMAIN='${ADMIN_DOMAIN}' CERTBOT_EMAIL='${CERTBOT_EMAIL}' bash -s" <<'REMOTE'
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Админка системы управления раздаётся только по TLS (спека
+# cms-content-authoring-and-migration, «Админка и её API раздаются только по
+# TLS») — незаданное имя не отдаёт панель по умолчанию, оно fail-closed валит
+# bootstrap: сертификат не на что выпускать.
+if [[ -z "${ADMIN_DOMAIN}" ]]; then
+  echo "[bootstrap] ADMIN_DOMAIN не задан — задайте отдельное имя для админки системы управления (например cms.${SITE_NAME}.example)." >&2
+  exit 4
+fi
+
 apt-get update
-apt-get install -y nginx rsync
+apt-get install -y nginx rsync certbot python3-certbot-nginx openssl
 
 mkdir -p "${WEB_ROOT}/releases"
 mkdir -p "${WEB_ROOT}/shared"
 chown -R root:root "${WEB_ROOT}"
 
+# Самоподписанный плейсхолдер, чтобы `nginx -t` прошёл ДО первого выпуска
+# сертификата: `ssl_certificate` не может ссылаться на файл, которого ещё
+# нет, а certbot --nginx ниже сам подменит эти пути на свои после проверки
+# домена.
+ADMIN_TLS_DIR="/etc/ikpk-admin-tls/${ADMIN_DOMAIN}"
+if [[ ! -f "${ADMIN_TLS_DIR}/fullchain.pem" ]]; then
+  mkdir -p "${ADMIN_TLS_DIR}"
+  openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+    -subj "/CN=${ADMIN_DOMAIN}" \
+    -keyout "${ADMIN_TLS_DIR}/privkey.pem" \
+    -out "${ADMIN_TLS_DIR}/fullchain.pem"
+fi
+
 # Существующий vhost НЕ перезаписываем без явного разрешения.
 #
-# Здесь конфиг пишется целиком, только `listen 80`, а certbot добавляет в этот же
-# файл 443-блок и редирект на https. Повторный bootstrap на боевом хосте вернул бы
-# конфигурацию к HTTP-only и обнулил `server_name`, если забыли DOMAIN. Раньше это
-# происходило молча, а деплой к тому же де-факто отправлял оператора запускать
-# bootstrap повторно — чтобы добрать `include` редиректов.
+# Конфиг пишется целиком, включая блок 443 ssl админки; certbot --nginx ниже
+# только подменяет ssl_certificate/-_key на выпущенный сертификат — саму
+# структуру vhost он не порождает. Повторный bootstrap на боевом хосте без
+# FORCE_VHOST вернул бы конфигурацию к состоянию ДО этой подмены и обнулил
+# `server_name`, если забыли DOMAIN. Раньше это происходило молча, а деплой к
+# тому же де-факто отправлял оператора запускать bootstrap повторно — чтобы
+# добрать `include` редиректов.
 VHOST="/etc/nginx/sites-available/${SITE_NAME}.conf"
 if [[ -f "$VHOST" && "${FORCE_VHOST:-}" != "1" ]]; then
   cat >&2 <<EXISTING
@@ -71,7 +101,23 @@ cat >"$VHOST" <<NGINX
 server {
   listen 80;
   listen [::]:80;
-  server_name ${DOMAIN};
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  # ADMIN_DOMAIN — отдельное имя админки системы управления, добавленное в
+  # ТОТ ЖЕ vhost по SNI: отдельный блок server на тот же порт держал бы два
+  # блока server в одном heredoc, а `tests/serving-config.test.ts` (уже
+  # принятый гейт `static-serving`) требует ровно один. Сертификат ниже
+  # выпускается ИМЕННО на ADMIN_DOMAIN, отдельно от сертификата канонических
+  # имён сайта (тот — предмет `prod-serving-on-nginx`).
+  server_name ${DOMAIN} ${ADMIN_DOMAIN};
+
+  # Сертификат админки системы управления (не канонические имена сайта — те
+  # переключает \`prod-serving-on-nginx\`). \`ssl_certificate\` смотрит на
+  # самоподписанный плейсхолдер, созданный выше, до первого выпуска настоящего
+  # сертификата; certbot --nginx ниже подменяет оба пути на свои после
+  # проверки домена и настраивает автопродление.
+  ssl_certificate ${ADMIN_TLS_DIR}/fullchain.pem;
+  ssl_certificate_key ${ADMIN_TLS_DIR}/privkey.pem;
 
   root ${WEB_ROOT}/current;
   index index.html;
@@ -116,6 +162,34 @@ server {
   # файла — ошибка конфигурации, а пустой include законен и значит «правил пока
   # нет».
   include ${WEB_ROOT}/shared/nginx-redirects.conf;
+
+  # Админка системы управления и её API раздаются только по TLS (спека
+  # cms-content-authoring-and-migration, «Админка и её API раздаются только по
+  # TLS»): по HTTP — перенаправление, а не обслуживание, иначе пароль
+  # администратора и cookie сессии ушли бы открытым текстом. Данные сотрудника
+  # разделяемому кешу хранить нельзя (дельта static-serving, класс адресов
+  # системы управления) — поэтому ровно no-store, без соседства с public.
+  location ^~ /admin/ {
+    add_header Cache-Control "no-store" always;
+    proxy_pass http://127.0.0.1:1337;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    if (\$scheme = http) {
+      return 301 https://\$host\$request_uri;
+    }
+  }
+
+  location ^~ /api/ {
+    add_header Cache-Control "no-store" always;
+    proxy_pass http://127.0.0.1:1337;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    if (\$scheme = http) {
+      return 301 https://\$host\$request_uri;
+    }
+  }
 
   # /_astro/ — имя несёт хеш содержимого сборки Astro, поэтому годовое
   # обещание безопасно: замена содержимого меняет и имя файла. Без always —
@@ -197,6 +271,21 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl enable nginx
 systemctl reload nginx
+
+# Выпуск и обновление сертификата — ВЫЗОВ, а не пункт инструкции оператору:
+# необязательный шаг в тексте инструкции — ровно то расхождение, из-за
+# которого TLS админки не был гарантирован (design.md, D-раздел про TLS).
+# `--nginx` сам подменит ssl_certificate/-_key на свои пути в блоке выше.
+if [[ -n "${CERTBOT_EMAIL}" ]]; then
+  certbot --nginx -d "${ADMIN_DOMAIN}" -m "${CERTBOT_EMAIL}" --agree-tos --non-interactive --redirect
+else
+  certbot --nginx -d "${ADMIN_DOMAIN}" --register-unsafely-without-email --agree-tos --non-interactive --redirect
+fi
+
+# Продление по умолчанию уже ставит пакет certbot (таймер systemd), но здесь
+# оно включено явно: продление сертификата не обязано зависеть от того, что
+# по умолчанию сделал пакетный менеджер дистрибутива.
+systemctl enable --now certbot.timer
 REMOTE
 
 echo "[bootstrap] Done. Nginx serves ${WEB_ROOT}/current"
