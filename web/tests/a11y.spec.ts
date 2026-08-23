@@ -567,6 +567,124 @@ test.describe('Контраст тумблера темы в обеих тема
   }
 });
 
+// ─── Роли `--text-primary`/`--surface-inverse`/`--text-inverse` не переворачиваются
+// дважды в тёмной теме (TD-42) ─────────────────────────────────────────────
+// Базовые токены `--color-dark-700`/`--color-light-100` уже инвертируются в
+// `:root[data-theme='dark']` (tokens.css) — так роли, объявленные в `:root` через
+// `var(--color-dark-700)` и `var(--color-light-100)`, сами становятся тёмно-темными
+// без дополнительных правок. Но блок тёмной темы ПОВТОРНО переобъявляет
+// `--text-primary`, `--text-inverse` и `--surface-inverse` через те же алиасы —
+// вторая инверсия отменяет первую. Измеряется ВЫЧИСЛЕННЫЙ цвет, а не текст токена:
+// `getComputedStyle` того же класса дефекта уже ловил (см. helpers/contrast.ts).
+test.describe('Роли текста и поверхностей не инвертируются дважды в тёмной теме', () => {
+  const TEXT_MIN = 4.5; // WCAG 1.4.3, обычный текст
+  const SURFACE_MIN = 3; // WCAG 1.4.11, различимость нетекстовых поверхностей
+
+  test('--text-primary читается на --surface-page в обеих темах', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      const response = await page.goto('/');
+      expect(response?.status(), `${theme}: страница не отдалась`).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+
+      const colors = await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.color = 'var(--text-primary)';
+        probe.style.backgroundColor = 'var(--surface-page)';
+        document.body.appendChild(probe);
+        const cs = getComputedStyle(probe);
+        const result = { text: cs.color, surface: cs.backgroundColor };
+        probe.remove();
+        return result;
+      });
+
+      const value = contrastRatio(parseRgb(colors.text), parseRgb(colors.surface));
+      expect(
+        value,
+        `${theme}: --text-primary ${colors.text} на --surface-page ${colors.surface} — ${value.toFixed(2)}:1 при требуемых ${TEXT_MIN}:1`,
+      ).toBeGreaterThanOrEqual(TEXT_MIN);
+    }
+  });
+
+  test('--surface-inverse отличима от --surface-page в обеих темах', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      const response = await page.goto('/');
+      expect(response?.status(), `${theme}: страница не отдалась`).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+
+      const colors = await page.evaluate(() => {
+        const page1 = document.createElement('div');
+        page1.style.backgroundColor = 'var(--surface-page)';
+        const page2 = document.createElement('div');
+        page2.style.backgroundColor = 'var(--surface-inverse)';
+        document.body.append(page1, page2);
+        const result = {
+          page: getComputedStyle(page1).backgroundColor,
+          inverse: getComputedStyle(page2).backgroundColor,
+        };
+        page1.remove();
+        page2.remove();
+        return result;
+      });
+
+      const value = contrastRatio(parseRgb(colors.page), parseRgb(colors.inverse));
+      expect(
+        value,
+        `${theme}: --surface-inverse ${colors.inverse} на --surface-page ${colors.page} — ${value.toFixed(2)}:1 при требуемых ${SURFACE_MIN}:1 (иначе «инверсная» поверхность сливается с полотном)`,
+      ).toBeGreaterThanOrEqual(SURFACE_MIN);
+    }
+  });
+
+  // Не текущий дефект (пара уже проходит и до фикса — обе стороны double-flip
+  // случайно остаются далеко друг от друга), но именно эта пара — то, на чём роль
+  // `--text-inverse` реально используется (текст НА инверсной поверхности), и
+  // фикс не должен её сломать.
+  test('--text-inverse читается на --surface-inverse в обеих темах', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem('ikpk.theme', t);
+        } catch {
+          /* приватный режим */
+        }
+      }, theme);
+      const response = await page.goto('/');
+      expect(response?.status(), `${theme}: страница не отдалась`).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+
+      const colors = await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.color = 'var(--text-inverse)';
+        probe.style.backgroundColor = 'var(--surface-inverse)';
+        document.body.appendChild(probe);
+        const cs = getComputedStyle(probe);
+        const result = { text: cs.color, surface: cs.backgroundColor };
+        probe.remove();
+        return result;
+      });
+
+      const value = contrastRatio(parseRgb(colors.text), parseRgb(colors.surface));
+      expect(
+        value,
+        `${theme}: --text-inverse ${colors.text} на --surface-inverse ${colors.surface} — ${value.toFixed(2)}:1 при требуемых ${TEXT_MIN}:1`,
+      ).toBeGreaterThanOrEqual(TEXT_MIN);
+    }
+  });
+});
+
 // Симулируем увеличенный кегль через document.documentElement.style.fontSize
 // (прямая проверка поведения раскладки; в реальности переход к масштабируемому
 // корню происходит через фикс html{font-size} в base.css — сам факт роста
