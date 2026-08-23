@@ -2,7 +2,7 @@
 import { seminarTitleFallback, seminarDescriptionFallback } from '../../../lib/seo-fallback';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
-import SeminarScheduleSection from '../../../components/seminars/SeminarScheduleSection.astro';
+import SeminarSchedulePanel from '../../../components/seminars/SeminarSchedulePanel.astro';
 import {
   getInstitutes,
   getCourseGroups,
@@ -157,17 +157,21 @@ const seminarSchema =
     <article class="section seminar-detail">
       <h1 class="page-title">{seminar.name}</h1>
 
-      {seminarBodyHtml ? (
-        <div class="seminar-content rich-content">
-          <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
-        </div>
-      ) : seminar.description_text && (
-        <div class="seminar-content rich-content">
-          <p>{seminar.description_text}</p>
-        </div>
-      )}
+      <div class="seminar-cols">
+        <SeminarSchedulePanel rows={scheduleRows} />
 
-      <SeminarScheduleSection rows={scheduleRows} />
+        <div class="seminar-main">
+          {seminarBodyHtml ? (
+            <div class="seminar-content rich-content">
+              <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
+            </div>
+          ) : seminar.description_text && (
+            <div class="seminar-content rich-content">
+              <p>{seminar.description_text}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </article>
   </div>
 </BaseLayout>
@@ -182,5 +186,53 @@ const seminarSchema =
   .seminar-content {
     margin-bottom: 0;
     line-height: 1.75;
+  }
+
+  /*
+   * Расписание — в боковой колонке справа, описание слева (вариант C, выбор
+   * владельца 23.08.2026). Раскладка живёт здесь, а не в компоненте: место блока
+   * на странице задаёт страница, компонент отвечает только за свой вид.
+   *
+   * Расписание идёт в разметке ПЕРВЫМ, а вправо его ставит явное размещение в
+   * гриде. Так порядок чтения и порядок обхода клавиатурой совпадают с видимым на
+   * узких ширинах, где блок стоит над описанием; вариант «описание первым, а блок
+   * поднять `order: -1`» дал бы на телефоне видимый порядок один, а порядок
+   * фокуса — обратный.
+   *
+   * `align-items` НЕ `start`: при `start` колонка расписания получает высоту своего
+   * содержимого, и `position: sticky` внутри неё уезжает вместе с ней после первого
+   * экрана. Растянутая колонка даёт липкости полный ход.
+   */
+  .seminar-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    gap: 2.5rem;
+    align-items: stretch;
+  }
+
+  .seminar-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .seminar-cols > :global(.seminar-schedule) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* Ниже 1024 колонки нет: блок расписания идёт во всю ширину над описанием.
+     Явное размещение снимается, элементы встают в порядке разметки. */
+  @media (max-width: 1024px) {
+    .seminar-cols {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    .seminar-main,
+    .seminar-cols > :global(.seminar-schedule) {
+      grid-column: auto;
+      grid-row: auto;
+    }
   }
 </style>

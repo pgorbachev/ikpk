@@ -1,0 +1,298 @@
+---
+/**
+ * Расписание семинара — карточками в липкой боковой колонке.
+ *
+ * Облик утверждён владельцем 23.08.2026 по мокапам (вариант C, см.
+ * `docs/demo-2026-08-23-mockup-choice.md`). Отдельный компонент, а не режим у
+ * прежней секции: таблица на шесть колонок в 21 rem не помещается физически, и
+ * «то же самое, но уже» дало бы горизонтальную прокрутку вместо переверстки.
+ *
+ * Три отличия от кадров мокапа, каждое — решение, а не расхождение:
+ *
+ *  1. подпись кнопки «Записаться на семинар», а не «Записаться»: в мокапе она
+ *     снималась до решения D11, которым подписи этой кнопки приведены к одной
+ *     (слито в `main` 23.08.2026, стережётся `tests/parity-compare.test.ts`);
+ *  2. ссылка «Показать все», а не «Все даты» — по той же причине: предмет этой
+ *     работы перенос расписания, а не правка формулировок;
+ *  3. в карточке есть продолжительность и примечание к дате. В мокапе их нет, но
+ *     они есть в данных (продолжительность у 60 записей из 61) и были на странице
+ *     до переноса — потерять их значило бы отдать содержимое за раскладку.
+ *     Продолжительность стоит В ОДНОЙ строке с городом именно поэтому: отдельная
+ *     строка подняла бы карточку и сдвинула описание на узких ширинах ниже цены,
+ *     названной при выборе варианта.
+ */
+import { formatDate, formatPrice } from '../../lib/data';
+import { registrationHref, isExternalFormHref } from '../../lib/forms';
+import type { ScheduleEntry } from '../../lib/data';
+
+interface Row {
+  entry: ScheduleEntry;
+  teachers: { fullName: string; href: string }[];
+}
+
+const { rows = [] } = Astro.props as { rows?: Row[] };
+
+function pluralizeRu(value: number, one: string, few: string, many: string): string {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+function formatDurationLabel(entry: ScheduleEntry): string {
+  const raw = String(entry.duration || '').trim();
+  if (!raw) return '';
+  if (!/^\d+$/.test(raw)) return raw;
+
+  const hours = Number(raw);
+  const hoursLabel = `${hours} ${pluralizeRu(hours, 'час', 'часа', 'часов')}`;
+  const start = new Date(entry.startAt);
+  const end = new Date(entry.endAt);
+  const daySpan = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+
+  if (daySpan > 1) {
+    return `${daySpan} ${pluralizeRu(daySpan, 'день', 'дня', 'дней')} (${hoursLabel})`;
+  }
+
+  return hoursLabel;
+}
+
+/** Продолжительность и город одной строкой; отсутствующее не даёт пустого «·». */
+function metaLine(entry: ScheduleEntry): string {
+  return [formatDurationLabel(entry), entry.city?.name].filter(Boolean).join(' · ');
+}
+---
+
+<aside class="seminar-schedule" data-testid="seminar-schedule" aria-labelledby="seminar-schedule-title">
+  <div class="seminar-schedule-panel" data-seminar-schedule-panel>
+    <div class="seminar-schedule-head">
+      <h2 id="seminar-schedule-title">Расписание</h2>
+      <a href="/raspisanie-i-tseny" class="seminar-schedule-all">Показать все</a>
+    </div>
+
+    {rows.length > 0 ? (
+      <ol class="seminar-schedule-list">
+        {rows.map(({ entry, teachers }) => {
+          const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
+          const external = isExternalFormHref(href);
+          return (
+            <li class="seminar-schedule-entry" data-seminar-schedule-card>
+              <div class="schedule-date">
+                {formatDate(entry.startAt)}
+                {entry.startAt !== entry.endAt && (
+                  <span class="schedule-date-range"> — {formatDate(entry.endAt)}</span>
+                )}
+              </div>
+              {metaLine(entry) && <div class="schedule-meta">{metaLine(entry)}</div>}
+              {teachers.length > 0 && (
+                <div class="schedule-meta schedule-teachers">
+                  {teachers.map((teacher, index) => (
+                    <>
+                      {index > 0 && <span class="teacher-separator">, </span>}
+                      <a href={teacher.href} class="schedule-teacher-link">{teacher.fullName}</a>
+                    </>
+                  ))}
+                </div>
+              )}
+              {entry.additionalText && (
+                <div class:list={[
+                  'schedule-additional',
+                  entry.additionalText.startsWith('Начало в ') && 'schedule-additional-highlight',
+                ]}>
+                  {entry.additionalText}
+                </div>
+              )}
+              <div class="schedule-foot">
+                <span class:list={['schedule-price', entry.isFree && 'schedule-price-free']}>
+                  {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
+                </span>
+                <a
+                  class="seminar-register-link"
+                  href={href}
+                  target={external ? '_blank' : undefined}
+                  rel={external ? 'noopener noreferrer' : undefined}
+                >
+                  Записаться на семинар
+                </a>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    ) : (
+      <p class="seminar-schedule-empty">
+        К сожалению, данный курс, в настоящий момент еще не запланирован.
+      </p>
+    )}
+  </div>
+</aside>
+
+<style>
+  /*
+   * Липкой и прокручиваемой сделана ВНУТРЕННЯЯ обёртка, а не сам `<aside>`:
+   * `position: sticky` работает относительно родителя, поэтому элемент, который
+   * липнет, обязан быть внутри растянутого на всю высоту строки грида. Растяжение
+   * задаёт страница (`align-items: stretch`), см. её стили.
+   */
+  .seminar-schedule-panel {
+    position: sticky;
+    top: calc(var(--header-height) + 1rem);
+    /*
+     * Ограничение высоты и своя прокрутка — принятое решение, а не побочный эффект.
+     * Без предела колонка выше экрана перестаёт липнуть на самых длинных списках, то
+     * есть кнопка записи уходит с экрана ровно там, где дат больше всего. Списков,
+     * переполняющих колонку, в данных два из 126 страниц семинара.
+     */
+    max-height: calc(100vh - var(--header-height) - 2rem);
+    overflow: auto;
+    padding: 1.15rem;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-container);
+    background: var(--surface-raised);
+  }
+
+  .seminar-schedule-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .seminar-schedule-head h2 {
+    margin: 0;
+    font-size: var(--font-xl);
+    line-height: 1.25;
+  }
+
+  .seminar-schedule-all {
+    color: var(--color-accent-700);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: var(--font-s);
+    white-space: nowrap;
+  }
+
+  .seminar-schedule-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .seminar-schedule-entry {
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .seminar-schedule-entry:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .seminar-schedule-entry:last-child {
+    padding-bottom: 0.15rem;
+  }
+
+  .schedule-date {
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .schedule-date-range {
+    white-space: nowrap;
+  }
+
+  .schedule-meta {
+    margin-top: 0.15rem;
+    font-size: var(--font-s);
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  .schedule-teacher-link {
+    color: var(--color-accent-700);
+    text-decoration: none;
+  }
+
+  .schedule-additional {
+    margin-top: 0.35rem;
+    font-size: var(--font-s);
+    color: var(--text-body);
+  }
+
+  .schedule-additional-highlight {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0.2rem 0.75rem;
+    border-radius: 999px;
+    /* Фон здесь — литерал (та же плашка, что была в таблице), поэтому и чернила
+       литерал: `--color-dark-700` на тёмной теме становится почти белым, и текст
+       на янтарном фоне терял бы контраст. Пара «фон + чернила» задаётся целиком. */
+    background: rgb(237, 198, 119);
+    color: #1a1a1a;
+  }
+
+  .schedule-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Переносится, а не сжимается: подпись кнопки длинная, и на самых узких */
+    /* колонках цена и кнопка встают в две строки вместо наезда друг на друга. */
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-top: 0.6rem;
+  }
+
+  .schedule-price {
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .seminar-register-link {
+    background: var(--cta-bg);
+    color: var(--cta-text);
+    border-radius: var(--radius-control);
+    padding: 0.45rem 0.85rem;
+    font-size: var(--font-s);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .seminar-schedule-empty {
+    margin: 0;
+    font-size: var(--font-s);
+    color: var(--text-body);
+  }
+
+  .schedule-teacher-link:hover,
+  .schedule-teacher-link:focus-visible,
+  .seminar-schedule-all:hover,
+  .seminar-schedule-all:focus-visible {
+    text-decoration: underline;
+  }
+
+  .seminar-register-link:hover,
+  .seminar-register-link:focus-visible {
+    background: var(--cta-bg-hover);
+  }
+
+  /*
+   * Ниже 1024 колонки нет — блок идёт во всю ширину над описанием. Липкость и
+   * предел высоты снимаются полностью: прокрутка внутри блока, занимающего всю
+   * ширину, ловила бы жест страницы и была бы дефектом, а не решением.
+   */
+  @media (max-width: 1024px) {
+    .seminar-schedule-panel {
+      position: static;
+      max-height: none;
+      overflow: visible;
+    }
+
+    .schedule-foot {
+      justify-content: flex-start;
+      gap: 0.5rem 1.5rem;
+    }
+  }
+</style>
