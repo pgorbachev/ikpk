@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "816d6b78e34219770932911ac9e65ae16512fe37",
+  "generatedFromSha": "becf3d71c34f1011b6948515f50eb5cd56143bea",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
