@@ -22,7 +22,8 @@
       "required": true
     },
     "body": {
-      "type": "richtext"
+      "type": "richtext",
+      "required": true
     },
     "image": {
       "type": "media",
@@ -34,6 +35,12 @@
     "published_at": {
       "type": "datetime"
     },
+    "categories": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::course-group.course-group",
+      "required": true
+    },
     "legacy_id": {
       "type": "string",
       "unique": true
@@ -41,7 +48,8 @@
     "seo": {
       "type": "component",
       "component": "shared.seo",
-      "repeatable": false
+      "repeatable": false,
+      "required": true
     }
   }
 }

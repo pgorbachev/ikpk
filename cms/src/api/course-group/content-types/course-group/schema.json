@@ -22,14 +22,23 @@
       "required": true
     },
     "description": {
-      "type": "richtext"
+      "type": "richtext",
+      "required": true
     },
     "image": {
       "type": "media",
-      "multiple": false,
+      "multiple": true,
       "allowedTypes": [
         "images"
       ]
+    },
+    "order": {
+      "type": "integer",
+      "default": 0
+    },
+    "is_article_category": {
+      "type": "boolean",
+      "default": true
     },
     "legacy_id": {
       "type": "string",
@@ -39,7 +48,8 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::institute.institute",
-      "inversedBy": "course_groups"
+      "inversedBy": "course_groups",
+      "required": true
     },
     "seminars": {
       "type": "relation",
@@ -50,7 +60,8 @@
     "seo": {
       "type": "component",
       "component": "shared.seo",
-      "repeatable": false
+      "repeatable": false,
+      "required": true
     }
   }
 }
