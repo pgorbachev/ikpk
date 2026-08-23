@@ -40,7 +40,7 @@
       Dependabot head зелёный; ручной путь проверяется отдельным PR-only ruleset bypass,
       который не обходит остальные CI. Прежняя manual-green evidence в
       `web/tests/dependabot-auto-merge-provenance.test.ts` superseded.
-      Evidence: `web/tests/dependabot-auto-merge-invariant-scope.test.ts`,
+      Evidence: `web/tests/dependency-auto-merge-invariant-scope.test.ts`,
       `web/tests/dependabot-auto-merge-target-producer.test.ts` and repository-policy plan assertions.
 - [x] 2.2a Написать RED-проверки двухступенчатого producer: Dependabot signal не требует
       write permissions/secrets; privileged `workflow_run` принимает только exact

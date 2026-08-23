@@ -61,9 +61,13 @@ jobs:
         run: npm run audit:prod
 
   cms-dependency-report:
+    # `continue-on-error` на УРОВНЕ ДЖОБА здесь был, и он сводил на нет всю аккуратность внутри:
+    # флаг гасит любой ненулевой исход, включая падение шага «измерение не выполнено» — то есть
+    # битый JSON, сетевую ошибку и отсутствие отчёта. Джоб выглядел бы пройденным ровно в том
+    # случае, ради которого проверка и писалась. Report-only относится к НАХОДКАМ, а не к сбою
+    # измерения: код возврата `npm audit` глотается адресно, в своём шаге и с объяснением.
     name: CMS runtime dependency audit (report only)
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: cms
@@ -82,14 +86,51 @@ jobs:
 
       - name: Generate runtime audit report
         run: |
-          npm audit --omit=dev --json > audit-report.json || true
+          # Код возврата npm audit — это НАХОДКИ, и глотается он ЗДЕСЬ, адресно: джоб
+          # report-only по составу advisory, а не по своей исправности. Сбой самого измерения —
+          # сеть, npm, битый JSON — не глотается: пустой отчёт с зелёным джобом читается как
+          # «advisory нет».
+          set -o pipefail
+          npm audit --omit=dev --json > audit-report.json || audit_status=$?
+          # Проверяется не «поле есть», а что отчёт СОДЕРЖИТ ЧИСЛА по всем уровням: пустой
+          # объект `{"metadata":{"vulnerabilities":{}}}` прежнюю проверку проходил, и заметка
+          # ниже печатала нули — «advisory нет» вместо «измерение не выполнено».
+          node -e "
+            const v = require('./audit-report.json')?.metadata?.vulnerabilities;
+            const levels = ['critical', 'high', 'moderate', 'low', 'info'];
+            if (!v || typeof v !== 'object') { console.error('нет metadata.vulnerabilities'); process.exit(1); }
+            // Счётчик advisory — целое неотрицательное. Дробное или отрицательное значение
+            // означает, что отчёт не тот, за который себя выдаёт, и «0 critical» из такого
+            // отчёта читать нельзя.
+            const bad = levels.filter((k) => !Number.isInteger(v[k]) || v[k] < 0);
+            if (bad.length) { console.error('поля не целые неотрицательные: ' + bad.join(', ')); process.exit(1); }
+            // total ОБЯЗАТЕЛЕН и обязан совпадать с суммой уровней. Прежняя редакция сверяла его
+            // только при наличии — то есть отчёт без total принимался, а именно так выглядит
+            // усечённый или собранный не тем инструментом вывод. Проверка, которая пропускает
+            // отсутствие поля, стережёт согласованность только у тех отчётов, что и так в порядке.
+            if (!Number.isInteger(v.total) || v.total < 0) { console.error('нет metadata.vulnerabilities.total или оно не целое неотрицательное'); process.exit(1); }
+            const sum = levels.reduce((a, k) => a + v[k], 0);
+            if (v.total !== sum) { console.error('total ' + v.total + ' не равен сумме уровней ' + sum); process.exit(1); }
+          " || { echo '::error::audit-report.json невалиден — измерение не выполнено'; exit 1; }
+          echo "npm audit exit=${audit_status:-0} (ненулевой код здесь означает найденные advisory)"
 
       - name: Upload runtime audit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
         with:
           name: cms-runtime-audit-report
           path: cms/audit-report.json
+          if-no-files-found: warn
 
       - name: Visibility note
+        if: always()
         run: |
-          echo "CMS audit is report-only because Strapi 5.40.0 currently carries upstream advisories with no clean automatic fix."
+          # Ни версию, ни состав advisory не пишем строкой: захардкоженное устаревает молча
+          # и потом читается как факт (было "Strapi 5.40.0" при 5.51.2, и утверждение
+          # "carries advisories with no clean fix" осталось бы и после их закрытия).
+          # Всё, что печатается, вычисляется из манифеста и из отчёта этого же прогона.
+          strapi_version="$(node -p "require('./package.json').dependencies['@strapi/strapi'] || 'unknown'")"
+          counts="$(node -p "const v=require('./audit-report.json').metadata.vulnerabilities; ['critical','high','moderate','low'].map(k=>k+'='+(v[k]||0)).join(' ')" 2>/dev/null || echo 'report unavailable')"
+          echo "CMS runtime audit is report-only (this job does not gate the PR)."
+          echo "@strapi/strapi ${strapi_version}; prod-tree advisories in this run: ${counts}"
+          echo "Local script cms/npm run audit:prod uses --audit-level=critical; see AGENTS.md for when its red result blocks a task."

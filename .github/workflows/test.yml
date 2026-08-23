@@ -67,6 +67,20 @@ jobs:
           npm run build:demo
           npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-head.json"
 
+      # Ссылки в сборочный вывод обязательный гейт ссылок проверить не может: он работает до
+      # сборки, и его вердикт не должен зависеть от того, собрано дерево. Здесь оба дерева уже
+      # собраны, поэтому именно здесь такие ссылки проверяются по-настоящему — иначе режим
+      # `--check-built` был бы обещанием, которое никто не исполняет.
+      #
+      # Корни названы ЯВНО, а не оставлены на усмотрение скрипта: тогда пропавшее дерево даёт
+      # код 2 («названы собранными, но их нет»), а не тихое сужение проверки до того, что
+      # случайно оказалось на диске. Пакеты `cms` и `payments` здесь не собираются, поэтому
+      # ссылки в их вывод этот шаг честно объявляет непроверенными вслух, а не расхождением:
+      # иначе законная ссылка на `cms/dist/**` валила бы гейт публикации боевого сайта.
+      - name: Check build-output references against built trees
+        working-directory: ${{ github.workspace }}
+        run: ./bin/check-spec-refs --check-built=web/dist,web/dist-demo
+
       - name: Classify dependency-only change for test-count
         id: web-dependency-scope
         working-directory: .

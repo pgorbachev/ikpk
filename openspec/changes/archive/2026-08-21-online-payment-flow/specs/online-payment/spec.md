@@ -1551,7 +1551,7 @@ change (`specs/deploy-gating/spec.md`). Без неё проверка боев�
 ### Requirement: Блок контактов сохраняется
 
 Появление формы оплаты SHALL NOT приводить к потере блока со способами связи
-(`#oplata-svyaz`, `web/src/pages/oplata.astro:18-31` на
+(блок `id="oplata-svyaz"`, `web/src/pages/oplata.astro@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850:18-31` на
 `main@8b4d13bf4c3a41c40636f5d4c4f1d7eeb2b8d850`, сокращённо `8b4d13b`) на `/oplata`.
 **Диапазон строк исправлен четвёртым раундом ревью #97:** прежде здесь стояло `17-30`,
 а в `proposal.md` — `16-30`; фактический `<div id="oplata-svyaz">` занимает 18-31, и ни

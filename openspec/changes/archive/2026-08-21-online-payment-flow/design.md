@@ -2447,7 +2447,7 @@ sequenceDiagram
 ### Решение 10: `location /api/` перекрывает унаследованные от `server` заголовки кеша и `error_page`
 
 **Задача передана явно** change `serving-cache-headers` (его `design.md`, строки
-130-135 на `main@d7e9b02` — change слит, #85) — она называет
+130-135 на `main@d7e9b025d885610b80b405112f53e8d2c5cdd85d` — change слит, #85) — она называет
 `online-payment-flow` по имени и предупреждает: блок `location`, не объявивший
 собственных заголовков, молча наследует серверный `Cache-Control: public,
 max-age=0, must-revalidate` и `error_page 404 /404.html`. Для API это неверно по
