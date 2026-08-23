@@ -31,6 +31,8 @@ openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh
 openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
+openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
+openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
 openspec/changes/dependabot-auto-merge/design.md :: dependabot/fetch-metadata
 openspec/changes/dependabot-auto-merge/design.md :: feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3
 openspec/changes/dependabot-auto-merge/design.md :: package.json
