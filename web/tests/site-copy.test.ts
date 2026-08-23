@@ -159,6 +159,32 @@ describe('D12 — сайт показывает оба номера телефо
     expect(telHrefs(band)).toEqual(expect.arrayContaining([CITY_TEL, MOBILE_TEL]));
   });
 
+  // Признак — «блок карточки контактов показывает городской номер», а не список
+  // блоков. Прежняя редакция проверяла ПЕРВЫЙ блок и потому не видела реквизиты,
+  // где остался один номер (находка владельца). Перечисление частных случаев
+  // отстаёт от предмета молча — здесь предмет задан общим признаком.
+  //
+  // Явно объявленное исключение: содержимое CMS. На
+  // `/svedeniya-ob-obrazovatelnoy-organizatsii` городской номер встречается ещё
+  // четыре раза — в таблице сведений и в трёх персональных строках поимённо
+  // названных сотрудников. Это не наша разметка, а тело страницы из CMS, и
+  // мобильный Веры в строке чужого сотрудника был бы неверен. Правка идёт
+  // change'ем по контенту, а не этой пачкой. Признак ниже ограничен карточкой
+  // контактов сознательно, и ограничение названо, а не подразумевается.
+  it('каждый блок карточки контактов с городским номером даёт и мобильный', () => {
+    const offenders: string[] = [];
+    for (const { path, html } of pages()) {
+      for (const [i, block] of byClass(html, 'contact-shell-section').entries()) {
+        const text = textOf(block);
+        if (!text.includes(CITY_PHONE)) continue;
+        if (!text.includes(MOBILE_PHONE)) {
+          offenders.push(`${path}: блок карточки контактов №${i + 1} — «${text.slice(0, 90)}…»`);
+        }
+      }
+    }
+    expect(offenders.slice(0, 5), offenders.slice(0, 5).join('\n')).toEqual([]);
+  });
+
   it('первый блок карточки контактов даёт оба номера института', () => {
     const html = readPage('/kontakty/');
     const blocks = byClass(html, 'contact-shell-section');
