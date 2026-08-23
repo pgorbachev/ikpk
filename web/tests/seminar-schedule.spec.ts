@@ -513,6 +513,52 @@ for (const width of [768, 375] as const) {
       ).toBeLessThanOrEqual(height);
     });
 
+    // Колонку не должно распирать содержимым. Признак — мутация DOM, а не надежда на
+    // данные: в панель вставляется неразрывная строка длиннее контейнера, и колонка
+    // обязана остаться в его пределах, а страница — не поехать по горизонтали.
+    //
+    // Гарантия названа узко и честно: `min-width: 0` держит в пределах контейнера саму
+    // КОЛОНКУ, но не обещает, что неразрывный текст не вылезет из панели наружу — на
+    // отпущенной панели он вылезет, и горизонтальная прокрутка страницы появится. В наших
+    // данных таких токенов нет (год и «г.» склеены одним пробелом, остальное переносится),
+    // и это утверждение про данные, а не про раскладку.
+    //
+    // Проверка живёт на УЗКИХ ширинах, и это не произвол. На десктопе панель — контейнер
+    // прокрутки (`overflow: auto`), а он по построению не отдаёт наружу внутреннюю ширину
+    // содержимого: там свойство инертно, и первая редакция этой проверки честно упала со
+    // словами «распирать было нечем» — проба вышла 297 px против дорожки 336. Ниже 1024
+    // панель отпущена (`overflow: visible`), и автоминимум грид-элемента снова считается
+    // по содержимому — именно там `min-width: 0` и работает.
+    test(`колонку не распирает неразрывное содержимое @d3-column-not-distended-${width}`, async ({ page }) => {
+      await openSeminar(page, MOST_DATES.path);
+
+      const measured = await page.evaluate(() => {
+        const aside = document.querySelector('[data-testid="seminar-schedule"]') as HTMLElement;
+        const probe = document.createElement('div');
+        probe.textContent = 'Ж'.repeat(200);
+        probe.style.whiteSpace = 'nowrap';
+        aside.querySelector('[data-seminar-schedule-panel]')!.append(probe);
+        const cols = aside.parentElement as HTMLElement;
+        return {
+          aside: Math.round(aside.getBoundingClientRect().width),
+          container: Math.round(cols.getBoundingClientRect().width),
+          // Внутренняя ширина, а не рамка: у блочного элемента рамка равна контейнеру, а
+          // наружу лезет ТЕКСТ. Первая редакция мерила рамку и честно падала со словами
+          // «распирать было нечем» (304 px против контейнера 343).
+          probe: Math.round(probe.scrollWidth),
+        };
+      });
+
+      expect(
+        measured.probe,
+        `проба ${measured.probe} px не шире контейнера ${measured.container} px — распирать было нечем`,
+      ).toBeGreaterThan(measured.container);
+      expect(
+        measured.aside,
+        `колонка ${measured.aside} px при контейнере ${measured.container} px — её распёрло содержимым`,
+      ).toBeLessThanOrEqual(measured.container);
+    });
+
     // Цена варианта C на узких ширинах принята владельцем при выборе, но проверить,
     // что она не стала ХУЖЕ названной, всё равно надо: карточки у нас несут больше
     // данных, чем в мокапе (продолжительность), и лишняя строка сдвинула бы описание
