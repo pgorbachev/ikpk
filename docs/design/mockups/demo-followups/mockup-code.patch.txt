@@ -6,15 +6,16 @@
 # /published-at.json, ни гашения на демо, ни официальных фирменных марок соцсетей.
 #
 # База: e0c4d1d (origin/main на 2026-08-22).
-# Сборка:  MOCKUP_VARIANT=a|b|c npx astro build --outDir dist-<v>
+# Сборка:  MOCKUP_VARIANT=a|b|c|d npx astro build --outDir dist-<v>
 # Съёмка:  node scripts/shoot-mockups.mjs --dist dist-<v> --variant <v>
-#          (ненулевой код выхода = постусловие «кнопка чата на картинке» не выполнено)
+#          Скрипт САМ оптимизирует PNG и пересчитывает постусловие по финальным
+#          файлам; ненулевой код выхода = постусловие не выполнено.
 #
 diff --git a/web/src/components/Footer.astro b/web/src/components/Footer.astro
-index c8b3a23..be76a69 100644
+index c8b3a23..0910c55 100644
 --- a/web/src/components/Footer.astro
 +++ b/web/src/components/Footer.astro
-@@ -1,10 +1,17 @@
+@@ -1,10 +1,19 @@
  ---
  import { SOCIAL_LINKS } from '../lib/social';
 +// --- МОКАП (одноразовый worktree): иконки соцсетей и строка публикации ---
@@ -22,6 +23,8 @@ index c8b3a23..be76a69 100644
 +import SocialIcons from './mockup/SocialIcons.astro';
 +import PublishedAt from './mockup/PublishedAt.astro';
 +
++// Вариант d отличается от a ТОЛЬКО формой виджета отзывов, поэтому подвал у него
++// такой же, как у a: сравнение остаётся по одной оси.
 +const socialTreatment = MOCKUP_VARIANT === 'c' ? 'brand' : MOCKUP_VARIANT === 'b' ? 'plain' : 'circle';
 +const dropSocialColumn = MOCKUP_VARIANT === 'c';
  ---
@@ -33,7 +36,7 @@ index c8b3a23..be76a69 100644
        <div class="footer-col">
          <a href="/" class="footer-logo-link" aria-label="ИКПК — Главная">
            <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
-@@ -42,19 +49,31 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -42,19 +51,31 @@ import { SOCIAL_LINKS } from '../lib/social';
          </ul>
        </div>
  
@@ -76,7 +79,7 @@ index c8b3a23..be76a69 100644
        <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
        {/* Документ обязателен, и на старом сайте ссылка на него была в футере
            каждой страницы. При переносе она потерялась: файл в сборку попал,
-@@ -66,6 +85,7 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -66,6 +87,7 @@ import { SOCIAL_LINKS } from '../lib/social';
            rel="noopener noreferrer"
          >Пользовательское соглашение и политика конфиденциальности</a>
        </p>
@@ -84,7 +87,7 @@ index c8b3a23..be76a69 100644
      </div>
    </div>
  </footer>
-@@ -169,7 +189,39 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -169,7 +191,39 @@ import { SOCIAL_LINKS } from '../lib/social';
      color: #fff;
    }
  
@@ -124,6 +127,44 @@ index c8b3a23..be76a69 100644
      .footer-grid {
        grid-template-columns: 1fr 1fr;
      }
+diff --git a/web/src/components/seminars/SeminarScheduleSection.astro b/web/src/components/seminars/SeminarScheduleSection.astro
+index 80c1683..51c1b49 100644
+--- a/web/src/components/seminars/SeminarScheduleSection.astro
++++ b/web/src/components/seminars/SeminarScheduleSection.astro
+@@ -1,5 +1,7 @@
+ ---
+ import { formatDate, formatPrice } from '../../lib/data';
++// --- МОКАП: решение Q11 держим одинаковым во всех вариантах ---
++import { isMockup, PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
+ import { registrationHref, isExternalFormHref } from '../../lib/forms';
+ import type { ScheduleEntry } from '../../lib/data';
+ 
+@@ -103,7 +105,15 @@ function formatDurationLabel(entry: ScheduleEntry): string {
+     </div>
+   ) : (
+     <div class="seminar-schedule-empty">
+-      К сожалению, данный курс, в настоящий момент еще не запланирован.
++      {isMockup ? (
++        <>
++          <strong>Даты пока не назначены.</strong> Уточняйте у менеджера:{' '}
++          <a href="tel:+78126465450">{PHONE_PRIMARY}</a>,{' '}
++          <a href="tel:+79810387797">{PHONE_MOBILE}</a>
++        </>
++      ) : (
++        'К сожалению, данный курс, в настоящий момент еще не запланирован.'
++      )}
+     </div>
+   )}
+ </section>
+@@ -217,6 +227,8 @@ function formatDurationLabel(entry: ScheduleEntry): string {
+     white-space: nowrap;
+   }
+ 
++  .seminar-schedule-empty a { color: var(--color-accent-700); }
++
+   .seminar-schedule-empty {
+     padding: 1rem 0;
+     border-top: 1px solid var(--color-gray-200);
 diff --git a/web/src/layouts/BaseLayout.astro b/web/src/layouts/BaseLayout.astro
 index 8062c30..789052a 100644
 --- a/web/src/layouts/BaseLayout.astro
@@ -236,7 +277,7 @@ index 27bd361..5aba59d 100644
 +  }
  </style>
 diff --git a/web/src/pages/index.astro b/web/src/pages/index.astro
-index c2514aa..fac36f2 100644
+index c2514aa..5169fda 100644
 --- a/web/src/pages/index.astro
 +++ b/web/src/pages/index.astro
 @@ -13,6 +13,9 @@ import Teachers from '../components/home/sections/Teachers.astro';
@@ -249,7 +290,7 @@ index c2514aa..fac36f2 100644
  
  const homepage = getPage('homepage');
  const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
-@@ -38,11 +41,14 @@ const schema = {
+@@ -38,11 +41,17 @@ const schema = {
  <BaseLayout title={title} description={description} schema={schema}>
    <HeroHybrid />
    <Advantages />
@@ -260,29 +301,33 @@ index c2514aa..fac36f2 100644
    <UpcomingSeminars />
    <Teachers />
 +  {MOCKUP_VARIANT === 'a' && <ReviewsSection layout="split" />}
++  {/* d отличается от a только формой виджета — место секции держим тем же,
++      чтобы сравнение шло по одной оси. */}
++  {MOCKUP_VARIANT === 'd' && <ReviewsSection layout="band" />}
    <News />
 +  {MOCKUP_VARIANT === 'c' && <ReviewsSection layout="centered" />}
    <CtaBand />
  </BaseLayout>
 diff --git a/web/src/lib/mockup.ts b/web/src/lib/mockup.ts
 new file mode 100644
-index 0000000..184a943
+index 0000000..9366e54
 --- /dev/null
 +++ b/web/src/lib/mockup.ts
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,70 @@
 +/**
 + * Реквизит мокапов доделок после демо 2026-08-19 (пункт 9 «Пакетов для OpenSpec»).
 + *
 + * Живёт ТОЛЬКО в одноразовом worktree: в ветку мокапов уходят снимки и текст,
 + * а не этот код. Реализация пойдёт по спеке, а не копированием отсюда.
 + *
-+ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c).
++ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c|d).
++ * Вариант d меняет только главную: страница семинара в нём остаётся как сегодня.
 + */
 +
-+export type MockupVariant = 'off' | 'a' | 'b' | 'c';
++export type MockupVariant = 'off' | 'a' | 'b' | 'c' | 'd';
 +
 +const raw = (process.env.MOCKUP_VARIANT || 'off').toLowerCase();
-+export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c'].includes(raw) ? raw : 'off') as MockupVariant;
++export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c', 'd'].includes(raw) ? raw : 'off') as MockupVariant;
 +export const isMockup = MOCKUP_VARIANT !== 'off';
 +
 +/**
@@ -553,17 +598,17 @@ index 0000000..7c2247a
 +</style>
 diff --git a/web/src/components/mockup/ReviewsSection.astro b/web/src/components/mockup/ReviewsSection.astro
 new file mode 100644
-index 0000000..8545e05
+index 0000000..da77b25
 --- /dev/null
 +++ b/web/src/components/mockup/ReviewsSection.astro
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,187 @@
 +---
 +/** Секция отзывов на главной. Три раскладки — по одной на вариант. */
 +import ReviewsWidget from './ReviewsWidget.astro';
 +import { REVIEWS, REVIEWS_LINE } from '../../lib/mockup';
 +
 +interface Props {
-+  layout: 'split' | 'compact' | 'centered';
++  layout: 'split' | 'compact' | 'centered' | 'band';
 +}
 +const { layout } = Astro.props;
 +---
@@ -578,10 +623,6 @@ index 0000000..8545e05
 +      <div class="rv-split">
 +        <div class="reviews-summary">
 +          <h2 class="section-title" id="reviews-title">Отзывы</h2>
-+          <p class="reviews-lead">
-+            Отзывы собираются на Яндекс.Картах. Мы их не редактируем и не отбираем —
-+            блок ниже показывает всё, что написали посетители.
-+          </p>
 +          <div class="reviews-figure">
 +            <span class="reviews-rating">{REVIEWS.rating}</span>
 +            <span class="reviews-figure-side">
@@ -604,10 +645,6 @@ index 0000000..8545e05
 +      <div class="rv-bar">
 +        <div class="reviews-bar-text">
 +          <h2 class="rv-bar-title" id="reviews-title">Что о нас пишут</h2>
-+          <p class="reviews-lead">
-+            Оценку и отзывы держит Яндекс: мы их не редактируем, не отбираем и не переносим
-+            к себе. Карточка справа обновляется сама.
-+          </p>
 +          <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
 +            {/* Без числа намеренно: рядом стоит карточка виджета со своим «33 отзыва»,
 +                и наша копия числа протухла бы отдельно от неё. */}
@@ -617,6 +654,18 @@ index 0000000..8545e05
 +        <div class="reviews-widget-slot" data-mockup-widget-slot>
 +          <ReviewsWidget mode="rating" width={420} />
 +        </div>
++      </div>
++    )}
++
++    {layout === 'band' && (
++      <div class="rv-band">
++        <h2 class="section-title rv-band-title" id="reviews-title">Отзывы учеников</h2>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="wide" />
++        </div>
++        <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++          Все отзывы на Яндекс.Картах →
++        </a>
 +      </div>
 +    )}
 +
@@ -716,6 +765,11 @@ index 0000000..8545e05
 +  .rv-bar .reviews-rating { font-size: 2.75rem; }
 +  .rv-bar .reviews-badge { margin-top: 0.85rem; }
 +
++  /* band — широкая лента карточек, форма kkpk.pro */
++  .rv-band { text-align: center; }
++  .rv-band-title { font-size: var(--font-xxxl); margin-bottom: 1.75rem; }
++  .rv-band :global(.ymw-note) { text-align: left; }
++
 +  /* centered */
 +  .rv-centered { text-align: center; }
 +  .reviews-figure-center { justify-content: center; margin-bottom: 1.75rem; }
@@ -737,10 +791,10 @@ index 0000000..8545e05
 +</style>
 diff --git a/web/src/components/mockup/ReviewsWidget.astro b/web/src/components/mockup/ReviewsWidget.astro
 new file mode 100644
-index 0000000..50176b0
+index 0000000..a9ae902
 --- /dev/null
 +++ b/web/src/components/mockup/ReviewsWidget.astro
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,286 @@
 +---
 +/**
 + * ЗАМЕНА официального виджета отзывов Яндекс.Карт, а не сам виджет.
@@ -752,18 +806,21 @@ index 0000000..50176b0
 + * чужие отзывы нельзя, а решение Q19 прямо запрещает переносить их к себе.
 + *
 + * Размер 560×800 — типовой размер встраивания Яндекса с комментариями;
-+ * 560×256 — он же без комментариев. Точные числа при внедрении снимаются с
-+ * фактического кода встраивания, здесь это НАЗВАННОЕ допущение.
++ * 560×256 — он же без комментариев; режим `wide` — широкая лента карточек во всю
++ * колонку, как на kkpk.pro. Точные числа при внедрении снимаются с фактического
++ * кода встраивания, здесь это НАЗВАННОЕ допущение.
 + */
 +import { REVIEWS, RATINGS_LINE, REVIEWS_COUNT_LINE } from '../../lib/mockup';
 +
 +interface Props {
-+  mode?: 'comments' | 'rating';
++  mode?: 'comments' | 'rating' | 'wide';
 +  width?: number;
 +}
 +const { mode = 'comments', width = 560 } = Astro.props;
 +const height = mode === 'comments' ? 800 : 256;
 +const items = mode === 'comments' ? [0, 1, 2, 3, 4] : [];
++/** Широкая лента: четыре карточки в ряд — форма, как у конкурента kkpk.pro. */
++const wideCards = [0, 1, 2, 3];
 +const barWidths = [
 +  ['96%', '88%', '54%'],
 +  ['92%', '61%'],
@@ -773,6 +830,34 @@ index 0000000..50176b0
 +];
 +---
 +
++{mode === 'wide' ? (
++  <div class="ymw ymw-wide" data-mockup-widget="wide">
++    <div class="yw-shell">
++      <div class="yw-pill">
++        <span class="ymw-stars" aria-hidden="true">★★★★★</span>
++        <b>{REVIEWS.rating} / 5</b>
++        <span class="yw-pill-count">({REVIEWS.reviews} отзыва)</span>
++      </div>
++      <div class="yw-cards">
++        {wideCards.map((i) => (
++          <div class="yw-card">
++            <span class="ymw-bar ymw-bar-name"></span>
++            <span class="ymw-stars ymw-stars-s yw-card-stars" aria-hidden="true">★★★★★</span>
++            <span class="ymw-bar ymw-bar-text" style="width:98%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:96%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:99%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:62%"></span>
++          </div>
++        ))}
++      </div>
++      <span class="yw-mark">Виджет отзывов</span>
++    </div>
++    <p class="ymw-note">
++      Заглушка вместо виджета: воспроизведена форма широкой ленты (как на kkpk.pro),
++      тексты и имена подтягивает Яндекс
++    </p>
++  </div>
++) : (
 +<div class="ymw" data-mockup-widget={mode} style={`--ymw-w:${width}px;--ymw-h:${height}px`}>
 +  <div class="ymw-frame">
 +    <div class="ymw-head">
@@ -829,6 +914,7 @@ index 0000000..50176b0
 +    тексты отзывов подтягивает Яндекс
 +  </p>
 +</div>
++)}
 +
 +<style>
 +  .ymw { width: min(100%, var(--ymw-w)); }
@@ -925,6 +1011,67 @@ index 0000000..50176b0
 +    width: 16px; height: 16px; border-radius: 50%;
 +    background: #fc3f1d; color: #fff; font-weight: 700; font-size: 11px;
 +    display: inline-flex; align-items: center; justify-content: center;
++  }
++
++  /* ── широкая лента, форма kkpk.pro ─────────────────────────────────────── */
++  .ymw-wide { width: 100%; }
++
++  .yw-shell {
++    position: relative;
++    background: #f1f2f4;
++    border-radius: 24px;
++    padding: 20px;
++    /* Внутри ленты выравнивание левое, даже если секция центрирована: у
++       конкурента плашка рейтинга и звёзды в карточках прижаты влево. */
++    text-align: left;
++  }
++
++  .yw-pill {
++    display: inline-flex;
++    align-items: center;
++    gap: 8px;
++    background: #fff;
++    border-radius: 14px;
++    padding: 11px 18px;
++    font-size: 15px;
++    color: #21201f;
++    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
++  }
++  .yw-pill b { font-size: 16px; }
++  .yw-pill-count { color: #5c5c5c; }
++
++  .yw-cards {
++    display: grid;
++    grid-template-columns: repeat(4, 1fr);
++    gap: 16px;
++    margin-top: 16px;
++  }
++
++  .yw-card {
++    background: #fff;
++    border-radius: 16px;
++    padding: 16px 18px 18px;
++    min-height: 168px;
++    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
++  }
++  .yw-card .ymw-bar-name { width: 60%; height: 12px; }
++  .yw-card-stars { display: block; margin: 8px 0 12px; }
++
++  .yw-mark {
++    position: absolute;
++    right: 22px;
++    bottom: 12px;
++    color: #b7b9bd;
++    font-size: 12px;
++  }
++
++  @media (max-width: 900px) {
++    .yw-cards { grid-template-columns: repeat(2, 1fr); }
++  }
++  @media (max-width: 560px) {
++    .yw-cards { grid-template-columns: 1fr; }
++    .yw-card { min-height: 0; }
++    .yw-shell { padding: 14px; border-radius: 18px; }
 +  }
 +
 +  .ymw-note {
@@ -1283,10 +1430,10 @@ index 0000000..edd39ba
 +</style>
 diff --git a/web/scripts/shoot-mockups.mjs b/web/scripts/shoot-mockups.mjs
 new file mode 100644
-index 0000000..f5d31ef
+index 0000000..a2e4dec
 --- /dev/null
 +++ b/web/scripts/shoot-mockups.mjs
-@@ -0,0 +1,427 @@
+@@ -0,0 +1,479 @@
 +/**
 + * Съёмка мокапов S2. Живёт только в одноразовом worktree.
 + *
@@ -1315,7 +1462,7 @@ index 0000000..f5d31ef
 + * проверить».
 + */
 +import { createServer } from 'node:http';
-+import { readFile, mkdir, writeFile } from 'node:fs/promises';
++import { readFile, mkdir, writeFile, readdir, stat } from 'node:fs/promises';
 +import { existsSync, statSync } from 'node:fs';
 +import { extname, join, resolve } from 'node:path';
 +import { chromium } from '@playwright/test';
@@ -1543,7 +1690,26 @@ index 0000000..f5d31ef
 +  if (pct < 25) {
 +    problems.push(`${path}: в рамке кнопки ${pct}% пикселей цвета чата (порог 25%), кнопка не нарисована`);
 +  }
-+  chatChecks.push(`${path.split('/').slice(-2).join('/')}=${pct}%`);
++  chatChecks.push({ path, rect: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, pct });
++}
++
++/** Доля пикселей цвета кнопки в заданной рамке КОНКРЕТНОГО файла. */
++async function chatFraction(file, r) {
++  const { data, info } = await sharp(file).raw().toBuffer({ resolveWithObject: true });
++  let hit = 0;
++  let total = 0;
++  for (let y = r.y; y < Math.min(info.height, r.y + r.h); y++) {
++    for (let x = r.x; x < Math.min(info.width, r.x + r.w); x++) {
++      const i = (y * info.width + x) * info.channels;
++      total++;
++      if (
++        Math.abs(data[i] - CHAT_RGB[0]) <= 10 &&
++        Math.abs(data[i + 1] - CHAT_RGB[1]) <= 10 &&
++        Math.abs(data[i + 2] - CHAT_RGB[2]) <= 10
++      ) hit++;
++    }
++  }
++  return total ? Math.round((hit / total) * 100) : 0;
 +}
 +
 +async function shotViewport(page, path) {
@@ -1686,12 +1852,16 @@ index 0000000..f5d31ef
 +    });
 +  }
 +  const page = await ctx.newPage();
-+  const dir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
-+  await mkdir(dir, { recursive: true });
-+  await shootHome(page, vp, dir);
-+  for (const [key, path] of Object.entries(SEMINARS)) {
-+    if (vp.light && !LIGHT_SEMINARS.includes(key)) continue;
-+    await shootSeminar(page, vp, dir, key, path);
++  const outDir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
++  await mkdir(outDir, { recursive: true });
++  await shootHome(page, vp, outDir);
++  // Вариант d меняет только главную: страница семинара в нём та же, что сегодня,
++  // и снимать её значило бы дублировать опорный набор.
++  if (VARIANT !== 'd') {
++    for (const [key, path] of Object.entries(SEMINARS)) {
++      if (vp.light && !LIGHT_SEMINARS.includes(key)) continue;
++      await shootSeminar(page, vp, outDir, key, path);
++    }
 +  }
 +  await ctx.close();
 +}
@@ -1704,7 +1874,36 @@ index 0000000..f5d31ef
 +  for (const p of problems) console.error('  ' + p);
 +  process.exit(1);
 +}
-+log.push(`${VARIANT}/постусловие «кнопка чата нарисована», доля пикселей цвета кнопки в её рамке: ${chatChecks.join(', ') || 'проверок не было'}`);
++// ── Оптимизация PNG — ЧАСТЬ ЭТОГО СЦЕНАРИЯ, а не отдельный ручной шаг ────────
++//
++// Она не lossless: sharp с `effort` переводит изображение в палитру, то есть
++// цвета сдвигаются. Пока она жила отдельной командой ПОСЛЕ проверки, гейт
++// стерёг не те файлы, которые уезжают в поставку. Теперь оптимизация внутри, а
++// постусловие пересчитывается ПО ОПТИМИЗИРОВАННЫМ файлам, и в протокол идут оба
++// числа.
++const dir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
++let bytesBefore = 0;
++let bytesAfter = 0;
++for (const f of await readdir(dir)) {
++  if (!f.endsWith('.png')) continue;
++  const file = join(dir, f);
++  const before = (await stat(file)).size;
++  const buf = await sharp(file).png({ compressionLevel: 9, effort: 10 }).toBuffer();
++  if (buf.length < before) await writeFile(file, buf);
++  bytesBefore += before;
++  bytesAfter += Math.min(buf.length, before);
++}
++log.push(`${VARIANT}/оптимизация PNG (палитровая, не lossless): ${(bytesBefore / 1048576).toFixed(1)} МБ → ${(bytesAfter / 1048576).toFixed(1)} МБ`);
++
++const finalChecks = [];
++for (const c of chatChecks) {
++  const pctFinal = await chatFraction(c.path, c.rect);
++  finalChecks.push(`${c.path.split('/').slice(-2).join('/')}=${c.pct}%→${pctFinal}%`);
++  if (pctFinal < 25) {
++    problems.push(`${c.path}: после оптимизации в рамке кнопки ${pctFinal}% пикселей цвета чата (порог 25%)`);
++  }
++}
++log.push(`${VARIANT}/постусловие «кнопка чата нарисована», доля пикселей цвета кнопки в её рамке (до оптимизации → после): ${finalChecks.join(', ') || 'проверок не было'}`);
 +await writeFile(join(OUT, `shot-log-${VARIANT}.txt`), log.join('\n') + '\n', 'utf-8');
 +console.log(
 +  chatChecks.length
