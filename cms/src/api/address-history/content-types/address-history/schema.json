@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "address_histories",
+  "info": {
+    "singularName": "address-history",
+    "pluralName": "address-histories",
+    "displayName": "Address History",
+    "description": "Постоянная история адресов записей: источник перенаправлений, переживает удаление владельца"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "address": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "owner_id": {
+      "type": "string",
+      "required": true
+    },
+    "owner_type": {
+      "type": "string"
+    }
+  }
+}

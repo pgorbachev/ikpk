@@ -17,13 +17,16 @@
       "required": true
     },
     "startAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "required": true
     },
     "endAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "required": true
     },
     "city": {
-      "type": "string"
+      "type": "string",
+      "required": true
     },
     "price": {
       "type": "decimal"
@@ -42,7 +45,8 @@
         "cancelled",
         "completed"
       ],
-      "default": "active"
+      "default": "active",
+      "required": true
     },
     "registrationFormLink": {
       "type": "string"
@@ -64,10 +68,13 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::seminar.seminar",
-      "inversedBy": "schedule_entries"
+      "inversedBy": "schedule_entries",
+      "required": true
     },
     "teachers": {
-      "type": "json"
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::teacher.teacher"
     }
   }
 }

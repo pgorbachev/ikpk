@@ -22,7 +22,8 @@
       "required": true
     },
     "body": {
-      "type": "richtext"
+      "type": "richtext",
+      "required": true
     },
     "legacy_id": {
       "type": "string",
@@ -31,7 +32,8 @@
     "seo": {
       "type": "component",
       "component": "shared.seo",
-      "repeatable": false
+      "repeatable": false,
+      "required": true
     }
   }
 }
