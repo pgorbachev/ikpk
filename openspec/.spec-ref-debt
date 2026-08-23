@@ -100,6 +100,8 @@ openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
 openspec/changes/visual-regression-gate/design.md :: mcr.microsoft.com/playwright
 openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
+openspec/changes/visual-regression-gate/tasks.md :: openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md@ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8:458
+openspec/changes/visual-regression-gate/tasks.md :: openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md@ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8:59
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
