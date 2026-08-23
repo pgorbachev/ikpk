@@ -5,9 +5,9 @@
 # настоящего виджета Яндекса, ни настоящего виджета Bitrix24, ни чтения
 # /published-at.json, ни гашения на демо, ни официальных фирменных марок соцсетей.
 #
-# База: 034e050 (origin/main на 2026-08-23, после слияния PR #153). Прежняя база была
-#       e0c4d1d; переехали, потому что #153 меняет подвал, шапку и подписи кнопок —
-#       то есть ровно то, что мокап сравнивает.
+# База: a6166f2 (origin/main на 2026-08-23, после слияния PR #155 с мокапами).
+#       Добавлен вариант e — выбранная владельцем конфигурация: лента отзывов из d
+#       плюс фирменные цвета иконок из c.
 # Сборка:  MOCKUP_VARIANT=a|b|c|d npx astro build --outDir dist-<v>
 # Съёмка:  node scripts/shoot-mockups.mjs --dist dist-<v> --variant <v>
 #          Скрипт САМ оптимизирует PNG и пересчитывает постусловие по финальным
@@ -15,7 +15,7 @@
 #
 diff --git a/web/scripts/shoot-mockups.mjs b/web/scripts/shoot-mockups.mjs
 new file mode 100644
-index 0000000..b72230f
+index 0000000..54a838b
 --- /dev/null
 +++ b/web/scripts/shoot-mockups.mjs
 @@ -0,0 +1,560 @@
@@ -513,9 +513,9 @@ index 0000000..b72230f
 +  const outDir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
 +  await mkdir(outDir, { recursive: true });
 +  await shootHome(page, vp, outDir);
-+  // Вариант d меняет только главную: страница семинара в нём та же, что сегодня,
-+  // и снимать её значило бы дублировать опорный набор.
-+  if (VARIANT !== 'd') {
++  // Варианты d и e меняют только главную: страница семинара в них та же, что
++  // сегодня, и снимать её значило бы дублировать опорный набор.
++  if (VARIANT !== 'd' && VARIANT !== 'e') {
 +    for (const [key, path] of Object.entries(SEMINARS)) {
 +      if (vp.light && !LIGHT_SEMINARS.includes(key)) continue;
 +      await shootSeminar(page, vp, outDir, key, path);
@@ -580,10 +580,10 @@ index 0000000..b72230f
 +    : `готово: ${VARIANT} — постусловие НИЧЕГО НЕ ИЗМЕРИЛО: снимков экрана с ожидаемой кнопкой чата не было (0 проверок). Для опорного набора это норма; для варианта — отказ проверки, а не её успех`
 +);
 diff --git a/web/src/components/Footer.astro b/web/src/components/Footer.astro
-index d9ccef0..3408d3c 100644
+index d9ccef0..4581d21 100644
 --- a/web/src/components/Footer.astro
 +++ b/web/src/components/Footer.astro
-@@ -1,11 +1,20 @@
+@@ -1,11 +1,24 @@
  ---
  import { SOCIAL_LINKS } from '../lib/social';
  import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
@@ -594,7 +594,11 @@ index d9ccef0..3408d3c 100644
 +
 +// Вариант d отличается от a ТОЛЬКО формой виджета отзывов, поэтому подвал у него
 +// такой же, как у a: сравнение остаётся по одной оси.
-+const socialTreatment = MOCKUP_VARIANT === 'c' ? 'brand' : MOCKUP_VARIANT === 'b' ? 'plain' : 'circle';
++// e — выбранная конфигурация: фирменные цвета из c, но подвал остаётся
++// четырёхколоночным, как в a и d. Перестройка подвала в три колонки — отдельная
++// ось, и владелец её не выбирал.
++const socialTreatment =
++  MOCKUP_VARIANT === 'c' || MOCKUP_VARIANT === 'e' ? 'brand' : MOCKUP_VARIANT === 'b' ? 'plain' : 'circle';
 +const dropSocialColumn = MOCKUP_VARIANT === 'c';
  ---
  
@@ -605,7 +609,7 @@ index d9ccef0..3408d3c 100644
        <div class="footer-col">
          <a href="/" class="footer-logo-link" aria-label="ИКПК — Главная">
            <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
-@@ -44,19 +53,31 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+@@ -44,19 +57,31 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
          </ul>
        </div>
  
@@ -648,7 +652,7 @@ index d9ccef0..3408d3c 100644
        <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
        {/* Документ обязателен, и на старом сайте ссылка на него была в футере
            каждой страницы. При переносе она потерялась: файл в сборку попал,
-@@ -68,6 +89,7 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+@@ -68,6 +93,7 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
            rel="noopener noreferrer"
          >Пользовательское соглашение и политика конфиденциальности</a>
        </p>
@@ -656,7 +660,7 @@ index d9ccef0..3408d3c 100644
      </div>
    </div>
  </footer>
-@@ -171,7 +193,39 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+@@ -171,7 +197,39 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
      color: #fff;
    }
  
@@ -1921,24 +1925,28 @@ index 8062c30..789052a 100644
  
 diff --git a/web/src/lib/mockup.ts b/web/src/lib/mockup.ts
 new file mode 100644
-index 0000000..435b0a6
+index 0000000..c2659fa
 --- /dev/null
 +++ b/web/src/lib/mockup.ts
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,92 @@
 +/**
 + * Реквизит мокапов доделок после демо 2026-08-19 (пункт 9 «Пакетов для OpenSpec»).
 + *
 + * Живёт ТОЛЬКО в одноразовом worktree: в ветку мокапов уходят снимки и текст,
 + * а не этот код. Реализация пойдёт по спеке, а не копированием отсюда.
 + *
-+ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c|d).
-+ * Вариант d меняет только главную: страница семинара в нём остаётся как сегодня.
++ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c|d|e).
++ * Варианты d и e меняют только главную: страница семинара в них остаётся как сегодня.
++ *
++ * Вариант e — ВЫБРАННАЯ ВЛАДЕЛЬЦЕМ КОНФИГУРАЦИЯ (23.08.2026): лента отзывов из d
++ * плюс фирменные цвета иконок из c. Такой комбинации среди снятых не было, поэтому
++ * она снята отдельно: показывать надо то, что выбрано, а не сумму двух картинок.
 + */
 +
-+export type MockupVariant = 'off' | 'a' | 'b' | 'c' | 'd';
++export type MockupVariant = 'off' | 'a' | 'b' | 'c' | 'd' | 'e';
 +
 +const raw = (process.env.MOCKUP_VARIANT || 'off').toLowerCase();
-+export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c', 'd'].includes(raw) ? raw : 'off') as MockupVariant;
++export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c', 'd', 'e'].includes(raw) ? raw : 'off') as MockupVariant;
 +export const isMockup = MOCKUP_VARIANT !== 'off';
 +
 +/**
@@ -2014,7 +2022,7 @@ index 0000000..435b0a6
 +export const PHONE_PRIMARY = '+7 (812) 646-54-50';
 +export const PHONE_MOBILE = '+7 (981) 038-77-97';
 diff --git a/web/src/pages/[institute]/[courseGroup]/[seminar].astro b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
-index 27bd361..5aba59d 100644
+index 27bd361..34e98b9 100644
 --- a/web/src/pages/[institute]/[courseGroup]/[seminar].astro
 +++ b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
 @@ -15,6 +15,10 @@ import {
@@ -2028,7 +2036,7 @@ index 27bd361..5aba59d 100644
  import type { GetStaticPaths } from 'astro';
  
  export const getStaticPaths: GetStaticPaths = () => {
-@@ -154,20 +158,37 @@ const seminarSchema =
+@@ -154,20 +158,43 @@ const seminarSchema =
        ]}
      />
  
@@ -2063,7 +2071,13 @@ index 27bd361..5aba59d 100644
 +          )}
  
 -      <SeminarScheduleSection rows={scheduleRows} />
-+          {(MOCKUP_VARIANT === 'off' || MOCKUP_VARIANT === 'b') && (
++          {/* Расписание на своём месте — везде, кроме вариантов, которые его
++              переносят (a — наверх, c — в боковую колонку). Первая редакция
++              перечисляла варианты, которые его показывают, и потеряла d: у него
++              страница семинара обязана быть «как сегодня», а расписание пропадало
++              целиком. Кадров это не задело — семинар у d не снимался, — но патч
++              воспроизводил дефект. */}
++          {MOCKUP_VARIANT !== 'a' && MOCKUP_VARIANT !== 'c' && (
 +            <div id="raspisanie">
 +              <SeminarScheduleSection rows={scheduleRows} />
 +            </div>
@@ -2075,7 +2089,7 @@ index 27bd361..5aba59d 100644
      </article>
    </div>
  </BaseLayout>
-@@ -183,4 +204,25 @@ const seminarSchema =
+@@ -183,4 +210,25 @@ const seminarSchema =
      margin-bottom: 0;
      line-height: 1.75;
    }
@@ -2102,7 +2116,7 @@ index 27bd361..5aba59d 100644
 +  }
  </style>
 diff --git a/web/src/pages/index.astro b/web/src/pages/index.astro
-index 7c0923e..6f3cbfe 100644
+index 7c0923e..8859d96 100644
 --- a/web/src/pages/index.astro
 +++ b/web/src/pages/index.astro
 @@ -14,6 +14,9 @@ import News from '../components/home/sections/News.astro';
@@ -2128,7 +2142,7 @@ index 7c0923e..6f3cbfe 100644
 +  {MOCKUP_VARIANT === 'a' && <ReviewsSection layout="split" />}
 +  {/* d отличается от a только формой виджета — место секции держим тем же,
 +      чтобы сравнение шло по одной оси. */}
-+  {MOCKUP_VARIANT === 'd' && <ReviewsSection layout="band" />}
++  {(MOCKUP_VARIANT === 'd' || MOCKUP_VARIANT === 'e') && <ReviewsSection layout="band" />}
    <News />
 +  {MOCKUP_VARIANT === 'c' && <ReviewsSection layout="centered" />}
    <CtaBand />
