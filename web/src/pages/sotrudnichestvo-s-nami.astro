@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { getPage, cleanBodyHtml } from '../lib/data';
 import RichContent from '../components/RichContent.astro';
+import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
 
 const page = getPage('sotrudnichestvo-s-nami');
 const title = page?.seo_title || 'Сотрудничество — ИКПК';
@@ -30,9 +31,13 @@ const description = page?.seo_description || 'Информация о сотру
           Мы открыты для сотрудничества и рады обсудить любые предложения.
         </p>
         <div class="cta-contacts">
-          <a href="tel:+78126465450" class="cta-contact-item">
+          <a href={PHONE_HREF} class="cta-contact-item">
             <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-            <span>+7 (812) 646-54-50</span>
+            <span>{PHONE}</span>
+          </a>
+          <a href={MOBILE_PHONE_HREF} class="cta-contact-item">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+            <span>{MOBILE_PHONE}</span>
           </a>
           <a href="mailto:info@ikpk.su" class="cta-contact-item">
             <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>

@@ -19,7 +19,7 @@
 //     поэтому ссылка вне меню срабатывает с первого касания;
 //   * Escape возвращает фокус на кнопку меню, иначе он остаётся на исчезнувшем
 //     содержимом.
-import { primaryNav, CTA_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
+import { primaryNav, CTA_HREF, PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../../lib/navigation';
 import HeaderTools from './HeaderTools.astro';
 
 // rel берём из navigation.ts как есть (уже 'noopener noreferrer' — согласовано
@@ -63,9 +63,12 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     </nav>
 
     <div class="topnav-actions">
-      <a href={PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${PHONE}`}>{PHONE}</a>
+      <div class="topnav-phones">
+        <a href={PHONE_HREF} class="topnav-phone" aria-label={`Позвонить: ${PHONE}`}>{PHONE}</a>
+        <a href={MOBILE_PHONE_HREF} class="topnav-phone topnav-phone--mobile" aria-label={`Позвонить: ${MOBILE_PHONE}`}>{MOBILE_PHONE}</a>
+      </div>
       <div class="topnav-tools"><HeaderTools /></div>
-      <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Записаться</a>
+      <a href={CTA_HREF} class="btn btn-primary topnav-cta" data-cta="header">Выбрать программу</a>
 
       <!-- Мобильное меню: нативный details; внешний щелчок и Escape закрывает скрипт ниже -->
       <details class="topnav-mobile">
@@ -95,8 +98,9 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
               <span class="drawer-theme-track" aria-hidden="true"><i class="tt-icon" data-state="sun"></i><i class="tt-icon" data-state="moon"></i><span class="drawer-theme-thumb"></span></span>
             </button>
           </div>
-          <a href={CTA_HREF} class="btn btn-primary drawer-cta" data-cta="drawer">Записаться на обучение</a>
+          <a href={CTA_HREF} class="btn btn-primary drawer-cta" data-cta="drawer">Выбрать программу</a>
           <a href={PHONE_HREF} class="drawer-phone">{PHONE}</a>
+          <a href={MOBILE_PHONE_HREF} class="drawer-phone">{MOBILE_PHONE}</a>
         </div>
       </details>
     </div>
@@ -209,19 +213,55 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   .dropdown a:hover { background: var(--color-accent-50, #eef5ee); color: var(--color-accent-600); }
 
   .topnav-actions { display: flex; align-items: center; gap: 0.9rem; flex-shrink: 0; }
+  .topnav-phones { display: flex; flex-direction: column; line-height: 1.25; }
   .topnav-phone { font-size: var(--font-s); font-weight: 600; color: var(--color-dark-700); text-decoration: none; white-space: nowrap; }
   .topnav-cta { padding: 0.5rem 1.1rem; }
 
   .topnav-mobile { display: none; }
 
-  /* На средних десктопах телефон уходит (он есть в футере и в CTA) — чтобы
-     кнопка «Записаться» всегда влезала */
+  /* Телефоны в шапке уходят ступенями, а не разом.
+     Два номера помещаются только шире 1440 px: подпись кнопки стала длиннее
+     (D10), и при 1280 шапка переставала влезать на 61 CSS-px. Порог взят от
+     измерения — с двумя номерами шапке нужно ~1382 px, при 1361 остаётся 21 px
+     переполнения; 1440 берётся с запасом на более широкие шрифты Linux.
+     Но прятать оба разом нельзя: до D12 в полосе 1181–1440 показывался один
+     номер, и «оба или ни одного» превратило бы просьбу заказчика ДОБАВИТЬ номер
+     в его исчезновение на 1280 — самой обычной десктопной ширине. Один номер это
+     деградация с сохранением связи, ноль — потеря связи (решение владельца
+     2026-08-23). Ниже 1180 не помещается и один — как было и до этой работы.
+     Настоящее лечение — мокап шапки, TD-41. */
+  @media (max-width: 1440px) {
+    .topnav-phone--mobile { display: none; }
+  }
+
+  /* Шапка ужимается — иначе с длинной подписью CTA ей не хватает ширины и она
+     уезжает по горизонтали (замерено: 140 px переполнения при 1181, 61 при 1280).
+     Отдаём в том же порядке, в каком шапка уже отдаёт место ниже 900: сначала
+     дескриптор под логотипом, затем внутренние отступы меню и кнопки. Номер
+     приоритетнее подписи под лого: телефон просил заказчик, дескриптор — наше
+     добавление.
+
+     Порог ужатия НАМЕРЕННО выше порога второго номера (1600 против 1440), и это
+     исправление дефекта, а не запас на всякий случай. Пока оба порога стояли на
+     1440, шапка на 1441 одновременно теряла ужатие и получала второй номер —
+     двойной скачок, который на macOS проходил впритык (0 px), а на более широких
+     шрифтах Linux уезжал на 40 px. Поймал собственный гейт в CI. Теперь скачки
+     разнесены: на 1441 добавляется только номер, на 1601 только возвращается
+     дескриптор. */
+  @media (max-width: 1600px) {
+    .topnav-logo-desc { display: none; }
+    .topnav-bar { gap: 0.6rem; }
+    .topnav-menu > ul { gap: 0.15rem; }
+    .topnav-link { padding: 0.5rem 0.35rem; }
+    .topnav-cta { padding: 0.5rem 0.7rem; }
+  }
+
   @media (max-width: 1180px) {
-    .topnav-phone { display: none; }
+    .topnav-phones { display: none; }
   }
 
   @media (max-width: 900px) {
-    .topnav-menu, .topnav-phone { display: none; }
+    .topnav-menu, .topnav-phones { display: none; }
     /* дескриптор под лого не помещается рядом с CTA+бургером на узком
        мобильном — прячем, чтобы шапка не распирала вьюпорт */
     .topnav-logo-desc { display: none; }
@@ -281,6 +321,22 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .drawer-theme[aria-checked='true'] .drawer-theme-thumb { transform: translateX(18px); }
     .drawer-cta { display: block; text-align: center; margin: 0.8rem 0 0.5rem; }
     .drawer-phone { display: block; text-align: center; font-weight: 600; color: var(--color-dark-700); text-decoration: none; padding: 0.4rem; }
+  }
+
+  /* На узком мобильном подпись CTA не влезает в строку рядом с логотипом,
+     инструментами и бургером: до этой правки шапке требовалось 407 CSS-px при
+     вьюпорте 375, и уезжали ВСЕ страницы сайта. Кнопке разрешено переносить
+     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤900 намеренно: правила
+     мобильного меню живут в том блоке, и любое вложение их сюда оставило бы
+     зону 431–900 без навигации вовсе. */
+  @media (max-width: 430px) {
+    /* Сжатие включаем ТОЛЬКО здесь. В базовом правиле `min-width: 0` снимает у
+       блока действий пол в min-content, и раскладка поджимает кнопку даже там,
+       где места вдоволь: подпись переносится на две строки на всех ширинах, а
+       шапка вырастает с 73,97 до 77,38 px — этого хватает, чтобы цель якоря
+       ушла под липкую шапку (`scroll-margin-top` резервирует 76 px). Замерено. */
+    .topnav-actions { flex-shrink: 1; min-width: 0; }
+    .topnav-cta { min-width: 0; padding: 0.4rem 0.7rem; text-align: center; line-height: 1.2; }
   }
 
   /* Совсем узкие экраны (старые iPhone SE / компактный Android): логотип,
