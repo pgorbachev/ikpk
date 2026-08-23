@@ -37,6 +37,9 @@ export default defineConfig({
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',
       'tests/rich-content-migration.build.test.ts',
+      // Предмет — собранный вывод: каталожные страницы и плоские адреса записей
+      // (change cms-content-authoring-and-migration).
+      'tests/cms-catalog-pages.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
