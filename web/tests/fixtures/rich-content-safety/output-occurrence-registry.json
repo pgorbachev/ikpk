@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "76d866d04fbae60295ef6851bd9aa5d2f7763f0e",
+  "generatedFromSha": "0608f4cf4cc2a00b4660ff460d36d9445a30b937",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -33483,7 +33483,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/oplata.BIFnUVqy.css|rel=stylesheet",
+      "identity": "link|href=/_astro/oplata.DS1jEV-F.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",

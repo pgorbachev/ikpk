@@ -21,7 +21,7 @@ const hasForm = role !== 'ci';
     <div class="payment-dialog-panel">
       <div class="payment-dialog-head">
         <h2 id="payment-dialog-title">Оплата семинара</h2>
-        <button type="button" class="payment-dialog-close" data-payment-close>Закрыть</button>
+        <button type="button" class="payment-dialog-close" data-payment-close aria-label="Закрыть">✕</button>
       </div>
 
       <div data-payment-chrome></div>
@@ -179,6 +179,54 @@ const hasForm = role !== 'ci';
   .payment-dialog-head h2 {
     margin: 0;
     font-size: var(--font-xl);
+    /* 700, а не 600 из `base.css`: так задано в утверждённом мокапе варианта B. */
+    font-weight: 700;
+  }
+
+  /* ── Кнопка закрытия ─────────────────────────────────────────────────────────
+   *
+   * До этого у `.payment-dialog-close` не было НИ ОДНОГО правила: класс в разметке
+   * стоял, а стилей не получал, и браузер рисовал кнопку по умолчанию — в тёмной теме
+   * белый прямоугольник с рамкой. Владелец увидел это на стенде и справедливо заметил,
+   * что согласовывали другое: мокап варианта B задавал `.p-close` кругляшом 2rem на
+   * приглушённой подложке с глифом «✕». Здесь ровно он.
+   *
+   * Глиф вместо слова «Закрыть» — как в мокапе, и доступное имя от этого не теряется:
+   * оно приходит из `aria-label`. Это не косметическая деталь, а условие работы
+   * проверки `payment-transport.spec.ts` «роль диалога, имя, кнопка закрытия», которая
+   * ищет кнопку по ДОСТУПНОМУ ИМЕНИ (`/закрыть|close/i`) — без `aria-label` она
+   * перестала бы её находить. Тот же приём уже применён у поиска в шапке
+   * (`header-search-close`), поэтому и глиф взят тот же.
+   *
+   * ПОДЛОЖКА ВЗЯТА НЕ ТА, ЧТО В МОКАПЕ, и это исправление дефекта мокапа, а не вольность.
+   * Мокап задавал `--color-light-300`, но в тёмной теме этот токен равен `#1f241f` —
+   * ровно то же значение, что у `--surface-raised` панели. То есть буквальное следование
+   * мокапу дало бы в тёмной теме невидимый контрол; гейт ниже это и показал (1.00:1).
+   * Взят `--border-default`, который по построению отстоит от поверхности в обеих темах.
+   * Замеры подложки к панели: 1.26:1 в светлой, 1.62:1 в тёмной; глиф `--text-muted` на
+   * ней — 3.87:1 и 3.95:1, то есть выше порога 3:1 для нетекстовых элементов в обеих.
+   * `--border-strong` дал бы заметнее подложку (1.54 и 2.46), но глиф в тёмной упал бы до
+   * 2.60 — поэтому он оставлен наведению, где глиф уходит в `--color-dark-700`.
+   *
+   * Наведение мокап не описывал, но без него контрол выглядит неживым: взяты соседние
+   * существующие токены, новых значений не заведено. */
+  .payment-dialog-close {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    font-size: var(--font-m);
+    line-height: 1;
+    color: var(--text-muted);
+    background: var(--border-default);
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+  }
+  .payment-dialog-close:hover {
+    background: var(--border-strong);
+    color: var(--color-dark-700);
   }
   .payment-lead {
     margin: 0 0 1.25rem;
