@@ -990,7 +990,7 @@ index 0000000..7c2247a
 +</style>
 diff --git a/web/src/components/mockup/ReviewsSection.astro b/web/src/components/mockup/ReviewsSection.astro
 new file mode 100644
-index 0000000..690d33a
+index 0000000..837dded
 --- /dev/null
 +++ b/web/src/components/mockup/ReviewsSection.astro
 @@ -0,0 +1,182 @@
@@ -1053,7 +1053,7 @@ index 0000000..690d33a
 +
 +    {layout === 'band' && (
 +      <div class="rv-band">
-+        <h2 class="section-title rv-band-title" id="reviews-title">Отзывы учеников</h2>
++        <h2 class="section-title rv-band-title" id="reviews-title">Отзывы</h2>
 +        <div class="reviews-widget-slot" data-mockup-widget-slot>
 +          <ReviewsWidget mode="wide">
 +            <AwardBadges slot="awards" layout="row" />
