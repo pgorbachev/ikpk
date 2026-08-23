@@ -37,6 +37,10 @@ export default defineConfig({
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',
       'tests/rich-content-migration.build.test.ts',
+      // Внешние виджеты: у каждого файла свой предмет — боевой вывод и демо-вывод, —
+      // поэтому оба живут в специализированных конфигурациях, а не здесь.
+      'tests/external-widgets-dist.test.ts',
+      'tests/external-widgets-demo.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
