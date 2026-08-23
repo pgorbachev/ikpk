@@ -313,6 +313,27 @@ test.describe('Расписание семинара на десктопе', () 
     ).toBeLessThan(200);
   });
 
+  // Дата не должна рваться посреди себя. В колонке 21 rem диапазон занимает две
+  // строки — это нормально, а «г.» на строке один нет. Признак объективный: каждая
+  // часть даты обязана укладываться в ОДИН прямоугольник переноса.
+  test('дата не переносится посреди себя @d3-date-not-broken', async ({ page }) => {
+    await openSeminar(page, MOST_DATES.path);
+
+    const broken = await page.locator('[data-seminar-schedule-date-part]').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        text: (node.textContent ?? '').trim(),
+        lines: node.getClientRects().length,
+      })),
+    );
+    expect(broken.length, 'частей даты на странице не нашлось — проверять было нечего')
+      .toBeGreaterThan(0);
+    const split = broken.filter((part) => part.lines !== 1);
+    expect(
+      split,
+      `часть даты разорвана переносом: ${split.map((p) => `«${p.text}» на ${p.lines} строк`).join('; ')}`,
+    ).toEqual([]);
+  });
+
   // В печати колонка обязана отпускаться: `max-height` в единицах экрана с
   // `overflow: auto` обрезал бы список, и лишние даты исчезли бы с бумаги совсем —
   // прокрутить её нечем. До переноса расписание печаталось целиком, так что это

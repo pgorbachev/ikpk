@@ -78,10 +78,20 @@ function metaLine(entry: ScheduleEntry): string {
           const external = isExternalFormHref(href);
           return (
             <li class="seminar-schedule-entry" data-seminar-schedule-card>
+              {/*
+                Каждая дата — отдельная неразрывная часть, а тире между ними
+                остаётся точкой переноса. Иначе в колонке 21 rem диапазон рвётся
+                посреди даты и «г.» уезжает на строку один: неразрывным был только
+                конец диапазона, поэтому перенос выпадал на пробел перед «г.»
+                начальной даты.
+              */}
               <div class="schedule-date">
-                {formatDate(entry.startAt)}
+                <span class="schedule-date-part" data-seminar-schedule-date-part>{formatDate(entry.startAt)}</span>
                 {entry.startAt !== entry.endAt && (
-                  <span class="schedule-date-range"> — {formatDate(entry.endAt)}</span>
+                  <>
+                    {' — '}
+                    <span class="schedule-date-part" data-seminar-schedule-date-part>{formatDate(entry.endAt)}</span>
+                  </>
                 )}
               </div>
               {metaLine(entry) && <div class="schedule-meta">{metaLine(entry)}</div>}
@@ -199,7 +209,7 @@ function metaLine(entry: ScheduleEntry): string {
     line-height: 1.35;
   }
 
-  .schedule-date-range {
+  .schedule-date-part {
     white-space: nowrap;
   }
 
