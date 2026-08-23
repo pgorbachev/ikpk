@@ -312,6 +312,23 @@ test.describe('Расписание семинара на десктопе', () 
       `переполненная панель перестала липнуть: верх на ${Math.round(panel.y)} после прокрутки`,
     ).toBeLessThan(200);
   });
+
+  // В печати колонка обязана отпускаться: `max-height` в единицах экрана с
+  // `overflow: auto` обрезал бы список, и лишние даты исчезли бы с бумаги совсем —
+  // прокрутить её нечем. До переноса расписание печаталось целиком, так что это
+  // регресс, который вводит сама раскладка, а не давнее отсутствие печатных стилей.
+  test('в печати колонка отпускается и список не обрезается @d3-print-released', async ({ page }) => {
+    await openSeminar(page, MOST_DATES.path);
+    await page.emulateMedia({ media: 'print' });
+
+    const metrics = await panelMetrics(page);
+    expect(metrics.position, 'панель осталась липкой в печати').toBe('static');
+    expect(metrics.maxHeight, 'у панели остался предел высоты в печати').toBe('none');
+    expect(
+      metrics.scrollHeight,
+      `список обрезан в печати: содержимое ${metrics.scrollHeight}, окно ${metrics.clientHeight}`,
+    ).toBeLessThanOrEqual(metrics.clientHeight + 1);
+  });
 });
 
 // ─── Узкие ширины: колонка отпускается, цена выбора названа заранее ───────────

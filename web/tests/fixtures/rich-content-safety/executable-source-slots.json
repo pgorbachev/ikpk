@@ -596,8 +596,8 @@
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
     "locator": "components/seminars/SeminarSchedulePanel.astro:L131:C1:style",
-    "fingerprint": "041a214e8f91b4ef0555b1096225a7c4ef9d044a634c3ebd51c84e48e7ad278f",
-    "identity": "style|body:3bc0bd617991733a"
+    "fingerprint": "b23ba5c8282bed673d8b5e9ee516f223f1acd32a9c4766a51761f907fd979c31",
+    "identity": "style|body:82cf0b045449d659"
   },
   {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
