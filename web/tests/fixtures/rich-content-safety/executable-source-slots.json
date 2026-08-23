@@ -644,8 +644,8 @@
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L127:C1:style",
-    "fingerprint": "23ae63ed56c9249bf384d5f9c5922e103d08c596543acb4234f4a33ae0ff24b1",
-    "identity": "style|body:988b162b484262db"
+    "fingerprint": "6b246bca580bf6159ec88f30cd11930a4c8b3e998ba96ca654224762127abbc0",
+    "identity": "style|body:fade64b470075d8c"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
