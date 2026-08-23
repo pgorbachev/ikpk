@@ -237,6 +237,23 @@ describe('D12 — сайт показывает оба номера телефо
     expect(declared, 'ни одна страница не объявляет telephone — гейт измерил бы пустоту').toBeGreaterThan(0);
     expect(offenders.slice(0, 5), offenders.slice(0, 5).join('\n')).toEqual([]);
   });
+
+  // Решение владельца 2026-08-23: строка «Контактный телефон» на странице сведений —
+  // телефон ОРГАНИЗАЦИИ, и D12 ровно про него, это тот же дефект, а не отдельный
+  // change. Три персональные строки на той же странице («телефон:» у поимённо
+  // названных сотрудников) НЕ трогаются: там контакты конкретных людей, и мобильный
+  // Веры в чужой строке был бы неверен по факту. Исключение названо здесь, чтобы
+  // не остаться молчаливым сужением объёма.
+  it('строка «Контактный телефон» в сведениях об организации даёт оба номера', () => {
+    const html = readPage('/svedeniya-ob-obrazovatelnoy-organizatsii/');
+    const rows = findAll(html, (el) => el.tagName === 'tr').filter((row) =>
+      textOf(row).includes('Контактный телефон'),
+    );
+    const row = only(rows, 'строка таблицы «Контактный телефон»');
+    const text = textOf(row);
+    expect(text, 'в строке нет городского номера').toContain(CITY_PHONE);
+    expect(text, 'в строке нет мобильного номера').toContain(MOBILE_PHONE);
+  });
 });
 
 // ─── D13: мобильный в контактах медцентра ───────────────────────────────────
@@ -347,6 +364,21 @@ describe('D11 — на /raspisanie-i-tseny кнопка называется «�
     const labels = new Set(cards.flatMap((card) => buttonsIn(card).map(textOf)));
     expect([...labels], 'осталась старая подпись').not.toContain('Зарегистрироваться');
     expect([...labels], 'новой подписи нет ни на одной карточке').toContain('Записаться на семинар');
+  });
+
+  // Решение владельца 2026-08-23: расширить D11 на страницу отдельного семинара.
+  // Формально заказчик назвал только `/raspisanie-i-tseny`, но кнопка одна и та же и
+  // ведёт туда же; разнобой в подписи одного действия хуже любого из двух вариантов.
+  // Основание записано, а не подразумевается.
+  it('на странице семинара кнопка записи называется так же', () => {
+    const html = readPage(
+      '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya/',
+    );
+    const links = findAll(html, (el) => el.tagName === 'a' && hasClass(el, 'seminar-register-link'));
+    expect(links.length, 'на странице семинара нет кнопок записи — проверять нечего').toBeGreaterThan(0);
+    const labels = [...new Set(links.map(textOf))];
+    expect(labels, 'осталась старая подпись').not.toContain('Зарегистрироваться');
+    expect(labels, 'подписи кнопок записи на странице семинара').toEqual(['Записаться на семинар']);
   });
 });
 

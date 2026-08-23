@@ -472,3 +472,49 @@ test.describe('Навигация видима на любой ширине', ()
     });
   }
 });
+
+// ─── Телефон в шапке: контракт по ширинам ────────────────────────────────
+//
+// Гейт заведён по находке владельца. Пряча оба номера вместе ниже 1440, я
+// получила ноль номеров в полосе 1180–1440 — там, где до D12 был показан один.
+// На 1280, самой обычной десктопной ширине, в шапке стало пусто: заказчик
+// просил номер ДОБАВИТЬ, а в этой полосе его убрали.
+//
+// Правило «оба или ни одного» было моим, а не требованием заказчика. D12
+// говорит «показывать оба номера», а не «показывать оба или прятать оба»: один
+// номер — это деградация с сохранением связи, ноль — потеря связи. Решение
+// владельца 2026-08-23: в полосе 1180–1440 показывать первый номер.
+//
+// Настоящее лечение — мокап шапки, он отложен в TD-41; здесь фиксируется
+// поведение, которое обязано держаться до него.
+const PHONE_CONTRACT = [
+  { width: 1179, city: false, mobile: false, why: 'ниже 1180 номеров нет — как было до D12' },
+  { width: 1181, city: true, mobile: false, why: 'полоса 1180–1440: первый номер остаётся' },
+  { width: 1280, city: true, mobile: false, why: 'обычная десктопная ширина — связь не теряется' },
+  { width: 1440, city: true, mobile: false, why: 'верхняя граница полосы' },
+  { width: 1441, city: true, mobile: true, why: 'шире 1440 помещаются оба' },
+];
+
+test.describe('Телефон в шапке', () => {
+  for (const { width, city, mobile, why } of PHONE_CONTRACT) {
+    test(`${width}px: ${why}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const response = await page.goto('/raspisanie-i-tseny');
+      expect(response?.status(), 'страница не отдалась — измерять нечего').toBe(200);
+
+      const bar = page.locator('.topnav-phones');
+      const cityLink = bar.locator('a[href="tel:+78126465450"]');
+      const mobileLink = bar.locator('a[href="tel:+79810387797"]');
+
+      expect(await cityLink.isVisible(), `${width}px: городской номер`).toBe(city);
+      expect(await mobileLink.isVisible(), `${width}px: мобильный номер`).toBe(mobile);
+
+      // Шапка при этом не должна уезжать по горизонтали ни в одном из состояний.
+      const overflow = await page.evaluate(() => {
+        const de = document.documentElement;
+        return de.scrollWidth - de.clientWidth;
+      });
+      expect(overflow, `${width}px: шапка распирает вьюпорт на ${overflow}px`).toBeLessThanOrEqual(1);
+    });
+  }
+});

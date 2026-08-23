@@ -243,7 +243,11 @@ describe('Parity audit against original site', () => {
     expect(html).toContain('data-testid="seminar-schedule"');
     expect(html).toContain('Расписание');
     expect(html).toContain('Показать все');
-    expect(html).toContain('Зарегистрироваться');
+    // Подпись приведена к общей по решению владельца 2026-08-23: та же кнопка с
+    // тем же назначением на карточках расписания уже называется так (D11), и
+    // разнобой хуже любого из двух вариантов. Паритет с живым сайтом этот пункт
+    // больше не задаёт.
+    expect(html).toContain('Записаться на семинар');
     expect(html).toContain('seminar-content');
   });
 
