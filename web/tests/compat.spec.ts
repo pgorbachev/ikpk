@@ -38,23 +38,60 @@ test.describe('Compatibility smoke', () => {
     expect(await details.count()).toBeGreaterThan(0);
   });
 
+  // Ожидание выводится из ШИРИНЫ вьюпорта против порога шапки, а не из имён
+  // профилей. Поимённый список описывал только то, что есть сегодня: планшетный
+  // профиль шире 900 (iPad landscape, iPad Pro 12.9″ портрет) в него не попал бы,
+  // и тест упал бы с сообщением «навигации в шапке нет», для такого профиля
+  // ложным. Ширина вьюпорта приходит из конфигурации проекта, а не из рендера, —
+  // значит признак по-прежнему не читает предмет, ради чего правка и делалась.
+  const BURGER_MAX_WIDTH = 900;
+
   // Дефект пришёл с iPhone 14 Pro: меню открывается, щелчок рядом его не
   // закрывает. Причина не в устройстве — drawer это нативный <details>, а он по
   // внешнему щелчку не закрывается ни в одном браузере. Проверка здесь нужна
   // именно потому, что здесь настоящие профили iOS и Android, а не эмуляция
   // размера окна.
-  test('мобильное меню закрывается щелчком вне себя', async ({ page }) => {
+  test('мобильное меню закрывается щелчком вне себя', async ({ page }, testInfo) => {
     const response = await page.goto('/');
     expect(response?.status(), 'страница не отдалась').toBe(200);
 
     const drawer = page.locator('details.topnav-mobile');
     const summary = drawer.locator('> summary');
-    if (!(await summary.isVisible().catch(() => false))) {
-      test.skip(true, 'в этом профиле мобильного меню нет по замыслу');
+    const burgerVisible = await summary.isVisible().catch(() => false);
+
+    // Условие пропуска раньше читало САМ ПРЕДМЕТ: «бургер не виден — значит в этом
+    // профиле меню нет по замыслу». Такой признак исчезает вместе с предметом, и
+    // регресс, спрятавший бургер, тихо превращался в пропуск вместо падения —
+    // ровно это и случилось на `compat-ios-ipad` (810×1080), когда правила
+    // мобильного меню уехали в медиазапрос ≤430 (ревью PR #153).
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+    expect(viewportWidth, 'у профиля нет ширины вьюпорта — сравнивать не с чем').toBeGreaterThan(0);
+    const where = `${testInfo.project.name} (${viewportWidth}px)`;
+
+    if (viewportWidth > BURGER_MAX_WIDTH) {
+      expect(burgerVisible, `${where}: шире ${BURGER_MAX_WIDTH}px бургера быть не должно`).toBe(false);
+      await expect(
+        page.locator('.topnav-menu a').first(),
+        `${where}: бургера нет по замыслу, но и пунктов горизонтального меню не видно`,
+      ).toBeVisible();
+      test.skip(true, `${where}: навигация горизонтальным меню, мобильного нет по замыслу`);
     }
+
+    expect(
+      burgerVisible,
+      `${where}: бургер не виден, а горизонтальное меню в этой ширине скрыто — ` +
+        'навигации в шапке нет вовсе',
+    ).toBe(true);
 
     await summary.click();
     await expect(drawer, 'меню не открылось').toHaveAttribute('open', '');
+    // Атрибута `open` мало: он выставляется и при скрытой панели. Без этого
+    // утверждения правило `.topnav-drawer { display: none }` оставило бы
+    // проверку зелёной при недостижимой навигации.
+    await expect(
+      page.locator('.topnav-drawer .drawer-link').first(),
+      `${where}: меню открылось, но ни одной ссылки в панели не видно`,
+    ).toBeVisible();
 
     const outside = await page.evaluate(() => {
       const d = document.querySelector('details.topnav-mobile');

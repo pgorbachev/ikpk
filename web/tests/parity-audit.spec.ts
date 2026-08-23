@@ -76,7 +76,9 @@ test.describe('Parity Audit Acceptance', () => {
   test('homepage news section has behavior controls, not static-only grid', async ({ page }) => {
     await gotoAttachedPath(page, '/');
 
-    const newsHeading = page.getByRole('heading', { name: /^Новости$/i }).first();
+    // Секция переименована в «Предложения» решением заказчика (D21 списка после
+    // демо 2026-08-19). Паритет с живым сайтом этот пункт больше не задаёт.
+    const newsHeading = page.getByRole('heading', { name: /^Предложения$/i }).first();
     await expect(newsHeading).toBeVisible();
 
     const newsSection = newsHeading.locator('xpath=ancestor::section[1]');
@@ -131,10 +133,10 @@ test.describe('Parity Audit Acceptance', () => {
     const headings = normalizeTextList(
       await page.locator('h2, h3, h4').allTextContents(),
     );
-    const newsIndex = headings.findIndex((heading) => heading === 'Новости');
+    const newsIndex = headings.findIndex((heading) => heading === 'Предложения');
     const newsletterIndex = headings.findIndex((heading) => /Подпишитесь на наши новости/i.test(heading));
 
-    expect(newsIndex, 'Expected heading "Новости"').toBeGreaterThan(-1);
+    expect(newsIndex, 'Expected heading "Предложения"').toBeGreaterThan(-1);
     expect(newsletterIndex, 'Expected heading "Подпишитесь на наши новости"').toBeGreaterThan(newsIndex);
     expect(headings).not.toContain('Наши институты');
     expect(headings).not.toContain('Акции и скидки');

@@ -5,9 +5,12 @@ interface Props {
   hoursWeekdays: string;
   hoursWeekend: string;
   institutePhone: string;
+  instituteMobilePhone: string;
+  hoursNote: string;
   email: string;
   storeUrl: string;
   clinicPhone: string;
+  clinicMobilePhone: string;
   clinicUrl: string;
   requisites: string[];
   mapSrc: string;
@@ -20,9 +23,12 @@ const {
   hoursWeekdays,
   hoursWeekend,
   institutePhone,
+  instituteMobilePhone,
+  hoursNote,
   email,
   storeUrl,
   clinicPhone,
+  clinicMobilePhone,
   clinicUrl,
   requisites,
   mapSrc,
@@ -45,15 +51,19 @@ const {
         <span class="contact-shell-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M11.99 2C6.47 2 2 6.48 2 12C2 17.52 6.47 22 11.99 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 11.99 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20ZM12.5 7.75C12.5 7.33579 12.1642 7 11.75 7C11.3358 7 11 7.33579 11 7.75V12.4338C11 12.7851 11.1843 13.1106 11.4855 13.2913L15.6383 15.783C15.9768 15.9861 16.4159 15.878 16.6214 15.5409C16.8298 15.1992 16.7188 14.7531 16.3746 14.5489L12.5 12.25V7.75Z" fill="currentColor"></path></svg>
         </span>
-        <div class="contact-shell-text">
+        <div class="contact-shell-text" data-hours="manager">
             понедельник — пятница: <strong>{hoursWeekdays}</strong>, суббота, воскресенье — <strong>{hoursWeekend}</strong>
+            <span class="contact-shell-note">{hoursNote}</span>
           </div>
       </div>
       <div class="contact-shell-item">
         <span class="contact-shell-icon contact-shell-icon--accent" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 12h2c0-2.76-2.24-5-5-5v2c1.66 0 3 1.34 3 3Zm4 0h2a9 9 0 0 0-9-9v2c3.87 0 7 3.13 7 7Zm1 3.5c-1.25 0-2.45-.2-3.57-.57-.1-.03-.21-.05-.31-.05-.26 0-.51.1-.71.29l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.21a.96.96 0 0 0 .25-1A11.36 11.36 0 0 1 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1ZM5.03 5h1.5c.07.88.22 1.75.45 2.58l-1.2 1.21c-.4-1.21-.66-2.47-.75-3.79ZM19 18.97c-1.32-.09-2.6-.35-3.8-.76l1.2-1.2c.85.24 1.72.39 2.6.45v1.51Z" fill="currentColor"></path></svg>
         </span>
-        <a class="contact-shell-link" href={`tel:${institutePhone.replace(/[^\d+]/g, '')}`}>{institutePhone}</a>
+        <div class="contact-shell-phones">
+          <a class="contact-shell-link" href={`tel:${institutePhone.replace(/[^\d+]/g, '')}`}>{institutePhone}</a>
+          <a class="contact-shell-link" href={`tel:${instituteMobilePhone.replace(/[^\d+]/g, '')}`}>{instituteMobilePhone}</a>
+        </div>
       </div>
       <div class="contact-shell-item">
         <span class="contact-shell-icon" aria-hidden="true">
@@ -79,7 +89,10 @@ const {
         <span class="contact-shell-icon contact-shell-icon--accent" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 12h2c0-2.76-2.24-5-5-5v2c1.66 0 3 1.34 3 3Zm4 0h2a9 9 0 0 0-9-9v2c3.87 0 7 3.13 7 7Zm1 3.5c-1.25 0-2.45-.2-3.57-.57-.1-.03-.21-.05-.31-.05-.26 0-.51.1-.71.29l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.21a.96.96 0 0 0 .25-1A11.36 11.36 0 0 1 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1ZM5.03 5h1.5c.07.88.22 1.75.45 2.58l-1.2 1.21c-.4-1.21-.66-2.47-.75-3.79ZM19 18.97c-1.32-.09-2.6-.35-3.8-.76l1.2-1.2c.85.24 1.72.39 2.6.45v1.51Z" fill="currentColor"></path></svg>
         </span>
-        <a class="contact-shell-link" href={`tel:${clinicPhone.replace(/[^\d+]/g, '')}`}>{clinicPhone}</a>
+        <div class="contact-shell-phones">
+          <a class="contact-shell-link" href={`tel:${clinicPhone.replace(/[^\d+]/g, '')}`}>{clinicPhone}</a>
+          <a class="contact-shell-link" href={`tel:${clinicMobilePhone.replace(/[^\d+]/g, '')}`}>{clinicMobilePhone}</a>
+        </div>
       </div>
       <div class="contact-shell-item">
         <span class="contact-shell-icon" aria-hidden="true">
@@ -219,6 +232,18 @@ const {
 
   .contact-shell-strong {
     font-weight: 700;
+  }
+
+  .contact-shell-phones {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .contact-shell-note {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: var(--font-s);
+    color: var(--color-gray-500);
   }
 
   .contact-shell-subtitle {

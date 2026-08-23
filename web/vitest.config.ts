@@ -24,6 +24,7 @@ export default defineConfig({
       'tests/payment-characterization.test.ts',
       'tests/payment-form-dist.test.ts',
       'tests/payment-role-dist.test.ts',
+      'tests/site-copy.test.ts',
       // Предмет — вывод ДЕМО-сборки, конфигурация vitest.demo.config.ts
       // (запускается через npm run test:demo, который его сначала собирает).
       'tests/demo-output.test.ts',

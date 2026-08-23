@@ -1,5 +1,7 @@
 ---
-// Секция «Новости» (слайдер). Извлечена из index.astro вместе с CSS и JS.
+// Секция «Предложения» (слайдер). Извлечена из index.astro вместе с CSS и JS.
+// Заголовок переименован по просьбе заказчика (D21 списка после демо 2026-08-19):
+// секция «Акции и скидки» при этом остаётся отдельной, слияния не было.
 import MediaCard from '../../ui/MediaCard.astro';
 import { getNews, cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
 import RichContent from '../../RichContent.astro';
@@ -9,7 +11,7 @@ const news = getNews();
 {news.length > 0 && (
   <section class="section section-alt" data-reveal>
     <div class="container">
-      <h2 class="section-title">Новости</h2>
+      <h2 class="section-title">Предложения</h2>
       <div class="news-slider" data-news-slider>
         <button type="button" class="news-nav-btn" aria-label="Предыдущий слайд" data-news-prev>
           <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
