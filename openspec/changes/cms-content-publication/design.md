@@ -12,7 +12,7 @@
    `grep -nE 'npm run build|astro build'`) и `build`
    (`.github/workflows/deploy.yml:117`, `run: npm run build`); всего **восемь** вызовов.
    Три варианта сборки, а не два: обычный, `build:demo` и `build:stand`
-   (`.github/workflows/test.yml:449`, `run: npm run build:stand`).
+   (`.github/workflows/test.yml:460`, `run: npm run build:stand`).
 3. **Часть вывода зависит от календарной даты**: статус семинара вычисляется от «сегодня»
    (`web/scripts/lib/planned-seminars.ts:54`, `export const calendarToday`).
 4. **Принятая `schedule-month-filter`** уже требует, чтобы опорная дата приходила аргументом из
