@@ -2,7 +2,7 @@
 import { seminarTitleFallback, seminarDescriptionFallback } from '../../../lib/seo-fallback';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
-import SeminarScheduleSection from '../../../components/seminars/SeminarScheduleSection.astro';
+import SeminarSchedulePanel from '../../../components/seminars/SeminarSchedulePanel.astro';
 import {
   getInstitutes,
   getCourseGroups,
@@ -157,17 +157,21 @@ const seminarSchema =
     <article class="section seminar-detail">
       <h1 class="page-title">{seminar.name}</h1>
 
-      {seminarBodyHtml ? (
-        <div class="seminar-content rich-content">
-          <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
-        </div>
-      ) : seminar.description_text && (
-        <div class="seminar-content rich-content">
-          <p>{seminar.description_text}</p>
-        </div>
-      )}
+      <div class="seminar-cols">
+        <SeminarSchedulePanel rows={scheduleRows} />
 
-      <SeminarScheduleSection rows={scheduleRows} />
+        <div class="seminar-main">
+          {seminarBodyHtml ? (
+            <div class="seminar-content rich-content">
+              <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
+            </div>
+          ) : seminar.description_text && (
+            <div class="seminar-content rich-content">
+              <p>{seminar.description_text}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </article>
   </div>
 </BaseLayout>
@@ -182,5 +186,67 @@ const seminarSchema =
   .seminar-content {
     margin-bottom: 0;
     line-height: 1.75;
+  }
+
+  /*
+   * Расписание — в боковой колонке справа, описание слева (вариант C, выбор
+   * владельца 23.08.2026). Раскладка живёт здесь, а не в компоненте: место блока
+   * на странице задаёт страница, компонент отвечает только за свой вид.
+   *
+   * Расписание идёт в разметке ПЕРВЫМ, а вправо его ставит явное размещение в
+   * гриде. Так порядок чтения и порядок обхода клавиатурой совпадают с видимым на
+   * узких ширинах, где блок стоит над описанием; вариант «описание первым, а блок
+   * поднять `order: -1`» дал бы на телефоне видимый порядок один, а порядок
+   * фокуса — обратный.
+   *
+   * `align-items` НЕ `start`, и причина узкая: липкая обёртка внутри колонки имеет
+   * СВОЙ предел высоты с прокруткой, а при `start` колонка получает высоту своего
+   * содержимого и уезжает вместе с ним. Общий примитив сайта живёт с
+   * `align-items: start` и липнет исправно (`web/src/styles/layout.css:20-31`,
+   * `.content-sidebar-aside--sticky`, потребитель — страница статьи) — первая
+   * редакция этого комментария объявляла `start` сломанным вообще, и это неверно:
+   * измерено на статье, сайдбар липнет, `top` 638 → 84 при `scrollY` 1800.
+   *
+   * Почему этот примитив здесь не переиспользован — названо, а не подразумевается:
+   * у него перелом 900 px и отступ `+1.5rem`, а у утверждённого владельцем облика
+   * этой страницы — 1024 px и `+1rem`, и колонка шире (21rem против 280 px у
+   * статьи). Расхождение двух реализаций одного приёма записано в
+   * `docs/tech-debt.md` (TD-44), чтобы его свели отдельной работой, а не забыли.
+   */
+  .seminar-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    gap: 2.5rem;
+    align-items: stretch;
+  }
+
+  .seminar-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .seminar-cols > :global(.seminar-schedule) {
+    grid-column: 2;
+    grid-row: 1;
+    /* Как и у левой колонки: без `min-width: 0` автоминимум грид-элемента равен
+       min-content его содержимого, и любая неразрывная строка внутри распирает
+       колонку шире дорожки. Ловится это только при увеличенном кегле. */
+    min-width: 0;
+  }
+
+  /* Ниже 1024 колонки нет: блок расписания идёт во всю ширину над описанием.
+     Явное размещение снимается, элементы встают в порядке разметки. */
+  @media (max-width: 1024px) {
+    .seminar-cols {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    .seminar-main,
+    .seminar-cols > :global(.seminar-schedule) {
+      grid-column: auto;
+      grid-row: auto;
+    }
   }
 </style>
