@@ -1,0 +1,2149 @@
+# Код мокапа: НЕ для копирования в реализацию.
+#
+# Лежит здесь только ради воспроизводимости снимков: по этому патчу их можно
+# снять заново и проверить числа. Реализация идёт по спеке — в мокапе нет ни
+# настоящего виджета Яндекса, ни настоящего виджета Bitrix24, ни чтения
+# /published-at.json, ни гашения на демо, ни официальных фирменных марок соцсетей.
+#
+# База: a6166f2 (origin/main на 2026-08-23, после слияния PR #155 с мокапами).
+#       Добавлен вариант e — выбранная владельцем конфигурация: лента отзывов из d
+#       плюс фирменные цвета иконок из c.
+# Сборка:  MOCKUP_VARIANT=a|b|c|d npx astro build --outDir dist-<v>
+# Съёмка:  node scripts/shoot-mockups.mjs --dist dist-<v> --variant <v>
+#          Скрипт САМ оптимизирует PNG и пересчитывает постусловие по финальным
+#          файлам; ненулевой код выхода = постусловие не выполнено.
+#
+diff --git a/web/scripts/shoot-mockups.mjs b/web/scripts/shoot-mockups.mjs
+new file mode 100644
+index 0000000..54a838b
+--- /dev/null
++++ b/web/scripts/shoot-mockups.mjs
+@@ -0,0 +1,560 @@
++/**
++ * Съёмка мокапов S2. Живёт только в одноразовом worktree.
++ *
++ *   node scripts/shoot-mockups.mjs --dist dist-a --variant a --out ../docs/design/mockups/demo-followups
++ *
++ * Числа считает браузер (getBoundingClientRect), не глаз. Пересечения считаются
++ * в координатах вьюпорта на конкретной позиции прокрутки — иначе fixed-элемент
++ * и содержимое страницы сравнивать нельзя.
++ *
++ * ── Почему съёмка разведена по проходам ──────────────────────────────────────
++ *
++ * Снимок БЛОКА требует спрятать плавающие слои: Playwright режет по рамке
++ * элемента, а липкая шапка ложится поверх. Первая редакция прятала их и
++ * возвращала обратно на той же странице — и восстановление молча не сработало
++ * после ВТОРОГО снимка блока: в поставку уехали снимки экрана подвала без
++ * кнопки чата, то есть ровно те кадры, ради которых съёмка и делалась.
++ * Причину в самом восстановлении воспроизвести не удалось (в изолированной
++ * пробе оно работает), поэтому чинится не причина, а класс: снимки блоков
++ * делаются на ОТДЕЛЬНОЙ загрузке страницы, после которой на ней больше ничего
++ * не снимается. Состояние, от которого зависят следующие кадры, не мутируется
++ * вовсе.
++ *
++ * И постусловие: каждый снимок экрана, который обязан содержать чат,
++ * проверяется по пикселю в центре кнопки. Без этого «кнопки нет» и «кнопка не
++ * попала» неразличимы — тот же класс, что «дефектов нет» против «я не смогла
++ * проверить».
++ */
++import { createServer } from 'node:http';
++import { readFile, mkdir, writeFile, readdir, stat } from 'node:fs/promises';
++import { existsSync, statSync } from 'node:fs';
++import { extname, join, resolve } from 'node:path';
++import { chromium } from '@playwright/test';
++import sharp from 'sharp';
++
++const arg = (n, d) => {
++  const i = process.argv.indexOf(`--${n}`);
++  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : d;
++};
++const DIST = resolve(arg('dist', 'dist'));
++const VARIANT = arg('variant', 'main');
++const OUT = resolve(arg('out', '../docs/design/mockups/demo-followups'));
++const PORT = Number(arg('port', '4399'));
++
++/** Цвет кнопки чата в заглушке — предмет постусловия. */
++const CHAT_RGB = [47, 199, 247];
++
++const MIME = {
++  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
++  '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
++  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
++  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
++  '.avif': 'image/avif', '.woff2': 'font/woff2', '.ico': 'image/x-icon',
++  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.pdf': 'application/pdf',
++};
++
++function resolveFile(pathname) {
++  const clean = decodeURIComponent(pathname.split('?')[0]).replace(/\/+$/, '') || '/index.html';
++  for (const c of [join(DIST, clean), join(DIST, clean, 'index.html'), `${join(DIST, clean)}.html`]) {
++    if (existsSync(c) && statSync(c).isFile()) return c;
++  }
++  return null;
++}
++
++const server = createServer(async (req, res) => {
++  const file = resolveFile(req.url || '/');
++  if (!file) {
++    res.writeHead(404, { 'content-type': 'text/plain' });
++    res.end('not found');
++    return;
++  }
++  const body = await readFile(file);
++  res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
++  res.end(body);
++});
++
++// `light: true` — сокращённый набор: планшет снимается ради одного вопроса (как
++// раскладки ведут себя между 375 и 1280), полностраничные кадры там только
++// раздували бы поставку.
++// `theme: 'dark'` — тема ставится через localStorage до отрисовки: страница
++// читает `ikpk.theme` синхронно в <head> (HeadMeta.astro) и prefers-color-scheme
++// НЕ смотрит, поэтому emulateMedia здесь не работает.
++const VIEWPORTS = [
++  { name: '1280', width: 1280, height: 800 },
++  { name: '768', width: 768, height: 1024, light: true },
++  { name: '375', width: 375, height: 812 },
++  { name: '1280d', width: 1280, height: 800, theme: 'dark', light: true },
++];
++
++const SEMINARS = {
++  dated: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
++  two: '/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej',
++  single: '/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii',
++  undated: '/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1',
++};
++const LIGHT_SEMINARS = ['dated', 'undated'];
++
++const log = [];
++const problems = [];
++const chatChecks = [];
++const note = (key, value) => {
++  log.push(`${VARIANT}/${key}: ${JSON.stringify(value)}`);
++  console.log(`${VARIANT}/${key}`, JSON.stringify(value));
++};
++
++const MEASURE = (selectors) => {
++  const rect = (el) => {
++    if (!el) return null;
++    const r = el.getBoundingClientRect();
++    if (r.width === 0 && r.height === 0) return null;
++    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
++  };
++  /** Рамка ТЕКСТА, а не блока: блок метки тянется во всю ширину контейнера, и
++      пересечение с ним говорит лишь о попадании в пустоту. */
++  const textRect = (el) => {
++    if (!el) return null;
++    const r = document.createRange();
++    r.selectNodeContents(el);
++    const b = r.getBoundingClientRect();
++    if (b.width === 0 && b.height === 0) return null;
++    return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) };
++  };
++  const out = {};
++  for (const [name, sel] of Object.entries(selectors)) {
++    const el = document.querySelector(sel);
++    out[name] = name.endsWith('Text') ? textRect(el) : rect(el);
++  }
++  const overlap = (a, b) => {
++    if (!a || !b) return 0;
++    const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
++    const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
++    return w * h;
++  };
++  const gapX = (a, b) => (a && b ? Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w) : null);
++  const chatBtn = out.chatButton;
++  const chatPanel = out.chatPanel;
++  const cover = {};
++  for (const [name, r] of Object.entries(out)) {
++    if (name === 'chatButton' || name === 'chatPanel' || !r) continue;
++    const area = r.w * r.h;
++    const byBtn = overlap(chatBtn, r);
++    const byPanel = overlap(chatPanel, r);
++    if (byBtn || byPanel) {
++      cover[name] = {
++        coveredByButtonPx: byBtn,
++        coveredByButtonPct: area ? Math.round((byBtn / area) * 100) : 0,
++        coveredByPanelPx: byPanel,
++        coveredByPanelPct: area ? Math.round((byPanel / area) * 100) : 0,
++      };
++    }
++  }
++  const gaps = {};
++  if (out.publishedText && chatBtn) gaps.publishedTextToChatButtonX = gapX(out.publishedText, chatBtn);
++  if (out.socialRow && out.publishedText) {
++    gaps.socialRowToPublishedTextY = Math.round(out.publishedText.y - (out.socialRow.y + out.socialRow.h));
++    gaps.socialRowOverlapsPublishedTextPx = overlap(out.socialRow, out.publishedText);
++  }
++  return {
++    rects: out, cover, gaps,
++    scrollY: Math.round(window.scrollY),
++    docHeight: Math.round(document.documentElement.scrollHeight),
++  };
++};
++
++const HOME_SELECTORS = {
++  chatButton: '[data-mockup-chat-button]',
++  chatPanel: '[data-mockup-chat-panel]:not([hidden])',
++  reviewsSection: '[data-mockup-reviews]',
++  reviewsWidget: '[data-mockup-widget]',
++  reviewsCta: '[data-mockup-reviews] .reviews-cta, [data-mockup-reviews] .reviews-link',
++  socialRow: '[data-mockup-social]',
++  socialTextList: '.footer-social',
++  publishedLine: '[data-mockup-published]',
++  publishedText: '[data-mockup-published]',
++  footerLegal: '.footer-legal a',
++  footer: '.footer',
++  ctaBandBtn: '.cta-band .btn',
++  newsletter: '.newsletter, [class*="newsletter"]',
++};
++
++const SEM_SELECTORS = {
++  chatButton: '[data-mockup-chat-button]',
++  chatPanel: '[data-mockup-chat-panel]:not([hidden])',
++  h1: '.page-title',
++  scheduleBlock: '[data-testid="seminar-schedule"]',
++  nextBar: '[data-mockup-nextbar]',
++  aside: '[data-mockup-aside]',
++  firstRegister: '.seminar-register-link, .nextbar-actions .btn, .sched-card-cta',
++  contentStart: '.seminar-content',
++};
++
++/** Прячет плавающие слои по ВЫЧИСЛЕННОМУ position (fixed и sticky), без списка
++    селекторов: шапка у нас sticky, и проверка только `fixed` её пропускала. */
++async function hideFloating(page) {
++  return page.evaluate(() => {
++    let n = 0;
++    for (const el of document.querySelectorAll('body *')) {
++      const cs = getComputedStyle(el);
++      if ((cs.position === 'fixed' || cs.position === 'sticky') && cs.visibility !== 'hidden') {
++        el.style.visibility = 'hidden';
++        n++;
++      }
++    }
++    return n;
++  });
++}
++
++/**
++ * Постусловие снимка экрана: кнопка чата обязана быть НА КАРТИНКЕ.
++ *
++ * Считается ДОЛЯ пикселей цвета кнопки во всей её рамке, а не один пиксель в
++ * центре. Первая редакция брала центр — и попадала в белый значок внутри
++ * кнопки: проверка краснела на кадрах, где кнопка нарисована. Ровно та же
++ * ошибка независимо повторилась во внешнем ревью, которое по центральному
++ * пикселю заключило, что кнопки нет ни на одном снимке.
++ */
++/**
++ * Постусловие «знаки наград нарисованы в секции отзывов».
++ *
++ * Проверяется не наличие узла в разметке, а ВИДИМАЯ рамка внутри рамки секции
++ * отзывов — именно она попадает на снимок блока. Узел, ушедший за границу
++ * секции или схлопнувшийся в ноль, на снимке отсутствует, а по разметке
++ * выглядел бы живым: это ровно тот случай «я не смогла проверить», выданный за
++ * «дефектов нет».
++ *
++ * Подписи ищутся по тексту, а не по числу элементов: список наград может
++ * поменяться, и проверка «их два» отстала бы от предмета молча.
++ */
++const AWARD_TITLES = ['Хорошее место 2026', 'Здесь хорошо!'];
++
++async function assertAwardsOnShot(page, path) {
++  if (VARIANT === 'main') return;
++  const r = await page.evaluate((titles) => {
++    const section = document.querySelector('[data-mockup-reviews]');
++    if (!section) return { ok: false, why: 'секции отзывов нет' };
++    const list = section.querySelector('[data-mockup-awards]');
++    if (!list) return { ok: false, why: 'знаков наград в секции нет' };
++    const sb = section.getBoundingClientRect();
++    const found = [];
++    for (const t of titles) {
++      const el = [...list.querySelectorAll('*')].find((n) => n.textContent.trim() === t);
++      if (!el) { found.push(`${t}: подписи нет`); continue; }
++      const b = el.getBoundingClientRect();
++      if (b.width === 0 || b.height === 0) { found.push(`${t}: рамка нулевая`); continue; }
++      // Рамки мало: снимок блока делается после того, как скрипт прячет
++      // плавающие слои через visibility, а visibility рамку не схлопывает.
++      // Знак, спрятанный самой съёмкой, прошёл бы проверку по рамке и
++      // отсутствовал бы на картинке — это и есть «не смогла проверить» под
++      // видом «дефектов нет». Проверено мутацией: см. negative-check.txt.
++      //
++      // Смотреть надо ВСЮ ЦЕПОЧКУ ПРЕДКОВ, а не сам узел: `opacity` не
++      // наследуется, поэтому `opacity: 0` на контейнере оставляет у подписи
++      // свою единицу — и первая редакция этой проверки была зелёной на кадре
++      // без знаков. Нашло внешнее ревью; мутация в negative-check.txt.
++      // checkVisibility учитывает предков сам, обход оставлен ради внятного
++      // сообщения и на случай, если метода нет.
++      if (typeof el.checkVisibility === 'function' &&
++          !el.checkVisibility({ opacityProperty: true, visibilityProperty: true, contentVisibilityAuto: true })) {
++        found.push(`${t}: узел невидим (checkVisibility=false)`);
++        continue;
++      }
++      let hiddenBy = null;
++      for (let node = el; node && node !== document.documentElement; node = node.parentElement) {
++        const cs = getComputedStyle(node);
++        const why = cs.visibility === 'hidden' ? `visibility=hidden`
++          : cs.display === 'none' ? `display=none`
++          : Number(cs.opacity) === 0 ? `opacity=0`
++          : null;
++        if (why) {
++          const who = node === el ? 'сам узел' : `предок <${node.tagName.toLowerCase()}${node.className ? '.' + String(node.className).trim().split(/\s+/)[0] : ''}>`;
++          hiddenBy = `${who}: ${why}`;
++          break;
++        }
++      }
++      if (hiddenBy) { found.push(`${t}: узел невидим — ${hiddenBy}`); continue; }
++      const inside = b.left >= sb.left - 1 && b.right <= sb.right + 1 && b.top >= sb.top - 1 && b.bottom <= sb.bottom + 1;
++      if (!inside) { found.push(`${t}: рамка вне секции`); continue; }
++      found.push(null);
++    }
++    const bad = found.filter(Boolean);
++    return bad.length ? { ok: false, why: bad.join('; ') } : { ok: true, count: titles.length };
++  }, AWARD_TITLES);
++  if (!r.ok) problems.push(`${path}: знаки наград не подтверждены — ${r.why}`);
++  else awardChecks.push(path);
++}
++
++const awardChecks = [];
++
++async function assertChatOnShot(page, path) {
++  if (VARIANT === 'main') return;
++  const btn = await page.evaluate(() => {
++    const el = document.querySelector('[data-mockup-chat-button]');
++    if (!el) return null;
++    const r = el.getBoundingClientRect();
++    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
++  });
++  if (!btn) {
++    problems.push(`${path}: кнопки чата нет в DOM`);
++    return;
++  }
++  const { data, info } = await sharp(path).raw().toBuffer({ resolveWithObject: true });
++  const x0 = Math.max(0, btn.x);
++  const y0 = Math.max(0, btn.y);
++  const x1 = Math.min(info.width, btn.x + btn.w);
++  const y1 = Math.min(info.height, btn.y + btn.h);
++  if (x1 <= x0 || y1 <= y0) {
++    problems.push(`${path}: рамка кнопки (${btn.x},${btn.y},${btn.w}x${btn.h}) вне кадра ${info.width}x${info.height}`);
++    return;
++  }
++  let hit = 0;
++  let total = 0;
++  for (let y = y0; y < y1; y++) {
++    for (let x = x0; x < x1; x++) {
++      const i = (y * info.width + x) * info.channels;
++      total++;
++      if (
++        Math.abs(data[i] - CHAT_RGB[0]) <= 10 &&
++        Math.abs(data[i + 1] - CHAT_RGB[1]) <= 10 &&
++        Math.abs(data[i + 2] - CHAT_RGB[2]) <= 10
++      ) hit++;
++    }
++  }
++  const pct = Math.round((hit / total) * 100);
++  // Вписанный круг даёт ~78 % рамки, белый значок съедает часть; на кадрах с
++  // раскрытой панелью её тень перекрывает край и доля падает до ~52 %. Порог 25 %
++  // отделяет «нарисована» от «нет вовсе» (0 %) с большим запасом в обе стороны.
++  if (pct < 25) {
++    problems.push(`${path}: в рамке кнопки ${pct}% пикселей цвета чата (порог 25%), кнопка не нарисована`);
++  }
++  chatChecks.push({ path, rect: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, pct });
++}
++
++/** Доля пикселей цвета кнопки в заданной рамке КОНКРЕТНОГО файла. */
++async function chatFraction(file, r) {
++  const { data, info } = await sharp(file).raw().toBuffer({ resolveWithObject: true });
++  let hit = 0;
++  let total = 0;
++  for (let y = r.y; y < Math.min(info.height, r.y + r.h); y++) {
++    for (let x = r.x; x < Math.min(info.width, r.x + r.w); x++) {
++      const i = (y * info.width + x) * info.channels;
++      total++;
++      if (
++        Math.abs(data[i] - CHAT_RGB[0]) <= 10 &&
++        Math.abs(data[i + 1] - CHAT_RGB[1]) <= 10 &&
++        Math.abs(data[i + 2] - CHAT_RGB[2]) <= 10
++      ) hit++;
++    }
++  }
++  return total ? Math.round((hit / total) * 100) : 0;
++}
++
++async function shotViewport(page, path) {
++  await page.screenshot({ path });
++  await assertChatOnShot(page, path);
++}
++
++async function load(page, url) {
++  await page.goto(url, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  // прогрев reveal-анимаций: прокрутить до конца и обратно
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(500);
++  await page.evaluate(() => window.scrollTo(0, 0));
++  await page.waitForTimeout(400);
++}
++
++const toBottom = async (page) => {
++  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
++  await page.waitForTimeout(400);
++};
++
++async function shootHome(page, vp, dir) {
++  const url = `http://127.0.0.1:${PORT}/`;
++  const f = (name) => join(dir, name);
++
++  // ── Проход 1: чистая загрузка. Только снимки экрана и измерения. ──────────
++  await load(page, url);
++  if (!vp.light) {
++    await page.screenshot({ path: f(`home-${vp.name}-01-full.png`), fullPage: true });
++  }
++  const base = await page.evaluate(MEASURE, HOME_SELECTORS);
++  note(`${vp.name} главная, документ`, {
++    pageHeight: base.docHeight,
++    reviewsHeight: base.rects.reviewsSection?.h ?? null,
++    footerHeight: base.rects.footer?.h ?? null,
++  });
++
++  const reviews = page.locator('[data-mockup-reviews]');
++  const hasReviews = (await reviews.count()) > 0;
++  if (hasReviews) {
++    await reviews.scrollIntoViewIfNeeded();
++    await page.waitForTimeout(350);
++    await shotViewport(page, f(`home-${vp.name}-03-reviews-viewport.png`));
++    note(`${vp.name} отзывы, чат закрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++  }
++
++  await toBottom(page);
++  await shotViewport(page, f(`home-${vp.name}-05-footer-viewport.png`));
++  note(`${vp.name} подвал, чат закрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  // ── Проход 2: отдельная загрузка ради снимков блоков. ─────────────────────
++  // После скрытия плавающих слоёв на этой странице больше ничего не снимается.
++  await load(page, url);
++  const hidden = await hideFloating(page);
++  note(`${vp.name} снимки блоков: скрыто плавающих слоёв`, hidden);
++  if (hasReviews) {
++    await reviews.scrollIntoViewIfNeeded();
++    await page.waitForTimeout(350);
++    await reviews.screenshot({ path: f(`home-${vp.name}-02-reviews-block.png`) });
++    await assertAwardsOnShot(page, `home-${vp.name}-02-reviews-block.png`);
++  }
++  await toBottom(page);
++  await page.locator('.footer').screenshot({ path: f(`home-${vp.name}-04-footer-block.png`) });
++
++  if (VARIANT === 'main' || vp.light) return;
++
++  // Отсутствие секции отзывов в неопорной сборке — это отказ проверки, а не
++  // повод молча пропустить проходы 3 и 4. Первая редакция падала здесь по
++  // таймауту локатора, и разобрать по сообщению, что именно случилось, было
++  // нельзя.
++  if (!hasReviews) {
++    problems.push(`${dir}: вариант ${VARIANT}, но секции отзывов в сборке нет — проходы с раскрытым чатом не выполнены`);
++    return;
++  }
++
++  // ── Проход 3: чат раскрыт. ────────────────────────────────────────────────
++  await load(page, `${url}?chat=open`);
++  await reviews.scrollIntoViewIfNeeded();
++  await page.waitForTimeout(350);
++  await shotViewport(page, f(`home-${vp.name}-06-reviews-chat-open.png`));
++  note(`${vp.name} отзывы, чат раскрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  await toBottom(page);
++  await shotViewport(page, f(`home-${vp.name}-07-footer-chat-open.png`));
++  note(`${vp.name} подвал, чат раскрыт`, await page.evaluate(MEASURE, HOME_SELECTORS));
++
++  // ── Проход 4: чат вне часов работы. ───────────────────────────────────────
++  await load(page, `${url}?chat=offline`);
++  await toBottom(page);
++  await shotViewport(page, f(`home-${vp.name}-08-footer-chat-offline.png`));
++}
++
++async function shootSeminar(page, vp, dir, key, path) {
++  const f = (name) => join(dir, name);
++  await page.goto(`http://127.0.0.1:${PORT}${path}`, { waitUntil: 'load' });
++  await page.waitForTimeout(400);
++  await shotViewport(page, f(`seminar-${key}-${vp.name}-01-top.png`));
++  const m = await page.evaluate(MEASURE, SEM_SELECTORS);
++  const extra = await page.evaluate(() => {
++    const vh = window.innerHeight;
++    const reg = document.querySelector('.seminar-register-link, .nextbar-actions .btn, .sched-card-cta');
++    const regTop = reg ? Math.round(reg.getBoundingClientRect().top + window.scrollY) : null;
++    const content = document.querySelector('.seminar-content');
++    const table = document.querySelector('.seminar-schedule-list');
++    return {
++      viewportHeight: vh,
++      firstRegisterAbsoluteTop: regTop,
++      firstRegisterOnFirstScreen: regTop !== null ? regTop < vh : null,
++      contentStartAbsoluteTop: content ? Math.round(content.getBoundingClientRect().top + window.scrollY) : null,
++      scheduleRows: document.querySelectorAll('.seminar-schedule-item, .sched-card').length,
++      tableScrollWidth: table ? Math.round(table.scrollWidth) : null,
++      tableClientWidth: table ? Math.round(table.clientWidth) : null,
++      pageHeight: Math.round(document.documentElement.scrollHeight),
++    };
++  });
++  note(`${vp.name} семинар ${key}`, { ...extra, rects: m.rects, cover: m.cover });
++
++  if (!vp.light) {
++    await page.screenshot({ path: f(`seminar-${key}-${vp.name}-02-full.png`), fullPage: true });
++  }
++  if (key === 'dated' && !vp.light) {
++    await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight * 0.45)));
++    await page.waitForTimeout(350);
++    await shotViewport(page, f(`seminar-${key}-${vp.name}-03-mid.png`));
++  }
++}
++
++await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
++await mkdir(OUT, { recursive: true });
++const browser = await chromium.launch();
++for (const vp of VIEWPORTS) {
++  const ctx = await browser.newContext({
++    viewport: { width: vp.width, height: vp.height },
++    deviceScaleFactor: 1,
++    reducedMotion: 'reduce',
++  });
++  if (vp.theme === 'dark') {
++    await ctx.addInitScript(() => {
++      try { localStorage.setItem('ikpk.theme', 'dark'); } catch { /* приватный режим */ }
++    });
++  }
++  const page = await ctx.newPage();
++  const outDir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
++  await mkdir(outDir, { recursive: true });
++  await shootHome(page, vp, outDir);
++  // Варианты d и e меняют только главную: страница семинара в них та же, что
++  // сегодня, и снимать её значило бы дублировать опорный набор.
++  if (VARIANT !== 'd' && VARIANT !== 'e') {
++    for (const [key, path] of Object.entries(SEMINARS)) {
++      if (vp.light && !LIGHT_SEMINARS.includes(key)) continue;
++      await shootSeminar(page, vp, outDir, key, path);
++    }
++  }
++  await ctx.close();
++}
++await browser.close();
++server.close();
++await writeFile(join(OUT, `shot-log-${VARIANT}.txt`), log.join('\n') + '\n', 'utf-8');
++
++if (problems.length) {
++  console.error(`\nПОСТУСЛОВИЕ НЕ ВЫПОЛНЕНО (${problems.length}):`);
++  for (const p of problems) console.error('  ' + p);
++  process.exit(1);
++}
++// ── Оптимизация PNG — ЧАСТЬ ЭТОГО СЦЕНАРИЯ, а не отдельный ручной шаг ────────
++//
++// Она не lossless: sharp с `effort` переводит изображение в палитру, то есть
++// цвета сдвигаются. Пока она жила отдельной командой ПОСЛЕ проверки, гейт
++// стерёг не те файлы, которые уезжают в поставку. Теперь оптимизация внутри, а
++// постусловие пересчитывается ПО ОПТИМИЗИРОВАННЫМ файлам, и в протокол идут оба
++// числа.
++const dir = join(OUT, VARIANT === 'main' ? 'reference' : `variant-${VARIANT}`);
++let bytesBefore = 0;
++let bytesAfter = 0;
++for (const f of await readdir(dir)) {
++  if (!f.endsWith('.png')) continue;
++  const file = join(dir, f);
++  const before = (await stat(file)).size;
++  const buf = await sharp(file).png({ compressionLevel: 9, effort: 10 }).toBuffer();
++  if (buf.length < before) await writeFile(file, buf);
++  bytesBefore += before;
++  bytesAfter += Math.min(buf.length, before);
++}
++log.push(`${VARIANT}/оптимизация PNG (палитровая, не lossless): ${(bytesBefore / 1048576).toFixed(1)} МБ → ${(bytesAfter / 1048576).toFixed(1)} МБ`);
++
++const finalChecks = [];
++for (const c of chatChecks) {
++  const pctFinal = await chatFraction(c.path, c.rect);
++  finalChecks.push(`${c.path.split('/').slice(-2).join('/')}=${c.pct}%→${pctFinal}%`);
++  if (pctFinal < 25) {
++    problems.push(`${c.path}: после оптимизации в рамке кнопки ${pctFinal}% пикселей цвета чата (порог 25%)`);
++  }
++}
++log.push(
++  VARIANT === 'main'
++    ? `${VARIANT}/постусловие «знаки наград нарисованы»: не применяется — в опорной сборке наград нет`
++    : `${VARIANT}/постусловие «знаки наград нарисованы в секции отзывов»: подтверждено на ${awardChecks.length} снимках блока (${awardChecks.join(', ') || 'нет'})`
++);
++if (VARIANT !== 'main' && awardChecks.length === 0) {
++  problems.push(`${VARIANT}: постусловие о знаках наград НИЧЕГО НЕ ИЗМЕРИЛО — ни одного снимка блока отзывов; это отказ проверки, а не её успех`);
++}
++log.push(`${VARIANT}/постусловие «кнопка чата нарисована», доля пикселей цвета кнопки в её рамке (до оптимизации → после): ${finalChecks.join(', ') || 'проверок не было'}`);
++await writeFile(join(OUT, `shot-log-${VARIANT}.txt`), log.join('\n') + '\n', 'utf-8');
++console.log(
++  chatChecks.length
++    ? `готово: ${VARIANT} — постусловие выполнено на ${chatChecks.length} снимках экрана`
++    // Причину вакуумности здесь НЕ называем: «в опорном наборе чата нет» — это
++    // догадка, а не измерение, и на прогоне варианта она солгала бы. Говорим
++    // только то, что известно: измерений ноль.
++    : `готово: ${VARIANT} — постусловие НИЧЕГО НЕ ИЗМЕРИЛО: снимков экрана с ожидаемой кнопкой чата не было (0 проверок). Для опорного набора это норма; для варианта — отказ проверки, а не её успех`
++);
+diff --git a/web/src/components/Footer.astro b/web/src/components/Footer.astro
+index d9ccef0..4581d21 100644
+--- a/web/src/components/Footer.astro
++++ b/web/src/components/Footer.astro
+@@ -1,11 +1,24 @@
+ ---
+ import { SOCIAL_LINKS } from '../lib/social';
+ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
++// --- МОКАП (одноразовый worktree): иконки соцсетей и строка публикации ---
++import { MOCKUP_VARIANT, isMockup } from '../lib/mockup';
++import SocialIcons from './mockup/SocialIcons.astro';
++import PublishedAt from './mockup/PublishedAt.astro';
++
++// Вариант d отличается от a ТОЛЬКО формой виджета отзывов, поэтому подвал у него
++// такой же, как у a: сравнение остаётся по одной оси.
++// e — выбранная конфигурация: фирменные цвета из c, но подвал остаётся
++// четырёхколоночным, как в a и d. Перестройка подвала в три колонки — отдельная
++// ось, и владелец её не выбирал.
++const socialTreatment =
++  MOCKUP_VARIANT === 'c' || MOCKUP_VARIANT === 'e' ? 'brand' : MOCKUP_VARIANT === 'b' ? 'plain' : 'circle';
++const dropSocialColumn = MOCKUP_VARIANT === 'c';
+ ---
+ 
+ <footer class="footer">
+   <div class="footer-inner container">
+-    <div class="footer-grid">
++    <div class:list={["footer-grid", dropSocialColumn && "footer-grid-3"]}>
+       <div class="footer-col">
+         <a href="/" class="footer-logo-link" aria-label="ИКПК — Главная">
+           <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
+@@ -44,19 +57,31 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+         </ul>
+       </div>
+ 
+-      <div class="footer-col">
+-        <h2 class="footer-heading">Подписывайтесь</h2>
+-        <ul class="footer-links footer-social">
+-          {SOCIAL_LINKS.map((link) => (
+-            <li>
+-              <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
+-            </li>
+-          ))}
+-        </ul>
+-      </div>
++      {!dropSocialColumn && (
++        <div class="footer-col">
++          <h2 class="footer-heading">Подписывайтесь</h2>
++          {isMockup ? (
++            <SocialIcons treatment={socialTreatment} />
++          ) : (
++            <ul class="footer-links footer-social">
++              {SOCIAL_LINKS.map((link) => (
++                <li>
++                  <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
++                </li>
++              ))}
++            </ul>
++          )}
++        </div>
++      )}
+     </div>
+ 
+-    <div class="footer-bottom">
++    <div class:list={["footer-bottom", isMockup && `footer-bottom-${MOCKUP_VARIANT}`]}>
++      {dropSocialColumn && (
++        <div class="footer-social-strip">
++          <span class="footer-social-caption">Подписывайтесь</span>
++          <SocialIcons treatment={socialTreatment} />
++        </div>
++      )}
+       <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
+       {/* Документ обязателен, и на старом сайте ссылка на него была в футере
+           каждой страницы. При переносе она потерялась: файл в сборку попал,
+@@ -68,6 +93,7 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+           rel="noopener noreferrer"
+         >Пользовательское соглашение и политика конфиденциальности</a>
+       </p>
++      {isMockup && <PublishedAt variant={MOCKUP_VARIANT === 'b' ? 'inline' : 'row'} />}
+     </div>
+   </div>
+ </footer>
+@@ -171,7 +197,39 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
+     color: #fff;
+   }
+ 
++  .footer-grid-3 { grid-template-columns: repeat(3, 1fr); }
++
++  /* вариант B: нижняя полоса в одну строку — копирайт, соглашение, метка */
++  .footer-bottom-b {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 1rem;
++    flex-wrap: wrap;
++    text-align: left;
++  }
++  .footer-bottom-b .footer-legal { margin-top: 0; }
++
++  /* вариант C: иконки и метка живут в нижней полосе */
++  .footer-social-strip {
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 0.6rem;
++    padding-bottom: 1.25rem;
++    margin-bottom: 1.25rem;
++    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
++  }
++  .footer-social-caption {
++    color: var(--color-light-100);
++    font-size: 0.94rem;
++    font-weight: 600;
++  }
++
+   @media (max-width: 768px) {
++    .footer-grid-3 { grid-template-columns: 1fr 1fr; }
++    .footer-bottom-b { justify-content: center; text-align: center; }
++
+     .footer-grid {
+       grid-template-columns: 1fr 1fr;
+     }
+diff --git a/web/src/components/mockup/AwardBadges.astro b/web/src/components/mockup/AwardBadges.astro
+new file mode 100644
+index 0000000..459c0cc
+--- /dev/null
++++ b/web/src/components/mockup/AwardBadges.astro
+@@ -0,0 +1,97 @@
++---
++/**
++ * Награды геосервисов: «Хорошее место» Яндекс Карт и «Здесь хорошо!» 2ГИС.
++ *
++ * ЗНАКИ НАРИСОВАНЫ ЗДЕСЬ, А НЕ ВЗЯТЫ У СЕРВИСА. Проверено 23.08.2026:
++ * официального встраиваемого бейджа или кода для сайта не даёт ни один из двух —
++ * Яндекс по своей документации выдаёт отметку в карточке организации и
++ * ФИЗИЧЕСКУЮ наклейку, 2ГИС — тоже наклейку по запросу. Значит на сайте это
++ * наше собственное утверждение о награде, а не виджет сервиса, и при внедрении
++ * знак придётся либо рисовать, либо брать официальный макет из кабинета.
++ *
++ * Основание для самого факта наград — фотография наклеек на двери центра
++ * (обе висят рядом), присланная владельцем 23.08.2026. Год «2026» — с наклейки
++ * Яндекса; у 2ГИС года на знаке нет.
++ */
++import { AWARDS } from '../../lib/mockup';
++
++interface Props {
++  /** stack — колонкой (узкая колонка A), row — в строку (лента D, полоса B), inline — в общий центрированный ряд (C). */
++  layout?: 'stack' | 'row' | 'inline';
++}
++const { layout = 'row' } = Astro.props;
++---
++
++<ul class:list={['awards', `awards-${layout}`]} data-mockup-awards={layout}>
++  {AWARDS.map((a) => (
++    <li class:list={['award', `award-${a.mark}`]}>
++      {a.mark === 'ym' ? (
++        <span class="award-mark award-mark-ym" aria-hidden="true">
++          <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
++            <path
++              d="M12 1.8c-3.9 0-7 3-7 6.8 0 4.9 5.6 11.4 6.4 12.3.3.4.9.4 1.2 0C13.4 20 19 13.5 19 8.6c0-3.8-3.1-6.8-7-6.8Z"
++              fill="#fc3f1d"
++            />
++            <circle cx="12" cy="8.4" r="2.6" fill="#fff" />
++          </svg>
++        </span>
++      ) : (
++        <span class="award-mark award-mark-gis" aria-hidden="true">
++          <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
++            <rect x="1" y="3" width="22" height="7" fill="#f2911b" />
++            <rect x="1" y="10" width="22" height="11" fill="#5db335" />
++            <circle cx="12" cy="11" r="6" fill="#1a8ce0" />
++            <path d="m12 7.4 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4Z" fill="#fff" />
++          </svg>
++        </span>
++      )}
++      <span class="award-text">
++        <span class="award-title">{a.title}</span>
++        <span class="award-src">{a.source}</span>
++      </span>
++    </li>
++  ))}
++</ul>
++
++<style>
++  .awards {
++    list-style: none;
++    margin: 0;
++    padding: 0;
++    display: flex;
++    gap: 0.6rem;
++  }
++  .awards-stack { flex-direction: column; align-items: flex-start; }
++  .awards-row { flex-wrap: wrap; }
++  .awards-inline { flex-wrap: wrap; justify-content: center; }
++
++  .award {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.5rem;
++    background: #fff;
++    border: 1px solid rgba(0, 0, 0, 0.08);
++    border-radius: var(--radius-pill, 999px);
++    padding: 0.4rem 0.85rem 0.4rem 0.5rem;
++    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
++  }
++
++  .award-mark {
++    display: inline-flex;
++    width: 26px;
++    height: 26px;
++    border-radius: 50%;
++    align-items: center;
++    justify-content: center;
++    flex: none;
++    background: #f5f6f7;
++    overflow: hidden;
++  }
++  .award-mark-gis svg { border-radius: 4px; }
++
++  .award-text { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
++  /* Не var(--text-primary): в тёмной теме эта роль указывает почти на чёрный
++     (TD-42), а плашка белая всегда — цвет задаётся явно. */
++  .award-title { font-size: var(--font-s); font-weight: 600; color: #21201f; }
++  .award-src { font-size: var(--font-xs); color: #6f7276; }
++</style>
+diff --git a/web/src/components/mockup/ChatWidget.astro b/web/src/components/mockup/ChatWidget.astro
+new file mode 100644
+index 0000000..464bd7e
+--- /dev/null
++++ b/web/src/components/mockup/ChatWidget.astro
+@@ -0,0 +1,171 @@
++---
++/**
++ * ЗАМЕНА плавающего чат-виджета Bitrix24 (решение Q22), а не сам виджет.
++ *
++ * Настоящий виджет — сторонний скрипт с домена заказчика: в мокапе он создавал
++ * бы живой канал обращений и недетерминированные снимки. Здесь воспроизведена
++ * геометрия типового виджета: круглая кнопка 60×60 с отступом 24px, раскрытая
++ * панель 400×620, на узком экране — почти во весь экран.
++ *
++ * ЧИСЛА — ДОПУЩЕНИЕ. При внедрении их снимают с живого виджета; здесь они
++ * названы, чтобы вывод о столкновениях можно было пересчитать под другой размер.
++ *
++ * Состояния переключаются параметром адреса, чтобы снимать их без пересборки:
++ *   ?chat=open     — раскрытая панель в рабочие часы
++ *   ?chat=offline  — раскрытая панель вне часов работы (D14)
++ */
++import { WORK_HOURS, PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
++
++interface Props {
++  side?: 'right' | 'left';
++}
++const { side = 'right' } = Astro.props;
++---
++
++<div class="chatw" data-mockup-chat={side} data-chat-side={side}>
++  <button type="button" class="chatw-btn" data-mockup-chat-button aria-label="Открыть онлайн-чат">
++    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
++      <path
++        fill="currentColor"
++        d="M12 3C6.9 3 3 6.6 3 11c0 2.3 1.1 4.3 2.9 5.7-.1 1-.6 2.4-1.7 3.6 1.9-.2 3.6-1 4.8-1.9 1 .3 2 .4 3 .4 5.1 0 9-3.6 9-8s-3.9-8-9-8Z"
++      />
++    </svg>
++  </button>
++
++  <div class="chatw-panel" data-mockup-chat-panel hidden>
++    <div class="chatw-head">
++      <span class="chatw-avatar" aria-hidden="true">В</span>
++      <span class="chatw-head-text">
++        <span class="chatw-title">Онлайн-чат</span>
++        <span class="chatw-sub" data-chat-status>Вера · обычно отвечает за 5 минут</span>
++      </span>
++      <span class="chatw-close" aria-hidden="true">×</span>
++    </div>
++
++    <div class="chatw-body">
++      <div class="chatw-msg" data-chat-online>
++        Здравствуйте! Подскажем по программам, датам и оплате. Что вас интересует?
++      </div>
++      <div class="chatw-msg chatw-msg-offline" data-chat-offline hidden>
++        Сейчас мы не в сети. Менеджер работает {WORK_HOURS}; в выходные семинары идут,
++        но менеджер не отвечает. Позвоните {PHONE_PRIMARY} или {PHONE_MOBILE} — либо
++        оставьте сообщение, ответим в рабочие часы.
++      </div>
++    </div>
++
++    <div class="chatw-foot">
++      <div class="chatw-input" aria-hidden="true">Ваше сообщение…</div>
++      <p class="chatw-consent">
++        Отправляя сообщение, вы соглашаетесь с&#32;<a href="/terms/Пользовательское_соглашение_и_политика_конфиденциальности.pdf">политикой конфиденциальности</a>
++      </p>
++    </div>
++  </div>
++</div>
++
++<script is:inline>
++  (function () {
++    var mode = new URLSearchParams(location.search).get('chat');
++    var panel = document.querySelector('[data-mockup-chat-panel]');
++    if (!panel || (mode !== 'open' && mode !== 'offline')) return;
++    panel.hidden = false;
++    if (mode === 'offline') {
++      document.querySelector('[data-chat-online]').hidden = true;
++      document.querySelector('[data-chat-offline]').hidden = false;
++      document.querySelector('[data-chat-status]').textContent = 'Не в сети · ответим в рабочие часы';
++    }
++  })();
++</script>
++
++<style>
++  .chatw {
++    --chatw-size: 60px;
++    --chatw-gap: 24px;
++    position: fixed;
++    bottom: var(--chatw-gap);
++    z-index: 120;
++  }
++  .chatw[data-chat-side='right'] { right: var(--chatw-gap); }
++  .chatw[data-chat-side='left'] { left: var(--chatw-gap); }
++
++  .chatw-btn {
++    width: var(--chatw-size);
++    height: var(--chatw-size);
++    border-radius: 50%;
++    border: none;
++    background: #2fc7f7;
++    color: #fff;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
++    cursor: pointer;
++  }
++
++  .chatw-panel {
++    position: fixed;
++    bottom: calc(var(--chatw-gap) + var(--chatw-size) + 12px);
++    width: 400px;
++    height: 620px;
++    display: flex;
++    flex-direction: column;
++    background: #fff;
++    border-radius: 12px;
++    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
++    overflow: hidden;
++    color: #1a1a1a;
++  }
++  .chatw[data-chat-side='right'] .chatw-panel { right: var(--chatw-gap); }
++  .chatw[data-chat-side='left'] .chatw-panel { left: var(--chatw-gap); }
++  .chatw-panel[hidden] { display: none; }
++
++  .chatw-head {
++    display: flex;
++    align-items: center;
++    gap: 10px;
++    padding: 14px 16px;
++    background: #2fc7f7;
++    color: #fff;
++  }
++  .chatw-avatar {
++    width: 34px; height: 34px; border-radius: 50%;
++    background: rgba(255, 255, 255, 0.28);
++    display: inline-flex; align-items: center; justify-content: center;
++    font-weight: 700;
++  }
++  .chatw-head-text { display: flex; flex-direction: column; flex: 1; }
++  .chatw-title { font-weight: 600; font-size: 15px; }
++  .chatw-sub { font-size: 12px; opacity: 0.9; }
++  .chatw-close { font-size: 22px; line-height: 1; opacity: 0.9; }
++
++  .chatw-body { flex: 1; padding: 16px; background: #f5f7f9; }
++  .chatw-msg {
++    background: #fff;
++    border-radius: 12px;
++    padding: 12px 14px;
++    font-size: 14px;
++    line-height: 1.5;
++    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
++  }
++  .chatw-msg-offline { background: #fff8e6; }
++  .chatw-msg[hidden] { display: none; }
++
++  .chatw-foot { padding: 12px 16px 14px; border-top: 1px solid #e8ebee; }
++  .chatw-input {
++    border: 1px solid #d8dde2;
++    border-radius: 8px;
++    padding: 10px 12px;
++    color: #8b9199;
++    font-size: 14px;
++  }
++  .chatw-consent { margin-top: 8px; font-size: 11px; line-height: 1.4; color: #6b7278; }
++  .chatw-consent a { color: #2f6fd0; }
++
++  @media (max-width: 480px) {
++    .chatw-panel {
++      width: calc(100vw - 16px);
++      height: calc(100vh - var(--chatw-gap) - var(--chatw-size) - 24px);
++      left: 8px;
++      right: 8px;
++    }
++  }
++</style>
+diff --git a/web/src/components/mockup/PublishedAt.astro b/web/src/components/mockup/PublishedAt.astro
+new file mode 100644
+index 0000000..7c2247a
+--- /dev/null
++++ b/web/src/components/mockup/PublishedAt.astro
+@@ -0,0 +1,29 @@
++---
++/**
++ * Строка «Опубликовано: <дата, время>» в подвале (решение Q28).
++ *
++ * В продукте значение приходит из /published-at.json и подставляется на
++ * клиенте; здесь оно ЗАФИКСИРОВАНО, иначе снимки вариантов различались бы
++ * минутами. Разметка повторяет ту, что понадобится в продукте: пустой
++ * <time data-published-at> и подпись рядом.
++ */
++import { PUBLISHED_AT_SAMPLE } from '../../lib/mockup';
++
++interface Props {
++  variant?: 'row' | 'inline';
++}
++const { variant = 'row' } = Astro.props;
++---
++
++<p class:list={['pub', `pub-${variant}`]} data-mockup-published>
++  Опубликовано: <time data-published-at datetime="2026-08-21T03:40:00+03:00">{PUBLISHED_AT_SAMPLE}</time>
++</p>
++
++<style>
++  .pub {
++    color: var(--color-gray-400);
++    font-size: var(--font-xs);
++  }
++  .pub-row { margin-top: 0.5rem; }
++  .pub-inline { margin: 0; }
++</style>
+diff --git a/web/src/components/mockup/ReviewsSection.astro b/web/src/components/mockup/ReviewsSection.astro
+new file mode 100644
+index 0000000..837dded
+--- /dev/null
++++ b/web/src/components/mockup/ReviewsSection.astro
+@@ -0,0 +1,182 @@
++---
++/** Секция отзывов на главной. Три раскладки — по одной на вариант. */
++import ReviewsWidget from './ReviewsWidget.astro';
++import AwardBadges from './AwardBadges.astro';
++import { REVIEWS, REVIEWS_LINE } from '../../lib/mockup';
++
++interface Props {
++  layout: 'split' | 'compact' | 'centered' | 'band';
++}
++const { layout } = Astro.props;
++---
++
++<section
++  class:list={['reviews section', `reviews-${layout}`, layout !== 'compact' && 'section-alt']}
++  data-mockup-reviews={layout}
++  aria-labelledby="reviews-title"
++>
++  <div class="container">
++    {layout === 'split' && (
++      <div class="rv-split">
++        <div class="reviews-summary">
++          <h2 class="section-title" id="reviews-title">Отзывы</h2>
++          <div class="reviews-figure">
++            <span class="reviews-rating">{REVIEWS.rating}</span>
++            <span class="reviews-figure-side">
++              <span class="reviews-stars" aria-hidden="true">★★★★★</span>
++              <span class="reviews-count">{REVIEWS_LINE}</span>
++            </span>
++          </div>
++          <AwardBadges layout="row" />
++          <a class="btn btn-primary reviews-cta" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++            Смотреть на Яндекс.Картах
++          </a>
++        </div>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="comments" />
++        </div>
++      </div>
++    )}
++
++    {layout === 'compact' && (
++      <div class="rv-bar">
++        <div class="reviews-bar-text">
++          <h2 class="rv-bar-title" id="reviews-title">Что о нас пишут</h2>
++          <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++            {/* Без числа намеренно: рядом стоит карточка виджета со своим «33 отзыва»,
++                и наша копия числа протухла бы отдельно от неё. */}
++            Читать отзывы на Яндекс.Картах →
++          </a>
++          <AwardBadges layout="row" />
++        </div>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="rating" width={420} />
++        </div>
++      </div>
++    )}
++
++    {layout === 'band' && (
++      <div class="rv-band">
++        <h2 class="section-title rv-band-title" id="reviews-title">Отзывы</h2>
++        <div class="reviews-widget-slot" data-mockup-widget-slot>
++          <ReviewsWidget mode="wide">
++            <AwardBadges slot="awards" layout="row" />
++          </ReviewsWidget>
++        </div>
++        <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++          Все отзывы на Яндекс.Картах →
++        </a>
++      </div>
++    )}
++
++    {layout === 'centered' && (
++      <div class="rv-centered">
++        <h2 class="section-title" id="reviews-title">Отзывы на Яндекс.Картах</h2>
++        <div class="reviews-figure reviews-figure-inline reviews-figure-center">
++          <span class="reviews-rating">{REVIEWS.rating}</span>
++          <span class="reviews-figure-side">
++            <span class="reviews-stars" aria-hidden="true">★★★★★</span>
++            <span class="reviews-count">{REVIEWS_LINE}</span>
++          </span>
++        </div>
++        <AwardBadges layout="inline" />
++        <div class="reviews-widget-slot reviews-widget-center" data-mockup-widget-slot>
++          <ReviewsWidget mode="comments" />
++        </div>
++        <a class="reviews-link" href={REVIEWS.mapsUrl} target="_blank" rel="noopener noreferrer">
++          Открыть карточку организации на Яндекс.Картах →
++        </a>
++      </div>
++    )}
++  </div>
++</section>
++
++<style>
++  .rv-split {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 560px;
++    gap: 3rem;
++    align-items: center;
++  }
++
++  .reviews-lead {
++    color: var(--text-body);
++    line-height: 1.6;
++    max-width: 42ch;
++    margin-bottom: 1.5rem;
++  }
++
++  .reviews-figure {
++    display: flex;
++    align-items: center;
++    gap: 0.75rem;
++  }
++
++  .reviews-rating {
++    font-size: 3.5rem;
++    font-weight: 700;
++    line-height: 1;
++    /* НЕ var(--text-primary): в тёмной теме эта роль указывает на #171a17 —
++       почти чёрный на тёмном полотне (контраст 1,11:1, измерено). Дефект в
++       tokens.css, а не в мокапе; мокап обязан показывать облик, а не дефект. */
++    color: var(--color-dark-700);
++  }
++
++  .reviews-figure-side { display: flex; flex-direction: column; gap: 0.2rem; }
++  .reviews-stars { color: #f5a623; font-size: 1.05rem; letter-spacing: 2px; }
++  .reviews-count { color: var(--text-body); font-size: var(--font-s); }
++
++  .reviews-summary :global(.awards) { margin-top: 1.1rem; }
++  .reviews-bar-text :global(.awards) { margin-top: 0.9rem; }
++  .rv-centered :global(.awards) { margin-bottom: 1.75rem; }
++
++  .reviews-cta { margin-top: 1.5rem; }
++
++  .reviews-link {
++    display: inline-block;
++    margin-top: 1rem;
++    color: var(--color-accent-700);
++    font-weight: 500;
++    text-decoration: none;
++  }
++  .reviews-link:hover { text-decoration: underline; }
++
++  /* compact */
++  .reviews-compact { padding: 2rem 0; }
++  .rv-bar {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 420px;
++    gap: 2.5rem;
++    align-items: center;
++    border: 1px solid var(--border-default);
++    border-radius: var(--radius-container);
++    background: var(--surface-raised);
++    padding: 1.75rem 2rem;
++  }
++  .rv-bar-title { font-size: var(--font-xxl); margin-bottom: 0.9rem; }
++  .reviews-figure-inline { gap: 0.9rem; }
++  .rv-bar .reviews-rating { font-size: 2.75rem; }
++
++  /* band — широкая лента карточек, форма kkpk.pro */
++  .rv-band { text-align: center; }
++  .rv-band-title { font-size: var(--font-xxxl); margin-bottom: 1.75rem; }
++  .rv-band :global(.ymw-note) { text-align: left; }
++
++  /* centered */
++  .rv-centered { text-align: center; }
++  .reviews-figure-center { justify-content: center; margin-bottom: 1.1rem; }
++  .reviews-widget-center { display: flex; justify-content: center; }
++  .rv-centered :global(.ymw-note) { text-align: center; }
++
++  @media (max-width: 1024px) {
++    .rv-split,
++    .rv-bar { grid-template-columns: 1fr; }
++    .rv-bar { gap: 1.5rem; }
++  }
++
++  @media (max-width: 640px) {
++    .rv-split { gap: 2rem; }
++    .reviews-rating { font-size: 2.75rem; }
++    .rv-bar { padding: 1.25rem; }
++  }
++</style>
+diff --git a/web/src/components/mockup/ReviewsWidget.astro b/web/src/components/mockup/ReviewsWidget.astro
+new file mode 100644
+index 0000000..a296efa
+--- /dev/null
++++ b/web/src/components/mockup/ReviewsWidget.astro
+@@ -0,0 +1,306 @@
++---
++/**
++ * ЗАМЕНА официального виджета отзывов Яндекс.Карт, а не сам виджет.
++ *
++ * Почему замена: настоящий виджет — <iframe> на yandex.ru, его содержимое
++ * приходит из сети. В мокапе он дал бы недетерминированные снимки и утащил бы
++ * запрос к Яндексу в каждую сборку. Здесь воспроизведены ГЕОМЕТРИЯ и хром
++ * виджета; тексты отзывов заменены полосами-заглушками намеренно — выдумывать
++ * чужие отзывы нельзя. Решениями это не запрещено: Q19 запрещает переносить к себе
++ * фотографии («чужие фото к себе не копируем»), про тексты решения нет — здесь полосы
++ * стоят потому, что предмет мокапа раскладка, а источник текстов — сам виджет.
++ *
++ * Хром сверен с ЖИВЫМ виджетом 23.08.2026 (HTTP 200 на
++ * yandex.ru/maps-reviews-widget/112883331290?comments): в нём есть логотип
++ * Яндекс Карт, имя организации, «4,9», «33 отзыва • 66 оценок», строка
++ * «Поставьте нам оценку» со звёздами, ссылка «Оставить отзыв», карточки отзывов
++ * с аватарами и ссылка «Ещё отзывы». Награды «Хорошее место» в нём НЕТ —
++ * прежняя редакция заглушки её показывала, это была неверность, и она снята.
++ *
++ * Размер 560×800 — типовой размер встраивания Яндекса с комментариями;
++ * 560×256 — он же без комментариев; режим `wide` — широкая лента карточек во всю
++ * колонку, как на kkpk.pro. Точные числа при внедрении снимаются с фактического
++ * кода встраивания, здесь это НАЗВАННОЕ допущение.
++ */
++import { REVIEWS, RATINGS_LINE, REVIEWS_COUNT_LINE } from '../../lib/mockup';
++
++interface Props {
++  mode?: 'comments' | 'rating' | 'wide';
++  width?: number;
++}
++const { mode = 'comments', width = 560 } = Astro.props;
++const height = mode === 'comments' ? 800 : 256;
++const items = mode === 'comments' ? [0, 1, 2, 3, 4, 5] : [];
++/** Широкая лента: четыре карточки в ряд — форма, как у конкурента kkpk.pro. */
++const wideCards = [0, 1, 2, 3];
++const barWidths = [
++  ['96%', '88%', '54%'],
++  ['92%', '61%'],
++  ['97%', '90%', '83%', '38%'],
++  ['86%', '49%'],
++  ['94%', '77%', '62%'],
++  ['91%', '84%', '45%'],
++];
++---
++
++{mode === 'wide' ? (
++  <div class="ymw ymw-wide" data-mockup-widget="wide">
++    <div class="yw-shell">
++      <div class="yw-pillrow">
++        <div class="yw-pill">
++          <span class="ymw-stars" aria-hidden="true">★★★★★</span>
++          <b>{REVIEWS.rating} / 5</b>
++          <span class="yw-pill-count">({REVIEWS.reviews} отзыва)</span>
++        </div>
++        <slot name="awards" />
++      </div>
++      <div class="yw-cards">
++        {wideCards.map((i) => (
++          <div class="yw-card">
++            <span class="ymw-bar ymw-bar-name"></span>
++            <span class="ymw-stars ymw-stars-s yw-card-stars" aria-hidden="true">★★★★★</span>
++            <span class="ymw-bar ymw-bar-text" style="width:98%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:96%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:99%"></span>
++            <span class="ymw-bar ymw-bar-text" style="width:62%"></span>
++          </div>
++        ))}
++      </div>
++      <span class="yw-mark">Виджет отзывов</span>
++    </div>
++    <p class="ymw-note">
++      Заглушка: широкая лента из четырёх отзывов в ряд. Такой раскладки официальный виджет
++      Яндекса не даёт — форму подсмотрели у конкурента, и её выводит сторонний сервис
++    </p>
++  </div>
++) : (
++<div class="ymw" data-mockup-widget={mode} style={`--ymw-w:${width}px;--ymw-h:${height}px`}>
++  <div class="ymw-frame">
++    <div class="ymw-head">
++      <div class="ymw-brand">
++        <span class="ymw-y" aria-hidden="true">Я</span>
++        <span>Яндекс&nbsp;Карты</span>
++      </div>
++      <span class="ymw-org-name">{REVIEWS.orgName}</span>
++      <div class="ymw-rate">
++        <span class="ymw-rate-value">{REVIEWS.rating}</span>
++        <span class="ymw-stars" aria-hidden="true">★★★★★</span>
++        <span class="ymw-rate-count">{REVIEWS_COUNT_LINE} • {RATINGS_LINE}</span>
++      </div>
++    </div>
++
++    {mode === 'comments' ? (
++      <>
++        <div class="ymw-form">
++          <span class="ymw-form-text">Поставьте нам оценку</span>
++          <span class="ymw-stars ymw-stars-empty" aria-hidden="true">☆☆☆☆☆</span>
++          <span class="ymw-form-link">Оставить отзыв</span>
++        </div>
++        <div class="ymw-list">
++          {items.map((i) => (
++            <div class="ymw-item">
++              <div class="ymw-item-head">
++                <span class="ymw-avatar" aria-hidden="true"></span>
++                <span class="ymw-item-meta">
++                  <span class="ymw-bar ymw-bar-name"></span>
++                  <span class="ymw-item-sub">
++                    <span class="ymw-stars ymw-stars-s" aria-hidden="true">★★★★★</span>
++                    <span class="ymw-bar ymw-bar-date"></span>
++                  </span>
++                </span>
++              </div>
++              {barWidths[i].map((w) => <span class="ymw-bar ymw-bar-text" style={`width:${w}`}></span>)}
++            </div>
++          ))}
++        </div>
++      </>
++    ) : (
++      <div class="ymw-compact">
++        {/* Короткий режим повторяет тот же приём живого виджета, что и полный:
++            предложение поставить оценку, а не вторую кнопку «читать» — она
++            дублировала бы ссылку «Ещё отзывы» в подвале карточки. */}
++        <span class="ymw-compact-line">Поставьте нам оценку</span>
++        <span class="ymw-stars ymw-stars-empty" aria-hidden="true">☆☆☆☆☆</span>
++      </div>
++    )}
++
++    <div class="ymw-foot">
++      <span class="ymw-foot-link">Ещё отзывы</span>
++    </div>
++  </div>
++  <p class="ymw-note">
++    Заглушка вместо виджета: воспроизведены размер {width}×{height} и хром,
++    тексты отзывов подтягивает Яндекс
++  </p>
++</div>
++)}
++
++<style>
++  .ymw { width: min(100%, var(--ymw-w)); }
++
++  .ymw-frame {
++    /* Внутри карточки выравнивание всегда левое, даже если секция центрирована
++       (вариант C): у настоящего виджета шапка и отзывы прижаты влево. */
++    text-align: left;
++    height: var(--ymw-h);
++    display: flex;
++    flex-direction: column;
++    box-sizing: border-box;
++    border: 1px solid #e6e6e6;
++    border-radius: 8px;
++    background: #fff;
++    overflow: hidden;
++    font-size: 13px;
++    color: #21201f;
++  }
++
++  .ymw-head {
++    padding: 14px 16px 12px;
++    border-bottom: 1px solid #f0f0f0;
++    display: grid;
++    gap: 6px;
++  }
++
++  .ymw-org-name { display: block; font-size: 15px; font-weight: 600; line-height: 1.25; }
++
++  .ymw-rate { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
++  .ymw-rate-value { font-size: 22px; font-weight: 700; line-height: 1; }
++  .ymw-stars { color: #fc0; letter-spacing: 1px; font-size: 15px; }
++  .ymw-stars-s { font-size: 11px; }
++  .ymw-rate-count { color: #7a7a7a; font-size: 12px; }
++
++  .ymw-brand {
++    display: flex;
++    align-items: center;
++    gap: 6px;
++    color: #7a7a7a;
++    font-size: 12px;
++  }
++
++  .ymw-form {
++    display: flex;
++    align-items: center;
++    gap: 10px;
++    padding: 10px 16px;
++    border-bottom: 1px solid #f0f0f0;
++    font-size: 12px;
++    color: #7a7a7a;
++  }
++  .ymw-stars-empty { color: #c8c8c8; font-size: 14px; }
++  .ymw-form-link { margin-left: auto; color: #0a5adb; font-weight: 500; }
++
++  .ymw-list { flex: 1; overflow: hidden; padding: 4px 16px 0; }
++
++  .ymw-item { padding: 14px 0; border-bottom: 1px solid #f4f4f4; }
++  .ymw-item-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
++  .ymw-avatar { width: 32px; height: 32px; border-radius: 50%; background: #e8e8e8; flex: none; }
++  .ymw-item-meta { display: block; }
++  .ymw-item-sub { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
++
++  .ymw-bar { display: block; height: 9px; border-radius: 4px; background: #ececec; }
++  .ymw-bar-name { width: 118px; height: 11px; }
++  .ymw-bar-date { width: 64px; height: 8px; }
++  .ymw-bar-text { margin-top: 7px; }
++
++  .ymw-compact {
++    flex: 1;
++    display: flex;
++    flex-direction: column;
++    justify-content: center;
++    gap: 10px;
++    padding: 0 16px;
++  }
++  .ymw-compact-line { color: #4a4a4a; }
++  .ymw-compact .ymw-stars-empty { font-size: 20px; letter-spacing: 3px; }
++
++  .ymw-foot {
++    display: flex;
++    align-items: center;
++    padding: 9px 16px;
++    border-top: 1px solid #f0f0f0;
++    font-size: 12px;
++  }
++  .ymw-foot-link { color: #0a5adb; font-weight: 500; }
++  .ymw-y {
++    width: 16px; height: 16px; border-radius: 50%;
++    background: #fc3f1d; color: #fff; font-weight: 700; font-size: 11px;
++    display: inline-flex; align-items: center; justify-content: center;
++  }
++
++  /* ── широкая лента, форма kkpk.pro ─────────────────────────────────────── */
++  .ymw-wide { width: 100%; }
++
++  .yw-shell {
++    position: relative;
++    background: #f1f2f4;
++    border-radius: 24px;
++    /* Нижний отступ больше: под лентой живёт подпись «Виджет отзывов», и при
++       равном padding она ложилась на четвёртую карточку. */
++    padding: 20px 20px 34px;
++    /* Внутри ленты выравнивание левое, даже если секция центрирована: у
++       конкурента плашка рейтинга и звёзды в карточках прижаты влево. */
++    text-align: left;
++  }
++
++  .yw-pillrow {
++    display: flex;
++    flex-wrap: wrap;
++    align-items: center;
++    gap: 10px;
++  }
++
++  .yw-pill {
++    display: inline-flex;
++    align-items: center;
++    gap: 8px;
++    background: #fff;
++    border-radius: 14px;
++    padding: 11px 18px;
++    font-size: 15px;
++    color: #21201f;
++    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
++  }
++  .yw-pill b { font-size: 16px; }
++  .yw-pill-count { color: #5c5c5c; }
++
++  .yw-cards {
++    display: grid;
++    grid-template-columns: repeat(4, 1fr);
++    gap: 16px;
++    margin-top: 16px;
++  }
++
++  .yw-card {
++    background: #fff;
++    border-radius: 16px;
++    padding: 16px 18px 18px;
++    min-height: 168px;
++    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
++  }
++  .yw-card .ymw-bar-name { width: 60%; height: 12px; }
++  .yw-card-stars { display: block; margin: 8px 0 12px; }
++
++  .yw-mark {
++    position: absolute;
++    right: 22px;
++    bottom: 12px;
++    color: #b7b9bd;
++    font-size: 12px;
++  }
++
++  @media (max-width: 900px) {
++    .yw-cards { grid-template-columns: repeat(2, 1fr); }
++  }
++  @media (max-width: 560px) {
++    .yw-cards { grid-template-columns: 1fr; }
++    .yw-card { min-height: 0; }
++    .yw-shell { padding: 14px; border-radius: 18px; }
++  }
++
++  .ymw-note {
++    margin-top: 8px;
++    font-size: var(--font-xs);
++    color: var(--text-muted);
++    line-height: 1.4;
++  }
++</style>
+diff --git a/web/src/components/mockup/SeminarNextBar.astro b/web/src/components/mockup/SeminarNextBar.astro
+new file mode 100644
+index 0000000..c4387ab
+--- /dev/null
++++ b/web/src/components/mockup/SeminarNextBar.astro
+@@ -0,0 +1,104 @@
++---
++/** Мокап, вариант B страницы семинара: полоса ближайшей даты сразу под заголовком. */
++import { formatDate, formatPrice } from '../../lib/data';
++import { registrationHref, isExternalFormHref } from '../../lib/forms';
++import { PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
++import type { ScheduleEntry } from '../../lib/data';
++
++interface Row {
++  entry: ScheduleEntry;
++  teachers: { fullName: string; href: string }[];
++}
++const { rows = [] } = Astro.props as { rows?: Row[] };
++const first = rows[0];
++const rest = Math.max(0, rows.length - 1);
++const href = first ? registrationHref(first.entry.registrationFormLink) || '/raspisanie-i-tseny' : null;
++const external = href ? isExternalFormHref(href) : false;
++
++function plural(n: number, one: string, few: string, many: string) {
++  const m10 = n % 10, m100 = n % 100;
++  if (m10 === 1 && m100 !== 11) return one;
++  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
++  return many;
++}
++---
++
++<div class="nextbar" data-mockup-nextbar={first ? 'dated' : 'empty'}>
++  {first ? (
++    <>
++      <div class="nextbar-main">
++        <span class="nextbar-label">Ближайшая дата</span>
++        <span class="nextbar-date">
++          {formatDate(first.entry.startAt)}
++          {first.entry.startAt !== first.entry.endAt && <> — {formatDate(first.entry.endAt)}</>}
++        </span>
++        <span class="nextbar-meta">
++          {first.entry.city?.name || '—'}
++          {first.teachers.length > 0 && <> · {first.teachers.map((t) => t.fullName).join(', ')}</>}
++        </span>
++      </div>
++      <div class="nextbar-price">
++        {first.entry.isFree ? 'Бесплатно' : formatPrice(first.entry.newPrice)}
++      </div>
++      <div class="nextbar-actions">
++        <a
++          class="btn btn-primary"
++          href={href!}
++          target={external ? '_blank' : undefined}
++          rel={external ? 'noopener noreferrer' : undefined}
++        >Записаться на семинар</a>
++        {rest > 0 && (
++          <a class="nextbar-more" href="#raspisanie">
++            ещё {rest} {plural(rest, 'дата', 'даты', 'дат')} ниже ↓
++          </a>
++        )}
++      </div>
++    </>
++  ) : (
++    <div class="nextbar-empty">
++      <span class="nextbar-label">Расписание</span>
++      <span class="nextbar-date">Даты пока не назначены</span>
++      <span class="nextbar-meta">
++        Уточняйте у менеджера: <a href="tel:+78126465450">{PHONE_PRIMARY}</a>,&#32;<a href="tel:+79810387797">{PHONE_MOBILE}</a>
++      </span>
++    </div>
++  )}
++</div>
++
++<style>
++  .nextbar {
++    display: flex;
++    align-items: center;
++    gap: 1.5rem;
++    flex-wrap: wrap;
++    margin: 0 0 2rem;
++    padding: 1.1rem 1.35rem;
++    border: 1px solid var(--border-default);
++    border-left: 4px solid var(--color-accent-500);
++    border-radius: var(--radius-container);
++    background: var(--surface-subtle);
++  }
++  .nextbar-main { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 15rem; }
++  .nextbar-label {
++    font-size: var(--font-xs);
++    text-transform: uppercase;
++    letter-spacing: 0.06em;
++    color: var(--text-muted);
++  }
++  /* НЕ var(--text-primary): см. комментарий в ReviewsSection.astro — в тёмной
++     теме эта роль почти чёрная. */
++  .nextbar-date { font-size: var(--font-l); font-weight: 600; color: var(--color-dark-700); }
++  .nextbar-meta { font-size: var(--font-s); color: var(--text-body); }
++  .nextbar-price { font-size: var(--font-xl); font-weight: 700; white-space: nowrap; }
++  .nextbar-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
++  .nextbar-more { font-size: var(--font-s); color: var(--color-accent-700); text-decoration: none; }
++  .nextbar-more:hover { text-decoration: underline; }
++  .nextbar-empty { display: flex; flex-direction: column; gap: 0.2rem; }
++  .nextbar-empty a { color: var(--color-accent-700); }
++
++  @media (max-width: 640px) {
++    .nextbar { align-items: stretch; gap: 0.9rem; }
++    .nextbar-actions { align-items: stretch; }
++    .nextbar-actions .btn { width: 100%; }
++  }
++</style>
+diff --git a/web/src/components/mockup/SeminarScheduleAside.astro b/web/src/components/mockup/SeminarScheduleAside.astro
+new file mode 100644
+index 0000000..cfcfe18
+--- /dev/null
++++ b/web/src/components/mockup/SeminarScheduleAside.astro
+@@ -0,0 +1,109 @@
++---
++/** Мокап, вариант C страницы семинара: расписание карточками в липкой колонке. */
++import { formatDate, formatPrice } from '../../lib/data';
++import { registrationHref, isExternalFormHref } from '../../lib/forms';
++import { PHONE_PRIMARY } from '../../lib/mockup';
++import type { ScheduleEntry } from '../../lib/data';
++
++interface Row {
++  entry: ScheduleEntry;
++  teachers: { fullName: string; href: string }[];
++}
++const { rows = [] } = Astro.props as { rows?: Row[] };
++---
++
++<aside class="sched-aside" data-mockup-aside={rows.length > 0 ? 'dated' : 'empty'} aria-labelledby="sched-aside-title">
++  <div class="sched-aside-inner">
++    <div class="sched-aside-head">
++      <h2 id="sched-aside-title">Расписание</h2>
++      <a href="/raspisanie-i-tseny">Все даты</a>
++    </div>
++
++    {rows.length > 0 ? (
++      <ol class="sched-cards">
++        {rows.map(({ entry, teachers }) => {
++          const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
++          const external = isExternalFormHref(href);
++          return (
++            <li class="sched-card">
++              <div class="sched-card-date">
++                {formatDate(entry.startAt)}
++                {entry.startAt !== entry.endAt && <> — {formatDate(entry.endAt)}</>}
++              </div>
++              <div class="sched-card-meta">{entry.city?.name || '—'}</div>
++              {teachers.length > 0 && (
++                <div class="sched-card-meta sched-card-teachers">
++                  {teachers.map((t, i) => (
++                    <>{i > 0 && ', '}<a href={t.href}>{t.fullName}</a></>
++                  ))}
++                </div>
++              )}
++              <div class="sched-card-foot">
++                <span class="sched-card-price">{entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}</span>
++                <a
++                  class="sched-card-cta"
++                  href={href}
++                  target={external ? '_blank' : undefined}
++                  rel={external ? 'noopener noreferrer' : undefined}
++                >Записаться</a>
++              </div>
++            </li>
++          );
++        })}
++      </ol>
++    ) : (
++      <p class="sched-aside-empty">
++        Даты пока не назначены. Уточняйте у менеджера: <a href="tel:+78126465450">{PHONE_PRIMARY}</a>
++      </p>
++    )}
++  </div>
++</aside>
++
++<style>
++  .sched-aside-inner {
++    position: sticky;
++    top: calc(var(--header-height) + 1rem);
++    border: 1px solid var(--border-default);
++    border-radius: var(--radius-container);
++    background: var(--surface-raised);
++    padding: 1.15rem 1.15rem 0.5rem;
++    max-height: calc(100vh - var(--header-height) - 2rem);
++    overflow: auto;
++  }
++  .sched-aside-head {
++    display: flex;
++    align-items: baseline;
++    justify-content: space-between;
++    gap: 0.75rem;
++    margin-bottom: 0.85rem;
++  }
++  .sched-aside-head h2 { margin: 0; font-size: var(--font-xl); }
++  .sched-aside-head a { font-size: var(--font-s); color: var(--color-accent-700); text-decoration: none; }
++
++  .sched-cards { list-style: none; margin: 0; padding: 0; }
++  .sched-card { padding: 0.85rem 0; border-top: 1px solid var(--border-subtle); }
++  .sched-card:first-child { border-top: none; padding-top: 0; }
++  .sched-card-date { font-weight: 600; }
++  .sched-card-meta { font-size: var(--font-s); color: var(--text-body); margin-top: 0.15rem; }
++  .sched-card-teachers a { color: var(--color-accent-700); text-decoration: none; }
++  .sched-card-foot {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.75rem;
++    margin-top: 0.6rem;
++  }
++  .sched-card-price { font-weight: 700; }
++  .sched-card-cta {
++    background: var(--cta-bg);
++    color: var(--cta-text);
++    border-radius: var(--radius-control);
++    padding: 0.4rem 0.8rem;
++    font-size: var(--font-s);
++    font-weight: 600;
++    text-decoration: none;
++    white-space: nowrap;
++  }
++  .sched-aside-empty { font-size: var(--font-s); color: var(--text-body); padding-bottom: 0.75rem; }
++  .sched-aside-empty a { color: var(--color-accent-700); }
++</style>
+diff --git a/web/src/components/mockup/SocialIcons.astro b/web/src/components/mockup/SocialIcons.astro
+new file mode 100644
+index 0000000..edd39ba
+--- /dev/null
++++ b/web/src/components/mockup/SocialIcons.astro
+@@ -0,0 +1,116 @@
++---
++/**
++ * Соцсети иконками вместо текста (пожелание владельца W1) и в составе из
++ * четырёх (решение D16: Instagram и Facebook сняты).
++ *
++ * Глифы нарисованы здесь и НЕ являются официальными фирменными знаками:
++ * они годятся, чтобы оценить размер, плотность и трактовку, но при внедрении
++ * берутся официальные марки — с проверкой условий использования.
++ */
++import { MOCKUP_SOCIAL_LINKS } from '../../lib/mockup';
++
++interface Props {
++  treatment: 'circle' | 'plain' | 'brand';
++  size?: number;
++}
++const { treatment, size = treatment === 'brand' ? 32 : 24 } = Astro.props;
++
++const BRAND: Record<string, string> = {
++  vk: '#0077ff',
++  youtube: '#ff0000',
++  telegram: '#29a5e3',
++  rutube: '#e11e6a',
++};
++---
++
++<ul class:list={['soc', `soc-${treatment}`]} data-mockup-social={treatment}>
++  {MOCKUP_SOCIAL_LINKS.map((link) => (
++    <li>
++      <a
++        href={link.href}
++        target="_blank"
++        rel="noopener noreferrer"
++        aria-label={link.label}
++        title={link.label}
++        data-mockup-social-link={link.icon}
++        style={treatment === 'brand' ? `--soc-brand:${BRAND[link.icon]}` : undefined}
++      >
++        <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
++          {link.icon === 'vk' && (
++            <>
++              <rect x="1" y="1" width="30" height="30" rx="8" class="soc-plate" />
++              <text x="16" y="21.5" text-anchor="middle" class="soc-glyph-text">VK</text>
++            </>
++          )}
++          {link.icon === 'youtube' && (
++            <>
++              <rect x="1" y="6" width="30" height="20" rx="6" class="soc-plate" />
++              <path d="M13 12.2 21 16l-8 3.8Z" class="soc-knockout" />
++            </>
++          )}
++          {link.icon === 'telegram' && (
++            <>
++              <circle cx="16" cy="16" r="15" class="soc-plate" />
++              <path d="M23.4 9.6 7.9 15.6c-.7.3-.7.8 0 1l3.9 1.2 1.5 4.5c.2.5.4.6.8.2l2.1-2 4 3c.5.3.9.1 1-.5l2.9-13c.1-.6-.2-.9-.7-.7Zm-3.1 3.1-6.6 6-.3 3-1.2-3.6 8.1-5.4Z" class="soc-knockout" />
++            </>
++          )}
++          {link.icon === 'rutube' && (
++            <>
++              <rect x="1" y="1" width="30" height="30" rx="10" class="soc-plate" />
++              <path d="M12.5 10.5 22 16l-9.5 5.5Z" class="soc-knockout" />
++            </>
++          )}
++        </svg>
++      </a>
++    </li>
++  ))}
++</ul>
++
++<style>
++  .soc { display: flex; gap: 0.6rem; list-style: none; margin: 0; padding: 0; }
++  .soc a {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    text-decoration: none;
++    color: inherit;
++  }
++  .soc svg { display: block; }
++
++  /* Монохром: пластина — контур, глиф — вырез цветом фона подвала */
++  .soc-circle a,
++  .soc-plain a { color: var(--color-gray-300); }
++  .soc-circle a:hover,
++  .soc-plain a:hover { color: var(--color-light-100); }
++
++  .soc-circle .soc-plate,
++  .soc-plain .soc-plate { fill: none; stroke: currentColor; stroke-width: 1.6; }
++  .soc-circle .soc-knockout,
++  .soc-plain .soc-knockout { fill: currentColor; }
++  .soc-circle .soc-glyph-text,
++  .soc-plain .soc-glyph-text {
++    fill: currentColor;
++    font-size: 12px;
++    font-weight: 700;
++    letter-spacing: 0.5px;
++  }
++
++  .soc-circle { gap: 0.5rem; }
++  .soc-circle a {
++    width: 40px;
++    height: 40px;
++    border-radius: 50%;
++    border: 1px solid rgba(255, 255, 255, 0.18);
++  }
++  .soc-circle a:hover { border-color: rgba(255, 255, 255, 0.5); }
++
++  .soc-plain { gap: 0.9rem; }
++
++  /* Фирменные цвета: пластина залита, глиф выбит белым */
++  .soc-brand { gap: 0.7rem; }
++  .soc-brand .soc-plate { fill: var(--soc-brand); }
++  .soc-brand .soc-knockout { fill: #fff; }
++  .soc-brand .soc-glyph-text { fill: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
++  .soc-brand a { opacity: 0.95; }
++  .soc-brand a:hover { opacity: 1; }
++</style>
+diff --git a/web/src/components/seminars/SeminarScheduleSection.astro b/web/src/components/seminars/SeminarScheduleSection.astro
+index 2a57c0b..c377057 100644
+--- a/web/src/components/seminars/SeminarScheduleSection.astro
++++ b/web/src/components/seminars/SeminarScheduleSection.astro
+@@ -1,5 +1,7 @@
+ ---
+ import { formatDate, formatPrice } from '../../lib/data';
++// --- МОКАП: решение Q11 держим одинаковым во всех вариантах ---
++import { isMockup, PHONE_PRIMARY, PHONE_MOBILE } from '../../lib/mockup';
+ import { registrationHref, isExternalFormHref } from '../../lib/forms';
+ import type { ScheduleEntry } from '../../lib/data';
+ 
+@@ -103,7 +105,15 @@ function formatDurationLabel(entry: ScheduleEntry): string {
+     </div>
+   ) : (
+     <div class="seminar-schedule-empty">
+-      К сожалению, данный курс, в настоящий момент еще не запланирован.
++      {isMockup ? (
++        <>
++          <strong>Даты пока не назначены.</strong> Уточняйте у менеджера:{' '}
++          <a href="tel:+78126465450">{PHONE_PRIMARY}</a>,{' '}
++          <a href="tel:+79810387797">{PHONE_MOBILE}</a>
++        </>
++      ) : (
++        'К сожалению, данный курс, в настоящий момент еще не запланирован.'
++      )}
+     </div>
+   )}
+ </section>
+@@ -217,6 +227,8 @@ function formatDurationLabel(entry: ScheduleEntry): string {
+     white-space: nowrap;
+   }
+ 
++  .seminar-schedule-empty a { color: var(--color-accent-700); }
++
+   .seminar-schedule-empty {
+     padding: 1rem 0;
+     border-top: 1px solid var(--color-gray-200);
+diff --git a/web/src/layouts/BaseLayout.astro b/web/src/layouts/BaseLayout.astro
+index 8062c30..789052a 100644
+--- a/web/src/layouts/BaseLayout.astro
++++ b/web/src/layouts/BaseLayout.astro
+@@ -16,6 +16,9 @@ import Footer from '../components/Footer.astro';
+ import NewsletterSignup from '../components/NewsletterSignup.astro';
+ import Analytics from '../components/Analytics.astro';
+ import { isDemoForms } from '../lib/forms';
++// --- МОКАП: плавающий чат-виджет (Q22) ---
++import { MOCKUP_VARIANT, isMockup } from '../lib/mockup';
++import ChatWidget from '../components/mockup/ChatWidget.astro';
+ import '../styles/global.css';
+ 
+ const {
+@@ -64,6 +67,8 @@ const {
+         демонстрации в живые Метрику и Mail.ru заказчика — портили статистику,
+         цели и вебвизор боевого сайта. Гейт по тому же признаку, что у форм. */}
+     {!isDemoForms && <Analytics />}
++
++    {isMockup && <ChatWidget side={MOCKUP_VARIANT === 'c' ? 'left' : 'right'} />}
+   </body>
+ </html>
+ 
+diff --git a/web/src/lib/mockup.ts b/web/src/lib/mockup.ts
+new file mode 100644
+index 0000000..c2659fa
+--- /dev/null
++++ b/web/src/lib/mockup.ts
+@@ -0,0 +1,92 @@
++/**
++ * Реквизит мокапов доделок после демо 2026-08-19 (пункт 9 «Пакетов для OpenSpec»).
++ *
++ * Живёт ТОЛЬКО в одноразовом worktree: в ветку мокапов уходят снимки и текст,
++ * а не этот код. Реализация пойдёт по спеке, а не копированием отсюда.
++ *
++ * Переключатель варианта — переменная окружения MOCKUP_VARIANT (off|a|b|c|d|e).
++ * Варианты d и e меняют только главную: страница семинара в них остаётся как сегодня.
++ *
++ * Вариант e — ВЫБРАННАЯ ВЛАДЕЛЬЦЕМ КОНФИГУРАЦИЯ (23.08.2026): лента отзывов из d
++ * плюс фирменные цвета иконок из c. Такой комбинации среди снятых не было, поэтому
++ * она снята отдельно: показывать надо то, что выбрано, а не сумму двух картинок.
++ */
++
++export type MockupVariant = 'off' | 'a' | 'b' | 'c' | 'd' | 'e';
++
++const raw = (process.env.MOCKUP_VARIANT || 'off').toLowerCase();
++export const MOCKUP_VARIANT: MockupVariant = (['a', 'b', 'c', 'd', 'e'].includes(raw) ? raw : 'off') as MockupVariant;
++export const isMockup = MOCKUP_VARIANT !== 'off';
++
++/**
++ * Метка публикации. В продукте её пишет сборка в /published-at.json, а подвал
++ * подтягивает на клиенте (решение Q28). В мокапе значение ЗАФИКСИРОВАНО, иначе
++ * снимки разных вариантов различались бы минутами и сравнение бы врало.
++ */
++export const PUBLISHED_AT_SAMPLE = '21.08.2026, 03:40';
++
++/**
++ * Числа отзывов — из раздела «Факты» решений: организация 112883331290,
++ * 4.9 из 5, 33 отзыва, 66 оценок, бейдж «Хорошее место 2026» (снято 2026-08-20).
++ */
++export const REVIEWS = {
++  orgId: '112883331290',
++  rating: '4,9',
++  ratingNumeric: 4.9,
++  reviews: 33,
++  ratings: 66,
++  badge: 'Хорошее место 2026',
++  orgName: 'Институт клинической прикладной кинезиологии',
++  mapsUrl: 'https://yandex.ru/maps/org/112883331290/',
++  widgetUrl: 'https://yandex.ru/maps-reviews-widget/112883331290?comments',
++};
++
++/**
++ * Награды геосервисов. Основание — фотография двух наклеек на двери центра
++ * (владелец, 23.08.2026): Яндекс Карты «Хорошее место 2026» и 2ГИС «Здесь хорошо!».
++ *
++ * Ни у одного из двух НЕТ официального встраиваемого бейджа для сайта
++ * (проверено 23.08.2026 по документации Яндекс Бизнеса и справке 2ГИС): сервис
++ * даёт отметку в своей карточке и физическую наклейку. Поэтому знак на сайте —
++ * собственное утверждение владельца, и оно живёт ровно до тех пор, пока
++ * награда действует; год в подписи Яндекса нужно будет обновлять руками.
++ *
++ * Карточка 2ГИС для организации НЕ НАЙДЕНА поиском — числа 2ГИС (рейтинг,
++ * количество отзывов) здесь намеренно отсутствуют, выдумывать их нельзя.
++ */
++export const AWARDS = [
++  { mark: 'ym' as const, title: 'Хорошее место 2026', source: 'Яндекс Карты' },
++  { mark: 'gis' as const, title: 'Здесь хорошо!', source: '2ГИС' },
++];
++
++/** Русская плюрализация: «33 отзыва», «66 оценок», «1 оценка». */
++export function pluralRu(n: number, one: string, few: string, many: string): string {
++  const m10 = n % 10;
++  const m100 = n % 100;
++  if (m10 === 1 && m100 !== 11) return one;
++  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
++  return many;
++}
++
++export const REVIEWS_LINE = `${REVIEWS.reviews} ${pluralRu(REVIEWS.reviews, 'отзыв', 'отзыва', 'отзывов')} · ${REVIEWS.ratings} ${pluralRu(REVIEWS.ratings, 'оценка', 'оценки', 'оценок')}`;
++export const RATINGS_LINE = `${REVIEWS.ratings} ${pluralRu(REVIEWS.ratings, 'оценка', 'оценки', 'оценок')}`;
++export const REVIEWS_COUNT_LINE = `${REVIEWS.reviews} ${pluralRu(REVIEWS.reviews, 'отзыв', 'отзыва', 'отзывов')}`;
++
++/** Четыре сети после снятия Instagram и Facebook (решение D16). */
++export interface MockupSocial {
++  label: string;
++  href: string;
++  icon: 'vk' | 'youtube' | 'telegram' | 'rutube';
++}
++
++export const MOCKUP_SOCIAL_LINKS: MockupSocial[] = [
++  { label: 'ВКонтакте', href: 'https://vk.com/clubikpk', icon: 'vk' },
++  { label: 'Youtube', href: 'https://www.youtube.com/user/TheKinesiology', icon: 'youtube' },
++  { label: 'Telegram', href: 'https://t.me/ikpk_spb', icon: 'telegram' },
++  { label: 'Rutube', href: 'https://rutube.ru/channel/30422569/', icon: 'rutube' },
++];
++
++/** Часы работы менеджера (D14) — источник поведения чата «вне часов». */
++export const WORK_HOURS = 'пн–пт 10:00–18:00';
++export const PHONE_PRIMARY = '+7 (812) 646-54-50';
++export const PHONE_MOBILE = '+7 (981) 038-77-97';
+diff --git a/web/src/pages/[institute]/[courseGroup]/[seminar].astro b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
+index 27bd361..34e98b9 100644
+--- a/web/src/pages/[institute]/[courseGroup]/[seminar].astro
++++ b/web/src/pages/[institute]/[courseGroup]/[seminar].astro
+@@ -15,6 +15,10 @@ import {
+ import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
+ import RichContent from '../../../components/RichContent.astro';
+ import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
++// --- МОКАП: расписание, поднятое вверх (D3) ---
++import { MOCKUP_VARIANT } from '../../../lib/mockup';
++import SeminarNextBar from '../../../components/mockup/SeminarNextBar.astro';
++import SeminarScheduleAside from '../../../components/mockup/SeminarScheduleAside.astro';
+ import type { GetStaticPaths } from 'astro';
+ 
+ export const getStaticPaths: GetStaticPaths = () => {
+@@ -154,20 +158,43 @@ const seminarSchema =
+       ]}
+     />
+ 
+-    <article class="section seminar-detail">
++    <article class:list={['section', 'seminar-detail', MOCKUP_VARIANT !== 'off' && `seminar-mockup-${MOCKUP_VARIANT}`]}>
+       <h1 class="page-title">{seminar.name}</h1>
+ 
+-      {seminarBodyHtml ? (
+-        <div class="seminar-content rich-content">
+-          <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
+-        </div>
+-      ) : seminar.description_text && (
+-        <div class="seminar-content rich-content">
+-          <p>{seminar.description_text}</p>
++      {MOCKUP_VARIANT === 'a' && (
++        <div class="seminar-schedule-top">
++          <SeminarScheduleSection rows={scheduleRows} />
+         </div>
+       )}
++      {MOCKUP_VARIANT === 'b' && <SeminarNextBar rows={scheduleRows} />}
++
++      <div class="seminar-cols">
++        <div class="seminar-main">
++          {seminarBodyHtml ? (
++            <div class="seminar-content rich-content">
++              <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
++            </div>
++          ) : seminar.description_text && (
++            <div class="seminar-content rich-content">
++              <p>{seminar.description_text}</p>
++            </div>
++          )}
+ 
+-      <SeminarScheduleSection rows={scheduleRows} />
++          {/* Расписание на своём месте — везде, кроме вариантов, которые его
++              переносят (a — наверх, c — в боковую колонку). Первая редакция
++              перечисляла варианты, которые его показывают, и потеряла d: у него
++              страница семинара обязана быть «как сегодня», а расписание пропадало
++              целиком. Кадров это не задело — семинар у d не снимался, — но патч
++              воспроизводил дефект. */}
++          {MOCKUP_VARIANT !== 'a' && MOCKUP_VARIANT !== 'c' && (
++            <div id="raspisanie">
++              <SeminarScheduleSection rows={scheduleRows} />
++            </div>
++          )}
++        </div>
++
++        {MOCKUP_VARIANT === 'c' && <SeminarScheduleAside rows={scheduleRows} />}
++      </div>
+     </article>
+   </div>
+ </BaseLayout>
+@@ -183,4 +210,25 @@ const seminarSchema =
+     margin-bottom: 0;
+     line-height: 1.75;
+   }
++
++  /* --- МОКАП --- */
++  .seminar-schedule-top { margin-bottom: 2.5rem; }
++  .seminar-schedule-top :global(.seminar-schedule) { margin-top: 0; }
++
++  /* align-items НЕ start: при start колонка расписания получает высоту своего
++     содержимого, и sticky внутри неё уезжает вместе с ней после первого экрана —
++     на снимке правая колонка оказывалась пустой. Растянутая колонка даёт sticky
++     полный ход. */
++  .seminar-mockup-c .seminar-cols {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 21rem;
++    gap: 2.5rem;
++    align-items: stretch;
++  }
++
++  @media (max-width: 1024px) {
++    .seminar-mockup-c .seminar-cols { grid-template-columns: 1fr; }
++    .seminar-mockup-c :global(.sched-aside) { order: -1; margin-bottom: 2rem; }
++    .seminar-mockup-c :global(.sched-aside-inner) { position: static; max-height: none; }
++  }
+ </style>
+diff --git a/web/src/pages/index.astro b/web/src/pages/index.astro
+index 7c0923e..8859d96 100644
+--- a/web/src/pages/index.astro
++++ b/web/src/pages/index.astro
+@@ -14,6 +14,9 @@ import News from '../components/home/sections/News.astro';
+ import CtaBand from '../components/home/sections/CtaBand.astro';
+ import { getPage } from '../lib/data';
+ import { PHONE_HREF, MOBILE_PHONE_HREF } from '../lib/navigation';
++// --- МОКАП: секция отзывов (Q7/Q13/Q24) ---
++import { MOCKUP_VARIANT } from '../lib/mockup';
++import ReviewsSection from '../components/mockup/ReviewsSection.astro';
+ 
+ const homepage = getPage('homepage');
+ const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
+@@ -41,11 +44,17 @@ const schema = {
+ <BaseLayout title={title} description={description} schema={schema}>
+   <HeroHybrid />
+   <Advantages />
++  {MOCKUP_VARIANT === 'b' && <ReviewsSection layout="compact" />}
+   <Approach />
+   <Programs />
+   <Segments />
+   <UpcomingSeminars />
+   <Teachers />
++  {MOCKUP_VARIANT === 'a' && <ReviewsSection layout="split" />}
++  {/* d отличается от a только формой виджета — место секции держим тем же,
++      чтобы сравнение шло по одной оси. */}
++  {(MOCKUP_VARIANT === 'd' || MOCKUP_VARIANT === 'e') && <ReviewsSection layout="band" />}
+   <News />
++  {MOCKUP_VARIANT === 'c' && <ReviewsSection layout="centered" />}
+   <CtaBand />
+ </BaseLayout>
