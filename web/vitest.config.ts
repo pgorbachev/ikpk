@@ -54,6 +54,9 @@ export default defineConfig({
       // но вызывать `astro build` можно только ПОСЛЕ обычной сборки (производные картинок
       // пробная сборка не пересобирает), поэтому файл идёт конфигурацией test:build.
       'tests/external-widgets-config-probe.test.ts',
+      // Предмет — собранный вывод: каталожные страницы и плоские адреса записей
+      // (change cms-content-authoring-and-migration).
+      'tests/cms-catalog-pages.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
