@@ -5,8 +5,9 @@
 # настоящего виджета Яндекса, ни настоящего виджета Bitrix24, ни чтения
 # /published-at.json, ни гашения на демо, ни официальных фирменных марок соцсетей.
 #
-# База: e0c4d1d (origin/main на 2026-08-22). Обновлено 2026-08-23: знаки наград,
-#       сверка заглушки виджета с живым, постусловие о знаках в скрипте съёмки.
+# База: 034e050 (origin/main на 2026-08-23, после слияния PR #153). Прежняя база была
+#       e0c4d1d; переехали, потому что #153 меняет подвал, шапку и подписи кнопок —
+#       то есть ровно то, что мокап сравнивает.
 # Сборка:  MOCKUP_VARIANT=a|b|c|d npx astro build --outDir dist-<v>
 # Съёмка:  node scripts/shoot-mockups.mjs --dist dist-<v> --variant <v>
 #          Скрипт САМ оптимизирует PNG и пересчитывает постусловие по финальным
@@ -579,12 +580,13 @@ index 0000000..b72230f
 +    : `готово: ${VARIANT} — постусловие НИЧЕГО НЕ ИЗМЕРИЛО: снимков экрана с ожидаемой кнопкой чата не было (0 проверок). Для опорного набора это норма; для варианта — отказ проверки, а не её успех`
 +);
 diff --git a/web/src/components/Footer.astro b/web/src/components/Footer.astro
-index c8b3a23..0910c55 100644
+index d9ccef0..3408d3c 100644
 --- a/web/src/components/Footer.astro
 +++ b/web/src/components/Footer.astro
-@@ -1,10 +1,19 @@
+@@ -1,11 +1,20 @@
  ---
  import { SOCIAL_LINKS } from '../lib/social';
+ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
 +// --- МОКАП (одноразовый worktree): иконки соцсетей и строка публикации ---
 +import { MOCKUP_VARIANT, isMockup } from '../lib/mockup';
 +import SocialIcons from './mockup/SocialIcons.astro';
@@ -603,7 +605,7 @@ index c8b3a23..0910c55 100644
        <div class="footer-col">
          <a href="/" class="footer-logo-link" aria-label="ИКПК — Главная">
            <img src="/logo-icon.svg" alt="" class="footer-logo-icon" width="33" height="34" />
-@@ -42,19 +51,31 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -44,19 +53,31 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
          </ul>
        </div>
  
@@ -646,7 +648,7 @@ index c8b3a23..0910c55 100644
        <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
        {/* Документ обязателен, и на старом сайте ссылка на него была в футере
            каждой страницы. При переносе она потерялась: файл в сборку попал,
-@@ -66,6 +87,7 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -68,6 +89,7 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
            rel="noopener noreferrer"
          >Пользовательское соглашение и политика конфиденциальности</a>
        </p>
@@ -654,7 +656,7 @@ index c8b3a23..0910c55 100644
      </div>
    </div>
  </footer>
-@@ -169,7 +191,39 @@ import { SOCIAL_LINKS } from '../lib/social';
+@@ -171,7 +193,39 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
      color: #fff;
    }
  
@@ -1855,7 +1857,7 @@ index 0000000..edd39ba
 +  .soc-brand a:hover { opacity: 1; }
 +</style>
 diff --git a/web/src/components/seminars/SeminarScheduleSection.astro b/web/src/components/seminars/SeminarScheduleSection.astro
-index 80c1683..51c1b49 100644
+index 2a57c0b..c377057 100644
 --- a/web/src/components/seminars/SeminarScheduleSection.astro
 +++ b/web/src/components/seminars/SeminarScheduleSection.astro
 @@ -1,5 +1,7 @@
@@ -2098,20 +2100,20 @@ index 27bd361..5aba59d 100644
 +  }
  </style>
 diff --git a/web/src/pages/index.astro b/web/src/pages/index.astro
-index c2514aa..5169fda 100644
+index 7c0923e..6f3cbfe 100644
 --- a/web/src/pages/index.astro
 +++ b/web/src/pages/index.astro
-@@ -13,6 +13,9 @@ import Teachers from '../components/home/sections/Teachers.astro';
- import News from '../components/home/sections/News.astro';
+@@ -14,6 +14,9 @@ import News from '../components/home/sections/News.astro';
  import CtaBand from '../components/home/sections/CtaBand.astro';
  import { getPage } from '../lib/data';
+ import { PHONE_HREF, MOBILE_PHONE_HREF } from '../lib/navigation';
 +// --- МОКАП: секция отзывов (Q7/Q13/Q24) ---
 +import { MOCKUP_VARIANT } from '../lib/mockup';
 +import ReviewsSection from '../components/mockup/ReviewsSection.astro';
  
  const homepage = getPage('homepage');
  const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
-@@ -38,11 +41,17 @@ const schema = {
+@@ -41,11 +44,17 @@ const schema = {
  <BaseLayout title={title} description={description} schema={schema}>
    <HeroHybrid />
    <Advantages />
