@@ -29,9 +29,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            payments/package-lock.json
 
-      - name: Install dependencies
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Install payments dependencies
+        working-directory: payments
         run: npm ci
 
       - name: Install Playwright chromium
@@ -60,6 +66,20 @@ jobs:
         run: |
           npm run build:demo
           npx vitest run --config vitest.demo.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-demo-head.json"
+
+      # Ссылки в сборочный вывод обязательный гейт ссылок проверить не может: он работает до
+      # сборки, и его вердикт не должен зависеть от того, собрано дерево. Здесь оба дерева уже
+      # собраны, поэтому именно здесь такие ссылки проверяются по-настоящему — иначе режим
+      # `--check-built` был бы обещанием, которое никто не исполняет.
+      #
+      # Корни названы ЯВНО, а не оставлены на усмотрение скрипта: тогда пропавшее дерево даёт
+      # код 2 («названы собранными, но их нет»), а не тихое сужение проверки до того, что
+      # случайно оказалось на диске. Пакеты `cms` и `payments` здесь не собираются, поэтому
+      # ссылки в их вывод этот шаг честно объявляет непроверенными вслух, а не расхождением:
+      # иначе законная ссылка на `cms/dist/**` валила бы гейт публикации боевого сайта.
+      - name: Check build-output references against built trees
+        working-directory: ${{ github.workspace }}
+        run: ./bin/check-spec-refs --check-built=web/dist,web/dist-demo
 
       - name: Classify dependency-only change for test-count
         id: web-dependency-scope
@@ -128,6 +148,18 @@ jobs:
             --head-report "$RUNNER_TEMP/web-demo-head.json" \
             "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
+
+      # Тот же dist-demo, который только что проверили. e2e-smoke его скачивает и
+      # не собирает заново: вторая сборка в чужом джобе — как раз то, что ловит
+      # demo-gate (решение 6). uses-шаги не наследуют defaults.run.working-directory,
+      # путь — от корня репозитория.
+      - name: Upload demo site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
+          if-no-files-found: error
+          retention-days: 1
   dependency-invariants:
     name: Dependency update invariants
     runs-on: ubuntu-latest
@@ -357,6 +389,7 @@ jobs:
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
+    needs: unit-and-build
     defaults:
       run:
         working-directory: web
@@ -398,6 +431,31 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-catalog-head.json
         run: npm run test:e2e:catalog
+
+      - name: Download preview-role site
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: web-dist-demo
+          path: web/dist-demo
+
+      - name: Run payment form e2e (preview role)
+        run: npm run test:e2e:payment-preview
+
+      # Артефакт роли `stand` собирается здесь, а не скачивается: джоб unit-and-build его не
+      # собирает, а набор без артефакта своей роли — это «проверять нечего», выданное за
+      # «прошло». Живая ЮKassa в прогоне не участвует, секреты ей не передаются: весь
+      # платёжный API перехвачен Playwright, и утечка роняет тест (fail-closed guard).
+      - name: Build stand-role site
+        run: npm run build:stand
+
+      # Здесь идут ВСЕ три набора роли `stand`: клиентские сценарии контура
+      # (payment-form.spec.ts), транспорт заявки (payment-transport.spec.ts) и инвариант
+      # контура при недоступном API (payment-contour.spec.ts). Прежде два последних шли
+      # основной конфигурацией по боевому `dist` — сборке роли `ci`, у которой формы по
+      # контракту нет вовсе. Состав набора задаёт `testMatch` конфигурации, а не перечень
+      # файлов в этой команде.
+      - name: Run payment e2e (stand role)
+        run: npm run test:e2e:payment-stand
 
       # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
       # останавливает только `Tests`, а проверка, положенная в файл, который не

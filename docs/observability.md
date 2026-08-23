@@ -20,7 +20,7 @@
 | Build duration | CI/CD logs (GitHub Actions) | Per build | Unlimited |
 | Build success/failure | CI/CD logs | Per build | Unlimited |
 | Payment service (`api.ikpk.su`) process status | systemd (`change/online-payment-flow`) | Continuous | 90 days |
-| Payment service refused to start — fail-closed on **any** failed start-up check, single outcome regardless of cause (see `openspec/changes/online-payment-flow/design.md`, Решение 1в) | systemd log (log names the failed check) | Per event | Unlimited |
+| Payment service refused to start — fail-closed on **any** failed start-up check, single outcome regardless of cause (see `openspec/changes/archive/2026-08-21-online-payment-flow/design.md`, Решение 1в) | systemd log (log names the failed check) | Per event | Unlimited |
 
 ### Performance
 
@@ -138,7 +138,7 @@ jobs:
 | Homepage unreachable for ≥ 2 minutes | UptimeRobot | Email + Telegram | Check CDN status, DNS, deploy status |
 | 5xx rate > 1% for ≥ 5 minutes | CDN analytics alert | Email | Check CDN logs, redeploy if needed |
 | Strapi API unreachable for ≥ 5 minutes | UptimeRobot | Email + Telegram | Check VPS/cloud, restart Strapi |
-| Payment service (`api.ikpk.su`) refused to start or is down | systemd + UptimeRobot | Email + Telegram | Read the failed check named in the log before restarting — the outcome is the same for every cause by design (`openspec/changes/online-payment-flow/design.md`, Решение 1в), so the log is the only thing that distinguishes them; a silent restart with a stale/empty idempotency store defeats idempotency (Решение 4а) |
+| Payment service (`api.ikpk.su`) refused to start or is down | systemd + UptimeRobot | Email + Telegram | Read the failed check named in the log before restarting — the outcome is the same for every cause by design (`openspec/changes/archive/2026-08-21-online-payment-flow/design.md`, Решение 1в), so the log is the only thing that distinguishes them; a silent restart with a stale/empty idempotency store defeats idempotency (Решение 4а) |
 | Stream of «нужна сверка» (`verification_required`) on repeats the visitor did not change | Payment service log, grouped by `requestId` | Email | Suspected fingerprint-key material changed without changing its version — the symptom of the residual named in Решение 3б, «Что контрольное значение НЕ закрывает»; check the key/version pair against the rotation runbook, do not restart in a loop |
 
 ### Warning (investigate within 24 hours)

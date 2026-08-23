@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
-import { loadWorkflows, publishingWorkflows, workflowRunTrigger, type Workflow } from './helpers/workflows';
+import {
+  loadWorkflows,
+  publishingWorkflows,
+  stripShellComments,
+  workflowRunTrigger,
+  type Workflow,
+} from './helpers/workflows';
 import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 
 // ─── Мета-гейт: браузерная проверка обязана исполняться в гейте публикации ────
@@ -112,42 +118,54 @@ function gatingWorkflows(all: Workflow[]): Workflow[] {
   return gating;
 }
 
-/** Команды, которые гейтующие workflow действительно запускают. */
+/**
+ * Команды, которые гейтующие workflow действительно запускают.
+ *
+ * Shell-комментарии снимаются: строка `# npm run test:e2e:payment` внутри пояснения командой
+ * не является, а разбор без снятия комментариев вынимал бы из неё и имя скрипта, и имена
+ * файлов. Ложное «файл исполняется» и ложное «в гейте есть вызов playwright» — того же класса,
+ * что и всё остальное в этом файле.
+ */
 function gatingCommands(all: Workflow[]): string[] {
   const commands = gatingWorkflows(all)
     .flatMap((wf) => Object.values(wf.jobs))
     .flatMap((job) => job.steps)
-    .map((step) => step.run ?? '')
-    .filter(Boolean);
+    .map((step) => stripShellComments(step.run ?? ''))
+    .filter((command) => command.trim() !== '');
   expect(commands.length, 'в гейтующих workflow не нашлось ни одной команды — разбор сломан').toBeGreaterThan(0);
   return commands;
 }
 
 /**
- * Файлы браузерных проверок, до которых доходит исполнение: команды workflow
- * раскрываются по скриптам `package.json` транзитивно, потому что `npm run
- * test:e2e:smoke` в самом workflow имени файла не содержит.
+ * Файлы браузерных проверок, до которых доходит исполнение: берутся из ФАКТИЧЕСКОГО набора,
+ * который собирает сам Playwright по подключённой конфигурации (`--list --reporter=json`).
+ *
+ * ПОЧЕМУ НЕ ПОИСК ИМЕНИ ФАЙЛА В ТЕКСТЕ КОМАНДЫ, как было раньше. Прежняя редакция вынимала
+ * из команды всё, похожее на `*.spec.ts`, и считала это исполняемым. Обе стороны такого
+ * признака неверны, и обе наблюдались:
+ *
+ *  - имя в командной строке НЕ ЗНАЧИТ, что файл будет запущен: `testMatch`/`testIgnore`
+ *    конфигурации могут его выбросить, и тогда прогон пуст при исправном виде команды —
+ *    ложное зелёное ровно того класса, за которым весь этот файл;
+ *  - ОТСУТСТВИЕ имени в командной строке не значит, что файл не запускается: набор роли
+ *    `stand` вызывается как `playwright test --config=playwright.stand.config.ts` без
+ *    перечисления файлов — состав задаёт `testMatch`. Прежний признак объявил бы все три его
+ *    файла сиротами, то есть краснел бы от выполненной работы.
+ *
+ * Спрашивать Playwright, а не разбирать glob'ы своими руками, — тот же выбор, что в
+ * `payment-artifact-roles.test.ts` и `scripts/check-month-run.ts`: приблизительный разбор
+ * отвечал бы за инструмент, и расхождение в семантике осталось бы незамеченным.
+ *
+ * Имена приводятся к путям ОТНОСИТЕЛЬНО `tests/` — в той же мере, в которой их даёт
+ * `walkSpecFiles`, иначе сверка двух множеств шла бы в разных мерах.
  */
 function executedSpecFiles(all: Workflow[]): Set<string> {
-  const scripts: Record<string, string> = JSON.parse(readFileSync(PACKAGE_JSON, 'utf-8')).scripts ?? {};
-  expect(Object.keys(scripts).length, 'в package.json нет скриптов — раскрывать нечего').toBeGreaterThan(0);
-
-  const seen = new Set<string>();
   const found = new Set<string>();
-
-  const expand = (command: string): void => {
-    for (const match of command.matchAll(/([\w./-]+\.spec\.ts)/g)) {
-      found.add(match[1].replace(/^tests\//, ''));
-    }
-    for (const match of command.matchAll(/npm\s+(?:run\s+)?([\w:-]+)/g)) {
-      const name = match[1];
-      if (seen.has(name) || scripts[name] === undefined) continue;
-      seen.add(name);
-      expand(scripts[name]);
-    }
-  };
-
-  gatingCommands(all).forEach(expand);
+  for (const test of collectTests(all)) {
+    const file = test.file.replace(/\\/g, '/');
+    const cut = file.lastIndexOf('tests/');
+    found.add(cut >= 0 ? file.slice(cut + 'tests/'.length) : file);
+  }
   return found;
 }
 
@@ -343,7 +361,7 @@ const monthTagsOf = (tests: CollectedTest[]): CollectedTest[] =>
   tests.filter((test) => test.tags.some((tag) => tag.startsWith('month-')));
 
 describe('браузерные проверки и гейт публикации', () => {
-  it('каждый файл либо исполняется гейтующим workflow, либо назван в списке долга', () => {
+  it('каждый файл либо исполняется гейтующим workflow, либо назван в списке долга', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
     const executed = executedSpecFiles(loadWorkflows());
     expect(executed.size, 'ни один файл браузерных проверок не исполняется — разбор workflow сломан')
       .toBeGreaterThan(0);
@@ -355,7 +373,7 @@ describe('браузерные проверки и гейт публикации
     ).toEqual([]);
   });
 
-  it('список долга не содержит имён, которые уже исполняются или которых нет', () => {
+  it('список долга не содержит имён, которые уже исполняются или которых нет', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
     // Список, который ничего не держит, — декорация. Устаревшее имя в нём молча
     // разрешало бы будущему файлу с тем же именем не исполняться.
     const executed = executedSpecFiles(loadWorkflows());

@@ -1,0 +1,48 @@
+[Unit]
+Description=IKPK payment API (YooKassa) — контур %i
+After=network.target
+
+# Шаблонный юнит (задача 4.10, design.md Решение 13): стенд и production — ДВЕ
+# УСТАНОВЛЕННЫЕ ИНСТАНЦИИ одного кода, а не переключение одного процесса. Развёртывание:
+#   systemctl enable --now ikpk-payments@stand
+#   systemctl enable --now ikpk-payments@prod
+#
+# У каждой инстанции — свой env-файл (root:root, права 0600 — Решение 1, задача 4.5),
+# устанавливаемый вне Git/CI/shell history, не обычным деплоем:
+#   /etc/ikpk-payments/stand.env   — PAYMENT_MODE=test, YOOKASSA_SHOP_ID=1440249,
+#                                     PAYMENT_RETURN_BASE=http://193.124.115.99
+#   /etc/ikpk-payments/prod.env    — PAYMENT_MODE=prod, YOOKASSA_SHOP_ID=409285,
+#                                     PAYMENT_RETURN_BASE=<origin боевого сайта>
+#
+# Изменяемое состояние каждой инстанции — в своём каталоге, общий только код:
+#   /var/lib/ikpk-payments/stand
+#   /var/lib/ikpk-payments/prod
+#
+# Бинд обеих инстанций — 127.0.0.1:8787: одинаковый loopback-порт на РАЗНЫХ host
+# допустим (production на демонстрационном VPS не разворачивается), поэтому разные порты
+# не требуются, пока stand и prod не окажутся на одном host.
+
+[Service]
+Type=simple
+User=ikpk-payments
+Group=ikpk-payments
+WorkingDirectory=/opt/ikpk-payments
+# БЕЗ ведущего `-` (исправлено по независимому ревью, находка F-11, 2026-08-20):
+# отсутствующий env-файл контура — ошибка конфигурации, а не законный пустой старт.
+# С `-` (унаследовано от удалённого одноинстансного юнита) systemd запускал бы процесс
+# без единого секрета, тот падал бы на validateProdEnv, а Restart=on-failure превращал
+# бы опечатку в пути файла в тихий цикл перезапуска каждые 3 секунды вместо явного
+# «unit failed» от systemd, которое видно немедленно.
+EnvironmentFile=/etc/ikpk-payments/%i.env
+Environment=PAYMENT_DATA_DIR=/var/lib/ikpk-payments/%i
+# Bind — явно конфигурацией инстанции, а не умолчанием кода (design.md, Решение 13).
+Environment=PAYMENT_LISTEN_HOST=127.0.0.1
+Environment=PAYMENT_LISTEN_PORT=8787
+ExecStart=/usr/bin/node --import tsx src/main.ts
+Restart=on-failure
+RestartSec=3
+# Ровно одна реплика НА ИНСТАНЦИЮ: %i различает stand/prod, но каждая не масштабируется.
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

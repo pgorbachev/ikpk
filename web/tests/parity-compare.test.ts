@@ -266,15 +266,10 @@ describe('Parity audit against original site', () => {
     expect(hasLegacyHashClass(readLocal(SEMINAR_PATH).html), 'Legacy hash classes on seminar').toBe(false);
   });
 
-  it('original and local homepage keep same main institute heading', async () => {
-    if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {
-      return;
-    }
-
-    const remote = await fetchRemote('/');
-    const local = readLocal('/');
-    expect(extractTag(local.html, 'h1')).toBe(extractTag(remote.html, 'h1'));
-  });
+  // Проверка равенства h1 главной снята намеренно: редизайн главной (PR #22/#23,
+  // 2026-07-20, вариант D) изменил заголовок ("Обучение прикладной кинезиологии…"
+  // вместо legacy "Институт клинической прикладной кинез…") — расхождение больше не
+  // паритет, а принятое решение, и держать здесь ослабленную проверку смысла не имеет.
 
   it('original and local contacts page keep the same primary heading', async () => {
     if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {

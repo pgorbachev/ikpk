@@ -116,6 +116,23 @@ jobs:
         working-directory: web
         run: npm run build
 
+      # Задача 6.13a: Pages платёжной поверхностью не является (design.md, Решение 13,
+      # решение владельца 2026-08-18) — артефакт SHALL быть собран в роли `ci`, без
+      # активной формы. Проверяется ТЕМ ЖЕ гейтом, что и выкладка стенда/прода
+      # (`scripts/lib/deploy-checks.sh`), а не своей копией: два гейта об одном предмете
+      # иначе дают два разных ответа. Ветвь `stand|prod` здесь не нужна — она проверяет
+      # достижимость и readiness установленного контура, которого у Pages нет вовсе; нужна
+      # ровно эта проверка — что артефакт действительно собран без формы и без объявленного
+      # эндпоинта (`PAYMENT_ROLE` в build-шаге выше не задаётся — умолчание даёт `ci`).
+      - name: Проверка роли артефакта Pages — без активной платёжной формы
+        working-directory: web
+        run: |
+          source ../scripts/lib/deploy-checks.sh
+          if ! payment_endpoint_matches dist '' ci; then
+            echo "::error::артефакт Pages несёт форму или потерял объявленную роль — публикация останавливается, а не проходит вхолостую"
+            exit 1
+          fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:

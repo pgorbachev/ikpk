@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
@@ -94,10 +94,29 @@ describe('Dependabot grouping contract', () => {
   });
 
   it('assigns web and scripts to exactly one npm update scope each', () => {
-    const exactDirectories = new Set(['/web', '/scripts', '/cms']);
+    // Каталоги ВЫВОДЯТСЯ из репозитория, а не перечисляются. Прежняя редакция держала
+    // список `['/web','/scripts','/cms']`, и он отстал молча: ветка
+    // `change/payment-verification-ux` добавила пакет `payments/`, зарегистрировала его в
+    // `dependabot.yml` — и гейт покраснел на законной записи, сообщив «unknown npm
+    // directory». Это ровно то, что запрещает `AGENTS.md`: «не перечислять частные случаи
+    // того, что проверяешь. Список ... отстаёт от предмета молча». Предмет проверки —
+    // «каталог существует и это не glob», и он выражается через факт наличия
+    // `package.json`, а не через память автора о составе репозитория.
+    const repoRoot = join(import.meta.dirname, '..', '..');
+    const packageDirectories = new Set(
+      readdirSync(repoRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.'))
+        .filter((entry) => existsSync(join(repoRoot, entry.name, 'package.json')))
+        .map((entry) => `/${entry.name}`),
+    );
+    // Пустой набор означал бы «проверять нечего», а не «нарушений нет».
+    expect(packageDirectories.size, 'no npm package directories discovered in the repository').toBeGreaterThan(0);
     for (const update of npmUpdates()) {
       for (const directory of dirs(update)) {
-        expect(exactDirectories.has(directory), `glob or unknown npm directory is not allowed: ${directory}`).toBe(true);
+        expect(
+          packageDirectories.has(directory),
+          `glob or unknown npm directory is not allowed: ${directory} (обнаружены: ${[...packageDirectories].sort().join(', ')})`,
+        ).toBe(true);
       }
     }
     for (const directory of ['/web', '/scripts']) {
