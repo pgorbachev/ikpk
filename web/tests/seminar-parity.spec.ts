@@ -7,8 +7,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 const pages = [
-  '/seminary/kraniosakralnaya-terapiya-1',
-  '/seminary/osnovy-manualnogo-myshechnogo-testirovaniya',
+  '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
+  '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya',
 ];
 
 for (const path of pages) {

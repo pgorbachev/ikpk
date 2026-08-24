@@ -34,8 +34,8 @@ const PAGES = [
   { name: 'home', path: '/' },
   { name: 'oplata', path: '/oplata' },
   { name: 'schedule', path: '/raspisanie-i-tseny' },
-  { name: 'seminar', path: '/seminary/kraniosakralnaya-terapiya-1' },
-  { name: 'institute', path: '/instituty/institut-apledzhera' },
+  { name: 'seminar', path: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1' },
+  { name: 'institute', path: '/institut-apledzhera' },
   { name: 'articles', path: '/statyi' },
 ];
 

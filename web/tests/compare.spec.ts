@@ -19,15 +19,12 @@ import type { Page } from '@playwright/test';
 const ORIGINAL = 'https://ikpk.su';
 const NEW_SITE = 'http://localhost:4322';
 
-// Key pages to compare (from url_map.csv top-level). Адреса — АКТУАЛЬНЫЕ для
-// нового сайта: институты живут под плоским /instituty/<id> (переход на плоскую
-// схему, см. discovery/url_map.csv). До переключения источника прод (ikpk.su)
-// отдаёт их по старому иерархическому адресу — см. LEGACY_PATH ниже.
+// Key pages to compare (from url_map.csv top-level)
 const KEY_PAGES = [
   '/',
-  '/instituty/institut-klinicheskoy-prikladnoy-kineziologii',
-  '/instituty/institut-apledzhera',
-  '/instituty/institut-barralya',
+  '/institut-klinicheskoy-prikladnoy-kineziologii',
+  '/institut-apledzhera',
+  '/institut-barralya',
   '/raspisanie-i-tseny',
   '/statyi',
   '/video',
@@ -37,15 +34,6 @@ const KEY_PAGES = [
   '/svedeniya-ob-obrazovatelnoy-organizatsii',
   '/aktsii-i-skidki',
 ];
-
-// Прод (ikpk.su) ещё не переключён на плоскую схему: для институтов адрес там
-// иерархический. Используется только при обращении к ORIGINAL — сборка нового
-// сайта уже отдаёт институты по плоскому адресу из KEY_PAGES напрямую.
-const LEGACY_PATH: Record<string, string> = {
-  '/instituty/institut-klinicheskoy-prikladnoy-kineziologii': '/institut-klinicheskoy-prikladnoy-kineziologii',
-  '/instituty/institut-apledzhera': '/institut-apledzhera',
-  '/instituty/institut-barralya': '/institut-barralya',
-};
 
 test.setTimeout(20000);
 
@@ -91,7 +79,7 @@ test.describe('Content parity: page-by-page', () => {
       const newPage = await ctx.newPage();
 
       const [orig, rebuilt] = await Promise.all([
-        extractPageData(origPage, ORIGINAL + (LEGACY_PATH[path] ?? path)),
+        extractPageData(origPage, ORIGINAL + path),
         extractPageData(newPage, NEW_SITE + path),
       ]);
 
@@ -137,9 +125,9 @@ test.describe('Navigation parity', () => {
   const EXPECTED_NAV_TARGETS = [
     '/',
     '/aktsii-i-skidki',
-    '/instituty/institut-klinicheskoy-prikladnoy-kineziologii',
-    '/instituty/institut-apledzhera',
-    '/instituty/institut-barralya',
+    '/institut-klinicheskoy-prikladnoy-kineziologii',
+    '/institut-apledzhera',
+    '/institut-barralya',
     '/raspisanie-i-tseny',
     '/oplata',
     '/statyi',
@@ -357,7 +345,7 @@ test.describe('Content volume parity', () => {
   });
 
   test('institute page has course groups', async ({ page }) => {
-    await page.goto(NEW_SITE + '/instituty/institut-klinicheskoy-prikladnoy-kineziologii');
+    await page.goto(NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii');
     const cards = page.locator('[data-testid="institute-program-card"]');
     const count = await cards.count();
     expect(count, 'Institute page should have course group cards').toBeGreaterThan(0);
@@ -379,7 +367,7 @@ test.describe('Detail page content', () => {
 
   test('seminar detail page loads', async ({ page }) => {
     // Pick first seminar from first institute/course group
-    await page.goto(NEW_SITE + '/instituty/institut-klinicheskoy-prikladnoy-kineziologii');
+    await page.goto(NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii');
     const firstLink = page.locator('.card a').first();
     if (await firstLink.count() > 0) {
       const href = await firstLink.getAttribute('href');
@@ -522,7 +510,7 @@ test.describe('No legacy CSS hash classes in rendered output', () => {
   });
 
   test('seminar detail page has no legacy CSS module classes', async ({ page }) => {
-    const url = NEW_SITE + '/seminary/osnovy-manualnogo-myshechnogo-testirovaniya';
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
     await page.goto(url);
     const allClasses = await page.evaluate(() =>
       Array.from(document.querySelectorAll('[class]')).map(el => el.className).join(' ')
@@ -556,14 +544,14 @@ test.describe('Content pages have clean structured HTML', () => {
   });
 
   test('seminar detail has non-empty body content', async ({ page }) => {
-    const url = NEW_SITE + '/seminary/osnovy-manualnogo-myshechnogo-testirovaniya';
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
     await page.goto(url);
     const body = await page.locator('main, article, .seminar-content, .content').first().textContent() ?? '';
     expect(body.trim().length, 'Seminar body should not be empty').toBeGreaterThan(50);
   });
 
   test('seminar detail has <details> collapsible elements', async ({ page }) => {
-    const url = NEW_SITE + '/seminary/osnovy-manualnogo-myshechnogo-testirovaniya';
+    const url = NEW_SITE + '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
     await page.goto(url);
     const details = page.locator('details');
     expect(await details.count(), 'Seminar should have collapsible <details> elements').toBeGreaterThan(0);
@@ -601,7 +589,7 @@ test.describe('Article page structure', () => {
 // ─── Seminar page structure ────────────────────────────────
 
 test.describe('Seminar page structure', () => {
-  const SEMINAR_URL = '/seminary/osnovy-manualnogo-myshechnogo-testirovaniya';
+  const SEMINAR_URL = '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
 
   test('does not use rebuild sidebar layout', async ({ page }) => {
     await page.goto(NEW_SITE + SEMINAR_URL);

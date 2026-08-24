@@ -94,7 +94,7 @@ test.describe('SEO', () => {
 test.describe('Key pages load', () => {
   const pages = [
     '/',
-    '/instituty/institut-klinicheskoy-prikladnoy-kineziologii',
+    '/institut-klinicheskoy-prikladnoy-kineziologii',
     '/raspisanie-i-tseny',
     '/statyi',
     '/kontakty',
@@ -118,7 +118,7 @@ test.describe('Key pages load', () => {
 // ─── Navigation ──────────────────────────────────────────
 test.describe('Navigation', () => {
   test('institute page has course groups', async ({ page }) => {
-    await page.goto('/instituty/institut-klinicheskoy-prikladnoy-kineziologii');
+    await page.goto('/institut-klinicheskoy-prikladnoy-kineziologii');
     const cards = page.locator('.program-card');
     expect(await cards.count()).toBeGreaterThan(0);
   });

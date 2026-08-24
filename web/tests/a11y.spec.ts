@@ -16,6 +16,7 @@ test.beforeEach(async ({ page }) => {
 // (`web/tests/helpers/templates.ts`): два расходящихся перечня над одним предметом
 // дают частичное покрытие с виду полным (см. комментарий в общем модуле).
 
+
 test.describe('Accessibility', () => {
   // axe разбирает всё дерево страницы, и на списках это долго: у расписания 63
   // события, у статей 68 карточек, у «Сведений» 17 раскрывающихся разделов с
@@ -210,7 +211,7 @@ test.describe('Сокращённое движение', () => {
   const TARGETS = [
     { path: '/raspisanie-i-tseny', selector: '.schedule-card' },
     { path: '/video', selector: '.playlist-card' },
-    { path: '/instituty/institut-apledzhera', selector: '.program-card' },
+    { path: '/institut-apledzhera', selector: '.program-card' },
   ];
 
   for (const { path, selector } of TARGETS) {
@@ -669,7 +670,7 @@ const ZOOM_PATHS = [
   '/',
   '/statyi',
   '/raspisanie-i-tseny',
-  '/seminary/kraniosakralnaya-terapiya-1',
+  '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
 ];
 
 // Опущенное закрытым <details> содержимое (мобильный дровер шапки) остаётся в

@@ -33,21 +33,6 @@ const REDIRECTS = join(import.meta.dirname, '..', '..', 'deploy', 'nginx-redirec
 // больше, чем можно предугадать; общий признак — сам вид адреса.
 const PATH_LITERAL = /'(\/[A-Za-z0-9\-._~/%]*)'/g;
 
-/**
- * Осознанное исключение, поимённое по строке: адрес используется ТОЛЬКО против
- * внешнего боевого origin (`ORIGINAL` в compare.spec.ts — https://ikpk.su, ещё
- * не переключённого на плоскую схему адресов), а не против локального
- * предпросмотра под этим гейтом. Предпросмотр этот адрес никогда не получает,
- * поэтому «отдаётся 301, а предпросмотром — 404» к нему неприменимо. Список —
- * по файлу и строке, а не по файлу целиком: тот же файл свободно приобретает
- * НОВЫЕ адреса предпросмотра рядом, и они обязаны продолжать проверяться.
- */
-const KNOWN_EXTERNAL_ORIGIN_LITERALS = new Set([
-  'compare.spec.ts:42',
-  'compare.spec.ts:43',
-  'compare.spec.ts:44',
-]);
-
 interface Address {
   file: string;
   line: number;
@@ -106,7 +91,6 @@ describe('адреса в браузерных тестах', () => {
     const sources = redirectSources();
     const offenders = collectAddresses()
       .filter(({ path }) => sources.has(path.split('?')[0].split('#')[0]))
-      .filter(({ file, line }) => !KNOWN_EXTERNAL_ORIGIN_LITERALS.has(`${file}:${line}`))
       .map(({ file, line, path }) => `${file}:${line} → ${path}`);
 
     expect(

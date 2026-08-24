@@ -7,8 +7,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 const TARGET_GROUPS = [
-  '/programmy/kraniosakralnaya-terapiya',
-  '/programmy/avtorskie-seminary-zharovoj-ls',
+  '/institut-apledzhera/kraniosakralnaya-terapiya',
+  '/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls',
 ];
 
 test.describe('Course Group Landing Parity', () => {
@@ -50,7 +50,7 @@ test.describe('Course Group Landing Parity', () => {
   }
 
   test('course-group page renders additional informational content when available', async ({ page }) => {
-    await gotoAttachedPath(page, '/programmy/kraniosakralnaya-terapiya');
+    await gotoAttachedPath(page, '/institut-apledzhera/kraniosakralnaya-terapiya');
 
     const extra = page.locator('[data-testid="course-group-extra-content"]');
     await expect(extra).toBeVisible();
