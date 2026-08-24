@@ -7,9 +7,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 const INSTITUTES = [
-  '/institut-klinicheskoy-prikladnoy-kineziologii',
-  '/institut-apledzhera',
-  '/institut-barralya',
+  '/instituty/institut-klinicheskoy-prikladnoy-kineziologii',
+  '/instituty/institut-apledzhera',
+  '/instituty/institut-barralya',
 ];
 
 test.describe('Institute Landing Parity', () => {
@@ -38,7 +38,7 @@ test.describe('Institute Landing Parity', () => {
   }
 
   test('institutes expose additional content shell instead of stopping after cards', async ({ page }) => {
-    await gotoAttachedPath(page, '/institut-klinicheskoy-prikladnoy-kineziologii');
+    await gotoAttachedPath(page, '/instituty/institut-klinicheskoy-prikladnoy-kineziologii');
 
     const extra = page.locator('[data-testid="institute-extra-content"]');
     await expect(extra).toBeVisible();

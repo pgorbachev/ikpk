@@ -210,7 +210,7 @@ test.describe('Сокращённое движение', () => {
   const TARGETS = [
     { path: '/raspisanie-i-tseny', selector: '.schedule-card' },
     { path: '/video', selector: '.playlist-card' },
-    { path: '/institut-apledzhera', selector: '.program-card' },
+    { path: '/instituty/institut-apledzhera', selector: '.program-card' },
   ];
 
   for (const { path, selector } of TARGETS) {
@@ -669,7 +669,7 @@ const ZOOM_PATHS = [
   '/',
   '/statyi',
   '/raspisanie-i-tseny',
-  '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1',
+  '/seminary/kraniosakralnaya-terapiya-1',
 ];
 
 // Опущенное закрытым <details> содержимое (мобильный дровер шапки) остаётся в
