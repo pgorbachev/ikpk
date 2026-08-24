@@ -390,13 +390,32 @@ function cfg(): Parsed {
     }
     const root = parseConfig(text);
     const servers = root.children.filter((b) => b.name === 'server');
-    if (servers.length !== 1) {
+    if (servers.length === 0) {
       throw new Error(
-        `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в теле heredoc'а ${HEREDOC} ожидался ровно один блок server, ` +
-          `найдено ${servers.length}.`,
+        `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в теле heredoc'а ${HEREDOC} не найдено ни одного блока server.`,
       );
     }
-    const server = servers[0];
+    // Предмет этого файла — кеш-политика и сжатие ОСНОВНОГО сайта, поэтому
+    // блок выбирается по имени, а не по счёту: с change
+    // `cms-content-authoring-and-migration` в heredoc появились ещё два блока
+    // (админка системы управления, `$ADMIN_DOMAIN`, на отдельном имени и
+    // сертификате — см. `tests/cms-serving-and-tls.test.ts`), и предположение
+    // «server ровно один» перестало быть верным для дерева в целом. `$DOMAIN`
+    // здесь — буквальный текст переменной bash: heredoc не закавычен, и
+    // `extractVhostText` намеренно возвращает `${ИМЯ}` как `$ИМЯ`, а не
+    // подставляет значение (спека раздачи от него не зависит).
+    const domainServers = servers.filter((s) => {
+      const names = s.directives.find((d) => d.name === 'server_name')?.args ?? [];
+      return names.includes('$DOMAIN') && !names.includes('$ADMIN_DOMAIN');
+    });
+    if (domainServers.length !== 1) {
+      throw new Error(
+        `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в теле heredoc'а ${HEREDOC} ожидался ровно один блок server с ` +
+          `server_name $DOMAIN (без $ADMIN_DOMAIN) — основной сайт; найдено ${domainServers.length} ` +
+          `из ${servers.length} блоков server.`,
+      );
+    }
+    const server = domainServers[0];
     if (server.directives.length === 0 && server.children.length === 0) {
       throw new Error(
         `ПРОВЕРИТЬ НЕ УДАЛОСЬ: блок server пуст — проверять политику не на чем.`,

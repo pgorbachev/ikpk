@@ -101,23 +101,7 @@ cat >"$VHOST" <<NGINX
 server {
   listen 80;
   listen [::]:80;
-  listen 443 ssl;
-  listen [::]:443 ssl;
-  # ADMIN_DOMAIN — отдельное имя админки системы управления, добавленное в
-  # ТОТ ЖЕ vhost по SNI: отдельный блок server на тот же порт держал бы два
-  # блока server в одном heredoc, а `tests/serving-config.test.ts` (уже
-  # принятый гейт `static-serving`) требует ровно один. Сертификат ниже
-  # выпускается ИМЕННО на ADMIN_DOMAIN, отдельно от сертификата канонических
-  # имён сайта (тот — предмет `prod-serving-on-nginx`).
-  server_name ${DOMAIN} ${ADMIN_DOMAIN};
-
-  # Сертификат админки системы управления (не канонические имена сайта — те
-  # переключает \`prod-serving-on-nginx\`). \`ssl_certificate\` смотрит на
-  # самоподписанный плейсхолдер, созданный выше, до первого выпуска настоящего
-  # сертификата; certbot --nginx ниже подменяет оба пути на свои после
-  # проверки домена и настраивает автопродление.
-  ssl_certificate ${ADMIN_TLS_DIR}/fullchain.pem;
-  ssl_certificate_key ${ADMIN_TLS_DIR}/privkey.pem;
+  server_name ${DOMAIN};
 
   root ${WEB_ROOT}/current;
   index index.html;
@@ -162,34 +146,6 @@ server {
   # файла — ошибка конфигурации, а пустой include законен и значит «правил пока
   # нет».
   include ${WEB_ROOT}/shared/nginx-redirects.conf;
-
-  # Админка системы управления и её API раздаются только по TLS (спека
-  # cms-content-authoring-and-migration, «Админка и её API раздаются только по
-  # TLS»): по HTTP — перенаправление, а не обслуживание, иначе пароль
-  # администратора и cookie сессии ушли бы открытым текстом. Данные сотрудника
-  # разделяемому кешу хранить нельзя (дельта static-serving, класс адресов
-  # системы управления) — поэтому ровно no-store, без соседства с public.
-  location ^~ /admin/ {
-    add_header Cache-Control "no-store" always;
-    proxy_pass http://127.0.0.1:1337;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    if (\$scheme = http) {
-      return 301 https://\$host\$request_uri;
-    }
-  }
-
-  location ^~ /api/ {
-    add_header Cache-Control "no-store" always;
-    proxy_pass http://127.0.0.1:1337;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    if (\$scheme = http) {
-      return 301 https://\$host\$request_uri;
-    }
-  }
 
   # /_astro/ — имя несёт хеш содержимого сборки Astro, поэтому годовое
   # обещание безопасно: замена содержимого меняет и имя файла. Без always —
@@ -299,6 +255,56 @@ server {
   }
 
   error_page 404 /404.html;
+}
+
+# Админка системы управления живёт в ОТДЕЛЬНЫХ блоках server, а не в блоке
+# основного сайта выше: изоляция по имени работает только если админский
+# сертификат обслуживает исключительно ADMIN_DOMAIN — иначе TLS-запрос к
+# основному имени по пути /admin/ маршрутизировался бы в админку тем же
+# location-правилом, просто с чужим (не совпадающим) сертификатом, который
+# нечеловеческие клиенты нередко не проверяют строго. Второй server на порт
+# 80 нужен ровно для того же: без него запрос к ADMIN_DOMAIN по HTTP попал бы
+# в блок основного сайта (единственный слушатель порта 80), а не получил
+# перенаправление на https.
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${ADMIN_DOMAIN};
+  return 301 https://\$host\$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  server_name ${ADMIN_DOMAIN};
+
+  # Сертификат админки системы управления (не канонические имена сайта — те
+  # переключает \`prod-serving-on-nginx\`). \`ssl_certificate\` смотрит на
+  # самоподписанный плейсхолдер, созданный выше, до первого выпуска настоящего
+  # сертификата; certbot --nginx ниже подменяет оба пути на свои после
+  # проверки домена (по -d ADMIN_DOMAIN — найдёт именно этот блок) и
+  # настраивает автопродление.
+  ssl_certificate ${ADMIN_TLS_DIR}/fullchain.pem;
+  ssl_certificate_key ${ADMIN_TLS_DIR}/privkey.pem;
+
+  # Данные сотрудника: разделяемому кешу хранить ответ нельзя (дельта
+  # static-serving, класс адресов системы управления) — поэтому ровно
+  # no-store, без соседства с public.
+  location ^~ /admin/ {
+    add_header Cache-Control "no-store" always;
+    proxy_pass http://127.0.0.1:1337;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+
+  location ^~ /api/ {
+    add_header Cache-Control "no-store" always;
+    proxy_pass http://127.0.0.1:1337;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
 }
 NGINX
 
