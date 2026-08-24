@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   loadWorkflows,
   stripShellComments,
+  REPO_ROOT,
   type Workflow,
   type WorkflowJob,
   type WorkflowStep,
@@ -54,25 +57,64 @@ function allSteps(): { wf: Workflow; job: WorkflowJob; step: WorkflowStep }[] {
 }
 
 /**
- * Вызовы сборки, строящие ВЕРШИНУ прогона. Три вызова из семи строят `BASE_SHA` во временном
- * worktree и предметом задачи 5.2 не являются (tasks.md 3.9a) — они отделяются по имени шага,
- * а не по номеру строки: номер сдвинется при первой же правке файла.
+ * npm-скрипты `web/package.json`: сборка бывает спрятана внутри скрипта
+ * (`test:build:remote` → `npm run build && …`), и текст шага в YAML тогда не содержит
+ * буквального `npm run build` вовсе. Найдено измерением tasks.md 5.2b — предыдущая версия
+ * этого файла ловила только буквальный текст и пропускала `nightly.yml:75`.
+ */
+const NPM_SCRIPTS: Record<string, string> = (() => {
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'web', 'package.json'), 'utf-8')) as {
+    scripts?: Record<string, string>;
+  };
+  if (!pkg.scripts || Object.keys(pkg.scripts).length === 0) {
+    throw new Error('web/package.json: секция scripts пуста или отсутствует — резолвить нечего');
+  }
+  return pkg.scripts;
+})();
+
+/** Разворачивает `npm run <имя>` рекурсивно через определения `web/package.json`. */
+function resolveNpmScripts(script: string): string {
+  let result = script;
+  const seen = new Set<string>();
+  for (let pass = 0; pass < 10; pass += 1) {
+    const names = [...result.matchAll(/\bnpm run ([\w:-]+)\b/g)].map((m) => m[1]!);
+    const next = names.filter((n) => !seen.has(n) && NPM_SCRIPTS[n] !== undefined);
+    if (next.length === 0) return result;
+    for (const name of next) {
+      seen.add(name);
+      result = result.replaceAll(`npm run ${name}`, NPM_SCRIPTS[name]!);
+    }
+  }
+  throw new Error(`резолвинг npm-скриптов не сошёлся за 10 проходов: ${script}`);
+}
+
+/** `nightly.yml:75` «Run remote parity tests» — вершинная сборка, но вне объёма 5.2 (см. 5.2a):
+ *  сверяет с живым ikpk.su, закреплённая фикстура делает эту сверку бессмысленной. */
+const OUT_OF_SCOPE_5_2A = /remote parity/i;
+
+/**
+ * Вызовы сборки, строящие ВЕРШИНУ прогона. Три из одиннадцати строят `BASE_SHA` во временном
+ * worktree и предметом задачи 5.2 не являются (tasks.md 3.9a) — отделяются по имени шага, а не
+ * по номеру строки: номер сдвинется при первой же правке файла. Один (5.2a) исключён по тому же
+ * принципу — по имени, а не по тексту команды, иначе появление явного `npm run build` в нём
+ * молча вернуло бы его в это число.
  */
 function headBuildInvocations(): { wf: Workflow; job: WorkflowJob; step: WorkflowStep }[] {
   return allSteps().filter(({ step }) => {
-    const script = stripShellComments(step.run ?? '');
-    if (!/\bnpm run build(:demo|:stand)?\b/.test(script) && !/\bastro build\b/.test(script)) return false;
-    return !/\bbase\b/i.test(step.name ?? '');
+    if (/\bbase\b/i.test(step.name ?? '')) return false;
+    if (OUT_OF_SCOPE_5_2A.test(step.name ?? '')) return false;
+    const script = resolveNpmScripts(stripShellComments(step.run ?? ''));
+    return /\bnpm run build(:demo|:stand)?\b/.test(script) || /\bastro build\b/.test(script);
   });
 }
 
 describe('один снимок на весь прогон', () => {
-  it('вызовов сборки вершины — пять, и ни один не измеряет BASE_SHA', () => {
+  it('вызовов сборки вершины в объёме задачи 5.2 — семь', () => {
     const invocations = headBuildInvocations();
     expect(
       invocations.length,
       `сборок вершины: ${invocations.map((i) => `${i.wf.file}:${i.job.key}/${i.step.name ?? i.step.index}`).join(', ')}`,
-    ).toBe(5);
+    ).toBe(7);
   });
 
   // Сценарий: все шаги прогона используют один снимок
@@ -84,15 +126,39 @@ describe('один снимок на весь прогон', () => {
     ).toHaveLength(1);
   });
 
-  it('каждая сборка вершины получает снимок артефактом, а не снимает его сама', () => {
+  /**
+   * Джобы на пути публикации: тот же прогон, который их запустил, и снимает снимок —
+   * артефакт физически достижим (ADDED «Проверки и выкладка используют один и тот же
+   * снимок»). `lhci` (`pull_request`/`push`) и `compat` (`schedule`) идут ДРУГИМ событием,
+   * не тем прогоном, что снял снимок публикации, — артефакт того прогона им недостижим
+   * структурно, а не по недосмотру реализации. По D7 они работают с закреплённой
+   * фикстурой. Требовать от них артефакта значило бы требовать того, чего спека не
+   * требует и что недостижимо (tasks.md 5.2 разводит это явно).
+   */
+  const PUBLISH_PATH_WORKFLOWS = new Set(['test.yml', 'deploy.yml']);
+  const FIXTURE_PATH_WORKFLOWS = new Set(['lighthouse.yml', 'nightly.yml']);
+
+  it('классификация путей покрывает все сборки вершины без остатка', () => {
+    const invocations = headBuildInvocations();
+    const unclassified = invocations.filter(
+      ({ wf }) => !PUBLISH_PATH_WORKFLOWS.has(wf.file) && !FIXTURE_PATH_WORKFLOWS.has(wf.file),
+    );
+    expect(
+      unclassified.map((i) => `${i.wf.file}:${i.job.key}`),
+      'новый workflow со сборкой вершины не отнесён ни к пути публикации, ни к фикстуре',
+    ).toEqual([]);
+  });
+
+  it('каждая сборка на пути публикации получает снимок артефактом, а не снимает его сама', () => {
     const failures: string[] = [];
     for (const { wf, job, step } of headBuildInvocations()) {
+      if (!PUBLISH_PATH_WORKFLOWS.has(wf.file)) continue;
       const receivesArtifact = job.steps.some(
         (s) => /^actions\/download-artifact(@|$)/.test(s.uses ?? '') && SNAPSHOT_CONSUMER.test(s.raw),
       );
       if (!receivesArtifact) failures.push(`${wf.file}:${job.key}/${step.name ?? step.index}`);
     }
-    expect(failures, 'сборка вершины без переданного снимка').toEqual([]);
+    expect(failures, 'сборка на пути публикации без переданного снимка').toEqual([]);
   });
 
   it('к системе управления обращается только шаг снятия снимка', () => {
