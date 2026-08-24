@@ -30,16 +30,46 @@ import type { Page, Route, Request } from '@playwright/test';
  * производительности — оно запускает настоящий браузер по боевому выводу
  * (`web/lighthouserc.cjs:16`, `staticDistDir: './dist',`) и хука для подмены не имеет
  * вовсе. Для него требование неприменимо, и это записано известным отклонением.
+ *
+ * ── ПОДСТАВНЫХ ОТВЕТОВ ВИДЖЕТА ДВА, И ОБА ОБЪЯВЛЕНЫ ЗДЕСЬ ───────────────────
+ * Спека требует именно этого: «используется один из двух названных подставных ответов:
+ * ответ ФИКСИРОВАННОГО РАЗМЕРА — для проверки сдвига раскладки, и ответ, НЕСУЩИЙ ПИКСЕЛЬ
+ * чужого счётчика — для проверки различения счётчиков; оба объявлены в одном месте вместе
+ * со списком хостов». Без этого у проверки различения счётчиков нет построимого красного
+ * состояния: живого ответа в прогонах нет по требованию о перехвате, значит пиксель обязан
+ * прийти из подставного ответа, а какой именно — должно быть сказано, а не угадано.
  */
 
 /** Хосты, обращения к которым считаются «своими» и не перехватываются. */
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
+/**
+ * Перечень сторонних хостов, которые перехват обязан накрывать.
+ *
+ * Список ПЛОСКИЙ и без деления на «наши» и «чужие»: у общего адреса тега Метрики такого
+ * деления не существует — наша аналитика и виджет отзывов загружают буквально один URL, и
+ * различие несёт только идентификатор счётчика. Перечень нужен перехвату и политике
+ * содержимого, а там правильно одно вхождение на адрес.
+ *
+ * Сам перехват при этом устроен ШИРЕ перечня — он накрывает любой не-loopback хост.
+ * Перечень существует как объявление предмета, а не как признак отбора: признак,
+ * ограниченный списком, пропустил бы хост, о котором мы не знали, — а спека требует, чтобы
+ * ни один сторонний сервис не попал в прогон живым.
+ */
+export const THIRD_PARTY_HOSTS = [
+  'yandex.ru',
+  'avatars.mds.yandex.net',
+  'mc.yandex.ru',
+  'yastatic.net',
+] as const;
+
+/** Идентификатор чужого счётчика, приходящего внутри виджета отзывов. */
+const FOREIGN_METRIKA_ID = '57020224';
+
 export interface GuardOptions {
   /**
-   * Тело подставного документа виджета отзывов. По умолчанию — документ ФИКСИРОВАННОГО
-   * размера: проверка сдвига раскладки не имеет права зависеть от того, сколько отзывов
-   * у организации сегодня.
+   * Тело подставного документа виджета отзывов. По умолчанию — ответ ФИКСИРОВАННОГО
+   * размера, несущий пиксель чужого счётчика.
    */
   reviewsWidgetBody?: string;
   /**
@@ -50,12 +80,6 @@ export interface GuardOptions {
   chatLoaderBody?: string;
   /** Адрес загрузчика чата: перехватывается по хосту и пути, а не угадывается. */
   chatLoaderSrc?: string | null;
-  /**
-   * Идентификатор чужого счётчика, который несёт подставной документ виджета. Ноль
-   * значит «виджет без своей аналитики» — так проверяется, что признак гашения опирается
-   * на встраивание, а не на аналитику внутри него.
-   */
-  foreignMetrikaId?: string | null;
 }
 
 export interface ThirdPartyGuard {
@@ -75,14 +99,30 @@ export interface ThirdPartyGuard {
   counterIds(): string[];
 }
 
-const FIXED_WIDGET_BODY = (foreignMetrikaId: string | null): string => `<!doctype html>
+/**
+ * ПЕРВЫЙ подставной ответ: фиксированного размера, без чужой аналитики.
+ *
+ * Для проверки сдвига раскладки. Размер фиксирован намеренно: на живом ответе проверка
+ * зависела бы от того, сколько отзывов у организации сегодня. Пикселя чужого счётчика
+ * здесь нет — этим же ответом проверяется, что признак гашения опирается на встраивание, а
+ * не на аналитику внутри него.
+ */
+export const FIXED_SIZE_WIDGET_BODY = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Отзывы организации</title>
 <style>html,body{margin:0}#stub{height:400px;background:#f2f2f2;font:14px sans-serif}</style>
-</head><body><div id="stub">подставной документ виджета отзывов</div>${
-  foreignMetrikaId === null
-    ? ''
-    : `<img src="https://mc.yandex.ru/watch/${foreignMetrikaId}" style="position:absolute;left:-9999px" alt="">`
-}</body></html>`;
+</head><body><div id="stub">подставной документ виджета отзывов</div></body></html>`;
+
+/**
+ * ВТОРОЙ подставной ответ: тот же фиксированный размер плюс пиксель ЧУЖОГО счётчика.
+ *
+ * Для проверки различения счётчиков по идентификатору. Пиксель несёт идентификатор в самом
+ * пути (`/watch/57020224`), тогда как адрес тега идентификатора не несёт вовсе — измерено,
+ * и именно поэтому признаком служит пиксель, а не адрес загрузки тега.
+ */
+export const WIDGET_BODY_WITH_FOREIGN_PIXEL = FIXED_SIZE_WIDGET_BODY.replace(
+  '</body>',
+  `<img src="https://mc.yandex.ru/watch/${FOREIGN_METRIKA_ID}" style="position:absolute;left:-9999px" alt=""></body>`,
+);
 
 /**
  * Подставной тег Метрики.
@@ -114,6 +154,7 @@ const CHAT_LOADER_STUB = `(function () {
   close.textContent = 'Закрыть';
   panel.appendChild(close);
   mount.appendChild(panel);
+  panel.focus();
 })();`;
 
 export async function installThirdPartyGuard(
@@ -121,7 +162,6 @@ export async function installThirdPartyGuard(
   options: GuardOptions = {},
 ): Promise<ThirdPartyGuard> {
   const urls: string[] = [];
-  const foreignId = options.foreignMetrikaId === undefined ? '57020224' : options.foreignMetrikaId;
   const loader = options.chatLoaderSrc ?? null;
   const loaderParsed = loader === null ? null : safeUrl(loader);
 
@@ -142,7 +182,7 @@ export async function installThirdPartyGuard(
         await route.fulfill({
           status: 200,
           contentType: 'text/html; charset=utf-8',
-          body: options.reviewsWidgetBody ?? FIXED_WIDGET_BODY(foreignId),
+          body: options.reviewsWidgetBody ?? WIDGET_BODY_WITH_FOREIGN_PIXEL,
         });
         return;
       }

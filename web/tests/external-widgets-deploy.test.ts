@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SEL_CHAT_FACADE } from './helpers/external-widgets';
+import { CHAT_LOADER_NONE, SEL_CHAT_FACADE } from './helpers/external-widgets';
 
 const execFileAsync = promisify(execFile);
 
@@ -31,6 +31,14 @@ const execFileAsync = promisify(execFile);
  *
  * Мутация, меняющая только имя атрибута на `data-*-src`, воспроизводит ПЕРВЫЙ исход и
  * НЕ воспроизводит второй — то есть проходит, не убрав предмет. Различать обязательно.
+ *
+ * ── ШОВ ВТОРОЙ ФУНКЦИИ: ТРЕТИЙ АРГУМЕНТ — ЗНАЧЕНИЕ КОНФИГУРАЦИИ ─────────────
+ * Первая редакция этих тестов передавала «ожидаемый адрес», и у неё было два исхода
+ * вместо семи: состояние «отсутствие объявлено явно» она отличить не могла вовсе, а
+ * состояние «не объявлено ничего» принимала за него. Спека теперь называет исходы
+ * поимённо — пять у боевой выкладки и два у стенда, — и различить их можно только если
+ * функция получает СЫРОЕ значение конфигурации: адрес, выделенное значение либо пустоту.
+ * Поэтому третий аргумент — значение `CHAT_LOADER_SRC`, а не вывод из него.
  */
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -60,6 +68,10 @@ function distRaw(pages: Record<string, string>): string {
   return dir;
 }
 
+/** Разметка страницы с встраиванием чата — носитель адреса объявлен нашим контейнером. */
+const withChat = (src: string): string =>
+  `<div ${SEL_CHAT_FACADE} data-chat-loader="${src}"><button data-chat-trigger>Чат</button></div>`;
+
 type Run = { code: number; stdout: string; stderr: string };
 
 async function sh(call: string): Promise<Run> {
@@ -82,19 +94,18 @@ const formLinks = (dir: string, mode: string, demo = ''): Promise<Run> =>
  * Спека требует: «выкладка боевого сайта SHALL проверять соответствие встраивания чата
  * ожидаемому для режима — тем же способом, которым она уже проверяет ссылки форм и
  * платёжный эндпоинт». Имя и порядок аргументов взяты по образцу
- * `payment_endpoint_matches <dist> <expect> <mode>`.
+ * `payment_endpoint_matches <dist> <expect> <mode>`; третьим идёт СЫРОЕ значение
+ * конфигурации, потому что различить состояния 2 и 3 иначе нечем.
  */
-const chatWidget = (dir: string, mode: string, expect_ = ''): Promise<Run> =>
-  sh(`chat_widget_matches_mode '${dir}' '${mode}' '${expect_}'`);
+const chatWidget = (dir: string, mode: string, configValue = ''): Promise<Run> =>
+  sh(`chat_widget_matches_mode '${dir}' '${mode}' '${configValue}'`);
 
 describe('гейт выкладки различает ссылку формы и загрузчик виджета', () => {
   it('загрузчик виджета в боевой сборке не принят за ссылку формы', async () => {
     // Исход «законная сборка заблокирована». Ссылки форм в боевой сборке правильные,
     // единственное, что может не понравиться гейту, — адрес загрузчика.
     const dir = distRaw({
-      'index.html':
-        `<a href="${CUSTOMER}/news/">Записаться</a>\n` +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_OFF_PORTAL}"></div>`,
+      'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
     });
     const run = await formLinks(dir, 'prod', '');
     expect(
@@ -108,9 +119,7 @@ describe('гейт выкладки различает ссылку формы �
     // ожиданию боевого режима соответствует, и первый исход не существует вовсе —
     // поэтому оба проверяются, а не выбирается один «по общему знанию».
     const dir = distRaw({
-      'index.html':
-        `<a href="${CUSTOMER}/news/">Записаться</a>\n` +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_ON_PORTAL}"></div>`,
+      'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>\n${withChat(LOADER_ON_PORTAL)}`,
     });
     const run = await formLinks(dir, 'prod', '');
     expect(run.code, run.stderr).toBe(0);
@@ -156,9 +165,7 @@ describe('гейт выкладки различает ссылку формы �
 
   it('стенд с одними заглушками и загрузчиком чата проходит', async () => {
     const dir = distRaw({
-      'index.html':
-        '<a href="/demo-zayavka">Записаться</a>\n' +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_OFF_PORTAL}"></div>`,
+      'index.html': `<a href="/demo-zayavka">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
     });
     const run = await formLinks(dir, 'stand', 'stub');
     expect(run.code, `загрузчик чата отвергнут на стенде:\n${run.stderr}`).toBe(0);
@@ -196,8 +203,20 @@ describe('гейт выкладки различает ссылку формы �
   });
 });
 
-describe('выкладка боевого сайта проверяет встраивание чата', () => {
-  it('боевой вывод без встраивания чата выкладку не проходит, и несоответствие названо', async () => {
+// ─── Пять исходов боевой выкладки ────────────────────────────────────────────
+
+describe('выкладка боевого сайта: пять исходов, из них два положительных', () => {
+  it('1. адрес задан и вывод несёт — выкладка ПРОХОДИТ', async () => {
+    // Исход назван спекой отдельно: без него реализация «адрес задан — выкладку
+    // остановить» удовлетворяет всем отрицательным сценариям и не краснит ни одного.
+    const dir = distRaw({
+      'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
+    });
+    const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);
+    expect(run.code, `выкладка при заданном адресе и согласном выводе не прошла:\n${run.stderr}`).toBe(0);
+  });
+
+  it('2. адрес задан, вывод не несёт — не проходит МОЛЧА: несоответствие названо', async () => {
     const dir = distRaw({ 'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>` });
     const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);
     expect(run.code, 'выкладка боевого сайта без чата прошла молча').toBe(1);
@@ -207,45 +226,59 @@ describe('выкладка боевого сайта проверяет встр
     ).toMatch(/чат/i);
   });
 
-  it('боевой вывод с ожидаемым адресом загрузчика проходит', async () => {
-    const dir = distRaw({
-      'index.html':
-        `<a href="${CUSTOMER}/news/">Записаться</a>\n` +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_OFF_PORTAL}"></div>`,
-    });
-    const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);
-    expect(run.code, run.stderr).toBe(0);
+  it('3. отсутствие объявлено явно и вывод не несёт — выкладка ПРОХОДИТ', async () => {
+    // Второй положительный исход. Объявленное отсутствие — законное публикуемое
+    // состояние, и без этого исхода реализация, останавливающая выкладку в нём,
+    // удовлетворяла бы всем отрицательным сценариям и не краснила ни одного, — то есть
+    // «законное состояние» и «зелёный гейт» снова были бы недостижимы одновременно,
+    // только у третьего потребителя.
+    const dir = distRaw({ 'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>` });
+    const run = await chatWidget(dir, 'prod', CHAT_LOADER_NONE);
+    expect(
+      run.code,
+      `выкладка при объявленном отсутствии и согласном выводе не прошла:\n${run.stderr}`,
+    ).toBe(0);
   });
 
-  it('боевой вывод с ЧУЖИМ адресом загрузчика выкладку не проходит', async () => {
-    // У заказчика два портала: молчаливый выбор одного направил бы обращения не туда,
-    // поэтому проверка сверяет адрес, а не только его наличие.
+  it('4. отсутствие объявлено, а вывод несёт чат — не проходит, расхождение названо', async () => {
+    // Без этого исхода выкладка проверяет чат только в одном состоянии из трёх, а
+    // «живой чат приехал мимо сборки» от «отсутствие объявлено» на ней не отличается.
     const dir = distRaw({
-      'index.html':
-        `<a href="${CUSTOMER}/news/">Записаться</a>\n` +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_ON_PORTAL}"></div>`,
+      'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
+    });
+    const run = await chatWidget(dir, 'prod', CHAT_LOADER_NONE);
+    expect(run.code, 'вывод несёт чат при объявленном отсутствии, а выкладка прошла').toBe(1);
+    expect(run.stderr, 'расхождение не названо').toMatch(/чат/i);
+  });
+
+  it('5. конфигурация не объявлена — не проходит с причиной «конфигурация не объявлена»', async () => {
+    // Ожидаемое для режима здесь известно — встраивания быть не должно, — но
+    // необъявленное состояние САМО является отказом: объявление есть решение человека, и
+    // его отсутствие не заменяется выводом из вывода сборки. Поэтому отказ обязан
+    // наступать и тогда, когда вывод «правильный».
+    for (const [what, pages] of [
+      ['вывод без чата', { 'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>` }],
+      ['вывод с чатом', { 'index.html': withChat(LOADER_OFF_PORTAL) }],
+    ] as const) {
+      const run = await chatWidget(distRaw(pages), 'prod', '');
+      expect(run.code, `${what}: необъявленная конфигурация прошла`).toBe(1);
+      expect(
+        run.stderr,
+        `${what}: причина не названа — «конфигурация не объявлена» обязана стоять в выводе`,
+      ).toMatch(/не объявлена|не объявлено/i);
+    }
+  });
+
+  it('адрес в выводе НЕ ТОТ, что объявлен — не проходит', async () => {
+    // Не отдельный сценарий, а следствие нормы «проверять соответствие ожидаемому для
+    // режима»: у заказчика два портала Bitrix24, и молчаливый выбор одного направил бы
+    // обращения посетителей не туда. Помечено как выведенное из прозы, а не из сценария,
+    // чтобы следующий читатель не искал сценарий, которого нет.
+    const dir = distRaw({
+      'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>\n${withChat(LOADER_ON_PORTAL)}`,
     });
     const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);
     expect(run.code, 'адрес загрузчика не тот, а выкладка прошла').toBe(1);
-  });
-
-  it('на стенде встраивания чата быть не должно, и живое встраивание выкладку не проходит', async () => {
-    // Выкладываемый стенд идёт из БОЕВОГО каталога, собранного с заглушкой форм, то
-    // есть встраивания в нём нет по признаку демо. Живое встраивание там означает
-    // расхождение двух признаков — состояние «формы погашены, чат живой».
-    const dir = distRaw({
-      'index.html':
-        '<a href="/demo-zayavka">Записаться</a>\n' +
-        `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_OFF_PORTAL}"></div>`,
-    });
-    const run = await chatWidget(dir, 'stand', LOADER_OFF_PORTAL);
-    expect(run.code, 'живой чат уехал на стенд при зелёной проверке').toBe(1);
-  });
-
-  it('стенд без встраивания чата проходит', async () => {
-    const dir = distRaw({ 'index.html': '<a href="/demo-zayavka">Записаться</a>' });
-    const run = await chatWidget(dir, 'stand', LOADER_OFF_PORTAL);
-    expect(run.code, run.stderr).toBe(0);
   });
 
   it('каталога нет — «проверить не удалось», а не «всё верно»', async () => {
@@ -258,13 +291,49 @@ describe('выкладка боевого сайта проверяет встр
     const run = await chatWidget(dir, 'ci', LOADER_OFF_PORTAL);
     expect(run.code, 'неизвестный режим принят').toBe(1);
   });
+});
 
-  it('ожидаемый адрес не задан — отказ, а не проход', async () => {
-    // Fail-closed: без ожидания сверять нечего, и «нечего сверять» не равно «сошлось».
+// ─── Два исхода выкладки стенда ──────────────────────────────────────────────
+
+describe('выкладка стенда: своё ожидаемое и то же выделенное значение', () => {
+  it('адрес задан, вывода нет — выкладка стенда ПРОХОДИТ', async () => {
+    // Обычное для стенда состояние: стенд собирается с гашением. Требовать наличия
+    // встраивания значило бы остановить выкладку стенда в нормальном состоянии.
+    const dir = distRaw({ 'index.html': '<a href="/demo-zayavka">Записаться</a>' });
+    const run = await chatWidget(dir, 'stand', LOADER_OFF_PORTAL);
+    expect(run.code, `выкладка стенда при заданном адресе и погашенном выводе не прошла:\n${run.stderr}`).toBe(0);
+  });
+
+  it('выкладка стенда распознаёт выделенное значение ТЕМ ЖЕ словом, что сборка и прод', async () => {
+    // Расхождение значений сделало бы состояние 2 у одного потребителя состоянием 3 у
+    // другого, то есть развилка развалилась бы по-тихому именно на стыке. Проверяется
+    // РАЗЛИЧЕНИЕМ: выделенное значение проходит, пустое — нет. Проверка «оба проходят»
+    // была бы зелёной и для реализации, которая выделенного значения не знает вовсе.
+    const dir = distRaw({ 'index.html': '<a href="/demo-zayavka">Записаться</a>' });
+    const sentinel = await chatWidget(dir, 'stand', CHAT_LOADER_NONE);
+    expect(
+      sentinel.code,
+      `стенд не распознал выделенное значение '${CHAT_LOADER_NONE}':\n${sentinel.stderr}`,
+    ).toBe(0);
+
+    const empty = await chatWidget(dir, 'stand', '');
+    expect(
+      empty.code,
+      'стенд принял пустое значение за объявление отсутствия: тогда состояние 3 у него — ' +
+        'состояние 2, и развилка развалилась на стыке',
+    ).toBe(1);
+    expect(empty.stderr).toMatch(/не объявлена|не объявлено/i);
+  });
+
+  it('живое встраивание на стенде выкладку не проходит', async () => {
+    // Выведено из нормы, а не из сценария: «ожидаемое для режима стенда — отсутствие
+    // встраивания». Живое встраивание там означает расхождение двух признаков —
+    // состояние «формы погашены, чат живой», ради которого спека и связала признак
+    // гашения с признаком артефакта.
     const dir = distRaw({
-      'index.html': `<div ${SEL_CHAT_FACADE} data-chat-loader="${LOADER_OFF_PORTAL}"></div>`,
+      'index.html': `<a href="/demo-zayavka">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
     });
-    const run = await chatWidget(dir, 'prod', '');
-    expect(run.code, 'проверка прошла без ожидаемого адреса').toBe(1);
+    const run = await chatWidget(dir, 'stand', LOADER_OFF_PORTAL);
+    expect(run.code, 'живой чат уехал на стенд при зелёной проверке').toBe(1);
   });
 });

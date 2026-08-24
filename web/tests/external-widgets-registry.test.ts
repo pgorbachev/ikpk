@@ -187,8 +187,13 @@ describe('встраивания не ломают принятый реестр
 const NEW_OUTPUT_CHECKS = [
   'tests/external-widgets-dist.test.ts',
   'tests/external-widgets-demo.test.ts',
+  'tests/external-widgets-config-probe.test.ts',
 ];
-const NEW_BROWSER_CHECKS = ['external-widgets.spec.ts'];
+const NEW_BROWSER_CHECKS = [
+  'external-widgets.spec.ts',
+  'external-widgets-baseline-repeat.spec.ts',
+  'external-widgets-build-year.spec.ts',
+];
 
 describe('новая проверка зарегистрирована во всех реестрах, которые её требуют', () => {
   const load = async (file: string): Promise<{ include: string[]; exclude: string[] }> => {
@@ -253,6 +258,37 @@ describe('новая проверка зарегистрирована во вс
     const demo = (await load('vitest.demo.config.ts')).include;
     const both = NEW_OUTPUT_CHECKS.filter((f) => build.includes(f) && demo.includes(f));
     expect(both, `проверка выбрана обеими конфигурациями: ${both.join(', ')}`).toEqual([]);
+  });
+
+  it('ни одна новая браузерная проверка не стоит одновременно в гейте и в долге', () => {
+    // «Либо в гейте, либо в долге» — ИСКЛЮЧАЮЩЕЕ «либо», и роняет оно с ДВУХ сторон:
+    // файл вне исполняемого набора и вне списка долга — сирота
+    // (`web/tests/browser-test-gating.test.ts:364`,
+    // `it('каждый файл либо исполняется гейтующим workflow, либо назван в списке долга'`),
+    // а файл, названный в долге и при этом исполняемый, роняет ту же проверку с другой
+    // стороны (`web/tests/browser-test-gating.test.ts:376`, `список долга не содержит имён`).
+    //
+    // Здесь проверяется вторая сторона ПОИМЁННО: новая проверка объявлена в скрипте
+    // пакета, который запускает гейтующий workflow, и одновременно её имени нет в списке
+    // долга. Общее равенство множеств об этом скажет «списки разошлись», а не «потерялась
+    // наша», — и лечиться это будет наугад.
+    const gating = readFileSync(join(WEB, 'tests', 'browser-test-gating.test.ts'), 'utf-8');
+    const start = gating.indexOf('const ACKNOWLEDGED_DEBT');
+    expect(start, 'в browser-test-gating нет списка признанного долга — сверять не с чем').toBeGreaterThan(-1);
+    const debt = gating.slice(start, gating.indexOf('];', start));
+    const pkg = JSON.parse(readFileSync(join(WEB, 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>;
+    };
+    const scripts = Object.values(pkg.scripts ?? {}).join('\n');
+
+    const problems: string[] = [];
+    for (const file of NEW_BROWSER_CHECKS) {
+      const inGate = scripts.includes(file);
+      const inDebt = debt.includes(file);
+      if (inGate && inDebt) problems.push(`${file}: и запускается скриптом пакета, и назван долгом`);
+      if (!inGate && !inDebt) problems.push(`${file}: ни в одном скрипте пакета и не назван долгом`);
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
   });
 
   it('вызов гейта ссылок на формы с тремя аргументами не тронут', () => {
