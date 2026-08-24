@@ -776,11 +776,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L63:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L68:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L63:C1:style",
-    "fingerprint": "e1c00edc00549224f33f131a1bc9196417cd073b9fe0286c09d6779eabb497ec",
+    "locator": "layouts/TopNavLayout.astro:L68:C1:style",
+    "fingerprint": "badf1fabf4fad440ba8cbea7942807410325240fc25161fb9580dc9efc1e2c22",
     "identity": "style|body:309f315b55438bb4"
   },
   {

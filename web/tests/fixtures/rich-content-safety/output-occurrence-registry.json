@@ -100,7 +100,7 @@
     "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
     "src:layouts/BaseLayout.astro:L89:C1:style",
     "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
-    "src:layouts/TopNavLayout.astro:L63:C1:style",
+    "src:layouts/TopNavLayout.astro:L68:C1:style",
     "src:pages/[institute].astro:L221:C1:style",
     "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
     "src:pages/[institute]/[courseGroup]/[seminar].astro:L175:C1:style",
