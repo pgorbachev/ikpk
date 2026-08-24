@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { contrastRatio, parseRgb } from './helpers/contrast';
 import { TEMPLATES } from './helpers/templates';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 // ─── Accessibility (axe-core) ────────────────────────────
 // PR-гейт плана 004 (Этап 0): 0 critical/serious нарушений на 4 шаблонах
