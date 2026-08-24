@@ -37,6 +37,10 @@ export default defineConfig({
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',
       'tests/rich-content-migration.build.test.ts',
+      // Предмет — собранное дерево и снимок, которым оно собрано (change
+      // cms-content-publication). Без сборки проверять нечего, поэтому файл живёт
+      // в наборе vitest.build.config.ts, как остальные *.build.test.ts.
+      'tests/cms-article-catalog-snapshot.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
