@@ -7,15 +7,22 @@
    `web/src/lib/data.ts`, плюс 12 файлов проверок и `web/astro.config.mjs` — часть из них
    напрямую. Решение, делающее чтение асинхронным, задевает все 31 и лишает проверки контента
    возможности работать без сети.
-2. **Сайт собирают три независимых джоба**: `unit-and-build` и `e2e-smoke` (`.github/workflows/test.yml`)
-   и `build` (`.github/workflows/deploy.yml:117`, `run: npm run build`). Строк с текстом сборки в
-   `test.yml` — семь (предикат `grep -nE 'npm run build|astro build'`), но это не число мест, куда
-   нужен снимок: **пять** вызовов строят вершину прогона (`unit-and-build` — обычная и
-   `build:demo`; `e2e-smoke` — обычная и `build:stand`, `.github/workflows/test.yml:460`; плюс
-   `deploy.yml`, см. ссылку с фрагментом выше) и нуждаются в одном снимке — предмет задачи 5.2. **Три** строят не вершину,
-   а `BASE_SHA` во временном worktree, только на Dependabot- и dependency-only PR (шаги «Measure
-   base … for dependency or Dependabot PR»), и снимок им нужен другой — предмет задачи 3.9a, не
-   решённый здесь. Три варианта сборки вершины, а не два: обычный, `build:demo` и `build:stand`.
+2. **Сайт собирают шесть джобов в четырёх workflow**: `unit-and-build` и `e2e-smoke`
+   (`.github/workflows/test.yml`);
+   `build` — `.github/workflows/deploy.yml:115`, `- name: Build Astro site`;
+   `lhci` — `.github/workflows/lighthouse.yml:43`, `- name: Build site`;
+   `compat` — `.github/workflows/nightly.yml:39`, `- name: Build site`; и
+   `parity-remote` — `.github/workflows/nightly.yml:75`, `- name: Run remote parity tests`.
+   Вызовов сборки одиннадцать: **восемь** строят вершину прогона, **три** — `BASE_SHA` во
+   временном worktree, только на Dependabot- и dependency-only PR (шаги «Measure base … for
+   dependency or Dependabot PR»), и снимок им нужен другой — предмет задачи 3.9a, не решённый
+   здесь. Из восьми вершинных **семь** нуждаются в одном снимке и составляют предмет задачи 5.2;
+   восьмой — `parity-remote`, сверка с внешним живым сайтом, — вынесен в задачу 5.2a, потому что
+   фикстура сверяла бы тестовое содержимое с настоящим сайтом. Число получено разрешением
+   npm-скриптов, а не поиском по тексту команды: восьмой вызов спрятан внутри `test:build:remote`
+   (`web/package.json:18`, `"test:build:remote":`), и предикат по тексту команды его не находит,
+   а применённый к одному `test.yml` — не находит и два workflow из четырёх. Три варианта сборки
+   вершины, а не два: обычный, `build:demo` и `build:stand`.
 3. **Часть вывода зависит от календарной даты**: статус семинара вычисляется от «сегодня»
    (`web/scripts/lib/planned-seminars.ts:54`, `export const calendarToday`).
 4. **Принятая `schedule-month-filter`** уже требует, чтобы опорная дата приходила аргументом из
