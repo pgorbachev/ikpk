@@ -17,6 +17,24 @@ const articleDates = new Map(
 );
 const snapshotDate = [...articleDates.values()].sort().at(-1) ?? new Date(0).toISOString();
 
+/**
+ * Институты, чьи иерархические подстраницы (`/<институт>/<программа>`,
+ * `/<институт>/<программа>/<семинар>`, `/<институт>/prepodavatel/<id>`) не
+ * должны попадать в карту сайта наравне с плоскими адресами
+ * (`/programmy/…`, `/seminary/…`, `/specialisty/…`, change
+ * `cms-content-authoring-and-migration`, D9): у записи один канонический
+ * адрес, а не два, делящих вес ссылок. Сами иерархические страницы
+ * продолжают раздаваться — исключается только запись в карте.
+ */
+/** @type {{ slug: string }[]} */
+const institutes = JSON.parse(
+  readFileSync(new URL('../discovery/entities/institutes.json', import.meta.url), 'utf-8')
+);
+const instituteSlugs = new Set(institutes.map((i) => i.slug));
+/** @param {string} page */
+const isHierarchicalInstituteSubpage = (page) =>
+  [...instituteSlugs].some((slug) => page.includes(`/${slug}/`));
+
 export default defineConfig({
   site: 'https://ikpk.su',
   integrations: [
@@ -30,7 +48,8 @@ export default defineConfig({
         !page.includes('/sitemap') &&
         !page.includes('/preview/') &&
         !page.includes('/demo-zayavka') &&
-        !page.includes('/rich-content-canary'),
+        !page.includes('/rich-content-canary') &&
+        !isHierarchicalInstituteSubpage(page),
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;
