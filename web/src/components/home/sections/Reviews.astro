@@ -91,6 +91,15 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
 </script>
 
 <style>
+  /* Стили Astro скопированы по CSS-области видимости (data-astro-cid-*): класс
+     `.section-sub`, задействованный в других секциях (Teachers.astro и т. д.),
+     сюда не дотягивается — без своего правила абзац наследовал бы недостаточный
+     контраст (axe, `color-contrast`, 2.55 вместо минимума 4.5:1). */
+  .section-sub {
+    color: var(--color-gray-500);
+    margin-bottom: 1.5rem;
+  }
+
   .award-row {
     display: flex;
     flex-wrap: wrap;

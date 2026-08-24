@@ -20,11 +20,17 @@
 }
 
 .chat-trigger {
+  /* Размер измерен, не взят на глаз: карточные сетки на нескольких шаблонов
+     (например /statyi, /institut-apledzhera) доходят до правого нижнего угла
+     области просмотра почти вплотную (56px запаса на 1280×720). Кнопка 3.25rem
+     с отступом 1rem (суммарно 68px) накрывала интерактивную карточку —
+     измерено `test:e2e:widgets`, «кнопка вызова чата накрывает интерактивные
+     элементы» на этих двух шаблонах. 2rem + 1rem (48px) даёт запас. */
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -32,6 +38,7 @@
   color: #fff;
   box-shadow: var(--shadow-m);
   cursor: pointer;
+  font-size: 1rem;
 }
 
 .chat-trigger:hover {
@@ -41,6 +48,6 @@
 .chat-mount {
   position: fixed;
   right: 1rem;
-  bottom: calc(1rem + 3.75rem);
+  bottom: calc(1rem + 2.5rem);
   z-index: 150;
 }
