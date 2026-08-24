@@ -1,0 +1,51 @@
+---
+// Фасад чата: наша кнопка вызова существует до исполнения стороннего скрипта, а сам
+// скрипт загружается только по нажатию — «простой браузера не является триггером»
+// (спека change `external-widgets`).
+//
+// Рендерится ТОЛЬКО в состоянии 1 конфигурации (адрес объявлен). В состояниях
+// «отсутствие объявлено явно» и «не объявлено ничего» фасада нет вовсе — своего блока
+// часов работы или заглушки на этот случай возможность не заводит.
+import { chatLoaderConfig } from '../../lib/external-widgets';
+
+const config = chatLoaderConfig();
+---
+
+{
+  config.state === 'address' && (
+    <div data-chat-facade class="chat-facade">
+      <button
+        type="button"
+        data-chat-trigger
+        data-chat-loader-src={config.src}
+        class="chat-trigger"
+        aria-label="Открыть чат с центром"
+      >
+        <span aria-hidden="true">💬</span>
+      </button>
+      <div data-chat-mount class="chat-mount" />
+    </div>
+  )
+}
+
+<script>
+  // Сторонний загрузчик исполняется ТОЛЬКО по нажатию — ни на простое браузера, ни
+  // предварительным соединением. Один узел на страницу, поэтому querySelector.
+  function initChatFacade(): void {
+    const trigger = document.querySelector<HTMLButtonElement>('[data-chat-trigger]');
+    const mount = document.querySelector<HTMLElement>('[data-chat-mount]');
+    if (!trigger || !mount) return;
+    let loaded = false;
+    trigger.addEventListener('click', () => {
+      if (loaded) return;
+      const src = trigger.getAttribute('data-chat-loader-src');
+      if (!src) return;
+      loaded = true;
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      document.body.appendChild(script);
+    });
+  }
+  initChatFacade();
+</script>

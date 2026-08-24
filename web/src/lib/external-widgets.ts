@@ -57,3 +57,25 @@ export function chatLoaderConfig(): ChatLoaderConfig {
   const raw = fromMeta ?? (typeof process !== 'undefined' ? process.env[CHAT_LOADER_KEY] : undefined);
   return readChatLoaderConfig(raw);
 }
+
+/**
+ * Синтетический адрес, выдаваемый ТОЛЬКО демо-сборкой (`build:demo`), когда реальный
+ * адрес не объявлен. У заказчика два портала Bitrix24 — молчаливый выбор одного из них
+ * направил бы обращения демо-посетителей не туда, поэтому адрес заведомо не разрешается
+ * ни в один настоящий портал.
+ */
+const SYNTHETIC_CHAT_LOADER_SRC = 'https://cdn.example.invalid/synthetic-chat-loader.js';
+
+/**
+ * Адрес загрузчика, который получила демо-сборка: настоящий, если конфигурация его
+ * несёт, иначе синтетический — демо-сборка получает адрес ВСЕГДА (`external-widgets-
+ * demo.test.ts`, «у проверки гашения чата предмет есть в любом состоянии
+ * конфигурации»). Фасад чата при этом в демо-выводе не рендерится вовсе (см.
+ * `ChatFacade.astro`) — рендер зависит только от `chatLoaderConfig()`, поэтому ни
+ * настоящий, ни синтетический адрес в разметку demo-сборки не попадают ни при каком
+ * состоянии.
+ */
+export function demoChatLoaderSrc(): string {
+  const config = chatLoaderConfig();
+  return config.state === 'address' ? config.src : SYNTHETIC_CHAT_LOADER_SRC;
+}

@@ -15,6 +15,7 @@ import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
+import ChatFacade from '../components/chat/ChatFacade.astro';
 import { isDemoForms } from '../lib/forms';
 import '../styles/global.css';
 
@@ -64,6 +65,14 @@ const {
         демонстрации в живые Метрику и Mail.ru заказчика — портили статистику,
         цели и вебвизор боевого сайта. Гейт по тому же признаку, что у форм. */}
     {!isDemoForms && <Analytics />}
+
+    {/* Фасад чата — прямой сосед <body>, а не внутри <main>: applyBackgroundInert
+        (payment-form.ts) гасит только прямых детей body, и при открытом диалоге
+        оплаты кнопка иначе осталась бы кликабельной поверх затемнения. На 404
+        компонент не подключается вовсе — байтовый запас страницы меньше килобайта,
+        а не только её рендер по конфигурации: скрипт компонента иначе всё равно
+        попал бы в бандл страницы. */}
+    {!noindex && <ChatFacade />}
   </body>
 </html>
 
