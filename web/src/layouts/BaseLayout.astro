@@ -7,6 +7,15 @@ interface Props {
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
   newsletterVariant?: 'band' | 'card' | 'none';
+  /**
+   * Исключить фасад чата (и его бандл) со страницы.
+   *
+   * НЕ то же самое, что `noindex`: noindex несут и /sitemap, и /rich-content-canary, а
+   * фасад на них — законное состояние 1 конфигурации. Единственная страница, обязанная
+   * исключать фасад, — 404: её байтовый запас меньше килобайта, и это её собственное
+   * требование, не следствие индексируемости.
+   */
+  hideWidgets?: boolean;
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
@@ -27,6 +36,7 @@ const {
   schema,
   preloadHero = false,
   newsletterVariant = 'band',
+  hideWidgets = false,
 } = Astro.props;
 ---
 
@@ -72,7 +82,7 @@ const {
         компонент не подключается вовсе — байтовый запас страницы меньше килобайта,
         а не только её рендер по конфигурации: скрипт компонента иначе всё равно
         попал бы в бандл страницы. */}
-    {!noindex && <ChatFacade />}
+    {!hideWidgets && <ChatFacade />}
   </body>
 </html>
 
