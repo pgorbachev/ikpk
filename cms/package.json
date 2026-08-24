@@ -10,6 +10,7 @@
     "dev": "strapi develop",
     "develop": "strapi develop",
     "lint": "eslint .",
+    "test": "node --experimental-strip-types --experimental-loader=./scripts/ts-extension-loader.mjs --test 'src/**/*.test.ts'",
     "start": "strapi start",
     "strapi": "strapi",
     "typecheck": "tsc --noEmit",

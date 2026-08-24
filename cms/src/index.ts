@@ -1,5 +1,7 @@
 import type { Core } from '@strapi/strapi';
 import { UPLOAD_ALLOWED_MIME_TYPES, UPLOAD_SIZE_LIMIT_BYTES } from '../config/plugins';
+import { registerContentAddressLifecycle } from './lifecycles/content-address';
+import { registerPublicationLifecycle } from './lifecycles/publication';
 
 export default {
   /**
@@ -33,5 +35,8 @@ export default {
         }
       },
     });
+
+    registerContentAddressLifecycle(strapi);
+    registerPublicationLifecycle(strapi);
   },
 };
