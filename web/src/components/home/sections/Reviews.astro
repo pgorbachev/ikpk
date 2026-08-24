@@ -16,7 +16,7 @@ const REVIEWS_PAGE_HREF = `https://yandex.ru/maps/org/${REVIEWS_ORG_ID}/reviews/
 const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
 ---
 
-<section class="reviews section" data-reveal data-reviews-section>
+<section class="reviews section" data-reviews-section>
   <div class="container">
     <h2 class="section-title">Отзывы на Яндекс.Картах</h2>
     <p class="section-sub">Оценки и комментарии слушателей и пациентов — на независимой площадке.</p>
@@ -55,9 +55,14 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       </div>
     )}
   </div>
-</section>
 
-<script>
+  {/* Скрипт — ВНУТРИ секции (не после её закрывающего тега): Astro размещает
+      необрабатываемый <script> ровно там, где он написан в разметке, и вне
+      секции он стал бы её nextElementSibling — сосед, чью позицию меряет
+      `external-widgets.spec.ts`, «появление виджета не сдвигает страницу»,
+      измерил бы позицию самого узла <script> (она равна scrollY, а не позиции
+      реального соседа) вместо позиции следующей секции. */}
+  <script>
   // Ленивое встраивание — тот же приём, что карта в ContactShell.astro (FR-08):
   // IntersectionObserver, а не событие загрузки страницы. До появления секции в зоне
   // видимости к домену виджета обращений нет.
@@ -88,7 +93,8 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       load();
     }
   });
-</script>
+  </script>
+</section>
 
 <style>
   /* Стили Astro скопированы по CSS-области видимости (data-astro-cid-*): класс
