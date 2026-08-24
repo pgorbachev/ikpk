@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { allDemoPages, demoDist, demoPagePath, demoPages, readDemoFile } from './helpers/demo-dist';
 import { attr } from './helpers/dom';
 import {
+  CHAT_LOADER_FALLBACK_KEY,
+  CHAT_LOADER_FALLBACK_SYNTHETIC,
   FOREIGN_METRIKA_ID,
   METRIKA_TAG_URL,
   OWN_METRIKA_ID,
@@ -13,12 +15,12 @@ import {
   REVIEWS_WIDGET_PATH,
   SEL_AWARD_BADGE,
   SEL_CHAT_FACADE,
-  SEL_CHAT_HOURS,
   SEL_CHAT_MOUNT,
   SEL_CHAT_TRIGGER,
   SEL_REVIEWS_SECTION,
   byDataName,
   chatLoaderHits,
+  chatLoaderSuspects,
   hostAndPath,
   reviewsEmbedHits,
   subtree,
@@ -40,6 +42,16 @@ import {
  * погашенном. Действующая проверка демо-вывода устроена именно так
  * (`web/tests/demo-output.test.ts:59`, `['id Яндекс.Метрики'`) — и без признаков
  * встраиваний пропустила бы оба виджета.
+ *
+ * ── ПОЧЕМУ ПРЕДМЕТ ЗДЕСЬ НЕПУСТ ВСЕГДА ──────────────────────────────────────
+ * Демо-сборка получает адрес загрузчика ВСЕГДА: настоящий, если конфигурация его несёт,
+ * иначе синтетический. Иначе в состояниях «объявленное отсутствие» и «не объявлено
+ * ничего» настоящего адреса нет нигде, и утверждение «в демо-выводе его нет» тривиально
+ * верно — гейт зелен на сломанном гашении.
+ *
+ * Признак назван АРТЕФАКТОМ, а не назначением прогона: синтетический адрес живёт только
+ * в `dist-demo`, а этот каталог не выкладывается никуда — ни на стенд, ни в production
+ * (выкладываемый стенд собирается БОЕВОЙ сборкой). Третьего артефакта не заводится.
  */
 
 let pages: string[];
@@ -51,7 +63,7 @@ beforeAll(() => {
 });
 
 /**
- * Адрес загрузчика чата, ОБЪЯВЛЕННЫЙ конфигурацией. Нет объявления — предмета нет.
+ * Адрес загрузчика, который получила демо-сборка. Нет никакого — предмета нет.
  *
  * Путь модуля лежит в переменной, а не в литерале импорта, намеренно: у литерала
  * `astro check` требует существования модуля, и отсутствие реализации давало бы КРАСНЫЙ
@@ -60,7 +72,33 @@ beforeAll(() => {
  */
 const CONFIG_MODULE = '../src/lib/external-widgets';
 
-async function declaredChatLoader(): Promise<string> {
+/**
+ * Вердикт проверки гашения: есть ли у неё предмет.
+ *
+ * Функция ЧИСТАЯ и проверяется фикстурой — сценарий «Демо-сборка выполнена без всякого
+ * адреса» иначе не имел бы построимого красного состояния: как только реализация подаёт
+ * адрес всегда, состояние «адреса нет» на настоящей сборке недостижимо, а требование к
+ * нему остаётся.
+ */
+export function demoSubject(suppliedSrc: string | null): { ok: boolean; reason: string } {
+  if (suppliedSrc === null || suppliedSrc.trim() === '')
+    return {
+      ok: false,
+      reason:
+        'демо-сборка не получила ни настоящего, ни синтетического адреса загрузчика: искать ' +
+        'в выводе адрес, которого не было на входе, — утверждение, тривиально верное на ' +
+        'пустом предмете. Проверка гашения считается НЕпройденной с причиной «измерить не ' +
+        'удалось»',
+    };
+  if (hostAndPath(suppliedSrc) === null)
+    return {
+      ok: false,
+      reason: `адрес '${suppliedSrc}' не разбирается как адрес — искать в выводе нечего`,
+    };
+  return { ok: true, reason: '' };
+}
+
+async function suppliedChatLoader(): Promise<string> {
   let mod: Record<string, unknown>;
   try {
     mod = (await import(CONFIG_MODULE)) as Record<string, unknown>;
@@ -68,20 +106,21 @@ async function declaredChatLoader(): Promise<string> {
     throw new Error(
       `модуля конфигурации нет либо он не загружается: ${(error as Error).message}. ` +
         'Спека требует объявить адрес там, где его читает проверка: значение только в ' +
-        'окружении выкладки оставляет симметричную проверку без предмета',
+        'окружении выкладки оставляет проверку гашения без предмета',
       { cause: error },
     );
   }
-  const read = mod.chatLoaderSrc as undefined | (() => string | null);
+  const read = mod.demoChatLoaderSrc as undefined | (() => string | null);
   if (typeof read !== 'function')
-    throw new Error("модуль не экспортирует chatLoaderSrc() — конфигурацию читать нечем");
-  const value = read();
-  if (value === null || value === '')
     throw new Error(
-      'адрес загрузчика чата не объявлен: проверка «в демо-выводе его нет» без адреса ' +
-        'тривиально верна, поэтому считается НЕпройденной, а не пройденной',
+      'модуль не экспортирует demoChatLoaderSrc() — узнать, какой адрес получила ' +
+        'демо-сборка, нечем. Спека требует, чтобы он подавался ВСЕГДА: настоящий либо ' +
+        'синтетический',
     );
-  return value;
+  const value = read();
+  const verdict = demoSubject(value);
+  if (!verdict.ok) throw new Error(verdict.reason);
+  return value as string;
 }
 
 describe('демо-вывод: материал на месте', () => {
@@ -108,17 +147,71 @@ describe('демо-вывод: материал на месте', () => {
   });
 });
 
+describe('у проверки гашения чата предмет есть в любом состоянии конфигурации', () => {
+  it('демо-сборка получила адрес загрузчика: настоящий либо синтетический', async () => {
+    const src = await suppliedChatLoader();
+    expect(
+      hostAndPath(src),
+      `адрес '${src}', полученный демо-сборкой, не разбирается — искать в выводе нечего`,
+    ).not.toBeNull();
+  });
+
+  it('адреса нет вовсе — «измерить не удалось», а не «нарушений нет»', () => {
+    // Фикстура вместо реальности: как только адрес подаётся всегда, это состояние на
+    // настоящей сборке недостижимо, а сценарий спеки к нему остаётся. Без фикстуры у
+    // него не было бы построимого красного состояния ни при какой реализации.
+    for (const raw of [null, '', '   ']) {
+      const verdict = demoSubject(raw);
+      expect(verdict.ok, `значение ${JSON.stringify(raw)} принято за предмет проверки`).toBe(false);
+      expect(verdict.reason).toMatch(/измерить не удалось/);
+    }
+    expect(demoSubject('https://example.invalid/loader.js').ok).toBe(true);
+  });
+
+  it('синтетический адрес выставляет ТОЛЬКО скрипт сборки демо-вывода', () => {
+    // Признак — какой артефакт собирается, и проверяется он ЧТЕНИЕМ МАНИФЕСТА, а не
+    // догадкой о «назначении прогона»: спека называет именно этот способ. Боевой скрипт
+    // подстановки не делает — у заказчика два портала Bitrix24, и молчаливый выбор
+    // одного направил бы обращения посетителей не туда.
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>;
+    };
+    const scripts = pkg.scripts ?? {};
+    const marker = `${CHAT_LOADER_FALLBACK_KEY}=${CHAT_LOADER_FALLBACK_SYNTHETIC}`;
+
+    const demoBuild = scripts['build:demo'] ?? '';
+    expect(
+      demoBuild.includes(marker),
+      `скрипт build:demo не выставляет '${marker}': тогда в состояниях без адреса у проверки ` +
+        'гашения нет предмета, и «в демо-выводе его нет» тривиально верно',
+    ).toBe(true);
+
+    const prodBuild = scripts.build ?? '';
+    expect(prodBuild, 'в манифесте нет скрипта build — проверять нечего').not.toBe('');
+    expect(
+      prodBuild.includes(CHAT_LOADER_FALLBACK_KEY),
+      `боевой скрипт build упоминает '${CHAT_LOADER_FALLBACK_KEY}': боевая сборка НЕ имеет ` +
+        'права подставлять адрес ни в одном состоянии конфигурации',
+    ).toBe(false);
+    const standBuild = scripts['build:stand'] ?? '';
+    expect(
+      standBuild.includes(CHAT_LOADER_FALLBACK_KEY),
+      'скрипт build:stand подставляет синтетический адрес: выкладываемый стенд собирается ' +
+        'боевой сборкой и уезжает к посетителю',
+    ).toBe(false);
+  });
+});
+
 /**
  * ЧЕМ ДОКАЗАНА НЕПУСТОТА ДЛЯ УТВЕРЖДЕНИЙ НИЖЕ.
  *
  * Требование о непустоте предмета здесь выполняется ДВУМЯ разными способами, и путать их
  * нельзя. Первый — свой: читаются настоящие собранные страницы (блок «материал на
- * месте»). Второй — ЧУЖОЙ, и это нормативно: «встраиваний нет» верно и в случае, когда
- * встраиваний нет НИГДЕ, и доказать обратное этим файлом невозможно по построению — он
- * не имеет права читать боевой вывод. Поэтому гарантию даёт симметричная проверка
- * `tests/external-widgets-dist.test.ts`, и спека называет её прямо: «без симметричной
- * проверки утверждение „на демо встраиваний нет“ выполняется и в случае, когда
- * встраиваний нет нигде, — то есть гейт зелен на сломанном продукте».
+ * месте»), и демо-сборка получила адрес загрузчика на вход (блок выше). Второй — ЧУЖОЙ, и
+ * это нормативно: «встраиваний нет» верно и в случае, когда встраиваний нет НИГДЕ, и
+ * доказать обратное этим файлом невозможно по построению — он не имеет права читать
+ * боевой вывод. Поэтому гарантию даёт симметричная проверка
+ * `tests/external-widgets-dist.test.ts`, и спека называет её прямо.
  *
  * Практическое следствие для реализации: удалять или ослаблять симметричную проверку
  * нельзя — вместе с ней исчезает единственное доказательство непустоты для всей группы
@@ -137,23 +230,41 @@ describe('на демо оба встраивания отсутствуют, и
     ).toEqual([]);
   });
 
-  it('в демо-выводе нет адреса загрузчика чата ни в одном атрибуте', async () => {
-    const loader = await declaredChatLoader();
+  it('в демо-выводе нет адреса загрузчика чата, который сборка получила на вход', async () => {
+    const src = await suppliedChatLoader();
     const offenders = [...sources.entries()]
-      .map(([path, html]) => ({ path, hits: chatLoaderHits(html, loader) }))
+      .map(([path, html]) => ({ path, hits: chatLoaderHits(html, src) }))
       .filter((x) => x.hits.length > 0)
       .map((x) => `${x.path} → ${x.hits.map((h) => `${h.tag}[${h.name}]`).join(', ')}`);
     expect(
       offenders.slice(0, 10),
-      `адрес загрузчика чата присутствует в демо-выводе на ${offenders.length} страницах: ` +
-        'обращения с показа уехали бы в живой портал заказчика',
+      `адрес загрузчика '${src}' присутствует в демо-выводе на ${offenders.length} страницах: ` +
+        'гашение сломано, и в состоянии 1 обращения с показа уехали бы в живой портал ' +
+        'заказчика',
+    ).toEqual([]);
+  });
+
+  it('в демо-выводе нет и адреса загрузчика, приехавшего мимо входа', () => {
+    // Второй признак, шире первого, и он нужен именно потому, что первый узкий: если
+    // демо-сборка получила СИНТЕТИЧЕСКИЙ адрес, то утечка НАСТОЯЩЕГО адреса портала под
+    // первый признак не попадает вовсе. Расхождение двух признаков названо: узкий
+    // проверяет ровно то, что подано на вход, широкий — что не приехало мимо входа.
+    const offenders = [...sources.entries()]
+      .map(([path, html]) => ({ path, hits: chatLoaderSuspects(html) }))
+      .filter((x) => x.hits.length > 0)
+      .map((x) => `${x.path} → ${x.hits.map((h) => `${h.tag}[${h.name}]=${h.value}`).join(', ')}`);
+    expect(
+      offenders.slice(0, 10),
+      `в демо-выводе есть адрес загрузчика на хосте поставщика: ${offenders.length} страниц. ` +
+        'Признак по НАЗНАЧЕНИЮ носителя, а не по домену: ссылки форм заявки живут на том же ' +
+        'портале, и признак по домену краснел бы на них',
     ).toEqual([]);
   });
 
   it('разметки чата в демо-выводе нет вовсе', () => {
     const offenders: string[] = [];
     for (const [path, html] of sources)
-      for (const name of [SEL_CHAT_FACADE, SEL_CHAT_TRIGGER, SEL_CHAT_MOUNT, SEL_CHAT_HOURS])
+      for (const name of [SEL_CHAT_FACADE, SEL_CHAT_TRIGGER, SEL_CHAT_MOUNT])
         if (byDataName(html, name).length > 0) offenders.push(`${path} → ${name}`);
     expect(offenders.slice(0, 10), `разметка чата в демо-выводе: ${offenders.length} вхождений`).toEqual([]);
   });
@@ -164,7 +275,7 @@ describe('на демо оба встраивания отсутствуют, и
     // несёт ни одного признака аналитики — признак обязан сработать.
     const markup =
       `<!doctype html><html lang="ru"><body><section ${SEL_REVIEWS_SECTION}>` +
-      `<div ${'data-reviews-embed'}="https://${REVIEWS_WIDGET_HOST}${REVIEWS_WIDGET_PATH}?comments"></div>` +
+      `<div data-reviews-embed="https://${REVIEWS_WIDGET_HOST}${REVIEWS_WIDGET_PATH}?comments"></div>` +
       '</section></body></html>';
     expect(markup.includes(OWN_METRIKA_ID), 'фикстура содержит признак нашей аналитики').toBe(false);
     expect(markup.includes(FOREIGN_METRIKA_ID), 'фикстура содержит идентификатор чужого счётчика').toBe(false);

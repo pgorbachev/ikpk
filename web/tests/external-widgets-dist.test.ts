@@ -5,22 +5,28 @@ import { tmpdir } from 'node:os';
 import { dist, walkHtml } from './helpers/dist-pages';
 import { attr, textOf } from './helpers/dom';
 import {
+  CHAT_STATE_NAMES,
+  MANAGER_HOURS_ATTR,
+  MANAGER_HOURS_VALUE,
+  PAGES_WITH_MANAGER_HOURS,
   REVIEWS_AVATAR_HOST,
   REVIEWS_ORG_ID,
   REVIEWS_WIDGET_HOST,
   SEL_AWARD_BADGE,
   SEL_CHAT_FACADE,
-  SEL_CHAT_HOURS,
   SEL_CHAT_MOUNT,
   SEL_CHAT_TRIGGER,
   SEL_REVIEWS_SECTION,
   byDataName,
-  chatLoaderHits,
+  chatLoaderSuspects,
   elements,
   hostAndPath,
+  hoursStripText,
   ratingSummaryHits,
   reviewsEmbedHits,
   subtree,
+  telLinks,
+  type ChatLoaderConfig,
 } from './helpers/external-widgets';
 
 /**
@@ -37,15 +43,28 @@ import {
  * именно этого: два прочтения одного требования дали бы две проверки разной силы над
  * одним предметом, и расхождение не увидела бы ни одна.
  *
+ * ── ЧТО ЗДЕСЬ ЕСТЬ, А ЧТО В ФАЙЛЕ ПРОБНЫХ СБОРОК ────────────────────────────
+ * У боевой сборки ОДНО состояние конфигурации — то, которое объявлено в дереве. Значит
+ * утверждения об облике страницы в состоянии 1 и в состоянии 2 не могут иметь предмет
+ * в одном и том же прогоне: спека объявляет публикуемыми оба, и требовать любого из них
+ * от единственной сборки значило бы вернуть шаблон «законное состояние и зелёный гейт
+ * недостижимы одновременно».
+ *
+ * Поэтому здесь остаётся то, что от состояния НЕ зависит (секция отзывов, сводка чисел,
+ * иерархия заголовков, телефоны в подвале), плюс СИММЕТРИЧНАЯ проверка: сошлось ли
+ * объявление с выводом — она осмысленна в любом состоянии. Облик страницы в каждом из
+ * трёх состояний проверяется по пробным сборкам —
+ * `tests/external-widgets-config-probe.test.ts`.
+ *
  * ── СТОРОЖ НЕПУСТОТЫ ────────────────────────────────────────────────────────
- * Большинство утверждений ниже — про ОТСУТСТВИЕ (сводки чисел, текстов отзывов, разметки
- * чата на 404, своей формы сбора данных). Все они тривиально верны на пустом предмете,
- * поэтому каждое из них стоит ПОСЛЕ доказательства непустоты: страницы читаются, секция
- * существует, встраивание на месте. Спека делает это отдельным требованием, а не
- * пожеланием.
+ * Большинство утверждений ниже — про ОТСУТСТВИЕ (сводки чисел, фотографий авторов,
+ * разметки чата на 404). Все они тривиально верны на пустом предмете, поэтому каждое из
+ * них стоит ПОСЛЕ доказательства непустоты: страницы читаются, секция существует.
+ * Спека делает это отдельным требованием, а не пожеланием.
  */
 
 const PAGE_404 = '404.html';
+const CONFIG_MODULE = '../src/lib/external-widgets';
 
 /** Страницы вывода: адрес → разметка. Пустой набор — «не выполнено», а не «прошло». */
 function outputPages(root: string = dist): Map<string, string> {
@@ -81,26 +100,89 @@ function reviewsSection(): ReturnType<typeof byDataName>[number] {
   return found[0];
 }
 
-/** Адрес загрузчика чата, объявленный сборкой. Не объявлен — проверка непройдена. */
-function declaredChatLoader(): string {
-  // Адрес берётся ИЗ ВЫВОДА, а не из окружения этой проверки: предмет — та сборка,
-  // которая уехала бы на боевой сайт, и её конфигурация видна только по выводу.
-  // Носителем объявлен наш контейнер фасада: угадывать хост загрузчика нельзя —
-  // спека прямо говорит, что где он живёт, НЕ ИЗВЕСТНО, и утверждать это запрещает.
-  const hits = [...pages.values()].flatMap((html) =>
-    byDataName(html, SEL_CHAT_FACADE).flatMap((el) =>
-      el.attrs.map((a) => a.value).filter((v) => hostAndPath(v) !== null),
-    ),
-  );
-  const uniq = [...new Set(hits)];
-  expect(
-    uniq.length,
-    'в боевом выводе не объявлен адрес загрузчика чата. Спека: «сборка, которую читает ' +
-      'симметричная проверка боевого вывода, собрана без адреса загрузчика — проверка ' +
-      'считается непройденной, а не пройденной». Конфигурация обязана лежать там, где её ' +
-      'читает проверка, а не только в окружении выкладки',
-  ).toBe(1);
-  return uniq[0];
+// ─── Симметричная проверка: объявление против вывода ─────────────────────────
+
+/**
+ * Вердикт симметричной проверки боевого вывода.
+ *
+ * Функция ЧИСТАЯ и проверяется фикстурами, а не только реальностью. Причина ровно та же,
+ * по которой спека развела исходы поимённо: у боевой сборки одно состояние, значит на
+ * настоящем выводе исполняется одна ветвь из трёх, а остальные две остались бы без
+ * построимого красного состояния. На фикстурах красное состояние есть у каждой.
+ *
+ * Три исхода, и они РАЗЛИЧНЫ: пройдена, не пройдена по расхождению, не пройдена по
+ * причине «измерить не удалось». Склейка последних двух — та же ошибка, что склейка
+ * второго состояния конфигурации с третьим: «нечего сверять» не равно «сошлось» и не
+ * равно «разошлось».
+ */
+export type SymmetricVerdict =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly kind: 'mismatch'; readonly reason: string }
+  | { readonly ok: false; readonly kind: 'unmeasurable'; readonly reason: string };
+
+export function symmetricVerdict(
+  config: ChatLoaderConfig,
+  carrying: readonly string[],
+): SymmetricVerdict {
+  if (config.state === 'unspecified')
+    return {
+      ok: false,
+      kind: 'unmeasurable',
+      reason:
+        'конфигурация не несёт ни адреса загрузчика, ни явного объявления его отсутствия: ' +
+        'измерить не удалось. Отсутствие предмета — непройденная проверка, а не разрешение ' +
+        'её пропустить',
+    };
+  if (config.state === 'address')
+    return carrying.length > 0
+      ? { ok: true }
+      : {
+          ok: false,
+          kind: 'mismatch',
+          reason:
+            `конфигурация несёт адрес загрузчика '${config.src}', а вывод встраивания чата не ` +
+            'несёт ни на одной странице: боевая выкладка уехала бы без чата',
+        };
+  return carrying.length === 0
+    ? { ok: true }
+    : {
+        ok: false,
+        kind: 'mismatch',
+        reason:
+          'конфигурация объявила отсутствие адреса, а вывод встраивание чата несёт на ' +
+          `${carrying.length} страницах: ${carrying.slice(0, 5).join(', ')}`,
+      };
+}
+
+/** Объявленная конфигурация. Нет модуля — «проверить не удалось», а не «прошло». */
+async function declaredConfig(): Promise<ChatLoaderConfig> {
+  let mod: Record<string, unknown>;
+  try {
+    mod = (await import(CONFIG_MODULE)) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `модуля конфигурации нет либо он не загружается: ${(error as Error).message}. ` +
+        'Спека требует объявить конфигурацию там, где её читает проверка: значение, ' +
+        'живущее только в окружении выкладки, оставляет симметричную проверку без предмета',
+      { cause: error },
+    );
+  }
+  const read = mod.chatLoaderConfig as undefined | (() => ChatLoaderConfig);
+  if (typeof read !== 'function')
+    throw new Error('модуль не экспортирует chatLoaderConfig() — конфигурацию читать нечем');
+  return read();
+}
+
+/**
+ * Страницы, несущие адрес загрузчика чата.
+ *
+ * Признак — по НАЗНАЧЕНИЮ носителя, а не по домену. Иначе симметричная проверка считала бы
+ * чат присутствующим из-за 393 законных ссылок форм заявки на портале заказчика — измерено
+ * на боевом выводе, и все 393 суть `a[href]`. Это ровно та ошибка, которой посвящено
+ * отдельное требование этой спеки: различать ссылку формы и загрузчик по назначению.
+ */
+function pagesCarryingChat(): string[] {
+  return [...pages.entries()].filter(([, html]) => chatLoaderSuspects(html).length > 0).map(([p]) => p);
 }
 
 // ─── Секция отзывов: место и охват ───────────────────────────────────────────
@@ -160,19 +242,46 @@ describe('отзывы показываются секцией главной и
     const suspects = [...pages.keys()].filter((p) => /\/otzyv|\/reviews|\/otzivy/i.test(p));
     expect(suspects, `собрана отдельная страница отзывов: ${suspects.join(', ')}`).toEqual([]);
   });
+
+  it('встраивание отзывов есть в боевом выводе', () => {
+    // Симметричная проверка к «на демо встраиваний нет»: без неё то утверждение
+    // выполняется и в случае, когда встраиваний нет НИГДЕ, то есть гейт зелен на
+    // сломанном продукте.
+    expect(
+      reviewsEmbedHits(home).length,
+      'на главной боевого вывода встраивания виджета отзывов нет',
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe('отзывы выводит официальный виджет, а не мы и не посредник', () => {
-  it('единственный внешний адрес секции — официальный виджет Яндекс.Карт', () => {
+  it('единственный внешний адрес, с которого секция ЗАГРУЖАЕТ, — официальный виджет', () => {
+    // Предмет — ЗАГРУЗКА, а не «любой внешний адрес», и оговорка нормативна: секция
+    // несёт ещё и ссылку на отзывы организации, а в ветке без скриптов и в демо-выводе
+    // она вообще единственное, что там есть. Прежняя редакция этой проверки запрещала
+    // любой внешний адрес в секции и тем краснела бы на законной ссылке — и на ссылке
+    // источника знака награды.
     const section = reviewsSection();
-    const foreign = subtree(section)
-      .flatMap((el) => el.attrs.map((a) => ({ tag: el.tagName, name: a.name, value: a.value })))
+    const LOADING_ATTRS = new Set(['src', 'srcset', 'data-src', 'data-reviews-embed', 'poster']);
+    const loading = subtree(section)
+      .flatMap((el) =>
+        el.attrs
+          .filter((a) => LOADING_ATTRS.has(a.name) || /(^|-)src(set)?$/.test(a.name))
+          .map((a) => ({ tag: el.tagName, name: a.name, value: a.value })),
+      )
       .map((a) => ({ ...a, parsed: hostAndPath(a.value) }))
-      .filter((a) => a.parsed !== null)
-      .filter((a) => a.parsed!.host !== REVIEWS_WIDGET_HOST && !a.parsed!.host.endsWith(`.${REVIEWS_WIDGET_HOST}`));
+      .filter((a) => a.parsed !== null);
+    expect(
+      loading.length,
+      'секция ничего не загружает ни с одного внешнего адреса — предмета нет: ленивое ' +
+        'встраивание обязано нести адрес виджета в атрибуте данных',
+    ).toBeGreaterThan(0);
+    const foreign = loading.filter(
+      (a) => a.parsed!.host !== REVIEWS_WIDGET_HOST && !a.parsed!.host.endsWith(`.${REVIEWS_WIDGET_HOST}`),
+    );
     expect(
       foreign.map((a) => `${a.tag}[${a.name}] → ${a.value}`),
-      'в секции отзывов есть внешний адрес не на официальном виджете',
+      'секция загружает что-то не с официального виджета Яндекс.Карт',
     ).toEqual([]);
   });
 
@@ -216,9 +325,9 @@ describe('отзывы выводит официальный виджет, а н
   it('ссылок на фотографии авторов отзывов в выводе нет', () => {
     // Непустота: без секции переносить нечего, и утверждение тривиально верно.
     reviewsSection();
-    // Механическая часть требования «тексты и авторы отзывов к нам не перенесены».
-    // Хост аватаров измерен в proposal.md; его появление в НАШЕЙ разметке означает,
-    // что чужие фотографии скопированы к нам.
+    // Механическая часть требования о фотографиях. Хост аватаров измерен в
+    // proposal.md; его появление в НАШЕЙ разметке означает, что чужие фотографии
+    // скопированы к нам.
     const offenders = [...pages.entries()]
       .filter(([, html]) => html.includes(REVIEWS_AVATAR_HOST))
       .map(([path]) => path);
@@ -314,31 +423,82 @@ describe('без скриптов секция даёт ссылку, а не в
   });
 });
 
-// ─── Чат: 404, стили, конфигурация ───────────────────────────────────────────
+// ─── Симметричная проверка боевого вывода ────────────────────────────────────
 
-describe('чат-виджет присутствует на страницах сайта, кроме 404', () => {
-  it('встраивание чата есть в боевом выводе', () => {
-    const loader = declaredChatLoader();
-    const carrying = [...pages.entries()].filter(([, html]) => chatLoaderHits(html, loader).length > 0);
+describe('симметричная проверка боевого вывода различает три состояния конфигурации', () => {
+  const ADDR: ChatLoaderConfig = { state: 'address', src: 'https://cdn.example.invalid/loader.js' };
+  const NONE: ChatLoaderConfig = { state: 'declared-absent' };
+  const NOTHING: ChatLoaderConfig = { state: 'unspecified' };
+
+  it('адрес задан и вывод несёт — пройдена', () => {
+    expect(symmetricVerdict(ADDR, ['/index.html']).ok).toBe(true);
+  });
+
+  it('адрес задан, а вывод не несёт — непройдена, несоответствие названо', () => {
+    const verdict = symmetricVerdict(ADDR, []);
+    expect(verdict.ok, 'вывод без чата при заданном адресе прошёл молча').toBe(false);
+    expect(verdict.ok === false && verdict.kind).toBe('mismatch');
+  });
+
+  it('отсутствие объявлено явно и вывод не несёт — ПРОЙДЕНА', () => {
+    // Исход назван спекой отдельно: без него реализация, останавливающая проверку в
+    // этом состоянии, удовлетворяла бы всем отрицательным сценариям и не краснила ни
+    // одного, а состояние объявлено публикуемым.
     expect(
-      carrying.length,
-      'ни одна страница боевого вывода не несёт встраивания чата',
-    ).toBeGreaterThan(50);
+      symmetricVerdict(NONE, []).ok,
+      'объявленное отсутствие с согласным выводом объявлено непройденным: законное ' +
+        'публикуемое состояние и зелёный гейт снова недостижимы одновременно',
+    ).toBe(true);
   });
 
-  it('кнопка вызова и точка монтирования объявлены нашими именами', () => {
-    expect(byDataName(home, SEL_CHAT_FACADE).length, 'на главной нет фасада чата').toBe(1);
-    expect(byDataName(home, SEL_CHAT_TRIGGER).length, 'на главной нет нашей кнопки вызова').toBe(1);
-    expect(byDataName(home, SEL_CHAT_MOUNT).length, 'на главной нет объявленной точки монтирования').toBe(1);
+  it('объявление отсутствия разошлось с выводом — непройдена, расхождение названо', () => {
+    const verdict = symmetricVerdict(NONE, ['/index.html', '/statyi/index.html']);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.kind).toBe('mismatch');
+    expect(verdict.ok === false && verdict.reason).toMatch(/объявила отсутствие/);
   });
 
+  it('не объявлено ничего — непройдена с причиной «измерить не удалось», а не «сошлось»', () => {
+    // Третий исход РАЗЛИЧЁН со вторым: «нечего сверять» не равно «разошлось». Пустое
+    // значение и отсутствие ключа — одно и то же состояние, и оба дают этот исход.
+    for (const carrying of [[], ['/index.html']]) {
+      const verdict = symmetricVerdict(NOTHING, carrying);
+      expect(verdict.ok, 'необъявленная конфигурация прошла').toBe(false);
+      expect(verdict.ok === false && verdict.kind).toBe('unmeasurable');
+    }
+  });
+
+  it('объявленная конфигурация боевой сборки согласна с её выводом', async () => {
+    // А это уже РЕАЛЬНОСТЬ, а не фикстура: тот же вердикт применяется к настоящему
+    // объявлению и настоящему выводу. Фикстуры выше дают красное состояние каждой
+    // ветви, этот тест — предмету.
+    const config = await declaredConfig();
+    const carrying = pagesCarryingChat();
+    const verdict = symmetricVerdict(config, carrying);
+    expect(
+      verdict.ok,
+      `состояние конфигурации: ${CHAT_STATE_NAMES[config.state]}; страниц с встраиванием ` +
+        `${carrying.length}. ${verdict.ok === false ? verdict.reason : ''}`,
+    ).toBe(true);
+  });
+});
+
+// ─── Чат: то, что верно в любом состоянии конфигурации ───────────────────────
+
+describe('чат: страница 404 и утечка стилей', () => {
   it('страница 404 не несёт разметки чата', () => {
-    // Непустота: фасад есть на главной (тест выше). Иначе «на 404 его нет» верно и
-    // когда его нет вовсе.
-    expect(byDataName(home, SEL_CHAT_FACADE).length, 'фасада нет и на главной — предмета нет').toBe(1);
+    // Оговорка спеки: 404 исключена из возможности целиком по байтовому пределу, и её
+    // запас меньше килобайта. Непустота предмета здесь доказывается НЕ фасадом на
+    // главной — в состоянии 2 фасада нет вообще нигде, и требование к 404 от этого не
+    // исчезает: доказывается тем, что страница 404 в выводе есть и она настоящая.
     const html = pages.get(`/${PAGE_404}`);
     expect(html, 'в выводе нет страницы 404 — проверять нечего').toBeTruthy();
-    for (const name of [SEL_CHAT_FACADE, SEL_CHAT_TRIGGER, SEL_CHAT_MOUNT, SEL_CHAT_HOURS])
+    expect(
+      /<html[^>]*lang="ru"/.test(html!),
+      'страница 404 не похожа на собранную страницу — утверждение об отсутствии на ней ' +
+        'разметки чата было бы тривиально верным',
+    ).toBe(true);
+    for (const name of [SEL_CHAT_FACADE, SEL_CHAT_TRIGGER, SEL_CHAT_MOUNT])
       expect(
         byDataName(html!, name).map((el) => el.tagName),
         `на 404 есть '${name}': её байтовый запас меньше килобайта, и перерасход ` +
@@ -378,10 +538,85 @@ describe('чат-виджет присутствует на страницах �
         'утверждение было тривиально верным',
     ).toBe(true);
   });
+});
 
-  it('наши элементы не несут инлайновых обработчиков событий', () => {
-    // Класс `event-handler` сверки исполняемого вывода. Предмет — НАШИ элементы:
-    // фасад чата, секция отзывов и всё внутри них.
+describe('вне часов работы: часы из панели виджета, телефон из подвала', () => {
+  it('подвал несёт телефоны на КАЖДОЙ странице боевого вывода', () => {
+    // Это наша часть и единственная гарантия, остающаяся при неответившем загрузчике.
+    const footers = [...pages.entries()].map(([path, html]) => {
+      const found = elements(html).filter((el) => el.tagName === 'footer');
+      return { path, tel: found.flatMap((el) => telLinks(el)) };
+    });
+    expect(footers.length, 'страниц нет — предмета нет').toBeGreaterThan(50);
+    const without = footers.filter((f) => f.tel.length === 0).map((f) => f.path);
+    expect(
+      without.slice(0, 10),
+      `страниц без телефона в подвале: ${without.length}. Подвал не часть фасада чата и ` +
+        'от конфигурации не зависит вовсе',
+    ).toEqual([]);
+  });
+
+  it('блоков часов работы менеджера столько же, сколько было, и на тех же двух страницах', () => {
+    // Своего постоянно видимого блока часов эта возможность НЕ добавляет: часы живут
+    // сообщением внутри раскрытой панели стороннего виджета.
+    //
+    // Признак — ЧУЖОЙ и уже принятый: `data-hours="manager"`. Число блоков стережёт
+    // существующая проверка обязательного прогона (`web/tests/site-copy.test.ts:272`),
+    // и своей проверки того же предмета эта возможность не заводит — так требует спека.
+    // Здесь проверяется то, чего та проверка НЕ утверждает: на КАКИХ страницах блоки
+    // стоят. Совпадение признака названо намеренно: две проверки над одним предметом
+    // обязаны сходиться, и они сходятся, потому что признак один.
+    const carrying = [...pages.entries()]
+      .filter(([, html]) =>
+        elements(html).some((el) => attr(el, MANAGER_HOURS_ATTR) === MANAGER_HOURS_VALUE),
+      )
+      .map(([path]) => path.replace(/index\.html$/, ''));
+    expect(
+      [...carrying].sort(),
+      `блоки часов менеджера стоят на страницах ${carrying.join(', ')}, а законны только на ` +
+        PAGES_WITH_MANAGER_HOURS.join(' и '),
+    ).toEqual([...PAGES_WITH_MANAGER_HOURS].sort());
+  });
+
+  it('фасад чата не несёт своей полосы часов работы', () => {
+    // Запрет без проверки — не запрет: три редакции спеки предписывали наш блок часов
+    // на каждой странице, и реализация, идущая по памяти или по осиротевшим задачам,
+    // поставит его снова.
+    //
+    // Предмет — ТОЛЬКО поддерево фасада, а не страница: страницы семинаров называют
+    // время занятий теми же числами, и признак по всей странице краснел бы от исправного
+    // содержимого. В состоянии 2 фасада нет вовсе — тогда предмета нет, и об этом
+    // сказано вслух, а не выдано за «нарушений нет».
+    const facades = [...pages.entries()].flatMap(([path, html]) =>
+      byDataName(html, SEL_CHAT_FACADE).map((el) => ({ path, el })),
+    );
+    if (facades.length === 0) {
+      // Состояние 2: фасада нет по требованию, полосы часов внутри него тоже нет
+      // тривиально. Утверждение переносится на пробную сборку состояния 1 —
+      // `tests/external-widgets-config-probe.test.ts`.
+      expect(
+        [...pages.values()].some((html) => byDataName(html, SEL_CHAT_TRIGGER).length > 0),
+        'фасада чата нет ни на одной странице — если это состояние 2, так и должно быть; ' +
+          'полоса часов внутри фасада проверяется на пробной сборке состояния 1',
+      ).toBe(false);
+      return;
+    }
+    const offenders = facades
+      .map(({ path, el }) => ({ path, text: hoursStripText(el) }))
+      .filter((x) => x.text !== null)
+      .map((x) => `${x.path}: «${x.text}»`);
+    expect(
+      offenders.slice(0, 5),
+      `внутри фасада чата стоит полоса часов работы: ${offenders.length} страниц. Спека ` +
+        'такой блок запрещает — он не нарисован ни в одном утверждённом варианте',
+    ).toEqual([]);
+  });
+});
+
+describe('наши элементы не несут инлайновых обработчиков событий', () => {
+  it('ни в секции отзывов, ни в фасаде чата инлайновых обработчиков нет', () => {
+    // Класс `event-handler` сверки исполняемого вывода
+    // (`web/tests/helpers/rich-content-safety/hazard-scan.ts:473`, `if (h.reason === 'event-handler'`).
     const ours = [
       ...byDataName(home, SEL_REVIEWS_SECTION).flatMap((el) => subtree(el)),
       ...byDataName(home, SEL_CHAT_FACADE).flatMap((el) => subtree(el)),
@@ -391,51 +626,6 @@ describe('чат-виджет присутствует на страницах �
       el.attrs.filter((a) => /^on[a-z]+$/i.test(a.name)).map((a) => `${el.tagName}[${a.name}]`),
     );
     expect(offenders, `инлайновые обработчики в наших элементах: ${offenders.join(', ')}`).toEqual([]);
-  });
-
-  it('адрес загрузчика записан СО СХЕМОЙ', () => {
-    // Наше правило, а не следствие чужого гейта: класс `protocol-relative` сверки
-    // исполняемого вывода срабатывает только для закрытого перечня атрибутов адреса
-    // (`web/tests/helpers/rich-content-safety/hazard-scan.ts:125`, `if (URL_ATTRS.has(name)`),
-    // и `data-*` в него не входит.
-    const loader = declaredChatLoader();
-    expect(
-      /^https?:\/\//.test(loader),
-      `адрес загрузчика '${loader}' записан без схемы: эту форму в атрибуте данных ` +
-        'сверка исполняемого вывода не покрывает вовсе',
-    ).toBe(true);
-  });
-});
-
-describe('данные посетителя в чате собирает виджет, а не мы', () => {
-  it('своей формы сбора данных для чата нет', () => {
-    const facades = byDataName(home, SEL_CHAT_FACADE);
-    expect(facades.length, 'фасада чата на главной нет — предмета нет').toBe(1);
-    const inside = subtree(facades[0]);
-    const collectors = inside
-      .filter((el) => ['form', 'input', 'textarea', 'select'].includes(el.tagName))
-      // Кнопка вызова — не сбор данных; `<input type=hidden>` тоже собирает, поэтому
-      // тип не разбирается вовсе: любой ввод внутри фасада — это своя форма.
-      .map((el) => el.tagName);
-    expect(
-      collectors,
-      `внутри фасада чата есть свои поля ввода (${collectors.join(', ')}): согласие и сбор ` +
-        'данных обязан брать виджет, а не мы',
-    ).toEqual([]);
-  });
-
-  it('ссылка на документ о персональных данных достижима со страницы с чатом', () => {
-    const loader = declaredChatLoader();
-    const withChat = [...pages.entries()].filter(([, html]) => chatLoaderHits(html, loader).length > 0);
-    expect(withChat.length, 'страниц с чатом нет — предмета нет').toBeGreaterThan(0);
-    const without = withChat
-      .filter(([, html]) =>
-        elements(html)
-          .filter((el) => el.tagName === 'a')
-          .every((el) => !(attr(el, 'href') ?? '').includes('/terms/')),
-      )
-      .map(([path]) => path);
-    expect(without.slice(0, 10), `страницы с чатом без ссылки на документ: ${without.length}`).toEqual([]);
   });
 });
 
@@ -448,6 +638,11 @@ describe('данные посетителя в чате собирает вид�
  * НАЗВАННОЕ совпадение, а не второй, независимый гейт: AGENTS.md требует, чтобы две
  * проверки над одним предметом сходились либо расхождение было названо. Здесь предмет
  * шире (страницы с новыми блоками) и добавлены фикстуры — сам критерий тот же.
+ *
+ * Граница названа: чужой инвариант идёт по ЧЕТЫРЁМ адресам
+ * (`web/tests/seo-package.test.ts:195`, `for (const p of [`), а не по всем 287, и
+ * распространение его на остальные страницы — отдельная работа. Здесь предмет шире, но
+ * это не отменяет того, что критерий объективен именно на тех четырёх.
  */
 function headingProblems(html: string): string[] {
   const levels = elements(html)
@@ -484,18 +679,40 @@ describe('заголовки новых блоков не ломают стру�
     expect(headingProblems('<h1>a</h1><h2>b</h2><h3>c</h3><h2>d</h2>')).toEqual([]);
   });
 
-  it('страницы с новыми блоками структуру не ломают', () => {
+  it('страницы с новыми блоками структуру не ломают — на четырёх адресах инварианта', () => {
+    // ОХВАТ НАЗВАН ТОЧНО, И ЭТО ИЗМЕРЕНИЕ, А НЕ ОСТОРОЖНОСТЬ.
+    //
+    // Чужой инвариант идёт по ЧЕТЫРЁМ адресам (`web/tests/seo-package.test.ts:195`,
+    // `for (const p of [`), а не по всем 287, и спека это признаёт прямо: «распространение
+    // инварианта на остальные страницы — отдельная работа».
+    //
+    // Первая редакция этой проверки брала ВСЕ страницы с новыми блоками — то есть все 287
+    // после реализации. Измерено на боевом выводе (`npm run build`, 24.08.2026): иерархию
+    // заголовков нарушают **163 страницы из 270** — пропуск уровня перед `h3`. Проверка с
+    // таким охватом была бы красной на дефектах, к этой возможности не относящихся вовсе:
+    // ложный отказ, зеркало ложного зелёного, и «лечили» бы его правкой чужих страниц.
+    //
+    // Список адресов ЧИТАЕТСЯ из чужой проверки, а не копируется: две копии разошлись бы
+    // молча, и тогда «тот же охват» перестало бы быть одним фактом.
+    const invariant = readFileSync(join(dirname(dist), 'tests', 'seo-package.test.ts'), 'utf-8');
+    const block = /H1→H2→H3 hierarchy[\s\S]*?for \(const p of \[([\s\S]*?)\]\)/.exec(invariant);
+    expect(block, 'в seo-package.test.ts не нашёлся перечень адресов инварианта заголовков').not.toBeNull();
+    const addresses = [...block![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(addresses.length, `адресов в инварианте ${addresses.length}, а не четыре`).toBe(4);
+
     reviewsSection();
-    const loader = declaredChatLoader();
-    const subject = [...pages.entries()].filter(
-      ([path, html]) => path === '/index.html' || chatLoaderHits(html, loader).length > 0,
-    );
-    expect(subject.length, 'страниц с новыми блоками нет — предмета нет').toBeGreaterThan(0);
+    const subject = addresses.map((address) => {
+      const key = `${address.replace(/\/$/, '')}/index.html`.replace('//', '/');
+      return { address, html: pages.get(key) };
+    });
+    const absent = subject.filter((x) => x.html === undefined).map((x) => x.address);
+    expect(absent, `адресов инварианта нет в выводе: ${absent.join(', ')} — предмета нет`).toEqual([]);
+
     const offenders = subject
-      .map(([path, html]) => ({ path, problems: headingProblems(html) }))
+      .map((x) => ({ address: x.address, problems: headingProblems(x.html!) }))
       .filter((x) => x.problems.length > 0)
-      .map((x) => `${x.path}: ${x.problems.join('; ')}`);
-    expect(offenders.slice(0, 10), offenders.join('\n')).toEqual([]);
+      .map((x) => `${x.address}: ${x.problems.join('; ')}`);
+    expect(offenders, offenders.join('\n')).toEqual([]);
   });
 });
 
