@@ -40,9 +40,5 @@ openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create
 openspec/changes/social-accounts/design.md :: 8abbf6f07bd0c385c2bde0ecf6f5be597f03ff55 :: external-revision
-openspec/changes/social-accounts/design.md :: web/src/assets/social-marks/ :: will-create
-openspec/changes/social-accounts/design.md :: web/src/lib/social-marks-registry.ts :: will-create
 openspec/changes/social-accounts/tasks.md :: openspec/specs/social-accounts/ :: will-create
-openspec/changes/social-accounts/tasks.md :: web/src/assets/social-marks/ :: will-create
-openspec/changes/social-accounts/tasks.md :: web/src/lib/social-marks-registry.ts :: will-create
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision

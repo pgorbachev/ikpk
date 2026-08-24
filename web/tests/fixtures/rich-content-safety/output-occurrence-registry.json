@@ -133,7 +133,12 @@
     "src:pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L35:C1:style",
     "src:pages/video/[slug].astro:L63:C1:style",
     "src:pages/video/index.astro:L39:C19:svg",
-    "src:pages/video/index.astro:L60:C1:style"
+    "src:pages/video/index.astro:L60:C1:style",
+    "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
+    "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+    "src:components/social-marks/TelegramMark.astro:L4:C1:svg",
+    "src:components/social-marks/VkontakteMark.astro:L4:C1:svg",
+    "src:components/social-marks/YoutubeMark.astro:L4:C1:svg"
   ],
   "occurrences": [
     {
