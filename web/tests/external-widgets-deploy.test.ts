@@ -68,9 +68,15 @@ function distRaw(pages: Record<string, string>): string {
   return dir;
 }
 
-/** Разметка страницы с встраиванием чата — носитель адреса объявлен нашим контейнером. */
+/**
+ * Разметка страницы с встраиванием чата — адрес лежит на ВЛОЖЕННОЙ кнопке, а не на
+ * самом узле-носителе `data-chat-facade`: так его кладёт реальный компонент
+ * (`web/src/components/chat/ChatFacade.astro`, `data-chat-loader-src` на `<button>`).
+ * Фикстура с адресом прямо на носителе не поймала бы исключение только по корню,
+ * не различая его от исключения всего поддерева.
+ */
 const withChat = (src: string): string =>
-  `<div ${SEL_CHAT_FACADE} data-chat-loader="${src}"><button data-chat-trigger>Чат</button></div>`;
+  `<div ${SEL_CHAT_FACADE}><button data-chat-trigger data-chat-loader-src="${src}">Чат</button></div>`;
 
 type Run = { code: number; stdout: string; stderr: string };
 

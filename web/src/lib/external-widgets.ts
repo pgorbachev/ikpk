@@ -58,6 +58,24 @@ export function chatLoaderConfig(): ChatLoaderConfig {
   return readChatLoaderConfig(raw);
 }
 
+/** Ключ конфигурации объявления сообщения офлайн-панели чата (портал Bitrix24). */
+export const CHAT_OFFLINE_MESSAGE_KEY = 'CHAT_OFFLINE_MESSAGE';
+
+/**
+ * Объявление настройки сообщения панели чата вне часов работы. Значения `configured`/
+ * `absent` — портал настроен явно в ту или другую сторону; `null` — ключ не объявлен
+ * вовсе (значение отсутствует, пусто или не совпадает ни с одним из двух). Третье
+ * состояние читается fail-closed приёмкой: «применимость измерить не удалось», а не
+ * «пункт неприменим» (spec.md, требование «У приёмочного утверждения есть запись
+ * свидетельства…»).
+ */
+export function chatOfflineMessage(): 'configured' | 'absent' | null {
+  const fromMeta = (import.meta as ImportMeta & { env?: { CHAT_OFFLINE_MESSAGE?: unknown } }).env
+    ?.CHAT_OFFLINE_MESSAGE;
+  const raw = fromMeta ?? (typeof process !== 'undefined' ? process.env[CHAT_OFFLINE_MESSAGE_KEY] : undefined);
+  return raw === 'configured' || raw === 'absent' ? raw : null;
+}
+
 /**
  * Синтетический адрес, выдаваемый ТОЛЬКО демо-сборкой (`build:demo`), когда реальный
  * адрес не объявлен. У заказчика два портала Bitrix24 — молчаливый выбор одного из них
