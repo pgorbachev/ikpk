@@ -40,6 +40,14 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
+    "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+    "file": "components/chat/ChatFacade.astro",
+    "nodeKind": "element",
+    "locator": "components/chat/ChatFacade.astro:L31:C1:script",
+    "fingerprint": "cf6962f9cfd571b5aa08273c88fc80d6b225296c9cee5af352c9d5c1d35bf69a",
+    "identity": "script|body:d327a05430855362"
+  },
+  {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
@@ -392,6 +400,22 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
+    "slotId": "src:components/home/sections/Reviews.astro:L60:C1:script",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L60:C1:script",
+    "fingerprint": "54aa6276226162898657bf8b00ab7d72ecc37c938af791ea74db983d3d4c2333",
+    "identity": "script|body:dab04171728ce088"
+  },
+  {
+    "slotId": "src:components/home/sections/Reviews.astro:L93:C1:style",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L93:C1:style",
+    "fingerprint": "ba4ab89e8ac70e5ddb46f8b7a4acab4167de1eff936b27a178c11a41212b6ccb",
+    "identity": "style|body:9ac7bec45f6e2471"
+  },
+  {
     "slotId": "src:components/home/sections/Segments.astro:L45:C1:style",
     "file": "components/home/sections/Segments.astro",
     "nodeKind": "element",
@@ -736,11 +760,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L70:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L89:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L70:C1:style",
-    "fingerprint": "55ca437a9ea0aa77ab4d53ef6eede1f0477315da4f5b2e848191442e6637cd52",
+    "locator": "layouts/BaseLayout.astro:L89:C1:style",
+    "fingerprint": "665b29867442b065d1abe0eccc322d8e16857a283a84a37273683fb67525d543",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
