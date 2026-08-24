@@ -115,6 +115,30 @@ export const CMS_RICHTEXT_SELECTORS: CmsRichtextSelector[] = [
     jsonFile: 'seminars.json',
     jsonField: null,
   },
+  // Секции семинара (design.md, D1/G4: три поля произвольного содержимого —
+  // учебный план, режим обучения, рекомендации). Как full_text выше: поля
+  // только в схеме CMS, в файловом снимке их нет.
+  {
+    id: 'cms:seminar.learning_plan',
+    singularName: 'seminar',
+    attr: 'learning_plan',
+    jsonFile: 'seminars.json',
+    jsonField: null,
+  },
+  {
+    id: 'cms:seminar.learning_mode',
+    singularName: 'seminar',
+    attr: 'learning_mode',
+    jsonFile: 'seminars.json',
+    jsonField: null,
+  },
+  {
+    id: 'cms:seminar.recommendations',
+    singularName: 'seminar',
+    attr: 'recommendations',
+    jsonFile: 'seminars.json',
+    jsonField: null,
+  },
   { id: 'cms:teacher.bio', singularName: 'teacher', attr: 'bio', jsonFile: 'teachers.json', jsonField: 'bio_html' },
 ];
 
