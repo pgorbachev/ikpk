@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "136368408f5059941c2b22176368993a59037008",
+  "generatedFromSha": "d367d4c4d658e3d899d58f973972f2425de62bc9",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",
@@ -21,6 +21,9 @@
     "cms:schedule-entry.additionalText",
     "cms:seminar.description",
     "cms:seminar.full_text",
+    "cms:seminar.learning_plan",
+    "cms:seminar.learning_mode",
+    "cms:seminar.recommendations",
     "cms:teacher.bio"
   ],
   "entries": [
@@ -821,6 +824,42 @@
       "attr": "full_text",
       "entityId": "seminar.full_text",
       "jsonPath": "cms:seminar.full_text",
+      "byteLength": 0,
+      "empty": true
+    },
+    {
+      "selectorId": "cms:seminar.learning_mode",
+      "kind": "cms-richtext",
+      "file": "seminars.json",
+      "field": null,
+      "singularName": "seminar",
+      "attr": "learning_mode",
+      "entityId": "seminar.learning_mode",
+      "jsonPath": "cms:seminar.learning_mode",
+      "byteLength": 0,
+      "empty": true
+    },
+    {
+      "selectorId": "cms:seminar.learning_plan",
+      "kind": "cms-richtext",
+      "file": "seminars.json",
+      "field": null,
+      "singularName": "seminar",
+      "attr": "learning_plan",
+      "entityId": "seminar.learning_plan",
+      "jsonPath": "cms:seminar.learning_plan",
+      "byteLength": 0,
+      "empty": true
+    },
+    {
+      "selectorId": "cms:seminar.recommendations",
+      "kind": "cms-richtext",
+      "file": "seminars.json",
+      "field": null,
+      "singularName": "seminar",
+      "attr": "recommendations",
+      "entityId": "seminar.recommendations",
+      "jsonPath": "cms:seminar.recommendations",
       "byteLength": 0,
       "empty": true
     },
@@ -6693,7 +6732,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/svedeniya-ob-obrazovatelnoy-organizatsii\"][\"Основные сведения\"]",
-      "byteLength": 2723,
+      "byteLength": 2741,
       "empty": false
     },
     {
@@ -6803,7 +6842,7 @@
       "field": "description_html",
       "entityId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "jsonPath": "course_groups.json$[1][\"description_html\"]",
-      "byteLength": 1416,
+      "byteLength": 1404,
       "empty": false
     },
     {
