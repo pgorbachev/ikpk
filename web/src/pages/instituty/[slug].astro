@@ -1,0 +1,88 @@
+---
+/**
+ * Плоский адрес института (`/instituty/<slug>`) — спека
+ * `cms-content-authoring-and-migration`, D9: адрес складывается из каталога и
+ * идентификатора, без иерархии.
+ *
+ * Страница временно ЛЕГЧЕ богатой `/[institute].astro` (программы, преподаватели,
+ * схема обучения, бот-ссылка): та живёт по прежнему иерархическому адресу и
+ * остаётся канонической до переключения источника сборки (change
+ * `cms-content-publication`) — раздел Purpose спеки прямо ограничивает объём
+ * сегодняшней сборки файловым снимком. Здесь — самодостаточная карточка
+ * института с ссылкой на полную страницу, а не редирект и не заглушка.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getInstitutes } from '../../lib/data';
+import type { Institute } from '../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  return getInstitutes().map((institute) => ({
+    params: { slug: institute.slug },
+    props: { institute },
+  }));
+};
+
+const { institute } = Astro.props as { institute: Institute };
+const image = institute.images?.[0];
+// Текст, а не RichContent(description_html): легаси-разметка несёт контролы
+// вроде голой <button> («Хочу сотрудничать!»), разрешаемые ТОЛЬКО с известным
+// целевым адресом конкретной секции страницы (html-cleaner.ts,
+// normalizeLegacyControls) — придумывать его здесь нет права. Иерархическая
+// страница обходит это точечной выборкой раздела «Дополнительная информация»;
+// здесь страница временная и текстовая, поэтому проще и безопаснее не вносить
+// весь HTML целиком.
+const summary = excerpt(institute.description_text, 500);
+// Суффикс отличает <title> от иерархической страницы того же института
+// (`/[institute].astro` использует seo_title без изменений): без него две
+// страницы одной записи давали бы совпадающий заголовок (`tests/seo-package.test.ts`,
+// «no duplicate <title> across the site»). Поле описания у части институтов
+// пусто — тот же гейт требует его непустым на КАЖДОЙ странице.
+const title = `${institute.seo_title || institute.name} — Институты — ИКПК`;
+const description = institute.seo_description?.trim() || excerpt(institute.description_text, 160);
+---
+
+<BaseLayout title={title} description={description} noindex>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Институты', href: '/instituty' }, { label: institute.name }]} />
+
+    <section class="section institute-flat">
+      <h1 class="page-title">{institute.name}</h1>
+
+      {image && <img src={image} alt={institute.name} class="institute-flat-image" loading="lazy" />}
+
+      {summary && <p class="institute-flat-summary">{summary}</p>}
+
+      <p class="institute-flat-full-link">
+        Полная страница института — с программами и преподавателями —{' '}
+        <a href={`/${institute.slug}`}>{institute.name}</a>.
+      </p>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .institute-flat-image {
+    max-width: 320px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-m);
+    margin-bottom: 1.25rem;
+  }
+
+  .institute-flat-summary {
+    max-width: 70ch;
+    line-height: 1.65;
+    color: var(--color-gray-700);
+  }
+
+  .institute-flat-full-link {
+    margin-top: 1.5rem;
+    color: var(--color-gray-600);
+  }
+</style>
