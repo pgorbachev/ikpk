@@ -1,0 +1,789 @@
+{
+  "/institut-barralya": {
+    "Какие документы выдает ИКПК после обучения?": "description",
+    "Сколько длится обучение?": "description",
+    "Какие требования к уровню подготовки необходимы для участия в семинарах института Барраля?": "description",
+    "Обязательно ли оплачивать всю сумму за обучение сразу?": "description",
+    "Может ли обучение оплачивать юридическое лицо?": "description",
+    "На каком языке проходит обучение?": "description",
+    "Во время обучения разрешена видеосъемка?": "description",
+    "Разрешена ли фотофиксация на семинаре?": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema": {
+    "Для кого подойдет": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/grudnaya-kletka": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/visceralnye-tehniki/taz": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/oplata": {
+    "Как оплатить?": "body",
+    "Способы оплаты?": "body",
+    "Условия возврата денежных средств?": "body",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii": {
+    "Какие документы выдает ИКПК после обучения?": "description",
+    "Предоставляет ли ИКПК запись проведенных мероприятий?": "description",
+    "Сколько длится обучение?": "description",
+    "Какие требования к уровню подготовки необходимы для участия в семинарах ИКПК?": "description",
+    "Обязательно ли оплачивать всю сумму за обучение сразу?": "description",
+    "Может ли обучение оплачивать юридическое лицо?": "description",
+    "На каком языке проходит обучение?": "description",
+    "Во время обучения разрешена видеосъемка?": "description",
+    "Разрешена ли фотофиксация на семинаре?": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/svedeniya-ob-obrazovatelnoy-organizatsii": {
+    "Основные сведения": "body",
+    "Структура и органы управления": "body",
+    "Уставные документы": "body",
+    "Положения и правила": "body",
+    "Отчеты о результатах самообследования": "body",
+    "Образование": "body",
+    "Руководство. Педагогический (научно-педагогический) состав": "body",
+    "Материально-техническое обеспечение и оснащенность образовательного процесса": "body",
+    "Платные образовательные услуги": "body",
+    "Образовательные стандарты и требования": "body",
+    "Финансово-хозяйственная деятельность": "body",
+    "Вакантные места для приема (перевода)": "body",
+    "Скачать образцы договоров": "body",
+    "Доступная среда": "body",
+    "Международное сотрудничество": "body",
+    "Стипендии и меры социальной поддержки обучающихся": "body",
+    "Организация питания в образовательной организации": "body",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/strahi-i-fobii-fap": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya": {
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven": {
+    "Для кого подойдет": "description",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko": {
+    "Для кого подойдет": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej": {
+    "Как проходит обучение": "learning_mode",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera": {
+    "Какие документы выдаются по окончании обучения?": "description",
+    "Сколько длится обучение?": "description",
+    "Какие требования к уровню подготовки необходимы для участия в семинарах Института Апледжера?": "description",
+    "Обязательно ли оплачивать всю сумму за обучение сразу?": "description",
+    "Может ли обучение оплачивать юридическое лицо?": "description",
+    "На каком языке проходит обучение?": "description",
+    "Во время обучения разрешена видеосъемка?": "description",
+    "Разрешена ли фотофиксация на семинаре?": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/mozg/mozg-govorit-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/mozg/mozg-govorit-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety": {
+    "Для кого подойдет": "description",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1": {
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  },
+  "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie": {
+    "Для кого подойдет": "description",
+    "Учебный план": "learning_plan",
+    "Как проходит обучение": "learning_mode",
+    "Выдаваемые документы": "documents_state",
+    "Рекомендации": "recommendations",
+    "Обучение": "skip:site-footer-not-content",
+    "Компания": "skip:site-footer-not-content"
+  }
+}
