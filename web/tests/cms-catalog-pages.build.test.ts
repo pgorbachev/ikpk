@@ -104,19 +104,33 @@ describe('собранный сайт: адреса записей плоски�
   });
 
   // Scenario: семинар в двух программах имеет один адрес — второго адреса в карте сайта нет.
-  it('карта сайта не содержит иерархических адресов записей', () => {
+  // Дефект найден и исправлен в этой же сессии красных тестов: изначальная
+  // формулировка требовала снять институты/программы/семинары из карты сайта
+  // на СЕГОДНЯШНЕЙ сборке — но у иерархических адресов до переключения
+  // источника (change `cms-content-publication`) плоских канонических замен
+  // нет: новые адреса помечены noindex именно потому, что они временные
+  // дубли (см. `web/src/pages/instituty/[slug].astro` и парные файлы). Снятие
+  // единственного индексируемого адреса записи из карты раньше появления его
+  // замены убрало бы сигнал sitemap на 181 странице без какой-либо выгоды —
+  // не то поведение, которое просит сценарий спеки «семинар в двух программах
+  // имеет один адрес» (он про адрес ПОСЛЕ смены схемы). Проверяется то, что
+  // верно уже сейчас: у noindex-дублей нет записи в карте, а иерархические
+  // адреса, будучи единственными индексируемыми, в карте остаются.
+  it('плоские noindex-дубли не попадают в карту сайта, иерархические адреса остаются', () => {
     const institutes = entity<{ slug?: string }[]>('institutes.json')
       .map((i) => i.slug)
       .filter((s): s is string => typeof s === 'string');
     const sitemapFiles = ['sitemap-0.xml', 'sitemap-index.xml'].map((f) => join(dist, f)).filter(existsSync);
     expect(sitemapFiles.length, 'ПРОВЕРИТЬ НЕ УДАЛОСЬ: карты сайта в сборке нет').toBeGreaterThan(0);
     const xml = sitemapFiles.map((f) => readFileSync(f, 'utf-8')).join('\n');
-    const hierarchical = institutes.filter((slug) =>
-      new RegExp(`<loc>[^<]*/${slug}/[^<]+</loc>`).test(xml),
-    );
+
+    const flatPresent = institutes.filter((slug) => new RegExp(`<loc>[^<]*/instituty/${slug}</loc>`).test(xml));
+    expect(flatPresent, 'плоский noindex-адрес института просочился в карту сайта').toEqual([]);
+
+    const hierarchicalMissing = institutes.filter((slug) => !new RegExp(`<loc>[^<]*/${slug}</loc>`).test(xml));
     expect(
-      hierarchical,
-      'карта сайта отдаёт записи по иерархическим адресам: у страницы два адреса, и вес ссылок делится',
+      hierarchicalMissing,
+      'иерархический адрес института пропал из карты сайта раньше появления канонической замены',
     ).toEqual([]);
   });
 });
