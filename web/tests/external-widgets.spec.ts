@@ -77,6 +77,24 @@ async function guard(page: Page, options: Parameters<typeof installThirdPartyGua
 
 const LOADER_HOST = new URL(PROBE_CHAT_LOADER_SRC).hostname;
 
+/**
+ * `seen.toHost()` ловит и субдомены (`.endsWith('.'+host)`) — годится для LOADER_HOST,
+ * но не для REVIEWS_WIDGET_HOST: реальный адрес виджета — голый `yandex.ru`
+ * (proposal.md, замер), а собственная Яндекс.Метрика сайта (39506315) висит на
+ * `mc.yandex.ru`, тоже субдомене `yandex.ru`, и грузится на каждой странице
+ * независимо от секции отзывов. Признак по субдомену конфликтует с ЧУЖИМ, но
+ * предсуществующим механизмом — нужен точный хост, а не суффикс.
+ */
+function toExactHost(urls: readonly string[], host: string): string[] {
+  return urls.filter((u) => {
+    try {
+      return new URL(u).hostname.toLowerCase() === host.toLowerCase();
+    } catch {
+      return false;
+    }
+  });
+}
+
 // ─── Ленивое встраивание виджета отзывов ─────────────────────────────────────
 
 test.describe('виджет отзывов не грузится, пока секция не показалась', () => {
@@ -100,8 +118,8 @@ test.describe('виджет отзывов не грузится, пока се�
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     expect(
-      seen.toHost(REVIEWS_WIDGET_HOST),
-      `к домену виджета обратились до появления секции: ${seen.toHost(REVIEWS_WIDGET_HOST).join(', ')}`,
+      toExactHost(seen.urls, REVIEWS_WIDGET_HOST),
+      `к домену виджета обратились до появления секции: ${toExactHost(seen.urls, REVIEWS_WIDGET_HOST).join(', ')}`,
     ).toEqual([]);
   });
 
@@ -113,7 +131,7 @@ test.describe('виджет отзывов не грузится, пока се�
       page.locator(`[${SEL_REVIEWS_SECTION}] iframe`),
       'после появления секции встраивание не подставлено',
     ).toHaveCount(1);
-    expect(seen.toHost(REVIEWS_WIDGET_HOST).length, 'запроса к домену виджета не было').toBeGreaterThan(0);
+    expect(toExactHost(seen.urls, REVIEWS_WIDGET_HOST).length, 'запроса к домену виджета не было').toBeGreaterThan(0);
   });
 
   test('появление виджета не сдвигает страницу', async ({ page }) => {
@@ -199,7 +217,7 @@ test.describe('без скриптов секция даёт ссылку, а н
       const link = page.locator(`[${SEL_REVIEWS_SECTION}] a[href*="${REVIEWS_WIDGET_HOST}"]`);
       await expect(link, 'без скриптов в секции нет ссылки на отзывы организации').toHaveCount(1);
       expect(
-        seen.toHost(REVIEWS_WIDGET_HOST),
+        toExactHost(seen.urls, REVIEWS_WIDGET_HOST),
         'без скриптов страница всё равно обратилась к домену виджета',
       ).toEqual([]);
     } finally {
@@ -493,9 +511,27 @@ test.describe('кнопка чата не перекрывает содержи�
           r.width > 0 && r.height > 0 &&
           r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
 
+        // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
+        // потомка — это признак ПРЕДКА. У `.topnav-drawer` (мобильное меню, TopNav.astro,
+        // не тронут этим change) `position: absolute` выводит его геометрию из-под
+        // схлопывания, которым браузер прячет закрытый details: getBoundingClientRect
+        // потомков остаётся настоящим и ненулевым, хотя пользователь их не видит и не
+        // может нажать. Без этой проверки хит-тест ловит фантомное перекрытие с любым
+        // новым фиксированным элементом на мобильном — независимо от того, что нового
+        // элемента касается.
+        const insideClosedDetails = (el: Element): boolean => {
+          let node: Element | null = el;
+          while (node !== null) {
+            if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
+            node = node.parentElement;
+          }
+          return false;
+        };
+
         const interactive: string[] = [];
         for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
           if (button.contains(el) || el.contains(button)) continue;
+          if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           if (hit(el.getBoundingClientRect()))
@@ -507,6 +543,7 @@ test.describe('кнопка чата не перекрывает содержи�
         const text: string[] = [];
         for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
           if (button.contains(p)) continue;
+          if (insideClosedDetails(p)) continue;
           const style = getComputedStyle(p);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const range = document.createRange();
