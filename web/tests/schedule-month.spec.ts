@@ -6,6 +6,11 @@ import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
 // Псевдоним, а не прямое имя: параметр `monthKeys` уже занят в `syntheticMarkup` и
 // `mountSynthetic`, и тень над импортом читалась бы как одно и то же.
 import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 // ─── Браузерные проверки фильтра расписания по месяцу ────────────────────────
 // Спецификация: openspec/specs/schedule-month-filter/spec.md
@@ -554,6 +559,9 @@ test.describe('контрол месяца доступен', () => {
 
     const withoutJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 720 } });
     const staticPage = await withoutJs.newPage();
+    // Своя страница — свой guard: guard из `beforeEach` стоит на странице фикстуры и об
+    // этой ничего не знает.
+    await installThirdPartyGuard(staticPage);
     const response = await staticPage.goto(PAGE);
     expect(response?.status(), `${PAGE}: страница не отдалась без JavaScript — измерять нечего`).toBe(200);
     await expect(staticPage.locator(MONTH), 'без JavaScript контрол месяца выглядит рабочим').toBeDisabled();
