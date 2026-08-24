@@ -11,6 +11,14 @@
  * «no known-dead external links in the build» в tests/content-quality.test.ts
  * держит вне сборки уже разобранные мёртвые адреса, но живость новых он
  * подтвердить не может.
+ *
+ * Состав закрыт перечнем решения заказчика D16 с демо 2026-08-19: Instagram и
+ * Facebook сняты, четыре сети ниже остаются. Это отменяет решение владельца от
+ * 2026-07-27, которое вернуло две сети, потому что они «есть в разметке живого
+ * сайта». Сверка с разметкой внешнего сайта основанием вернуть сети больше не
+ * является: состав — принятое решение, а не следствие любого внешнего
+ * источника (change social-accounts, Requirement «Состав внешних аккаунтов
+ * закрыт перечнем»).
  */
 
 export interface SocialLink {
@@ -29,23 +37,29 @@ export const SOCIAL_LINKS: SocialLink[] = [
   { label: 'Telegram', href: 'https://t.me/ikpk_spb' },
   // совпадает со старым сайтом; на запрос отвечает 403 — это антибот, не поломка
   { label: 'Rutube', href: 'https://rutube.ru/channel/30422569/' },
-  // Instagram и Facebook есть в разметке живого сайта, и по решению владельца
-  // (2026-07-27) возвращаются. Адреса взяты оттуда как есть.
-  //
-  // Проверить доступность запросом нельзя: сервисы Meta в России заблокированы,
-  // поэтому «живость» этих страниц наши гейты подтвердить не могут — в отличие
-  // от остальных четырёх, проверенных ответом сервера.
-  { label: 'Instagram', href: 'https://www.instagram.com/ikpk812/' },
-  { label: 'Facebook', href: 'https://www.facebook.com/prikladnaya.kineziologiya/' },
 ];
+
+function hrefOf(label: string): string {
+  const found = SOCIAL_LINKS.find((link) => link.label === label);
+  if (found === undefined) {
+    throw new Error(`в источнике состава нет аккаунта «${label}»`);
+  }
+  return found.href;
+}
 
 /**
  * Видео ВКонтакте. Точный адрес раздела с видео подтвердить запросом нельзя:
  * VK отправляет любой неавторизованный запрос на логин. Поэтому ведём в
  * сообщество, где видео и лежат, а не в выдуманный адрес vkvideo.ru/@clubikpk
  * (он отдавал invalid user). Уточнить у заказчика — в списке вопросов.
+ *
+ * Адрес берётся из перечня выше, а не повторяется литералом: второе независимое
+ * определение того же адреса — нарушение Requirement о едином источнике.
  */
-export const VK_COMMUNITY_URL = 'https://vk.com/clubikpk';
+export const VK_COMMUNITY_URL = hrefOf('ВКонтакте');
+
+/** Канал Rutube — тот же адрес, что в перечне состава, без второго литерала. */
+export const RUTUBE_CHANNEL_URL = hrefOf('Rutube');
 
 /**
  * Магазин. На старом сайте в теле страниц — kinezio.shop, в наших данных
