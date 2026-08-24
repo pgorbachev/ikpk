@@ -138,8 +138,18 @@ describe('демо-вывод: материал на месте', () => {
     // Тот же сторож, что у действующей проверки демо-вывода, и проверяется он вызовом:
     // на пустом каталоге перечисление обязано падать, на непустом — нет. Первое без
     // второго прошло бы и для функции, падающей всегда.
+    // Путей отказа у чужого сторожа три — каталога нет, путь не каталог, страниц ноль, — и
+    // проверяются все три. Мутация, убравшая один путь из трёх, прогон не покраснит:
+    // измерено на симметричном стороже боевого вывода.
+    const missing = join(tmpdir(), 'ikpk-widgets-demo-no-such-dir-нет');
+    expect(() => demoPages(missing), 'на ОТСУТСТВУЮЩЕМ каталоге сторож не упал').toThrow(
+      /предмета проверки нет/,
+    );
+    const asFile = join(mkdtempSync(join(tmpdir(), 'ikpk-widgets-demo-file-')), 'not-a-dir');
+    writeFileSync(asFile, 'x');
+    expect(() => demoPages(asFile), 'на пути-ФАЙЛЕ сторож не упал').toThrow(/предмета проверки нет/);
     const empty = mkdtempSync(join(tmpdir(), 'ikpk-widgets-demo-empty-'));
-    expect(() => demoPages(empty)).toThrow(/предмета проверки нет/);
+    expect(() => demoPages(empty), 'на ПУСТОМ каталоге сторож не упал').toThrow(/предмета проверки нет/);
     const filled = mkdtempSync(join(tmpdir(), 'ikpk-widgets-demo-filled-'));
     mkdirSync(join(filled, 'x'), { recursive: true });
     writeFileSync(join(filled, 'x', 'index.html'), '<!doctype html><html lang="ru"></html>');

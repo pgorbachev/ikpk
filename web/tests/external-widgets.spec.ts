@@ -57,12 +57,16 @@ let site: StaticSite;
 
 test.beforeAll(async () => {
   test.setTimeout(10 * 60 * 1000);
-  probe = buildProbe(`${CHAT_LOADER_KEY}=<адрес>`, { [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC });
-  site = await serveStatic(probe.root);
+  // `keepOnDisk`: этому набору дерево надо РАЗДАВАТЬ, поэтому 91 МБ остаются до конца
+  // прогона и убираются в `afterAll`. Всем остальным потребителям хватает разметки в
+  // памяти, и там каталог удаляется сразу — иначе за сессию накапливаются гигабайты.
+  probe = buildProbe(`${CHAT_LOADER_KEY}=<адрес>`, { [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC }, { keepOnDisk: true });
+  site = await serveStatic(probe.root!);
 });
 
 test.afterAll(async () => {
   await site?.close();
+  probe?.dispose();
 });
 
 const url = (path: string): string => `${site.origin}${path}`;

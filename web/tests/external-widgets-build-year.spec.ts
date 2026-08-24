@@ -143,22 +143,31 @@ test.describe('датозависимый фрагмент — строка зн
 
   test.beforeAll(async ({ browser }) => {
     const year = await declaredBadgeYear();
+    // `keepOnDisk`: оба дерева надо раздавать браузеру. Убираются здесь же, в `finally`:
+    // одна пробная сборка занимает 91 МБ, и забытые каталоги за сессию съели 5,4 ГБ,
+    // прежде чем это было замечено — диск кончился посреди прогона.
     const built = [
-      buildProbe(`${BUILD_YEAR_KEY}=${year}`, {
-        [BUILD_YEAR_KEY]: String(year),
-        [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC,
-      }),
-      buildProbe(`${BUILD_YEAR_KEY}=${year + 1}`, {
-        [BUILD_YEAR_KEY]: String(year + 1),
-        [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC,
-      }),
+      buildProbe(
+        `${BUILD_YEAR_KEY}=${year}`,
+        { [BUILD_YEAR_KEY]: String(year), [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC },
+        { keepOnDisk: true },
+      ),
+      buildProbe(
+        `${BUILD_YEAR_KEY}=${year + 1}`,
+        { [BUILD_YEAR_KEY]: String(year + 1), [CHAT_LOADER_KEY]: PROBE_CHAT_LOADER_SRC },
+        { keepOnDisk: true },
+      ),
     ];
-    const sites = await Promise.all(built.map((b) => serveStatic(b.root)));
     try {
-      current = await measure(browser, sites[0]);
-      next = await measure(browser, sites[1]);
+      const sites = await Promise.all(built.map((b) => serveStatic(b.root!)));
+      try {
+        current = await measure(browser, sites[0]);
+        next = await measure(browser, sites[1]);
+      } finally {
+        await Promise.all(sites.map((s) => s.close()));
+      }
     } finally {
-      await Promise.all(sites.map((s) => s.close()));
+      built.forEach((b) => b.dispose());
     }
   });
 

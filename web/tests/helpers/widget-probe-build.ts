@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { walkFiles } from './walk';
@@ -29,6 +29,18 @@ import { walkFiles } from './walk';
  * ПОСЛЕ обычной сборки. Отсюда место файлов-потребителей: `vitest.build.config.ts`, который
  * запускается скриптом `test:build` сразу за `npm run build`.
  *
+ * ── КАТАЛОГ УДАЛЯЕТСЯ, И ЭТО НЕ АККУРАТНОСТЬ ────────────────────────────────
+ * Одна пробная сборка занимает **91 МБ** (образы из `public/` копируются целиком, флага
+ * «не копировать» у Astro нет). Первая редакция этого модуля каталог не удаляла, и за одну
+ * сессию накопилось **59 каталогов, 5,4 ГБ** — диск кончился посреди работы, и `eslint`
+ * упал с «no space left on device». То есть проверка ломала не свой предмет, а машину, на
+ * которой шла.
+ *
+ * Поэтому по умолчанию модуль читает все страницы в память и каталог УДАЛЯЕТ сразу:
+ * потребителю HTML нужен, а дерево — нет. Дерево остаётся на диске только когда его
+ * действительно надо раздавать (`keepOnDisk`), и тогда удалить его обязан потребитель —
+ * `dispose()`.
+ *
  * ── ПОЧЕМУ КАТАЛОГ ВНЕ РЕПОЗИТОРИЯ ──────────────────────────────────────────
  * Корень сборочного вывода внутри репозитория пришлось бы вписать и в `.gitignore`, и в
  * закрытый перечень корней у `./bin/check-spec-refs` (он сверяет их с `.gitignore` и
@@ -40,12 +52,31 @@ import { walkFiles } from './walk';
 const WEB = join(import.meta.dirname, '..', '..');
 
 export interface ProbeBuild {
-  /** Корень пробной сборки. */
-  readonly root: string;
+  /**
+   * Корень пробной сборки на диске либо `null`, если дерево уже удалено.
+   *
+   * `null` — обычное состояние: страницы прочитаны в память, а 91 МБ дерева больше не
+   * нужны. Не `null` только при `keepOnDisk`, и тогда потребитель обязан вызвать
+   * `dispose()`.
+   */
+  readonly root: string | null;
   /** Страницы: путь относительно корня → разметка. */
   readonly pages: Map<string, string>;
   /** Чем сборка отличалась от боевой — для сообщений об отказе. */
   readonly label: string;
+  /** Удалить дерево. Идемпотентно; на уже удалённом ничего не делает. */
+  dispose(): void;
+}
+
+export interface ProbeOptions {
+  /**
+   * Оставить дерево на диске.
+   *
+   * Нужно только тем потребителям, которые дерево РАЗДАЮТ (браузерные прогоны). Всем
+   * остальным хватает разметки в памяти, а 91 МБ на сборку при семи сборках — это 637 МБ
+   * за прогон, накапливающиеся между прогонами.
+   */
+  readonly keepOnDisk?: boolean;
 }
 
 /**
@@ -55,7 +86,11 @@ export interface ProbeBuild {
  * называет пустое значение и отсутствие ключа одним состоянием, но проверять их надо
  * обоими способами, иначе реализация, различающая их, пройдёт незамеченной.
  */
-export function buildProbe(label: string, env: Record<string, string | undefined>): ProbeBuild {
+export function buildProbe(
+  label: string,
+  env: Record<string, string | undefined>,
+  options: ProbeOptions = {},
+): ProbeBuild {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-widget-probe-'));
   const childEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env))
@@ -90,11 +125,28 @@ export function buildProbe(label: string, env: Record<string, string | undefined
     pages.set(file.slice(root.length).replaceAll('\\', '/'), readFileSync(file, 'utf-8'));
 
   // Пустой набор — «не выполнено», а не «нарушений нет»: все утверждения об отсутствии
-  // ниже тривиально верны на пустом выводе.
-  if (pages.size === 0)
+  // ниже тривиально верны на пустом выводе. Каталог при этом всё равно убираем: иначе
+  // отказ оставляет 91 МБ мусора на каждой неудачной сборке.
+  if (pages.size === 0) {
+    rmSync(root, { recursive: true, force: true });
     throw new Error(`пробная сборка «${label}» не дала ни одной html-страницы: предмета нет`);
+  }
 
-  return { root, pages, label };
+  let alive = options.keepOnDisk === true;
+  if (!alive) rmSync(root, { recursive: true, force: true });
+  const probe: ProbeBuild = {
+    get root() {
+      return alive ? root : null;
+    },
+    pages,
+    label,
+    dispose() {
+      if (!alive) return;
+      alive = false;
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+  return probe;
 }
 
 /**
