@@ -11,9 +11,14 @@ export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   /**
-   * Отклоняет загрузку, не прошедшую ограничения D5 (`cms/config/plugins.ts`):
-   * `sizeLimit`/`allowedTypes` там же лишь конфигурация загрузчика Strapi, а
-   * фактическую загрузку останавливает этот хук на `plugin::upload.file`.
+   * Вторая линия для ограничений D5 (`cms/config/plugins.ts`): реальный gate по MIME —
+   * `plugin::upload.security.allowedTypes` (см. комментарий там же), он останавливает запись
+   * ДО physical write и покрывает и admin, и `/api/upload`. Этот хук на `plugin::upload.file`
+   * срабатывает на `strapi.db.query(...).create()`, то есть уже ПОСЛЕ того, как провайдер
+   * записал байты на диск (`uploadFileAndPersist()` в `@strapi/upload` вызывает
+   * `provider.upload()` раньше, чем `add()`/`create()`) — он не останавливает саму запись
+   * файла, а ловит запись в БД в обход контроллеров (например, прямой `db.query(...).create()`
+   * из скрипта или другого плагина).
    */
   bootstrap({ strapi }: { strapi: Core.Strapi }) {
     strapi.db.lifecycles.subscribe({
