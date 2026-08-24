@@ -34,12 +34,14 @@
 
 **Модули:**
 
-- `web/src/lib/manager-hours.ts` → `isWithinManagerHours(at: Date): boolean`
-- `web/src/lib/award-badges.ts` → `visibleAwardBadges(declared, at: Date): AwardBadge[]`,
-  где объявление несёт `id`, `year`, `sourceUrl`, `evidence`
+- ~~`web/src/lib/manager-hours.ts` → `isWithinManagerHours(at: Date): boolean`~~ — **СНЯТО**: требования
+  о выводе принадлежности момента часам работы больше нет, модуля не будет
+- `web/src/lib/award-badges.ts` → `visibleAwardBadges(declared, buildYear: number): AwardBadge[]`,
+  где объявление несёт `id`, `year`, `sourceUrl` и **два** подтверждения — награждения и права
+  размещать марку (**изменено**: год передаётся значением, а не моментом; полей четыре, а не три)
 - `web/src/lib/external-widgets.ts` → `THIRD_PARTY_EMBED_HOSTS: readonly string[]`
   (плоский массив, без деления на «наши» и «чужие»), `readChatLoaderConfig(raw): string | null`,
-  `chatLoaderSrc(): string | null`
+  `chatLoaderSrc()` с ТРЕМЯ различимыми состояниями (`string | null` их склеивает — **изменено**)
 
 **Компоненты:** `web/src/components/chat/ChatFacade.astro`,
 `web/src/components/home/sections/Reviews.astro`, подключение фасада в
@@ -47,7 +49,7 @@
 
 **Атрибуты разметки** (наши имена — сторона их переименовать не может):
 `data-reviews-section`, `data-reviews-embed`, `data-award-badge`, `data-chat-facade`,
-`data-chat-trigger`, `data-chat-mount`, `data-chat-hours`. Класс стилей фасада —
+`data-chat-trigger`, `data-chat-mount` (`data-chat-hours` — **СНЯТ**, своего блока часов нет). Класс стилей фасада —
 `chat-facade` (проверка ищет его в инлайновом CSS страницы 404 и во внешнем стиле).
 
 **Функция гейта выкладки:** `chat_widget_matches_mode <dist> <mode> <expected-loader>` в
@@ -621,7 +623,7 @@ tests» начнёт исполняться сам — он уже вписан 
 **Список швов и карта покрытия выше устарели в четырёх местах, и это надо знать до их чтения:**
 `web/src/lib/manager-hours.ts` с `isWithinManagerHours(at: Date)` — **модуля не будет**, требования о
 выводе принадлежности момента часам работы нет; атрибут `data-chat-hours` — **запрещён** спекой,
-своего блока часов нет; `readChatLoaderConfig(raw): string | null` и `chatLoaderSrc(): string | null`
+своего блока часов нет; `readChatLoaderConfig(raw): string | null` и `chatLoaderSrc()` с ТРЕМЯ различимыми состояниями (`string | null` их склеивает — **изменено**)
 — контракт двухсостоянийный, а состояний три, и `null` склеивает «объявлено отсутствие» с «не
 объявлено ничего». Шов знака тоже сдвинулся: `visibleAwardBadges` принимает **год** значением, а не
 `Date`, и объявление несёт **три** поля вместо двух.
@@ -638,7 +640,7 @@ tests» начнёт исполняться сам — он уже вписан 
 | | Требований | Сценариев | Задач |
 |---|---|---|---|
 | `f7f1fac` (по этому документу) | 25 | 79 | 109 |
-| текущая голова | 25 | 99 | 130 |
+| текущая голова | 25 | 100 | 132 |
 
 Заголовок «Карта покрытия: 79 сценариев спеки» читать с этой поправкой. Числа в этом разделе
 пересчитываются при каждой правке спеки — прежние его редакции говорили 88 и 118, и оба устарели в
