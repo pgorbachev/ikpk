@@ -23,32 +23,45 @@ function loadSlots(): ExecutableSlot[] {
   ) as ExecutableSlot[];
 }
 
-function matchSlot(slots: ExecutableSlot[], outputIdentity: string): ExecutableSlot | undefined {
+/**
+ * When several source slots project to the same output identity (dual-theme Rutube:
+ * identical root attrs, `svg` provenance ignores body), prefer a slot not yet claimed
+ * on this page so both copies get distinct inventory rows instead of a ghost slot.
+ */
+function matchSlot(
+  slots: ExecutableSlot[],
+  outputIdentity: string,
+  usedSlotIds: Set<string>,
+): ExecutableSlot | undefined {
+  const pick = (candidates: ExecutableSlot[]): ExecutableSlot | undefined => {
+    const unused = candidates.find((slot) => !usedSlotIds.has(slot.slotId));
+    return unused ?? candidates[0];
+  };
   const exact = slots.filter((slot) => slot.identity === outputIdentity);
-  if (exact[0]) return exact[0];
+  if (exact[0]) return pick(exact);
   const projected = slots.filter((slot) => !provenanceError(slot.identity, outputIdentity));
   if (projected.length === 0) return undefined;
   const output = projectIdentity(outputIdentity);
   if (output.tag === 'link' && (output.staticAttrs.get('rel') ?? '') === 'stylesheet') {
     const imported = projected.filter((slot) => slot.nodeKind === 'css-import');
-    if (imported[0]) return imported[0];
+    if (imported[0]) return pick(imported);
   }
   if (output.tag === 'script' && output.staticAttrs.get('type') === 'module') {
     const bundled = projected.filter((slot) => slot.nodeKind === 'element' && !slot.identity.includes('is:inline'));
-    if (bundled[0]) return bundled[0];
+    if (bundled[0]) return pick(bundled);
   }
   if (output.tag === 'style') {
     const styles = projected.filter((slot) => slot.identity.startsWith('style|'));
-    if (styles[0]) return styles[0];
+    if (styles[0]) return pick(styles);
   }
   if (output.tag === 'svg') {
     const viewBox = output.staticAttrs.get('viewbox');
     if (viewBox) {
       const sameBox = projected.filter((slot) => slot.identity.includes(viewBox));
-      if (sameBox[0]) return sameBox[0];
+      if (sameBox[0]) return pick(sameBox);
     }
   }
-  return projected[0];
+  return pick(projected);
 }
 
 export function collectRulesFromDist(
@@ -64,12 +77,14 @@ export function collectRulesFromDist(
   for (const file of walkFiles(distRoot, ['.html'])) {
     const html = stripMarkedRegions(readFileSync(file, 'utf-8'));
     const route = htmlFileRoute(file, distRoot);
+    const usedSlotIds = new Set<string>();
     for (const found of collectOccurrences(html)) {
-      const slot = matchSlot(slots, found.identity);
+      const slot = matchSlot(slots, found.identity, usedSlotIds);
       if (!slot) {
         unmatched.push({ route, identity: found.identity, placement: found.placement });
         continue;
       }
+      usedSlotIds.add(slot.slotId);
       const key = `${slot.slotId}\t${route}\t${found.placement}\t${found.identity}`;
       const prev = grouped.get(key);
       if (prev) prev.count += 1;
