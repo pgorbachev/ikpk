@@ -103,6 +103,33 @@ test('beforeCreate: отклоняет идентификатор, уже зан
   await assert.rejects(() => subscriber.beforeCreate(event), /уже занят/);
 });
 
+// Ревью PR #186, дельта: находка #1 (блокер). Strapi публикует запись с `draftAndPublish`
+// через `db.query(uid).create()` — тот же вызов, что и обычное создание, — с сохранённым
+// `documentId` черновика. `beforeCreate` до этой правки проверял новую запись под
+// плейсхолдером `id: '__new__'`, поэтому не узнавал в уже существующей строке (тот же
+// `documentId`, тот же slug) саму себя и отклонял публикацию как коллизию с записью,
+// которую редактор публикует. Смоделировано ровно так, как Strapi собирает payload
+// публикации: `documentId` черновика присутствует в `data`, слаг не меняется.
+test('beforeCreate: публикация черновика (тот же documentId, тот же slug) не блокируется как коллизия с самим собой', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'apledzher' }] },
+  });
+  const event = makeEvent('api::institute.institute', { data: { slug: 'apledzher', documentId: 'doc-1' } });
+  await assert.doesNotReject(() => subscriber.beforeCreate(event));
+});
+
+// Негативный парный тест к предыдущему: настоящая коллизия (чужой documentId, тот же slug)
+// обязана остаться отклонённой даже когда `documentId` присутствует в payload — иначе фикс
+// finding #1 просто выключил бы проверку целиком вместо того, чтобы отличить публикацию
+// от настоящего конфликта.
+test('beforeCreate: коллизия с чужим documentId отклоняется, даже если payload несёт свой documentId', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'apledzher' }] },
+  });
+  const event = makeEvent('api::institute.institute', { data: { slug: 'apledzher', documentId: 'doc-2' } });
+  await assert.rejects(() => subscriber.beforeCreate(event), /уже занят/);
+});
+
 test('beforeCreate: одинаковый идентификатор в разных каталогах не конфликт', async () => {
   const { subscriber } = makeStrapi({
     rowsByUid: { 'api::seminar.seminar': [{ documentId: 'doc-1', slug: 'dolgoletie' }] },

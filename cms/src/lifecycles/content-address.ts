@@ -112,9 +112,17 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       if (typeof identifier !== 'string' || identifier === '') return;
 
       const state = await loadAddressState(strapi);
-      // Новая запись ещё не попала в state.records/addressHistory — id-плейсхолдер ни с чем
-      // не совпадёт, самопересечение исключать не нужно.
-      const record: RecordRef = { id: '__new__', type, identifier };
+      // Ревью PR #186, дельта, находка #1 (блокер): плейсхолдер `id: '__new__'` был верен
+      // только для настоящего создания — там новой записи ещё нет ни в state.records, ни в
+      // истории, и placeholder ни с чем не совпадает. Но у типов с `draftAndPublish: true`
+      // (все семь каталожных) публикация ТОЖЕ идёт через `db.query(uid).create()` — Strapi
+      // берёт черновик, выставляет `publishedAt` и создаёт вторую строку с ТЕМ ЖЕ
+      // `documentId`, который остаётся в `data.documentId` (сам `id` вырезан, `documentId`
+      // нет). На момент проверки черновик уже лежит в `state.records` под этим documentId и
+      // с тем же слагом — с плейсхолдером `beforeCreate` не узнавал в нём себя и отклонял
+      // публикацию как «адрес уже занят записью <тот же документ>». `data.documentId`,
+      // когда он есть, — как раз тот различитель: настоящее создание его не передаёт.
+      const record: RecordRef = { id: (data.documentId as string | undefined) ?? '__new__', type, identifier };
       const verdict = checkIdentifier({ record, state });
       if (!verdict.ok) throw new ApplicationError(verdict.message);
     },
