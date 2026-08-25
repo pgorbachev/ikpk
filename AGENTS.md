@@ -830,6 +830,7 @@ find .claude .codex -name '*.md' -exec perl -pi -e \
 
 **Не входят в гейт и публикацию не блокируют:** `Lint and Typecheck`, `Lighthouse CI`,
 `Security`, `Nightly full checks`, `Published main head monitor`,
+`Snapshot fixture compatibility`,
 `Dependabot auto-merge`, `Dependabot auto-merge policy`, `Dependabot auto-merge signal`,
 `Dependabot rebase`, `Dependabot rebase policy`, `Dependabot rebase signal`. Их падение видно на PR и в
 ленте прогонов, но выкладку оно не останавливает. `Published main head monitor` не

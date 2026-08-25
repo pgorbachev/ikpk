@@ -314,6 +314,8 @@ export function concurrencyGroups(wf: Workflow): string[] {
 const OWN_REPO = 'ikpk/ikpk';
 const FORK_REPO = 'chuzhoy/ikpk';
 const TESTED_SHA = 'a'.repeat(40);
+/** Идентификатор проверенного прогона `Tests` в фикстуре `workflow_run`. */
+const TESTED_RUN_ID = 4242;
 
 /** Событие `workflow_run` с заданным исходом и происхождением. */
 export function workflowRunContext(options: {
@@ -333,6 +335,7 @@ export function workflowRunContext(options: {
     ref_name: DEFAULT_BRANCH,
     event: {
       workflow_run: {
+        id: TESTED_RUN_ID,
         conclusion: options.conclusion,
         status: 'completed',
         head_sha: TESTED_SHA,
@@ -370,4 +373,4 @@ export function dispatchContext(refName = DEFAULT_BRANCH): GithubContext {
   };
 }
 
-export const CONTEXT_CONSTANTS = { OWN_REPO, FORK_REPO, TESTED_SHA };
+export const CONTEXT_CONSTANTS = { OWN_REPO, FORK_REPO, TESTED_SHA, TESTED_RUN_ID };
