@@ -147,7 +147,27 @@ test('beforeUpdate → afterUpdate: смена идентификатора до
   });
   await subscriber.beforeUpdate(event);
   await subscriber.afterUpdate(event);
-  assert.deepEqual(created, [{ address: '/instituty/old-name', owner_id: 'doc-1', owner_type: 'institute' }]);
+  // F3 (ревью PR #186, дельта): для института пишутся ДВЕ строки истории — будущий
+  // плоский адрес и голый корневой (живой сейчас) адрес одного и того же старого имени.
+  assert.deepEqual(created, [
+    { address: '/instituty/old-name', owner_id: 'doc-1', owner_type: 'institute' },
+    { address: '/old-name', owner_id: 'doc-1', owner_type: 'institute' },
+  ]);
+});
+
+test('beforeUpdate → afterUpdate: у программы (не института) пишется ОДНА строка истории', async () => {
+  // Отрицательный контроль к предыдущему тесту: у программы/семинара/персоны нет голого
+  // корневого маршрута — второй, «легаси», записи истории для них не должно быть.
+  const { subscriber, created } = makeStrapi({
+    rowsByUid: { 'api::course-group.course-group': [{ documentId: 'doc-1', slug: 'old-name' }] },
+  });
+  const event = makeEvent('api::course-group.course-group', {
+    where: { documentId: 'doc-1' },
+    data: { slug: 'new-name' },
+  });
+  await subscriber.beforeUpdate(event);
+  await subscriber.afterUpdate(event);
+  assert.deepEqual(created, [{ address: '/programmy/old-name', owner_id: 'doc-1', owner_type: 'course-group' }]);
 });
 
 test('beforeUpdate: отклоняет смену идентификатора на адрес, занятый историей', async () => {
@@ -172,12 +192,12 @@ test('afterUpdate: повторная запись того же старого 
   });
   await subscriber.beforeUpdate(event);
   await subscriber.afterUpdate(event);
-  assert.equal(created.length, 1);
-  assert.equal(history.length, 1);
+  assert.equal(created.length, 2, 'институт пишет плоский адрес и голый корневой (F3)');
+  assert.equal(history.length, 2);
 
   // Второй проход по тому же событию (например, ретрай) не должен упасть на unique-ограничении.
   await subscriber.afterUpdate(event);
-  assert.equal(created.length, 1, 'дубль в историю не добавлен');
+  assert.equal(created.length, 2, 'дубль в историю не добавлен');
 });
 
 // H5 (ревью PR #186): институт живёт СЕЙЧАС и по голому корневому адресу `/<slug>`
@@ -210,6 +230,46 @@ test('beforeCreate: статическая страница может испо�
   );
 });
 
+// F2 (ревью PR #186, дельта): предыдущая пара тестов защищала статическую страницу от
+// занятия адреса института — обратное направление было НЕ защищено. Институт с
+// идентификатором существующей статической страницы проходил проверку (вычисленные
+// адреса разные: `/instituty/<id>` против `/<id>`), а на сборке оба претендовали бы на
+// один и тот же корневой маршрут ([institute].astro и [slug].astro).
+test('beforeCreate: институт не занимает идентификатор существующей статической страницы', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: { 'api::page.page': [{ documentId: 'doc-1', slug: 'garantii' }] },
+  });
+  const event = makeEvent('api::institute.institute', { data: { slug: 'garantii' } });
+  await assert.rejects(() => subscriber.beforeCreate(event), /корневой сегмент уже занят/);
+});
+
+test('beforeUpdate: переименование института в идентификатор существующей статической страницы отклоняется', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::institute.institute': [{ documentId: 'doc-1', slug: 'institut-apledzhera' }],
+      'api::page.page': [{ documentId: 'doc-2', slug: 'garantii' }],
+    },
+  });
+  const event = makeEvent('api::institute.institute', {
+    where: { documentId: 'doc-1' },
+    data: { slug: 'garantii' },
+  });
+  await assert.rejects(() => subscriber.beforeUpdate(event), /корневой сегмент уже занят/);
+});
+
+test('beforeCreate: институт может использовать идентификатор программы или семинара', async () => {
+  // Отрицательный контроль: расширение касается ТОЛЬКО статических страниц — программа и
+  // семинар не претендуют на корневой сегмент, коллизии с институтом не даёт.
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::course-group.course-group': [{ documentId: 'doc-1', slug: 'garantii' }],
+    },
+  });
+  await assert.doesNotReject(() =>
+    subscriber.beforeCreate(makeEvent('api::institute.institute', { data: { slug: 'garantii' } })),
+  );
+});
+
 // H5: до этой правки история писалась только при переименовании. Запись, которую
 // никогда не переименовывали, освобождала свой адрес при удалении молча — без единой
 // строки в истории, то есть без какого-либо сигнала будущему владельцу того же адреса.
@@ -220,7 +280,11 @@ test('beforeDelete → afterDelete: адрес никогда не переим�
   const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
   await subscriber.beforeDelete(event);
   await subscriber.afterDelete(event);
-  assert.deepEqual(created, [{ address: '/instituty/institut-barralya', owner_id: 'doc-1', owner_type: 'institute' }]);
+  // F3: та же пара адресов, что и при переименовании — плоский и голый корневой.
+  assert.deepEqual(created, [
+    { address: '/instituty/institut-barralya', owner_id: 'doc-1', owner_type: 'institute' },
+    { address: '/institut-barralya', owner_id: 'doc-1', owner_type: 'institute' },
+  ]);
 });
 
 test('afterDelete: повторный проход по тому же событию не дублирует запись истории', async () => {
@@ -231,8 +295,39 @@ test('afterDelete: повторный проход по тому же событ
   await subscriber.beforeDelete(event);
   await subscriber.afterDelete(event);
   await subscriber.afterDelete(event);
-  assert.equal(created.length, 1);
-  assert.equal(history.length, 1);
+  assert.equal(created.length, 2, 'институт пишет плоский адрес и голый корневой (F3)');
+  assert.equal(history.length, 2);
+});
+
+// F3 (ревью PR #186, дельта), сквозной сценарий — именно то, для чего заведена запись
+// голого корневого адреса: удалённый институт освобождает `/<slug>`, и следующая
+// статическая страница с тем же идентификатором должна встретить «занят историей», а
+// не молча перехватить адрес, который посетитель по старой ссылке ещё считает институтом.
+test('сквозной сценарий: статическая страница не занимает адрес удалённого института', async () => {
+  // Строки института — отдельный массив, мутируемый по ссылке: удаление в реальной БД
+  // убирает запись из последующих findMany/findOne, а без этого шага fake хранит её
+  // навсегда и следующая проверка отклонила бы страницу по buildRouteSegments (институт
+  // «как будто жив»), а не по истории — то есть проверяла бы не то, что нужно этому тесту.
+  const instituteRows = [{ documentId: 'doc-1', slug: 'institut-barralya' }];
+  const { subscriber } = makeStrapi({ rowsByUid: { 'api::institute.institute': instituteRows } });
+
+  const deleteEvent = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(deleteEvent);
+  instituteRows.length = 0; // институт удалён из БД
+  await subscriber.afterDelete(deleteEvent);
+
+  const createEvent = makeEvent('api::page.page', { data: { slug: 'institut-barralya' } });
+  await assert.rejects(() => subscriber.beforeCreate(createEvent), /занят историей/);
+});
+
+test('beforeDelete → afterDelete: у семинара (не института) пишется ОДНА строка истории', async () => {
+  const { subscriber, created } = makeStrapi({
+    rowsByUid: { 'api::seminar.seminar': [{ documentId: 'doc-1', slug: 'osnovy-testirovaniya' }] },
+  });
+  const event = makeEvent('api::seminar.seminar', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(event);
+  await subscriber.afterDelete(event);
+  assert.deepEqual(created, [{ address: '/seminary/osnovy-testirovaniya', owner_id: 'doc-1', owner_type: 'seminar' }]);
 });
 
 test('beforeDelete: запись без идентификатора не пишет историю (нечего терять)', async () => {
@@ -260,8 +355,10 @@ test('afterUpdate: отказ записи истории не прерывае�
   });
   await subscriber.beforeUpdate(event);
   await assert.doesNotReject(() => subscriber.afterUpdate(event));
-  assert.equal(loggedErrors.length, 1);
-  assert.match(loggedErrors[0], /old-name/);
+  // F3: институт пишет ДВЕ строки истории (плоский адрес + голый корневой), поэтому при
+  // сквозном отказе БД — два независимых лог-сообщения, а не одно.
+  assert.equal(loggedErrors.length, 2);
+  assert.ok(loggedErrors.every((m) => /old-name/.test(m)));
 });
 
 test('afterDelete: отказ записи истории не прерывает обработчик и попадает в лог', async () => {
@@ -272,7 +369,7 @@ test('afterDelete: отказ записи истории не прерывае�
   const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
   await subscriber.beforeDelete(event);
   await assert.doesNotReject(() => subscriber.afterDelete(event));
-  assert.equal(loggedErrors.length, 1);
+  assert.equal(loggedErrors.length, 2);
 });
 
 // G4 (teammate rev186-lifecycles): «слаг присутствует, но не изменился» — реалистичный

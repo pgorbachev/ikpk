@@ -65,6 +65,37 @@ async function recordAddressHistoryIfMissing(strapi: Core.Strapi, address: strin
   });
 }
 
+// Отказ здесь не должен всплыть у вызывающего как отказ уже закоммиченной операции
+// (переименования или удаления) — H5/G2, ревью PR #186. Потеря записи истории — реальная
+// потеря, поэтому не молчим вовсе, а пишем в лог сервера.
+async function writeHistorySafely(
+  strapi: Core.Strapi,
+  address: string,
+  ownerId: string,
+  ownerType: string,
+  action: 'переименования' | 'удаления',
+) {
+  try {
+    await recordAddressHistoryIfMissing(strapi, address, ownerId, ownerType);
+  } catch (err) {
+    strapi.log.error(
+      `[content-address] не удалось записать историю адреса ${address} (владелец ${ownerId}) после ${action}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// Институт — единственный тип, у которого СЕЙЧАС, до переключения источника
+// (`cms-content-publication`), живой канонический маршрут — голый корневой сегмент
+// `/<identifier>` ([institute].astro), а НЕ плоский `/instituty/<identifier>`, который
+// вычисляет `addressOf`. F3 (ревью PR #186, дельта): без этой добавки переименование или
+// удаление института писало в историю только будущий плоский адрес — а статическая
+// страница, претендующая на освободившийся КОРНЕВОЙ сегмент (её собственный вычисленный
+// адрес — тот же `/<identifier>`), под проверку «занят историей» не попадала и молча
+// перехватывала бы адрес, который посетитель по старой ссылке всё ещё считает институтом.
+function legacyRootAddress(type: RecordType, identifier: string): string | undefined {
+  return type === 'institute' ? `/${identifier}` : undefined;
+}
+
 /**
  * Первая линия для грамматики идентификатора, областей уникальности по каталогам и истории
  * адресов (спека `cms-content-authoring`, задачи 3.11–3.12). Вторая линия — сборка `web`,
@@ -127,16 +158,11 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       if (!previousIdentifier || !previousType || !documentId) return;
 
       const oldAddress = addressOf({ type: previousType, identifier: previousIdentifier });
-      // Переименование в БД уже закоммичено — исключение здесь не должно всплыть у
-      // вызывающего как отказ сохранения (H5, находка G2): редактор увидел бы 500 на
-      // успешно сохранённой записи. Потеря записи истории — реальная потеря, поэтому не
-      // молчим вовсе, а пишем в лог сервера; сама операция остаётся успешной.
-      try {
-        await recordAddressHistoryIfMissing(strapi, oldAddress, documentId, previousType);
-      } catch (err) {
-        strapi.log.error(
-          `[content-address] не удалось записать историю адреса ${oldAddress} (владелец ${documentId}) после переименования: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      await writeHistorySafely(strapi, oldAddress, documentId, previousType, 'переименования');
+
+      const legacyOldAddress = legacyRootAddress(previousType, previousIdentifier);
+      if (legacyOldAddress) {
+        await writeHistorySafely(strapi, legacyOldAddress, documentId, previousType, 'переименования');
       }
     },
 
@@ -170,14 +196,11 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       if (!identifier || !type || !documentId) return;
 
       const address = addressOf({ type, identifier });
-      // Тот же довод, что в afterUpdate: удаление уже закоммичено, отказ здесь не должен
-      // выглядеть отказом удаления.
-      try {
-        await recordAddressHistoryIfMissing(strapi, address, documentId, type);
-      } catch (err) {
-        strapi.log.error(
-          `[content-address] не удалось записать историю адреса ${address} (владелец ${documentId}) после удаления: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      await writeHistorySafely(strapi, address, documentId, type, 'удаления');
+
+      const legacyAddress = legacyRootAddress(type, identifier);
+      if (legacyAddress) {
+        await writeHistorySafely(strapi, legacyAddress, documentId, type, 'удаления');
       }
     },
   });

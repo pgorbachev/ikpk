@@ -79,6 +79,25 @@ export function checkIdentifier({ record, state }: { record: RecordRef; state: A
     }
   }
 
+  // Симметрично предыдущей проверке (ревью PR #186, дельта, находка F2): институт живёт
+  // СЕЙЧАС по голому корневому адресу `/<identifier>` — том же, что вычисляет `addressOf`
+  // для статической страницы, хотя ВЫЧИСЛЕННЫЙ адрес института другой (`/instituty/<id>`,
+  // будущий плоский). Без этой проверки институт с чужим уже занятым корневым сегментом
+  // проходил бы (адреса не совпадают вычислением) и на сборке `web` столкнулся бы с
+  // `[slug].astro`, породившим страницу по тому же самому идентификатору. Проверка — только
+  // в эту сторону: у прочих типов (программа, семинар, персона) иерархический адрес не
+  // корневой сегмент, коллизии со статической страницей не даёт.
+  if (type === 'institute') {
+    const staticPageOwner = state.records.find((r) => r.type === 'static-page' && r.identifier === identifier);
+    if (staticPageOwner && staticPageOwner.id !== id) {
+      return {
+        ok: false,
+        message: `корневой сегмент уже занят статической страницей: ${identifier}`,
+        conflictWith: staticPageOwner.id,
+      };
+    }
+  }
+
   for (const entry of state.addressHistory) {
     if (entry.address === address && entry.ownerId !== id) {
       return {
