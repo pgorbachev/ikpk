@@ -5,7 +5,7 @@ import { KNOWN_CATALOG_SEGMENTS } from '../lib/build-route-segments';
 
 const { ApplicationError } = errors;
 
-/** Каталожные типы записи → UID Strapi. Ключи — предмет требования (спека, задача 3.11). */
+/** Каталожные типы записи → UID Strapi. Ключи — предмет требования (спека `cms-content-authoring-and-migration`, задача 3.11 — на момент этого коммита только на неслитой ветке PR #132, M1). */
 const TYPE_BY_UID: Record<string, RecordType> = {
   'api::institute.institute': 'institute',
   'api::course-group.course-group': 'course-group',
@@ -98,8 +98,9 @@ function legacyRootAddress(type: RecordType, identifier: string): string | undef
 
 /**
  * Первая линия для грамматики идентификатора, областей уникальности по каталогам и истории
- * адресов (спека `cms-content-authoring`, задачи 3.11–3.12). Вторая линия — сборка `web`,
- * которая видит полный список маршрутов Astro; здесь — только то, что знает сама CMS.
+ * адресов (спека `cms-content-authoring-and-migration`, задачи 3.11–3.12 — на момент этого
+ * коммита только на неслитой ветке PR #132, M1). Вторая линия — сборка `web`, которая видит
+ * полный список маршрутов Astro; здесь — только то, что знает сама CMS.
  */
 export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
   strapi.db.lifecycles.subscribe({
