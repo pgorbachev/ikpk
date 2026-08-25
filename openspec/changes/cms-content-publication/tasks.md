@@ -93,11 +93,11 @@
       `.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:502`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:503`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
-      `.github/workflows/test.yml:359`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:360`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
       в джобе `scripts-unit` — сюда не входит: этот шаг гоняет `vitest` только внутри `scripts/`
       и НЕ вызывает `npm run build` вовсе, к сборке сайта и к снимку контента отношения не имеет
       (проверено ревью PR #185 по факт-находке, которая сперва приняла совпадение имени за
@@ -154,8 +154,8 @@
       вершину прогона**, в четырёх workflow: `unit-and-build` — обычная сборка
       (`.github/workflows/test.yml:51`, `- name: Run build tests (dist checks)`) и `build:demo`
       (`.github/workflows/test.yml:65`, `- name: Run demo build tests (dist-demo checks)`);
-      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:413`, `- name: Build site`) и
-      `build:stand` (`.github/workflows/test.yml:459`, `- name: Build stand-role site`); `build`
+      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:414`, `- name: Build site`) и
+      `build:stand` (`.github/workflows/test.yml:460`, `- name: Build stand-role site`); `build`
       (`.github/workflows/deploy.yml:115`, `- name: Build Astro site`); `lhci`
       (`.github/workflows/lighthouse.yml:43`, `- name: Build site`); `compat`
       (`.github/workflows/nightly.yml:39`, `- name: Build site`). Джобы независимы, поэтому снимок
