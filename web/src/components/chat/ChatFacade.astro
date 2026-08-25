@@ -3,16 +3,27 @@
 // скрипт загружается только по нажатию — «простой браузера не является триггером»
 // (спека change `external-widgets`).
 //
-// Рендерится ТОЛЬКО в состоянии 1 конфигурации (адрес объявлен). В состояниях
-// «отсутствие объявлено явно» и «не объявлено ничего» фасада нет вовсе — своего блока
-// часов работы или заглушки на этот случай возможность не заводит.
+// Рендерится ТОЛЬКО в состоянии 1 конфигурации (адрес объявлен) И вне демо/стенд-
+// гашения. Без второго условия фасад ориентировался только на наличие адреса и не
+// видел `isDemoForms` — тот же гейт, что у `Analytics` (`{!isDemoForms && <Analytics
+// />}`, BaseLayout.astro/TopNavLayout.astro), здесь отсутствовал вовсе. Измерено:
+// `CHAT_LOADER_SRC=<реальный адрес> DEMO_FORMS=stub npm run build` вносил живой адрес
+// и разметку фасада в 286 страниц демо-вывода — ровно то, что «гашение обоих на демо»
+// должно было исключить. `DEPLOY_MODE=stand` тоже собирается с `DEMO_FORMS=stub` по
+// умолчанию (`scripts/deploy-web.sh`), поэтому один и тот же гейт закрывает оба режима,
+// которых `chat_widget_matches_mode` (`scripts/lib/deploy-checks.sh`) не пускает.
+//
+// В состояниях «отсутствие объявлено явно» и «не объявлено ничего» фасада нет вовсе —
+// своего блока часов работы или заглушки на этот случай возможность не заводит.
 import { chatLoaderConfig } from '../../lib/external-widgets';
+import { isDemoForms } from '../../lib/forms';
 
 const config = chatLoaderConfig();
+const showFacade = config.state === 'address' && !isDemoForms;
 ---
 
 {
-  config.state === 'address' && (
+  showFacade && (
     <div data-chat-facade class="chat-facade">
       <button
         type="button"
@@ -53,16 +64,90 @@ const config = chatLoaderConfig();
   //
   // Сторонний загрузчик исполняется ТОЛЬКО по нажатию — ни на простое браузера, ни
   // предварительным соединением. Один узел на страницу, поэтому querySelector.
+  //
+  // Загрузка скрипта — не выполнение сценария. Документированный контракт портала
+  // (справка Bitrix24, «advanced widget settings»): после исполнения загрузчика
+  // глобально стреляет `onBitrixLiveChat` с `event.detail.widget`, у объекта есть
+  // `widget.subscribe({ type, callback })` и `widget.open()`; подписка на
+  // `BX.LiveChatWidget.SubscriptionType.configLoaded` — документированный способ
+  // ждать готовности конфигурации перед открытием. Ни один из известных методов
+  // (`open`/`close`/`subscribe`/`setUserRegisterData`/`setCustomData`/`setOption`/
+  // `addLocalize`) не даёт доступа к DOM-узлу собственного интерфейса портала, и
+  // документация не описывает, куда он его вставляет — поэтому `[data-chat-mount]`
+  // ниже используется только как контейнер ДЛЯ ЭТОЙ РАЗМЕТКИ, а не как гарантия того,
+  // куда попадёт панель портала.
+  //
+  // Перевод фокуса — из того же ограничения: раз место появления не документировано,
+  // сторожим ЛЮБОЙ новый узел в `document.body` и переносим фокус в первый focusable
+  // внутри него. Это наилучшее digital-доступное приближение без доступа к реальному
+  // порталу (клиент ещё не передал ключи Bitrix24 — docs/client-requests.md, п. 8);
+  // проверить точное соответствие макету портала можно только на живом стенде.
   (function () {
     const trigger = document.querySelector('[data-chat-trigger]');
     const mount = document.querySelector('[data-chat-mount]');
     if (!trigger || !mount) return;
     let loaded = false;
+
+    function focusFirstFocusable(root) {
+      if (!root || typeof root.querySelector !== 'function') return false;
+      var selector = '[tabindex],button,a[href],input,textarea,select,iframe';
+      var el = root.matches && root.matches(selector) ? root : root.querySelector(selector);
+      if (!el) return false;
+      if (!el.hasAttribute('tabindex') && el.tagName !== 'IFRAME' && el.tabIndex < 0) {
+        el.setAttribute('tabindex', '-1');
+      }
+      el.focus();
+      return true;
+    }
+
+    function watchForInterfaceAndFocus() {
+      var observer = new MutationObserver(function (mutations) {
+        for (var m = 0; m < mutations.length; m += 1) {
+          var added = mutations[m].addedNodes;
+          for (var i = 0; i < added.length; i += 1) {
+            if (focusFirstFocusable(added[i])) {
+              observer.disconnect();
+              return;
+            }
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      window.setTimeout(function () {
+        observer.disconnect();
+      }, 15000);
+    }
+
+    function openWidget(widget) {
+      if (!widget || typeof widget.open !== 'function') return;
+      watchForInterfaceAndFocus();
+      var subscriptionType =
+        window.BX && window.BX.LiveChatWidget && window.BX.LiveChatWidget.SubscriptionType
+          ? window.BX.LiveChatWidget.SubscriptionType.configLoaded
+          : null;
+      if (subscriptionType && typeof widget.subscribe === 'function') {
+        widget.subscribe({
+          type: subscriptionType,
+          callback: function () {
+            widget.open();
+          },
+        });
+      } else {
+        widget.open();
+      }
+    }
+
     trigger.addEventListener('click', function () {
       if (loaded) return;
       const src = trigger.getAttribute('data-chat-loader-src');
       if (!src) return;
       loaded = true;
+
+      window.addEventListener('onBitrixLiveChat', function onReady(event) {
+        window.removeEventListener('onBitrixLiveChat', onReady);
+        openWidget(event && event.detail && event.detail.widget);
+      });
+
       const script = document.createElement('script');
       script.src = src;
       script.async = true;

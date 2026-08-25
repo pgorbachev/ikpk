@@ -141,9 +141,25 @@ const METRIKA_TAG_STUB = `(function () {
   for (var i = 0; i < queued.length; i += 1) if (queued[i][1] === 'init') fire(queued[i][0]);
 })();`;
 
+/**
+ * Подставной загрузчик чата.
+ *
+ * ЭМУЛИРУЕТ ДОКУМЕНТИРОВАННЫЙ КОНТРАКТ портала (справка Bitrix24, «advanced widget
+ * settings»), а не наивное «сам создаёт панель»: настоящий загрузчик стреляет глобальным
+ * `onBitrixLiveChat` с `event.detail.widget`, а `widget.open()`/`widget.subscribe({ type:
+ * BX.LiveChatWidget.SubscriptionType.configLoaded, callback })` — единственные
+ * документированные способы дождаться готовности и показать интерфейс. Прежняя редакция
+ * этого подставного ответа обходила и открытие, и событие — панель появлялась и получала
+ * фокус сама, поэтому наш код проверялся не за то, что он делает, а за то, что делает мок.
+ *
+ * Панель вставляется в `document.body`, А НЕ в `[data-chat-mount]`: у портала нет
+ * документированного способа указать контейнер и нет метода узнать, куда он вставил
+ * интерфейс, — подставной ответ не должен подтверждать предположение, которого нет в
+ * официальном контракте и которое настоящий портал может не выполнять.
+ */
 const CHAT_LOADER_STUB = `(function () {
-  var mount = document.querySelector('[data-chat-mount]');
-  if (!mount) return;
+  window.BX = window.BX || {};
+  window.BX.LiveChatWidget = window.BX.LiveChatWidget || { SubscriptionType: { configLoaded: 'configLoaded' } };
   var panel = document.createElement('div');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Подставной интерфейс чата');
@@ -153,8 +169,18 @@ const CHAT_LOADER_STUB = `(function () {
   close.type = 'button';
   close.textContent = 'Закрыть';
   panel.appendChild(close);
-  mount.appendChild(panel);
-  panel.focus();
+  var opened = false;
+  var widget = {
+    open: function () {
+      if (opened) return;
+      opened = true;
+      document.body.appendChild(panel);
+    },
+    subscribe: function (options) {
+      if (options && typeof options.callback === 'function') options.callback();
+    },
+  };
+  window.dispatchEvent(new CustomEvent('onBitrixLiveChat', { detail: { widget: widget } }));
 })();`;
 
 export async function installThirdPartyGuard(

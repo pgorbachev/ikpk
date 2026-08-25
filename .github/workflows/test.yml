@@ -43,6 +43,14 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
+      # tests/external-widgets-privacy-doc.test.ts снимает текстовый слой политики
+      # конфиденциальности через `pdftotext` (poppler-utils) — на раннере его нет по
+      # умолчанию, локально он обычно есть, отсюда расхождение «зелено у автора, красно
+      # в CI». Тест сам fail-closed на ENOENT (кидает, а не молча пропускает) — без этого
+      # шага он падает не на содержимом документа, а на отсутствии инструмента.
+      - name: Install poppler-utils (pdftotext)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+
       - name: Run unit tests
         run: |
           npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-head.json"

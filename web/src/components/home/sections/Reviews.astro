@@ -63,9 +63,14 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       измерил бы позицию самого узла <script> (она равна scrollY, а не позиции
       реального соседа) вместо позиции следующей секции. */}
   <script>
-  // Ленивое встраивание — тот же приём, что карта в ContactShell.astro (FR-08):
-  // IntersectionObserver, а не событие загрузки страницы. До появления секции в зоне
-  // видимости к домену виджета обращений нет.
+  // Ленивое встраивание: спека (external-widgets, «SHALL происходить не раньше, чем
+  // секция появится в зоне видимости») требует ФАКТИЧЕСКОЙ видимости, а не близости к
+  // ней. Прежняя редакция копировала приём карты в ContactShell.astro (FR-08) вместе с
+  // его `rootMargin: '200px'` — там это уместно (карта не несёт такого SHALL), здесь же
+  // запрос к Яндексу уходил до появления секции в вьюпорте. `rootMargin` снят (действует
+  // умолчание '0px' — событие только при фактическом пересечении), а fallback без
+  // IntersectionObserver больше не грузит виджет немедленно: он проверяет реальную
+  // видимость границ секции и, если её ещё нет, ждёт scroll/resize.
   document.querySelectorAll<HTMLElement>('[data-reviews-embed]').forEach((box) => {
     const src = box.dataset.reviewsEmbed;
     if (!src) return;
@@ -79,18 +84,30 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       box.prepend(iframe);
     };
     if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver(
-        (entries, obs) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            load();
-            obs.disconnect();
-          }
-        },
-        { rootMargin: '200px' },
-      );
+      const io = new IntersectionObserver((entries, obs) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          load();
+          obs.disconnect();
+        }
+      });
       io.observe(box);
     } else {
-      load();
+      const isVisible = (): boolean => {
+        const rect = box.getBoundingClientRect();
+        return rect.bottom > 0 && rect.top < window.innerHeight;
+      };
+      const check = (): void => {
+        if (!isVisible()) return;
+        load();
+        window.removeEventListener('scroll', check);
+        window.removeEventListener('resize', check);
+      };
+      if (isVisible()) {
+        load();
+      } else {
+        window.addEventListener('scroll', check, { passive: true });
+        window.addEventListener('resize', check);
+      }
     }
   });
   </script>

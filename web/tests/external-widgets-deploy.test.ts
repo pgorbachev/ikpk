@@ -222,6 +222,25 @@ describe('выкладка боевого сайта: пять исходов, �
     expect(run.code, `выкладка при заданном адресе и согласном выводе не прошла:\n${run.stderr}`).toBe(0);
   });
 
+  it('адрес несёт query-параметры — & в разметке экранирован как &amp;, выкладка всё равно ПРОХОДИТ', async () => {
+    // Astro сериализует атрибут стандартным HTML-экранированием: `&` в адресе (обычный
+    // разделитель query-параметров) становится `&amp;` в собранной разметке. Фикстура
+    // строит ИМЕННО такую разметку напрямую (не через `withChat()`, который кладёт
+    // сырую строку без экранирования и не воспроизвёл бы дефект): сравнение только
+    // сырой формы адреса не находит собственный экранированный вывод, и выкладка
+    // исправной сборки с query-параметрами в адресе останавливалась молча.
+    const loaderWithQuery = `${LOADER_OFF_PORTAL}?a=1&b=2`;
+    const escaped = loaderWithQuery.replace(/&/g, '&amp;');
+    const dir = distRaw({
+      'index.html': `<div ${SEL_CHAT_FACADE}><button data-chat-trigger data-chat-loader-src="${escaped}">Чат</button></div>`,
+    });
+    const run = await chatWidget(dir, 'prod', loaderWithQuery);
+    expect(
+      run.code,
+      `выкладка с query-параметрами в адресе не прошла:\n${run.stderr}`,
+    ).toBe(0);
+  });
+
   it('2. адрес задан, вывод не несёт — не проходит МОЛЧА: несоответствие названо', async () => {
     const dir = distRaw({ 'index.html': `<a href="${CUSTOMER}/news/">Записаться</a>` });
     const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);

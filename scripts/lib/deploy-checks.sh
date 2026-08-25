@@ -278,16 +278,42 @@ chat_widget_matches_mode() {
   local hits rc carries=0
   set +e
   if [[ "$state" == "address" ]]; then
+    # Литеральная подстрока ищется в ДВУХ формах, а не одной. Astro сериализует
+    # атрибут через стандартное HTML-экранирование: `&` в адресе (обычный разделитель
+    # query-параметров) становится `&amp;` в разметке. Поиск только сырой формы не
+    # находит `data-chat-loader-src="…?a=1&amp;b=2"` при заданном `…?a=1&b=2` —
+    # измерено, `grep -F` с сырым значением не матчит собственный экранированный
+    # вывод — и гейт останавливал бы публикацию исправной сборки с адресом,
+    # несущим query-параметры. Экранируются только `&`, `<`, `>`, `"`: это ровно
+    # набор символов, которые сериализатор атрибутов заменяет сущностями.
+    local escaped
+    escaped=$(printf '%s' "$src" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g')
     hits=$(grep -rlF --include='*.html' -- "$src" "$dist" 2>/dev/null)
+    rc=$?
+    if (( rc > 1 )); then
+      set -e
+      echo "chat_widget_matches_mode: не удалось прочитать $dist при поиске встраивания чата (grep код $rc) — проверка не выполнена" >&2
+      return 1
+    fi
+    if [[ -z "$hits" && "$escaped" != "$src" ]]; then
+      hits=$(grep -rlF --include='*.html' -- "$escaped" "$dist" 2>/dev/null)
+      rc=$?
+      if (( rc > 1 )); then
+        set -e
+        echo "chat_widget_matches_mode: не удалось прочитать $dist при поиске встраивания чата (grep код $rc) — проверка не выполнена" >&2
+        return 1
+      fi
+    fi
   else
     hits=$(grep -rlF --include='*.html' -- 'data-chat-facade' "$dist" 2>/dev/null)
+    rc=$?
+    if (( rc > 1 )); then
+      set -e
+      echo "chat_widget_matches_mode: не удалось прочитать $dist при поиске встраивания чата (grep код $rc) — проверка не выполнена" >&2
+      return 1
+    fi
   fi
-  rc=$?
   set -e
-  if (( rc > 1 )); then
-    echo "chat_widget_matches_mode: не удалось прочитать $dist при поиске встраивания чата (grep код $rc) — проверка не выполнена" >&2
-    return 1
-  fi
   [[ -n "$hits" ]] && carries=1
 
   # Ожидаемое для режима: prod несёт чат ровно при заданном адресе, stand не несёт его

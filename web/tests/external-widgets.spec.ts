@@ -273,20 +273,22 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     await trigger.focus();
     await trigger.click();
 
-    const panel = page.locator(`[${SEL_CHAT_MOUNT}] [data-chat-stub-panel]`);
+    // Место появления интерфейса портала НЕ документировано (справка Bitrix24 не
+    // называет ни контейнер, ни метод узнать DOM-узел виджета), поэтому предметом
+    // служит сам подставной интерфейс где угодно в документе, а не его положение
+    // внутри `[data-chat-mount]` — этот контейнер несёт только нашу разметку.
+    const panel = page.locator('[data-chat-stub-panel]');
     await expect(
       panel,
-      'подставной интерфейс не появился в объявленной точке монтирования: либо загрузчик ' +
-        'не исполнился, либо смонтировался не туда',
+      'подставной интерфейс не появился: либо загрузчик не исполнился, либо наш код не ' +
+        'вызвал widget.open() по документированному контракту (onBitrixLiveChat → ' +
+        'subscribe(configLoaded) → open())',
     ).toHaveCount(1);
 
-    const inside = await page.evaluate(
-      (mount) => {
-        const host = document.querySelector(`[${mount}]`);
-        return host !== null && document.activeElement !== null && host.contains(document.activeElement);
-      },
-      SEL_CHAT_MOUNT,
-    );
+    const inside = await page.evaluate(() => {
+      const panel = document.querySelector('[data-chat-stub-panel]');
+      return panel !== null && document.activeElement !== null && panel.contains(document.activeElement);
+    });
     expect(
       inside,
       'фокус не внутри появившегося интерфейса: уничтожение элемента с фокусом уводит его ' +
@@ -304,7 +306,7 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     await trigger.click();
     await page.waitForTimeout(1000);
     await expect(
-      page.locator(`[${SEL_CHAT_MOUNT}] [data-chat-stub-panel]`),
+      page.locator('[data-chat-stub-panel]'),
       'панель появилась при пустом ответе загрузчика — значит рисуем её мы, а не сторона',
     ).toHaveCount(0);
     await expect(
