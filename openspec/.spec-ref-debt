@@ -38,6 +38,7 @@ openspec/changes/dependabot-auto-merge/design.md :: pgorbachev/ikpk
 openspec/changes/dependabot-auto-merge/design.md :: refs/heads/main
 openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: actions/download-artifact
 openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: dependabot/fetch-metadata
+openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: fix/dependabot-auto-merge-method
 openspec/changes/dependabot-auto-merge/evidence/repository-prerequisites.md :: pgorbachev/ikpk
 openspec/changes/dependabot-auto-merge/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/changes/dependabot-auto-merge/tasks.md :: actions/download-artifact
