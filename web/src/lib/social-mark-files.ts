@@ -9,6 +9,10 @@ import telegramMark from '../assets/social-marks/telegram.svg?raw';
 import rutubeMark from '../assets/social-marks/rutube.svg?raw';
 import rutubeOnDarkMark from '../assets/social-marks/rutube-on-dark.svg?raw';
 import { SOCIAL_MARKS_REGISTRY } from './social-marks-registry';
+import { assertMarkAstroBodiesMatchAssets } from './social-mark-sync';
+
+export { assertMarkAstroBodiesMatchAssets } from './social-mark-sync';
+export { MARK_ASTRO_BY_ASSET, normalizeMarkSvg } from './social-mark-sync';
 
 export const SOCIAL_MARK_FILES: Record<string, string> = {
   'vkontakte.svg': vkontakteMark,
@@ -64,4 +68,6 @@ export function assertMarkFilesMatchRegistry(): void {
       }
     }
   }
+  // TD-45: хеш ассета не ловит дрейф *Mark.astro — сверяем нормализованные тела.
+  assertMarkAstroBodiesMatchAssets();
 }

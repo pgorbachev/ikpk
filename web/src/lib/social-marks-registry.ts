@@ -10,6 +10,7 @@
  * `social-mark-files.ts` и вызывается при сборке подвала. Разметка `<svg>` в
  * `.astro` — копия того же файла: `set:html` запрещён принятой спекой
  * `rich-content-safety`, а без элемента `<svg>` в AST нет source slot.
+ * Равенство копий охраняет `assertMarkAstroBodiesMatchAssets` (TD-45).
  *
  * Контраст доминирующей заливки к фону подвала, измерено 2026-08-24 при
  * отрисовке 24px и deviceScaleFactor=1 (задача 3.9):
@@ -32,6 +33,11 @@ export interface MarkRegistryEntry {
   markFileHash?: string;
   themeAssets?: Record<string, string>;
   themeAssetHashes?: Record<string, string>;
+  /**
+   * Темы, где владелец принял марку ниже 3:1 (нет разрешённой альтернативы).
+   * Ключ `default` — тема по умолчанию (нет `data-theme`); иначе значение атрибута.
+   */
+  contrastWaiverThemes?: string[];
 }
 
 export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
@@ -60,15 +66,16 @@ export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
   },
   {
     network: 'Telegram',
-    outcome: 'text-link',
-    decidedAt: '2026-08-24',
+    outcome: 'mark',
+    decidedAt: '2026-08-25',
     conditionsSource: 'https://telegram.org/tos',
     conditionsOutcome:
-      'официальный знак публикуется на telegram.org/img/t_logo.svg. Отдельной версии ' +
-      'для светлого фона нет: доминирующая заливка к фону подвала в теме dark (#eceeec) ' +
-      'около 2,4:1 при пороге 3:1. Перекраска запрещена. Владелец 2026-08-24 выбрал ' +
-      'исход text-link (задача 3.9 / сценарий «порог недостижим»). Одна текстовая ' +
-      'ссылка порог полноты не переходит.',
+      'официальный знак telegram.org/img/t_logo.svg. Отдельной версии для светлого фона ' +
+      'нет: доминирующая заливка к фону подвала в теме dark (#eceeec) около 2,4:1 при ' +
+      'пороге 3:1. Перекраска запрещена. Владелец 2026-08-25 выбрал исход mark с ' +
+      'contrastWaiverThemes=["dark"] (сценарий «порог недостижим»), а не text-link.',
+    markFileHash: 'sha256-85059d5e5bf7bda91ebab30664993c49867a26be6b947834aca16c846581766a',
+    contrastWaiverThemes: ['dark'],
   },
   {
     network: 'Rutube',
@@ -91,6 +98,18 @@ export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
 ];
 
 export type SocialMarkPresentation = 'text' | 'mark' | 'themed';
+
+/** Ключ темы для `contrastWaiverThemes` / `themeAssets`. */
+export function themeRegistryKey(theme: string | null): string {
+  return theme === null ? 'default' : theme;
+}
+
+/** Владелец принял марку ниже 3:1 в этой теме. */
+export function hasContrastWaiver(network: string, theme: string | null): boolean {
+  const entry = SOCIAL_MARKS_REGISTRY.find((e) => e.network === network);
+  if (entry === undefined || entry.outcome !== 'mark') return false;
+  return (entry.contrastWaiverThemes ?? []).includes(themeRegistryKey(theme));
+}
 
 /** Как рисовать сеть в подвале. `themed` — разные файлы в теме по умолчанию и `dark`. */
 export function socialMarkPresentation(network: string): SocialMarkPresentation {

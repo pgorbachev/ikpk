@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -39,6 +39,7 @@ import {
   textLinkOverflow,
   type MarkRegistryEntry,
 } from './helpers/social-accounts-contract';
+import { assertMarkAstroBodiesMatchAssets } from '../src/lib/social-mark-sync';
 import {
   deltaE76,
   CONTROL_ANCHOR,
@@ -707,5 +708,32 @@ describe('реестр применимости марок: запись чит�
         'применимости марки зафиксировано в машиночитаемом реестре»). Упоминания имени модуля ' +
         'в тексте сообщения признаком не является — нужен импорт или вызов',
     ).toBe(true);
+  });
+});
+
+describe('происхождение марки: *Mark.astro совпадает с ассетом (TD-45)', () => {
+  it('нормализованные тела всех пяти SVG равны ассетам', () => {
+    expect(() => assertMarkAstroBodiesMatchAssets()).not.toThrow();
+  });
+
+  it('правка только .astro ломает сверку', () => {
+    const target = join(
+      import.meta.dirname,
+      '..',
+      'src',
+      'components',
+      'social-marks',
+      'YoutubeMark.astro',
+    );
+    const before = readFileSync(target, 'utf8');
+    const mutated = before.replace('fill="#FF0000"', 'fill="#010101"');
+    expect(mutated, 'мутация не изменила файл — проба пуста').not.toBe(before);
+    writeFileSync(target, mutated);
+    try {
+      expect(() => assertMarkAstroBodiesMatchAssets()).toThrow(/YoutubeMark\.astro/);
+    } finally {
+      writeFileSync(target, before);
+    }
+    expect(() => assertMarkAstroBodiesMatchAssets()).not.toThrow();
   });
 });

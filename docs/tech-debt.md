@@ -2433,20 +2433,20 @@ merge-commit, отключат squash), и обнаружится это опя�
 
 ## TD-46. Хеш официальной марки сверяет ассет, а страница рендерит копию в `.astro`
 
+**ЗАКРЫТ 2026-08-25** в PR #168: `web/src/lib/social-mark-sync.ts` —
+`assertMarkAstroBodiesMatchAssets()` (нормализованное тело `<svg>` ассета =
+`*Mark.astro`, допустимы XML-prolog и `aria-hidden="true"` на корне). Вызов из
+`assertMarkFilesMatchRegistry()` при сборке подвала. Спека/design Decision 17
+обновлены: исключение `rich-content-safety` + обязательный гейт равенства копий.
+
 **Файлы:** `web/src/assets/social-marks/*.svg`, `web/src/lib/social-mark-files.ts`
-(`assertMarkFilesMatchRegistry`), `web/src/components/social-marks/*Mark.astro`,
+(`assertMarkFilesMatchRegistry`), `web/src/lib/social-mark-sync.ts`,
+`web/src/components/social-marks/*Mark.astro`,
 `web/src/lib/social-marks-registry.ts`
 
-**Проблема.** Задача 3.2 / Decision 17 change `social-accounts` требует, чтобы показанная
-марка совпадала с лицензионно проверенным первоисточником. Гейт хеширует файлы в
-`web/src/assets/social-marks/`. На страницу попадает независимая разметка в
-`*Mark.astro` (`set:html` запрещён `rich-content-safety`). Негативная мутация §5.6
+**Проблема (историческая).** Задача 3.2 / Decision 17 change `social-accounts` требует, чтобы показанная
+марка совпадала с лицензионно проверенным первоисточником. Гейт хешировал файлы в
+`web/src/assets/social-marks/`. На страницу попадала независимая разметка в
+`*Mark.astro`. Негативная мутация §5.6
 (ветка `test/social-accounts@3ecd0ec468c08ff787416f0fa657b67d8101de18`): смена
 цвета только в `.astro` прошла сборку без ошибки хеша.
-
-**Что делать.** Либо один канал (рендер из `?raw` без ручной копии, в пределах
-`rich-content-safety`), либо тест, что тело `<svg>` в `*Mark.astro` совпадает с
-байтами ассета (минус XML-prolog и `aria-hidden` на корне, если они сознательно
-добавлены). Хеш обязан падать, если посетитель видит не то, что в реестре.
-
-**Пока долг не закрыт**, происхождение марки защищает только файл на диске, не вывод.

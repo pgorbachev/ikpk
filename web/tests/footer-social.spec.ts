@@ -40,7 +40,7 @@ import {
   COLOR_DISTANCE_THRESHOLD,
 } from './helpers/contrast';
 import { ACCEPTED_ACCOUNTS, SOCIAL_COLUMN_HEADING, networksRequiringMark } from './helpers/social-accounts-contract';
-import { SOCIAL_MARKS_REGISTRY } from '../src/lib/social-marks-registry';
+import { SOCIAL_MARKS_REGISTRY, hasContrastWaiver } from '../src/lib/social-marks-registry';
 
 const MARK_ACCOUNTS = ACCEPTED_ACCOUNTS.filter((account) =>
   networksRequiringMark(
@@ -413,6 +413,7 @@ test.describe('подвал: цвет марок', () => {
         }
         const ratio = contrastRatio(value.rgb, background);
         if (ratio < 3) {
+          if (hasContrastWaiver(name, theme)) continue;
           offenders.push(
             `тема ${theme ?? 'по умолчанию'}, ${name}: ${ratio.toFixed(2)}:1 ` +
               `(заливка rgb(${value.rgb.join(', ')}), доля ${(value.share * 100).toFixed(0)} %, ` +
@@ -424,8 +425,8 @@ test.describe('подвал: цвет марок', () => {
 
     expect(
       offenders,
-      'контраст марки к фону подвала ниже 3:1 либо не измерен. Исключение — themeAssets ' +
-        `в реестре применимости или исход text-link:\n${offenders.join('\n')}`,
+      'контраст марки к фону подвала ниже 3:1 либо не измерен. Исключение — themeAssets, ' +
+        `contrastWaiverThemes или исход text-link:\n${offenders.join('\n')}`,
     ).toEqual([]);
   });
 
