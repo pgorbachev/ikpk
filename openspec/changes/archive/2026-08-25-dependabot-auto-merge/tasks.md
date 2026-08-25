@@ -366,4 +366,8 @@
       valid. Применимость проверена **применением** в одноразовом worktree
       (`git worktree add /private/tmp/ikpk-applicability HEAD` → `openspec archive … --yes`):
       `dependency-update-automation: +4 added, ~2 modified, -0`, отказов нет; дерево удалено.
-- [ ] 7.6 Заархивировать change, требования переехали в `openspec/specs/`
+- [x] 7.6 Заархивировать change, требования переехали в `openspec/specs/`.
+      Синхронизировано в `openspec/specs/dependency-update-automation/spec.md`: 4 ADDED
+      требования добавлены, 2 MODIFIED (покрытие линтера, число тестов) заменены полным
+      обновлённым содержимым с сохранением прежних сценариев. Change перемещён в
+      `openspec/changes/archive/2026-08-25-dependabot-auto-merge/`
