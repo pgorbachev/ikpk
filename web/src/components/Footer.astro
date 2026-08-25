@@ -1,6 +1,11 @@
 ---
 import { SOCIAL_LINKS } from '../lib/social';
 import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
+import { socialMarkPresentation } from '../lib/social-marks-registry';
+import { assertMarkFilesMatchRegistry } from '../lib/social-mark-files';
+import SocialMark from './social-marks/SocialMark.astro';
+
+assertMarkFilesMatchRegistry();
 ---
 
 <footer class="footer">
@@ -47,11 +52,39 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
       <div class="footer-col">
         <h2 class="footer-heading">Подписывайтесь</h2>
         <ul class="footer-links footer-social">
-          {SOCIAL_LINKS.map((link) => (
-            <li>
-              <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a>
-            </li>
-          ))}
+          {SOCIAL_LINKS.map((link) => {
+            const presentation = socialMarkPresentation(link.label);
+            return (
+              <li>
+                {presentation === 'text' ? (
+                  <a href={link.href} target="_blank" rel="noopener noreferrer">
+                    {link.label}
+                  </a>
+                ) : (
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="footer-social-icon"
+                    aria-label={link.label}
+                  >
+                    {presentation === 'themed' ? (
+                      <>
+                        <span class="footer-social-mark footer-social-mark--default">
+                          <SocialMark network={link.label} variant="default" />
+                        </span>
+                        <span class="footer-social-mark footer-social-mark--dark">
+                          <SocialMark network={link.label} variant="dark" />
+                        </span>
+                      </>
+                    ) : (
+                      <SocialMark network={link.label} />
+                    )}
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
@@ -149,6 +182,58 @@ import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navig
   .footer-links a:hover {
     color: var(--color-light-100);
     text-decoration: none;
+  }
+
+  .footer-social {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0;
+    margin: 0;
+  }
+
+  .footer-social li {
+    margin-bottom: 0;
+  }
+
+  .footer-social a {
+    display: inline-flex;
+    align-items: center;
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  .footer-social-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  .footer-social-icon :global(svg) {
+    height: 24px;
+    width: auto;
+    max-height: 24px;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .footer-social-mark--dark {
+    display: none;
+  }
+
+  :global(html[data-theme='dark']) .footer-social-mark--default {
+    display: none;
+  }
+
+  :global(html[data-theme='dark']) .footer-social-mark--dark {
+    display: block;
   }
 
   .footer-bottom {

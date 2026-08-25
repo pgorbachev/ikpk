@@ -47,9 +47,20 @@ export function assertMarkFilesMatchRegistry(): void {
         `хеш ${primary} ${hash} не равен markFileHash реестра ${entry.markFileHash}`,
       );
     }
-    for (const file of Object.values(entry.themeAssets ?? {})) {
-      if (SOCIAL_MARK_FILES[file] === undefined) {
+    for (const [theme, file] of Object.entries(entry.themeAssets ?? {})) {
+      const themeBody = SOCIAL_MARK_FILES[file];
+      if (themeBody === undefined) {
         throw new Error(`themeAssets ссылается на отсутствующий файл ${file}`);
+      }
+      const expected = entry.themeAssetHashes?.[theme];
+      if (!expected?.trim()) {
+        throw new Error(`нет themeAssetHashes.${theme} для ${entry.network}`);
+      }
+      const themeHash = sha256sri(themeBody);
+      if (themeHash !== expected) {
+        throw new Error(
+          `хеш ${file} ${themeHash} не равен themeAssetHashes.${theme} ${expected}`,
+        );
       }
     }
   }

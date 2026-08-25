@@ -39,7 +39,15 @@ import {
   dominantOpaqueRgb,
   COLOR_DISTANCE_THRESHOLD,
 } from './helpers/contrast';
-import { ACCEPTED_ACCOUNTS, SOCIAL_COLUMN_HEADING } from './helpers/social-accounts-contract';
+import { ACCEPTED_ACCOUNTS, SOCIAL_COLUMN_HEADING, networksRequiringMark } from './helpers/social-accounts-contract';
+import { SOCIAL_MARKS_REGISTRY } from '../src/lib/social-marks-registry';
+
+const MARK_ACCOUNTS = ACCEPTED_ACCOUNTS.filter((account) =>
+  networksRequiringMark(
+    SOCIAL_MARKS_REGISTRY,
+    ACCEPTED_ACCOUNTS.map((a) => a.name),
+  ).includes(account.name),
+);
 
 const PAGE = '/';
 
@@ -129,7 +137,7 @@ test.describe('подвал: состав и подача внешних акк�
   test('каждый аккаунт обозначен маркой, а не текстом', async ({ page }) => {
     const { column } = await openFooter(page);
     const withoutMark: string[] = [];
-    for (const account of ACCEPTED_ACCOUNTS) {
+    for (const account of MARK_ACCOUNTS) {
       const link = column.locator(`a[href="${account.href}"]`);
       if ((await link.count()) === 0) {
         withoutMark.push(`${account.name}: ссылки нет вовсе`);
@@ -141,9 +149,8 @@ test.describe('подвал: состав и подача внешних акк�
     expect(
       withoutMark,
       `подача аккаунта не марочная:\n${withoutMark.join('\n')}\n` +
-        'Исключений сейчас нет по существу, а не по недосмотру: реестра применимости ' +
-        '(web/src/lib/social-marks-registry.ts) в дереве нет, а пустой реестр исход ' +
-        '«текстовая ссылка» ни для одной сети не называет.',
+        'Исключения — сети, для которых реестр применимости называет исход «текстовая ссылка» ' +
+        '(web/src/lib/social-marks-registry.ts); перечень берётся из networksRequiringMark(...).',
     ).toEqual([]);
   });
 
@@ -170,7 +177,7 @@ test.describe('подвал: состав и подача внешних акк�
   test('вокруг марок нет единой посторонней оправы', async ({ page }) => {
     const { column } = await openFooter(page);
     const signatures: string[] = [];
-    for (const account of ACCEPTED_ACCOUNTS) {
+    for (const account of MARK_ACCOUNTS) {
       const link = column.locator(`a[href="${account.href}"]`);
       if ((await link.count()) === 0) continue;
       signatures.push(
@@ -194,10 +201,10 @@ test.describe('подвал: состав и подача внешних акк�
       );
     }
     expect(signatures.length, 'ни одной ссылки на аккаунт не найдено — проверять было нечего').toBe(
-      ACCEPTED_ACCOUNTS.length,
+      MARK_ACCOUNTS.length,
     );
     const decorated = signatures.filter((s) => s !== '');
-    const identical = decorated.length === ACCEPTED_ACCOUNTS.length && new Set(decorated).size === 1;
+    const identical = decorated.length === MARK_ACCOUNTS.length && new Set(decorated).size === 1;
     expect(
       identical,
       `вокруг всех четырёх марок одинаковое добавленное украшение — это единая оправа: ${signatures[0]}`,
@@ -334,8 +341,8 @@ test.describe('подвал: цвет марок', () => {
     background: number[],
   ): Promise<Map<string, { rgb: number[]; share: number } | string>> {
     const out = new Map<string, { rgb: number[]; share: number } | string>();
-    for (const account of ACCEPTED_ACCOUNTS) {
-      const svg = column.locator(`a[href="${account.href}"] svg`).first();
+    for (const account of MARK_ACCOUNTS) {
+      const svg = column.locator(`a[href="${account.href}"] svg`).filter({ visible: true });
       if ((await svg.count()) === 0) {
         out.set(account.name, 'марки (svg) внутри ссылки нет — измерить нечего');
         continue;
@@ -415,11 +422,8 @@ test.describe('подвал: цвет марок', () => {
 
     expect(
       offenders,
-      'контраст марки к фону подвала ниже 3:1 либо не измерен. Исключение из порога — ' +
-        'разрешённая правообладателем альтернативная версия марки для этой темы — спека ' +
-        'предписывает объявлять полем themeAssets реестра применимости ' +
-        '(web/src/lib/social-marks-registry.ts); реестра в дереве пока нет, поэтому учесть ' +
-        `исключение не из чего:\n${offenders.join('\n')}`,
+      'контраст марки к фону подвала ниже 3:1 либо не измерен. Исключение — themeAssets ' +
+        `в реестре применимости или исход text-link:\n${offenders.join('\n')}`,
     ).toEqual([]);
   });
 

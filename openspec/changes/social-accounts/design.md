@@ -36,7 +36,7 @@
 
 ## Решение 4. Предмет — весь вывод, каждая сборка своим предметом
 
-Сегодня проверка читает одну страницу: `web/tests/content-quality.test.ts:506`, `const html = readFileSync(` — главную. Подвал site-wide, поэтому одна страница ловит
+Сегодня проверка читает одну страницу: `web/tests/content-quality.test.ts:500`, `for (const file of walkHtml()) {` — главную. Подвал site-wide, поэтому одна страница ловит
 только правку единого источника, то есть ровно тот случай, который и так виден в дифф.
 Невидим противоположный: адрес, вписанный в разметку конкретной страницы мимо источника.
 Так дефект и возник — адреса стояли прямо в разметке футера и в отдельном модуле страниц
@@ -129,7 +129,7 @@
 **противоположен**. `web/src/styles/tokens.css:34`, `--color-dark-700: #1a1a1a` — светлая
 тема; `web/src/styles/tokens.css:154`, `--color-dark-700: #eceeec` — та же роль внутри
 `:root[data-theme='dark']`. Подвал красится ею —
-`web/src/components/Footer.astro:77`, `background: var(--color-dark-700);`
+`web/src/components/Footer.astro:110`, `background: var(--color-dark-700);`
 
 Следствие измерено на фирменных цветах, **зафиксированных в репозитории** —
 `docs/design/mockups/demo-followups/mockup-code.patch.txt:1767`, `vk: '#0077ff',` и далее по

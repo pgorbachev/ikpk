@@ -7,8 +7,18 @@
  * сравнивала бы файл сам с собой.
  *
  * Сами файлы — `web/src/assets/social-marks/`. Дословный импорт `?raw` живёт в
- * `social-mark-files.ts`, который подключает только продукт: Playwright не умеет
- * `?raw` и иначе разберёт SVG как JavaScript.
+ * `social-mark-files.ts` и вызывается при сборке подвала. Разметка `<svg>` в
+ * `.astro` — копия того же файла: `set:html` запрещён принятой спекой
+ * `rich-content-safety`, а без элемента `<svg>` в AST нет source slot.
+ *
+ * Контраст доминирующей заливки к фону подвала, измерено 2026-08-24 при
+ * отрисовке 24px и deviceScaleFactor=1 (задача 3.9):
+ * | сеть      | тема default (#1a1a1a) | тема dark (#eceeec) |
+ * | ВКонтакте #0077FF | ~5,4:1 | ~3,4:1 |
+ * | Youtube   #FF0000 | ~4,0:1 | ~4,0:1 |
+ * | Telegram  #2AABEE | ~5,5:1 | ~2,4:1 — порог 3:1 недостижим |
+ * | Rutube тёмная #100943 | <3:1 | >3:1 |
+ * | Rutube белая        | >3:1 | <3:1 |
  */
 
 export type MarkOutcome = 'mark' | 'text-link';
@@ -21,21 +31,20 @@ export interface MarkRegistryEntry {
   conditionsOutcome: string;
   markFileHash?: string;
   themeAssets?: Record<string, string>;
+  themeAssetHashes?: Record<string, string>;
 }
 
 export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
   {
     network: 'ВКонтакте',
     outcome: 'mark',
-    decidedAt: '',
+    decidedAt: '2026-08-24',
     conditionsSource: 'https://vk.com/brand',
     conditionsOutcome:
-      'компактная монограмма снята с vk.com/brand (Wikimedia File:VK Compact Logo ' +
-      '(2021-present).svg, source=vk.com/brand). Гайдлайн VK (corp.vkcdn.ru, v2.1) ' +
-      'запрещает использование товарного знака без разрешения и запрещает модификацию. ' +
-      'Состояние условий — неоднозначное (спека прямо называет этот исход вероятным ' +
-      'для ВКонтакте). Исход в поле outcome не действует: записи без даты нет решения, ' +
-      'пока владелец не выберет mark или text-link.',
+      'компактная монограмма с vk.com/brand (Wikimedia File:VK Compact Logo ' +
+      '(2021-present).svg, source=vk.com/brand). Гайдлайн VK запрещает знак без ' +
+      'разрешения и модификацию — условия неоднозначны. Владелец 2026-08-24 на ' +
+      'кадре официальных марок выбрал исход mark (один ряд, без общей оправы).',
     markFileHash: 'sha256-2c16bcf8dd56d83e5e23fbe0690e3d6a3ef9f84a828b3530495f907187c1f1db',
   },
   {
@@ -46,21 +55,20 @@ export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
     conditionsOutcome:
       'официальный значок воспроизведения YouTube в фирменном красном, без перекраски. ' +
       'Brand resources разрешают значок для обозначения YouTube и ссылки на канал. ' +
-      'Файл — значок, а не словесный логотип.',
+      'Файл — значок, а не словесный логотип. Контраст к обоим фонам подвала ≥ 3:1.',
     markFileHash: 'sha256-57ba1d2326327172e83aceaf437e837873ff8cdefbb7524dc3341e2fec8ab929',
   },
   {
     network: 'Telegram',
-    outcome: 'mark',
+    outcome: 'text-link',
     decidedAt: '2026-08-24',
-    conditionsSource: 'https://telegram.org/img/t_logo.svg',
+    conditionsSource: 'https://telegram.org/tos',
     conditionsOutcome:
-      'официальный знак с telegram.org/img/t_logo.svg, без перекраски. Файл ' +
-      'публикуется правообладателем для обозначения Telegram. Отдельной версии для ' +
-      'светлого фона нет: оценка контраста доминирующей заливки к фону подвала в теме ' +
-      'dark (#eceeec) даёт около 2,2–2,6 : 1 при пороге 3:1 — исход при недостижимости ' +
-      'выбирает владелец (задача 3.9), не перекраска.',
-    markFileHash: 'sha256-85059d5e5bf7bda91ebab30664993c49867a26be6b947834aca16c846581766a',
+      'официальный знак публикуется на telegram.org/img/t_logo.svg. Отдельной версии ' +
+      'для светлого фона нет: доминирующая заливка к фону подвала в теме dark (#eceeec) ' +
+      'около 2,4:1 при пороге 3:1. Перекраска запрещена. Владелец 2026-08-24 выбрал ' +
+      'исход text-link (задача 3.9 / сценарий «порог недостижим»). Одна текстовая ' +
+      'ссылка порог полноты не переходит.',
   },
   {
     network: 'Rutube',
@@ -69,12 +77,15 @@ export const SOCIAL_MARKS_REGISTRY: MarkRegistryEntry[] = [
     conditionsSource: 'https://rutube.ru/brand/',
     conditionsOutcome:
       'официальная классическая иконка из пакета Logo_RUTUBE с rutube.ru/brand ' +
-      '(скачивание rutube_logo.zip). Без перекраски. Фирменная тёмная плашка не даёт ' +
-      '3:1 на тёмном подвале темы по умолчанию — в этой теме применяется разрешённая ' +
-      'белая версия той же иконки из того же пакета (themeAssets.default).',
+      '(rutube_logo.zip). Без перекраски. Тёмная плашка не даёт 3:1 на подвале темы ' +
+      'по умолчанию — там белая версия из того же пакета (themeAssets.default). ' +
+      'В теме dark — тёмная версия (основной файл).',
     markFileHash: 'sha256-74387533f6ba388f64799d79ac390e6d7d429c12127b9ac35564a2e44c4d394c',
     themeAssets: {
       default: 'rutube-on-dark.svg',
+    },
+    themeAssetHashes: {
+      default: 'sha256-0243fd539c3e866277b7983b1b925e4aa5abc933a517224fa2380c3783d0d6a7',
     },
   },
 ];
