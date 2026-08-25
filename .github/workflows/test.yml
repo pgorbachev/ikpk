@@ -112,6 +112,7 @@ jobs:
           base="$RUNNER_TEMP/web-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           npm ci --prefix "$base/web"
+          npm ci --prefix "$base/payments"
           (
             cd "$base/web"
             npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-base.json"
