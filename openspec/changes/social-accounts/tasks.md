@@ -178,6 +178,12 @@
       тело `<svg>` в каждом `*Mark.astro` совпадает с ассетом (допустимы XML-prolog и
       `aria-hidden="true"` на корне). Вызов рядом с `assertMarkFilesMatchRegistry` в
       `Footer.astro`. Негативно: правка только `.astro` обязана ронять сборку. Закрыть TD-45
+- [ ] 3.17 **Приёмка отличимости Youtube и Rutube по форме** (сценарий спеки): кадры всего
+      подвала в целевом размере в обеих темах лежат в
+      `docs/design/acceptance/social-accounts/`
+      (`footer-distinctiveness-default-1280.png`,
+      `footer-distinctiveness-dark-1280.png`). Владелец подтверждает отличимость по этим
+      кадрам — без подтверждения сценарий не закрыт
 
 ## 4. Документы и согласования
 
