@@ -83,7 +83,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       box.querySelector('.reviews-embed-placeholder')?.remove();
       box.prepend(iframe);
     };
-    if ('IntersectionObserver' in window) {
+    if (typeof IntersectionObserver === 'function') {
       const io = new IntersectionObserver((entries, obs) => {
         if (entries.some((e) => e.isIntersecting)) {
           load();

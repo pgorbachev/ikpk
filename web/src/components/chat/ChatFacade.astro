@@ -90,8 +90,8 @@ const showFacade = config.state === 'address' && !isDemoForms;
 
     function focusFirstFocusable(root) {
       if (!root || typeof root.querySelector !== 'function') return false;
-      var selector = '[tabindex],button,a[href],input,textarea,select,iframe';
-      var el = root.matches && root.matches(selector) ? root : root.querySelector(selector);
+      const selector = '[tabindex],button,a[href],input,textarea,select,iframe';
+      const el = root.matches && root.matches(selector) ? root : root.querySelector(selector);
       if (!el) return false;
       if (!el.hasAttribute('tabindex') && el.tagName !== 'IFRAME' && el.tabIndex < 0) {
         el.setAttribute('tabindex', '-1');
@@ -101,10 +101,10 @@ const showFacade = config.state === 'address' && !isDemoForms;
     }
 
     function watchForInterfaceAndFocus() {
-      var observer = new MutationObserver(function (mutations) {
-        for (var m = 0; m < mutations.length; m += 1) {
-          var added = mutations[m].addedNodes;
-          for (var i = 0; i < added.length; i += 1) {
+      const observer = new MutationObserver(function (mutations) {
+        for (let m = 0; m < mutations.length; m += 1) {
+          const added = mutations[m].addedNodes;
+          for (let i = 0; i < added.length; i += 1) {
             if (focusFirstFocusable(added[i])) {
               observer.disconnect();
               return;
@@ -121,7 +121,7 @@ const showFacade = config.state === 'address' && !isDemoForms;
     function openWidget(widget) {
       if (!widget || typeof widget.open !== 'function') return;
       watchForInterfaceAndFocus();
-      var subscriptionType =
+      const subscriptionType =
         window.BX && window.BX.LiveChatWidget && window.BX.LiveChatWidget.SubscriptionType
           ? window.BX.LiveChatWidget.SubscriptionType.configLoaded
           : null;
