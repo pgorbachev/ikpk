@@ -209,6 +209,8 @@ export interface FoundOccurrence {
   identity: string;
   placement: string;
   tag: string;
+  /** Element inner HTML — generator uses it when root attrs collide (dual-theme SVG). */
+  inner: string;
 }
 
 export function occurrenceIdentity(tag: OpenTag, inner: string): string {
@@ -239,6 +241,7 @@ export function collectOccurrences(html: string): FoundOccurrence[] {
       tag: tag.name,
       identity: occurrenceIdentity(tag, inner),
       placement: nearestId ? `after:#${nearestId}` : `doc-order:${index}:${tag.name}`,
+      inner,
     });
     index += 1;
   }
