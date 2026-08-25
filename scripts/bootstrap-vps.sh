@@ -39,11 +39,15 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Админка системы управления раздаётся только по TLS (спека
 # cms-content-authoring-and-migration, «Админка и её API раздаются только по
-# TLS») — незаданное имя не отдаёт панель по умолчанию, оно fail-closed валит
-# bootstrap: сертификат не на что выпускать.
+# TLS») — незаданное имя не отдаёт панель по умолчанию. Но пустой ADMIN_DOMAIN
+# НЕ валит весь bootstrap: до этой правки он делал именно так и ломал
+# provisioning хостов, которым админка не нужна вовсе (например, демо-стенд на
+# голом IP, без имени в принципе) — это дефект, не намеренное поведение.
+# fail-closed остаётся, но локально для самой админки: без имени просто не
+# пишется её vhost и не выпускается её сертификат (ниже), а не отменяется
+# раздача сайта.
 if [[ -z "${ADMIN_DOMAIN}" ]]; then
-  echo "[bootstrap] ADMIN_DOMAIN не задан — задайте отдельное имя для админки системы управления (например cms.${SITE_NAME}.example)." >&2
-  exit 4
+  echo "[bootstrap] ADMIN_DOMAIN не задан — админка системы управления настроена НЕ будет (сайт разворачивается как обычно). Чтобы включить админку, перезапустите bootstrap с ADMIN_DOMAIN=<имя>." >&2
 fi
 
 apt-get update
@@ -53,17 +57,19 @@ mkdir -p "${WEB_ROOT}/releases"
 mkdir -p "${WEB_ROOT}/shared"
 chown -R root:root "${WEB_ROOT}"
 
-# Самоподписанный плейсхолдер, чтобы `nginx -t` прошёл ДО первого выпуска
-# сертификата: `ssl_certificate` не может ссылаться на файл, которого ещё
-# нет, а certbot --nginx ниже сам подменит эти пути на свои после проверки
-# домена.
-ADMIN_TLS_DIR="/etc/ikpk-admin-tls/${ADMIN_DOMAIN}"
-if [[ ! -f "${ADMIN_TLS_DIR}/fullchain.pem" ]]; then
-  mkdir -p "${ADMIN_TLS_DIR}"
-  openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
-    -subj "/CN=${ADMIN_DOMAIN}" \
-    -keyout "${ADMIN_TLS_DIR}/privkey.pem" \
-    -out "${ADMIN_TLS_DIR}/fullchain.pem"
+if [[ -n "${ADMIN_DOMAIN}" ]]; then
+  # Самоподписанный плейсхолдер, чтобы `nginx -t` прошёл ДО первого выпуска
+  # сертификата: `ssl_certificate` не может ссылаться на файл, которого ещё
+  # нет, а certbot --nginx ниже сам подменит эти пути на свои после проверки
+  # домена.
+  ADMIN_TLS_DIR="/etc/ikpk-admin-tls/${ADMIN_DOMAIN}"
+  if [[ ! -f "${ADMIN_TLS_DIR}/fullchain.pem" ]]; then
+    mkdir -p "${ADMIN_TLS_DIR}"
+    openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+      -subj "/CN=${ADMIN_DOMAIN}" \
+      -keyout "${ADMIN_TLS_DIR}/privkey.pem" \
+      -out "${ADMIN_TLS_DIR}/fullchain.pem"
+  fi
 fi
 
 # Существующий vhost НЕ перезаписываем без явного разрешения.
@@ -256,16 +262,23 @@ server {
 
   error_page 404 /404.html;
 }
+NGINX
 
-# Админка системы управления живёт в ОТДЕЛЬНЫХ блоках server, а не в блоке
-# основного сайта выше: изоляция по имени работает только если админский
-# сертификат обслуживает исключительно ADMIN_DOMAIN — иначе TLS-запрос к
-# основному имени по пути /admin/ маршрутизировался бы в админку тем же
-# location-правилом, просто с чужим (не совпадающим) сертификатом, который
-# нечеловеческие клиенты нередко не проверяют строго. Второй server на порт
-# 80 нужен ровно для того же: без него запрос к ADMIN_DOMAIN по HTTP попал бы
-# в блок основного сайта (единственный слушатель порта 80), а не получил
-# перенаправление на https.
+# Админка системы управления живёт в ОТДЕЛЬНЫХ блоках server, дописанных вторым
+# heredoc'ом — а не в блоке основного сайта выше: изоляция по имени работает
+# только если админский сертификат обслуживает исключительно ADMIN_DOMAIN —
+# иначе TLS-запрос к основному имени по пути /admin/ маршрутизировался бы в
+# админку тем же location-правилом, просто с чужим (не совпадающим)
+# сертификатом, который нечеловеческие клиенты нередко не проверяют строго.
+# Второй server на порт 80 нужен ровно для того же: без него запрос к
+# ADMIN_DOMAIN по HTTP попал бы в блок основного сайта (единственный
+# слушатель порта 80), а не получил перенаправление на https.
+#
+# Блок целиком условен на ADMIN_DOMAIN: без имени сертификат выпускать не на
+# что (ADMIN_TLS_DIR выше тоже не создан), и попытка дописать эти server{}
+# всё равно провалила бы `nginx -t` пустой строкой в server_name.
+if [[ -n "${ADMIN_DOMAIN}" ]]; then
+cat >>"$VHOST" <<NGINX_ADMIN
 server {
   listen 80;
   listen [::]:80;
@@ -306,7 +319,8 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
   }
 }
-NGINX
+NGINX_ADMIN
+fi
 
 touch "${WEB_ROOT}/shared/nginx-redirects.conf"
 
@@ -321,10 +335,14 @@ systemctl reload nginx
 # необязательный шаг в тексте инструкции — ровно то расхождение, из-за
 # которого TLS админки не был гарантирован (design.md, D-раздел про TLS).
 # `--nginx` сам подменит ssl_certificate/-_key на свои пути в блоке выше.
-if [[ -n "${CERTBOT_EMAIL}" ]]; then
-  certbot --nginx -d "${ADMIN_DOMAIN}" -m "${CERTBOT_EMAIL}" --agree-tos --non-interactive --redirect
-else
-  certbot --nginx -d "${ADMIN_DOMAIN}" --register-unsafely-without-email --agree-tos --non-interactive --redirect
+# Без ADMIN_DOMAIN выпускать нечего и не для чего — блок админки выше не
+# писался вовсе, `certbot --nginx -d ""` только сломал бы вызов.
+if [[ -n "${ADMIN_DOMAIN}" ]]; then
+  if [[ -n "${CERTBOT_EMAIL}" ]]; then
+    certbot --nginx -d "${ADMIN_DOMAIN}" -m "${CERTBOT_EMAIL}" --agree-tos --non-interactive --redirect
+  else
+    certbot --nginx -d "${ADMIN_DOMAIN}" --register-unsafely-without-email --agree-tos --non-interactive --redirect
+  fi
 fi
 
 # Продление по умолчанию уже ставит пакет certbot (таймер systemd), но здесь

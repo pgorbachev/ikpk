@@ -200,6 +200,45 @@ describe('гигиена репозитория', () => {
     expect(/FORCE_VHOST/.test(code), 'нет осознанного обхода для перезаписи').toBe(true);
   });
 
+  // H4 (2026-08-24, PR #186): пустой ADMIN_DOMAIN валил весь bootstrap безусловным
+  // exit ДО apt-get install — ломало provisioning хостов без админки (демо-стенд на
+  // голом IP). Админка — опциональная надстройка, а не предусловие раздачи сайта.
+  it('пустой ADMIN_DOMAIN не останавливает bootstrap сайта', () => {
+    const code = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    const missingDomainBlock = /if \[\[ -z "\$\{ADMIN_DOMAIN\}" \]\]; then([\s\S]*?)\nfi/.exec(code);
+    expect(missingDomainBlock, 'ветка «ADMIN_DOMAIN не задан» не найдена').not.toBeNull();
+    expect(
+      /\bexit\b/.test(missingDomainBlock![1]),
+      'пустой ADMIN_DOMAIN всё ещё завершает bootstrap — сайт без админки не развернётся',
+    ).toBe(false);
+    expect(/apt-get install/.test(code), 'базовый provisioning (apt-get install) отсутствует').toBe(
+      true,
+    );
+  });
+
+  // Обратная сторона H4: сертификат и vhost админки не должны выпускаться/писаться
+  // без имени — `certbot --nginx -d ""` либо провалится, либо (хуже) молча привяжется
+  // не к тому.
+  it('сертификат и vhost админки требуют ADMIN_DOMAIN', () => {
+    const code = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    const certbotCall = /certbot --nginx -d "\$\{ADMIN_DOMAIN\}"/;
+    expect(certbotCall.test(code), 'вызов certbot для админки не найден').toBe(true);
+
+    const guarded = /if \[\[ -n "\$\{ADMIN_DOMAIN\}" \]\]; then[\s\S]*?certbot --nginx -d "\$\{ADMIN_DOMAIN\}"/;
+    expect(
+      guarded.test(code),
+      'certbot для админки вызывается не внутри проверки на непустой ADMIN_DOMAIN',
+    ).toBe(true);
+  });
+
   // Генераторы не должны сообщать об ошибках и завершаться нулём. Проверяем
   // ПОВЕДЕНИЕ, запуская генератор на негодных данных, а не наличие строки
   // `process.exit(1)` в тексте.

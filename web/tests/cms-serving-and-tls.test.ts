@@ -7,6 +7,11 @@
  * Предмет — ТЕКСТ генерируемой конфигурации раздачи. Единственный её носитель в
  * репозитории — heredoc `NGINX` в `scripts/bootstrap-vps.sh`: файла конфигурации нет,
  * каталога `infra/` нет (проверено поиском по `add_header Cache-Control` и `listen 80`).
+ * Блоки админки (класс адресов системы управления, TLS) с исправления H4 (2026-08-24,
+ * PR #186) дописываются ВТОРЫМ heredoc'ом `NGINX_ADMIN`, условно на ADMIN_DOMAIN —
+ * до этого пустой ADMIN_DOMAIN валил provisioning целиком, ломая хосты без админки
+ * (например, демо-стенд на голом IP). `vhost()` ниже читает оба heredoc'а вместе:
+ * предмет этого файла живёт целиком во втором.
  *
  * Что здесь НЕ проверяется и почему: фактический заголовок в ответе, код 301 с
  * незащищённого протокола и признак `Secure` у cookie в живом ответе — это поведение
@@ -26,23 +31,29 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dirname, '..', '..');
 const BOOTSTRAP = join(ROOT, 'scripts', 'bootstrap-vps.sh');
 const HEREDOC = 'NGINX';
+const ADMIN_HEREDOC = 'NGINX_ADMIN';
 
 function bootstrapText(): string {
   expect(existsSync(BOOTSTRAP), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${BOOTSTRAP}`).toBe(true);
   return readFileSync(BOOTSTRAP, 'utf-8');
 }
 
-/** Тело heredoc'а, порождающего vhost. Переименование разделителя = предмет исчез. */
+/** Тело именованного heredoc'а. Переименование разделителя = предмет исчез. */
+function extractHeredoc(text: string, tag: string): string {
+  const start = new RegExp(`<<'?${tag}'?\\s*\\n`).exec(text);
+  expect(start, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: heredoc ${tag} не найден`).not.toBeNull();
+  const from = start!.index + start![0].length;
+  const endMatch = new RegExp(`^${tag}\\s*$`, 'm').exec(text.slice(from));
+  expect(endMatch, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: heredoc ${tag} не закрыт`).not.toBeNull();
+  const body = text.slice(from, from + endMatch!.index);
+  expect(body.trim().length, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: тело heredoc ${tag} пусто`).toBeGreaterThan(0);
+  return body;
+}
+
+/** Тело vhost'а для проверки — оба heredoc'а вместе (см. комментарий файла). */
 function vhost(): string {
   const text = bootstrapText();
-  const start = new RegExp(`<<'?${HEREDOC}'?\\s*\\n`).exec(text);
-  expect(start, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: heredoc ${HEREDOC} не найден`).not.toBeNull();
-  const from = start!.index + start![0].length;
-  const endMatch = new RegExp(`^${HEREDOC}\\s*$`, 'm').exec(text.slice(from));
-  expect(endMatch, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: heredoc ${HEREDOC} не закрыт`).not.toBeNull();
-  const body = text.slice(from, from + endMatch!.index);
-  expect(body.trim().length, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: тело heredoc ${HEREDOC} пусто`).toBeGreaterThan(0);
-  return body;
+  return `${extractHeredoc(text, HEREDOC)}\n${extractHeredoc(text, ADMIN_HEREDOC)}`;
 }
 
 /**
