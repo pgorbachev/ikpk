@@ -222,20 +222,39 @@ describe('гигиена репозитория', () => {
 
   // Обратная сторона H4: сертификат и vhost админки не должны выпускаться/писаться
   // без имени — `certbot --nginx -d ""` либо провалится, либо (хуже) молча привяжется
-  // не к тому.
+  // не к тому. Оба места проверены НЕЗАВИСИМО — F1 показал, что общей регулярки
+  // недостаточно (guard вокруг heredoc'а вообще не проверялся под именем «vhost админки»).
   it('сертификат и vhost админки требуют ADMIN_DOMAIN', () => {
-    const code = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8')
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
+    const rawLines = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8').split('\n');
+    const lines = rawLines.filter((line) => !line.trim().startsWith('#'));
 
-    const certbotCall = /certbot --nginx -d "\$\{ADMIN_DOMAIN\}"/;
-    expect(certbotCall.test(code), 'вызов certbot для админки не найден').toBe(true);
+    /** Строка находится строго внутри ОТКРЫТОГО `if [[ -n "${ADMIN_DOMAIN}" ]]; then ... fi`. */
+    function isInsideAdminDomainGuard(targetLineIndex: number): boolean {
+      const stack: boolean[] = [];
+      for (let i = 0; i <= targetLineIndex; i++) {
+        const line = lines[i].trim();
+        if (i === targetLineIndex) break;
+        if (/^if\s*\[\[.*\]\];\s*then$/.test(line)) {
+          stack.push(/-n\s+"\$\{ADMIN_DOMAIN\}"/.test(line));
+        } else if (line === 'fi') {
+          stack.pop();
+        }
+      }
+      return stack.some(Boolean);
+    }
 
-    const guarded = /if \[\[ -n "\$\{ADMIN_DOMAIN\}" \]\]; then[\s\S]*?certbot --nginx -d "\$\{ADMIN_DOMAIN\}"/;
+    const certbotLine = lines.findIndex((l) => l.includes('certbot --nginx -d "${ADMIN_DOMAIN}"'));
+    expect(certbotLine, 'вызов certbot для админки не найден').toBeGreaterThanOrEqual(0);
     expect(
-      guarded.test(code),
+      isInsideAdminDomainGuard(certbotLine),
       'certbot для админки вызывается не внутри проверки на непустой ADMIN_DOMAIN',
+    ).toBe(true);
+
+    const adminHeredocLine = lines.findIndex((l) => /<<\s*NGINX_ADMIN\b/.test(l));
+    expect(adminHeredocLine, 'heredoc NGINX_ADMIN (vhost админки) не найден').toBeGreaterThanOrEqual(0);
+    expect(
+      isInsideAdminDomainGuard(adminHeredocLine),
+      'vhost админки (heredoc NGINX_ADMIN) пишется не внутри проверки на непустой ADMIN_DOMAIN — при пустом имени `server_name ;` провалит `nginx -t`',
     ).toBe(true);
   });
 
