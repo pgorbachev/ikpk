@@ -2,6 +2,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    env: {
+      // Игла проверки утечки учётных данных в dist/снимок. В джобе Tests нет CMS_TOKEN
+      // (к CMS обращается только capture) — без иглы проверка была бы вакуумной.
+      // Настоящий CMS_TOKEN/STRAPI_TOKEN, если задан снаружи, имеет приоритет в тесте.
+      CONTENT_ACCESS_LEAK_NEEDLE:
+        process.env.CONTENT_ACCESS_LEAK_NEEDLE ?? 'ikpk-content-access-must-not-leak-9f3c2e1a',
+    },
     /**
      * ЯВНЫЙ предел теста. Без него действует умолчание vitest — 5000 мс, и это не величина
      * по существу, а ложное красное: самая долгая проверка этого набора измерена в 5802 мс

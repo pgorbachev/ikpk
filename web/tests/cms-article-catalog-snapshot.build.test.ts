@@ -163,11 +163,18 @@ describe('вывод сборки соответствует снимку', () =
   // Сценарий: вывод сборки не содержит токена
   it('токена доступа нет ни в выводе сборки, ни в снимке', () => {
     requireDist();
-    const token = process.env.CMS_TOKEN ?? process.env.STRAPI_TOKEN ?? '';
+    // В джобе Tests CMS_TOKEN намеренно отсутствует: к CMS обращается только шаг
+    // capture (чистота пайплайна). Тогда игла — CONTENT_ACCESS_LEAK_NEEDLE из
+    // vitest.build.config; при живом доступе предпочитается настоящий токен.
+    const token =
+      process.env.CMS_TOKEN?.trim() ||
+      process.env.STRAPI_TOKEN?.trim() ||
+      process.env.CONTENT_ACCESS_LEAK_NEEDLE?.trim() ||
+      '';
     if (token === '')
       throw new Error(
-        'ПРОВЕРИТЬ НЕ УДАЛОСЬ: токен доступа не задан в окружении, искать нечего. ' +
-          'Проверка обязана выполняться в прогоне, где токен есть.',
+        'ПРОВЕРИТЬ НЕ УДАЛОСЬ: ни CMS_TOKEN/STRAPI_TOKEN, ни CONTENT_ACCESS_LEAK_NEEDLE ' +
+          'не заданы — искать нечего. Проверка обязана иметь иглу.',
       );
 
     const leaking = allPages().filter((page) =>
@@ -177,3 +184,4 @@ describe('вывод сборки соответствует снимку', () =
     expect(JSON.stringify(snapshotOfBuild()).includes(token)).toBe(false);
   });
 });
+
