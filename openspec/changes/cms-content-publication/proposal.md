@@ -8,7 +8,7 @@
 
 Отдельно ломается воспроизводимость и независимость проверок. Сайт собирают **шесть джобов в
 четырёх workflow**: `unit-and-build` и `e2e-smoke` (`.github/workflows/test.yml`), `build`
-(`.github/workflows/deploy.yml:115`, `- name: Build Astro site`), `lhci`
+(`.github/workflows/deploy.yml:136`, `- name: Build Astro site`), `lhci`
 (`.github/workflows/lighthouse.yml:43`, `- name: Build site`), `compat`
 (`.github/workflows/nightly.yml:39`, `- name: Build site`) и `parity-remote`
 (`.github/workflows/nightly.yml:75`, `- name: Run remote parity tests`).
@@ -25,11 +25,11 @@
 
 | Место | Джоб | Событие | Роль |
 |---|---|---|---|
-| `.github/workflows/test.yml:51`, `- name: Run build tests (dist checks)` | `unit-and-build` | `pull_request`, `push: main` | гейт публикации |
-| `.github/workflows/test.yml:65`, `- name: Run demo build tests (dist-demo checks)` | `unit-and-build` | те же | гейт публикации |
-| `.github/workflows/test.yml:413`, `- name: Build site` | `e2e-smoke` | те же | гейт публикации |
-| `.github/workflows/test.yml:459`, `- name: Build stand-role site` | `e2e-smoke` | те же | гейт публикации |
-| `.github/workflows/deploy.yml:115`, `- name: Build Astro site` | `build` | `workflow_run`, `workflow_dispatch` | сама выкладка |
+| `.github/workflows/test.yml:102`, `- name: Run build tests (dist checks)` | `unit-and-build` | `pull_request`, `push: main` | гейт публикации |
+| `.github/workflows/test.yml:116`, `- name: Run demo build tests (dist-demo checks)` | `unit-and-build` | те же | гейт публикации |
+| `.github/workflows/test.yml:489`, `- name: Build site` | `e2e-smoke` | те же | гейт публикации |
+| `.github/workflows/test.yml:535`, `- name: Build stand-role site` | `e2e-smoke` | те же | гейт публикации |
+| `.github/workflows/deploy.yml:136`, `- name: Build Astro site` | `build` | `workflow_run`, `workflow_dispatch` | сама выкладка |
 | `.github/workflows/lighthouse.yml:43`, `- name: Build site` | `lhci` | `pull_request`, `push: main`, `workflow_dispatch` | обязателен для merge, вне гейта публикации |
 | `.github/workflows/nightly.yml:39`, `- name: Build site` | `compat` | `schedule`, `workflow_dispatch` | вне обоих гейтов |
 
@@ -46,9 +46,9 @@
 
 **Три вызова строят не вершину, а `BASE_SHA`, во временном worktree, и выполняются не всегда.**
 Оба шага в `test.yml` — «Measure base Vitest volume for dependency or Dependabot PR»
-(`.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR`)
+(`.github/workflows/test.yml:173`, `- name: Measure base Vitest volume for dependency or Dependabot PR`)
 и «Measure base browser tests for dependency or Dependabot PR»
-(`.github/workflows/test.yml:502`, `- name: Measure base browser tests for dependency or Dependabot PR`),
+(`.github/workflows/test.yml:578`, `- name: Measure base browser tests for dependency or Dependabot PR`),
 оба под `if: … dependency_only == 'true' || … dependabot[bot]`: первый собирает `npm run build` и
 `npm run build:demo` внутри `unit-and-build`, второй — `npm run build` внутри `e2e-smoke`. Их цель
 — сравнить объём тестов до и после правки на Dependabot- и dependency-only PR, а не проверить сайт
@@ -308,7 +308,7 @@ GitHub Pages из целевой раздачи. Подтверждается я
 одного снимка оно разное, и в разметке оно сломало бы сценарий побайтового совпадения
 (`openspec/specs/article-catalog/spec.md:309`, `повторная сборка даёт тот же результат`). Идентификатор снимка этот сценарий
 **не** ломает: у двух сборок одной пары он один и тот же. Ломает он вторую проверку — визуальные
-эталоны, снимаемые целой страницей (`web/tests/visual-baseline.spec.ts:34`, `fullPage: true`):
+эталоны, снимаемые целой страницей (`web/tests/visual-baseline.spec.ts:35`, `fullPage: true`):
 видимый на странице идентификатор менялся бы при каждой правке контента и двигал бы эталоны
 без единой правки раскладки. Отсюда требование этого change называет место объявления явно:
 вне разметки страниц.

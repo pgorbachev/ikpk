@@ -94,6 +94,30 @@ Nginx is down:
 Key advantage: **visitors can browse the site even when the CMS is unavailable**.
 The current monolith (Next.js + Express) takes the entire site down on any failure.
 
+## Content publication: snapshot pipeline
+
+Build and publish do **not** call Strapi during page generation. Content is captured into a
+**content snapshot** (JSON artifact) and the Astro build reads only that snapshot.
+
+| Concept | Role |
+|---------|------|
+| Content fingerprint | Hash of published content **without** the reference date — “same content?” |
+| Snapshot id | Fingerprint **plus** reference date — “same site output?” |
+| Reference date | Calendar day used for schedule and status math (timezone `Europe/Moscow`) |
+| Provenance ledger | Append-only event log; revision is derived (not “last entry number”) |
+| Publish gate | Stale (newer ledger entry) cancels automatically; regress needs confirmation |
+
+Pipeline shape:
+
+1. Publishing `Tests` run prepares or captures the snapshot and uploads artifact `content-snapshot`.
+2. Build, e2e, and deploy jobs download that artifact (`CONTENT_SNAPSHOT_DIR`) — they never re-fetch CMS.
+3. Checks outside the publishing path use pinned fixture `fixtures/content-snapshot/` (including `url_map.csv` for redirects).
+4. Triggers that start the existing `Tests` workflow: CMS `repository_dispatch`, daily schedule, push to `main`. Concurrency for those events does **not** cancel an in-flight run.
+
+Redirect generation (`web/scripts/gen-redirects.ts`) reads `url_map.csv` from the same snapshot directory, not as a bypass around the artifact.
+
+Visual-regression environment manifests (neighbor change) pin the **content fingerprint**, not the snapshot id — the latter changes every calendar day.
+
 ## Forms: Submission Architecture
 
 Forms (seminar enrollment, newsletter subscription) send data

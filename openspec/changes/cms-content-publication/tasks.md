@@ -94,14 +94,14 @@
       предложений (D7).** Три из одиннадцати вызовов сборки строят не вершину этого прогона, а
       `BASE_SHA` — во временном worktree, только на Dependabot- и dependency-only PR: два внутри
       шага в джобе `unit-and-build` —
-      `.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:173`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:502`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:578`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
-      `.github/workflows/test.yml:359`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:426`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
       в джобе `scripts-unit` — сюда не входит: этот шаг гоняет `vitest` только внутри `scripts/`
       и НЕ вызывает `npm run build` вовсе, к сборке сайта и к снимку контента отношения не имеет
       (проверено ревью PR #185 по факт-находке, которая сперва приняла совпадение имени за
@@ -156,11 +156,11 @@
       браузерные проверки, демо-сборку и выкладку
 - [x] 5.2 Убрать самостоятельные обращения к системе управления из **семи вызовов, строящих
       вершину прогона**, в четырёх workflow: `unit-and-build` — обычная сборка
-      (`.github/workflows/test.yml:51`, `- name: Run build tests (dist checks)`) и `build:demo`
-      (`.github/workflows/test.yml:65`, `- name: Run demo build tests (dist-demo checks)`);
-      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:413`, `- name: Build site`) и
-      `build:stand` (`.github/workflows/test.yml:459`, `- name: Build stand-role site`); `build`
-      (`.github/workflows/deploy.yml:115`, `- name: Build Astro site`); `lhci`
+      (`.github/workflows/test.yml:102`, `- name: Run build tests (dist checks)`) и `build:demo`
+      (`.github/workflows/test.yml:116`, `- name: Run demo build tests (dist-demo checks)`);
+      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:489`, `- name: Build site`) и
+      `build:stand` (`.github/workflows/test.yml:535`, `- name: Build stand-role site`); `build`
+      (`.github/workflows/deploy.yml:136`, `- name: Build Astro site`); `lhci`
       (`.github/workflows/lighthouse.yml:43`, `- name: Build site`); `compat`
       (`.github/workflows/nightly.yml:39`, `- name: Build site`). Джобы независимы, поэтому снимок
       должен приходить в каждый вызов: артефактом внутри публикующего прогона и закреплённой
@@ -183,7 +183,7 @@
 - [x] 5.2c **Найдено ревью PR #185: `web/tests/parity-compare.test.ts` содержит буквальное
       сравнение содержимого с прод-сайтом, которое переход на фикстуру ломает предсказуемо, а не
       флаково.** Тест
-      `web/tests/parity-compare.test.ts:285`, `it('original and local contacts page keep the same primary heading', async () => {`
+      `web/tests/parity-compare.test.ts:288`, `it.skip('original and local contacts page keep the same primary heading', async () => {`
       под `REMOTE_PARITY_ENABLED` (включается `test:build:remote` —
       именно та сборка, что 5.2a переводит на фикстуру) буквально сравнивает `h1` замороженной
       фикстуры с `h1`, снятым live с `https://ikpk.su/kontakty`. После перехода на фикстуру эти
@@ -238,7 +238,7 @@
 - [x] 6.2 Переключение источника переменной окружения: закреплённый снимок или система
       управления; обе ветки рабочие
 - [x] 6.3 Генерация правил перенаправления получает историю адресов через тот же снимок:
-      `url_map.csv` лежит в `fixtures/content-snapshot/` и копируется
+      `fixtures/content-snapshot/url_map.csv` лежит в фикстуре снимка и копируется
       `prepare-snapshot`/`snapshot:capture` в артефакт; `web/scripts/gen-redirects.ts` читает
       карту через `resolveSnapshotDir`, а не напрямую из `discovery/`. `--map=` остаётся для
       проб конфликтов (`repo-hygiene`). История адресов как предмет данных — соседний change;
@@ -276,7 +276,7 @@
 - [x] 8.4 Очередь на один ожидающий прогон без отмены текущего; серия правок сходится к
       публикации последнего состояния
 - [x] 8.4a **Снять противоречие с настройкой concurrency обязательного прогона.**
-      `.github/workflows/test.yml:13-14`, `group: tests-${{ github.ref }}` задаёт
+      `.github/workflows/test.yml:21`, `group: ${{ (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'publication-tests' || format('tests-{0}', github.ref) }}` задаёт
       `cancel-in-progress: true`, то есть на `main` каждое следующее событие **отменяет идущий
       прогон**, а принятое требование говорит «прогон отменён → публикация не запускается».
       С триггером по изменению контента и суточным прогоном отменять друг друга начнут ночной
@@ -354,13 +354,14 @@
 
 ## 10. Приёмка
 
-- [ ] 10.1 Обновить `docs/architecture/new-architecture.md` и `docs/migration-runbook.md` по
+- [x] 10.1 Обновить `docs/architecture/new-architecture.md` и `docs/migration-runbook.md` по
       фактической механике снимка и публикации
 - [ ] 10.2 Локальные гейты в затронутых пакетах: `web` — `lint`, `typecheck`, `build`, `test`,
       `test:build`; `scripts` — `lint`, `typecheck`
 - [ ] 10.3 `./bin/openspec validate --all --strict --no-interactive` зелёная
 - [ ] 10.4 Проверить применимость дельт применением в одноразовом worktree
-- [ ] 10.5 **1.6 закрыта (см. выше)** — предусловие выполнено. Заархивировать change, требования переехали в
-      `openspec/specs/`. Порядок с соседним
+- [ ] 10.5 **Отложено до merge.** Заархивировать change после слияния draft PR (не в этой
+      поставке реализации): требования переедут в `openspec/specs/`. Порядок с соседним
       change: `cms-content-authoring-and-migration` архивируется **не раньше** этого, потому что
       его сценарии о собранном сайте проверяются только на сборке из снимка
+- [ ] 10.6 Draft PR открыт; merge и независимые ревью — после зелёных обязательных проверок

@@ -9,7 +9,7 @@
    возможности работать без сети.
 2. **Сайт собирают шесть джобов в четырёх workflow**: `unit-and-build` и `e2e-smoke`
    (`.github/workflows/test.yml`);
-   `build` — `.github/workflows/deploy.yml:115`, `- name: Build Astro site`;
+   `build` — `.github/workflows/deploy.yml:136`, `- name: Build Astro site`;
    `lhci` — `.github/workflows/lighthouse.yml:43`, `- name: Build site`;
    `compat` — `.github/workflows/nightly.yml:39`, `- name: Build site`; и
    `parity-remote` — `.github/workflows/nightly.yml:75`, `- name: Run remote parity tests`.

@@ -68,7 +68,7 @@ XML/XLink-ссылки и любой атрибут либо URL, отсутст
 `course_groups[*].description_html`, `institutes[*].description_html`,
 `seminars[*].description_html`, `static_pages[*].body_html`, `teachers[*].bio_html`,
 `video_playlists[*].description_html`, `news[*].description`, `promotions[*].description`
-и все строковые values `collapsible_panels.json`. Независимый discovery gate SHALL
+и все строковые values `discovery/entities/collapsible_panels.json`. Независимый discovery gate SHALL
 обходить все входные JSON и CMS schema, считать HTML-bearing строкой любое поле с
 суффиксом `_html` либо значением, tolerant parse которого содержит element node, и падать
 на найденном значении вне selector list или на selector без source registry entry.

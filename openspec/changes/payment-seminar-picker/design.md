@@ -9,12 +9,12 @@
 включает. То есть неверный выбор здесь ломает контракт не в браузере, а в отпечатке
 идемпотентности на сервере.
 
-Расписание доступно на сборке: `web/src/lib/data.ts:289`, `export function getScheduleEntries`; тип записи — `web/src/lib/data.ts:144`, `export interface ScheduleEntry {`. Запись уже несёт `seminar.name`, `city.name`, `startAt`, `endAt`,
+Расписание доступно на сборке: `web/src/lib/data.ts:357`, `export function getScheduleEntries`; тип записи — `web/src/lib/data.ts:212`, `export interface ScheduleEntry {`. Запись уже несёт `seminar.name`, `city.name`, `startAt`, `endAt`,
 `newPrice`, `oldPrice`, `isFree`, `status`. Правило «событие ещё не закончилось»
 реализовано в `web/src/lib/schedule-window.ts` (`lastDay`, `isCurrentOrFuture`) и повторно
 выводиться здесь не должно.
 
-Страница расписания строит свой набор так: `web/src/pages/raspisanie-i-tseny.astro:61`, `...scheduleSupplements.filter(` — то есть
+Страница расписания строит свой набор так: `web/src/pages/raspisanie-i-tseny.astro:58`, `const entries = getScheduleEntries()` — то есть
 основные записи **плюс дополняющие**, с защитой от двойного учёта по паре «слаг семинара +
 дата начала», затем фильтр `status === 'active'` и актуальности.
 
@@ -84,7 +84,7 @@
 
 **Исправлено по находке повторного ревью.** Прежняя редакция различала `isFree === true`
 («платить нечего») и `newPrice === 0 && !isFree` («цена не указана») и допускала вторые к
-оплате. Но страница расписания обе подписывает одинаково: `web/src/pages/raspisanie-i-tseny.astro:137`, `priceLabel: entry.isFree ? 'Бесплатно' :` — и вторая ветвь тернарника отдаёт то же слово, потому что `web/src/lib/data.ts:341`, `if (price === 0) return 'Бесплатно';`. Тернарник тут избыточен: на нуле обе ветви дают «Бесплатно», то есть страница
+оплате. Но страница расписания обе подписывает одинаково: `web/src/pages/raspisanie-i-tseny.astro:134`, `priceLabel: entry.isFree ? 'Бесплатно' :` — и вторая ветвь тернарника отдаёт то же слово, потому что `web/src/lib/data.ts:409`, `if (price === 0) return 'Бесплатно';`. Тернарник тут избыточен: на нуле обе ветви дают «Бесплатно», то есть страница
 **не различает** эти случаи в принципе.
 
 Значит форма, допускающая запись без цены, просила бы денег за то, что сайт объявляет
