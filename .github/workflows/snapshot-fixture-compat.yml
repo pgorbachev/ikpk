@@ -36,7 +36,7 @@ jobs:
         env:
           CMS_URL: ${{ secrets.CMS_URL }}
           CMS_TOKEN: ${{ secrets.CMS_TOKEN }}
-          CONTENT_SNAPSHOT_DIR: ${{ runner.temp }}/content-snapshot
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
         run: |
           # Единственный производитель: npm run snapshot:capture (признак pipeline-теста).
           if [ -z "$CMS_URL" ]; then

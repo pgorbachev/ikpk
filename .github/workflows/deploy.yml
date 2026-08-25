@@ -90,7 +90,7 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: content-snapshot
-          path: ${{ runner.temp }}/content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
@@ -98,7 +98,7 @@ jobs:
         if: github.event_name != 'workflow_run'
         working-directory: web
         env:
-          CONTENT_SNAPSHOT_DIR: ${{ runner.temp }}/content-snapshot
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
         run: |
           npm ci
           npm run snapshot:prepare
@@ -136,7 +136,7 @@ jobs:
       - name: Build Astro site
         working-directory: web
         env:
-          CONTENT_SNAPSHOT_DIR: ${{ runner.temp }}/content-snapshot
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
         run: npm run build
 
       # Задача 6.13a: Pages платёжной поверхностью не является (design.md, Решение 13,
