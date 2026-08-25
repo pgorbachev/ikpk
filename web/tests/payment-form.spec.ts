@@ -52,6 +52,7 @@ import {
   yooKassaFallbackHref,
   yooKassaNavigationUrls,
 } from './helpers/yookassa-navigation';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const STATE = (s: string) => `[${PAYMENT_STATE_ATTR}="${s}"]`;
@@ -94,6 +95,9 @@ const STAND_BASE = PAYMENT_ENDPOINT_BASE.stand;
 let guard: FailClosedGuard;
 
 test.beforeEach(async ({ page }) => {
+  // installThirdPartyGuard ПЕРВЫМ: тем же приёмом, что и ниже, отделяющим fail-closed
+  // guard от мока конкретного теста — маршруты применяются в обратном порядке регистрации.
+  await installThirdPartyGuard(page);
   // Guard ставится ПЕРВЫМ. Playwright применяет маршруты в обратном порядке регистрации:
   // моки конкретного теста, поставленные позже, забирают свои запросы, а guard видит ровно
   // то, что не забрал никто. Обратный порядок сделал бы guard'ом первый же мок.
@@ -490,6 +494,9 @@ test.describe('3.10a-2c два хранилища', () => {
     const origins = state.origins.map((o) => ({ ...o, sessionStorage: [] as { name: string; value: string }[] }));
     const fresh = await browser.newContext({ storageState: { cookies: state.cookies, origins } });
     const p2 = await fresh.newPage();
+    // Своя страница — свой guard: guard из `beforeEach` стоит на странице фикстуры и об
+    // этой ничего не знает.
+    await installThirdPartyGuard(p2);
     await mockApi(p2, () => ({ status: 200, body: { status: 'verification_required' } }));
     await p2.goto('/oplata');
     await expect(p2.locator(STATE('verification_required'))).toBeVisible();

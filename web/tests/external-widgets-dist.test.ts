@@ -231,15 +231,24 @@ describe('боевой вывод: материал на месте', () => {
 
 describe('отзывы показываются секцией главной и только там', () => {
   it('секция отзывов стоит после блока преподавателей', () => {
-    const section = reviewsSection();
+    // Не переиспользовать section из reviewsSection(): она разбирает `home` СВОИМ
+    // вызовом parseDocument, а indexOf ниже сравнивает объекты по ссылке — с узлом из
+    // не того дерева indexOf всегда даёт -1, и тест краснеет независимо от порядка
+    // секций. Проверка непустоты (ровно один элемент) остаётся за reviewsSection().
+    reviewsSection();
     const all = elements(home);
+    const section = all.find((el) => attr(el, SEL_REVIEWS_SECTION) !== null);
     const teachers = all.find((el) => (attr(el, 'class') ?? '').split(/\s+/).includes('teachers'));
+    expect(
+      section,
+      'секция отзывов не найдена внутри общего обхода документа',
+    ).toBeTruthy();
     expect(
       teachers,
       'на главной не найден блок преподавателей — относительно чего проверять порядок',
     ).toBeTruthy();
     expect(
-      all.indexOf(section) > all.indexOf(teachers!),
+      all.indexOf(section!) > all.indexOf(teachers!),
       'секция отзывов стоит НЕ после блока преподавателей',
     ).toBe(true);
   });

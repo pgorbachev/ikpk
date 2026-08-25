@@ -1,0 +1,53 @@
+/* Стили фасада чата (ChatFacade.astro).
+ *
+ * Здесь, а не компонентным <style>, — намеренно: спека change `external-widgets`
+ * требует, чтобы на странице 404 (компонент там не рендерится) стилей фасада не было
+ * ни в инлайновом CSS, ни во внешнем. Стили из компонентного <style> в .astro-файле
+ * Astro эмитит в CSS-чанк независимо от условного рендера, и при auto-инлайне мелкий
+ * чанк попадает в КАЖДУЮ страницу инлайновым `<style>` — так уже устроен `.demo-banner`
+ * в `BaseLayout.astro` (см. `web/tests/seo-package.test.ts:253`). `global.css` собирает
+ * несколько файлов в один большой бандл, который остаётся внешней ссылкой всегда —
+ * порог автоинлайна у Astro по умолчанию 4 КБ, а весь бандл значительно больше.
+ */
+
+.chat-facade {
+  /* z-index СТРОГО ниже `.payment-dialog` (200, PaymentForm.astro) — иначе кнопка
+     остаётся кликабельной поверх затемнения открытого диалога оплаты. */
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 150;
+}
+
+.chat-trigger {
+  /* Размер измерен, не взят на глаз: карточные сетки на нескольких шаблонов
+     (например /statyi, /institut-apledzhera) доходят до правого нижнего угла
+     области просмотра почти вплотную (56px запаса на 1280×720). Кнопка 3.25rem
+     с отступом 1rem (суммарно 68px) накрывала интерактивную карточку —
+     измерено `test:e2e:widgets`, «кнопка вызова чата накрывает интерактивные
+     элементы» на этих двух шаблонах. 2rem + 1rem (48px) даёт запас. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent-500);
+  color: #fff;
+  box-shadow: var(--shadow-m);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.chat-trigger:hover {
+  background: var(--color-accent-300);
+}
+
+.chat-mount {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + 2.5rem);
+  z-index: 150;
+}

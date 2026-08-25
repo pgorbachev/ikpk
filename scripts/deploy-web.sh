@@ -101,6 +101,13 @@ export DEMO_FORMS
 # экспорта здесь `npm run build` собрал бы роль `ci` (умолчание при отсутствии
 # переменной) — безопасную CI-сборку без формы, а не заказанный контур.
 export PAYMENT_ROLE="$DEPLOY_MODE"
+# Адрес загрузчика чата (change external-widgets): без экспорта здесь `npm run build`
+# собрал бы артефакт с той конфигурацией, что унаследована из окружения оператора, а
+# гейт ниже проверял бы её же — то есть "собрано не то, что заказано" осталось бы
+# невидимым, тем же классом дефекта, что уже разобран для `DEMO_FORMS`/`PAYMENT_ROLE`
+# выше. Умолчания нет намеренно: необъявленная конфигурация — отказ гейта
+# `chat_widget_matches_mode`, а не молчаливое «чата нет».
+export CHAT_LOADER_SRC="${CHAT_LOADER_SRC:-}"
 npm --prefix "$WEB_DIR" ci
 npm --prefix "$WEB_DIR" run build
 
@@ -133,6 +140,15 @@ echo "[deploy] Uploading nginx redirects ($(grep -c '^location' "$REDIRECTS_SRC"
 # до него не дойти без реального хоста, и поведенческий тест возможен только у
 # вынесенной функции (web/tests/deploy-form-links.test.ts).
 if ! form_links_match_mode "$DIST_DIR" "$DEPLOY_MODE" "$DEMO_FORMS"; then
+  exit 1
+fi
+
+# ── Гейт встраивания виджета чата (change external-widgets) ─────────────────
+#
+# Механика — `chat_widget_matches_mode` в `scripts/lib/deploy-checks.sh`, тот же приём,
+# что у гейта ссылок форм выше: артефакт сверяется с ЗАКАЗАННОЙ конфигурацией
+# (`CHAT_LOADER_SRC`), а не с самим собой.
+if ! chat_widget_matches_mode "$DIST_DIR" "$DEPLOY_MODE" "$CHAT_LOADER_SRC"; then
   exit 1
 fi
 

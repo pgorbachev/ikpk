@@ -40,6 +40,14 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
+    "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+    "file": "components/chat/ChatFacade.astro",
+    "nodeKind": "element",
+    "locator": "components/chat/ChatFacade.astro:L31:C1:script",
+    "fingerprint": "f1ddc793e9af27ade458dcd20c58c4b99ed57996e0999fabc5d8f64d51508fc9",
+    "identity": "script|is:inline=empty:|body:3cfa4a50da2ab9a7"
+  },
+  {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
@@ -392,6 +400,22 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
+    "slotId": "src:components/home/sections/Reviews.astro:L65:C3:script",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L65:C3:script",
+    "fingerprint": "a00c94d13187fb2d57a0cc43d41cc8e523a765f3ad59667e7306bb7c4abc922b",
+    "identity": "script|body:48a3f69f9de40a31"
+  },
+  {
+    "slotId": "src:components/home/sections/Reviews.astro:L99:C1:style",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L99:C1:style",
+    "fingerprint": "0bbd107cd447bbf8fbf98e7c7a6c63f55cc5adb751ab0bda953fb5922c7dd9f1",
+    "identity": "style|body:45e90505a26a756a"
+  },
+  {
     "slotId": "src:components/home/sections/Segments.astro:L45:C1:style",
     "file": "components/home/sections/Segments.astro",
     "nodeKind": "element",
@@ -736,11 +760,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L70:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L89:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L70:C1:style",
-    "fingerprint": "55ca437a9ea0aa77ab4d53ef6eede1f0477315da4f5b2e848191442e6637cd52",
+    "locator": "layouts/BaseLayout.astro:L89:C1:style",
+    "fingerprint": "665b29867442b065d1abe0eccc322d8e16857a283a84a37273683fb67525d543",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -752,11 +776,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L63:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L68:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L63:C1:style",
-    "fingerprint": "e1c00edc00549224f33f131a1bc9196417cd073b9fe0286c09d6779eabb497ec",
+    "locator": "layouts/TopNavLayout.astro:L68:C1:style",
+    "fingerprint": "badf1fabf4fad440ba8cbea7942807410325240fc25161fb9580dc9efc1e2c22",
     "identity": "style|body:309f315b55438bb4"
   },
   {
