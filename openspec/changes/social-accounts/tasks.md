@@ -260,27 +260,29 @@
       `npm run test:e2e:footer-social -- --project=desktop --project=footer-tablet --project=mobile`:
       **26 passed, 4 skipped**, дословно совпадает с прогоном в CI на `cf2af14`
 
+**Побочная находка §5.6 → `docs/tech-debt.md` TD-45:** хеш ассета не сверяет рендер `*Mark.astro`; закрытие вне этого change или отдельной задачей.
+
 ## 6. Гейты и ревью
 
-- [ ] 6.1 Локально в `web/`: `npm run lint`, `npm run typecheck`, `npm run build`,
+- [x] 6.1 Локально в `web/`: `npm run lint`, `npm run typecheck`, `npm run build`,
       `npm test`, `npm run test:build`. Затронуты стили и раскладка, поэтому `test:build`
       обязателен
-- [ ] 6.2 Локально `npm run test:demo` — без него не проверяется то, что требует задача
+- [x] 6.2 Локально `npm run test:demo` — без него не проверяется то, что требует задача
       2.8: `test:build` демо-сборку не делает
-- [ ] 6.3 Локально `npm run test:e2e:a11y` и `npm run test:e2e:smoke` — предмет правки
+- [x] 6.3 Локально `npm run test:e2e:a11y` и `npm run test:e2e:smoke` — предмет правки
       живёт в подвале каждой страницы
-- [ ] 6.4 **Lighthouse.** `Lighthouse budgets (4 templates, median of 5)` — обязательный
+- [x] 6.4 **Lighthouse.** `Lighthouse budgets (4 templates, median of 5)` — обязательный
       контекст защиты ветки, и он мерит именно то, что change трогает:
       `web/lighthouserc.cjs:24`, `'categories:accessibility': ['error', { minScore: 0.9, aggregationMethod: 'median-run' }],`
       плюс порог сдвига раскладки. Подвал есть на всех четырёх шаблонах бюджета. Прогнать
       локально или явно записать, что проверяется только в CI
-- [ ] 6.5 `audit:prod` в затронутых пакетах — **только если** дерево зависимостей или
+- [x] 6.5 `audit:prod` в затронутых пакетах — **только если** дерево зависимостей или
       lockfile всё-таки менялись. Решение 13 говорит новых зависимостей не вводить; если
       решение изменено, это тянет ещё два обязательных контекста
 - [x] 6.6 Локально `./bin/check-spec-refs`. Перед выводом «у меня зелено» —
       `git fetch --prune`: достижимость ревизий меряется по `refs/remotes/origin/*`, а они
       обновляются только выборкой
-- [ ] 6.7 Обновить реестры `openspec/.spec-ref-debt` и `openspec/.spec-ref-absent`
+- [x] 6.7 Обновить реестры `openspec/.spec-ref-debt` и `openspec/.spec-ref-absent`
       флагами `--write-debt` / `--write-absent` **в этом же PR** и перечислить добавленные
       строки в описании PR — по строкам реестра обоснования не видно
 - [x] 6.8 `./bin/openspec validate --all --strict --no-interactive`
