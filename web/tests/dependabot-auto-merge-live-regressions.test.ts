@@ -557,3 +557,52 @@ describe('живая регрессия: сигнал продвижения в�
     expect(policy?.permissions).toEqual({ 'pull-requests': 'write' });
   });
 });
+
+// Дефект 3: репозиторий разрешает только squash-слияние (`allow_merge_commit: false`,
+// `allow_squash_merge: true` — измерено `gh api repos/pgorbachev/ikpk`), а шаг
+// «Enable native auto-merge» вызывает `gh pr merge --auto --merge`. GitHub отклоняет
+// запрещённый метод ещё на этапе включения marker'а, а не на этапе самого слияния.
+// Живой след: run 32676345517 (PR #180, дерево — 2026-08-24), job «Policy / Enable
+// native auto-merge», точная ошибка GraphQL — «Merge method merge commits are not
+// allowed on this repository (enablePullRequestAutoMerge)». Это не единичный сбой:
+// из истории репозитория этот шаг фактически исполнился (не skipped) ровно 6 раз —
+// 2026-08-24T00:23:53Z..00:24:08Z, на всех шести eligible PR из партии Dependabot
+// (#174–178, #180) — и все шесть упали одной и той же ошибкой. За весь период
+// 2026-08-18..2026-08-23, когда против этого движка снимались «15 успехов из 15» для
+// цепочки продвижения (evidence/live-rollout.md §9, §11, §14), этот шаг не
+// выполнился ни разу: продвижение проверялось через ручное слияние человеком, а не
+// через реально включённый native auto-merge. То есть заявленная цель дельты —
+// самостоятельное слияние PR Dependabot без участия человека — ни разу не
+// сработала.
+describe('живая регрессия: enable-auto-merge использует запрещённый в репозитории метод слияния', () => {
+  const ENABLE_STEP = () => stepNamed(POLICY_FILE, 'enable-auto-merge', 'Mark the exact assessed head for merge').run as string;
+
+  function ghRejectingMergeCommits(): Record<string, string> {
+    return {
+      gh: `#!/usr/bin/env bash
+printf 'GH %s\\n' "$*" >>"$GH_CALL_LOG"
+for arg in "$@"; do
+  if [ "$arg" = "--merge" ] || [ "$arg" = "-m" ]; then
+    echo 'GraphQL: Merge method merge commits are not allowed on this repository (enablePullRequestAutoMerge)' >&2
+    exit 1
+  fi
+done
+exit 0
+`,
+    };
+  }
+
+  it('не включает marker методом, который репозиторий не разрешает (allow_merge_commit=false)', () => {
+    const result = runStep(ENABLE_STEP(), {
+      GH_TOKEN: 'test-token',
+      GITHUB_REPOSITORY: REPOSITORY,
+      HEAD_SHA: HEAD_SHA,
+      PR_NUMBER: String(PR_NUMBER),
+    }, ghRejectingMergeCommits());
+
+    expect(result.status, `шаг обязан включать marker разрешённым методом слияния: ${result.stderr}`).toBe(0);
+    expect(result.calls, 'ожидался вызов gh pr merge с --squash, а не с --merge').toMatch(/--squash\b/);
+    expect(result.calls).not.toMatch(/(^|\s)--merge(\s|$)/);
+    expect(result.calls).not.toMatch(/(^|\s)-m(\s|$)/);
+  });
+});
