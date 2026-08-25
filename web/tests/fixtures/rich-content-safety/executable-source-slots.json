@@ -44,8 +44,8 @@
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
     "locator": "components/chat/ChatFacade.astro:L42:C1:script",
-    "fingerprint": "3bff788f43e870717c5857ec6a74522ffe5bf3153c92daa4f6e398bfe6412b7f",
-    "identity": "script|is:inline=empty:|body:641275b8c767b98f"
+    "fingerprint": "d561ffa732f6c742bdb663a4ce479baca2731b6df49d787e43636dead7e8bd00",
+    "identity": "script|is:inline=empty:|body:ff789ce13f2b07ac"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
@@ -412,8 +412,8 @@
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L65:C3:script",
-    "fingerprint": "9a41d6ab2cc07154750bf6031a8ef99fd4b4d90744d194bdc8aec0d3bb25d18b",
-    "identity": "script|body:d3a6f4c3d68fd94d"
+    "fingerprint": "6abb9cb5f09860dbcd639bb95612ed91c0c5193fd3183190f2d4022567ea473d",
+    "identity": "script|body:75cf35f093fd012f"
   },
   {
     "slotId": "src:components/home/sections/Segments.astro:L45:C1:style",
