@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { CMS_API_DIR, ENTITIES_DIR } from './paths.js';
+import { CMS_API_DIR, CONTENT_JSON_DIR } from './paths.js';
 import { hasElementNode } from './html-scan.js';
 import { CMS_RICHTEXT_SELECTORS, JSON_SELECTORS, type JsonSelector } from './normative.js';
 
@@ -29,8 +29,8 @@ export interface DiscoveryResult {
 }
 
 export interface DiscoveryOptions {
-  entitiesDir?: string;
-  entitiesGlob?: string;
+  contentJsonDir?: string;
+  contentJsonGlob?: string;
   cmsApiDir?: string;
   extraEntityFiles?: { name: string; json: unknown }[];
   extraCmsAttributes?: { singularName: string; attr: string; schemaPath: string }[];
@@ -109,19 +109,19 @@ export function matchJsonSelector(hit: StringHit): JsonSelector | undefined {
 }
 
 export function discoverSources(opts: DiscoveryOptions = {}): DiscoveryResult {
-  const entitiesDir = opts.entitiesDir ?? ENTITIES_DIR;
-  const pattern = opts.entitiesGlob ?? '*.json';
-  if (!existsSync(entitiesDir)) {
-    throw new Error(`каталог входных JSON недоступен: ${entitiesDir}`);
+  const contentJsonDir = opts.contentJsonDir ?? CONTENT_JSON_DIR;
+  const pattern = opts.contentJsonGlob ?? '*.json';
+  if (!existsSync(contentJsonDir)) {
+    throw new Error(`каталог входных JSON недоступен: ${contentJsonDir}`);
   }
-  const allJson = walkDir(entitiesDir, '.json');
+  const allJson = walkDir(contentJsonDir, '.json');
   const files = pattern === '*.json'
-    ? allJson.filter((f) => f.slice(entitiesDir.length + 1).split(/[/\\]/).length === 1)
+    ? allJson.filter((f) => f.slice(contentJsonDir.length + 1).split(/[/\\]/).length === 1)
     : allJson.filter((f) => f.endsWith(pattern.replace('*', '')));
 
   if (files.length === 0) {
     throw new Error(
-      `discovery: zero-match input glob ${pattern} в ${entitiesDir} — проверять нечего`,
+      `source-scan: zero-match input glob ${pattern} в ${contentJsonDir} — проверять нечего`,
     );
   }
 

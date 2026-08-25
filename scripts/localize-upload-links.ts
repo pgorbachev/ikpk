@@ -1,5 +1,5 @@
 /**
- * Локализация ссылок на upload-API старого сайта в файлах discovery/entities.
+ * Локализация ссылок на upload-API старого сайта в файлах legacy transfer dump.
  *
  * `https://ikpk.su/api/upload/file/<uuid>` — эндпоинт умирающего бэкенда: он
  * исчезнет вместе со старым сайтом при переключении DNS. Ссылки надо заменить
@@ -15,15 +15,16 @@
  * чтобы повторные прогоны не ходили в сеть.
  *
  * Запуск:  npx tsx scripts/localize-upload-links.ts [файл…]
- * Без аргументов обходит все discovery/entities/*.json.
+ * Без аргументов обходит все legacy transfer dump/*.json.
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, renameSync } from 'node:fs';
+import { legacyTransferDir } from '../web/scripts/lib/legacy-transfer-dir.js';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
+const TRANSFER_DIR = legacyTransferDir(ROOT);
 const TYPES_CACHE = join(ROOT, 'web', 'src', 'lib', 'upload-types.json');
 
 const UPLOAD_API_PREFIX = 'https://ikpk.su/api/upload/file/';
@@ -72,9 +73,9 @@ async function probeExt(uuid: string): Promise<string | null> {
 
 const targets = process.argv.slice(2).length
   ? process.argv.slice(2).map((p) => resolve(p))
-  : readdirSync(ENTITIES_DIR)
+  : readdirSync(TRANSFER_DIR)
       .filter((f) => f.endsWith('.json'))
-      .map((f) => join(ENTITIES_DIR, f));
+      .map((f) => join(TRANSFER_DIR, f));
 
 // Сначала собираем все uuid по всем файлам, потом опрашиваем сервер — так
 // один и тот же файл не запрашивается дважды.

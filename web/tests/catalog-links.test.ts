@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { loadPinnedType } from './helpers/pinned-snapshot';
 
 // Целостность связи семинара с группой курсов.
 //
@@ -11,9 +12,7 @@ import { join } from 'path';
 // статический маршрут исчезал из сборки. По объёму потеря одной программы из 26
 // меньше любого разумного порога, поэтому блокировка по количеству этот случай не
 // ловит принципиально.
-const ENTITIES = join(import.meta.dirname, '..', '..', 'discovery', 'entities');
-const load = <T>(file: string): T =>
-  JSON.parse(readFileSync(join(ENTITIES, file), 'utf-8')) as T;
+const load = <T>(file: string): T => loadPinnedType<T>(file.replace(/\.json$/, ''));
 
 interface Seminar {
   slug: string;

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
 export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
@@ -42,13 +42,81 @@ export function cleanBodyHtml(
   });
 }
 
-const ENTITIES_DIR = join(process.cwd(), '..', 'discovery', 'entities');
+const WEB_ROOT = process.cwd();
+const REPO_ROOT = join(WEB_ROOT, '..');
+
+type SnapshotFile = {
+  pinned?: boolean;
+  referenceDate: string;
+  fingerprint?: string;
+  snapshotId?: string;
+  content: { types: Record<string, unknown> };
+};
+
+let _snapshot: SnapshotFile | null = null;
+let _snapshotDir: string | null = null;
+
+function snapshotDir(): string {
+  if (_snapshotDir) return _snapshotDir;
+  const fromEnv = process.env.CONTENT_SNAPSHOT_DIR;
+  const candidates = [
+    fromEnv,
+    join(WEB_ROOT, '.snapshot'),
+    join(REPO_ROOT, 'fixtures', 'content-snapshot'),
+  ].filter((v): v is string => Boolean(v));
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'snapshot.json'))) {
+      _snapshotDir = dir;
+      return dir;
+    }
+  }
+  throw new Error(
+    'снимок контента не найден (CONTENT_SNAPSHOT_DIR / web/.snapshot / fixtures/content-snapshot)',
+  );
+}
+
+function loadSnapshot(): SnapshotFile {
+  if (_snapshot) return _snapshot;
+  const raw = readFileSync(join(snapshotDir(), 'snapshot.json'), 'utf-8');
+  _snapshot = JSON.parse(localizeAssetUrls(raw)) as SnapshotFile;
+  return _snapshot;
+}
+
+/** Опорная дата снимка, которым идёт сборка. */
+export function getSnapshotReferenceDate(): string {
+  return loadSnapshot().referenceDate;
+}
+
+export function getSnapshotIdentity(): { fingerprint?: string; snapshotId?: string; referenceDate: string } {
+  const snap = loadSnapshot();
+  return { fingerprint: snap.fingerprint, snapshotId: snap.snapshotId, referenceDate: snap.referenceDate };
+}
+
+const TYPE_BY_FILE: Record<string, string> = {
+  'institutes.json': 'institutes',
+  'course_groups.json': 'course_groups',
+  'seminars.json': 'seminars',
+  'teachers.json': 'teachers',
+  'articles.json': 'articles',
+  'schedule_entries.json': 'schedule_entries',
+  'news.json': 'news',
+  'promotions.json': 'promotions',
+  'video_playlists.json': 'video_playlists',
+  'static_pages.json': 'static_pages',
+};
 
 function loadJson<T>(filename: string): T {
-  const raw = readFileSync(join(ENTITIES_DIR, filename), 'utf-8');
-  // Единая точка локализации медиа: все URL бакета (в любых полях, включая
-  // HTML-строки) заменяются на локальные /media/** до парсинга (Этап 2).
-  return JSON.parse(localizeAssetUrls(raw)) as T;
+  if (filename === 'collapsible_panels.json') {
+    const panelsPath = join(snapshotDir(), 'collapsible_panels.json');
+    const raw = readFileSync(panelsPath, 'utf-8');
+    return JSON.parse(localizeAssetUrls(raw)) as T;
+  }
+  const type = TYPE_BY_FILE[filename];
+  if (!type) throw new Error(`неизвестный файл снимка: ${filename}`);
+  const records = loadSnapshot().content.types[type];
+  if (records === undefined) throw new Error(`в снимке нет типа ${type}`);
+  // Локализация уже применена ко всему снимку; повторно сериализуем только запись.
+  return records as T;
 }
 
 // ---------- Types ----------

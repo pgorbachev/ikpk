@@ -4,7 +4,7 @@ import { discoverSources, matchJsonSelector } from './source-discovery.js';
 import { fingerprintHtml, type SourceFingerprint } from './fingerprint.js';
 import { htmlOf } from './html-of.js';
 import { visibleText } from './html-scan.js';
-import { ENTITIES_DIR } from './paths.js';
+import { CONTENT_JSON_DIR } from './paths.js';
 import { cleanBodyHtml } from '../../../src/lib/html-cleaner.js';
 import { localizeAssetUrls } from '../../../src/lib/media.js';
 import { replacementForDeclaration } from './migration.js';
@@ -180,7 +180,7 @@ let panelsByPath: Record<string, Record<string, string>> | null = null;
 function loadPanels(): Record<string, Record<string, string>> {
   if (!panelsByPath) {
     panelsByPath = JSON.parse(
-      readFileSync(join(ENTITIES_DIR, 'collapsible_panels.json'), 'utf-8'),
+      readFileSync(join(CONTENT_JSON_DIR, 'collapsible_panels.json'), 'utf-8'),
     ) as Record<string, Record<string, string>>;
   }
   return panelsByPath;

@@ -1,7 +1,7 @@
 /**
  * Этап 2 (план 004): миграция медиа со storage.yandexcloud.net.
  *
- * Собирает все URL бакета из discovery/entities/*.json и web/src/**, скачивает
+ * Собирает все URL бакета из legacy transfer dump/*.json и web/src/**, скачивает
  * файлы в web/public/** (путь после /ikpk-image/ сохраняется 1:1, поэтому
  * рерайт URL — простая замена префикса) и генерирует манифест размеров
  * web/src/lib/media-manifest.json для проставления width/height у <img>
@@ -31,7 +31,7 @@ import sharp from 'sharp';
 import { resolveLocalPath } from './lib/media-paths.js';
 
 const ROOT = join(import.meta.dirname, '..');
-const ENTITIES_DIR = join(ROOT, 'discovery', 'entities');
+const TRANSFER_DIR = legacyTransferDir(ROOT);
 const PUBLIC_DIR = join(ROOT, 'web', 'public');
 // Оригиналы НЕ отдаются посетителю: из них web/scripts/make-derivatives.ts делает
 // уменьшенные версии в web/public/media. Причина — загрузчик раньше уменьшал
@@ -62,7 +62,7 @@ const MAX_WIDTH = 1200;
  * министерств (/svedeniya-ob-obrazovatelnoy-organizatsii). Лежали на
  * ikpk.su/_next/static/media/** — то есть на умирающем деплое: при переключении
  * DNS этот путь исчезает вместе со старым сайтом, и логотипы на главной
- * отвалились бы разом. Захвачены локально; ссылки в discovery/entities
+ * отвалились бы разом. Захвачены локально; ссылки в legacy transfer dump
  * переписаны на /media/legacy/**. Ключ — локальный путь, значение — источник
  * (сохранён для провенанса; хеш в имени файла не переносим).
  */
@@ -129,7 +129,7 @@ function sourceUrlFor(path: string): string {
 const force = process.argv.includes('--force');
 
 // ---------- collect unique bucket paths ----------
-// Источники: discovery/entities/*.json + web/src/** (там есть supplement-файлы
+// Источники: legacy transfer dump/*.json + web/src/** (там есть supplement-файлы
 // с прямыми ссылками). Ищем и полные URL бакета, и уже локализованные
 // локальные пути — так скрипт остаётся полным после рерайта ссылок в src.
 
@@ -160,9 +160,9 @@ function safeDecode(path: string): string | null {
 
 const paths = new Set<string>();
 const sources = [
-  ...readdirSync(ENTITIES_DIR)
+  ...readdirSync(TRANSFER_DIR)
     .filter((f) => f.endsWith('.json'))
-    .map((f) => join(ENTITIES_DIR, f)),
+    .map((f) => join(TRANSFER_DIR, f)),
   ...walkSourceFiles(join(ROOT, 'web', 'src')),
 ];
 for (const file of sources) {

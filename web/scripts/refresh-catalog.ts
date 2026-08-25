@@ -4,7 +4,7 @@
  *
  * Почему это возможно и зачем отдельно от других скриптов.
  *
- * Снимок в discovery/entities сделан 2026-03-31 и разошёлся с живым сайтом:
+ * Снимок в legacy transfer dump сделан 2026-03-31 и разошёлся с живым сайтом:
  * 14 живых страниц отдают у нас 404, у преподавателей разъехались направления,
  * а порядка следования в снимке нет вообще — из-за этого сортировка
  * алфавитная, и продвинутые ступени идут раньше обязательных (на группе КСТ
@@ -26,7 +26,7 @@
  * образовательной организации»), но для каталога источник теперь API — он
  * авторитетнее и полнее.
  *
- * Схему discovery/entities НЕ меняем: поля остаются в snake_case, потому что на
+ * Схему legacy transfer dump НЕ меняем: поля остаются в snake_case, потому что на
  * них смотрят lib/data.ts и все страницы. Добавляется только `order`.
  *
  * Запуск: из web/ — `npm run data:refresh` (или tsx scripts/refresh-catalog.ts)
@@ -38,9 +38,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sectionsHtml, SECTION_TITLES } from './lib/seminar-sections.js';
 import { calendarToday, plannedSlugs as derivePlannedSlugs } from './lib/planned-seminars.js';
+import { legacyTransferDir } from './lib/legacy-transfer-dir.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const ENTITIES = join(ROOT, 'discovery', 'entities');
+const TRANSFER_DUMP = legacyTransferDir(ROOT);
 const ORIGIN = 'https://ikpk.su';
 const CONCURRENCY = 6;
 
@@ -217,13 +218,13 @@ function groupPath(program: ProgramItem | undefined): string | null {
  * с фиксированной датой, а не живыми данными, ход времени которых красил гейт.
  */
 const scheduleEntries = JSON.parse(
-  readFileSync(join(ENTITIES, 'schedule_entries.json'), 'utf-8'),
+  readFileSync(join(TRANSFER_DUMP, 'schedule_entries.json'), 'utf-8'),
 ) as Array<{ status?: string; startAt?: string; endAt?: string; seminar?: { slug?: string } | null }>;
 
 const plannedSlugs = derivePlannedSlugs(scheduleEntries, calendarToday());
 console.log(`семинаров с будущими датами по расписанию: ${plannedSlugs.size}`);
 
-const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'utf-8')) as Array<{
+const oldSeminars = JSON.parse(readFileSync(join(TRANSFER_DUMP, 'seminars.json'), 'utf-8')) as Array<{
   slug: string;
   description_html?: string;
   description_text?: string;
@@ -234,7 +235,7 @@ const oldSeminars = JSON.parse(readFileSync(join(ENTITIES, 'seminars.json'), 'ut
   course_group_legacy_id?: string | null;
 }>;
 const oldBySlug = new Map(oldSeminars.map((s) => [s.slug, s]));
-const oldTeachers = JSON.parse(readFileSync(join(ENTITIES, 'teachers.json'), 'utf-8')) as Array<{
+const oldTeachers = JSON.parse(readFileSync(join(TRANSFER_DUMP, 'teachers.json'), 'utf-8')) as Array<{
   slug: string;
 }>;
 let contentFromApi = 0;
@@ -301,7 +302,7 @@ const nextSeminars = seminars.map((s) => {
   };
 });
 
-const oldGroups = JSON.parse(readFileSync(join(ENTITIES, 'course_groups.json'), 'utf-8')) as Array<{
+const oldGroups = JSON.parse(readFileSync(join(TRANSFER_DUMP, 'course_groups.json'), 'utf-8')) as Array<{
   slug: string;
   seo_title?: string;
   seo_description?: string;
@@ -352,12 +353,12 @@ function diff(label: string, oldArr: Array<{ slug: string }>, nextArr: Array<{ s
 diff('семинары', oldSeminars, nextSeminars);
 diff(
   'группы курсов',
-  JSON.parse(readFileSync(join(ENTITIES, 'course_groups.json'), 'utf-8')),
+  JSON.parse(readFileSync(join(TRANSFER_DUMP, 'course_groups.json'), 'utf-8')),
   nextGroups,
 );
 diff(
   'преподаватели',
-  JSON.parse(readFileSync(join(ENTITIES, 'teachers.json'), 'utf-8')),
+  JSON.parse(readFileSync(join(TRANSFER_DUMP, 'teachers.json'), 'utf-8')),
   nextTeachers,
 );
 
@@ -403,12 +404,12 @@ const seminarsOut = keepVanished(oldSeminars as never[], nextSeminars as never[]
 // удалял страницы групп вместе со всеми маршрутами `[institute]/[courseGroup]/**`,
 // то есть уносил куски сайта из индекса — при коде выхода 0.
 const groupsOut = keepVanished(
-  JSON.parse(readFileSync(join(ENTITIES, 'course_groups.json'), 'utf-8')) as never[],
+  JSON.parse(readFileSync(join(TRANSFER_DUMP, 'course_groups.json'), 'utf-8')) as never[],
   nextGroups as never[],
   'группы курсов',
 );
 const teachersOut = keepVanished(
-  JSON.parse(readFileSync(join(ENTITIES, 'teachers.json'), 'utf-8')),
+  JSON.parse(readFileSync(join(TRANSFER_DUMP, 'teachers.json'), 'utf-8')),
   nextTeachers as never[],
   'преподаватели',
 );
@@ -474,7 +475,7 @@ if (blockers.length) {
 }
 
 function save(file: string, data: unknown): void {
-  const target = join(ENTITIES, file);
+  const target = join(TRANSFER_DUMP, file);
   const tmp = `${target}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(data, null, 1)}\n`, 'utf-8');
   renameSync(tmp, target);

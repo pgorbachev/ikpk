@@ -1,16 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { teacherLead } from '../src/lib/teacher-lead';
+import { loadPinnedType } from './helpers/pinned-snapshot';
 
 // Краткое описание преподавателя на странице института. Аудит паритета показал
 // два дефекта: часть описаний начиналась с середины фразы (первым символом
 // запятая или строчная буква), а у основателя института выпадала главная строка
 // позиционирования — потому что отбор паррагафов отбрасывал всё, где встречалось
 // слово «институт».
-const teachers = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', '..', 'discovery', 'entities', 'teachers.json'), 'utf-8'),
-) as Array<{ name: string; bio_html: string; bio_text: string }>;
+const teachers = loadPinnedType<Array<{ name: string; bio_html: string; bio_text: string }>>('teachers');
 
 describe('краткое описание преподавателя', () => {
   it('никогда не начинается с середины фразы', () => {

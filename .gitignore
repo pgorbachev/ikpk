@@ -18,6 +18,10 @@ web/dist-demo/
 web/dist-stand/
 web/.astro/
 
+# Снимок контента на диске сборки (артефакт / локальный prepare) — не в git.
+web/.snapshot/
+web/dist-snapshot/
+
 # Environment
 .env
 .env.*

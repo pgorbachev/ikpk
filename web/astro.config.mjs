@@ -1,17 +1,26 @@
 // @ts-check
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
-// lastmod для sitemap (Этап 3, план 004):
-// - /statyi/<slug> — реальная дата публикации статьи (published_at);
-// - остальные страницы — дата снапшота данных (максимальный published_at
-//   по всем статьям): стабильна между пересборками и меняется только
-//   при реальном обновлении контента (не даёт ложных сигналов краулерам).
+// lastmod для sitemap: из снимка контента, которым идёт сборка (не из материала переноса).
+const webRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(webRoot, '..');
+const snapshotCandidates = [
+  process.env.CONTENT_SNAPSHOT_DIR,
+  join(webRoot, '.snapshot'),
+  join(repoRoot, 'fixtures', 'content-snapshot'),
+].filter(Boolean);
+const snapshotDir = snapshotCandidates.find((dir) => existsSync(join(/** @type {string} */ (dir), 'snapshot.json')));
+if (!snapshotDir) {
+  throw new Error('astro.config: снимок контента не найден');
+}
+/** @type {{ content: { types: { articles?: Array<{ slug: string; published_at?: string }> } } }} */
+const snapshot = JSON.parse(readFileSync(join(snapshotDir, 'snapshot.json'), 'utf-8'));
 /** @type {Array<{ slug: string; published_at?: string }>} */
-const articles = JSON.parse(
-  readFileSync(new URL('../discovery/entities/articles.json', import.meta.url), 'utf-8')
-);
+const articles = snapshot.content.types.articles ?? [];
 const articleDates = new Map(
   articles.filter((a) => a.published_at).map((a) => [a.slug, /** @type {string} */ (a.published_at)])
 );

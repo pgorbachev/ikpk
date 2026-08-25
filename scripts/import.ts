@@ -1,9 +1,10 @@
+import { legacyTransferDir } from '../web/scripts/lib/legacy-transfer-dir.js';
 #!/usr/bin/env tsx
 /**
  * IKPK Discovery → Strapi CMS Import Pipeline
  *
  * Idempotent import: uses legacy_id to detect existing records, then creates or updates.
- * Imports entities in dependency order across four phases.
+ * Imports records in dependency order across four phases.
  *
  * Usage:
  *   STRAPI_API_TOKEN=xxx tsx import.ts
@@ -36,7 +37,7 @@ const RETRY_BASE_MS = 1_000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ENTITIES_DIR = path.resolve(__dirname, "..", "discovery", "entities");
+const TRANSFER_DIR = legacyTransferDir(path.resolve(__dirname, ".."));
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -167,7 +168,7 @@ async function api<T = unknown>(
 async function loadJSON<T = Record<string, unknown>>(
   filename: string,
 ): Promise<T[]> {
-  const fp = path.join(ENTITIES_DIR, filename);
+  const fp = path.join(TRANSFER_DIR, filename);
   return JSON.parse(await fs.readFile(fp, "utf-8"));
 }
 
@@ -383,7 +384,7 @@ async function upsert(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Phase 1 — Independent entities (no foreign-key deps)
+// Phase 1 — Independent records (no foreign-key deps)
 // ════════════════════════════════════════════════════════════════
 
 async function importInstitutes(): Promise<void> {
@@ -448,7 +449,7 @@ async function importVideoPlaylists(): Promise<void> {
     const data: Record<string, unknown> = {
       name: (e.title as string) ?? (e.name as string),
       slug: e.slug,
-      // discovery data has no structured videos array; Strapi field stays null
+      // transfer dump has no structured videos array; Strapi field stays null
       videos: (e.videos as unknown) ?? null,
       legacy_id: e.legacy_id,
     };
@@ -807,7 +808,7 @@ async function main(): Promise<void> {
   console.log(`   Strapi URL:  ${STRAPI_URL}`);
   console.log(`   Dry run:     ${DRY_RUN}`);
   console.log(`   Skip media:  ${SKIP_MEDIA}`);
-  console.log(`   Entities:    ${ENTITIES_DIR}\n`);
+  console.log(`   Entities:    ${TRANSFER_DIR}\n`);
 
   if (!STRAPI_API_TOKEN && !DRY_RUN) {
     console.error(
@@ -816,11 +817,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Verify entities directory exists
+  // Verify transfer dump directory exists
   try {
-    await fs.access(ENTITIES_DIR);
+    await fs.access(TRANSFER_DIR);
   } catch {
-    console.error(`❌ Entities directory not found: ${ENTITIES_DIR}`);
+    console.error(`❌ Entities directory not found: ${TRANSFER_DIR}`);
     process.exit(1);
   }
 
@@ -843,8 +844,8 @@ async function main(): Promise<void> {
     log("ℹ️  No API token – running fully offline dry-run");
   }
 
-  // ─── Phase 1: Independent entities ───────────────────────
-  log("═══ Phase 1: Independent entities ═══");
+  // ─── Phase 1: Independent records ───────────────────────
+  log("═══ Phase 1: Independent records ═══");
   await importInstitutes();
   await importTeachers();
   await importArticles();

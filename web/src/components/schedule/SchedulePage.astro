@@ -16,7 +16,7 @@ interface ProgramOption {
   slug: string;
 }
 
-interface Card {
+interface ScheduleItem {
   additionalText: string;
   cityName: string;
   citySlug: string;
@@ -40,7 +40,7 @@ interface Card {
 }
 
 interface Props {
-  cards: Card[];
+  items: ScheduleItem[];
   cities: string[];
   institutes: Option[];
   months: MonthOption[];
@@ -48,13 +48,13 @@ interface Props {
   title: string;
 }
 
-const { cards, cities, institutes, months, programs, title } = Astro.props as Props;
+const { items, cities, institutes, months, programs, title } = Astro.props as Props;
 ---
 
 <section class="section schedule-section">
   <SchedulePageHeader title={title} />
   <ScheduleFilters institutes={institutes} programs={programs} cities={cities} months={months} />
-  <ScheduleListing cards={cards} />
+  <ScheduleListing items={items} />
   <ScheduleControlsScript />
 </section>
 

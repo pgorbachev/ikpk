@@ -85,6 +85,27 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
+      - name: Download content snapshot from Tests run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ runner.temp }}/content-snapshot
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Prepare pinned snapshot for manual dispatch
+        if: github.event_name != 'workflow_run'
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ runner.temp }}/content-snapshot
+        run: |
+          npm ci
+          npm run snapshot:prepare
+          mkdir -p "$CONTENT_SNAPSHOT_DIR"
+          cp -R .snapshot/. "$CONTENT_SNAPSHOT_DIR/"
+
+
       # Ранняя сверка: стоит ли вообще тратить сборку. Она НЕ доказывает, что публиковать
       # можно — между ней и выкладкой пройдёт сборка, за которую вершина успеет сдвинуться.
       # Решающая сверка стоит в джобе публикации, внутри группы сериализации.
@@ -114,6 +135,8 @@ jobs:
 
       - name: Build Astro site
         working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ runner.temp }}/content-snapshot
         run: npm run build
 
       # Задача 6.13a: Pages платёжной поверхностью не является (design.md, Решение 13,

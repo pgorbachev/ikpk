@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHARACTERIZATION_SHA,
-  ENTITIES_DIR,
+  CONTENT_JSON_DIR,
   FIXTURES_DIR,
   LOCAL_UPLOAD_ORIGINAL,
   LOCAL_UPLOAD_WEBP,
@@ -21,7 +21,7 @@ import { loadLockfile, subtreeLockfileNodes } from './lockfile-graph.js';
 import { assertCleanGitWorktree } from './git-clean.js';
 
 function loadEntity<T>(name: string): T {
-  return JSON.parse(readFileSync(join(ENTITIES_DIR, name), 'utf-8')) as T;
+  return JSON.parse(readFileSync(join(CONTENT_JSON_DIR, name), 'utf-8')) as T;
 }
 
 function writeJson(name: string, value: unknown): void {

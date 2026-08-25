@@ -14,9 +14,9 @@ import {
   getScheduleEntries,
   getTeachers,
   cleanBodyHtml,
-  stripLegacySeminarTail,
+  stripLegacySeminarTail, getSnapshotReferenceDate,
 } from '../../../lib/data';
-import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
+import { isCurrentOrFuture } from '../../../lib/schedule-window';
 import { findTeacherForSeminar, seminarTeacherLabel } from '../../../lib/home';
 import { isDemoForms } from '../../../lib/forms';
 import { ARCHITECTURE_IDS, variants, type ArchitectureId } from '../../../lib/variants';
@@ -34,7 +34,7 @@ const institutes = getInstitutes();
 const allCGs = getCourseGroups();
 const allSeminars = getSeminars();
 const allTeachers = getTeachers();
-const today = calendarToday();
+const today = getSnapshotReferenceDate();
 
 const futureSlugs = new Set(
   getScheduleEntries()

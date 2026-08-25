@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { loadPinnedType } from './helpers/pinned-snapshot';
 
 // ─── Characterization-тесты: клиентское поведение каталога статей ────────────
 // Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline
@@ -19,9 +18,7 @@ interface Article {
   published_at: string | null;
 }
 
-const articles: Article[] = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', '..', 'discovery', 'entities', 'articles.json'), 'utf-8'),
-);
+const articles = loadPinnedType<Article[]>('articles');
 
 /** Первые символы заголовка в нижнем регистре — по ним поиск и работает. */
 const queryFor = (a: Article) => a.title.toLowerCase().slice(0, 22);

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { loadPinnedType } from './helpers/pinned-snapshot';
 
-const ENTITIES = join(import.meta.dirname, '..', '..', 'discovery', 'entities');
-const load = <T>(f: string): T => JSON.parse(readFileSync(join(ENTITIES, f), 'utf-8')) as T;
+const load = <T>(f: string): T => {
+  const type = f.replace(/\.json$/, '');
+  return loadPinnedType<T>(type);
+};
 
 interface Seminar {
   slug: string;

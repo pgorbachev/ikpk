@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { dist, allPages, readPage } from './helpers/dist-pages';
+import { loadPinnedType } from './helpers/pinned-snapshot';
 
 // ─── Characterization-тесты: каталог статей ──────────────────────────────────
 // Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline
@@ -28,8 +29,7 @@ interface Article {
   image: string | null;
 }
 
-const ENTITIES = join(import.meta.dirname, '..', '..', 'discovery', 'entities');
-const articles: Article[] = JSON.parse(readFileSync(join(ENTITIES, 'articles.json'), 'utf-8'));
+const articles: Article[] = loadPinnedType<Article[]>('articles');
 
 /** Размер страницы списка — паритет со старым сайтом (6 ссылок на /statyi). */
 const PAGE_SIZE = 6;
@@ -53,7 +53,7 @@ const shownSlugs = (): string[] => [
 // вакуумными: цикл по нулю элементов проходит всегда.
 describe('каталог статей: источник данных', () => {
   it('каталог непуст — иначе проверки ниже ничего не проверяют', () => {
-    expect(articles.length, 'discovery/entities/articles.json пуст').toBeGreaterThan(0);
+    expect(articles.length, 'снимок articles пуст').toBeGreaterThan(0);
   });
 
   it('обязательные поля заполнены у каждой записи', () => {

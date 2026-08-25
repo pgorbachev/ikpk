@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scheduleSupplements } from '../src/lib/schedule-supplements';
-import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
+import { isCurrentOrFuture } from '../src/lib/schedule-window';
+import { loadPinnedSnapshot, loadPinnedType } from './helpers/pinned-snapshot';
 // Псевдоним, а не прямое имя: параметр `monthKeys` уже занят в `syntheticMarkup` и
 // `mountSynthetic`, и тень над импортом читалась бы как одно и то же.
 import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
@@ -91,11 +91,19 @@ const inMonth = (entries: Entry[], key: string): Entry[] => entries.filter((entr
 
 /** Запись снапшота в объёме, нужном для окна актуальности и склейки с заплатками. */
 interface SnapshotEntry {
+  id?: number;
+  name?: string;
   status?: string;
   startAt?: string;
   endAt?: string;
   seminar?: { slug?: string };
   city?: { name?: string } | null;
+}
+
+/** Бывшая заплатка в снимке: id ≥ 900000 и обязательное имя (раньше — отдельный модуль заплаток). */
+interface SchedulePatch extends SnapshotEntry {
+  id: number;
+  name: string;
 }
 
 /**
@@ -110,19 +118,14 @@ interface SnapshotEntry {
  * Почему снапшот читается напрямую, а не через `src/lib/data.ts`: тот модуль тянет
  * `import.meta.env` (через `html-cleaner` → `forms`), которого в прогоне Playwright
  * нет вовсе — импорт падает на `forms.ts:22`. Окно и склейка с заплатками берутся из
- * тех же модулей, что у страницы (`schedule-window`, `schedule-supplements`), поэтому
+ * тех же модулей, что у страницы (`schedule-window`, `модуль заплаток`), поэтому
  * расходиться со сборкой может только правило склейки — и на этом ветка покраснеет,
  * а не промолчит.
  */
 function liveSnapshotEntries(today: string): SnapshotEntry[] {
-  const file = join(import.meta.dirname, '..', '..', 'discovery', 'entities', 'schedule_entries.json');
-  const base = JSON.parse(readFileSync(file, 'utf-8')) as SnapshotEntry[];
-  expect(base.length, `${file}: снапшот расписания пуст — считать нечего`).toBeGreaterThan(0);
-
-  const key = (entry: SnapshotEntry): string => `${entry.seminar?.slug}:${entry.startAt}`;
-  const known = new Set(base.map(key));
-  const all = [...base, ...(scheduleSupplements as SnapshotEntry[]).filter((entry) => !known.has(key(entry)))];
-  return all.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today));
+  const base = loadPinnedType<SnapshotEntry[]>('schedule_entries');
+  expect(base.length, 'закреплённый снимок расписания пуст — считать нечего').toBeGreaterThan(0);
+  return base.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today));
 }
 
 /** Сколько записей обязано быть на странице на дату `today`. */
@@ -162,6 +165,15 @@ function strictPairInData(today: string): boolean {
 /** Города живых записей по ДАННЫМ на дату `today` — по имени, см. `strictPairInData`. */
 const liveCityNames = (today: string): Set<string> =>
   new Set(liveSnapshotEntries(today).map((entry) => entry.city?.name ?? '').filter(Boolean));
+
+/** Бывшие записи-заплатки: в снимке с id >= 900000 (раньше жили в модуль заплаток). */
+function schedulePatches(): SchedulePatch[] {
+  return loadPinnedType<SnapshotEntry[]>('schedule_entries').filter(
+    (entry): entry is SchedulePatch =>
+      Number(entry.id) >= 900000 && typeof entry.name === 'string' && entry.name.length > 0,
+  );
+}
+
 
 test.describe('выбор месяца сужает выдачу', () => {
   test('показаны только записи выбранного месяца @month-narrow', async ({ page }) => {
@@ -223,7 +235,7 @@ test.describe('выбор месяца сужает выдачу', () => {
     // той же причине, что в `@month-supplement` и `@month-pagination`.
     //
     // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2027-05-24. Вычислена, а не оценена: склейка снапшота
-    // `discovery/entities/schedule_entries.json` с `scheduleSupplements` по ключу
+    // `закреплённый снимок (schedule_entries)` с `schedulePatches()` по ключу
     // `slug:startAt`, затем `status === 'active'` и `isCurrentOrFuture`, затем
     // `monthKeys` — те же модули, которыми пользуется сборка, — перебором календарных
     // дат. Строгая пара есть по 2027-05-23 включительно (живых 6: май — 2 записи в
@@ -241,7 +253,7 @@ test.describe('выбор месяца сужает выдачу', () => {
       // Строгой пары на странице нет. Это законно, только если её нет и по данным; если
       // по данным она есть, значит записи потеряны или испорчен признак города — и тогда
       // ветка краснеет.
-      const today = calendarToday();
+      const today = loadPinnedSnapshot().referenceDate;
       expect(
         strictPairInData(today),
         `на странице нет пары «месяц + город» с пересечением строго меньше каждого из двух множеств, а по снапшоту и окну актуальности на ${today} такая пара есть — записи потеряны`,
@@ -374,7 +386,7 @@ test.describe('месяц и остальное управление', () => {
     // исчезает от хода времени, а не от дефекта.
     //
     // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2026-11-24. Вычислена, а не оценена: склейка снапшота
-    // `discovery/entities/schedule_entries.json` (63 записи) с `scheduleSupplements` по
+    // `закреплённый снимок (schedule_entries)` (63 записи) с `schedulePatches()` по
     // тому же ключу `slug:startAt`, что у страницы, затем отбор `status === 'active'` и
     // `isCurrentOrFuture` из `schedule-window` — того же вывода о времени, которым
     // пользуется сборка, — перебором календарных дат. Живых: 2026-08-12 — 64,
@@ -393,7 +405,7 @@ test.describe('месяц и остальное управление', () => {
       // окну живых больше страницы, значит записи потеряны, и ветка краснеет. Второе:
       // при одной странице пагинации не должно быть ни до выбора месяца, ни после, ни
       // после сброса — это ловит обратный дефект, «пагинация показана всегда».
-      const today = calendarToday();
+      const today = loadPinnedSnapshot().referenceDate;
       const live = liveEntryCount(today);
       expect(
         live,
@@ -432,7 +444,7 @@ test.describe('месяц и остальное управление', () => {
     // Идентификатора записи в разметке нет вовсе, поэтому заплатка узнаётся по
     // заголовку из своего источника. «Месяц только с заплаткой» проверить нельзя:
     // обе приходятся на октябрь 2026, где ещё 12 обычных записей.
-    const present = scheduleSupplements
+    const present = schedulePatches()
       .map((supplement) => ({
         title: supplement.name,
         key: (supplement.startAt ?? '').slice(0, 7),
@@ -467,10 +479,10 @@ test.describe('месяц и остальное управление', () => {
       // если окно отсекло все; если хотя бы одна ещё в окне, значит её потеряли — и тогда
       // ветка краснеет, называя расхождение ДВУМЯ числами: сколько заплаток наблюдается
       // на странице и сколько обязано быть по данным на опорную дату.
-      const today = calendarToday();
+      const today = loadPinnedSnapshot().referenceDate;
       const titles = new Set(entries.map((entry) => entry.title));
-      const onPage = scheduleSupplements.filter((supplement) => titles.has(supplement.name));
-      const stillInWindow = scheduleSupplements.filter((supplement) => isCurrentOrFuture(supplement, today));
+      const onPage = schedulePatches().filter((supplement) => titles.has(supplement.name));
+      const stillInWindow = schedulePatches().filter((supplement) => isCurrentOrFuture(supplement, today));
       expect(
         stillInWindow.map((supplement) => supplement.name),
         `на странице заплаток ${onPage.length}, а по данным и окну актуальности на ${today} обязано быть ${stillInWindow.length} — запись потеряна:\n${stillInWindow.map((s) => s.name).join('\n')}`,
@@ -868,13 +880,13 @@ test.describe('синтетический набор', () => {
     // предмет исчезает от хода времени, и `@month-supplement` остаётся
     // характеризационной проверкой живого набора, а не носителем требования (TD-20).
     //
-    // Заплатка здесь НЕ придуманная: имя и даты берутся из `scheduleSupplements`, а
+    // Заплатка здесь НЕ придуманная: имя и даты берутся из `schedulePatches()`, а
     // ключи месяцев — из того же `monthKeys`, которым их считает сборка. Опорная дата
     // задаётся первым днём самой заплатки, поэтому от календаря вывод не зависит.
-    expect(scheduleSupplements.length, 'заплаток в источнике нет — проверять было нечего')
+    expect(schedulePatches().length, 'заплаток в источнике нет — проверять было нечего')
       .toBeGreaterThan(0);
 
-    for (const supplement of scheduleSupplements) {
+    for (const supplement of schedulePatches()) {
       const reference = (supplement.startAt ?? '').slice(0, 10);
       const keys = monthKeysOf(supplement, reference);
       expect(keys.length, `у заплатки «${supplement.name}» нет ключей месяца на ${reference}`)
