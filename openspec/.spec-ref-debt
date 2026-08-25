@@ -31,18 +31,6 @@ openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh
 openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
-openspec/changes/dependabot-auto-merge/design.md :: dependabot/fetch-metadata
-openspec/changes/dependabot-auto-merge/design.md :: feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3
-openspec/changes/dependabot-auto-merge/design.md :: package.json
-openspec/changes/dependabot-auto-merge/design.md :: pgorbachev/ikpk
-openspec/changes/dependabot-auto-merge/design.md :: refs/heads/main
-openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: actions/download-artifact
-openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: dependabot/fetch-metadata
-openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: fix/dependabot-auto-merge-method
-openspec/changes/dependabot-auto-merge/evidence/repository-prerequisites.md :: pgorbachev/ikpk
-openspec/changes/dependabot-auto-merge/specs/dependency-update-automation/spec.md :: refs/heads/main
-openspec/changes/dependabot-auto-merge/tasks.md :: actions/download-artifact
-openspec/changes/dependabot-auto-merge/tasks.md :: dependabot/fetch-metadata
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
@@ -106,6 +94,8 @@ openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
+openspec/specs/dependency-update-automation/spec.md :: design.md
+openspec/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/specs/online-payment/spec.md :: design.md
 openspec/specs/online-payment/spec.md :: dist/oplata/index.html
 openspec/specs/online-payment/spec.md :: proposal.md

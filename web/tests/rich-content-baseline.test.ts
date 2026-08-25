@@ -321,8 +321,9 @@ describe('rich-content baseline: пересечения', () => {
   });
 
   it('security-registry override — deny-only в dependabot-auto-merge, согласование с dependency-update-gates', () => {
+    // dependabot-auto-merge заархивирован 2026-08-25 — путь теперь под openspec/changes/archive/.
     const autoMerge = readFileSync(
-      join(REPO_ROOT, 'openspec', 'changes', 'dependabot-auto-merge', 'proposal.md'),
+      join(REPO_ROOT, 'openspec', 'changes', 'archive', '2026-08-25-dependabot-auto-merge', 'proposal.md'),
       'utf-8',
     );
     expect(autoMerge).toMatch(/deny-only/);
