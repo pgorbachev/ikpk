@@ -85,6 +85,8 @@ async function openFooter(page: Page): Promise<{ footer: Locator; column: Locato
 
   const footer = page.getByRole('contentinfo');
   await expect(footer, 'на странице нет элемента роли contentinfo — подвала нет').toHaveCount(1);
+  // Без прокрутки elementFromPoint по центру цели даёт null — подвал ниже первого экрана.
+  await footer.scrollIntoViewIfNeeded();
 
   // Колонка отбирается по ЗАГОЛОВКУ, а не по имени CSS-класса: колонка названа самим
   // требованием о раскладке, класс — деталь реализации, которую эта работа и меняет.
