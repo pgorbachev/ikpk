@@ -41,9 +41,18 @@ async function loadAddressState(strapi: Core.Strapi): Promise<AddressState> {
     .findMany({ select: ['address', 'owner_id'] })) as AddressHistoryRow[];
   const addressHistory = historyRows.map((h) => ({ address: h.address, ownerId: h.owner_id }));
 
-  // Известные Strapi'у маршруты сборки — только шесть каталогов; произвольные страницы
-  // web/src/pages не видны из этого процесса (см. build-route-segments.ts).
-  const buildRouteSegments: string[] = [...KNOWN_CATALOG_SEGMENTS];
+  // Известные Strapi'у маршруты сборки — шесть каталогов плюс идентификаторы институтов.
+  // Институт — единственный тип, у которого СЕЙЧАС, до переключения источника
+  // (`cms-content-publication`), живой канонический маршрут — голый корневой сегмент
+  // `/<slug>` (страница `web/src/pages/[institute].astro`), а не плоский `/instituty/<slug>`,
+  // который вычисляет `addressOf`. Без этой добавки статическая страница с тем же
+  // идентификатором проходила бы проверку (её вычисленный адрес `/<slug>` не совпадал ни с
+  // одним другим вычисленным адресом) и на сборке `web` столкнулась бы с этим маршрутом —
+  // подтверждённый ревью PR #186 дефект (H5), а не гипотетический. Прочие типы (программа,
+  // семинар, персона) сюда не добавляются: их иерархические адреса — не корневой сегмент,
+  // коллизии с плоской статической страницей не дают.
+  const instituteIdentifiers = records.filter((r) => r.type === 'institute').map((r) => r.identifier);
+  const buildRouteSegments: string[] = [...KNOWN_CATALOG_SEGMENTS, ...instituteIdentifiers];
 
   return { records, addressHistory, buildRouteSegments };
 }
@@ -118,7 +127,58 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       if (!previousIdentifier || !previousType || !documentId) return;
 
       const oldAddress = addressOf({ type: previousType, identifier: previousIdentifier });
-      await recordAddressHistoryIfMissing(strapi, oldAddress, documentId, previousType);
+      // Переименование в БД уже закоммичено — исключение здесь не должно всплыть у
+      // вызывающего как отказ сохранения (H5, находка G2): редактор увидел бы 500 на
+      // успешно сохранённой записи. Потеря записи истории — реальная потеря, поэтому не
+      // молчим вовсе, а пишем в лог сервера; сама операция остаётся успешной.
+      try {
+        await recordAddressHistoryIfMissing(strapi, oldAddress, documentId, previousType);
+      } catch (err) {
+        strapi.log.error(
+          `[content-address] не удалось записать историю адреса ${oldAddress} (владелец ${documentId}) после переименования: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    // H5 (ревью PR #186): до этой правки история писалась ТОЛЬКО при переименовании —
+    // запись, которую никогда не переименовывали, при удалении освобождала свой адрес
+    // без единой записи в истории. Новый владелец того же адреса не получал никакого
+    // сигнала о том, что здесь раньше было другое содержимое, и посетитель по старой
+    // ссылке молча попадал бы на чужую страницу вместо ожидаемого 404 или редиректа.
+    // Тот же beforeX/afterX швов, что и у переименования: адрес читаем ДО удаления (после
+    // него записи уже нет, где искать), пишем историю ПОСЛЕ (запись в БД удалена не сразу
+    // же и может ещё не дойти — тогда истории лучше не быть, чем указывать на несуществующее
+    // удаление).
+    async beforeDelete(event) {
+      const type = TYPE_BY_UID[event.model.uid];
+      const existing = (await strapi.db
+        .query(event.model.uid)
+        .findOne({ where: event.params.where, select: ['documentId', IDENTIFIER_FIELD] })) as
+        | { documentId: string; slug: string | null }
+        | null;
+      if (!existing || !existing.slug) return;
+
+      event.state.deletedIdentifier = existing.slug;
+      event.state.deletedType = type;
+      event.state.deletedDocumentId = existing.documentId;
+    },
+
+    async afterDelete(event) {
+      const identifier = event.state.deletedIdentifier as string | undefined;
+      const type = event.state.deletedType as RecordType | undefined;
+      const documentId = event.state.deletedDocumentId as string | undefined;
+      if (!identifier || !type || !documentId) return;
+
+      const address = addressOf({ type, identifier });
+      // Тот же довод, что в afterUpdate: удаление уже закоммичено, отказ здесь не должен
+      // выглядеть отказом удаления.
+      try {
+        await recordAddressHistoryIfMissing(strapi, address, documentId, type);
+      } catch (err) {
+        strapi.log.error(
+          `[content-address] не удалось записать историю адреса ${address} (владелец ${documentId}) после удаления: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     },
   });
 }

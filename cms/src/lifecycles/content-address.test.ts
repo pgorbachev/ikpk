@@ -22,17 +22,27 @@ interface Subscriber {
   beforeCreate(event: LifecycleEvent): Promise<void>;
   beforeUpdate(event: LifecycleEvent): Promise<void>;
   afterUpdate(event: LifecycleEvent): Promise<void>;
+  beforeDelete(event: LifecycleEvent): Promise<void>;
+  afterDelete(event: LifecycleEvent): Promise<void>;
 }
 
 function makeStrapi(opts: {
   rowsByUid: Record<string, FakeRow[]>;
   history?: FakeHistoryRow[];
+  /** G2: имитирует отказ записи БД при создании строки истории. */
+  failHistoryCreate?: boolean;
 }) {
   const history = opts.history ? [...opts.history] : [];
   const created: { address: string; owner_id: string; owner_type: string }[] = [];
+  const loggedErrors: string[] = [];
   let subscriber!: Subscriber;
 
   const strapi = {
+    log: {
+      error(message: string) {
+        loggedErrors.push(message);
+      },
+    },
     db: {
       lifecycles: {
         subscribe(sub: Subscriber) {
@@ -61,6 +71,7 @@ function makeStrapi(opts: {
             );
           },
           async create({ data }: { data: { address: string; owner_id: string; owner_type: string } }) {
+            if (opts.failHistoryCreate) throw new Error('БД недоступна (симуляция)');
             history.push({ address: data.address, owner_id: data.owner_id });
             created.push(data);
             return data;
@@ -71,7 +82,7 @@ function makeStrapi(opts: {
   } as unknown as Parameters<typeof registerContentAddressLifecycle>[0];
 
   registerContentAddressLifecycle(strapi);
-  return { subscriber, created, history };
+  return { subscriber, created, history, loggedErrors };
 }
 
 function makeEvent(uid: string, params: LifecycleEvent['params']): LifecycleEvent {
@@ -167,4 +178,118 @@ test('afterUpdate: повторная запись того же старого 
   // Второй проход по тому же событию (например, ретрай) не должен упасть на unique-ограничении.
   await subscriber.afterUpdate(event);
   assert.equal(created.length, 1, 'дубль в историю не добавлен');
+});
+
+// H5 (ревью PR #186): институт живёт СЕЙЧАС и по голому корневому адресу `/<slug>`
+// (`[institute].astro`, канонический до переключения источника), а не только по
+// вычисляемому плоскому `/instituty/<slug>`. Статическая страница с тем же
+// идентификатором раньше проходила проверку и на сборке `web` столкнулась бы с этим
+// маршрутом — подтверждённый, а не гипотетический дефект.
+test('beforeCreate: статическая страница не занимает идентификатор существующего института', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'institut-apledzhera' }] },
+  });
+  const event = makeEvent('api::page.page', { data: { slug: 'institut-apledzhera' } });
+  await assert.rejects(() => subscriber.beforeCreate(event), /маршрута сборки/);
+});
+
+test('beforeCreate: статическая страница может использовать идентификатор программы или семинара', async () => {
+  // Отрицательный контроль к предыдущему тесту: расширение касается ТОЛЬКО институтов —
+  // у программы и семинара иерархические адреса не занимают корневой сегмент.
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::course-group.course-group': [{ documentId: 'doc-1', slug: 'kraniosakralnaya-terapiya' }],
+      'api::seminar.seminar': [{ documentId: 'doc-2', slug: 'osnovy-testirovaniya' }],
+    },
+  });
+  await assert.doesNotReject(() =>
+    subscriber.beforeCreate(makeEvent('api::page.page', { data: { slug: 'kraniosakralnaya-terapiya' } })),
+  );
+  await assert.doesNotReject(() =>
+    subscriber.beforeCreate(makeEvent('api::page.page', { data: { slug: 'osnovy-testirovaniya' } })),
+  );
+});
+
+// H5: до этой правки история писалась только при переименовании. Запись, которую
+// никогда не переименовывали, освобождала свой адрес при удалении молча — без единой
+// строки в истории, то есть без какого-либо сигнала будущему владельцу того же адреса.
+test('beforeDelete → afterDelete: адрес никогда не переименованной записи попадает в историю', async () => {
+  const { subscriber, created } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'institut-barralya' }] },
+  });
+  const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(event);
+  await subscriber.afterDelete(event);
+  assert.deepEqual(created, [{ address: '/instituty/institut-barralya', owner_id: 'doc-1', owner_type: 'institute' }]);
+});
+
+test('afterDelete: повторный проход по тому же событию не дублирует запись истории', async () => {
+  const { subscriber, created, history } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'institut-barralya' }] },
+  });
+  const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(event);
+  await subscriber.afterDelete(event);
+  await subscriber.afterDelete(event);
+  assert.equal(created.length, 1);
+  assert.equal(history.length, 1);
+});
+
+test('beforeDelete: запись без идентификатора не пишет историю (нечего терять)', async () => {
+  const { subscriber, created } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: null }] },
+  });
+  const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(event);
+  await subscriber.afterDelete(event);
+  assert.equal(created.length, 0);
+});
+
+// G2 (ревью PR #186, teammate rev186-lifecycles): переименование/удаление в БД уже
+// закоммичено к моменту записи истории — отказ этой записи не должен всплывать у
+// вызывающего как отказ самой операции. Одновременно потеря не молчит вовсе: она идёт
+// в лог сервера.
+test('afterUpdate: отказ записи истории не прерывает обработчик и попадает в лог', async () => {
+  const { subscriber, loggedErrors } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'old-name' }] },
+    failHistoryCreate: true,
+  });
+  const event = makeEvent('api::institute.institute', {
+    where: { documentId: 'doc-1' },
+    data: { slug: 'new-name' },
+  });
+  await subscriber.beforeUpdate(event);
+  await assert.doesNotReject(() => subscriber.afterUpdate(event));
+  assert.equal(loggedErrors.length, 1);
+  assert.match(loggedErrors[0], /old-name/);
+});
+
+test('afterDelete: отказ записи истории не прерывает обработчик и попадает в лог', async () => {
+  const { subscriber, loggedErrors } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'institut-barralya' }] },
+    failHistoryCreate: true,
+  });
+  const event = makeEvent('api::institute.institute', { where: { documentId: 'doc-1' } });
+  await subscriber.beforeDelete(event);
+  await assert.doesNotReject(() => subscriber.afterDelete(event));
+  assert.equal(loggedErrors.length, 1);
+});
+
+// G4 (teammate rev186-lifecycles): «слаг присутствует, но не изменился» — реалистичный
+// случай для content-manager Strapi, который при каждом сохранении отправляет ВСЕ поля,
+// включая неизменённые. Отдельная ветка от «слага нет в data вовсе» (тест выше,
+// «идентификатор не меняется — история не пишется», где data: {}) — до этого теста была
+// покрыта только вторая, реалистичная первая не была ничем.
+test('beforeUpdate: слаг присутствует в data, но равен текущему — история не пишется', async () => {
+  const { subscriber, created } = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'doc-1', slug: 'apledzher' }] },
+  });
+  const event = makeEvent('api::institute.institute', {
+    where: { documentId: 'doc-1' },
+    data: { slug: 'apledzher', name: 'Институт Апледжера' },
+  });
+  await subscriber.beforeUpdate(event);
+  assert.equal(Object.keys(event.state).length, 0, 'состояние переименования не должно выставляться');
+  await subscriber.afterUpdate(event);
+  assert.equal(created.length, 0);
 });
