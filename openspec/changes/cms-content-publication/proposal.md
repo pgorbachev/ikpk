@@ -48,7 +48,7 @@
 Оба шага в `test.yml` — «Measure base Vitest volume for dependency or Dependabot PR»
 (`.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR`)
 и «Measure base browser tests for dependency or Dependabot PR»
-(`.github/workflows/test.yml:503`, `- name: Measure base browser tests for dependency or Dependabot PR`),
+(`.github/workflows/test.yml:531`, `- name: Measure base browser tests for dependency or Dependabot PR`),
 оба под `if: … dependency_only == 'true' || … dependabot[bot]`: первый собирает `npm run build` и
 `npm run build:demo` внутри `unit-and-build`, второй — `npm run build` внутри `e2e-smoke`. Их цель
 — сравнить объём тестов до и после правки на Dependabot- и dependency-only PR, а не проверить сайт

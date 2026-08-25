@@ -11,7 +11,7 @@
       прогона он новый, и сверка манифеста «неуспех при любом расхождении» краснела бы каждые
       сутки. Для вопроса «то же ли содержимое» нужен **отпечаток контента** — величина без даты.
       Сегодня противоречия нет только потому, что визуальное сравнение в обязательный прогон не
-      подключено вовсе (`web/package.json:43`, `"test:e2e:visual"` не вызывается ни одним
+      подключено вовсе (`web/package.json:45`, `"test:e2e:visual"` не вызывается ни одним
       workflow), — то есть проверять это надо до того, как соседний change его подключит
 - [x] 1.3 СДЕЛАНО: принятая `schedule-month-filter` дельты не требует — полей, которые здесь
       меняются, она не называет, а её правило отсечения совпадает по семантике с вычисляемым
@@ -93,7 +93,7 @@
       `.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:503`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:531`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
@@ -179,7 +179,7 @@
 - [ ] 5.2c **Найдено ревью PR #185: `web/tests/parity-compare.test.ts` содержит буквальное
       сравнение содержимого с прод-сайтом, которое переход на фикстуру ломает предсказуемо, а не
       флаково.** Тест
-      `web/tests/parity-compare.test.ts:285`, `it('original and local contacts page keep the same primary heading', async () => {`
+      `web/tests/parity-compare.test.ts:291`, `it('original and local contacts page keep the same primary heading', async () => {`
       под `REMOTE_PARITY_ENABLED` (включается `test:build:remote` —
       именно та сборка, что 5.2a переводит на фикстуру) буквально сравнивает `h1` замороженной
       фикстуры с `h1`, снятым live с `https://ikpk.su/kontakty`. После перехода на фикстуру эти
