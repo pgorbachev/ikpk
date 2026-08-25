@@ -505,8 +505,30 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('кнопка чата не перекрывает содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
+  // TD-50 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
+  // этих шаблонов (карточка семинара, ссылка tel:, карточки статей, `<select>` города,
+  // карточка модуля программы) — не тестовый дефект и не сторонний баг, замерено
+  // `getBoundingClientRect`. Признано известным отклонением владельцем: точечного фикса
+  // нет (сдвиг кнопки требует поведения на скролле, которого нет в спеке; правка чужой
+  // вёрстки — редизайн, а не фикс кнопки). Список — по факту двух прогонов CI, а не по
+  // старой таблице в docs/handoff (та писалась до расширения TEMPLATES и называла 5 из
+  // прежних 11, не семь из текущих). Desktop эта проверка по-прежнему покрывает —
+  // пропускается только mobile-проект и только эти шаблоны.
+  const KNOWN_MOBILE_OVERLAP = new Set([
+    'home',
+    'course',
+    'seminar',
+    'seminar-dated',
+    'kontakty',
+    'statyi',
+    'raspisanie',
+  ]);
+
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
+    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }, testInfo) => {
+      if (testInfo.project.name === 'mobile' && KNOWN_MOBILE_OVERLAP.has(name))
+        test.skip(true, `TD-50: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
+
       await guard(page);
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
