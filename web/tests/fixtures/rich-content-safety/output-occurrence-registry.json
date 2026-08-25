@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "dc9a84a38844e2adfad52ffb07594ab6a96b5f34",
+  "generatedFromSha": "ea5655d1d5abcd61194faf26e9314e9e33fb434f",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -13,7 +13,7 @@
     "src:components/articles/ArticleFilterBar.astro:L22:C7:svg",
     "src:components/articles/ArticleFilterBar.astro:L36:C1:style",
     "src:components/Breadcrumbs.astro:L46:C1:style",
-    "src:components/chat/ChatFacade.astro:L31:C1:script",
+    "src:components/chat/ChatFacade.astro:L42:C1:script",
     "src:components/contacts/ContactShell.astro:L121:C9:svg",
     "src:components/contacts/ContactShell.astro:L132:C5:iframe",
     "src:components/contacts/ContactShell.astro:L140:C3:script",
@@ -58,8 +58,8 @@
     "src:components/home/sections/PositioningEditorial.astro:L26:C1:style",
     "src:components/home/sections/Programs.astro:L58:C1:style",
     "src:components/home/sections/ProgramsCatalog.astro:L46:C1:style",
+    "src:components/home/sections/Reviews.astro:L116:C1:style",
     "src:components/home/sections/Reviews.astro:L65:C3:script",
-    "src:components/home/sections/Reviews.astro:L99:C1:style",
     "src:components/home/sections/Segments.astro:L45:C1:style",
     "src:components/home/sections/Teachers.astro:L57:C1:style",
     "src:components/home/sections/TeachersFeatured.astro:L55:C1:style",
@@ -161,10 +161,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -197,7 +197,7 @@
       "slotId": "src:components/contacts/ContactShell.astro:L140:C3:script",
       "route": "/",
       "placement": "after:#upcoming",
-      "identity": "script|type=module|body:800b2a8a482a2bc4",
+      "identity": "script|type=module|body:32f549ff1bc05827",
       "count": 1,
       "builds": [
         "production",
@@ -566,10 +566,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/aktsii-i-skidki",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -740,10 +740,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/demo-zayavka",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -912,10 +912,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera",
       "placement": "after:#programs",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -1109,10 +1109,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/dolgoletie",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -1295,10 +1295,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -1481,10 +1481,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/imunnyj-otvet",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -1667,10 +1667,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -1853,10 +1853,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2039,10 +2039,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2225,10 +2225,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2411,10 +2411,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2597,10 +2597,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2783,10 +2783,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -2969,10 +2969,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -3155,10 +3155,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -3341,10 +3341,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -3527,10 +3527,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -3713,10 +3713,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -3899,10 +3899,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -4085,10 +4085,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/mozg",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -4271,10 +4271,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/mozg/mozg-govorit-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -4457,10 +4457,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/mozg/mozg-govorit-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -4643,10 +4643,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -4829,10 +4829,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5015,10 +5015,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5201,10 +5201,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5387,10 +5387,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/63",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5573,10 +5573,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/64",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5759,10 +5759,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/65",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -5945,10 +5945,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/66",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -6131,10 +6131,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/67",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -6317,10 +6317,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/68",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -6503,10 +6503,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/74",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -6689,10 +6689,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/77",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -6875,10 +6875,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/prepodavatel/79",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7061,10 +7061,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7247,10 +7247,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7433,10 +7433,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7619,10 +7619,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7805,10 +7805,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -7991,10 +7991,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -8177,10 +8177,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -8363,10 +8363,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -8549,10 +8549,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -8735,10 +8735,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -8921,10 +8921,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -9107,10 +9107,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -9293,10 +9293,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -9479,10 +9479,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -9665,10 +9665,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -9851,10 +9851,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya",
       "placement": "after:#programs",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10048,10 +10048,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10234,10 +10234,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10420,10 +10420,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10606,10 +10606,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10792,10 +10792,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -10978,10 +10978,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -11164,10 +11164,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -11350,10 +11350,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -11536,10 +11536,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -11722,10 +11722,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -11908,10 +11908,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prepodavatel/69",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -12094,10 +12094,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prepodavatel/70",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -12280,10 +12280,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prepodavatel/71",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -12466,10 +12466,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -12652,10 +12652,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -12838,10 +12838,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13024,10 +13024,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/specializirovannye-programmy",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13210,10 +13210,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13396,10 +13396,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/tehniki-vyslushivaniya",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13582,10 +13582,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13768,10 +13768,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -13954,10 +13954,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -14140,10 +14140,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -14326,10 +14326,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -14512,10 +14512,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -14698,10 +14698,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -14884,10 +14884,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -15070,10 +15070,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-barralya/visceralnye-tehniki/taz",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -15256,10 +15256,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii",
       "placement": "after:#programs",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -15453,10 +15453,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -15639,10 +15639,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/bezopasnost-kak-bazovaya-potrebnost-cheloveka",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -15825,10 +15825,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16011,10 +16011,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16197,10 +16197,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16383,10 +16383,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16569,10 +16569,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16755,10 +16755,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -16941,10 +16941,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -17127,10 +17127,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -17313,10 +17313,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -17499,10 +17499,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -17685,10 +17685,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -17871,10 +17871,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18057,10 +18057,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18243,10 +18243,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18429,10 +18429,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18615,10 +18615,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18801,10 +18801,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -18987,10 +18987,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -19173,10 +19173,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -19359,10 +19359,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -19545,10 +19545,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -19731,10 +19731,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -19917,10 +19917,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -20103,10 +20103,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -20289,10 +20289,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -20475,10 +20475,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -20661,10 +20661,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -20847,10 +20847,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21033,10 +21033,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21219,10 +21219,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21405,10 +21405,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21591,10 +21591,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21777,10 +21777,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -21963,10 +21963,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -22149,10 +22149,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -22335,10 +22335,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/53",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -22521,10 +22521,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/54",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -22707,10 +22707,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/55",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -22893,10 +22893,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/56",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -23079,10 +23079,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/57",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -23265,10 +23265,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/58",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -23451,10 +23451,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/60",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -23637,10 +23637,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/61",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -23823,10 +23823,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/73",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24009,10 +24009,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/76",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24195,10 +24195,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/78",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24381,10 +24381,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/80",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24567,10 +24567,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/81",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24753,10 +24753,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/82",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -24939,10 +24939,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -25125,10 +25125,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/84",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -25311,10 +25311,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/85",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -25497,10 +25497,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -25683,10 +25683,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -25869,10 +25869,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26055,10 +26055,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26241,10 +26241,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26427,10 +26427,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26613,10 +26613,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26799,10 +26799,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -26985,10 +26985,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -27171,10 +27171,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -27357,10 +27357,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -27543,10 +27543,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -27729,10 +27729,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -27915,10 +27915,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -28101,10 +28101,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -28287,10 +28287,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -28473,10 +28473,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -28659,10 +28659,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -28845,10 +28845,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29031,10 +29031,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29217,10 +29217,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29403,10 +29403,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29589,10 +29589,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29775,10 +29775,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -29961,10 +29961,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/proshenie",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -30147,10 +30147,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -30333,10 +30333,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -30519,10 +30519,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -30705,10 +30705,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -30891,10 +30891,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -31077,10 +31077,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/endokrinotoksichnost",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -31263,10 +31263,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -31449,10 +31449,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -31635,10 +31635,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -31821,10 +31821,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32007,10 +32007,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32193,10 +32193,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32379,10 +32379,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32565,10 +32565,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32751,10 +32751,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -32937,10 +32937,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -33123,10 +33123,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -33309,10 +33309,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -33495,10 +33495,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -33681,10 +33681,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -33867,10 +33867,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34053,10 +34053,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-endokrinotoksichnost-vneshnej-sredy",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34239,10 +34239,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34425,10 +34425,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34611,10 +34611,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina",
       "placement": "after:#seminars",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34797,10 +34797,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -34983,10 +34983,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
       "placement": "after:#seminar-schedule-title",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -35169,10 +35169,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/kontakty",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -35399,10 +35399,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/oplata",
       "placement": "after:#oplata-svyaz",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -35605,10 +35605,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/b",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -35795,10 +35795,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/c",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -35975,10 +35975,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/d",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -36175,10 +36175,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/editorial",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -36385,10 +36385,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/editorial/schedule",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -36545,10 +36545,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/editorial/seminar",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -36715,10 +36715,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/editorial/seminar-undated",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -36885,10 +36885,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/faculty",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37095,10 +37095,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/faculty/schedule",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37255,10 +37255,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/faculty/seminar",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37425,10 +37425,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/faculty/seminar-undated",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37605,10 +37605,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/hub",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37755,10 +37755,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/modular",
       "placement": "after:#upcoming",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -37955,10 +37955,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/modular/schedule",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -38115,10 +38115,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/modular/seminar",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -38285,10 +38285,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/preview/modular/seminar-undated",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "demo"
@@ -38477,10 +38477,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/raspisanie-i-tseny",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -38674,10 +38674,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/rich-content-canary",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -38860,10 +38860,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/sitemap",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -39046,10 +39046,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/sotrudnichestvo-s-nami",
       "placement": "after:#sotrudnichestvo-svyaz",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -39254,10 +39254,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi",
       "placement": "after:#articles-sort-select",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -40199,10 +40199,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -40385,10 +40385,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/beremennost-rody-i-vozmozhnosti-osteopatii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -40571,10 +40571,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -40757,10 +40757,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -40943,10 +40943,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/gipertenziya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -41129,10 +41129,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -41315,10 +41315,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/gryzha-pishevodnogo-otverstiya-diafragmy",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -41501,10 +41501,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -41687,10 +41687,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -41873,10 +41873,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42059,10 +42059,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42245,10 +42245,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42431,10 +42431,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42617,10 +42617,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42803,10 +42803,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -42989,10 +42989,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -43175,10 +43175,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -43361,10 +43361,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -43547,10 +43547,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -43733,10 +43733,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/lechenie-allergij-v-hiropraktike",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -43919,10 +43919,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/lechenie-bronhialnoj-astmy",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -44105,10 +44105,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/metody-issledovaniya-mochi",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -44291,10 +44291,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -44477,10 +44477,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -44663,10 +44663,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -44849,10 +44849,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45035,10 +45035,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45221,10 +45221,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45407,10 +45407,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/osnovnye-principy-osteopatii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45593,10 +45593,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45779,10 +45779,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -45965,10 +45965,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/pishevoj-faktor-v-hiropraktike",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -46151,10 +46151,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -46337,10 +46337,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/predmet-prikladnoj-kineziologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -46523,10 +46523,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -46709,10 +46709,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -46895,10 +46895,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -47081,10 +47081,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/principy-balansirovaniya-myshc",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -47267,10 +47267,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/problemy-kolennogo-sustava",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -47453,10 +47453,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/provokaciya-shejnyh-pozvonkov",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -47639,10 +47639,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -47825,10 +47825,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48011,10 +48011,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/respiratornye-funkcii-cherepa",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48197,10 +48197,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/sakroiliokalnye-i-iliosakralnye-narusheniya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48383,10 +48383,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48569,10 +48569,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48755,10 +48755,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/shizofreniya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -48941,10 +48941,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/sindrom-tarzalnogo-tunnelya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -49127,10 +49127,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/sluchaj-lecheniya-enureza",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -49313,10 +49313,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -49499,10 +49499,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -49685,10 +49685,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -49871,10 +49871,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/ustalost-i-borba-s-neyu",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50057,10 +50057,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/visceralnaya-manipulyaciya",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50243,10 +50243,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50429,10 +50429,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50615,10 +50615,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50801,10 +50801,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -50987,10 +50987,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -51173,10 +51173,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -51359,10 +51359,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -51545,10 +51545,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -51731,10 +51731,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -51917,10 +51917,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -52103,10 +52103,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -52289,10 +52289,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -52475,10 +52475,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -52661,10 +52661,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -52847,10 +52847,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/svedeniya-ob-obrazovatelnoy-organizatsii",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -53033,10 +53033,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -53230,10 +53230,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/31",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -53438,10 +53438,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/32",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -53646,10 +53646,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/33",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -53854,10 +53854,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/34",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -54062,10 +54062,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/36",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
@@ -54270,10 +54270,10 @@
       ]
     },
     {
-      "slotId": "src:components/chat/ChatFacade.astro:L31:C1:script",
+      "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
       "route": "/video/37",
       "placement": "after:#header-search-close",
-      "identity": "script|body:3cfa4a50da2ab9a7",
+      "identity": "script|body:641275b8c767b98f",
       "count": 1,
       "builds": [
         "production",
