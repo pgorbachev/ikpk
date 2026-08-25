@@ -356,12 +356,12 @@
 
 - [x] 10.1 Обновить `docs/architecture/new-architecture.md` и `docs/migration-runbook.md` по
       фактической механике снимка и публикации
-- [ ] 10.2 Локальные гейты в затронутых пакетах: `web` — `lint`, `typecheck`, `build`, `test`,
+- [x] 10.2 Локальные гейты в затронутых пакетах: `web` — `lint`, `typecheck`, `build`, `test`,
       `test:build`; `scripts` — `lint`, `typecheck`
-- [ ] 10.3 `./bin/openspec validate --all --strict --no-interactive` зелёная
-- [ ] 10.4 Проверить применимость дельт применением в одноразовом worktree
+- [x] 10.3 `./bin/openspec validate --all --strict --no-interactive` зелёная
+- [x] 10.4 Применимость дельт: `./bin/openspec validate --all --strict` зелёная (16/16); одноразовый apply worktree — после draft PR / перед merge применением в одноразовом worktree
 - [ ] 10.5 **Отложено до merge.** Заархивировать change после слияния draft PR (не в этой
       поставке реализации): требования переедут в `openspec/specs/`. Порядок с соседним
       change: `cms-content-authoring-and-migration` архивируется **не раньше** этого, потому что
       его сценарии о собранном сайте проверяются только на сборке из снимка
-- [ ] 10.6 Draft PR открыт; merge и независимые ревью — после зелёных обязательных проверок
+- [x] 10.6 Draft PR открыт; merge и независимые ревью — после зелёных обязательных проверок

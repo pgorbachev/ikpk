@@ -1,4 +1,3 @@
-import { legacyTransferDir } from '../web/scripts/lib/legacy-transfer-dir.js';
 #!/usr/bin/env tsx
 /**
  * IKPK Discovery → Strapi CMS Import Pipeline
@@ -20,6 +19,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
+import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration

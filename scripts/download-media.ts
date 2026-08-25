@@ -28,6 +28,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
+import { legacyTransferDir } from './lib/legacy-transfer-dir.js';
 import { resolveLocalPath } from './lib/media-paths.js';
 
 const ROOT = join(import.meta.dirname, '..');

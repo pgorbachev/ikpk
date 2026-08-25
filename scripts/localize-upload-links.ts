@@ -19,8 +19,8 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, renameSync } from 'node:fs';
-import { legacyTransferDir } from '../web/scripts/lib/legacy-transfer-dir.js';
 import { join, dirname, resolve } from 'node:path';
+import { legacyTransferDir } from './lib/legacy-transfer-dir.js';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
