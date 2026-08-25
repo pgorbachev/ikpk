@@ -198,6 +198,33 @@ test('удаление программы отклоняется по тому �
   );
 });
 
+// G3 (teammate rev186-lifecycles, ревью PR #186): ветка 'unpublish' — вероятно ОСНОВНОЙ
+// реальный триггер этого правила (снять с публикации программу, которая осталась единственной
+// категорией опубликованной статьи) — до этого была в коде (publication.ts), но 'unpublish'
+// не встречалось в тестах ни разу; проверялись только 'update' и 'delete'.
+test('снятие с публикации программы отклоняется по тому же правилу', async () => {
+  const { run } = makeStrapi({
+    courseGroupsByDocumentId: { 'cg-1': { slug: 'dolgoletie' } },
+    articles: [{ slug: 'article-a', publishedAt: '2026-01-01', categories: [{ slug: 'dolgoletie' }] }],
+  });
+  await assert.rejects(
+    () => run({ uid: 'api::course-group.course-group', action: 'unpublish', params: { documentId: 'cg-1' } }),
+    /снятие признака оставит без категории/,
+  );
+});
+
+// Отрицательный контроль к предыдущему: путь снятия блокировки — снять зависимость СНАЧАЛА
+// (статья больше не единственная опубликованная с этой категорией), и снятие с публикации
+// программы проходит.
+test('снятие с публикации программы допустимо, если статья не единственная опубликованная с этой категорией', async () => {
+  const { run } = makeStrapi({
+    courseGroupsByDocumentId: { 'cg-1': { slug: 'dolgoletie' } },
+    articles: [{ slug: 'article-a', publishedAt: '2026-01-01', categories: [{ slug: 'dolgoletie' }, { slug: 'other' }] }],
+  });
+  const result = await run({ uid: 'api::course-group.course-group', action: 'unpublish', params: { documentId: 'cg-1' } });
+  assert.equal(result, 'next-called');
+});
+
 test('обновление программы без изменения признака категории не запускает guard', async () => {
   const { run } = makeStrapi({
     courseGroupsByDocumentId: { 'cg-1': { slug: 'dolgoletie' } },
