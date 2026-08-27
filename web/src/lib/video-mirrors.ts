@@ -21,8 +21,11 @@ export interface VideoMirror {
 
 // Адрес vkvideo.ru/@clubikpk отдавал invalid user — вёл посетителей в никуда
 // прямо из CTA на страницах видео. Ведём в сообщество, где видео и лежат.
-export { VK_COMMUNITY_URL as VK_CHANNEL_URL } from './social.js';
-export const RUTUBE_CHANNEL_URL = 'https://rutube.ru/channel/30422569/';
+// Адреса — реэкспорт из единого источника состава, без второго литерала.
+export {
+  VK_COMMUNITY_URL as VK_CHANNEL_URL,
+  RUTUBE_CHANNEL_URL,
+} from './social.js';
 
 const MIRRORS: Record<string, VideoMirror> = {
   '31': { rutubePlaylistId: '265664', rutubePlaylistUrl: 'https://rutube.ru/plst/265664/', rutubeEmbedVideoId: '8c68aff003aa73ec0b3c669bef1ce2c6', thumbnail: '/media/video-thumbs/31.jpg', videoCount: 9, videoCountCapped: false },

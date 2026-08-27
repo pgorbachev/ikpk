@@ -96,7 +96,6 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
-openspec/changes/social-accounts/tasks.md :: web/dist
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
 openspec/changes/visual-regression-gate/design.md :: HeaderTools.astro:205,212
 openspec/changes/visual-regression-gate/design.md :: base.css:193-197
@@ -105,6 +104,8 @@ openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
+openspec/specs/dependency-update-automation/spec.md :: design.md
+openspec/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/specs/online-payment/spec.md :: design.md
 openspec/specs/online-payment/spec.md :: dist/oplata/index.html
 openspec/specs/online-payment/spec.md :: proposal.md

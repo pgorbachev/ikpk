@@ -483,32 +483,53 @@ describe('таблицы в контенте', () => {
   });
 });
 
-// ─── Футер содержит все соцсети живого сайта ─────────────────────────────────
-// Аудит паритета показал, что при переносе из футера пропали Instagram и
-// Facebook, а три оставшихся адреса были заменены несуществующими. Первое —
-// потеря функционала относительно оригинала, второе — уже исправлено.
-//
-// Список сверен с разметкой живого ikpk.su 2026-07-27. Проверять доступность
-// запросом здесь нельзя (гейт должен работать без сети, а сервисы Meta в России
-// заблокированы), поэтому гейт держит СОСТАВ: ни одна сеть не должна исчезнуть
-// из футера незаметно.
+// ─── Состав соцсетей в подвале ───────────────────────────────────────────────
+// Change social-accounts, задача 2.4: две независимые половины, не выводимые
+// друг из друга (Решение 2). Ожидания — из контракта, не из social.ts (Решение 3).
+// «Присутствует» — внутри подвала; «отсутствует» — по всей странице (задача 2.5).
+// Предмет — весь вывод, не одна главная (задача 2.7).
+import {
+  ACCEPTED_ACCOUNTS,
+  retiredMentions,
+  socialColumn,
+} from './helpers/social-accounts-contract';
+
 describe('соцсети в футере', () => {
-  const EXPECTED = [
-    { name: 'ВКонтакте', match: /vk\.com\/clubikpk/ },
-    { name: 'Youtube', match: /youtube\.com\/user\/TheKinesiology/ },
-    { name: 'Telegram', match: /t\.me\/ikpk_spb/ },
-    { name: 'Rutube', match: /rutube\.ru\/channel\/30422569/ },
-    { name: 'Instagram', match: /instagram\.com\/ikpk812/ },
-    { name: 'Facebook', match: /facebook\.com\/prikladnaya\.kineziologiya/ },
-  ];
-
-  it('все сети живого сайта присутствуют', () => {
-    const html = readFileSync(`${dist}/index.html`, 'utf-8');
-    const missing = EXPECTED.filter(({ match }) => !match.test(html)).map((e) => e.name);
-
+  it('принятый состав присутствует в подвале каждой страницы', () => {
+    const offenders: string[] = [];
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      const column = socialColumn(html);
+      const page = file.replace(dist, '') || '/';
+      if (column.container === null) {
+        offenders.push(`${page}: нет колонки «Подписывайтесь»`);
+        continue;
+      }
+      const hrefs = column.links.map((l) => l.href);
+      for (const account of ACCEPTED_ACCOUNTS) {
+        if (!hrefs.includes(account.href)) {
+          offenders.push(`${page}: нет аккаунта ${account.name}`);
+        }
+      }
+    }
     expect(
-      missing,
-      `в футере нет соцсетей, которые есть на живом сайте: ${missing.join(', ')}`,
+      offenders.slice(0, 10),
+      `принятый состав отсутствует в подвале (${offenders.length}):\n${offenders.slice(0, 10).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('снятые сети не вернулись ни на одной странице', () => {
+    const offenders: string[] = [];
+    for (const file of walkHtml()) {
+      const html = readFileSync(file, 'utf-8');
+      const page = file.replace(dist, '') || '/';
+      for (const m of retiredMentions(html)) {
+        offenders.push(`${page}: ${m.name} (${m.where})`);
+      }
+    }
+    expect(
+      offenders.slice(0, 10),
+      `снятая сеть в выводе (${offenders.length}):\n${offenders.slice(0, 10).join('\n')}`,
     ).toEqual([]);
   });
 });

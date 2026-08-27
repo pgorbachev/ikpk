@@ -45,13 +45,11 @@
   - Медицинский центр → `https://mudriydoctor.ru/` (external)
   - Магазин → `https://kinezio.shop/` (external)
   - Карта сайта → `/sitemap`
-- [ ] **Social media icons** — 6 links, each opening in new tab:
+- [ ] **Social media icons** — 4 links, each opening in new tab _(изменено решением заказчика 2026-08-19, D16: Instagram и Facebook сняты. Паритет с живым сайтом этот пункт больше не задаёт.)_
   1. ВКонтакте → `https://vk.com/clubikpk`
   2. YouTube → `https://www.youtube.com/user/TheKinesiology`
-  3. Rutube → `https://rutube.ru/channel/30422569/`
-  4. Instagram → `https://www.instagram.com/ikpk812/`
-  5. Facebook → `https://www.facebook.com/prikladnaya.kineziologiya/`
-  6. Telegram → `https://t.me/ikpk_spb`
+  3. Telegram → `https://t.me/ikpk_spb`
+  4. Rutube → `https://rutube.ru/channel/30422569/`
 - [ ] **Copyright / legal text** in footer
 
 ## 3. Global — Newsletter Subscription (all pages)
