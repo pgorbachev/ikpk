@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canBeTrue, evaluateToValue } from './helpers/gh-expression';
+import { parseExpression, type ExprNode } from './helpers/gh-expression';
 import { loadWorkflows, type Workflow, type WorkflowJob } from './helpers/workflows';
 
 const POLICY_FILE = 'dependabot-auto-merge-policy.yml';
@@ -69,7 +69,7 @@ function runStep(script: string, env: Record<string, string>): {
 
 /** Значение выхода вердикта, объявленное джобом (`outputs:` джоба ссылается на шаг). */
 function verdictOutputName(jobKey: string): string {
-  const outputs = (job(jobKey) as unknown as { outputs?: Record<string, string> }).outputs ?? {};
+  const outputs = job(jobKey).outputs ?? {};
   const names = Object.keys(outputs);
   expect(names, `джоб ${jobKey} не объявляет выхода с вердиктом`).not.toHaveLength(0);
   return names[0]!;
@@ -134,44 +134,86 @@ describe('свидетельство о происхождении раздел�
 });
 
 describe('включение пометки требует положительного вердикта, а не только зелёного джоба', () => {
-  const gateJob = 'eligibility-gate';
-
-  const context = (needs: Record<string, unknown>) => ({
-    event_name: 'workflow_call',
-    repository: 'pgorbachev/ikpk',
-    needs,
-  });
-
-  const needsFor = (result: string, verdict: string | undefined) => {
-    const outputs: Record<string, string> = {};
-    if (verdict !== undefined) outputs[verdictOutputName(gateJob)] = verdict;
-    return {
-      assess: { result: 'success', outputs: { 'enable-auto-merge': 'true' } },
-      'provenance-evidence': { result: 'success', outputs: { verdict: 'positive' } },
-      [gateJob]: { result, outputs },
-    };
-  };
-
-  const condition = () => {
+  /**
+   * Почему проверяется СОСТАВ КОНЪЮНКТОВ, а не результат вычисления условия.
+   *
+   * Помощник `gh-expression` намеренно считает `needs.*` неизвестным: на этом стоят
+   * соседние тесты, рассуждающие о выполнимости. Подставлять туда значения — значит менять
+   * общую инфраструктуру под один тест.
+   *
+   * Проверка состава при этом не слабее, а является доказательством: конъюнкция монотонна,
+   * поэтому наличие конъюнкта `X == 'positive'` на верхнем уровне ОЗНАЧАЕТ, что при любом
+   * другом значении `X` всё условие ложно. Ради этого отдельно утверждается, что верхний
+   * уровень — чистая цепочка `&&` без объемлющего `||`: внутри дизъюнкции конъюнкт такой
+   * силы не имел бы.
+   */
+  const condition = (): string => {
     const raw = (job('enable-auto-merge') as unknown as { if?: string }).if;
     expect(raw, 'у джоба включения пометки нет условия').toBeDefined();
-    return `\${{ ${String(raw).trim()} }}`;
+    return String(raw).trim();
   };
 
-  it('зелёный джоб при отрицательном вердикте не открывает путь к пометке', () => {
-    expect(evaluateToValue(condition(), context(needsFor('success', 'negative')))).toBe(false);
+  /** Конъюнкты верхнего уровня: дерево разбирается, а не текст делится по `&&`. */
+  const conjuncts = (): ExprNode[] => {
+    const out: ExprNode[] = [];
+    const walk = (node: ExprNode): void => {
+      if (node.t === 'bin' && node.op === '&&') {
+        walk(node.a);
+        walk(node.b);
+        return;
+      }
+      out.push(node);
+    };
+    walk(parseExpression(`\${{ ${condition()} }}`));
+    return out;
+  };
+
+  /** Есть ли среди конъюнктов сравнение `path == 'value'`. */
+  const hasEquality = (path: string, value: string): boolean =>
+    conjuncts().some((node) =>
+      node.t === 'bin' && node.op === '==' &&
+      ((node.a.t === 'path' && node.a.p === path && node.b.t === 'lit' && node.b.v === value) ||
+       (node.b.t === 'path' && node.b.p === path && node.a.t === 'lit' && node.a.v === value)),
+    );
+
+  it('верхний уровень условия — чистая цепочка И', () => {
+    const top = parseExpression(`\${{ ${condition()} }}`);
+    expect(
+      top.t === 'bin' && top.op === '&&',
+      'при объемлющем ИЛИ отдельный конъюнкт не гарантирует ложности условия',
+    ).toBe(true);
   });
 
-  it('отсутствующее значение вердикта читается как «не положительно»', () => {
-    expect(evaluateToValue(condition(), context(needsFor('success', undefined)))).not.toBe(true);
+  it('положительный вердикт допустимости — обязательный конъюнкт', () => {
+    expect(
+      hasEquality('needs.eligibility-gate.outputs.verdict', 'positive'),
+      'зелёный джоб при отрицательном вердикте иначе откроет путь к пометке',
+    ).toBe(true);
   });
 
-  it.each(['skipped', 'cancelled', 'failure'])('джоб вердикта %s — пометка не включается', (result) => {
-    expect(evaluateToValue(condition(), context(needsFor(result, 'positive')))).toBe(false);
+  it('успех джоба вердикта остаётся обязательным конъюнктом', () => {
+    expect(
+      hasEquality('needs.eligibility-gate.result', 'success'),
+      'без него пропущенный или отменённый джоб не остановит пометку',
+    ).toBe(true);
   });
 
-  it('положительный вердикт при успешном джобе остаётся достижимым', () => {
-    expect(canBeTrue(condition(), context(needsFor('success', 'positive')))).toBe(true);
+  it('положительное происхождение обязательно, когда свидетельство отрабатывало', () => {
+    const guarded = conjuncts().some((node) => {
+      if (node.t !== 'bin' || node.op !== '||') return false;
+      const parts = [node.a, node.b];
+      const skipped = parts.some((x) =>
+        x.t === 'bin' && x.op === '==' && x.a.t === 'path' &&
+        x.a.p === 'needs.provenance-evidence.result' && x.b.t === 'lit' && x.b.v === 'skipped');
+      const positive = parts.some((x) =>
+        x.t === 'bin' && x.op === '==' && x.a.t === 'path' &&
+        x.a.p === 'needs.provenance-evidence.outputs.verdict' && x.b.t === 'lit' && x.b.v === 'positive');
+      return skipped && positive;
+    });
+    expect(
+      guarded,
+      'после разделения `result == success` больше не означает «происхождение допустимо»',
+    ).toBe(true);
   });
 });
 

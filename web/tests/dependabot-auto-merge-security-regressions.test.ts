@@ -74,7 +74,10 @@ fi
         EVENT_ACTION: 'reopened',
         FRESH_AUTO_MERGE_ENABLED: 'false',
         FRESH_HEAD_MATCHES_CURRENT: 'true',
-        GATE_RESULT: 'failure',
+        // Пустой вердикт = «определить не удалось», и исход публикуемой проверки остаётся
+        // `failure` — ровно тот, что был при прежнем `GATE_RESULT: failure`. Предмет этого
+        // теста (идемпотентность POST/PATCH) не меняется.
+        GATE_VERDICT: '',
         GH_LOG: log,
         GH_TOKEN: 'test-token',
         GITHUB_REPOSITORY: 'pgorbachev/ikpk',
@@ -83,7 +86,7 @@ fi
         GITHUB_SERVER_URL: 'https://github.com',
         HEAD_SHA,
         POLICY_SHA,
-        PROVENANCE_RESULT: 'skipped',
+        PROVENANCE_VERDICT: '',
         SOURCE_RUN_ATTEMPT: '3',
         SOURCE_RUN_ID: '7001',
       },
