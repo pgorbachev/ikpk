@@ -281,9 +281,9 @@
       вызов `createLedger` / `observe` / `classifySnapshotForPublication`; при успехе прогона —
       append журнала + merge `verified-pairs.json` без регресса + push с retry (2–3);
       **исчерпание retry роняет прогон целиком** (не продолжать без записи). Force-push на
-      ветку запрещён. Права `contents: write` — **только на job/step publication-пути** с тем же
-      `if`, что у остальных publication-шагов; не поднимать на весь workflow (иначе privilege
-      escalation на `pull_request` от форков)
+      ветку запрещён. Права `contents: write` — **только на job `publication-record`** с тем же
+      `if`, что у publication-шагов; `unit-and-build` остаётся на workflow `contents: read`
+      (иначе privilege escalation на `pull_request` от форков)
 - [x] 7.6 **Wiring:** деплой пишет `/release.json` (`commit` + `snapshotId`) в артефакт раздачи
       до публикации; наблюдение читает его с раздачи
 - [x] 7.7 **Wiring:** `deploy.yml` `workflow_dispatch` — inputs для выбора снимка / подтверждения

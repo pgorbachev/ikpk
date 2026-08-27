@@ -59,9 +59,8 @@ jobs:
     name: Unit and build tests
     needs: content-snapshot
     runs-on: ubuntu-latest
-    # Запись verified-pairs в orphan-ветку state/cms-provenance (только publication-события).
-    permissions:
-      contents: write
+    # contents: write — НЕ здесь: запись в state/cms-provenance вынесена в job
+    # publication-record с тем же if, что у publication-шагов (задача 7.5).
     env:
       CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
     defaults:
@@ -201,57 +200,6 @@ jobs:
             --ledger-dir "$RUNNER_TEMP/cms-provenance/ledger" \
             --snapshot-dir "$CONTENT_SNAPSHOT_DIR"
 
-      - name: Record verified pair after successful publication checks
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch') && success()
-        working-directory: web
-        env:
-          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PROV="$RUNNER_TEMP/cms-provenance"
-          mkdir -p "$PROV/ledger"
-          test -f "$PROV/verified-pairs.json" || echo '[]' > "$PROV/verified-pairs.json"
-          # revision: для pinned bootstrap — 0; иначе high-water из журнала
-          REV=0
-          if [ -f "$PROV/ledger/high-water-mark" ]; then
-            REV=$(cat "$PROV/ledger/high-water-mark")
-          fi
-          npx tsx scripts/publication-cli.ts record-pair \
-            --pairs-dir "$PROV" \
-            --commit "${{ github.sha }}" \
-            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
-            --revision "$REV"
-          # Push в orphan-ветку с retry. Исчерпание retry → прогон ПАДАЕТ целиком:
-          # молчаливый пропуск записи в журнал/индекс дал бы дыру в высшей отметке (D4).
-          cd "$PROV"
-          git init >/dev/null 2>&1 || true
-          git checkout -B state/cms-provenance
-          pushed=
-          for i in 1 2 3; do
-            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
-              state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
-            if git rev-parse --verify refs/remotes/origin/state/cms-provenance >/dev/null 2>&1; then
-              git show refs/remotes/origin/state/cms-provenance:verified-pairs.json \
-                > "$PROV/.remote-pairs.json" 2>/dev/null || echo '[]' > "$PROV/.remote-pairs.json"
-              (cd "${{ github.workspace }}/web" && npx tsx scripts/publication-cli.ts merge-pairs \
-                --pairs-dir "$PROV" --with "$PROV/.remote-pairs.json")
-            fi
-            git add -A
-            git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
-            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
-              HEAD:state/cms-provenance; then
-              echo "pushed state/cms-provenance"
-              pushed=1
-              break
-            fi
-            echo "retry $i after push conflict"
-            sleep 2
-          done
-          if [ -z "$pushed" ]; then
-            echo "::error::не удалось записать state/cms-provenance за 3 попытки — публикация остановлена, журнал/индекс не обновлены"
-            exit 1
-          fi
-
       - name: Measure base Vitest volume for dependency or Dependabot PR
         if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
@@ -309,6 +257,93 @@ jobs:
           path: web/dist-demo
           if-no-files-found: error
           retention-days: 1
+
+  # Запись в orphan-ветку — отдельный job: contents: write только здесь и только на
+  # publication-событиях (тот же if, что у reconcile/gate). На pull_request job не
+  # запускается → write не выдаётся форкам (задача 7.5).
+  publication-record:
+    name: Record verified publication pair
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+    needs: [content-snapshot, unit-and-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Download content snapshot
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+
+      - name: Record verified pair and push state/cms-provenance
+        run: |
+          PROV="$RUNNER_TEMP/cms-provenance"
+          mkdir -p "$PROV/ledger"
+          git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+          if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+            git worktree add --detach "$PROV" state/cms-provenance
+          else
+            echo '[]' > "$PROV/verified-pairs.json"
+          fi
+          test -f "$PROV/verified-pairs.json" || echo '[]' > "$PROV/verified-pairs.json"
+          REV=0
+          if [ -f "$PROV/ledger/high-water-mark" ]; then
+            REV=$(cat "$PROV/ledger/high-water-mark")
+          fi
+          npx tsx scripts/publication-cli.ts record-pair \
+            --pairs-dir "$PROV" \
+            --commit "${{ github.sha }}" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
+            --revision "$REV"
+          # Push с retry. Исчерпание → прогон ПАДАЕТ: без записи в журнал/индекс дыра в отметке.
+          cd "$PROV"
+          git init >/dev/null 2>&1 || true
+          git checkout -B state/cms-provenance
+          pushed=
+          for i in 1 2 3; do
+            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
+            if git rev-parse --verify refs/remotes/origin/state/cms-provenance >/dev/null 2>&1; then
+              git show refs/remotes/origin/state/cms-provenance:verified-pairs.json \
+                > "$PROV/.remote-pairs.json" 2>/dev/null || echo '[]' > "$PROV/.remote-pairs.json"
+              (cd "${{ github.workspace }}/web" && npx tsx scripts/publication-cli.ts merge-pairs \
+                --pairs-dir "$PROV" --with "$PROV/.remote-pairs.json")
+            fi
+            git add -A
+            git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
+            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              HEAD:state/cms-provenance; then
+              echo "pushed state/cms-provenance"
+              pushed=1
+              break
+            fi
+            echo "retry $i after push conflict"
+            sleep 2
+          done
+          if [ -z "$pushed" ]; then
+            echo "::error::не удалось записать state/cms-provenance за 3 попытки — публикация остановлена, журнал/индекс не обновлены"
+            exit 1
+          fi
+
   dependency-invariants:
     name: Dependency update invariants
     runs-on: ubuntu-latest

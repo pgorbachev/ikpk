@@ -335,6 +335,26 @@ describe('триггеры публикации', () => {
     );
   });
 
+  it('contents: write только у publication-record, не у unit-and-build', () => {
+    const tests = workflows.find((wf) => wf.displayName === TESTS_WORKFLOW || wf.file === 'test.yml');
+    expect(tests, 'test.yml не найден').toBeTruthy();
+    const unit = tests!.jobs['unit-and-build'];
+    const record = tests!.jobs['publication-record'];
+    expect(unit, 'нет unit-and-build').toBeTruthy();
+    expect(record, 'нет publication-record').toBeTruthy();
+    const unitPerms = JSON.stringify(unit!.permissions ?? {});
+    expect(unitPerms, 'unit-and-build не должен поднимать contents: write').not.toMatch(
+      /contents["']?\s*:\s*["']?write/,
+    );
+    const recordPerms = JSON.stringify(record!.permissions ?? {});
+    expect(recordPerms, 'publication-record обязан иметь contents: write').toMatch(
+      /contents["']?\s*:\s*["']?write/,
+    );
+    expect(String(record!.if ?? ''), 'publication-record без if publication-событий').toMatch(
+      /repository_dispatch|schedule|refs\/heads\/main/,
+    );
+  });
+
   it('ручной deploy принимает inputs отката', () => {
     const deploy = workflows.find((wf) => wf.file === 'deploy.yml');
     expect(deploy, 'deploy.yml не найден').toBeTruthy();
