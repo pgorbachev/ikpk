@@ -40,6 +40,7 @@ function loadSnapshot(dir: string): {
   snapshotId: string;
   fingerprint: string;
   referenceDate: string;
+  pinned?: boolean;
   provenance?: { observedEntry: number; revision: number | null; highWaterMark: number };
 } {
   const path = join(dir, 'snapshot.json');
