@@ -6,7 +6,6 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { comparePublishedState } from './lib/published-state.ts';
 import {
   chooseManualPublication,
@@ -18,8 +17,6 @@ import {
 import { createLedger } from './lib/provenance-ledger.ts';
 import { fetchReleaseDeclaration, writeReleaseDeclaration } from './lib/release-declaration.ts';
 import { readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs, mergeVerifiedPairs } from './lib/verified-pairs.ts';
-
-const webRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 function arg(name: string): string | undefined {
   const idx = process.argv.indexOf(`--${name}`);
