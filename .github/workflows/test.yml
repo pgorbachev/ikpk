@@ -202,6 +202,8 @@ jobs:
         working-directory: web
         env:
           CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           mkdir -p "$RUNNER_TEMP/cms-provenance"
           if [ ! -d "$RUNNER_TEMP/cms-provenance/.git" ] && [ ! -f "$RUNNER_TEMP/cms-provenance/verified-pairs.json" ]; then
@@ -214,6 +216,7 @@ jobs:
             fi
           fi
           # createLedger / observe / classifySnapshotForPublication
+          # cancel-stale → repository_dispatch cms-content-changed (прогон для последней записи)
           npx tsx scripts/publication-cli.ts gate-snapshot \
             --ledger-dir "$RUNNER_TEMP/cms-provenance/ledger" \
             --snapshot-dir "$CONTENT_SNAPSHOT_DIR"
@@ -283,7 +286,9 @@ jobs:
   publication-record:
     name: Record verified publication pair
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
-    needs: [content-snapshot, unit-and-build]
+    # Пара = успех всего обязательного прогона Tests, не только unit-and-build
+    # (иначе choose-manual мог бы выложить содержимое при красном e2e).
+    needs: [content-snapshot, unit-and-build, e2e-smoke, scripts-unit, dependency-invariants]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -111,7 +111,13 @@ async function cmdGateSnapshot(): Promise<void> {
     confirmedBy,
   });
   console.log(JSON.stringify({ decision, observation }));
-  if (decision.action === 'cancel-stale' || decision.action === 'require-confirmation') {
+  if (decision.action === 'cancel-stale') {
+    // Спека: выкладка отменена И для последней записи журнала запущен прогон.
+    await scheduleLatestPublicationRun('cancel-stale');
+    console.error(`::error::publication gate: ${decision.action}`);
+    process.exit(1);
+  }
+  if (decision.action === 'require-confirmation') {
     console.error(`::error::publication gate: ${decision.action}`);
     process.exit(1);
   }
@@ -119,6 +125,39 @@ async function cmdGateSnapshot(): Promise<void> {
     console.error(`::error::publication gate: ${decision.action} ${decision.reason ?? ''}`);
     process.exit(1);
   }
+}
+
+async function scheduleLatestPublicationRun(reason: string): Promise<void> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!token || !repo) {
+    console.error(
+      `::warning::cancel-stale (${reason}): нет GITHUB_TOKEN/GITHUB_REPOSITORY — следующий прогон не запланирован`,
+    );
+    return;
+  }
+  const res = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      event_type: 'cms-content-changed',
+      client_payload: { reason: `gate-${reason}-schedule-latest` },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(
+      `::error::не удалось запланировать прогон для последней записи журнала: HTTP ${res.status} ${body}`,
+    );
+    // Всё равно падаем cancel-stale ниже; отсутствие schedule — отдельный дефект сигнала.
+    return;
+  }
+  console.error('::notice::запланирован publication-прогон для последней записи журнала (repository_dispatch)');
 }
 
 async function cmdRecordPair(): Promise<void> {

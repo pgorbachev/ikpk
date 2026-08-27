@@ -26,7 +26,12 @@
       журнал уже принимает события; иначе резервные копии промежуточных состояний
       неразличимы с новым контентом. Альтернатива (копии до журнала не восстанавливать без
       человека) остаётся запасной и называется в proposal соседнего change при его создании
-- [ ] 1.5 Провести два независимых ревью спеки с разными уклонами, строго на чтение
+- [x] 1.5 **ЗАКРЫТО 27.08.2026.** Два независимых ревью на
+      `feat/cms-content-publication@858900d474018564a8df2bc6770fd789c1e67da8`: уклон
+      «соответствие фактам» — блокеров нет; уклон «полнота последствий» — блокеры внесены
+      (publication-record после полного Tests; честный 7.5/7.5a про журнал vs observe;
+      cancel-stale → schedule latest; устаревшая проза 8.4a/8.5/design Context). Живой REST
+      и писатель журнала на событие CMS остаются открытыми как 3.4–3.9a / 7.5a
 - [x] 1.6 **ЗАКРЫТО 23.08.2026.** `prod-serving-on-nginx` (#158) заархивирован PR #167
       (`d75dc44`). Признак сработал: `grep -c 'сериализованы' openspec/specs/deploy-gating/spec.md`
       дал 1. Здешний `MODIFIED` пересобран полным копированием блока из основной спеки на голове
@@ -101,14 +106,14 @@
       предложений (D8).** Три из одиннадцати вызовов сборки строят не вершину этого прогона, а
       `BASE_SHA` — во временном worktree, только на Dependabot- и dependency-only PR: два внутри
       шага в джобе `unit-and-build` —
-      `.github/workflows/test.yml:221`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:224`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:757`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:762`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
-      `.github/workflows/test.yml:562`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:567`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
       в джобе `scripts-unit` — сюда не входит: этот шаг гоняет `vitest` только внутри `scripts/`
       и НЕ вызывает `npm run build` вовсе, к сборке сайта и к снимку контента отношения не имеет
       (проверено ревью PR #185 по факт-находке, которая сперва приняла совпадение имени за
@@ -168,8 +173,8 @@
       вершину прогона**, в четырёх workflow: `unit-and-build` — обычная сборка
       (`.github/workflows/test.yml:112`, `- name: Run build tests (dist checks)`) и `build:demo`
       (`.github/workflows/test.yml:136`, `- name: Run demo build tests (dist-demo checks)`);
-      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:625`, `- name: Build site`) и
-      `build:stand` (`.github/workflows/test.yml:671`, `- name: Build stand-role site`); `build`
+      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:630`, `- name: Build site`) и
+      `build:stand` (`.github/workflows/test.yml:676`, `- name: Build stand-role site`); `build`
       (`.github/workflows/deploy.yml:196`, `- name: Build Astro site`); `lhci`
       (`.github/workflows/lighthouse.yml:43`, `- name: Build site`); `compat`
       (`.github/workflows/nightly.yml:39`, `- name: Build site`). Джобы независимы, поэтому снимок
@@ -278,14 +283,19 @@
       ни одно требование его не определяет. Отказ для пары старше названного срока хранения
       снимка; событийный путь исключением не пользуется
 - [x] 7.5 **Wiring:** на publication-пути `Tests` — checkout/pull ветки `state/cms-provenance`,
-      вызов `createLedger` / `observe` / `classifySnapshotForPublication`; при успехе прогона —
-      append журнала + merge `verified-pairs.json` без регресса + push с retry (2–3);
-      **исчерпание retry роняет прогон целиком** (не продолжать без записи). Force-push на
-      ветку запрещён (**branch protection** на `state/cms-provenance`:
-      `allow_force_pushes=false`, `allow_deletions=false`, `enforce_admins=true`,
-      27.08.2026). Права `contents: write` — **только на job `publication-record`** с тем же
-      `if`, что у publication-шагов; `unit-and-build` остаётся на workflow `contents: read`
-      (иначе privilege escalation на `pull_request` от форков)
+      вызов `createLedger` / `observe` / `classifySnapshotForPublication`; при успехе **полного**
+      прогона Tests (`needs`: unit-and-build + e2e-smoke + scripts-unit + dependency-invariants) —
+      merge `verified-pairs.json` без регресса + push с retry (2–3);
+      **исчерпание retry роняет прогон целиком**. Force-push на ветку запрещён (branch
+      protection 27.08.2026). Права `contents: write` — только job `publication-record`.
+      **Не путать с записью журнала на событие CMS:** append записей происхождения — на
+      изменение контента (живая CMS / соседний change); publication-path только observe +
+      индекс пар. `cancel-stale` планирует следующий прогон через `repository_dispatch`
+      `cms-content-changed` (плюс суточный cron 8.6 как страховочная сеть).
+- [ ] 7.5a **Отложено с живым REST:** писатель журнала на событие изменения контента
+      (`recordEvent` / маркеры восстановления) — когда capture перестанет быть `copyPinned`
+      и CMS начнёт слать события; до тех пор гейт ревизии на publication-пути работает
+      в режиме observe + pinned-bootstrap / подтверждение
 - [x] 7.6 **Wiring:** деплой пишет `/release.json` (`commit` + `snapshotId`) в артефакт раздачи
       до публикации; наблюдение читает его с раздачи
 - [x] 7.7 **Wiring:** `deploy.yml` `workflow_dispatch` — inputs для выбора снимка / подтверждения
@@ -314,19 +324,13 @@
       без правки concurrency она невыполнима. Ни в Impact, ни в задачах это прежде названо не
       было.
 
-      **РЕШЕНО (владелец, 2026-08-24), чекбокс намеренно остаётся открытым: подход выбран,
-      сама правка `concurrency` в workflow — предмет реализации, а не этой правки спеки.**
-      Отдельная группа concurrency для событий публикации, с `cancel-in-progress: false`.
-      GitHub Actions сам держит не больше одного ожидающего
-      прогона на группу и заменяет его следующим событием, не трогая текущий — это и есть
-      требуемая 8.4 «очередь на один без отмены текущего», без своего замка или очереди в коде.
-      Группа `tests-${{ github.ref }}` с `cancel-in-progress: true` остаётся как есть для
-      обычных PR-прогонов (там отмена нужна — экономит минуты CI на серии пушей в PR); события
-      публикации (8.1 внешний запрос, 8.6 календарный прогон, push в `main`) получают свою
-      группу с `cancel-in-progress: false`. Заводить кастомный лок/семафор не нужно
+      **РЕШЕНО (владелец, 2026-08-24) и реализовано:** отдельная группа concurrency
+      `publication-tests` с `cancel-in-progress: false` для publication-событий
+      (`.github/workflows/test.yml:18–22`). Группа `tests-${{ github.ref }}` с отменой
+      остаётся для обычных PR.
 - [x] 8.5 Сверка при потерянном оповещении: расхождение опубликованного состояния с контентом
-      обнаруживается без участия оповещения. **Модуль `comparePublishedState` есть; шаг
-      reconcile в `test.yml` пока заглушка — врезка: задача 7.5 / 8.5a**
+      обнаруживается без участия оповещения — `publication-cli reconcile` /
+      `comparePublishedState` против `/release.json` (задачи 7.8 / 8.5a)
 - [x] 8.6 Календарный публикующий прогон: **суточное** расписание (решение Q23), отставание —
       сутки плюс длительность прогона, явно заданный часовой пояс, независимость от настроек
       машины

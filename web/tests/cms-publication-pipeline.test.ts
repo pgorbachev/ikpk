@@ -353,6 +353,9 @@ describe('триггеры публикации', () => {
     expect(String(record!.if ?? ''), 'publication-record без if publication-событий').toMatch(
       /repository_dispatch|schedule|refs\/heads\/main/,
     );
+    const needs = JSON.stringify(record!.needs ?? []);
+    expect(needs, 'publication-record обязан ждать e2e-smoke (полный гейт)').toMatch(/e2e-smoke/);
+    expect(needs, 'publication-record обязан ждать scripts-unit').toMatch(/scripts-unit/);
   });
 
   it('ручной deploy принимает inputs отката', () => {
