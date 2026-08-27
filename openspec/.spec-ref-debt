@@ -83,9 +83,6 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
-openspec/changes/archive/2026-08-25-social-accounts/design.md :: docs/handoff/social-accounts-spec-executability.md@8abbf6f07bd0c385c2bde0ecf6f5be597f03ff55
-openspec/changes/archive/2026-08-25-social-accounts/design.md :: web/tests/helpers/social-accounts-contract.ts@8abbf6f07bd0c385c2bde0ecf6f5be597f03ff55
-openspec/changes/archive/2026-08-25-social-accounts/tasks.md :: web/dist
 openspec/changes/external-widgets/proposal.md :: main@8e93aceabae99f0e31776f25e6967d3edb12cbb1
 openspec/changes/external-widgets/specs/external-widgets/spec.md :: main@b44e600fb55dfbf529ee615375c154b94b29e08e
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
