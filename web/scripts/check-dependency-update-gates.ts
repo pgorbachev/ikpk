@@ -2,13 +2,11 @@ import { readFileSync } from 'node:fs';
 import {
   checkLintCoverage,
   checkPlatformEntries,
-  checkPublishedHead,
   checkRuntimeAuditScope,
   checkTestExecution,
   type AcceptedPlatformLoss,
   type GateResult,
 } from './lib/dependency-update-gates.ts';
-import { resolvePublishedHeadInputFromGitHub } from './lib/github-published-head.ts';
 
 function option(name: string): string {
   const index = process.argv.indexOf(name);
@@ -96,40 +94,6 @@ function emit(result: GateResult): void {
   if (!result.ok) process.exitCode = 1;
 }
 
-async function resolvePublishedHeadInput(maxLagMs: number): Promise<Parameters<typeof checkPublishedHead>[0]> {
-  const overrideSha = optional('--main-sha');
-  const overrideCreatedAt = optional('--main-created-at');
-  const overridePublishedSha = optional('--published-sha');
-  const overrideNow = optional('--now');
-  if (overrideSha || overrideCreatedAt || overridePublishedSha) {
-    if (!overrideSha || !overrideCreatedAt || !overridePublishedSha) {
-      throw new Error('published-head overrides require --main-sha, --main-created-at, and --published-sha together');
-    }
-    return {
-      mainHeadSha: overrideSha,
-      mainHeadCreatedAt: overrideCreatedAt,
-      publishedSha: overridePublishedSha === 'none' ? null : overridePublishedSha,
-      now: overrideNow ?? new Date().toISOString(),
-      maxLagMs,
-    };
-  }
-
-  const repository = process.env.GITHUB_REPOSITORY;
-  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
-  const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
-  if (!repository || !token) {
-    throw new Error('published-head requires GITHUB_REPOSITORY and GITHUB_TOKEN or GH_TOKEN');
-  }
-
-  return resolvePublishedHeadInputFromGitHub({
-    api,
-    repository,
-    token,
-    now: overrideNow ?? new Date().toISOString(),
-    maxLagMs,
-  });
-}
-
 async function main(): Promise<void> {
   const command = process.argv[2];
   const packageName = optional('--package');
@@ -149,12 +113,6 @@ async function main(): Promise<void> {
         reportJson: readReport(option('--head-report'), 'head'),
       },
     }));
-    return;
-  }
-
-  if (command === 'published-head') {
-    const maxLagMs = integerOption('--max-lag');
-    emit(checkPublishedHead(await resolvePublishedHeadInput(maxLagMs)));
     return;
   }
 
