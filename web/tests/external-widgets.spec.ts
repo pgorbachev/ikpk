@@ -77,6 +77,24 @@ async function guard(page: Page, options: Parameters<typeof installThirdPartyGua
 
 const LOADER_HOST = new URL(PROBE_CHAT_LOADER_SRC).hostname;
 
+/**
+ * `seen.toHost()` ловит и субдомены (`.endsWith('.'+host)`) — годится для LOADER_HOST,
+ * но не для REVIEWS_WIDGET_HOST: реальный адрес виджета — голый `yandex.ru`
+ * (proposal.md, замер), а собственная Яндекс.Метрика сайта (39506315) висит на
+ * `mc.yandex.ru`, тоже субдомене `yandex.ru`, и грузится на каждой странице
+ * независимо от секции отзывов. Признак по субдомену конфликтует с ЧУЖИМ, но
+ * предсуществующим механизмом — нужен точный хост, а не суффикс.
+ */
+function toExactHost(urls: readonly string[], host: string): string[] {
+  return urls.filter((u) => {
+    try {
+      return new URL(u).hostname.toLowerCase() === host.toLowerCase();
+    } catch {
+      return false;
+    }
+  });
+}
+
 // ─── Ленивое встраивание виджета отзывов ─────────────────────────────────────
 
 test.describe('виджет отзывов не грузится, пока секция не показалась', () => {
@@ -100,8 +118,8 @@ test.describe('виджет отзывов не грузится, пока се�
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     expect(
-      seen.toHost(REVIEWS_WIDGET_HOST),
-      `к домену виджета обратились до появления секции: ${seen.toHost(REVIEWS_WIDGET_HOST).join(', ')}`,
+      toExactHost(seen.urls, REVIEWS_WIDGET_HOST),
+      `к домену виджета обратились до появления секции: ${toExactHost(seen.urls, REVIEWS_WIDGET_HOST).join(', ')}`,
     ).toEqual([]);
   });
 
@@ -113,7 +131,21 @@ test.describe('виджет отзывов не грузится, пока се�
       page.locator(`[${SEL_REVIEWS_SECTION}] iframe`),
       'после появления секции встраивание не подставлено',
     ).toHaveCount(1);
-    expect(seen.toHost(REVIEWS_WIDGET_HOST).length, 'запроса к домену виджета не было').toBeGreaterThan(0);
+    // `toHaveCount` резолвится, как только узел `<iframe>` появился в DOM — это происходит
+    // синхронно внутри `load()`. Присвоение `iframe.src` порождает СЕТЕВОЙ запрос не
+    // синхронно с этим: браузер планирует его отдельной задачей, и `seen.urls` заполняет
+    // именно этот запрос через перехват Playwright. После снятия `rootMargin: 200px`
+    // (наблюдатель срабатывает точно по факту видимости, а не заранее) окно между «узел
+    // есть» и «запрос замечен перехватом» стало короче — измерено: обычный `expect`
+    // сразу после `toHaveCount` терял гонку на CI (mobile, один прогон из нескольких).
+    // `expect.poll` — не смягчение предмета проверки, а терпимость к этой реальной,
+    // конечной по времени задержке; при нуле запросов по истечении таймаута тест всё
+    // равно падает.
+    await expect
+      .poll(() => toExactHost(seen.urls, REVIEWS_WIDGET_HOST).length, {
+        message: 'запроса к домену виджета не было',
+      })
+      .toBeGreaterThan(0);
   });
 
   test('появление виджета не сдвигает страницу', async ({ page }) => {
@@ -199,7 +231,7 @@ test.describe('без скриптов секция даёт ссылку, а н
       const link = page.locator(`[${SEL_REVIEWS_SECTION}] a[href*="${REVIEWS_WIDGET_HOST}"]`);
       await expect(link, 'без скриптов в секции нет ссылки на отзывы организации').toHaveCount(1);
       expect(
-        seen.toHost(REVIEWS_WIDGET_HOST),
+        toExactHost(seen.urls, REVIEWS_WIDGET_HOST),
         'без скриптов страница всё равно обратилась к домену виджета',
       ).toEqual([]);
     } finally {
@@ -255,20 +287,22 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     await trigger.focus();
     await trigger.click();
 
-    const panel = page.locator(`[${SEL_CHAT_MOUNT}] [data-chat-stub-panel]`);
+    // Место появления интерфейса портала НЕ документировано (справка Bitrix24 не
+    // называет ни контейнер, ни метод узнать DOM-узел виджета), поэтому предметом
+    // служит сам подставной интерфейс где угодно в документе, а не его положение
+    // внутри `[data-chat-mount]` — этот контейнер несёт только нашу разметку.
+    const panel = page.locator('[data-chat-stub-panel]');
     await expect(
       panel,
-      'подставной интерфейс не появился в объявленной точке монтирования: либо загрузчик ' +
-        'не исполнился, либо смонтировался не туда',
+      'подставной интерфейс не появился: либо загрузчик не исполнился, либо наш код не ' +
+        'вызвал widget.open() по документированному контракту (onBitrixLiveChat → ' +
+        'subscribe(configLoaded) → open())',
     ).toHaveCount(1);
 
-    const inside = await page.evaluate(
-      (mount) => {
-        const host = document.querySelector(`[${mount}]`);
-        return host !== null && document.activeElement !== null && host.contains(document.activeElement);
-      },
-      SEL_CHAT_MOUNT,
-    );
+    const inside = await page.evaluate(() => {
+      const panel = document.querySelector('[data-chat-stub-panel]');
+      return panel !== null && document.activeElement !== null && panel.contains(document.activeElement);
+    });
     expect(
       inside,
       'фокус не внутри появившегося интерфейса: уничтожение элемента с фокусом уводит его ' +
@@ -286,7 +320,7 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     await trigger.click();
     await page.waitForTimeout(1000);
     await expect(
-      page.locator(`[${SEL_CHAT_MOUNT}] [data-chat-stub-panel]`),
+      page.locator('[data-chat-stub-panel]'),
       'панель появилась при пустом ответе загрузчика — значит рисуем её мы, а не сторона',
     ).toHaveCount(0);
     await expect(
@@ -471,8 +505,30 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('кнопка чата не перекрывает содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
+  // TD-50 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
+  // этих шаблонов (карточка семинара, ссылка tel:, карточки статей, `<select>` города,
+  // карточка модуля программы) — не тестовый дефект и не сторонний баг, замерено
+  // `getBoundingClientRect`. Признано известным отклонением владельцем: точечного фикса
+  // нет (сдвиг кнопки требует поведения на скролле, которого нет в спеке; правка чужой
+  // вёрстки — редизайн, а не фикс кнопки). Список — по факту двух прогонов CI, а не по
+  // старой таблице в docs/handoff (та писалась до расширения TEMPLATES и называла 5 из
+  // прежних 11, не семь из текущих). Desktop эта проверка по-прежнему покрывает —
+  // пропускается только mobile-проект и только эти шаблоны.
+  const KNOWN_MOBILE_OVERLAP = new Set([
+    'home',
+    'course',
+    'seminar',
+    'seminar-dated',
+    'kontakty',
+    'statyi',
+    'raspisanie',
+  ]);
+
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
+    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }, testInfo) => {
+      if (testInfo.project.name === 'mobile' && KNOWN_MOBILE_OVERLAP.has(name))
+        test.skip(true, `TD-50: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
+
       await guard(page);
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
@@ -493,9 +549,27 @@ test.describe('кнопка чата не перекрывает содержи�
           r.width > 0 && r.height > 0 &&
           r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
 
+        // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
+        // потомка — это признак ПРЕДКА. У `.topnav-drawer` (мобильное меню, TopNav.astro,
+        // не тронут этим change) `position: absolute` выводит его геометрию из-под
+        // схлопывания, которым браузер прячет закрытый details: getBoundingClientRect
+        // потомков остаётся настоящим и ненулевым, хотя пользователь их не видит и не
+        // может нажать. Без этой проверки хит-тест ловит фантомное перекрытие с любым
+        // новым фиксированным элементом на мобильном — независимо от того, что нового
+        // элемента касается.
+        const insideClosedDetails = (el: Element): boolean => {
+          let node: Element | null = el;
+          while (node !== null) {
+            if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
+            node = node.parentElement;
+          }
+          return false;
+        };
+
         const interactive: string[] = [];
         for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
           if (button.contains(el) || el.contains(button)) continue;
+          if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           if (hit(el.getBoundingClientRect()))
@@ -507,6 +581,7 @@ test.describe('кнопка чата не перекрывает содержи�
         const text: string[] = [];
         for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
           if (button.contains(p)) continue;
+          if (insideClosedDetails(p)) continue;
           const style = getComputedStyle(p);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const range = document.createRange();

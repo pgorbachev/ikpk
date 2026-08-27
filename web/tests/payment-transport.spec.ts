@@ -29,6 +29,7 @@ import {
   installFailClosedGuard,
   type FailClosedGuard,
 } from './helpers/payment-network-guard';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const DIALOG = '[role="dialog"]';
@@ -46,6 +47,9 @@ async function openForm(page: Page) {
 let guard: FailClosedGuard;
 
 test.beforeEach(async ({ page }) => {
+  // installThirdPartyGuard ПЕРВЫМ: тем же приёмом, что и ниже, отделяющим fail-closed
+  // guard от мока конкретного теста — маршруты применяются в обратном порядке регистрации.
+  await installThirdPartyGuard(page);
   guard = await installFailClosedGuard(page, 'stand');
   await interceptYooKassaNavigation(page);
 });
@@ -796,6 +800,7 @@ test.describe('3a.6 без скриптов', () => {
     const page = await context.newPage();
     // Своя страница — свой guard: guard из `beforeEach` стоит на странице фикстуры и об этой
     // ничего не знает, а «на этой странице перехвата не было» — это не «утечек не было».
+    await installThirdPartyGuard(page);
     const ownGuard = await installFailClosedGuard(page, 'stand');
     await gotoOplata(page);
     await expect(page.locator(FORM)).toHaveCount(1);

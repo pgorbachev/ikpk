@@ -38,6 +38,7 @@ import {
   takeEscapes,
   type FailClosedGuard,
 } from './helpers/payment-network-guard';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 const STATE = (s: string) => `[${PAYMENT_STATE_ATTR}="${s}"]`;
@@ -78,6 +79,9 @@ async function mockApi(
 let guard: FailClosedGuard;
 
 test.beforeEach(async ({ page }) => {
+  // installThirdPartyGuard ПЕРВЫМ: маршруты применяются в обратном порядке регистрации,
+  // и этим же приёмом ниже отделяется fail-closed guard от мока конкретного теста.
+  await installThirdPartyGuard(page);
   page.on('framenavigated', (frame) => {
     void frame.url();
   });

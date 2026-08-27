@@ -42,6 +42,14 @@ export const TEMPLATES: Template[] = [
     name: 'seminar',
     path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej',
   },
+  // Шаблон семинара выше — БЕЗ дат, и это не мелочь: axe на нём не видит ни одной
+  // карточки расписания, ни кнопки записи, ни ссылки на преподавателя, ни цены, то
+  // есть проверяет пустую панель. Датированный шаблон добавлен отдельной строкой, а
+  // не заменой: недатированных страниц 81 из 126, и терять их покрытие нельзя.
+  // Что страница действительно датирована, утверждается ниже кодом, а не надеждой:
+  // даты уходят от хода времени, и молча опустевший шаблон вернул бы ровно тот
+  // «проверено впустую», из-за которого строка и появилась.
+  { name: 'seminar-dated', path: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1' },
   { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme' },
   // варианты редизайна b/c/d и architecture-прототипы собираются только при
   // DEMO_FORMS (build:demo). Job Playwright smoke строит прод → эти пути дают

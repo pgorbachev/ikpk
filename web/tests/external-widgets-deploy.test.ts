@@ -68,9 +68,15 @@ function distRaw(pages: Record<string, string>): string {
   return dir;
 }
 
-/** Разметка страницы с встраиванием чата — носитель адреса объявлен нашим контейнером. */
+/**
+ * Разметка страницы с встраиванием чата — адрес лежит на ВЛОЖЕННОЙ кнопке, а не на
+ * самом узле-носителе `data-chat-facade`: так его кладёт реальный компонент
+ * (`web/src/components/chat/ChatFacade.astro`, `data-chat-loader-src` на `<button>`).
+ * Фикстура с адресом прямо на носителе не поймала бы исключение только по корню,
+ * не различая его от исключения всего поддерева.
+ */
 const withChat = (src: string): string =>
-  `<div ${SEL_CHAT_FACADE} data-chat-loader="${src}"><button data-chat-trigger>Чат</button></div>`;
+  `<div ${SEL_CHAT_FACADE}><button data-chat-trigger data-chat-loader-src="${src}">Чат</button></div>`;
 
 type Run = { code: number; stdout: string; stderr: string };
 
@@ -214,6 +220,25 @@ describe('выкладка боевого сайта: пять исходов, �
     });
     const run = await chatWidget(dir, 'prod', LOADER_OFF_PORTAL);
     expect(run.code, `выкладка при заданном адресе и согласном выводе не прошла:\n${run.stderr}`).toBe(0);
+  });
+
+  it('адрес несёт query-параметры — & в разметке экранирован как &amp;, выкладка всё равно ПРОХОДИТ', async () => {
+    // Astro сериализует атрибут стандартным HTML-экранированием: `&` в адресе (обычный
+    // разделитель query-параметров) становится `&amp;` в собранной разметке. Фикстура
+    // строит ИМЕННО такую разметку напрямую (не через `withChat()`, который кладёт
+    // сырую строку без экранирования и не воспроизвёл бы дефект): сравнение только
+    // сырой формы адреса не находит собственный экранированный вывод, и выкладка
+    // исправной сборки с query-параметрами в адресе останавливалась молча.
+    const loaderWithQuery = `${LOADER_OFF_PORTAL}?a=1&b=2`;
+    const escaped = loaderWithQuery.replace(/&/g, '&amp;');
+    const dir = distRaw({
+      'index.html': `<div ${SEL_CHAT_FACADE}><button data-chat-trigger data-chat-loader-src="${escaped}">Чат</button></div>`,
+    });
+    const run = await chatWidget(dir, 'prod', loaderWithQuery);
+    expect(
+      run.code,
+      `выкладка с query-параметрами в адресе не прошла:\n${run.stderr}`,
+    ).toBe(0);
   });
 
   it('2. адрес задан, вывод не несёт — не проходит МОЛЧА: несоответствие названо', async () => {

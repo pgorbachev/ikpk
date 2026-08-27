@@ -7,6 +7,15 @@ interface Props {
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
   newsletterVariant?: 'band' | 'card' | 'none';
+  /**
+   * Исключить фасад чата (и его бандл) со страницы.
+   *
+   * НЕ то же самое, что `noindex`: noindex несут и /sitemap, и /rich-content-canary, а
+   * фасад на них — законное состояние 1 конфигурации. Единственная страница, обязанная
+   * исключать фасад, — 404: её байтовый запас меньше килобайта, и это её собственное
+   * требование, не следствие индексируемости.
+   */
+  hideWidgets?: boolean;
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
@@ -15,6 +24,7 @@ import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
+import ChatFacade from '../components/chat/ChatFacade.astro';
 import { isDemoForms } from '../lib/forms';
 import '../styles/global.css';
 
@@ -26,6 +36,7 @@ const {
   schema,
   preloadHero = false,
   newsletterVariant = 'band',
+  hideWidgets = false,
 } = Astro.props;
 ---
 
@@ -64,6 +75,14 @@ const {
         демонстрации в живые Метрику и Mail.ru заказчика — портили статистику,
         цели и вебвизор боевого сайта. Гейт по тому же признаку, что у форм. */}
     {!isDemoForms && <Analytics />}
+
+    {/* Фасад чата — прямой сосед <body>, а не внутри <main>: applyBackgroundInert
+        (payment-form.ts) гасит только прямых детей body, и при открытом диалоге
+        оплаты кнопка иначе осталась бы кликабельной поверх затемнения. На 404
+        компонент не подключается вовсе — байтовый запас страницы меньше килобайта,
+        а не только её рендер по конфигурации: скрипт компонента иначе всё равно
+        попал бы в бандл страницы. */}
+    {!hideWidgets && <ChatFacade />}
   </body>
 </html>
 
