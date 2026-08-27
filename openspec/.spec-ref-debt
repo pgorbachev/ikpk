@@ -33,17 +33,6 @@ openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/te
 openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
-openspec/changes/dependabot-auto-merge/design.md :: dependabot/fetch-metadata
-openspec/changes/dependabot-auto-merge/design.md :: feat/sanitize-rich-html-content@e010e9dd8ad47b15b6b885ff52e01a1df6eca3e3
-openspec/changes/dependabot-auto-merge/design.md :: package.json
-openspec/changes/dependabot-auto-merge/design.md :: pgorbachev/ikpk
-openspec/changes/dependabot-auto-merge/design.md :: refs/heads/main
-openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: actions/download-artifact
-openspec/changes/dependabot-auto-merge/evidence/live-rollout.md :: dependabot/fetch-metadata
-openspec/changes/dependabot-auto-merge/evidence/repository-prerequisites.md :: pgorbachev/ikpk
-openspec/changes/dependabot-auto-merge/specs/dependency-update-automation/spec.md :: refs/heads/main
-openspec/changes/dependabot-auto-merge/tasks.md :: actions/download-artifact
-openspec/changes/dependabot-auto-merge/tasks.md :: dependabot/fetch-metadata
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
