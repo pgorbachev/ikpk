@@ -39,6 +39,14 @@ import {
 } from './helpers/contrast';
 import { ACCEPTED_ACCOUNTS, SOCIAL_COLUMN_HEADING, networksRequiringMark } from './helpers/social-accounts-contract';
 import { SOCIAL_MARKS_REGISTRY, hasContrastWaiver } from '../src/lib/social-marks-registry';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+// PAGE — главная, которая несёт и секцию отзывов (change external-widgets), и фасад чата:
+// без перехвата прогон зависел бы от доступности сторонних сервисов либо действительно
+// обращался бы к ним.
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 const MARK_ACCOUNTS = ACCEPTED_ACCOUNTS.filter((account) =>
   networksRequiringMark(
