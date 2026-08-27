@@ -262,7 +262,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.assess.outputs.head-sha }}
           PR_NUMBER: ${{ needs.assess.outputs.pr-number }}
-        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$HEAD_SHA"
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$HEAD_SHA"
 
   disable-auto-merge:
     name: Disable stale auto-merge marker

@@ -1,0 +1,25 @@
+---
+/**
+ * Марка сети в подвале. Графика живёт отдельным `.astro`, чтобы у `<svg>` был
+ * source slot для гейта executable occurrences; файл-первоисточник — в
+ * `web/src/assets/social-marks/` и читается реестром через `?raw`.
+ */
+import VkontakteMark from './VkontakteMark.astro';
+import YoutubeMark from './YoutubeMark.astro';
+import TelegramMark from './TelegramMark.astro';
+import RutubeMark from './RutubeMark.astro';
+import RutubeOnDarkMark from './RutubeOnDarkMark.astro';
+
+interface Props {
+  network: string;
+  variant?: 'default' | 'dark';
+}
+
+const { network, variant = 'default' } = Astro.props;
+---
+
+{network === 'ВКонтакте' && <VkontakteMark />}
+{network === 'Youtube' && <YoutubeMark />}
+{network === 'Telegram' && <TelegramMark />}
+{network === 'Rutube' && variant === 'default' && <RutubeOnDarkMark />}
+{network === 'Rutube' && variant === 'dark' && <RutubeMark />}

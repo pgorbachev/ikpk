@@ -131,7 +131,7 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
   }
 }
 
-// TD-51 (docs/tech-debt.md): DECLARED_AWARD_BADGES пуст (задача 1.3 tasks.md не закрыта —
+// TD-53 (docs/tech-debt.md): DECLARED_AWARD_BADGES пуст (задача 1.3 tasks.md не закрыта —
 // право размещать знак не подтверждено), а без хотя бы одного знака с `year` позитивный
 // контроль «состав знаков различается» не построить — beforeAll кидает до первого теста.
 // Снять .skip вместе с заполнением DECLARED_AWARD_BADGES настоящей записью.

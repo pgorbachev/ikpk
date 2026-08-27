@@ -39,6 +39,7 @@ export default defineConfig({
       'tests/demo-prototypes.test.ts',
       'tests/demo-payment-form.test.ts',
       'tests/preview-role-dist.test.ts',
+      'tests/social-accounts-preview-dist.test.ts',
       'tests/rich-content-canary.demo.test.ts',
       'tests/rich-content-hazard.demo.test.ts',
       'tests/external-widgets-demo.test.ts',

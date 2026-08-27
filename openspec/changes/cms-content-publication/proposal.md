@@ -27,8 +27,8 @@
 |---|---|---|---|
 | `.github/workflows/test.yml:59`, `- name: Run build tests (dist checks)` | `unit-and-build` | `pull_request`, `push: main` | гейт публикации |
 | `.github/workflows/test.yml:83`, `- name: Run demo build tests (dist-demo checks)` | `unit-and-build` | те же | гейт публикации |
-| `.github/workflows/test.yml:431`, `- name: Build site` | `e2e-smoke` | те же | гейт публикации |
-| `.github/workflows/test.yml:477`, `- name: Build stand-role site` | `e2e-smoke` | те же | гейт публикации |
+| `.github/workflows/test.yml:432`, `- name: Build site` | `e2e-smoke` | те же | гейт публикации |
+| `.github/workflows/test.yml:478`, `- name: Build stand-role site` | `e2e-smoke` | те же | гейт публикации |
 | `.github/workflows/deploy.yml:115`, `- name: Build Astro site` | `build` | `workflow_run`, `workflow_dispatch` | сама выкладка |
 | `.github/workflows/lighthouse.yml:43`, `- name: Build site` | `lhci` | `pull_request`, `push: main`, `workflow_dispatch` | обязателен для merge, вне гейта публикации |
 | `.github/workflows/nightly.yml:39`, `- name: Build site` | `compat` | `schedule`, `workflow_dispatch` | вне обоих гейтов |
@@ -48,7 +48,7 @@
 Оба шага в `test.yml` — «Measure base Vitest volume for dependency or Dependabot PR»
 (`.github/workflows/test.yml:124`, `- name: Measure base Vitest volume for dependency or Dependabot PR`)
 и «Measure base browser tests for dependency or Dependabot PR»
-(`.github/workflows/test.yml:535`, `- name: Measure base browser tests for dependency or Dependabot PR`),
+(`.github/workflows/test.yml:564`, `- name: Measure base browser tests for dependency or Dependabot PR`),
 оба под `if: … dependency_only == 'true' || … dependabot[bot]`: первый собирает `npm run build` и
 `npm run build:demo` внутри `unit-and-build`, второй — `npm run build` внутри `e2e-smoke`. Их цель
 — сравнить объём тестов до и после правки на Dependabot- и dependency-only PR, а не проверить сайт

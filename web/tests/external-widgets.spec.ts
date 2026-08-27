@@ -505,7 +505,7 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('кнопка чата не перекрывает содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
-  // TD-50 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
+  // TD-52 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
   // этих шаблонов (карточка семинара, ссылка tel:, карточки статей, `<select>` города,
   // карточка модуля программы) — не тестовый дефект и не сторонний баг, замерено
   // `getBoundingClientRect`. Признано известным отклонением владельцем: точечного фикса
@@ -527,7 +527,7 @@ test.describe('кнопка чата не перекрывает содержи�
   for (const { name, path } of TEMPLATES) {
     test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }, testInfo) => {
       if (testInfo.project.name === 'mobile' && KNOWN_MOBILE_OVERLAP.has(name))
-        test.skip(true, `TD-50: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
+        test.skip(true, `TD-52: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
 
       await guard(page);
       const response = await page.goto(url(path));

@@ -130,6 +130,7 @@ jobs:
           base="$RUNNER_TEMP/web-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           npm ci --prefix "$base/web"
+          npm ci --prefix "$base/payments"
           (
             cd "$base/web"
             npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-unit-base.json"
@@ -509,6 +510,34 @@ jobs:
         run: |
           npm run test:e2e:schedule
           cp test-results/schedule-month-run.json "$RUNNER_TEMP/playwright-schedule-head.json"
+
+      # Проверки по РАЗМЕТКЕ вывода роли `stand`. До change `social-accounts` этот артефакт
+      # проверялся только браузерными наборами оплаты, то есть про его разметку не
+      # утверждалось ничего — при том что это ровно то, что выкладывается на публичный стенд
+      # и что смотрит заказчик. Шаг живёт в ЭТОМ джобе по одной причине: `dist-stand`
+      # собирается только здесь, и вторая сборка платила бы за то же дерево дважды.
+      #
+      # Место — после наборов оплаты, а не сразу за сборкой: падение шага прекращает джоб, и
+      # новая проверка, поставленная раньше существующих, скрыла бы их результат. Дерево
+      # `dist-stand` к этому моменту уже собрано и никем не перезаписывается.
+      #
+      # Вызывается сам vitest, а не `npm run test:stand`: тот собирает заново.
+      - name: Run stand build tests (dist-stand checks)
+        run: npx vitest run --config vitest.stand.config.ts --reporter=default
+
+      # Подача внешних аккаунтов в подвале: доступное имя, размер цели, индикатор фокуса,
+      # контраст марки в каждой теме и число дорожек сетки на трёх полосах ширины.
+      # Отдельным шагом и в ЭТОМ workflow: публикацию останавливает только `Tests`, а
+      # проверка, положенная в файл, который не запускает ни один workflow, зелена ровно
+      # потому, что её никто не выполняет.
+      #
+      # Проектов три, а не два: полоса 481–768 px не была покрыта ни одним вьюпортом
+      # прогона, и требование о двух колонках не проверялось ничем.
+      #
+      # Место — в конце, по той же причине, что у шага выше: пока подача не реализована, эта
+      # проверка красная, и раньше существующих шагов она скрывала бы их результат.
+      - name: Run footer social icons e2e
+        run: npm run test:e2e:footer-social
 
       - name: Classify dependency-only change for browser test-count
         id: browser-dependency-scope
