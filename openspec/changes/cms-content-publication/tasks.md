@@ -390,7 +390,7 @@
 - [x] 10.2 Локальные гейты в затронутых пакетах: `web` — `lint`, `typecheck`, `build`, `test`,
       `test:build`; `scripts` — `lint`, `typecheck`
 - [x] 10.3 `./bin/openspec validate --all --strict --no-interactive` зелёная
-- [x] 10.4 Применимость дельт: `./bin/openspec validate --all --strict` зелёная (16/16); одноразовый apply worktree — перед merge
+- [x] 10.4 Применимость дельт: `./bin/openspec validate --all --strict` зелёная; apply в одноразовом worktree на `ea5bc60` — archive без `--skip-specs` создал `cms-content-source`, обновил `article-catalog`/`deploy-gating`, validate после apply 17/17 (throwaway удалён; в эту ветку не коммитился)
 - [ ] 10.5 **Отложено до merge.** Заархивировать change после слияния draft PR (не в этой
       поставке реализации): требования переедут в `openspec/specs/`. Порядок с соседним
       change: `cms-content-authoring-and-migration` архивируется **не раньше** этого, потому что
