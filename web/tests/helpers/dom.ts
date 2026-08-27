@@ -1,4 +1,4 @@
-import { parse } from 'parse5';
+import { parse, parseFragment } from 'parse5';
 import type { DefaultTreeAdapterMap } from 'parse5';
 
 /**
@@ -12,8 +12,31 @@ export function parseDocument(html: string): DefaultTreeAdapterMap['document'] {
   return parse(html);
 }
 
+/**
+ * `<noscript>` — parse5 по умолчанию не разбирает его содержимое как разметку: оно
+ * приходит единственным текстовым узлом. Разбираем этот текст сами и возвращаем
+ * результат ВМЕСТО текстового узла (не вместе с ним — иначе `textOf()` посчитает
+ * содержимое дважды). Срабатывает только на форме «ровно один дочерний узел, и это
+ * текст» — noscript с уже разобранной разметкой (элемент внутри, как в проде сегодня)
+ * этот путь не затрагивает.
+ */
+function noscriptMarkup(n: { nodeName?: string; childNodes?: ChildNode[] }): ChildNode[] | null {
+  if (n.nodeName !== 'noscript') return null;
+  const own = n.childNodes ?? [];
+  if (own.length !== 1) return null;
+  const only = own[0] as { nodeName?: string; value?: string };
+  if (only.nodeName !== '#text') return null;
+  return parseFragment(only.value ?? '').childNodes as unknown as ChildNode[];
+}
+
 function children(node: unknown): ChildNode[] {
-  const n = node as { childNodes?: ChildNode[]; content?: { childNodes?: ChildNode[] } };
+  const n = node as {
+    nodeName?: string;
+    childNodes?: ChildNode[];
+    content?: { childNodes?: ChildNode[] };
+  };
+  const noscript = noscriptMarkup(n);
+  if (noscript !== null) return noscript;
   // Содержимое <template> лежит в отдельном фрагменте: без него обход слепнет ровно
   // там, где разметка спрятана (у нас так спрятан каталог статей).
   const own = n.childNodes ?? [];

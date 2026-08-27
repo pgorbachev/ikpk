@@ -207,7 +207,13 @@ describe('Parity audit against original site', () => {
     const html = readLocal('/').html;
     expect(html).toContain('646-54-50');
     expect(html).toContain('info@ikpk.su');
-    expect(/vk\.com|youtube\.com|rutube\.ru|t\.me/i.test(html)).toBe(true);
+    // Ужесточено change social-accounts, задача 2.10: «хоть что-нибудь из четырёх
+    // хостов» оставалось зелёным после снятия трёх сетей. Проверяем все четыре
+    // принятых адреса, а не дизъюнкцию хостов.
+    expect(html).toContain('https://vk.com/clubikpk');
+    expect(html).toContain('https://www.youtube.com/user/TheKinesiology');
+    expect(html).toContain('https://t.me/ikpk_spb');
+    expect(html).toContain('https://rutube.ru/channel/30422569/');
   });
 
   it('homepage keeps canonical, OG, JSON-LD and analytics markers', () => {

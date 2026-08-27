@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "136368408f5059941c2b22176368993a59037008",
+  "generatedFromSha": "095a596ca1b8e5414e4afd5c69c22fb8d303704b",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",
@@ -6693,7 +6693,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/svedeniya-ob-obrazovatelnoy-organizatsii\"][\"Основные сведения\"]",
-      "byteLength": 2723,
+      "byteLength": 2741,
       "empty": false
     },
     {
@@ -6803,7 +6803,7 @@
       "field": "description_html",
       "entityId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "jsonPath": "course_groups.json$[1][\"description_html\"]",
-      "byteLength": 1416,
+      "byteLength": 1404,
       "empty": false
     },
     {

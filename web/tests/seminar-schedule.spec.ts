@@ -1,6 +1,11 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { isCurrentOrFuture } from '../src/lib/schedule-window';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
 import { loadPinnedSnapshot, loadPinnedType } from './helpers/pinned-snapshot';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 // ─── Расписание на странице семинара: перенос вверх (D3, вариант C) ──────────
 // Предмет: `docs/demo-2026-08-23-mockup-choice.md`, «Страница семинара — вариант C

@@ -40,6 +40,14 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
+    "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
+    "file": "components/chat/ChatFacade.astro",
+    "nodeKind": "element",
+    "locator": "components/chat/ChatFacade.astro:L42:C1:script",
+    "fingerprint": "d561ffa732f6c742bdb663a4ce479baca2731b6df49d787e43636dead7e8bd00",
+    "identity": "script|is:inline=empty:|body:ff789ce13f2b07ac"
+  },
+  {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
@@ -136,12 +144,12 @@
     "identity": "style|body:81fa0a5c4b7caea0"
   },
   {
-    "slotId": "src:components/Footer.astro:L75:C1:style",
+    "slotId": "src:components/Footer.astro:L108:C1:style",
     "file": "components/Footer.astro",
     "nodeKind": "element",
-    "locator": "components/Footer.astro:L75:C1:style",
-    "fingerprint": "ee84981c8087e4381d0fc225aac94f0e4f81714de9364e9ff4e3fc8d253fb312",
-    "identity": "style|body:593dde412ec88922"
+    "locator": "components/Footer.astro:L108:C1:style",
+    "fingerprint": "6ee1fd0d30da0686c3f63125f1dfa25bc012a2910babac9d4f6b7527541b98e3",
+    "identity": "style|body:4d309e4536d94a02"
   },
   {
     "slotId": "src:components/HeadMeta.astro:L26:C1:link",
@@ -392,6 +400,22 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
+    "slotId": "src:components/home/sections/Reviews.astro:L116:C1:style",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L116:C1:style",
+    "fingerprint": "3060a405e9e3bbe7cecacb426f38b12b93ba314cdb2e3819b6b148dca1f733b7",
+    "identity": "style|body:45e90505a26a756a"
+  },
+  {
+    "slotId": "src:components/home/sections/Reviews.astro:L65:C3:script",
+    "file": "components/home/sections/Reviews.astro",
+    "nodeKind": "element",
+    "locator": "components/home/sections/Reviews.astro:L65:C3:script",
+    "fingerprint": "6abb9cb5f09860dbcd639bb95612ed91c0c5193fd3183190f2d4022567ea473d",
+    "identity": "script|body:75cf35f093fd012f"
+  },
+  {
     "slotId": "src:components/home/sections/Segments.astro:L45:C1:style",
     "file": "components/home/sections/Segments.astro",
     "nodeKind": "element",
@@ -600,6 +624,46 @@
     "identity": "style|body:6d08ab9809844292"
   },
   {
+    "slotId": "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
+    "file": "components/social-marks/RutubeMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/RutubeMark.astro:L4:C1:svg",
+    "fingerprint": "d80d0ed5efbcad9daa6f2a67df2a251551f638a6b6412eeec46d810be1c057a1",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:132|viewBox=quoted:0 0 132 132|width=quoted:132|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+    "file": "components/social-marks/RutubeOnDarkMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+    "fingerprint": "a184a3e691e6a48c439a33b01e8e6d46e06f109a21720deb37730cfc265c6183",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:132|viewBox=quoted:0 0 132 132|width=quoted:132|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/TelegramMark.astro:L4:C1:svg",
+    "file": "components/social-marks/TelegramMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/TelegramMark.astro:L4:C1:svg",
+    "fingerprint": "d98c3d8c2e5e749e64ec6b55e599e845a6d101c0dc857dad062c57f6246cdb24",
+    "identity": "svg|aria-hidden=quoted:true|height=quoted:128|viewBox=quoted:0 0 128 128|width=quoted:128|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/VkontakteMark.astro:L4:C1:svg",
+    "file": "components/social-marks/VkontakteMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/VkontakteMark.astro:L4:C1:svg",
+    "fingerprint": "8b1f1058c5c10a81dcfb6cf542ecef7b053a82729d470a179ecfbc3f0a134cb0",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:48|viewBox=quoted:0 0 48 48|width=quoted:48|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/YoutubeMark.astro:L4:C1:svg",
+    "file": "components/social-marks/YoutubeMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/YoutubeMark.astro:L4:C1:svg",
+    "fingerprint": "1819c4214f000b6dcfcb43510ee05b812515d3cebcb2c3b42d5aaa4b1a4576cd",
+    "identity": "svg|aria-hidden=quoted:true|viewBox=quoted:0 0 28.57 20|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
     "file": "components/topnav/HeaderTools.astro",
     "nodeKind": "element",
@@ -736,11 +800,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L70:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L89:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L70:C1:style",
-    "fingerprint": "55ca437a9ea0aa77ab4d53ef6eede1f0477315da4f5b2e848191442e6637cd52",
+    "locator": "layouts/BaseLayout.astro:L89:C1:style",
+    "fingerprint": "665b29867442b065d1abe0eccc322d8e16857a283a84a37273683fb67525d543",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -752,11 +816,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L63:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L68:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L63:C1:style",
-    "fingerprint": "e1c00edc00549224f33f131a1bc9196417cd073b9fe0286c09d6779eabb497ec",
+    "locator": "layouts/TopNavLayout.astro:L68:C1:style",
+    "fingerprint": "badf1fabf4fad440ba8cbea7942807410325240fc25161fb9580dc9efc1e2c22",
     "identity": "style|body:309f315b55438bb4"
   },
   {

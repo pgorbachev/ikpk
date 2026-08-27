@@ -11,9 +11,10 @@ import {
   projectIdentity,
   provenanceError,
   stripMarkedRegions,
+  type FoundOccurrence,
   type OccurrenceRule,
 } from './hazard-scan.js';
-import { FIXTURES_DIR, REPO_ROOT, WEB_ROOT } from './paths.js';
+import { FIXTURES_DIR, REPO_ROOT, WEB_ROOT, WEB_SRC } from './paths.js';
 import type { ExecutableSlot } from './ast-sinks.js';
 import { assertCleanGitWorktree } from './git-clean.js';
 
@@ -23,32 +24,69 @@ function loadSlots(): ExecutableSlot[] {
   ) as ExecutableSlot[];
 }
 
-function matchSlot(slots: ExecutableSlot[], outputIdentity: string): ExecutableSlot | undefined {
-  const exact = slots.filter((slot) => slot.identity === outputIdentity);
-  if (exact[0]) return exact[0];
-  const projected = slots.filter((slot) => !provenanceError(slot.identity, outputIdentity));
+/** Stable token from source SVG body (clipPath / gradient id) for disambiguating identical roots. */
+const sourceTokenBySlot = new Map<string, string | null>();
+function sourceInnerToken(slot: ExecutableSlot): string | null {
+  if (sourceTokenBySlot.has(slot.slotId)) return sourceTokenBySlot.get(slot.slotId)!;
+  const src = readFileSync(join(WEB_SRC, slot.file), 'utf-8');
+  const match =
+    src.match(/clipPath\s+id=["']([^"']+)["']/) ??
+    src.match(/linearGradient\s+id=["']([^"']+)["']/) ??
+    src.match(/\bid=["']([^"']+)["']/);
+  const token = match?.[1] ?? null;
+  sourceTokenBySlot.set(slot.slotId, token);
+  return token;
+}
+
+/**
+ * Dual-theme Rutube shares root `<svg>` attrs (`svg` provenance ignores body). Prefer a
+ * slot whose source body token appears in the output inner HTML — not sort order — so
+ * inventory `slotId` matches the file that actually rendered. Fall back to unused-slot
+ * pick only when tokens cannot decide.
+ */
+function matchSlot(
+  slots: ExecutableSlot[],
+  found: FoundOccurrence,
+  usedSlotIds: Set<string>,
+): ExecutableSlot | undefined {
+  const pick = (candidates: ExecutableSlot[]): ExecutableSlot | undefined => {
+    const unused = candidates.find((slot) => !usedSlotIds.has(slot.slotId));
+    return unused ?? candidates[0];
+  };
+  const disambiguate = (candidates: ExecutableSlot[]): ExecutableSlot | undefined => {
+    if (candidates.length <= 1) return candidates[0];
+    const byBody = candidates.filter((slot) => {
+      const token = sourceInnerToken(slot);
+      return Boolean(token && found.inner.includes(token));
+    });
+    if (byBody.length > 0) return pick(byBody);
+    return pick(candidates);
+  };
+  const exact = slots.filter((slot) => slot.identity === found.identity);
+  if (exact[0]) return disambiguate(exact);
+  const projected = slots.filter((slot) => !provenanceError(slot.identity, found.identity));
   if (projected.length === 0) return undefined;
-  const output = projectIdentity(outputIdentity);
+  const output = projectIdentity(found.identity);
   if (output.tag === 'link' && (output.staticAttrs.get('rel') ?? '') === 'stylesheet') {
     const imported = projected.filter((slot) => slot.nodeKind === 'css-import');
-    if (imported[0]) return imported[0];
+    if (imported[0]) return disambiguate(imported);
   }
   if (output.tag === 'script' && output.staticAttrs.get('type') === 'module') {
     const bundled = projected.filter((slot) => slot.nodeKind === 'element' && !slot.identity.includes('is:inline'));
-    if (bundled[0]) return bundled[0];
+    if (bundled[0]) return disambiguate(bundled);
   }
   if (output.tag === 'style') {
     const styles = projected.filter((slot) => slot.identity.startsWith('style|'));
-    if (styles[0]) return styles[0];
+    if (styles[0]) return disambiguate(styles);
   }
   if (output.tag === 'svg') {
     const viewBox = output.staticAttrs.get('viewbox');
     if (viewBox) {
       const sameBox = projected.filter((slot) => slot.identity.includes(viewBox));
-      if (sameBox[0]) return sameBox[0];
+      if (sameBox[0]) return disambiguate(sameBox);
     }
   }
-  return projected[0];
+  return disambiguate(projected);
 }
 
 export function collectRulesFromDist(
@@ -64,12 +102,14 @@ export function collectRulesFromDist(
   for (const file of walkFiles(distRoot, ['.html'])) {
     const html = stripMarkedRegions(readFileSync(file, 'utf-8'));
     const route = htmlFileRoute(file, distRoot);
+    const usedSlotIds = new Set<string>();
     for (const found of collectOccurrences(html)) {
-      const slot = matchSlot(slots, found.identity);
+      const slot = matchSlot(slots, found, usedSlotIds);
       if (!slot) {
         unmatched.push({ route, identity: found.identity, placement: found.placement });
         continue;
       }
+      usedSlotIds.add(slot.slotId);
       const key = `${slot.slotId}\t${route}\t${found.placement}\t${found.identity}`;
       const prev = grouped.get(key);
       if (prev) prev.count += 1;

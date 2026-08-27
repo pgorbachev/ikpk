@@ -389,7 +389,9 @@
     {
       "id": "canary-body",
       "production": {
-        "paths": ["/rich-content-canary"],
+        "paths": [
+          "/rich-content-canary"
+        ],
         "count": 1
       },
       "demo": {

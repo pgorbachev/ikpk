@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { gotoAttachedPath } from './helpers/navigation';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 function normalizeTextList(values: string[]): string[] {
   return values.map((value) => value.replace(/\s+/g, ' ').trim()).filter(Boolean);

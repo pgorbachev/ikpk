@@ -101,14 +101,14 @@
       предложений (D8).** Три из одиннадцати вызовов сборки строят не вершину этого прогона, а
       `BASE_SHA` — во временном worktree, только на Dependabot- и dependency-only PR: два внутри
       шага в джобе `unit-and-build` —
-      `.github/workflows/test.yml:255`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:221`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:660`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:757`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
-      `.github/workflows/test.yml:508`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:562`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
       в джобе `scripts-unit` — сюда не входит: этот шаг гоняет `vitest` только внутри `scripts/`
       и НЕ вызывает `npm run build` вовсе, к сборке сайта и к снимку контента отношения не имеет
       (проверено ревью PR #185 по факт-находке, которая сперва приняла совпадение имени за
@@ -166,10 +166,10 @@
       браузерные проверки, демо-сборку и выкладку
 - [x] 5.2 Убрать самостоятельные обращения к системе управления из **семи вызовов, строящих
       вершину прогона**, в четырёх workflow: `unit-and-build` — обычная сборка
-      (`.github/workflows/test.yml:105`, `- name: Run build tests (dist checks)`) и `build:demo`
-      (`.github/workflows/test.yml:119`, `- name: Run demo build tests (dist-demo checks)`);
-      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:571`, `- name: Build site`) и
-      `build:stand` (`.github/workflows/test.yml:617`, `- name: Build stand-role site`); `build`
+      (`.github/workflows/test.yml:112`, `- name: Run build tests (dist checks)`) и `build:demo`
+      (`.github/workflows/test.yml:136`, `- name: Run demo build tests (dist-demo checks)`);
+      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:625`, `- name: Build site`) и
+      `build:stand` (`.github/workflows/test.yml:671`, `- name: Build stand-role site`); `build`
       (`.github/workflows/deploy.yml:196`, `- name: Build Astro site`); `lhci`
       (`.github/workflows/lighthouse.yml:43`, `- name: Build site`); `compat`
       (`.github/workflows/nightly.yml:39`, `- name: Build site`). Джобы независимы, поэтому снимок
@@ -193,7 +193,7 @@
 - [x] 5.2c **Найдено ревью PR #185: `web/tests/parity-compare.test.ts` содержит буквальное
       сравнение содержимого с прод-сайтом, которое переход на фикстуру ломает предсказуемо, а не
       флаково.** Тест
-      `web/tests/parity-compare.test.ts:288`, `it.skip('original and local contacts page keep the same primary heading', async () => {`
+      `web/tests/parity-compare.test.ts:294`, `it.skip('original and local contacts page keep the same primary heading', async () => {`
       под `REMOTE_PARITY_ENABLED` (включается `test:build:remote` —
       именно та сборка, что 5.2a переводит на фикстуру) буквально сравнивает `h1` замороженной
       фикстуры с `h1`, снятым live с `https://ikpk.su/kontakty`. После перехода на фикстуру эти
