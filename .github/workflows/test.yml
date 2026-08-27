@@ -221,22 +221,36 @@ jobs:
             --commit "${{ github.sha }}" \
             --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
             --revision "$REV"
-          # Push в orphan-ветку с retry (8.4a уже сериализует publication-события).
+          # Push в orphan-ветку с retry. Исчерпание retry → прогон ПАДАЕТ целиком:
+          # молчаливый пропуск записи в журнал/индекс дал бы дыру в высшей отметке (D4).
           cd "$PROV"
           git init >/dev/null 2>&1 || true
           git checkout -B state/cms-provenance
-          git add -A
-          git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
+          pushed=
           for i in 1 2 3; do
-            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
-            git pull --ff-only origin state/cms-provenance 2>/dev/null || true
-            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:state/cms-provenance; then
+            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
+            if git rev-parse --verify refs/remotes/origin/state/cms-provenance >/dev/null 2>&1; then
+              git show refs/remotes/origin/state/cms-provenance:verified-pairs.json \
+                > "$PROV/.remote-pairs.json" 2>/dev/null || echo '[]' > "$PROV/.remote-pairs.json"
+              (cd "${{ github.workspace }}/web" && npx tsx scripts/publication-cli.ts merge-pairs \
+                --pairs-dir "$PROV" --with "$PROV/.remote-pairs.json")
+            fi
+            git add -A
+            git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
+            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              HEAD:state/cms-provenance; then
               echo "pushed state/cms-provenance"
+              pushed=1
               break
             fi
-            echo "retry $i"
+            echo "retry $i after push conflict"
             sleep 2
           done
+          if [ -z "$pushed" ]; then
+            echo "::error::не удалось записать state/cms-provenance за 3 попытки — публикация остановлена, журнал/индекс не обновлены"
+            exit 1
+          fi
 
       - name: Measure base Vitest volume for dependency or Dependabot PR
         if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'

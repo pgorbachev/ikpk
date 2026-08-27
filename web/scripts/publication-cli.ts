@@ -17,7 +17,7 @@ import {
 } from './lib/publish-gate.ts';
 import { createLedger } from './lib/provenance-ledger.ts';
 import { fetchReleaseDeclaration, writeReleaseDeclaration } from './lib/release-declaration.ts';
-import { readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs } from './lib/verified-pairs.ts';
+import { readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs, mergeVerifiedPairs } from './lib/verified-pairs.ts';
 
 const webRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
@@ -142,6 +142,17 @@ async function cmdRecordPair(): Promise<void> {
   console.log('recorded pair', pair.snapshotId);
 }
 
+/** Слить локальный индекс с файлом с origin — без регресса более новых пар. */
+async function cmdMergePairs(): Promise<void> {
+  const pairsDir = requireArg('pairs-dir');
+  const withPath = requireArg('with');
+  const remoteRaw = JSON.parse(readFileSync(withPath, 'utf-8')) as VerifiedPair[];
+  if (!Array.isArray(remoteRaw)) throw new Error(`${withPath}: ожидался массив`);
+  const result = mergeVerifiedPairs(readVerifiedPairs(pairsDir), remoteRaw);
+  writeVerifiedPairs(pairsDir, result);
+  console.log('merged pairs', result.length);
+}
+
 async function cmdWriteRelease(): Promise<void> {
   const outDir = requireArg('out-dir');
   const commit = requireArg('commit');
@@ -207,6 +218,7 @@ const runners: Record<string, () => Promise<void>> = {
   reconcile: cmdReconcile,
   'gate-snapshot': cmdGateSnapshot,
   'record-pair': cmdRecordPair,
+  'merge-pairs': cmdMergePairs,
   'write-release': cmdWriteRelease,
   'choose-manual': cmdChooseManual,
   'event-gate': cmdEventGate,
