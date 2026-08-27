@@ -42,6 +42,7 @@ export default defineConfig({
       'tests/social-accounts-preview-dist.test.ts',
       'tests/rich-content-canary.demo.test.ts',
       'tests/rich-content-hazard.demo.test.ts',
+      'tests/external-widgets-demo.test.ts',
     ],
   },
 });

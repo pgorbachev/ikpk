@@ -1,50 +1,20 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { contrastRatio, parseRgb } from './helpers/contrast';
+import { TEMPLATES } from './helpers/templates';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 // ─── Accessibility (axe-core) ────────────────────────────
 // PR-гейт плана 004 (Этап 0): 0 critical/serious нарушений на 4 шаблонах
 // из kpi-validation.md: главная, курс (depth=2), семинар (depth=3), статья.
-
-const TEMPLATES: Array<{ name: string; path: string }> = [
-  { name: 'home', path: '/' },
-  {
-    name: 'course',
-    path: '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya',
-  },
-  {
-    name: 'seminar',
-    path: '/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej',
-  },
-  // Шаблон семинара выше — БЕЗ дат, и это не мелочь: axe на нём не видит ни одной
-  // карточки расписания, ни кнопки записи, ни ссылки на преподавателя, ни цены, то
-  // есть проверяет пустую панель. Датированный шаблон добавлен отдельной строкой, а
-  // не заменой: недатированных страниц 81 из 126, и терять их покрытие нельзя.
-  // Что страница действительно датирована, утверждается ниже кодом, а не надеждой:
-  // даты уходят от хода времени, и молча опустевший шаблон вернул бы ровно тот
-  // «проверено впустую», из-за которого строка и появилась.
-  { name: 'seminar-dated', path: '/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1' },
-  { name: 'article', path: '/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme' },
-  // варианты редизайна b/c/d и architecture-прототипы собираются только при
-  // DEMO_FORMS (build:demo). Job Playwright smoke строит прод → эти пути дают
-  // 404, и тест ниже их пропускает. Прототипы вне a11y-гейта CI; проверка —
-  // локально на демо-сборке.
-  { name: 'preview-b', path: '/preview/b' },
-  { name: 'preview-c', path: '/preview/c' },
-  { name: 'preview-d', path: '/preview/d' },
-  // страница видео-плейлиста с фасадом (FR-04)
-  { name: 'video', path: '/video/33' },
-  // контакты с ленивой картой + форма подписки (card-вариант)
-  { name: 'kontakty', path: '/kontakty' },
-  // Внутренние страницы, которых в списке не было, а правки их касаются:
-  // фильтры статей (видимый фокус), аккордеоны оплаты и «Сведений»,
-  // расписание с фасетами, страница института с портретами.
-  { name: 'oplata', path: '/oplata' },
-  { name: 'statyi', path: '/statyi' },
-  { name: 'raspisanie', path: '/raspisanie-i-tseny' },
-  { name: 'svedeniya', path: '/svedeniya-ob-obrazovatelnoy-organizatsii' },
-  { name: 'institute', path: '/institut-apledzhera' },
-];
+//
+// Перечень шаблонов — общий с проверкой перекрытия кнопкой чата
+// (`web/tests/helpers/templates.ts`): два расходящихся перечня над одним предметом
+// дают частичное покрытие с виду полным (см. комментарий в общем модуле).
 
 test.describe('Accessibility', () => {
   // axe разбирает всё дерево страницы, и на списках это долго: у расписания 63

@@ -39,6 +39,7 @@ import {
   installFailClosedGuard,
   type FailClosedGuard,
 } from './helpers/payment-network-guard';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const FORM = `[${PAYMENT_FORM_ATTR}]`;
 
@@ -65,6 +66,9 @@ async function fillValid(page: Page) {
 let guard: FailClosedGuard;
 
 test.beforeEach(async ({ page }) => {
+  // installThirdPartyGuard ПЕРВЫМ: маршруты применяются в обратном порядке регистрации,
+  // и этим же приёмом ниже отделяется fail-closed guard от мока конкретного теста.
+  await installThirdPartyGuard(page);
   // Guard ПЕРВЫМ: маршруты применяются в обратном порядке регистрации, поэтому обрыв
   // `/payments` самим тестом (это и есть его предмет — недоступный API) забирает свои
   // запросы, а guard видит только то, что не забрал никто.

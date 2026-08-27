@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { gotoAttachedPath } from './helpers/navigation';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 test.describe('Schedule Listing Parity', () => {
   test('/raspisanie-i-tseny renders production-like filters, cards and pagination', async ({ page }) => {

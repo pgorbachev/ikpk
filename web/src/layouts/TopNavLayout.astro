@@ -16,6 +16,7 @@ import MotionScript from '../components/MotionScript.astro';
 import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import Analytics from '../components/Analytics.astro';
+import ChatFacade from '../components/chat/ChatFacade.astro';
 import { isDemoForms } from '../lib/forms';
 import '../styles/global.css';
 
@@ -57,6 +58,10 @@ const {
     <Footer />
     {/* Только боевая сборка — см. пояснение в BaseLayout.astro */}
     {!isDemoForms && <Analytics />}
+    {/* Прямой сосед <body>, не внутри <main> — см. пояснение в BaseLayout.astro.
+        Черновики вариантов не несут отдельного байтового бюджета, как 404, —
+        своего исключающего флага здесь не заводим. */}
+    <ChatFacade />
   </body>
 </html>
 

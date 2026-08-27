@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 // ─── Characterization-тесты: клиентское поведение каталога статей ────────────
 // Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline

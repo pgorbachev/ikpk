@@ -90,14 +90,14 @@
       предложений (D7).** Три из одиннадцати вызовов сборки строят не вершину этого прогона, а
       `BASE_SHA` — во временном worktree, только на Dependabot- и dependency-only PR: два внутри
       шага в джобе `unit-and-build` —
-      `.github/workflows/test.yml:106`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:124`, `- name: Measure base Vitest volume for dependency or Dependabot PR` —
       (`npm run build` и `npm run build:demo` последовательно в одном шаге) и один — в шаге джоба
       `e2e-smoke` —
-      `.github/workflows/test.yml:531`, `- name: Measure base browser tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:564`, `- name: Measure base browser tests for dependency or Dependabot PR` —
       (`npm run build`), оба под `if: … dependency_only == 'true' || … dependabot[bot]`.
       **Осторожно с поиском по имени шага:** третье совпадение по строке «Measure base … for
       dependency or Dependabot PR» —
-      `.github/workflows/test.yml:360`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
+      `.github/workflows/test.yml:378`, `- name: Measure base scripts tests for dependency or Dependabot PR` —
       в джобе `scripts-unit` — сюда не входит: этот шаг гоняет `vitest` только внутри `scripts/`
       и НЕ вызывает `npm run build` вовсе, к сборке сайта и к снимку контента отношения не имеет
       (проверено ревью PR #185 по факт-находке, которая сперва приняла совпадение имени за
@@ -152,10 +152,10 @@
       браузерные проверки, демо-сборку и выкладку
 - [ ] 5.2 Убрать самостоятельные обращения к системе управления из **семи вызовов, строящих
       вершину прогона**, в четырёх workflow: `unit-and-build` — обычная сборка
-      (`.github/workflows/test.yml:51`, `- name: Run build tests (dist checks)`) и `build:demo`
-      (`.github/workflows/test.yml:65`, `- name: Run demo build tests (dist-demo checks)`);
-      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:414`, `- name: Build site`) и
-      `build:stand` (`.github/workflows/test.yml:460`, `- name: Build stand-role site`); `build`
+      (`.github/workflows/test.yml:59`, `- name: Run build tests (dist checks)`) и `build:demo`
+      (`.github/workflows/test.yml:83`, `- name: Run demo build tests (dist-demo checks)`);
+      `e2e-smoke` — обычная сборка (`.github/workflows/test.yml:432`, `- name: Build site`) и
+      `build:stand` (`.github/workflows/test.yml:478`, `- name: Build stand-role site`); `build`
       (`.github/workflows/deploy.yml:115`, `- name: Build Astro site`); `lhci`
       (`.github/workflows/lighthouse.yml:43`, `- name: Build site`); `compat`
       (`.github/workflows/nightly.yml:39`, `- name: Build site`). Джобы независимы, поэтому снимок

@@ -36,6 +36,8 @@ export default defineConfig({
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',
       'tests/rich-content-migration.build.test.ts',
+      'tests/external-widgets-dist.test.ts',
+      'tests/external-widgets-config-probe.test.ts',
     ],
   },
 });
