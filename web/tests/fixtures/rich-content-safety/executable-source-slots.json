@@ -144,12 +144,12 @@
     "identity": "style|body:81fa0a5c4b7caea0"
   },
   {
-    "slotId": "src:components/Footer.astro:L75:C1:style",
+    "slotId": "src:components/Footer.astro:L108:C1:style",
     "file": "components/Footer.astro",
     "nodeKind": "element",
-    "locator": "components/Footer.astro:L75:C1:style",
-    "fingerprint": "ee84981c8087e4381d0fc225aac94f0e4f81714de9364e9ff4e3fc8d253fb312",
-    "identity": "style|body:593dde412ec88922"
+    "locator": "components/Footer.astro:L108:C1:style",
+    "fingerprint": "6ee1fd0d30da0686c3f63125f1dfa25bc012a2910babac9d4f6b7527541b98e3",
+    "identity": "style|body:4d309e4536d94a02"
   },
   {
     "slotId": "src:components/HeadMeta.astro:L26:C1:link",
@@ -622,6 +622,46 @@
     "locator": "components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
     "fingerprint": "771a6a27cc678d051334edcc8b02aac3b6efd51788257357b9f060fd48e8c6ea",
     "identity": "style|body:6d08ab9809844292"
+  },
+  {
+    "slotId": "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
+    "file": "components/social-marks/RutubeMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/RutubeMark.astro:L4:C1:svg",
+    "fingerprint": "d80d0ed5efbcad9daa6f2a67df2a251551f638a6b6412eeec46d810be1c057a1",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:132|viewBox=quoted:0 0 132 132|width=quoted:132|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+    "file": "components/social-marks/RutubeOnDarkMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+    "fingerprint": "a184a3e691e6a48c439a33b01e8e6d46e06f109a21720deb37730cfc265c6183",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:132|viewBox=quoted:0 0 132 132|width=quoted:132|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/TelegramMark.astro:L4:C1:svg",
+    "file": "components/social-marks/TelegramMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/TelegramMark.astro:L4:C1:svg",
+    "fingerprint": "d98c3d8c2e5e749e64ec6b55e599e845a6d101c0dc857dad062c57f6246cdb24",
+    "identity": "svg|aria-hidden=quoted:true|height=quoted:128|viewBox=quoted:0 0 128 128|width=quoted:128|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/VkontakteMark.astro:L4:C1:svg",
+    "file": "components/social-marks/VkontakteMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/VkontakteMark.astro:L4:C1:svg",
+    "fingerprint": "8b1f1058c5c10a81dcfb6cf542ecef7b053a82729d470a179ecfbc3f0a134cb0",
+    "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:48|viewBox=quoted:0 0 48 48|width=quoted:48|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/social-marks/YoutubeMark.astro:L4:C1:svg",
+    "file": "components/social-marks/YoutubeMark.astro",
+    "nodeKind": "element",
+    "locator": "components/social-marks/YoutubeMark.astro:L4:C1:svg",
+    "fingerprint": "1819c4214f000b6dcfcb43510ee05b812515d3cebcb2c3b42d5aaa4b1a4576cd",
+    "identity": "svg|aria-hidden=quoted:true|viewBox=quoted:0 0 28.57 20|xmlns=quoted:http://www.w3.org/2000/svg"
   },
   {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
