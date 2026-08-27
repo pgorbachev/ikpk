@@ -40,3 +40,4 @@ openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
+* :: ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8 :: external-revision

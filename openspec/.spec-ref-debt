@@ -29,6 +29,9 @@ openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:61
 openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh:87
 openspec/changes/article-list-pagination/proposal.md :: shared/
+openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md@ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8:32
+openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md@ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8:359
+openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md@ebd943db9ee5fea798e4b0ba5ac2c19b61299ab8:375
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
