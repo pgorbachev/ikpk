@@ -59,6 +59,9 @@ jobs:
     name: Unit and build tests
     needs: content-snapshot
     runs-on: ubuntu-latest
+    # Запись verified-pairs в orphan-ветку state/cms-provenance (только publication-события).
+    permissions:
+      contents: write
     env:
       CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
     defaults:
@@ -157,18 +160,83 @@ jobs:
 
       - name: Reconcile published state with content snapshot
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          # Раздача Pages (промежуточная); после переезда на nginx — тот же /release.json на origin.
+          PUBLISHED_ORIGIN: https://pgorbachev.github.io/ikpk
+        run: |
+          mkdir -p "$RUNNER_TEMP/cms-provenance"
+          git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+          if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+            git worktree add --detach "$RUNNER_TEMP/cms-provenance" state/cms-provenance
+          else
+            echo "::warning::ветка state/cms-provenance ещё не создана — reconcile soft-start"
+          fi
+          # Сверка: comparePublishedState против /release.json на раздаче (не заглушка).
+          npx tsx scripts/publication-cli.ts reconcile \
+            --origin "$PUBLISHED_ORIGIN" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
+            --commit "${{ github.sha }}" \
+            --pairs-dir "$RUNNER_TEMP/cms-provenance"
+
+      - name: Publication gate on content snapshot
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+        working-directory: web
         env:
           CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
         run: |
-          # Сверка при потерянном оповещении: расхождение опубликованного состояния с контентом.
-          node --input-type=module <<'EOF'
-          import { readFileSync, existsSync } from 'node:fs';
-          import { join } from 'node:path';
-          const dir = process.env.CONTENT_SNAPSHOT_DIR;
-          const snap = JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf-8'));
-          if (!snap.snapshotId) throw new Error('snapshot without id');
-          console.log('reconcile: snapshot', snap.snapshotId, 'ready for drift check against published state');
-          EOF
+          mkdir -p "$RUNNER_TEMP/cms-provenance"
+          if [ ! -d "$RUNNER_TEMP/cms-provenance/.git" ] && [ ! -f "$RUNNER_TEMP/cms-provenance/verified-pairs.json" ]; then
+            git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+            if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+              git worktree add --detach "$RUNNER_TEMP/cms-provenance" state/cms-provenance
+            else
+              mkdir -p "$RUNNER_TEMP/cms-provenance"
+              echo '[]' > "$RUNNER_TEMP/cms-provenance/verified-pairs.json"
+            fi
+          fi
+          # createLedger / observe / classifySnapshotForPublication
+          npx tsx scripts/publication-cli.ts gate-snapshot \
+            --ledger-dir "$RUNNER_TEMP/cms-provenance/ledger" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR"
+
+      - name: Record verified pair after successful publication checks
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch') && success()
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PROV="$RUNNER_TEMP/cms-provenance"
+          mkdir -p "$PROV/ledger"
+          test -f "$PROV/verified-pairs.json" || echo '[]' > "$PROV/verified-pairs.json"
+          # revision: для pinned bootstrap — 0; иначе high-water из журнала
+          REV=0
+          if [ -f "$PROV/ledger/high-water-mark" ]; then
+            REV=$(cat "$PROV/ledger/high-water-mark")
+          fi
+          npx tsx scripts/publication-cli.ts record-pair \
+            --pairs-dir "$PROV" \
+            --commit "${{ github.sha }}" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
+            --revision "$REV"
+          # Push в orphan-ветку с retry (8.4a уже сериализует publication-события).
+          cd "$PROV"
+          git init >/dev/null 2>&1 || true
+          git checkout -B state/cms-provenance
+          git add -A
+          git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
+          for i in 1 2 3; do
+            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
+            git pull --ff-only origin state/cms-provenance 2>/dev/null || true
+            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:state/cms-provenance; then
+              echo "pushed state/cms-provenance"
+              break
+            fi
+            echo "retry $i"
+            sleep 2
+          done
 
       - name: Measure base Vitest volume for dependency or Dependabot PR
         if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'

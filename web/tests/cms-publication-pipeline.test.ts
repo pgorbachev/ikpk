@@ -302,15 +302,48 @@ describe('триггеры публикации', () => {
     // Признак составной: одного слова «сверка» мало — существующие шаги сверяют коммит с
     // вершиной ветки и о контенте не знают вовсе. Предмет здесь — расхождение
     // ОПУБЛИКОВАННОГО СОСТОЯНИЯ С КОНТЕНТОМ, поэтому шаг обязан упоминать снимок или
-    // систему управления.
+    // систему управления И вызывать comparePublishedState (не заглушку).
     const reconciling = allSteps().filter(({ step }) => {
       const text = `${step.name ?? ''} ${stepText(step)}`;
-      return /reconcile|сверк|drift/i.test(text) && (/snapshot/i.test(text) || CMS_MARKERS.test(text));
+      return (
+        /reconcile|сверк|drift/i.test(text) &&
+        (/snapshot/i.test(text) || CMS_MARKERS.test(text)) &&
+        /comparePublishedState|publication-cli\.ts reconcile|publication:reconcile/.test(text)
+      );
     });
     expect(
       reconciling.map((r) => `${r.wf.file}:${r.job.key}/${r.step.name ?? r.step.index}`),
       'потерянное оповещение оставляет сайт расходящимся с контентом навсегда',
     ).not.toEqual([]);
+  });
+
+  it('publication gate и ledger вызываются из workflow, а не только из unit-тестов', () => {
+    const text = allSteps()
+      .map(({ step }) => stepText(step))
+      .join('\n');
+    expect(text, 'createLedger / gate-snapshot не вызван в CI').toMatch(
+      /createLedger|gate-snapshot|publication-cli\.ts gate-snapshot/,
+    );
+    expect(text, 'chooseManualPublication не вызван в deploy').toMatch(
+      /chooseManualPublication|choose-manual|publication-cli\.ts choose-manual/,
+    );
+    expect(text, 'classifyEventDrivenPublication / event-gate не вызван').toMatch(
+      /event-gate|classifyEventDrivenPublication|publication-cli\.ts event-gate/,
+    );
+    expect(text, '/release.json не пишется при выкладке').toMatch(
+      /write-release|writeReleaseDeclaration|release\.json/,
+    );
+  });
+
+  it('ручной deploy принимает inputs отката', () => {
+    const deploy = workflows.find((wf) => wf.file === 'deploy.yml');
+    expect(deploy, 'deploy.yml не найден').toBeTruthy();
+    const dispatch = deploy!.triggers.workflow_dispatch;
+    expect(dispatch, 'workflow_dispatch без inputs').toBeTruthy();
+    const inputs = (dispatch as { inputs?: Record<string, unknown> }).inputs ?? {};
+    expect(Object.keys(inputs)).toEqual(
+      expect.arrayContaining(['rollback_snapshot_id', 'rollback_confirmed', 'rollback_reason']),
+    );
   });
 
   // Сценарии: форма данных разошлась; неуспех проверки имеет адресата; расхождение не влияет

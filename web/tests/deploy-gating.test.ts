@@ -240,6 +240,10 @@ describe('гейт публикации: конфигурация', () => {
           if (resolved === TESTED_RUN_ID || resolved === String(TESTED_RUN_ID)) return null;
           return `${wf.file}:${key}:шаг ${step.index} — run-id='${String(runId)}' при workflow_run даёт '${String(resolved)}', а проверенный прогон — ${TESTED_RUN_ID}`;
         }
+        // Выгрузка orphan-ветки журнала (state/cms-provenance) — не код публикуемого сайта.
+        if (/\bgit\s+fetch\b/.test(step.run ?? '') && /state\/cms-provenance/.test(step.run ?? '')) {
+          return null;
+        }
         const ref = step.with?.ref;
         if (ref === undefined)
           return `${wf.file}:${key}:шаг ${step.index} — ref не задан, checkout возьмёт голову ветки`;
