@@ -9,6 +9,9 @@
  * - Contact info (phone, email)
  * - Key content blocks presence
  * - SEO elements (canonical, OG, JSON-LD)
+ *
+ * THIRD_PARTY_GUARD_EXEMPT: предмет этого прогона — сам живой ответ ikpk.su, поэтому
+ * перехват сторонних запросов здесь не ставится (он изменил бы то, что сравнивается).
  */
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';

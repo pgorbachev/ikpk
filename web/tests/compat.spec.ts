@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 const PAGES: Array<{ path: string; check: string }> = [
   { path: '/', check: 'Институт клинической прикладной кинезиологии' },

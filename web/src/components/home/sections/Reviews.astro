@@ -1,0 +1,173 @@
+---
+// Отзывы: официальный виджет Яндекс.Карт, встраиваемый лениво по появлению в зоне
+// видимости (тот же приём, что карта в ContactShell.astro, FR-08) — «пока секция не
+// показалась, к домену виджета запросов нет» (спека change `external-widgets`).
+//
+// Своей сводки чисел (рейтинг/число отзывов) страница не показывает: эти числа несёт
+// сам виджет, и держать их у себя значило бы два источника одной цифры, расходящихся
+// молча.
+import { DECLARED_AWARD_BADGES, buildYear, visibleAwardBadges } from '../../../lib/award-badges';
+import { isDemoForms } from '../../../lib/forms';
+
+const REVIEWS_ORG_ID = '112883331290';
+const REVIEWS_WIDGET_SRC = `https://yandex.ru/maps-reviews-widget/${REVIEWS_ORG_ID}?comments`;
+const REVIEWS_PAGE_HREF = `https://yandex.ru/maps/org/${REVIEWS_ORG_ID}/reviews/`;
+
+const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
+---
+
+<section class="reviews section" data-reviews-section>
+  <div class="container">
+    <h2 class="section-title">Отзывы на Яндекс.Картах</h2>
+    <p class="section-sub">Оценки и комментарии слушателей и пациентов — на независимой площадке.</p>
+
+    {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
+        остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
+        сравнения облика (external-widgets-build-year.spec.ts). */}
+    <div class="award-row" data-award-row>
+      {badges.map((badge) => (
+        <a
+          class="award-badge"
+          data-award-badge
+          href={badge.sourceUrl ?? undefined}
+          target="_blank"
+          rel="noopener"
+        >
+          {badge.label ?? 'Знак награды'}
+        </a>
+      ))}
+    </div>
+
+    {isDemoForms ? (
+      <p class="reviews-cta">
+        <a href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+          Смотреть отзывы на Яндекс.Картах
+        </a>
+      </p>
+    ) : (
+      <div class="reviews-embed" data-reviews-embed={REVIEWS_WIDGET_SRC}>
+        <div class="reviews-embed-placeholder" aria-hidden="true">Загрузка отзывов…</div>
+        <noscript>
+          <a class="reviews-cta" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+            Смотреть отзывы на Яндекс.Картах
+          </a>
+        </noscript>
+      </div>
+    )}
+  </div>
+
+  {/* Скрипт — ВНУТРИ секции (не после её закрывающего тега): Astro размещает
+      необрабатываемый <script> ровно там, где он написан в разметке, и вне
+      секции он стал бы её nextElementSibling — сосед, чью позицию меряет
+      `external-widgets.spec.ts`, «появление виджета не сдвигает страницу»,
+      измерил бы позицию самого узла <script> (она равна scrollY, а не позиции
+      реального соседа) вместо позиции следующей секции. */}
+  <script>
+  // Ленивое встраивание: спека (external-widgets, «SHALL происходить не раньше, чем
+  // секция появится в зоне видимости») требует ФАКТИЧЕСКОЙ видимости, а не близости к
+  // ней. Прежняя редакция копировала приём карты в ContactShell.astro (FR-08) вместе с
+  // его `rootMargin: '200px'` — там это уместно (карта не несёт такого SHALL), здесь же
+  // запрос к Яндексу уходил до появления секции в вьюпорте. `rootMargin` снят (действует
+  // умолчание '0px' — событие только при фактическом пересечении), а fallback без
+  // IntersectionObserver больше не грузит виджет немедленно: он проверяет реальную
+  // видимость границ секции и, если её ещё нет, ждёт scroll/resize.
+  document.querySelectorAll<HTMLElement>('[data-reviews-embed]').forEach((box) => {
+    const src = box.dataset.reviewsEmbed;
+    if (!src) return;
+    const load = (): void => {
+      if (box.querySelector('iframe')) return;
+      const iframe = document.createElement('iframe');
+      iframe.src = src;
+      iframe.title = 'Отзывы организации на Яндекс.Картах';
+      iframe.loading = 'lazy';
+      box.querySelector('.reviews-embed-placeholder')?.remove();
+      box.prepend(iframe);
+    };
+    if (typeof IntersectionObserver === 'function') {
+      const io = new IntersectionObserver((entries, obs) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          load();
+          obs.disconnect();
+        }
+      });
+      io.observe(box);
+    } else {
+      const isVisible = (): boolean => {
+        const rect = box.getBoundingClientRect();
+        return rect.bottom > 0 && rect.top < window.innerHeight;
+      };
+      const check = (): void => {
+        if (!isVisible()) return;
+        load();
+        window.removeEventListener('scroll', check);
+        window.removeEventListener('resize', check);
+      };
+      if (isVisible()) {
+        load();
+      } else {
+        window.addEventListener('scroll', check, { passive: true });
+        window.addEventListener('resize', check);
+      }
+    }
+  });
+  </script>
+</section>
+
+<style>
+  /* Стили Astro скопированы по CSS-области видимости (data-astro-cid-*): класс
+     `.section-sub`, задействованный в других секциях (Teachers.astro и т. д.),
+     сюда не дотягивается — без своего правила абзац наследовал бы недостаточный
+     контраст (axe, `color-contrast`, 2.55 вместо минимума 4.5:1). */
+  .section-sub {
+    color: var(--color-gray-500);
+    margin-bottom: 1.5rem;
+  }
+
+  .award-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    min-height: 2.5rem;
+    margin: 0.75rem 0 1.25rem;
+  }
+
+  .award-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--font-s);
+    color: var(--color-dark-700);
+    text-decoration: none;
+    border: 1px solid var(--color-gray-150, #e2e2e2);
+    border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+  }
+
+  .reviews-embed {
+    position: relative;
+    min-height: 24rem;
+    background: var(--color-light-300, #f5f5f5);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .reviews-embed iframe {
+    display: block;
+    width: 100%;
+    height: 24rem;
+    border: 0;
+  }
+
+  .reviews-embed-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24rem;
+    color: var(--color-gray-500, #767676);
+    font-size: var(--font-s);
+  }
+
+  .reviews-cta {
+    margin-top: 0.5rem;
+  }
+</style>
