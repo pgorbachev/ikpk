@@ -2609,3 +2609,44 @@ build-year.spec.ts:78`, fail-closed throw). Массив пуст: задача 
 `DECLARED_AWARD_BADGES` реальной записью (`year`, `sourceUrl`, `awardEvidence`,
 `markUsageEvidence`) → снять `.skip` с `describe` в `external-widgets-build-year.spec.ts`.
 Change `external-widgets` не архивируется, пока TD-53 не закрыт.
+
+## TD-54. `Deploy to GitHub Pages` гарантированно красный — Pages не включён на уровне репозитория
+
+**Файлы:** нет — чисто наблюдаемое поведение, код и тесты не менялись.
+
+**Проблема.** GitHub Pages не включён на уровне настроек репозитория
+(`gh api repos/pgorbachev/ikpk/pages` → 404: `Not Found`, «Ensure GitHub Pages has been
+enabled»), а фактическая публикация идёт на VPS (`docs/deploy-vps.md`,
+`scripts/deploy-web.sh`) — Pages была вторым, интерим-путём без `CNAME`. Из-за этого
+каждый успешный прогон `Tests` на `main` порождает гарантированно красный запуск
+`Deploy to GitHub Pages` (`HttpError: Not Found`, `Failed to create deployment
+(status: 404)`). Публикацию это не блокирует — `Deploy to GitHub Pages` не входит ни в
+обязательные контексты branch protection, ни в гейт публикации (`Tests` — единственный
+workflow, событие об успехе которого что-либо запускает), это постоянно красный, но
+некритичный прогон в ленте Actions.
+
+**Рассмотренный и отклонённый путь.** Отключение триггера `workflow_run` в
+`.github/workflows/deploy.yml` (оставить только `workflow_dispatch`) устраняет красноту,
+но ломает 14 тестов в `demo-gate.test.ts`/`deploy-gating.test.ts` и, при дальнейшей
+проверке, ещё 6 в `browser-test-gating.test.ts`/`social-accounts.test.ts` — ≈20 тестов в
+4 файлах, а не 2, как показалось сначала. Все они намеренно выводят «обязательный
+прогон» не по имени, а из структуры гейта (`workflow_run.workflows` у публикующего
+workflow, `workflowRunTrigger`, `web/tests/helpers/workflows.ts`), и без триггера теряют
+предмет. Правка отменена целиком (`.github/workflows/deploy.yml`,
+`web/tests/demo-gate.test.ts`, `web/tests/deploy-gating.test.ts` возвращены к
+зафиксированному состоянию); владелец предпочёл известный красный прогон правке такого
+объёма ради косметики.
+
+Отдельно: `deploy-gating` сам по себе не трогается — `openspec/changes/cms-content-publication`
+(активный, ещё не смерженный change) содержит собственную `MODIFIED`-дельту на него,
+переработанную под сценарий внешнего CMS-контента, и любая правка `deploy-gating` сейчас
+означает переписывать код, на который эта дельта уже опирается.
+
+**Что делать.** Один из двух путей, решает владелец: (а) включить Pages на уровне
+репозитория (`gh api --method PUT repos/pgorbachev/ikpk/pages …` или через UI) — тогда
+`Deploy to GitHub Pages` начнёт проходить зелёным без изменения кода вовсе; (б) решить,
+что Pages не возвращается никогда → отдельная задача, дожидающаяся разрешения конфликта
+с `cms-content-publication`, на снос `workflow_run`-триггера и адаптацию всех ≈20
+тестов в 4 файлах под новый контракт (не просто `.skip`, а переписывание — они
+проверяют реальный инвариант, который в этом случае исчезнет). Ни один путь не выбран
+на момент записи.
