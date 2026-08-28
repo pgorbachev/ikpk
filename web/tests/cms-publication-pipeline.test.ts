@@ -356,6 +356,25 @@ describe('триггеры публикации', () => {
     const needs = JSON.stringify(record!.needs ?? []);
     expect(needs, 'publication-record обязан ждать e2e-smoke (полный гейт)').toMatch(/e2e-smoke/);
     expect(needs, 'publication-record обязан ждать scripts-unit').toMatch(/scripts-unit/);
+    expect(needs, 'publication-record обязан ждать dependency-invariants').toMatch(
+      /dependency-invariants/,
+    );
+  });
+
+  it('cancel-stale планирует следующий publication-прогон', () => {
+    const cli = readFileSync(join(REPO_ROOT, 'web/scripts/publication-cli.ts'), 'utf8');
+    expect(cli, 'CLI не вызывает schedule после cancel-stale').toMatch(/scheduleLatestPublicationRun/);
+    expect(cli, 'dispatch без типа cms-content-changed').toMatch(/cms-content-changed/);
+
+    const gateSteps = allSteps().filter(({ step }) =>
+      /Publication gate on content snapshot|gate-snapshot/.test(`${step.name ?? ''} ${stepText(step)}`),
+    );
+    expect(gateSteps.length, 'шаг gate-snapshot в workflow не найден').toBeGreaterThan(0);
+    const env = JSON.stringify(gateSteps.map(({ step }) => step.env ?? {}));
+    expect(env, 'gate-snapshot без GITHUB_TOKEN — cancel-stale не запланирует прогон').toMatch(
+      /GITHUB_TOKEN/,
+    );
+    expect(env).toMatch(/GITHUB_REPOSITORY/);
   });
 
   it('ручной deploy принимает inputs отката', () => {
