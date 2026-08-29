@@ -51,15 +51,6 @@ export interface RuntimeAuditScopeInput {
   head: { exitCode: number; reportJson: string };
 }
 
-export interface PublishedHeadInput {
-  mainHeadSha: string;
-  mainHeadCreatedAt: string;
-  publishedSha: string | null;
-  now: string;
-  maxLagMs: number;
-  cancelledIntermediateShas?: string[];
-}
-
 const DEPENDENCY_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json)$/;
 
 export function isDependencyOnlyChange(changedFiles: string[]): boolean {
@@ -371,29 +362,4 @@ export function checkRuntimeAuditScope(input: RuntimeAuditScopeInput): GateResul
     baseCount,
     headCount,
   };
-}
-
-export function checkPublishedHead(input: PublishedHeadInput): GateResult {
-  if (!/^[0-9a-f]{40}$/i.test(input.mainHeadSha)) return failure('не удалось определить SHA вершины main');
-  if (input.publishedSha === input.mainHeadSha) {
-    return { ok: true, message: `вершина main ${input.mainHeadSha} опубликована` };
-  }
-  if (!Number.isFinite(input.maxLagMs) || input.maxLagMs <= 0) {
-    return failure('допустимое отставание публикации не задано');
-  }
-  const headCreatedAt = Date.parse(input.mainHeadCreatedAt);
-  const now = Date.parse(input.now);
-  if (!Number.isFinite(headCreatedAt) || !Number.isFinite(now) || now < headCreatedAt) {
-    return failure('не удалось измерить возраст вершины main');
-  }
-  const lag = now - headCreatedAt;
-  if (lag <= input.maxLagMs) {
-    return {
-      ok: true,
-      message: `вершина main ${input.mainHeadSha} ещё в допустимом окне публикации (${lag} ms)`,
-    };
-  }
-  return failure(
-    `вершина main ${input.mainHeadSha} не опубликована ${lag} ms; опубликован ${input.publishedSha ?? 'none'}`,
-  );
 }
