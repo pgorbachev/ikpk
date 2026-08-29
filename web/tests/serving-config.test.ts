@@ -1179,6 +1179,141 @@ describe('раздача: кеш-политика и сжатие в текст�
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Единственность адреса: форма со завершающим слэшем (дефект, red/green)
+// ---------------------------------------------------------------------------
+
+/**
+ * ДЕФЕКТ. Страница, которой не было на старом сайте, доступна по ДВУМ адресам.
+ *
+ * Правила `X/ → X` порождаются генератором из `discovery/url_map.csv` — снимка
+ * СТАРОГО сайта. Маршрут, которого в той карте нет, правила не получает, и
+ * `try_files $uri $uri/index.html …` отдаёт ему 200 на обеих формах. Замерено на
+ * живой раздаче стенда 29.08.2026 (`curl -s -o /dev/null -w '%{http_code}'`, без
+ * `-L`, иначе предмет подменяется следованием по редиректу):
+ *
+ *   http://193.124.115.99/video/33   → 200
+ *   http://193.124.115.99/video/33/  → 200   ← второй адрес той же страницы
+ *   http://193.124.115.99/kontakty/  → 301   ← адрес из карты, ведёт себя верно
+ *
+ * По свежей сборке (269 маршрутов) правила со слэша нет у 21. Дубль адреса — это
+ * ровно то, против чего предупреждает Google: одна страница SHALL быть доступна по
+ * одному адресу, остальные формы SHALL перенаправлять на него.
+ *
+ * ПОЧЕМУ ПРОВЕРЯЕТСЯ ПРИЗНАК ПРАВИЛА, А НЕ СПИСОК МАРШРУТОВ. Список известных
+ * страниц — это перечень частных случаев: он отстаёт от предмета молча (AGENTS.md,
+ * «не перечислять частные случаи того, что проверяешь»), и маршрут, добавленный
+ * завтра, снова окажется без правила. Проверяется общее правило нормализации, и
+ * корпус адресов задан ФОРМАМИ пути, а не именами страниц.
+ *
+ * ГРАНИЦА. Модель строится по тексту vhost и не видит `include` с правилами
+ * перенаправления: там свои `location = <адрес>` (точное совпадение в nginx
+ * выигрывает у регулярного выражения). Обе ветви обязаны давать один исход —
+ * 301 на форму без слэша, — и вторая проверяется здесь же, по тексту include.
+ */
+
+/** Раскрывает цель `return` nginx на совпадении регулярного выражения location. */
+function expandReturnTarget(target: string, m: RegExpMatchArray, query: string): string {
+  return target
+    .replace(/\$is_args/g, query ? '?' : '')
+    .replace(/\$args/g, query)
+    .replace(/\$(\d)/g, (_, d: string) => m[Number(d)] ?? '');
+}
+
+/** Как обработчик отвечает на адрес: 301 с раскрытой целью, либо иной исход. */
+function redirectFor(uri: string, query = ''): { code: number; target: string } | null {
+  const loc = matchLocation(cfg().locs, uri);
+  if (!loc) return null;
+  const ret = loc.block.directives.find((d) => d.name === 'return');
+  if (!ret) return null;
+  const code = Number(ret.args[0]);
+  if (!Number.isInteger(code)) {
+    throw new Error(
+      `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в «${loc.block.header}» директива «${ret.raw}» не разбирается ` +
+        'как return <код> <цель>',
+    );
+  }
+  const m = loc.kind === 'regex' || loc.kind === 'regex-i' ? uri.match(locRegExp(loc)) : null;
+  const target = m ? expandReturnTarget(ret.args[1] ?? '', m, query) : (ret.args[1] ?? '');
+  return { code, target };
+}
+
+/**
+ * Корпус задан формами пути, а не именами страниц. Каждая форма встречается в
+ * дереве маршрутов сайта: один сегмент, вложенность 2–4, числовой хвост
+ * (`/video/33`), длинный слаг с дефисами.
+ */
+const SLASH_FORMS: Array<{ uri: string; canonical: string; why: string }> = [
+  { uri: '/kontakty/', canonical: '/kontakty', why: 'один сегмент' },
+  { uri: '/video/33/', canonical: '/video/33', why: 'два сегмента, числовой хвост' },
+  {
+    uri: '/institut-apledzhera/mozg/mozg-govorit-1/',
+    canonical: '/institut-apledzhera/mozg/mozg-govorit-1',
+    why: 'три сегмента',
+  },
+  {
+    uri: '/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov/',
+    canonical:
+      '/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov',
+    why: 'длинный слаг с дефисами',
+  },
+  { uri: '/a/b/c/d/', canonical: '/a/b/c/d', why: 'вложенность 4' },
+  { uri: '/Kontakty/', canonical: '/Kontakty', why: 'верхний регистр — тот же дубль' },
+];
+
+describe('единственность адреса: форма со завершающим слэшем', () => {
+  it('форма со слэшем перенаправляется на канонический адрес без слэша', () => {
+    const bad: string[] = [];
+    for (const f of SLASH_FORMS) {
+      const r = redirectFor(f.uri);
+      if (!r) {
+        bad.push(`${f.uri} (${f.why}): не перенаправляется вовсе — второй рабочий адрес`);
+      } else if (r.code !== 301 || r.target !== f.canonical) {
+        bad.push(`${f.uri} (${f.why}): ${r.code} → ${r.target}, ожидалось 301 → ${f.canonical}`);
+      }
+    }
+    expect(
+      bad,
+      `адресов, у которых форма со слэшем не сводится к каноническому адресу: ${bad.length}\n` +
+        bad.join('\n'),
+    ).toEqual([]);
+  });
+
+  it('корень «/» не перенаправляется: у него формы без слэша не существует', () => {
+    const r = redirectFor('/');
+    expect(
+      r,
+      `корень получил перенаправление ${r?.code} → ${r?.target}. https://example.com ` +
+        'эквивалентен https://example.com/ (RFC 3986), редирект здесь — петля или потеря главной',
+    ).toBeNull();
+  });
+
+  it('строка запроса переживает нормализацию', () => {
+    const r = redirectFor('/video/33/', 'utm_source=seo&page=2');
+    expect(
+      r?.target,
+      'строка запроса срезана при нормализации — глубокая ссылка с параметром сломана',
+    ).toBe('/video/33?utm_source=seo&page=2');
+  });
+
+  it('правила перенаправления ведут на форму БЕЗ слэша, а не на неё же со слэшем', () => {
+    const text = readFileSync(join(ROOT, REDIRECTS_REL), 'utf-8');
+    const rules = [...text.matchAll(/^location = (\S+) \{ return 301 (\S+); \}$/gm)];
+    expect(
+      rules.length,
+      `в ${REDIRECTS_REL} нет ни одного правила — проверять нечего ` +
+        '(запустите npm run redirects:gen)',
+    ).toBeGreaterThan(0);
+    const toSlash = rules.filter((m) => m[2].endsWith('/') && m[2] !== '/').map((m) => `${m[1]} → ${m[2]}`);
+    expect(
+      toSlash.slice(0, 8),
+      `правил, ведущих на форму со завершающим слэшем: ${toSlash.length}. Канон сайта — ` +
+        'адрес без слэша, такое правило создаёт цепочку 301 → 301 либо второй канон',
+    ).toEqual([]);
+  });
+});
+
 /*
  * СЦЕНАРИИ БЕЗ АВТОМАТИЧЕСКОЙ ПРОВЕРКИ (tasks.md 2.10)
  *
