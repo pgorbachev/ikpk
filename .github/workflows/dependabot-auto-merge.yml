@@ -122,7 +122,7 @@ jobs:
       checks: write
       contents: write
       pull-requests: write
-    uses: "pgorbachev/ikpk/.github/workflows/dependabot-auto-merge-policy.yml@6338a9ece9ee3f626469268be60addd65bcd748d" # engine v5 (squash, allow_merge_commit=false)
+    uses: "pgorbachev/ikpk/.github/workflows/dependabot-auto-merge-policy.yml@20d2b228636f35b13ea0f848eea43fe64c195285" # engine v5 (squash, allow_merge_commit=false)
     with:
       metadata-json-base64: ${{ needs.authenticate.outputs.metadata-json-base64 }}
       source-action: ${{ needs.authenticate.outputs.source-action }}
