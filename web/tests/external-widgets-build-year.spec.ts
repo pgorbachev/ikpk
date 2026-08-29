@@ -131,11 +131,7 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
   }
 }
 
-// TD-53 (docs/tech-debt.md): DECLARED_AWARD_BADGES пуст (задача 1.3 tasks.md не закрыта —
-// право размещать знак не подтверждено), а без хотя бы одного знака с `year` позитивный
-// контроль «состав знаков различается» не построить — beforeAll кидает до первого теста.
-// Снять .skip вместе с заполнением DECLARED_AWARD_BADGES настоящей записью.
-test.describe.skip('датозависимый фрагмент — строка знаков наград', () => {
+test.describe('датозависимый фрагмент — строка знаков наград', () => {
   // Прогон идёт на ОДНОМ разрешении, и отбор сделан НЕ здесь, а в скрипте пакета
   // (`test:e2e:widgets` вызывает этот файл только с `--project=desktop`). Предмет —
   // зависимость облика от года сборки, а не адаптивность; второе разрешение удвоило бы две
@@ -145,7 +141,12 @@ test.describe.skip('датозависимый фрагмент — строка
   let current: Measured;
   let next: Measured;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // `describe.configure({ timeout })` выше governит таймаут ТЕСТОВ, а не `beforeAll`:
+    // хук держит собственный таймаут (умолчание конфига — 10с, `playwright.config.ts:16`),
+    // и до снятия `.skip` с этого файла (TD-53) обе пробные сборки внутри него ни разу не
+    // запускались — несовпадение обнаружилось только сейчас, при первом реальном прогоне.
+    testInfo.setTimeout(15 * 60 * 1000);
     const year = await declaredBadgeYear();
     // `keepOnDisk`: оба дерева надо раздавать браузеру. Убираются здесь же, в `finally`:
     // одна пробная сборка занимает 91 МБ, и забытые каталоги за сессию съели 5,4 ГБ,
