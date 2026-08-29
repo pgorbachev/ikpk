@@ -32,7 +32,12 @@ openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
+openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
+openspec/changes/cms-content-publication/design.md :: state/cms-provenance
+openspec/changes/cms-content-publication/specs/cms-content-source/spec.md :: state/cms-provenance
+openspec/changes/cms-content-publication/tasks.md :: feat/cms-content-publication@858900d474018564a8df2bc6770fd789c1e67da8
+openspec/changes/cms-content-publication/tasks.md :: state/cms-provenance
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html

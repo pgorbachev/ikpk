@@ -49,7 +49,7 @@ import {
 // «push сам по себе не публикует» останется красной до второго шага. Это не дефект
 // проверки: она стережёт требование, а не промежуточный шаг плана.
 
-const { OWN_REPO, FORK_REPO, TESTED_SHA } = CONTEXT_CONSTANTS;
+const { OWN_REPO, FORK_REPO, TESTED_SHA, TESTED_RUN_ID } = CONTEXT_CONSTANTS;
 
 const asList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(String) : typeof v === 'string' ? [v] : [];
@@ -229,6 +229,21 @@ describe('гейт публикации: конфигурация', () => {
     const ctx = workflowRunContext({ conclusion: 'success' });
     const wrong = checkouts
       .map(({ job: key, step }) => {
+        // Артефакт снимка привязывается к проверенному прогону через `run-id`, а не
+        // через `ref` (у download-artifact его нет). Без run-id шаг взял бы артефакты
+        // текущего деплой-прогона — связь с Tests теряется.
+        if (/^actions\/download-artifact(@|$)/.test(step.uses ?? '')) {
+          const runId = step.with?.['run-id'];
+          if (runId === undefined)
+            return `${wf.file}:${key}:шаг ${step.index} — download-artifact без run-id не привязан к проверенному прогону`;
+          const resolved = evaluateToValue(String(runId), ctx);
+          if (resolved === TESTED_RUN_ID || resolved === String(TESTED_RUN_ID)) return null;
+          return `${wf.file}:${key}:шаг ${step.index} — run-id='${String(runId)}' при workflow_run даёт '${String(resolved)}', а проверенный прогон — ${TESTED_RUN_ID}`;
+        }
+        // Выгрузка orphan-ветки журнала (state/cms-provenance) — не код публикуемого сайта.
+        if (/\bgit\s+fetch\b/.test(step.run ?? '') && /state\/cms-provenance/.test(step.run ?? '')) {
+          return null;
+        }
         const ref = step.with?.ref;
         if (ref === undefined)
           return `${wf.file}:${key}:шаг ${step.index} — ref не задан, checkout возьмёт голову ветки`;

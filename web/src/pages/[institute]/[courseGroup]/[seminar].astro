@@ -10,11 +10,11 @@ import {
   getScheduleEntries,
   getTeachers,
   cleanBodyHtml,
-  stripLegacySeminarTail,
+  stripLegacySeminarTail, getSnapshotReferenceDate,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
-import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
+import { isCurrentOrFuture } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -45,7 +45,7 @@ const { seminar, courseGroup, institute } = Astro.props as {
 // Актуальность считается по ПОСЛЕДНЕМУ дню события, а не по первому: из 63
 // записей расписания 60 многодневные, и фильтр по startAt убирал бы идущий
 // семинар со страницы уже на второй день обучения.
-const today = calendarToday();
+const today = getSnapshotReferenceDate();
 const schedule = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
 );

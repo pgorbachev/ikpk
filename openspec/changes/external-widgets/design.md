@@ -18,7 +18,7 @@
 
 **Третье: проверки, которые придётся тронуть, устроены на признаках нашего вывода.** Проверка
 демо-вывода ищет строки нашей аналитики (`web/tests/demo-output.test.ts:59`, `['id Яндекс.Метрики'`), а визуальные эталоны снимают страницу целиком после тишины в сети
-(`web/tests/visual-baseline.spec.ts:50`, `waitForLoadState('networkidle')`). Оба предмета живой
+(`web/tests/visual-baseline.spec.ts:51`, `waitForLoadState('networkidle')`). Оба предмета живой
 сторонний iframe меняет.
 
 ## Goals / Non-Goals

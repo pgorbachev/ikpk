@@ -1,5 +1,10 @@
 /**
- * Генерация конфигурации редиректов для nginx из discovery/url_map.csv.
+ * Генерация конфигурации редиректов для nginx из карты адресов снимка.
+ *
+ * Карта (`url_map.csv`) входит в артефакт/каталог снимка контента тем же каналом, что и
+ * `snapshot.json` (задача 6.3 cms-content-publication). История адресов как предмет данных —
+ * соседний change; здесь генератор только читает её через снимок, а не из обходного пути
+ * `discovery/` в обход артефакта.
  *
  * Зачем артефакт, а не «настроим руками при переключении»: карта содержит 768
  * правил, и половина из них — не про красоту URL, а про сохранение трафика.
@@ -17,20 +22,34 @@
  * в конфиг редиректов они не идут.
  *
  * Запуск: из web/ — `npm run redirects:gen`
+ * Переопределение карты: `--map=<путь-от-корня-репо>` (для проб конфликтов).
  */
 
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveSnapshotDir } from './lib/snapshot-paths.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-// Путь к карте переопределяется `--map=<файл>`: иначе проверку поведения
-// генератора (падает ли он на конфликте) нельзя выполнить, не подменяя рабочую
-// карту — а подмена рабочих данных в тесте оставляет мусор при любом обрыве.
+const WEB_ROOT = join(ROOT, 'web');
+
 const mapArg = process.argv.find((a) => a.startsWith('--map='));
-const MAP_CSV = mapArg
-  ? join(ROOT, mapArg.slice('--map='.length))
-  : join(ROOT, 'discovery', 'url_map.csv');
+
+function resolveUrlMapPath(): string {
+  if (mapArg) return join(ROOT, mapArg.slice('--map='.length));
+
+  const snapDir = resolveSnapshotDir(WEB_ROOT, ROOT);
+  const fromSnap = join(snapDir, 'url_map.csv');
+  if (!existsSync(fromSnap)) {
+    throw new Error(
+      `нет url_map.csv в снимке (${snapDir}): положите карту в артефакт/фикстуру снимка ` +
+        `(prepare-snapshot копирует её вместе со snapshot.json)`,
+    );
+  }
+  return fromSnap;
+}
+
+const MAP_CSV = resolveUrlMapPath();
 const OUT = mapArg
   ? join(ROOT, 'deploy', 'nginx-redirects.probe.conf')
   : join(ROOT, 'deploy', 'nginx-redirects.conf');
@@ -107,11 +126,13 @@ for (const r of redirects) {
   else seen.set(r.old_path, r.new_path);
 }
 
+const mapLabel = MAP_CSV.startsWith(ROOT) ? MAP_CSV.slice(ROOT.length + 1) : MAP_CSV;
+
 const lines = [
   '# Редиректы легаси-адресов старого сайта.',
   '#',
-  '# СГЕНЕРИРОВАНО: web/scripts/gen-redirects.ts из discovery/url_map.csv.',
-  '# Править руками не нужно — правьте карту и перегенерируйте.',
+  `# СГЕНЕРИРОВАНО: web/scripts/gen-redirects.ts из ${mapLabel}.`,
+  '# Править руками не нужно — правьте карту в снимке и перегенерируйте.',
   '#',
   '# Подключение в server-блоке: include <WEB_ROOT>/shared/nginx-redirects.conf;',
   '# Файл кладёт scripts/deploy-web.sh, include прописывает scripts/bootstrap-vps.sh.',

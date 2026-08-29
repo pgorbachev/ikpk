@@ -5,18 +5,21 @@
 Complete **all** items before scheduling go-live.
 
 - [ ] Strapi populated with all content (run `cd scripts && npm run import`, verify entity counts match `discovery/content_dump.json`)
-- [ ] All 259 pages building without errors (`cd web && npm run build` — zero errors; 255 content pages + 404 + 3 noindex preview variants, see canonical counts in `docs/architecture/wbs.md`)
+- [ ] Content snapshot captured or fixture current (`fixtures/content-snapshot/`); weekly compat workflow green
+- [ ] All pages building from snapshot without errors (`cd web && npm run build` — zero errors; page count from current snapshot)
+- [ ] Redirects regenerated from snapshot map (`cd web && npm run redirects:gen`; map is `url_map.csv` in the snapshot artifact)
 - [ ] Lighthouse CI on 4 templates (home, course, seminar, articles) — record baselines, verify KPI targets (see `docs/kpi-validation.md`)
 - [ ] Crawl all URLs from sitemap, verify 200 status (`cd scripts && npx tsx validate-urls.ts --base-url https://staging.ikpk.su`)
-- [ ] Test 301 redirects from `discovery/url_map.csv` (script validates all entries; manually spot-check 20+ URLs in browser)
+- [ ] Test 301 redirects from snapshot `url_map.csv` (script validates all entries; manually spot-check 20+ URLs in browser)
 - [ ] UAT sign-off from stakeholder (written confirmation per Этап 5.2)
 - [ ] DNS TTL lowered to 300s (at least 24 hours before cutover)
 - [ ] Old site accessible via backup IP for rollback (document IP in this section before go-live: `___.___.___.___ `)
 - [ ] Yandex.Metrika counter `39506315` added to new site `<head>` and firing on page load
 - [ ] Yandex.Webmaster verified for new site (if access available)
 - [ ] Google Search Console verified (if access available)
-- [ ] Security headers configured on CDN (HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
+- [ ] Security headers configured on nginx VPS (HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
 - [ ] Functional parity checklist 100% complete (see `discovery/functional_parity_checklist.md`)
+- [ ] Provenance ledger ready **before** any migration run that writes to the live CMS database
 
 ---
 
@@ -32,20 +35,28 @@ cd scripts && npm run import
 
 **Verify:** Compare entity counts in Strapi admin panel with expected counts from `discovery/content_dump.json`.
 
-### 2. Build and Deploy to CDN
+### 2. Build site from content snapshot
+
+The build reads a **content snapshot**, not live Strapi and not `discovery/entities` directly.
 
 ```bash
-cd web && npm run build
+# Local / PR: pinned fixture → web/.snapshot (prebuild also does this)
+cd web && npm run snapshot:prepare && npm run build
+
+# Publishing CI: artifact from the Tests run is placed in CONTENT_SNAPSHOT_DIR first
+# Redirects come from the same snapshot (url_map.csv), then:
+npm run redirects:gen
 ```
 
-Deploy the `web/dist/` directory to CDN (Vercel/Netlify).
-
 **Verify:** Build completes with zero errors. Check `dist/` contains expected number of HTML files.
+Pair published on the origin is **commit + snapshot id** (see published-state observation), not commit alone.
 
 ```bash
 find web/dist -name '*.html' | wc -l
-# Expected: 259 (255 content pages + 404.html + 3 noindex preview variants)
+# Expected: ~270 with current fixture (content pages + 404 + preview variants)
 ```
+
+Deploy the `web/dist/` directory via the existing VPS path (`scripts/deploy-web.sh`), not a foreign CDN.
 
 ### 3. Verify New Site at CDN URL
 

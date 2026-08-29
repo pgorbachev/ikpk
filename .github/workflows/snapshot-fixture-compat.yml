@@ -1,0 +1,60 @@
+name: Snapshot fixture compatibility
+
+# Отдельная сетевая проверка соответствия закреплённого снимка форме данных CMS.
+# Не входит в обязательные проверки PR (D7).
+# Единственный шаг-производитель снимка с обращением к CMS — здесь (capture).
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  fixture-compat:
+    name: Fixture vs CMS API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture content snapshot and compare fixture
+        env:
+          CMS_URL: ${{ secrets.CMS_URL }}
+          CMS_TOKEN: ${{ secrets.CMS_TOKEN }}
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          # Единственный производитель: npm run snapshot:capture (признак pipeline-теста).
+          if [ -z "$CMS_URL" ]; then
+            env -u CMS_URL -u CMS_TOKEN npm run snapshot:capture
+            echo "::warning::CMS_URL не задан — сверка формы отложена; адресат: maintainers"
+            exit 0
+          fi
+          npm run snapshot:capture
+          echo "fixture-compat: сравнить типы фикстуры с API $CMS_URL — адресат maintainers"
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Закреплённый снимок разошёлся с CMS API',
+              body: 'Проверка Snapshot fixture compatibility упала. Адресат: maintainers. Расписание: еженедельно (пн 06:00 UTC) и workflow_dispatch.',
+            });

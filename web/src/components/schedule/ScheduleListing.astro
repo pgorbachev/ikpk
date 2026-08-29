@@ -1,7 +1,7 @@
 ---
 import ScheduleEventCard from './ScheduleEventCard.astro';
 
-interface Card {
+interface ScheduleItem {
   additionalText: string;
   cityName: string;
   citySlug: string;
@@ -25,10 +25,10 @@ interface Card {
 }
 
 interface Props {
-  cards: Card[];
+  items: ScheduleItem[];
 }
 
-const { cards } = Astro.props as Props;
+const { items } = Astro.props as Props;
 
 // Ключи месяцев уезжают в разметку через ПРОБЕЛ, и клиентский скрипт сравнивает по
 // целому токену, а не подстрокой. Подстроковое совпадение верно лишь случайно — из-за
@@ -40,7 +40,7 @@ const { cards } = Astro.props as Props;
 ---
 
 <div class="schedule-list" data-testid="schedule-list">
-  {cards.map((card) => (
+  {items.map((card) => (
     <div
       class="schedule-card-item"
       data-schedule-item

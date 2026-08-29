@@ -1,8 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window';
+import { isCurrentOrFuture } from '../src/lib/schedule-window';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
+import { loadPinnedSnapshot, loadPinnedType } from './helpers/pinned-snapshot';
 
 test.beforeEach(async ({ page }) => {
   await installThirdPartyGuard(page);
@@ -31,7 +30,7 @@ test.beforeEach(async ({ page }) => {
 // ВЫБИРАЮТСЯ по данным, а перегруз колонки, которого в данных может не оказаться,
 // создаётся мутацией DOM, а не ожиданием подходящего семинара.
 //
-// Сущности читаются прямо из `discovery/entities/`, а не через `src/lib/data`:
+// Сущности читаются из закреплённого снимка, а не через `src/lib/data`:
 // `data.ts` тянет `media-manifest.json`, а трансформер Playwright импорт JSON без
 // атрибута типа не берёт — прогон падал на сборе, не запустив ни одного теста.
 // Отбор дат при этом идёт той же функцией `isCurrentOrFuture`, что и у страницы.
@@ -68,11 +67,10 @@ interface SeminarPage {
   described: boolean;
 }
 
-const ENTITIES = join(import.meta.dirname, '..', '..', 'discovery', 'entities');
-
 function entities<T>(file: string): T[] {
-  const raw = JSON.parse(readFileSync(join(ENTITIES, file), 'utf-8'));
-  const rows = Array.isArray(raw) ? raw : Object.values(raw)[0];
+  const type = file.replace(/\.json$/, '');
+  const raw = loadPinnedType<unknown>(type);
+  const rows = Array.isArray(raw) ? raw : Object.values(raw as object)[0];
   expect(Array.isArray(rows), `${file}: ожидался массив сущностей`).toBe(true);
   return rows as T[];
 }
@@ -96,7 +94,7 @@ function seminarPages(): SeminarPage[] {
     startAt: string;
     endAt: string;
   }>('schedule_entries.json');
-  const today = calendarToday();
+  const today = loadPinnedSnapshot().referenceDate;
 
   const perSlug = new Map<string, number>();
   for (const entry of schedule) {

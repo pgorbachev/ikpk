@@ -243,7 +243,7 @@ async function main(): Promise<void> {
         '# Source-only RUTUBE stand (task 4.4)',
         '',
         `- URL: ${standServer.origin}/rutube-stand.html`,
-        `- Source entity: discovery/entities/course_groups.json description_html, embed id 4a1e6023bd7a3716d8ff56bf98c96e97`,
+        `- Source entity: content-snapshot types/course_groups.json description_html, embed id 4a1e6023bd7a3716d8ff56bf98c96e97`,
         '- This HTML is source-only: course-group pages render additional_html, not description_html.',
         '- Stand reconstructs the exact system iframe (sandbox/allow/referrerpolicy/loading/title/allowfullscreen).',
         `- Captured attrs: ${JSON.stringify(attrs)}`,

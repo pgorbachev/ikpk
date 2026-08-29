@@ -42,6 +42,10 @@ export default defineConfig({
       'tests/rich-content-canary.build.test.ts',
       'tests/rich-content-hazard.build.test.ts',
       'tests/rich-content-migration.build.test.ts',
+      // Предмет — собранное дерево и снимок, которым оно собрано (change
+      // cms-content-publication). Без сборки проверять нечего, поэтому файл живёт
+      // в наборе vitest.build.config.ts, как остальные *.build.test.ts.
+      'tests/cms-article-catalog-snapshot.build.test.ts',
       // Внешние виджеты: у каждого файла свой предмет — боевой вывод и демо-вывод, —
       // поэтому оба живут в специализированных конфигурациях, а не здесь.
       'tests/external-widgets-dist.test.ts',

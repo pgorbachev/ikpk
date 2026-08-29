@@ -46,7 +46,7 @@
   Сегодня он покрывает оплату — `openspec/specs/online-payment/spec.md:267`, `Requirement: Согласие на обработку персональных данных для оплаты`.
 - **Визуальные эталоны остаются детерминированными.** Живой iframe на главной ломает снимок,
   снимаемый целой страницей с ожиданием тишины в сети:
-  `web/tests/visual-baseline.spec.ts:50`, `waitForLoadState('networkidle')`.
+  `web/tests/visual-baseline.spec.ts:51`, `waitForLoadState('networkidle')`.
 
 ### Что мерено, а не взято на слово
 

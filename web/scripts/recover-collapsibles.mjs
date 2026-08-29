@@ -2,16 +2,16 @@
  * Восстановление контента свёрнутых секций с живого сайта.
  *
  * Зачем: на ikpk.su аккордеоны сделаны на Radix Collapsible, который НЕ
- * монтирует закрытую панель в DOM. Обычный HTTP-скрейп (discovery/) поэтому
+ * монтирует закрытую панель в DOM. Обычный HTTP-скрейп (legacy dump) поэтому
  * забрал только заголовки: «Учебный план», «Как проходит обучение»,
  * «Выдаваемые документы»… — а содержимого не получил. В нашей сборке это
  * видно как 404 секции на 96 страницах, которые раскрываются в пустоту.
- * Контента нет ни в __NEXT_DATA__, ни в discovery/content_dump.json —
+ * Контента нет ни в __NEXT_DATA__, ни в legacy content dump —
  * только в DOM после клика. Значит нужен настоящий браузер.
  *
  * Что делает: открывает каждую затронутую страницу, раскрывает все секции,
  * снимает HTML каждой панели и складывает в
- * discovery/entities/collapsible_panels.json в виде
+ * legacy-transfer/collapsible_panels.json в виде
  *   { "<путь страницы>": { "<заголовок секции>": "<html панели>" } }
  *
  * Запуск из web/ (playwright стоит там):
@@ -28,9 +28,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const { readFileSync: _readCfg } = await import('node:fs');
+const _legacyRel = JSON.parse(_readCfg(resolve(ROOT, 'migration/legacy-transfer-dir.json'), 'utf-8')).relativeDir;
 /**
  * Список адресов для обхода. Путь задаётся аргументом `--targets=<файл>`; по
- * умолчанию — `discovery/collapsible_targets.json`, который лежит в репозитории.
+ * умолчанию — `legacy/collapsible_targets.json`, который лежит в репозитории.
  *
  * Прежде путь был жёстко задан как `scratch-empty.json` — черновой файл, которого
  * в репозитории нет: из чистого checkout скрипт падал на чтении, то есть
@@ -42,7 +44,7 @@ const TARGETS = resolve(
   ROOT,
   targetsArg ? targetsArg.slice('--targets='.length) : 'discovery/collapsible_targets.json',
 );
-const OUT = resolve(ROOT, 'discovery/entities/collapsible_panels.json');
+const OUT = resolve(ROOT, _legacyRel, 'collapsible_panels.json');
 const ORIGIN = 'https://ikpk.su';
 
 /**

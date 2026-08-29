@@ -1,8 +1,8 @@
 ## Why
 
 Сайт нельзя редактировать. Контент читается из снимка `discovery/entities/*.json` при сборке
-(`web/src/lib/data.ts:45`, `const ENTITIES_DIR =`), Strapi к фронту не подключён нигде, а единственный канал
-обновления — `web/scripts/refresh-catalog.ts:44`, `const ORIGIN = 'https://ikpk.su'` — тянет данные с **старого бэкенда** по
+(`web/src/lib/data.ts:45`, `const WEB_ROOT = process.cwd()`), сборка уже читает снимок контента (change `cms-content-publication`); Strapi к фронту не подключён нигде, а канал
+обновления discovery — `web/scripts/refresh-catalog.ts:45`, `const ORIGIN = 'https://ikpk.su'` — тянет данные с **старого бэкенда** по
 адресу `https://ikpk.su`, то есть по тому самому адресу, который новый сайт забирает себе при
 переключении DNS.
 
@@ -176,4 +176,4 @@ change `cms-content-publication`. Формы заявок и оплата — с
   до переключения источника», — и это было невыполнимо. По той же причине удаление модуля
   заплаток расписания из сборки принадлежит соседнему change: снять его раньше значит удалить
   события у посетителя
-  (`web/src/pages/raspisanie-i-tseny.astro:61`, `...scheduleSupplements.filter(`).
+  (`web/src/lib/schedule-supplements.ts`, удалён change `cms-content-publication`; заплатки в фикстуре снимка).

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { CHARACTERIZATION_SHA, ENTITIES_DIR, LOCAL_UPLOAD_ORIGINAL, LOCAL_UPLOAD_WEBP, KNOWN_REMOTE_UPLOAD, MEDIA_MANIFEST, REPO_ROOT } from './helpers/rich-content-safety/paths.js';
+import { CHARACTERIZATION_SHA, CONTENT_JSON_DIR, LOCAL_UPLOAD_ORIGINAL, LOCAL_UPLOAD_WEBP, KNOWN_REMOTE_UPLOAD, MEDIA_MANIFEST, REPO_ROOT } from './helpers/rich-content-safety/paths.js';
 import {
   assertDiscoveryMatchesRegistry,
   buildSourceRegistry,
@@ -71,7 +71,7 @@ describe('rich-content baseline: source discovery', () => {
   });
 
   it('zero-match input glob валит discovery', () => {
-    expect(() => discoverSources({ entitiesGlob: '*.no-such-json' })).toThrow(/zero-match/);
+    expect(() => discoverSources({ contentJsonGlob: '*.no-such-json' })).toThrow(/zero-match/);
   });
 
   it('новое незарегистрированное _html поле валит discovery', () => {
@@ -147,9 +147,9 @@ describe('rich-content baseline: migration manifest', () => {
   it('повторно собранный manifest совпадает с committed', () => {
     const discovered = discoverSources();
     const htmlHits = discovered.htmlBearing.filter((h) => matchJsonSelector(h));
-    const courseGroups = JSON.parse(readFileSync(join(ENTITIES_DIR, 'course_groups.json'), 'utf-8'));
-    const seminars = JSON.parse(readFileSync(join(ENTITIES_DIR, 'seminars.json'), 'utf-8'));
-    const teachers = JSON.parse(readFileSync(join(ENTITIES_DIR, 'teachers.json'), 'utf-8'));
+    const courseGroups = JSON.parse(readFileSync(join(CONTENT_JSON_DIR, 'course_groups.json'), 'utf-8'));
+    const seminars = JSON.parse(readFileSync(join(CONTENT_JSON_DIR, 'seminars.json'), 'utf-8'));
+    const teachers = JSON.parse(readFileSync(join(CONTENT_JSON_DIR, 'teachers.json'), 'utf-8'));
     const live = buildMigrationManifest(htmlHits, { courseGroups, seminars, teachers });
     expect(live.length).toBe(manifest.length);
     expect(live.map((r) => `${r.jsonPath}|${r.kind}|${r.sourceValue}|${r.replacementClass}`)).toEqual(

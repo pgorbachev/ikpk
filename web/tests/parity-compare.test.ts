@@ -288,7 +288,10 @@ describe('Parity audit against original site', () => {
   // вместо legacy "Институт клинической прикладной кинез…") — расхождение больше не
   // паритет, а принятое решение, и держать здесь ослабленную проверку смысла не имеет.
 
-  it('original and local contacts page keep the same primary heading', async () => {
+  // Снято при переходе nightly parity-remote на закреплённый снимок (cms-content-publication, 5.2c):
+  // локальный h1 из фикстуры больше не связан источником с живым ikpk.su — сравнение стало бы
+  // случайным. Структурные проверки паритета выше остаются.
+  it.skip('original and local contacts page keep the same primary heading', async () => {
     if (!REMOTE_PARITY_ENABLED || !remoteOriginReachable) {
       return;
     }

@@ -2,11 +2,10 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatPrice, getInstitutes, getPage, getScheduleEntries, getTeachers } from '../lib/data';
-import { calendarToday, isCurrentOrFuture } from '../lib/schedule-window';
+import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers } from '../lib/data';
+import { isCurrentOrFuture } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
-import { scheduleSupplements } from '../lib/schedule-supplements';
 
 const page = getPage('raspisanie-i-tseny');
 const institutes = getInstitutes();
@@ -55,10 +54,8 @@ function formatDurationLabel(startAt: string, endAt: string, duration: string | 
   return `${formatCalendarDate(startAt)} - ${formatCalendarDate(endAt)} - ${dayLabel} (${hoursLabel})`;
 }
 
-const todayDate = calendarToday();
-const baseEntries = getScheduleEntries();
-const scheduleIndex = new Set(baseEntries.map((entry) => `${entry.seminar.slug}:${entry.startAt}`));
-const entries = [...baseEntries, ...scheduleSupplements.filter((entry) => !scheduleIndex.has(`${entry.seminar.slug}:${entry.startAt}`))]
+const todayDate = getSnapshotReferenceDate();
+const entries = getScheduleEntries()
   // По последнему дню события, а не по первому: многодневных записей 60 из 63.
   .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, todayDate))
   .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
@@ -98,7 +95,7 @@ const visiblePrograms = entries
   .filter((value, index, values) => values.findIndex((candidate) => candidate.slug === value.slug) === index)
   .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
-const cards = entries.map((entry) => {
+const items = entries.map((entry) => {
   const institute = instituteByName.get(entry.institute.name);
   const teacher = entry.teachers?.[0]
     ? teachers.find(
@@ -152,6 +149,6 @@ const cards = entries.map((entry) => {
 <BaseLayout title={title} description={description} newsletterVariant="none">
   <div class="container schedule-page">
     <Breadcrumbs items={[{ label: 'Расписание и цены' }]} />
-    <SchedulePage title="Расписание и цены" institutes={visibleInstitutes} programs={visiblePrograms} cities={visibleCities} months={visibleMonths} cards={cards} />
+    <SchedulePage title="Расписание и цены" institutes={visibleInstitutes} programs={visiblePrograms} cities={visibleCities} months={visibleMonths} items={items} />
   </div>
 </BaseLayout>

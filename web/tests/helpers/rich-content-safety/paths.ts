@@ -8,7 +8,8 @@ export const REPO_ROOT = join(here, '..', '..', '..', '..');
 
 export const WEB_ROOT = join(REPO_ROOT, 'web');
 export const WEB_SRC = join(WEB_ROOT, 'src');
-export const ENTITIES_DIR = join(REPO_ROOT, 'discovery', 'entities');
+/** Типы закреплённого снимка контента (отдельные JSON на тип). */
+export const CONTENT_JSON_DIR = join(REPO_ROOT, 'fixtures', 'content-snapshot', 'types');
 export const CMS_API_DIR = join(REPO_ROOT, 'cms', 'src', 'api');
 export const FIXTURES_DIR = join(here, '..', '..', 'fixtures', 'rich-content-safety');
 export const MEDIA_MANIFEST = join(WEB_SRC, 'lib', 'media-manifest.json');

@@ -5,18 +5,64 @@ on:
   push:
     branches:
       - main
+  # Публикация по изменению контента (аутентификация — секрет GitHub на стороне CMS).
+  repository_dispatch:
+    types: [cms-content-changed]
+  # Календарный публикующий прогон: суточное расписание (Europe/Moscow ≈ UTC+3 → 02:00 MSK).
+  schedule:
+    - cron: '0 23 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  # События публикации — отдельная группа без отмены текущего (очередь на один ожидающий).
+  # Обычные PR сохраняют tests-${{ github.ref }} с отменой.
+  group: ${{ (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'publication-tests' || format('tests-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'repository_dispatch' && github.event_name != 'schedule' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 jobs:
+  content-snapshot:
+    name: Capture content snapshot
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Prepare content snapshot artifact
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          npm run snapshot:prepare
+          mkdir -p "$CONTENT_SNAPSHOT_DIR"
+          cp -R .snapshot/. "$CONTENT_SNAPSHOT_DIR/"
+
+      - name: Upload content snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+          retention-days: 14
+
   unit-and-build:
     name: Unit and build tests
+    needs: content-snapshot
     runs-on: ubuntu-latest
+    # contents: write — НЕ здесь: запись в state/cms-provenance вынесена в job
+    # publication-record с тем же if, что у publication-шагов (задача 7.5).
+    env:
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
     defaults:
       run:
         working-directory: web
@@ -35,6 +81,13 @@ jobs:
 
       - name: Install web dependencies
         run: npm ci
+
+      - name: Download content snapshot
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+
 
       - name: Install payments dependencies
         working-directory: payments
@@ -121,6 +174,53 @@ jobs:
           fi
           echo "dependency_only=$dependency_only" >> "$GITHUB_OUTPUT"
 
+
+      - name: Reconcile published state with content snapshot
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          # Раздача Pages (промежуточная); после переезда на nginx — тот же /release.json на origin.
+          PUBLISHED_ORIGIN: https://pgorbachev.github.io/ikpk
+        run: |
+          mkdir -p "$RUNNER_TEMP/cms-provenance"
+          git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+          if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+            git worktree add --detach "$RUNNER_TEMP/cms-provenance" state/cms-provenance
+          else
+            echo "::warning::ветка state/cms-provenance ещё не создана — reconcile soft-start"
+          fi
+          # Сверка: comparePublishedState против /release.json на раздаче (не заглушка).
+          npx tsx scripts/publication-cli.ts reconcile \
+            --origin "$PUBLISHED_ORIGIN" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
+            --commit "${{ github.sha }}" \
+            --pairs-dir "$RUNNER_TEMP/cms-provenance"
+
+      - name: Publication gate on content snapshot
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/cms-provenance"
+          if [ ! -d "$RUNNER_TEMP/cms-provenance/.git" ] && [ ! -f "$RUNNER_TEMP/cms-provenance/verified-pairs.json" ]; then
+            git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+            if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+              git worktree add --detach "$RUNNER_TEMP/cms-provenance" state/cms-provenance
+            else
+              mkdir -p "$RUNNER_TEMP/cms-provenance"
+              echo '[]' > "$RUNNER_TEMP/cms-provenance/verified-pairs.json"
+            fi
+          fi
+          # createLedger / observe / classifySnapshotForPublication
+          # cancel-stale → repository_dispatch cms-content-changed (прогон для последней записи)
+          npx tsx scripts/publication-cli.ts gate-snapshot \
+            --ledger-dir "$RUNNER_TEMP/cms-provenance/ledger" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR"
+
       - name: Measure base Vitest volume for dependency or Dependabot PR
         if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
@@ -179,6 +279,95 @@ jobs:
           path: web/dist-demo
           if-no-files-found: error
           retention-days: 1
+
+  # Запись в orphan-ветку — отдельный job: contents: write только здесь и только на
+  # publication-событиях (тот же if, что у reconcile/gate). На pull_request job не
+  # запускается → write не выдаётся форкам (задача 7.5).
+  publication-record:
+    name: Record verified publication pair
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch')
+    # Пара = успех всего обязательного прогона Tests, не только unit-and-build
+    # (иначе choose-manual мог бы выложить содержимое при красном e2e).
+    needs: [content-snapshot, unit-and-build, e2e-smoke, scripts-unit, dependency-invariants]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Download content snapshot
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+
+      - name: Record verified pair and push state/cms-provenance
+        run: |
+          PROV="$RUNNER_TEMP/cms-provenance"
+          mkdir -p "$PROV/ledger"
+          git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+          if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+            git worktree add --detach "$PROV" state/cms-provenance
+          else
+            echo '[]' > "$PROV/verified-pairs.json"
+          fi
+          test -f "$PROV/verified-pairs.json" || echo '[]' > "$PROV/verified-pairs.json"
+          REV=0
+          if [ -f "$PROV/ledger/high-water-mark" ]; then
+            REV=$(cat "$PROV/ledger/high-water-mark")
+          fi
+          npx tsx scripts/publication-cli.ts record-pair \
+            --pairs-dir "$PROV" \
+            --commit "${{ github.sha }}" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR" \
+            --revision "$REV"
+          # Push с retry. Исчерпание → прогон ПАДАЕТ: без записи в журнал/индекс дыра в отметке.
+          cd "$PROV"
+          git init >/dev/null 2>&1 || true
+          git checkout -B state/cms-provenance
+          pushed=
+          for i in 1 2 3; do
+            git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              state/cms-provenance:refs/remotes/origin/state/cms-provenance 2>/dev/null || true
+            if git rev-parse --verify refs/remotes/origin/state/cms-provenance >/dev/null 2>&1; then
+              git show refs/remotes/origin/state/cms-provenance:verified-pairs.json \
+                > "$PROV/.remote-pairs.json" 2>/dev/null || echo '[]' > "$PROV/.remote-pairs.json"
+              (cd "${{ github.workspace }}/web" && npx tsx scripts/publication-cli.ts merge-pairs \
+                --pairs-dir "$PROV" --with "$PROV/.remote-pairs.json")
+            fi
+            git add -A
+            git -c user.email=ci@ikpk.su -c user.name=ci commit -m "verified pair ${{ github.sha }}" || true
+            if git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              HEAD:state/cms-provenance; then
+              echo "pushed state/cms-provenance"
+              pushed=1
+              break
+            fi
+            echo "retry $i after push conflict"
+            sleep 2
+          done
+          if [ -z "$pushed" ]; then
+            echo "::error::не удалось записать state/cms-provenance за 3 попытки — публикация остановлена, журнал/индекс не обновлены"
+            exit 1
+          fi
+
   dependency-invariants:
     name: Dependency update invariants
     runs-on: ubuntu-latest
@@ -408,7 +597,9 @@ jobs:
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
-    needs: unit-and-build
+    needs: [unit-and-build, content-snapshot]
+    env:
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
     defaults:
       run:
         working-directory: web
@@ -425,6 +616,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Download content snapshot
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+
 
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium

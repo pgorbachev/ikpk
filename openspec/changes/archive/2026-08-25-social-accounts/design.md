@@ -233,9 +233,9 @@ change записывается в TD-40 строкой; пересъёмка о
 дважды.
 
 Во-первых, артефактов в обязательном прогоне **три**, а не два. Роль `ci`, каталог `dist` —
-`.github/workflows/test.yml:433`, `run: npm run build`. Роль `preview`, каталог `dist-demo` —
-`.github/workflows/test.yml:85`, `npm run build:demo`. Роль `stand`, каталог `dist-stand` —
-`.github/workflows/test.yml:479`, `run: npm run build:stand`. Роли читаются прямо из скриптов:
+`.github/workflows/test.yml:631`, `run: npm run build`. Роль `preview`, каталог `dist-demo` —
+`.github/workflows/test.yml:138`, `npm run build:demo`. Роль `stand`, каталог `dist-stand` —
+`.github/workflows/test.yml:677`, `run: npm run build:stand`. Роли читаются прямо из скриптов:
 `web/package.json:34`, `"build:demo": "PAYMENT_ROLE=preview DEMO_FORMS=stub CHAT_LOADER_FALLBACK=synthetic astro build --outDir dist-demo && pagefind --site dist-demo",`
 и `web/package.json:35`, `"build:stand": "PAYMENT_ROLE=stand astro build --outDir dist-stand && pagefind --site dist-stand",`.
 Артефакт роли `stand` — это то, что выкладывается на публичный стенд и что смотрит

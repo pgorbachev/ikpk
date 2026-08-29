@@ -13,6 +13,20 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rollback_snapshot_id:
+        description: Идентификатор снимка для подтверждённого отката (пусто — новейшая пара вершины)
+        required: false
+        type: string
+      rollback_confirmed:
+        description: Подтверждение отката (true), иначе откат откажется
+        required: false
+        type: boolean
+        default: false
+      rollback_reason:
+        description: Почему публикуется не вершина (обязательно при откате)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -85,6 +99,83 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
+      - name: Download content snapshot from Tests run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Prepare pinned snapshot for manual dispatch
+        if: github.event_name != 'workflow_run'
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          npm run snapshot:prepare
+          mkdir -p "$CONTENT_SNAPSHOT_DIR"
+          cp -R .snapshot/. "$CONTENT_SNAPSHOT_DIR/"
+
+      - name: Event publication gate (workflow_run)
+        if: github.event_name == 'workflow_run'
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          # classifyEventDrivenPublication — только успешный проверенный коммит вершины
+          tip=$(git ls-remote origin refs/heads/main | cut -f1)
+          npx tsx scripts/publication-cli.ts event-gate \
+            --verified-commit "${{ steps.target.outputs.sha }}" \
+            --head "$tip" \
+            --conclusion success
+
+      - name: Manual publication gate (chooseManualPublication)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          PROV="$RUNNER_TEMP/cms-provenance"
+          mkdir -p "$PROV"
+          git fetch origin state/cms-provenance:state/cms-provenance 2>/dev/null || true
+          if git rev-parse --verify state/cms-provenance >/dev/null 2>&1; then
+            git worktree add --detach "$PROV" state/cms-provenance
+          else
+            echo '[]' > "$PROV/verified-pairs.json"
+          fi
+          EXTRA=()
+          if [ -n "${{ inputs.rollback_snapshot_id }}" ]; then
+            EXTRA+=(--rollback-snapshot-id "${{ inputs.rollback_snapshot_id }}")
+            EXTRA+=(--rollback-confirmed "${{ inputs.rollback_confirmed }}")
+            EXTRA+=(--rollback-reason "${{ inputs.rollback_reason }}")
+          fi
+          # chooseManualPublication — новейшая пара или подтверждённый откат
+          out=$(npx tsx scripts/publication-cli.ts choose-manual \
+            --pairs-dir "$PROV" \
+            --ledger-dir "$PROV/ledger" \
+            --head-commit "${{ steps.target.outputs.sha }}" \
+            --actor "${{ github.actor }}" \
+            "${EXTRA[@]}")
+          echo "$out"
+          pair_snap=$(echo "$out" | sed -n 's/^pair_snapshot=//p' | tail -1)
+          snap_id=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.CONTENT_SNAPSHOT_DIR+'/snapshot.json','utf8')).snapshotId)")
+          if [ -n "$pair_snap" ] && [ "$pair_snap" != "$snap_id" ]; then
+            echo "::error::выбранная пара $pair_snap не совпадает со снимком сборки $snap_id — откат к чужому артефакту не поддержан без хранения старых снимков"
+            exit 1
+          fi
+
       # Ранняя сверка: стоит ли вообще тратить сборку. Она НЕ доказывает, что публиковать
       # можно — между ней и выкладкой пройдёт сборка, за которую вершина успеет сдвинуться.
       # Решающая сверка стоит в джобе публикации, внутри группы сериализации.
@@ -102,18 +193,10 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install dependencies
-        working-directory: web
-        run: npm ci
-
       - name: Build Astro site
         working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
         run: npm run build
 
       # Задача 6.13a: Pages платёжной поверхностью не является (design.md, Решение 13,
@@ -132,6 +215,17 @@ jobs:
             echo "::error::артефакт Pages несёт форму или потерял объявленную роль — публикация останавливается, а не проходит вхолостую"
             exit 1
           fi
+
+      - name: Write /release.json into dist
+        working-directory: web
+        env:
+          CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+        run: |
+          # writeReleaseDeclaration — объявление пары на раздаче (D11)
+          npx tsx scripts/publication-cli.ts write-release \
+            --out-dir dist \
+            --commit "${{ steps.target.outputs.sha }}" \
+            --snapshot-dir "$CONTENT_SNAPSHOT_DIR"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

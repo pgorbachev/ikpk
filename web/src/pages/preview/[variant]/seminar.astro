@@ -15,9 +15,9 @@ import {
   getTeachers,
   cleanBodyHtml,
   stripLegacySeminarTail,
-  formatPrice,
+  formatPrice, getSnapshotReferenceDate,
 } from '../../../lib/data';
-import { calendarToday, isCurrentOrFuture } from '../../../lib/schedule-window';
+import { isCurrentOrFuture } from '../../../lib/schedule-window';
 import { registrationHref, isDemoForms } from '../../../lib/forms';
 import {
   formatScheduleDateRange,
@@ -38,7 +38,7 @@ const institutes = getInstitutes();
 const allCGs = getCourseGroups();
 const allSeminars = getSeminars();
 const allTeachers = getTeachers();
-const today = calendarToday();
+const today = getSnapshotReferenceDate();
 
 // Эталон с датой и преподавателем — один для всех трёх.
 const entry = getScheduleEntries()
