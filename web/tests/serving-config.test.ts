@@ -720,7 +720,7 @@ describe('раздача: кеш-политика и сжатие в текст�
     expect(
       decls.length,
       'серверное умолчание политики страниц отсутствует или объявлено не один раз — ' +
-        'без него 264 правила перенаправления отвечают без Cache-Control',
+        'без него 267 правил перенаправления отвечают без Cache-Control',
     ).toBe(1);
     expect(decls[0].value, 'серверное умолчание отдаёт не политику страниц').toBe(PAGES);
   });
@@ -884,10 +884,10 @@ describe('раздача: кеш-политика и сжатие в текст�
   // Требование «Заголовок кеширования не теряется и не удваивается», оговорка AND сценария
   // «Перенаправление со старого адреса тоже несёт политику»: правило перенаправления
   // своего значения не объявляет, и наследование серверного — единственное, что удерживает
-  // 264 таких правила от ответа без политики. Файл генерируемый, add_header в нём нет
+  // 267 таких правил от ответа без политики. Файл генерируемый, add_header в нём нет
   // сейчас — проверка характеризационная. Закрывается мутацией 4.17 (посторонний
   // add_header в шаблоне генератора `web/scripts/gen-redirects.ts`, без своего
-  // Cache-Control) — её следствие: 263 из 264 правил отвечают без Cache-Control, а
+  // Cache-Control) — её следствие: 266 из 267 правил отвечают без Cache-Control, а
   // /sitemap.xml, напечатанный отдельным литералом, продолжает его наследовать.
   it('[GREEN-BY-DESIGN] правила перенаправления не объявляют своих add_header', () => {
     const rules = redirectRules();
@@ -931,7 +931,7 @@ describe('раздача: кеш-политика и сжатие в текст�
     );
     expect(
       includes.length,
-      'в блоке server нет include файла правил перенаправления — 264 правила существовали бы ' +
+      'в блоке server нет include файла правил перенаправления — 267 правил существовали бы ' +
         'только в репозитории, а на сервере старые адреса отдавали бы 404',
     ).toBe(1);
   });
@@ -1176,6 +1176,274 @@ describe('раздача: кеш-политика и сжатие в текст�
     expect(kind('/inoe/nekiy.pf_fragment')).toBe('regex');
     // Иначе — самый длинный обычный префикс.
     expect(kind('/kontakty')).toBe('/');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Единственность адреса: форма со завершающим слэшем (дефект, red/green)
+// ---------------------------------------------------------------------------
+
+/**
+ * ДЕФЕКТ. Страница, которой не было на старом сайте, доступна по ДВУМ адресам.
+ *
+ * Правила `X/ → X` порождаются генератором из `discovery/url_map.csv` — снимка
+ * СТАРОГО сайта. Маршрут, которого в той карте нет, правила не получает, и
+ * `try_files $uri $uri/index.html …` отдаёт ему 200 на обеих формах. Замерено на
+ * живой раздаче стенда 29.08.2026 (`curl -s -o /dev/null -w '%{http_code}'`, без
+ * `-L`, иначе предмет подменяется следованием по редиректу):
+ *
+ *   http://193.124.115.99/video/33   → 200
+ *   http://193.124.115.99/video/33/  → 200   ← второй адрес той же страницы
+ *   http://193.124.115.99/kontakty/  → 301   ← адрес из карты, ведёт себя верно
+ *
+ * По свежей сборке (269 маршрутов) правила со слэша нет у 21. Дубль адреса — это
+ * ровно то, против чего предупреждает Google: одна страница SHALL быть доступна по
+ * одному адресу, остальные формы SHALL перенаправлять на него.
+ *
+ * ПОЧЕМУ ПРОВЕРЯЕТСЯ ПРИЗНАК ПРАВИЛА, А НЕ СПИСОК МАРШРУТОВ. Список известных
+ * страниц — это перечень частных случаев: он отстаёт от предмета молча (AGENTS.md,
+ * «не перечислять частные случаи того, что проверяешь»), и маршрут, добавленный
+ * завтра, снова окажется без правила. Проверяется общее правило нормализации, и
+ * корпус адресов задан ФОРМАМИ пути, а не именами страниц.
+ *
+ * ГРАНИЦА. Модель строится по тексту vhost и не видит `include` с правилами
+ * перенаправления: там свои `location = <адрес>` (точное совпадение в nginx
+ * выигрывает у регулярного выражения). Обе ветви обязаны давать один исход —
+ * 301 на форму без слэша, — и вторая проверяется здесь же, по тексту include.
+ */
+
+/** Раскрывает цель `return` nginx на совпадении регулярного выражения location. */
+function expandReturnTarget(target: string, m: RegExpMatchArray, query: string): string {
+  return target
+    .replace(/\$is_args/g, query ? '?' : '')
+    .replace(/\$args/g, query)
+    .replace(/\$(\d)/g, (_, d: string) => m[Number(d)] ?? '');
+}
+
+/** Как обработчик отвечает на адрес: 301 с раскрытой целью, либо иной исход. */
+function redirectFor(uri: string, query = ''): { code: number; target: string } | null {
+  const loc = matchLocation(cfg().locs, uri);
+  if (!loc) return null;
+  const ret = loc.block.directives.find((d) => d.name === 'return');
+  if (!ret) return null;
+  const code = Number(ret.args[0]);
+  if (!Number.isInteger(code)) {
+    throw new Error(
+      `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в «${loc.block.header}» директива «${ret.raw}» не разбирается ` +
+        'как return <код> <цель>',
+    );
+  }
+  const m = loc.kind === 'regex' || loc.kind === 'regex-i' ? uri.match(locRegExp(loc)) : null;
+  const target = m ? expandReturnTarget(ret.args[1] ?? '', m, query) : (ret.args[1] ?? '');
+  return { code, target };
+}
+
+/**
+ * Корпус НЕ задаётся списком литералов, и это следствие находки ревью: шесть форм не
+ * увидели четырёх обходов — перехвата целого раздела объявленным раньше `location`,
+ * сужения класса символов в регулярном выражении, собственного `add_header` в блоке
+ * правила и правила-петли в самом vhost. Список литералов в этой роли отстаёт от
+ * предмета молча, поэтому адреса берутся из карты адресов (`discovery/url_map.csv`,
+ * колонка `new_path` — все канонические адреса, которые сайт обязан обслуживать), а к
+ * ним добавлены формы, которых в карте нет ПО АЛФАВИТУ: подчёркивание, точка,
+ * кириллица, процент-кодирование, верхний регистр, глубокая вложенность.
+ */
+function splitCsvRow(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else if (c === '"') quoted = false;
+      else cur += c;
+      continue;
+    }
+    if (c === '"') quoted = true;
+    else if (c === ',') {
+      out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+/** Канонические адреса сайта по карте адресов: колонка `new_path`, без корня и без query. */
+function mapCanonicalPaths(): string[] {
+  const rel = 'discovery/url_map.csv';
+  const lines = readFileSync(join(ROOT, rel), 'utf-8').split('\n').filter((l) => l.trim());
+  const header = splitCsvRow(lines[0]).map((h) => h.trim());
+  const idx = header.indexOf('new_path');
+  if (idx === -1) {
+    throw new Error(
+      `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в ${rel} нет колонки new_path — корпус адресов построить не из чего`,
+    );
+  }
+  const paths = new Set<string>();
+  for (const line of lines.slice(1)) {
+    const p = (splitCsvRow(line)[idx] ?? '').trim();
+    if (p.startsWith('/') && p !== '/' && !p.includes('?') && !p.includes('#')) paths.add(p);
+  }
+  if (paths.size < 100) {
+    throw new Error(
+      `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в ${rel} нашлось всего ${paths.size} канонических адресов — ` +
+        'корпус пуст или разбор колонки сломан, а проверка на пустом множестве успехом не считается',
+    );
+  }
+  return [...paths].sort();
+}
+
+/** Формы, которых в карте нет по алфавиту: класс символов регулярного выражения обязан быть открытым. */
+const ALPHABET_FORMS: Array<{ canonical: string; why: string }> = [
+  { canonical: '/statyi/nekaya_statya', why: 'подчёркивание' },
+  { canonical: '/media/foto.2026', why: 'точка в последнем сегменте' },
+  { canonical: '/статьи/новость', why: 'кириллица' },
+  { canonical: '/statyi/%D1%81%D1%82%D0%B0%D1%82%D1%8C%D1%8F', why: 'процент-кодирование' },
+  { canonical: '/terms/Пользовательское_соглашение', why: 'кириллица с подчёркиванием' },
+  { canonical: '/Kontakty', why: 'верхний регистр' },
+  { canonical: '/a/b/c/d/e', why: 'вложенность 5' },
+];
+
+describe('единственность адреса: форма со завершающим слэшем', () => {
+  it('форма со слэшем перенаправляется на канонический адрес без слэша', () => {
+    const corpus = [
+      ...mapCanonicalPaths().map((canonical) => ({ canonical, why: 'адрес из карты' })),
+      ...ALPHABET_FORMS,
+    ];
+    const bad: string[] = [];
+    for (const f of corpus) {
+      const r = redirectFor(`${f.canonical}/`);
+      if (!r) bad.push(`${f.canonical}/ (${f.why}): не перенаправляется вовсе — второй рабочий адрес`);
+      else if (r.code !== 301 || r.target !== f.canonical) {
+        bad.push(`${f.canonical}/ (${f.why}): ${r.code} → ${r.target}, ожидалось 301 → ${f.canonical}`);
+      }
+    }
+    expect(
+      bad.slice(0, 8),
+      `адресов, у которых форма со слэшем не сводится к каноническому: ${bad.length} ` +
+        `из ${corpus.length} проверенных\n${bad.slice(0, 8).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('корень «/» не перенаправляется: у него формы без слэша не существует', () => {
+    const r = redirectFor('/');
+    expect(
+      r,
+      `корень получил перенаправление ${r?.code} → ${r?.target}. https://example.com ` +
+        'эквивалентен https://example.com/ (RFC 3986), редирект здесь — петля или потеря главной',
+    ).toBeNull();
+  });
+
+  it('строка запроса переживает нормализацию', () => {
+    const r = redirectFor('/video/33/', 'utm_source=seo&page=2');
+    expect(
+      r?.target,
+      'строка запроса срезана при нормализации — глубокая ссылка с параметром сломана',
+    ).toBe('/video/33?utm_source=seo&page=2');
+  });
+
+  /**
+   * В nginx набор `add_header` не складывается по уровням: блок, объявивший свой
+   * заголовок, теряет серверный целиком. Проверка на этот инвариант в файле уже есть, но
+   * она читает только `deploy/nginx-redirects.conf`; обработчик формы со слэшем живёт в
+   * vhost и под неё не попадал — ревью показало мутацию, при которой все 301 уходят без
+   * `Cache-Control`, а прогон зелёный.
+   */
+  it('обработчик формы со слэшем не объявляет своих add_header', () => {
+    const probes = ['/kontakty/', '/video/33/', '/statyi/nekaya-statya/'];
+    const declaring: string[] = [];
+    for (const uri of probes) {
+      const loc = matchLocation(cfg().locs, uri);
+      if (!loc) {
+        throw new Error(
+          `ПРОВЕРИТЬ НЕ УДАЛОСЬ: адрес ${uri} не выбрал ни одного обработчика — ` +
+            'проверять наследование заголовков не на чем',
+        );
+      }
+      const own = addHeaders(loc.block);
+      if (own.length > 0) declaring.push(`${uri} → «${loc.block.header}»: ${own.map((d) => d.raw).join('; ')}`);
+    }
+    expect(
+      declaring,
+      'обработчик формы со слэшем объявил свои add_header и тем потерял серверные целиком — ' +
+        `ответ 301 придёт без Cache-Control:\n${declaring.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  /**
+   * Правило, ведущее НА форму со слэшем, вместе с нормализацией даёт бесконечную петлю
+   * (`/kontakty` → 301 `/kontakty/` → 301 `/kontakty` → …), и страница становится
+   * недоступна вовсе. Ветви две — include и сам vhost, — и проверять надо обе: ревью
+   * показало, что правило-петля, положенное в vhost, гейт не замечал.
+   */
+  /**
+   * Цепочка от объявленного легаси-адреса не длиннее ОДНОГО путевого шага. Без варианта
+   * со слэшем адрес `/contacts/` обслуживается общим правилом нормализации и получает
+   * два шага: 301 на `/contacts`, затем 301 на `/kontakty`. Спека ограничивает всю
+   * цепочку двумя шагами и первый закладывает под канонизацию схемы и имени хоста —
+   * то есть второй путевой шаг съедает бюджет целиком. Находка независимого ревью:
+   * таких адресов было три (`/contacts`, `/promotions`, `/sitemap.xml`).
+   */
+  it('у каждого легаси-адреса есть вариант со слэшем, ведущий сразу на канон', () => {
+    const text = readFileSync(join(ROOT, REDIRECTS_REL), 'utf-8');
+    const rules = new Map(
+      [...text.matchAll(/^location = (\S+) \{ return 301 (\S+); \}$/gm)].map((m) => [m[1], m[2]]),
+    );
+    expect(
+      rules.size,
+      `в ${REDIRECTS_REL} нет ни одного правила — проверять нечего ` +
+        '(запустите npm run redirects:gen)',
+    ).toBeGreaterThan(0);
+    const twoHops: string[] = [];
+    for (const [from, to] of rules) {
+      if (from.endsWith('/')) continue;
+      const withSlash = rules.get(`${from}/`);
+      if (withSlash !== to) {
+        twoHops.push(`${from}/ → ${withSlash ?? '<нет правила: нормализация даст 301 на ' + from + '>'}`);
+      }
+    }
+    expect(
+      twoHops.slice(0, 8),
+      `легаси-адресов с двухшаговой путевой цепочкой: ${twoHops.length}. Первый шаг ` +
+        'бюджета цепочки принадлежит канонизации схемы и хоста, поэтому два путевых ' +
+        `шага нарушат ограничение спеки\n${twoHops.slice(0, 8).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('ни одно правило не ведёт на форму СО слэшем — ни в include, ни в vhost', () => {
+    const text = readFileSync(join(ROOT, REDIRECTS_REL), 'utf-8');
+    const included = [...text.matchAll(/^location = (\S+) \{ return 301 (\S+); \}$/gm)].map(
+      (m) => ({ from: m[1], to: m[2], where: REDIRECTS_REL }),
+    );
+    expect(
+      included.length,
+      `в ${REDIRECTS_REL} нет ни одного правила — проверять нечего ` +
+        '(запустите npm run redirects:gen)',
+    ).toBeGreaterThan(0);
+
+    const inVhost = cfg()
+      .locs.flatMap((l) =>
+        l.block.directives
+          .filter((d) => d.name === 'return' && d.args[0] === '301')
+          .map((d) => ({ from: l.block.args.join(' '), to: d.args[1] ?? '', where: BOOTSTRAP_REL })),
+      )
+      // Цель с переменной ($1…) — это и есть нормализация: она подставляет путь БЕЗ слэша.
+      .filter((r) => !r.to.includes('$'));
+
+    const toSlash = [...included, ...inVhost]
+      .filter((r) => r.to.endsWith('/') && r.to !== '/')
+      .map((r) => `${r.where}: ${r.from} → ${r.to}`);
+    expect(
+      toSlash.slice(0, 8),
+      `правил, ведущих на форму со завершающим слэшем: ${toSlash.length}. Вместе с ` +
+        'нормализацией это бесконечная петля 301 → 301, страница недоступна вовсе\n' +
+        toSlash.slice(0, 8).join('\n'),
+    ).toEqual([]);
   });
 });
 
