@@ -178,11 +178,10 @@
       упоминание `noindex` в этом change (задача 1.6, адрес фильтра категорий статей) о другом
       адресе и решено отдельно (Q31). Сейчас все четыре плоских детальных шаблона размечены
       `noindex` явно:
-      `feat/cms-content-authoring-2@46a7fd349698f2a7831c4037c40df22536ac1d6c:web/src/pages/instituty/[slug].astro:46`,
-      `noindex`; тот же атрибут на том же SHA —
-      `feat/cms-content-authoring-2@46a7fd349698f2a7831c4037c40df22536ac1d6c:web/src/pages/programmy/[slug].astro:33`,
-      `feat/cms-content-authoring-2@46a7fd349698f2a7831c4037c40df22536ac1d6c:web/src/pages/seminary/[slug].astro:43`,
-      `feat/cms-content-authoring-2@46a7fd349698f2a7831c4037c40df22536ac1d6c:web/src/pages/specialisty/[slug].astro:31`.
+      `web/src/pages/instituty/[slug].astro:46`, `noindex`; тот же атрибут там же —
+      `web/src/pages/programmy/[slug].astro:33`, `noindex`;
+      `web/src/pages/seminary/[slug].astro:43`, `noindex`;
+      `web/src/pages/specialisty/[slug].astro:31`, `noindex`.
       Условие снятия: источник данных сборки
       переключён (соседний change) — до этого страница по плоскому адресу отдаёт то же
       содержимое, что и старая, и индексация обеих параллельно дала бы дубли
@@ -242,7 +241,7 @@
       является), автоматическое обновление с учётом короткого срока действия, перенаправление с
       незащищённого протокола, признак «только по защищённому соединению» у cookie сессии.
       Отдельным пунктом, потому что нынешний bootstrap пишет vhost с одним `listen 80`
-      (`scripts/bootstrap-vps.sh:72`, `listen 80;`), а HTTPS в инструкции развёртывания —
+      (`scripts/bootstrap-vps.sh@d8131372071838cc94ad614af31861c541939e7f:72`, `listen 80;`), а HTTPS в инструкции развёртывания —
       необязательный шаг; панель в таком vhost отдаёт пароль администратора открытым текстом
 - [ ] 7.2 Бэкапы базы и загруженных файлов, проверенные восстановлением — **инфраструктурная
       задача без спекового предмета**: требования о резервном копировании в спеке нет и не
