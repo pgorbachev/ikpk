@@ -7,8 +7,8 @@
  * включения пометки — выражение GitHub, поэтому оно разбирается парсером
  * (`helpers/gh-expression`), а не поиском подстроки.
  */
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -237,5 +237,105 @@ describe('публикуемая проверка выводится из вер
         `needs.${jobKey}.outputs.${verdictOutputName(jobKey)}`,
       );
     }
+  });
+});
+
+/**
+ * Исполняет шаг публикации с подставным `gh`, записывающим свои аргументы, и возвращает
+ * исход (`conclusion`), с которым опубликована названная проверка.
+ *
+ * Отображение вердикта в исход — это и есть предмет всего изменения: именно `neutral`
+ * снимает красноту с человеческих PR. До этого теста оно не проверялось ничем, и мутация
+ * `neutral` -> `failure` оставила бы весь набор зелёным.
+ */
+function publishedConclusion(env: Record<string, string>, checkName: string): string | undefined {
+  const dir = mkdtempSync(join(tmpdir(), 'publish-step-'));
+  const bin = join(dir, 'bin');
+  mkdirSync(bin);
+  const log = join(dir, 'gh.log');
+  writeFileSync(log, '');
+  const gh = join(bin, 'gh');
+  writeFileSync(gh, `#!/usr/bin/env bash
+set -euo pipefail
+{
+  printf 'CALL'
+  for arg in "$@"; do printf '\\t%s' "$arg"; done
+  printf '\\n'
+} >>"$GH_LOG"
+if [[ "$*" == *'/check-runs?'* ]]; then
+  printf '%s\\n' '{"check_runs":[]}'
+else
+  printf '{}\\n'
+fi
+`);
+  chmodSync(gh, 0o755);
+  const scriptFile = join(dir, 'publish.sh');
+  writeFileSync(scriptFile, verdictStep('publish-checks').script);
+  spawnSync('bash', ['-e', scriptFile], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ''}`,
+      GH_LOG: log,
+      GH_TOKEN: 'test-token',
+      GITHUB_REPOSITORY: 'pgorbachev/ikpk',
+      GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_RUN_ID: '1',
+      GITHUB_SERVER_URL: 'https://github.com',
+      HEAD_SHA: '1111111111111111111111111111111111111111',
+      POLICY_SHA: '2222222222222222222222222222222222222222',
+      SOURCE_RUN_ATTEMPT: '1',
+      SOURCE_RUN_ID: '2',
+      ASSESSMENT_RESULT: 'success',
+      EVENT_ACTION: 'opened',
+      FRESH_HEAD_MATCHES_CURRENT: 'true',
+      GATE_VERDICT: '',
+      PROVENANCE_VERDICT: '',
+      ...env,
+    },
+  });
+  for (const line of readFileSync(log, 'utf-8').split('\n')) {
+    const args = line.split('\t');
+    if (!args.includes(`name=${checkName}`)) continue;
+    const found = args.find((a) => a.startsWith('conclusion='));
+    if (found) return found.slice('conclusion='.length);
+  }
+  return undefined;
+}
+
+describe('исход публикуемой проверки отображает вердикт', () => {
+  const ELIGIBILITY = 'Dependabot auto-merge / Eligibility gate';
+  const PROVENANCE = 'Dependabot auto-merge / Provenance evidence';
+
+  it('отрицательный вердикт публикуется как neutral, а не как неуспех', () => {
+    expect(
+      publishedConclusion({ GATE_VERDICT: 'negative' }, ELIGIBILITY),
+      'ради этого исхода и затеяно изменение: neutral не красит человеческий PR',
+    ).toBe('neutral');
+  });
+
+  it('положительный вердикт публикуется как success', () => {
+    expect(publishedConclusion({ GATE_VERDICT: 'positive' }, ELIGIBILITY)).toBe('success');
+  });
+
+  it('пустой вердикт остаётся неуспехом', () => {
+    expect(
+      publishedConclusion({ GATE_VERDICT: '' }, ELIGIBILITY),
+      'пустота означает «определить не удалось» — публикация обязана оставаться fail closed',
+    ).toBe('failure');
+  });
+
+  it('несвежая вершина не публикуется как успех даже при положительном вердикте', () => {
+    expect(
+      publishedConclusion({ GATE_VERDICT: 'positive', FRESH_HEAD_MATCHES_CURRENT: 'false' }, ELIGIBILITY),
+    ).not.toBe('success');
+  });
+
+  it.each([
+    ['negative', 'neutral'],
+    ['positive', 'success'],
+    ['', 'failure'],
+  ])('свидетельство: вердикт %s публикуется как %s', (verdict, expected) => {
+    expect(publishedConclusion({ PROVENANCE_VERDICT: verdict }, PROVENANCE)).toBe(expected);
   });
 });
