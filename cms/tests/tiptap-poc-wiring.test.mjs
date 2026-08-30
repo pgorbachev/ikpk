@@ -5,14 +5,17 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
 test('Tiptap custom field is registered as a text field on both sides of Strapi', async () => {
-  const [server, admin, schema] = await Promise.all([
+  const [server, admin, locale, schema] = await Promise.all([
     read('../src/index.ts'),
     read('../src/admin/app.tsx'),
+    read('../src/admin/admin-localization.ts'),
     read('../src/api/editor-prototype/content-types/editor-prototype/schema.json'),
   ]);
 
   assert.match(server, /name: 'tiptap-html'[\s\S]*type: 'text'/);
   assert.match(admin, /name: 'tiptap-html'[\s\S]*type: 'text'/);
+  assert.match(admin, /locales: \[DEFAULT_ADMIN_LOCALE\]/);
+  assert.match(locale, /DEFAULT_ADMIN_LOCALE = 'ru'/);
   assert.deepEqual(JSON.parse(schema).attributes.body, {
     type: 'customField',
     customField: 'global::tiptap-html',

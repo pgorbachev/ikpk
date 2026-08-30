@@ -1,6 +1,10 @@
 import type { StrapiApp } from '@strapi/strapi/admin';
+import { DEFAULT_ADMIN_LOCALE, ensureDefaultAdminLocale } from './admin-localization';
 
 export default {
+  config: {
+    locales: [DEFAULT_ADMIN_LOCALE],
+  },
   register(app: StrapiApp) {
     app.customFields.register({
       name: 'tiptap-html',
@@ -17,5 +21,8 @@ export default {
         Input: async () => import('./components/TiptapHtmlInput'),
       },
     });
+  },
+  bootstrap() {
+    ensureDefaultAdminLocale(window.localStorage);
   },
 };
