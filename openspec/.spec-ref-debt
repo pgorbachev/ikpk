@@ -34,10 +34,6 @@ openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
 openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
-openspec/changes/cms-content-publication/design.md :: state/cms-provenance
-openspec/changes/cms-content-publication/specs/cms-content-source/spec.md :: state/cms-provenance
-openspec/changes/cms-content-publication/tasks.md :: feat/cms-content-publication@858900d474018564a8df2bc6770fd789c1e67da8
-openspec/changes/cms-content-publication/tasks.md :: state/cms-provenance
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
@@ -100,6 +96,7 @@ openspec/changes/visual-regression-gate/tasks.md :: base.css:193-197
 openspec/specs/article-catalog/spec.md :: feat/demo-mode-and-hero-photo@542151bb8d5348bf2b4dd307eb6dca48edbf34c3
 openspec/specs/article-catalog/spec.md :: main@45297b4dd90f1f174553f9840f3a69df9d38f252
 openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
+openspec/specs/cms-content-source/spec.md :: state/cms-provenance
 openspec/specs/dependency-update-automation/spec.md :: design.md
 openspec/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/specs/online-payment/spec.md :: design.md
