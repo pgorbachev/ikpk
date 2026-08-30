@@ -29,10 +29,14 @@ async function loadAddressState(strapi: Core.Strapi): Promise<AddressState> {
   for (const [uid, type] of Object.entries(TYPE_BY_UID)) {
     const rows = (await strapi.db
       .query(uid)
-      .findMany({ select: ['documentId', IDENTIFIER_FIELD] })) as { documentId: string; slug: string | null }[];
+      .findMany({ select: ['documentId', IDENTIFIER_FIELD, 'publishedAt'] })) as {
+      documentId: string;
+      slug: string | null;
+      publishedAt?: string | null;
+    }[];
     for (const row of rows) {
       if (!row.slug) continue;
-      records.push({ id: row.documentId, type, identifier: row.slug });
+      records.push({ id: row.documentId, type, identifier: row.slug, publishedAt: row.publishedAt });
     }
   }
 

@@ -12,13 +12,18 @@ export interface OrderedItem {
   order?: number | null;
 }
 
-export function byExplicitOrder<T extends OrderedItem>(items: T[]): T[] {
+export function byExplicitOrder<T extends { order?: number | null }>(
+  items: T[],
+  identifierOf: (item: T) => string = (item) => (item as T & OrderedItem).identifier,
+): T[] {
   return [...items].sort((a, b) => {
     const orderA = a.order ?? Number.POSITIVE_INFINITY;
     const orderB = b.order ?? Number.POSITIVE_INFINITY;
     if (orderA !== orderB) return orderA - orderB;
-    if (a.identifier < b.identifier) return -1;
-    if (a.identifier > b.identifier) return 1;
+    const identifierA = identifierOf(a);
+    const identifierB = identifierOf(b);
+    if (identifierA < identifierB) return -1;
+    if (identifierA > identifierB) return 1;
     return 0;
   });
 }

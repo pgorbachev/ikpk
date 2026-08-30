@@ -42,6 +42,8 @@ export interface RecordRef {
   identifier: string;
   /** Прежние адреса: адрес старого сайта и адрес нынешнего маршрута, если различны. */
   previousAddresses?: string[];
+  /** `undefined` — состояние без Draft & Publish; `null` — только черновик. */
+  publishedAt?: string | null;
 }
 
 export interface AddressState {

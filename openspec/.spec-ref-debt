@@ -32,6 +32,7 @@ openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
+openspec/changes/cms-content-authoring-and-migration/tasks.md :: feat/cms-content-authoring-2@e10823146e2d82d06624167d2e20dfe30e5d3f2c
 openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust

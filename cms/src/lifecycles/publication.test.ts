@@ -88,6 +88,44 @@ test('publish: не блокирует create/update — только дейст
   assert.equal(result, 'next-called');
 });
 
+test('publish: событие расписания без города отклоняется', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: {
+      'doc-1': {
+        seminar: { id: 1 },
+        startAt: '2026-09-01T09:00:00.000Z',
+        endAt: '2026-09-01T18:00:00.000Z',
+        city: '',
+        status: 'active',
+      },
+    },
+  });
+  await assert.rejects(
+    () => run({ uid: 'api::schedule-entry.schedule-entry', action: 'publish', params: { documentId: 'doc-1' } }),
+    /city/,
+  );
+});
+
+test('publish: новость без даты отклоняется', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: { 'doc-1': { name: 'Новость', date: null, description: 'Текст' } },
+  });
+  await assert.rejects(
+    () => run({ uid: 'api::news-item.news-item', action: 'publish', params: { documentId: 'doc-1' } }),
+    /date/,
+  );
+});
+
+test('publish: акция без тела отклоняется', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: { 'doc-1': { name: 'Акция', date: '2026-08-30', description: '' } },
+  });
+  await assert.rejects(
+    () => run({ uid: 'api::promotion.promotion', action: 'publish', params: { documentId: 'doc-1' } }),
+    /body/,
+  );
+});
+
 test('publish: семинар с documentsState=issued требует непустого набора документов', async () => {
   const { run } = makeStrapi({
     draftsByUid: {
@@ -146,6 +184,49 @@ test('publish: значение «иное» у исходного образо�
     () => run({ uid: 'api::seminar.seminar', action: 'publish', params: { documentId: 'doc-1' } }),
     /уточняющего текста/,
   );
+});
+
+test('update: переход из неподтверждённых сведений без полного основания отклоняется', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: { 'doc-1': { documents_state: 'unconfirmed' } },
+  });
+  await assert.rejects(
+    () =>
+      run({
+        uid: 'api::seminar.seminar',
+        action: 'update',
+        params: {
+          documentId: 'doc-1',
+          data: {
+            documents_state: 'issued',
+            documents_confirmation_date: '2026-08-30',
+            documents_confirmation_source: '',
+            documents_confirmation_author: 'admin',
+          },
+        },
+      }),
+    /требует основания/,
+  );
+});
+
+test('update: переход из неподтверждённых сведений с полным основанием разрешён', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: { 'doc-1': { documents_state: 'unconfirmed' } },
+  });
+  const result = await run({
+    uid: 'api::seminar.seminar',
+    action: 'update',
+    params: {
+      documentId: 'doc-1',
+      data: {
+        documents_state: 'not-issued',
+        documents_confirmation_date: '2026-08-30',
+        documents_confirmation_source: 'письмо заказчика',
+        documents_confirmation_author: 'admin',
+      },
+    },
+  });
+  assert.equal(result, 'next-called');
 });
 
 test('publish: недопустимое значение признака персоны отклоняется', async () => {

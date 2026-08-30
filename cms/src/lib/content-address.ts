@@ -35,6 +35,8 @@ export interface RecordRef {
   type: RecordType;
   identifier: string;
   previousAddresses?: string[];
+  /** `undefined` — состояние без Draft & Publish; `null` — только черновик. */
+  publishedAt?: string | null;
 }
 
 export interface AddressState {
@@ -141,7 +143,8 @@ export function redirectsFor({
   recordId: string;
   state: AddressState;
 }): { from: string; to: string }[] {
-  const record = state.records.find((r) => r.id === recordId);
+  const versions = state.records.filter((r) => r.id === recordId);
+  const record = versions.find((r) => r.publishedAt) ?? versions.find((r) => r.publishedAt === undefined);
   if (!record) return [];
 
   const currentAddress = addressOf({ type: record.type, identifier: record.identifier });

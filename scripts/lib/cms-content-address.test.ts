@@ -333,6 +333,31 @@ describe('cms-content-authoring: история адресов и повторн
     ).toBe(false);
   });
 
+  it('при draft и published одного документа цель берётся из опубликованной версии независимо от порядка', async () => {
+    const { redirectsFor } = await loadContentAddress();
+    const state = baseState({
+      records: [
+        record({ id: 's1', type: 'seminar', identifier: 'novyj-chernovik', publishedAt: null }),
+        record({ id: 's1', type: 'seminar', identifier: 'tekushchij', publishedAt: '2026-08-30T00:00:00.000Z' }),
+      ],
+      addressHistory: [{ address: '/seminary/prezhnij', ownerId: 's1' }],
+    });
+
+    expect(redirectsFor({ recordId: 's1', state })).toEqual([
+      { from: '/seminary/prezhnij', to: '/seminary/tekushchij' },
+    ]);
+  });
+
+  it('явно неопубликованный черновик не становится целью перенаправления', async () => {
+    const { redirectsFor } = await loadContentAddress();
+    const state = baseState({
+      records: [record({ id: 's1', type: 'seminar', identifier: 'tolko-chernovik', publishedAt: null })],
+      addressHistory: [{ address: '/seminary/prezhnij', ownerId: 's1' }],
+    });
+
+    expect(redirectsFor({ recordId: 's1', state })).toEqual([]);
+  });
+
   // Scenario: запись может вернуть себе прежний идентификатор (вторая половина)
   it('перенаправления с текущего адреса на него самого не появляется', async () => {
     const { redirectsFor } = await loadContentAddress();

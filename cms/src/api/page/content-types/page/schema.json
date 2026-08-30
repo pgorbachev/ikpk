@@ -14,16 +14,16 @@
   "attributes": {
     "title": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "title",
-      "required": true
+      "required": false
     },
     "body": {
       "type": "richtext",
-      "required": true
+      "required": false
     },
     "legacy_id": {
       "type": "string",
@@ -33,7 +33,7 @@
       "type": "component",
       "component": "shared.seo",
       "repeatable": false,
-      "required": true
+      "required": false
     }
   }
 }

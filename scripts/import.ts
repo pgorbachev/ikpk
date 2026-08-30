@@ -467,7 +467,7 @@ async function importInstitutes(): Promise<void> {
       slug: e.slug,
       shortName: (e.shortName as string) ?? null,
       description: (e.description_html as string) ?? null,
-      order: (e.order as number) ?? 0,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -486,6 +486,7 @@ async function importTeachers(): Promise<void> {
       name: e.name,
       slug: e.slug,
       bio: (e.bio_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     if (photoId) data.photo = photoId;
@@ -554,6 +555,7 @@ async function importNewsItems(): Promise<void> {
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       legacy_id: lid,
@@ -572,6 +574,7 @@ async function importPromotions(): Promise<void> {
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       active: true,
@@ -595,6 +598,7 @@ async function importCourseGroups(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -682,7 +686,7 @@ async function importSeminars(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
-      status: (e.status as string) ?? "planned",
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -740,10 +744,12 @@ async function importScheduleEntries(): Promise<void> {
   log("📦 Importing schedule entries …");
   const report = newReport("schedule-entries");
 
-  const [entries, seminars] = await Promise.all([
+  const [entries, seminars, teachers] = await Promise.all([
     loadJSON("schedule_entries.json"),
     loadJSON("seminars.json"),
+    loadJSON("teachers.json"),
   ]);
+  const teacherNumMap = buildTeacherNumericMap(teachers);
 
   // Build slug → legacy_id map for efficient seminar resolution
   const seminarSlugToLid = new Map<string, string>();
@@ -769,10 +775,33 @@ async function importScheduleEntries(): Promise<void> {
       description: (e.description as string) ?? null,
       additionalText: (e.additionalText as string) ?? null,
       duration: e.duration != null ? String(e.duration) : null,
-      // teachers stored as JSON (not a relation) on schedule-entry
-      teachers: Array.isArray(e.teachers) ? e.teachers : null,
       legacy_id: lid,
     };
+
+    if (Array.isArray(e.teachers)) {
+      const teacherDocumentIds: string[] = [];
+      for (const teacher of e.teachers as { id?: number | string }[]) {
+        const teacherLegacyId = teacherNumMap.get(String(teacher.id));
+        if (!teacherLegacyId) {
+          report.missingRelations.push({
+            legacy_id: lid,
+            relation: "teachers",
+            target: `teachers/id=${String(teacher.id)}`,
+          });
+          continue;
+        }
+
+        const documentId = await resolveRelation(
+          "teachers",
+          teacherLegacyId,
+          report,
+          lid,
+          "teachers",
+        );
+        if (documentId) teacherDocumentIds.push(documentId);
+      }
+      data.teachers = { set: teacherDocumentIds };
+    }
 
     // Resolve seminar relation via slug
     const seminarObj = e.seminar as { slug?: string } | undefined;

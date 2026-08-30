@@ -39,8 +39,11 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'course-group': ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description'],
   institute: ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order'],
   person: ['name', 'identifier', 'trait'],
+  'schedule-entry': ['seminar', 'startAt', 'endAt', 'city', 'status'],
   'static-page': ['title', 'identifier', 'body', 'seo_title', 'seo_description'],
   'video-playlist': ['title', 'identifier'],
+  'news-item': ['title', 'date', 'body'],
+  promotion: ['title', 'date', 'body'],
 };
 
 const PERSON_TRAITS = new Set(['teacher', 'method-author']);

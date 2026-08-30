@@ -12,7 +12,53 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadMigration, makeRevisionStore, type PanelMapEntry } from './cms-authoring-contract';
+
+const importFunction = (name: string, next: string): string => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'import.ts'), 'utf-8');
+  const start = source.indexOf(`async function ${name}`);
+  const end = source.indexOf(`function ${next}`, start + 1);
+  expect(start, `в import.ts нет ${name}`).toBeGreaterThanOrEqual(0);
+  expect(end, `в import.ts нет следующей функции ${next}`).toBeGreaterThan(start);
+  return source.slice(start, end);
+};
+
+describe('перенос: wiring порядка и вычисляемого статуса семинара', () => {
+  it.each([
+    ['importInstitutes', 'importTeachers'],
+    ['importTeachers', 'importArticles'],
+    ['importCourseGroups', 'importSeminars'],
+    ['importSeminars', 'importScheduleEntries'],
+  ])('%s переносит явное поле order', (name, next) => {
+    expect(importFunction(name, next)).toMatch(/\border\s*:/);
+  });
+
+  it('импорт семинара не возвращает удалённое хранимое поле status', () => {
+    expect(importFunction('importSeminars', 'importScheduleEntries')).not.toMatch(/\bstatus\s*:/);
+  });
+});
+
+describe('перенос: связи расписания соответствуют схеме CMS', () => {
+  it('преподаватели события разрешаются в documentId и записываются relation payload', () => {
+    const source = importFunction('importScheduleEntries', 'printReport');
+
+    expect(source).toMatch(/loadJSON\(["']teachers\.json["']\)/);
+    expect(source).toMatch(/resolveRelation\(\s*["']teachers["']/);
+    expect(source).toMatch(/data\.teachers\s*=\s*\{\s*set\s*:/);
+    expect(source).not.toMatch(/teachers:\s*Array\.isArray\(e\.teachers\)/);
+  });
+});
+
+describe('перенос: даты новостей и акций сохраняют исходный момент', () => {
+  it.each([
+    ['importNewsItems', 'importPromotions'],
+    ['importPromotions', 'importCourseGroups'],
+  ])('%s переносит createdAt в публикационное поле date', (name, next) => {
+    expect(importFunction(name, next)).toMatch(/date:\s*\(e\.createdAt as string\)/);
+  });
+});
 
 describe('перенос: контрольная точка предыдущего прогона', () => {
   // Scenario: повторный перенос не затирает правку редактора

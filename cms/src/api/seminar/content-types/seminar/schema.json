@@ -14,16 +14,16 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
     },
     "description": {
       "type": "richtext",
-      "required": true
+      "required": false
     },
     "full_text": {
       "type": "richtext"
@@ -45,8 +45,7 @@
       ]
     },
     "order": {
-      "type": "integer",
-      "default": 0
+      "type": "integer"
     },
     "documents_state": {
       "type": "enumeration",
@@ -55,12 +54,21 @@
         "not-issued",
         "unconfirmed"
       ],
-      "required": true
+      "required": false
     },
     "documents": {
       "type": "component",
       "component": "seminar.document-record",
       "repeatable": true
+    },
+    "documents_confirmation_date": {
+      "type": "date"
+    },
+    "documents_confirmation_source": {
+      "type": "text"
+    },
+    "documents_confirmation_author": {
+      "type": "string"
     },
     "legacy_id": {
       "type": "string",
@@ -71,7 +79,7 @@
       "relation": "manyToOne",
       "target": "api::course-group.course-group",
       "inversedBy": "seminars",
-      "required": true
+      "required": false
     },
     "teachers": {
       "type": "relation",
@@ -89,7 +97,7 @@
       "type": "component",
       "component": "shared.seo",
       "repeatable": false,
-      "required": true
+      "required": false
     }
   }
 }

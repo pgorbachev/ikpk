@@ -3,7 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getInstitutes } from '../../lib/data';
 
-const institutes = [...getInstitutes()].sort((a, b) => a.order - b.order);
+const institutes = getInstitutes();
 
 const title = 'Институты — ИКПК';
 const description = 'Институты, входящие в ИКПК: программы обучения и преподаватели.';

@@ -14,19 +14,19 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "startAt": {
       "type": "datetime",
-      "required": true
+      "required": false
     },
     "endAt": {
       "type": "datetime",
-      "required": true
+      "required": false
     },
     "city": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "price": {
       "type": "decimal"
@@ -46,7 +46,7 @@
         "completed"
       ],
       "default": "active",
-      "required": true
+      "required": false
     },
     "registrationFormLink": {
       "type": "string"
@@ -69,7 +69,7 @@
       "relation": "manyToOne",
       "target": "api::seminar.seminar",
       "inversedBy": "schedule_entries",
-      "required": true
+      "required": false
     },
     "teachers": {
       "type": "relation",

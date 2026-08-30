@@ -1,3 +1,3 @@
-import { factories } from '@strapi/strapi';
-
-export default factories.createCoreRouter('api::address-history.address-history');
+// Историю пишет только внутренний lifecycle через `strapi.db`. Публичного CRUD нет:
+// иначе API-токен с выданным правом мог бы освободить постоянный прежний адрес.
+export default { routes: [] };

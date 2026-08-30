@@ -14,12 +14,12 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
     },
     "trait": {
       "type": "enumeration",
@@ -27,11 +27,10 @@
         "teacher",
         "method-author"
       ],
-      "required": true
+      "required": false
     },
     "order": {
-      "type": "integer",
-      "default": 0
+      "type": "integer"
     },
     "photo": {
       "type": "media",

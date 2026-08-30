@@ -3,7 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getCourseGroups } from '../../lib/data';
 
-const programs = [...getCourseGroups()].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+const programs = getCourseGroups();
 
 const title = 'Программы — ИКПК';
 const description = 'Программы обучения ИКПК по всем институтам.';

@@ -9,12 +9,12 @@
     "seo_title": {
       "type": "string",
       "maxLength": 120,
-      "required": true
+      "required": false
     },
     "seo_description": {
       "type": "text",
       "maxLength": 320,
-      "required": true
+      "required": false
     },
     "og_image": {
       "type": "media",

@@ -80,6 +80,26 @@ describe('схема CMS: порядок следования', () => {
     );
     expect(found, `у ${PERSON} нет целочисленного поля порядка`).toBeDefined();
   });
+
+  it.each(['institute', 'course-group', 'seminar', PERSON])(
+    'пустой порядок типа %s не превращается в ноль значением по умолчанию',
+    (name) => {
+      const found = Object.entries(schema(name).attributes ?? {}).find(
+        ([field, a]) => /order|poryadok|position|sort/i.test(field) && a.type === 'integer',
+      );
+      expect(found, `у ${name} нет целочисленного поля порядка`).toBeDefined();
+      expect(
+        found![1],
+        `${name}.${found![0]} задаёт default: пустая запись попадёт в начало вместо конца`,
+      ).not.toHaveProperty('default');
+    },
+  );
+
+  it('production data access использует общий сортировщик с лексикографическим tie-break', () => {
+    const dataSource = readFileSync(join(ROOT, 'web', 'src', 'lib', 'data.ts'), 'utf-8');
+    expect(dataSource).toMatch(/import\s*\{\s*byExplicitOrder\s*\}.*content-order/);
+    expect(dataSource).not.toMatch(/function\s+byOrder\s*</);
+  });
 });
 
 describe('схема CMS: статус семинара не хранится', () => {
@@ -134,6 +154,7 @@ describe('схема CMS: секции семинара — отдельные �
     const freeform = Object.entries(attributes).filter(
       ([field, a]) =>
         /certificate|document|diplom|udostoveren|svidetel/i.test(field) &&
+        !/confirmation/i.test(field) &&
         (a.type === 'richtext' || a.type === 'text' || a.type === 'string' || a.type === 'blocks'),
     );
     expect(
@@ -156,7 +177,7 @@ describe('схема CMS: секции семинара — отдельные �
 });
 
 describe('схема CMS: выдаваемые документы описаны структурно', () => {
-  it('у семинара есть поле состояния сведений из трёх значений и оно обязательно', () => {
+  it('у семинара есть поле состояния сведений из трёх значений', () => {
     const attributes = schema('seminar').attributes ?? {};
     const found = Object.entries(attributes).find(
       ([field, a]) => a.type === 'enumeration' && /document|svedeni/i.test(field),
@@ -164,9 +185,7 @@ describe('схема CMS: выдаваемые документы описаны
     expect(found, 'нет поля состояния сведений о документах').toBeDefined();
     const [, a] = found!;
     expect((a.enum as string[])?.length, 'состояний не три').toBe(3);
-    expect(a.required, 'состояние сведений не обязательно — пустое поле неотличимо от «не выдаются»').toBe(
-      true,
-    );
+    expect(a.required ?? false, 'schema.required блокирует черновик до publication guard').toBe(false);
   });
 
   it('у семинара есть повторяемый набор записей о документах', () => {
@@ -175,6 +194,14 @@ describe('схема CMS: выдаваемые документы описаны
       ([, a]) => a.type === 'component' && a.repeatable === true,
     );
     expect(found, 'нет повторяемого набора записей о документах').toBeDefined();
+  });
+
+  it('основание перехода из неподтверждённого состояния хранит дату, источник и автора', () => {
+    const attributes = schema('seminar').attributes ?? {};
+    const names = Object.keys(attributes);
+    expect(names.some((name) => /confirmation.*date|date.*confirmation/i.test(name))).toBe(true);
+    expect(names.some((name) => /confirmation.*source|source.*confirmation/i.test(name))).toBe(true);
+    expect(names.some((name) => /confirmation.*author|author.*confirmation/i.test(name))).toBe(true);
   });
 
   it('компонент записи о документе называет документ, выдающее лицо и структурное условие', () => {
@@ -218,15 +245,13 @@ describe('схема CMS: выдаваемые документы описаны
 });
 
 describe('схема CMS: персона — один тип с признаком одного значения', () => {
-  it('признак персоны — перечень из двух значений и он обязателен', () => {
+  it('признак персоны — перечень из двух значений и не блокирует черновик', () => {
     const attributes = schema(PERSON).attributes ?? {};
     const found = Object.entries(attributes).find(
       ([, a]) => a.type === 'enumeration' && Array.isArray(a.enum) && (a.enum as string[]).length === 2,
     );
     expect(found, 'у персоны нет признака из двух значений').toBeDefined();
-    expect(found![1].required, 'признак не обязателен — персона без признака попадёт в публикацию').toBe(
-      true,
-    );
+    expect(found![1].required ?? false, 'признак блокирует неполный черновик до publication guard').toBe(false);
   });
 
   it('отдельного типа для авторов методик нет', () => {
@@ -293,45 +318,43 @@ describe('схема CMS: обязательные поля публикации
     ['institute', ['name', 'slug', 'description']],
     ['page', ['title', 'slug', 'body']],
     ['video-playlist', ['name', 'slug']],
-  ])('у типа %s обязательны названные поля', (name, expected) => {
-    const required = requiredNames(name);
+    ['news-item', ['name', 'date', 'description']],
+    ['promotion', ['name', 'date', 'description']],
+    ['schedule-entry', ['seminar', 'startAt', 'endAt', 'city', 'status']],
+  ])('у типа %s существуют поля публикационного контракта', (name, expected) => {
+    const attributes = schema(name).attributes ?? {};
     for (const field of expected as string[]) {
-      expect(required, `${name}.${field} не обязательно — публикация без него пройдёт`).toContain(field);
+      expect(attributes, `${name}.${field} отсутствует в схеме`).toHaveProperty(field);
     }
   });
 
-  it('у события расписания обязательны связь с семинаром, даты, город и статус', () => {
-    const required = requiredNames('schedule-entry');
-    for (const field of ['seminar', 'startAt', 'endAt', 'city', 'status']) {
-      expect(required, `schedule-entry.${field} не обязательно`).toContain(field);
+  it('обязательность не блокирует сохранение неполного черновика на уровне схемы', () => {
+    for (const { name } of ALL) {
+      if (schema(name).options?.draftAndPublish !== true) continue;
+      expect(requiredNames(name), `${name}: schema.required блокирует неполный черновик до publication guard`).toEqual(
+        [],
+      );
     }
-  });
-
-  it('у семинара обязательна связь с программой', () => {
-    expect(requiredNames('seminar')).toContain('course_group');
-  });
-
-  it('у программы обязательна связь с институтом', () => {
-    expect(requiredNames('course-group')).toContain('institute');
   });
 
   // Незаполненные заголовок и описание страницы не видны редактору визуально и дают
-  // страницу без заголовка в выдаче — поэтому они обязательны, а не желательны.
-  it('заголовок и описание страницы обязательны в компоненте SEO', () => {
+  // страницу без заголовка в выдаче — поэтому их проверяет publication guard. На уровне
+  // компонента required запрещал бы сохранить черновик с частично заполненным SEO.
+  it('компонент SEO не блокирует неполный черновик до publication guard', () => {
     const file = join(ROOT, 'cms', 'src', 'components', 'shared', 'seo.json');
     expect(existsSync(file), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${file}`).toBe(true);
     const json = JSON.parse(readFileSync(file, 'utf-8')) as Schema;
     for (const field of ['seo_title', 'seo_description']) {
-      expect(json.attributes?.[field]?.required, `${field} не обязательно`).toBe(true);
+      expect(json.attributes?.[field]?.required ?? false, `${field} блокирует неполный черновик`).toBe(false);
     }
   });
 
   it.each(['article', 'seminar', 'course-group', 'institute', 'page'])(
-    'компонент SEO у типа %s обязателен',
+    'компонент SEO у типа %s не блокирует неполный черновик',
     (name) => {
       const seo = attr(name, 'seo');
       expect(seo, `у ${name} нет компонента SEO`).toBeDefined();
-      expect(seo!.required, `компонент SEO у ${name} не обязателен`).toBe(true);
+      expect(seo!.required ?? false, `компонент SEO у ${name} блокирует неполный черновик`).toBe(false);
     },
   );
 
@@ -381,6 +404,18 @@ describe('схема CMS: история адресов', () => {
       contentManager.visible,
       'история адресов доступна прямому редактированию через менеджер контента',
     ).toBe(false);
+  });
+
+  it('история адресов не имеет публичного CRUD API', () => {
+    const route = join(ROOT, 'cms', 'src', 'api', 'address-history', 'routes', 'address-history.ts');
+    expect(existsSync(route), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${route}`).toBe(true);
+    const source = readFileSync(route, 'utf-8');
+    expect(source, 'core router открывает прямое создание, правку и удаление истории').not.toMatch(
+      /createCoreRouter/,
+    );
+    expect(source, 'маршруты истории должны быть пустыми: пишет только внутренний lifecycle').toMatch(
+      /routes\s*:\s*\[\s*\]/,
+    );
   });
 
   it('запись истории называет адрес и владельца', () => {

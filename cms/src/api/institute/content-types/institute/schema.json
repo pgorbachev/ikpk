@@ -14,19 +14,19 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
     },
     "shortName": {
       "type": "string"
     },
     "description": {
       "type": "richtext",
-      "required": true
+      "required": false
     },
     "image": {
       "type": "media",
@@ -36,8 +36,7 @@
       ]
     },
     "order": {
-      "type": "integer",
-      "default": 0
+      "type": "integer"
     },
     "legacy_id": {
       "type": "string",
@@ -53,7 +52,7 @@
       "type": "component",
       "component": "shared.seo",
       "repeatable": false,
-      "required": true
+      "required": false
     }
   }
 }

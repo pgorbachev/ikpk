@@ -14,16 +14,16 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
     },
     "description": {
       "type": "richtext",
-      "required": true
+      "required": false
     },
     "image": {
       "type": "media",
@@ -33,8 +33,7 @@
       ]
     },
     "order": {
-      "type": "integer",
-      "default": 0
+      "type": "integer"
     },
     "is_article_category": {
       "type": "boolean",
@@ -49,7 +48,7 @@
       "relation": "manyToOne",
       "target": "api::institute.institute",
       "inversedBy": "course_groups",
-      "required": true
+      "required": false
     },
     "seminars": {
       "type": "relation",
@@ -61,7 +60,7 @@
       "type": "component",
       "component": "shared.seo",
       "repeatable": false,
-      "required": true
+      "required": false
     }
   }
 }

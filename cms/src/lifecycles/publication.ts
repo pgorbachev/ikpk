@@ -1,10 +1,27 @@
 import type { Core } from '@strapi/strapi';
 import { errors } from '@strapi/utils';
-import { checkPublication, checkDocumentRecord, checkCategoryFlagRemoval, type DocumentRecord } from '../lib/publication-validation';
+import {
+  checkPublication,
+  checkDocumentRecord,
+  checkCategoryFlagRemoval,
+  checkDocumentsStateChange,
+  type DocumentRecord,
+  type DocumentsState,
+} from '../lib/publication-validation';
 
 const { ApplicationError } = errors;
 
-type PublicationType = 'institute' | 'course-group' | 'seminar' | 'person' | 'article' | 'video-playlist' | 'static-page';
+type PublicationType =
+  | 'institute'
+  | 'course-group'
+  | 'seminar'
+  | 'person'
+  | 'article'
+  | 'video-playlist'
+  | 'static-page'
+  | 'schedule-entry'
+  | 'news-item'
+  | 'promotion';
 
 const TYPE_BY_UID: Record<string, PublicationType> = {
   'api::institute.institute': 'institute',
@@ -14,10 +31,14 @@ const TYPE_BY_UID: Record<string, PublicationType> = {
   'api::article.article': 'article',
   'api::video-playlist.video-playlist': 'video-playlist',
   'api::page.page': 'static-page',
+  'api::schedule-entry.schedule-entry': 'schedule-entry',
+  'api::news-item.news-item': 'news-item',
+  'api::promotion.promotion': 'promotion',
 };
 
 const COURSE_GROUP_UID = 'api::course-group.course-group';
 const ARTICLE_UID = 'api::article.article';
+const SEMINAR_UID = 'api::seminar.seminar';
 
 /** Что нужно `populate`, чтобы обязательные поля-связи/компоненты не выглядели пустыми. */
 const POPULATE_BY_TYPE: Record<PublicationType, Record<string, unknown> | undefined> = {
@@ -28,6 +49,9 @@ const POPULATE_BY_TYPE: Record<PublicationType, Record<string, unknown> | undefi
   article: { categories: true, seo: true, image: true },
   'video-playlist': undefined,
   'static-page': { seo: true },
+  'schedule-entry': { seminar: true },
+  'news-item': undefined,
+  promotion: undefined,
 };
 
 function seoFields(entity: Record<string, unknown>): { seo_title?: unknown; seo_description?: unknown } {
@@ -86,6 +110,17 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
       return { title: entity.name, identifier: entity.slug };
     case 'static-page':
       return { title: entity.title, identifier: entity.slug, body: entity.body, seo_title, seo_description };
+    case 'schedule-entry':
+      return {
+        seminar: entity.seminar,
+        startAt: entity.startAt,
+        endAt: entity.endAt,
+        city: entity.city,
+        status: entity.status,
+      };
+    case 'news-item':
+    case 'promotion':
+      return { title: entity.name, date: entity.date, body: entity.description };
   }
 }
 
@@ -137,6 +172,37 @@ async function guardCategoryFlagRemoval(strapi: Core.Strapi, courseGroupDocument
 export function registerPublicationLifecycle(strapi: Core.Strapi): void {
   strapi.documents.use(async (context, next) => {
     const type = TYPE_BY_UID[context.uid as string];
+
+    if (context.uid === SEMINAR_UID && context.action === 'update') {
+      const params = context.params as { documentId?: string; data?: Record<string, unknown> };
+      const nextState = params.data?.documents_state;
+      if (params.documentId && typeof nextState === 'string') {
+        const existing = (await strapi.documents(SEMINAR_UID as never).findOne({
+          documentId: params.documentId,
+          status: 'draft',
+          fields: [
+            'documents_state',
+            'documents_confirmation_date',
+            'documents_confirmation_source',
+            'documents_confirmation_author',
+          ],
+        })) as Record<string, unknown> | null;
+        const previousState = existing?.documents_state;
+        if (typeof previousState === 'string' && previousState !== nextState) {
+          const data = params.data ?? {};
+          const verdict = checkDocumentsStateChange({
+            from: previousState as DocumentsState,
+            to: nextState as DocumentsState,
+            confirmation: {
+              date: String(data.documents_confirmation_date ?? existing?.documents_confirmation_date ?? ''),
+              source: String(data.documents_confirmation_source ?? existing?.documents_confirmation_source ?? ''),
+              author: String(data.documents_confirmation_author ?? existing?.documents_confirmation_author ?? ''),
+            },
+          });
+          if (!verdict.ok) throw new ApplicationError(verdict.message);
+        }
+      }
+    }
 
     if (type && context.action === 'publish') {
       const documentId = (context.params as { documentId?: string }).documentId;
