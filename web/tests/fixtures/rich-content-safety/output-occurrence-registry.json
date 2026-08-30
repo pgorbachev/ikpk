@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "2c9460a8cccb6b9a33578bffb69c1ea80c31c4dc",
+  "generatedFromSha": "8b098f7dc3d7439378c20414eefd098243e05b41",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -160,7 +160,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/",
       "placement": "doc-order:8:style",
-      "identity": "style|body:76a3d7c92d0924b4",
+      "identity": "style|body:8c5ec622dc6f8921",
       "count": 1,
       "builds": [
         "production",
@@ -303,7 +303,7 @@
       "slotId": "src:components/home/sections/Reviews.astro:L37:C13:svg",
       "route": "/",
       "placement": "after:#upcoming",
-      "identity": "svg|aria-hidden=true|class=award-badge__icon|data-astro-cid-utinu7e2=|data-award-icon=|viewbox=0 0 24 24",
+      "identity": "svg|aria-hidden=true|class=award-badge-icon|data-astro-cid-utinu7e2=|data-award-icon=|viewbox=0 0 24 24",
       "count": 1,
       "builds": [
         "production",

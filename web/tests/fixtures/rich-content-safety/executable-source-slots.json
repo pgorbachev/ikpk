@@ -404,24 +404,24 @@
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L147:C1:style",
-    "fingerprint": "abf2c6976978ed5885c729d7df722e520dc2213c8a73c271bb94270f846bc10d",
-    "identity": "style|body:914db00dfd925c16"
+    "fingerprint": "d29dd85dc36188eb297ece6f6697fe0c2dedd0c6b14f6cee9c24f7e06bab0920",
+    "identity": "style|body:558143f291c435bd"
   },
   {
     "slotId": "src:components/home/sections/Reviews.astro:L37:C13:svg",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L37:C13:svg",
-    "fingerprint": "a01850a3d97c0af2e8dd8218d37e4bebf3ef23c94fb8043b6aa1990205c25745",
-    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge__icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
+    "fingerprint": "b0df25a3ac2e06aa4193e0bcb04760ff8a3a10c11b3702ba7bd3a939e12e38b6",
+    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge-icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
   },
   {
     "slotId": "src:components/home/sections/Reviews.astro:L50:C13:svg",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L50:C13:svg",
-    "fingerprint": "3f7cea8f6327cda5751282ae730d8d3b5b289898fecad372f7fef6f253e0113c",
-    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge__icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
+    "fingerprint": "2637c0f1cd558e292c96d5420741f21fd6c3364063d31800611bf95b65374a1d",
+    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge-icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
   },
   {
     "slotId": "src:components/home/sections/Reviews.astro:L96:C3:script",
