@@ -418,6 +418,10 @@ describe('схема CMS: история адресов', () => {
     );
   });
 
+  it('история адресов всегда называет тип владельца для вычисления текущей цели', () => {
+    expect(schema('address-history').attributes?.owner_type?.required).toBe(true);
+  });
+
   it('запись истории называет адрес и владельца', () => {
     const found = ALL.find((s) => /address[-_]?history|istoriya[-_]?adres/i.test(s.name));
     expect(found).toBeDefined();

@@ -29,7 +29,8 @@
       "required": true
     },
     "owner_type": {
-      "type": "string"
+      "type": "string",
+      "required": true
     }
   }
 }
