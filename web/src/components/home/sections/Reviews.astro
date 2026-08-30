@@ -35,7 +35,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
         >
           {badge.provider.id === 'yandex-maps' ? (
             <svg
-              class="award-badge__icon"
+              class="award-badge-icon"
               data-award-icon
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -48,7 +48,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
             </svg>
           ) : (
             <svg
-              class="award-badge__icon"
+              class="award-badge-icon"
               data-award-icon
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -59,11 +59,11 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
               <circle cx="12" cy="11" r="3.5" fill="#ffd43b"></circle>
             </svg>
           )}
-          <span class="award-badge__copy">
-            <span class="award-badge__title" data-award-title>
+          <span class="award-badge-copy">
+            <span class="award-badge-title" data-award-title>
               {badge.label ?? 'Знак награды'}
             </span>
-            <span class="award-badge__source" data-award-source>{badge.provider.label}</span>
+            <span class="award-badge-source" data-award-source>{badge.provider.label}</span>
           </span>
         </a>
       ))}
@@ -175,25 +175,25 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
     padding: 0.35rem 0.75rem 0.35rem 0.45rem;
   }
 
-  .award-badge__icon {
+  .award-badge-icon {
     flex: 0 0 auto;
     width: 1.5rem;
     height: 1.5rem;
   }
 
-  .award-badge__copy {
+  .award-badge-copy {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     line-height: 1.15;
   }
 
-  .award-badge__title {
+  .award-badge-title {
     font-size: var(--font-s);
     font-weight: 600;
   }
 
-  .award-badge__source {
+  .award-badge-source {
     color: var(--color-gray-500, #767676);
     font-size: 0.75rem;
   }
