@@ -1,4 +1,4 @@
-// import type { Core } from '@strapi/strapi';
+import type { Core } from '@strapi/strapi';
 
 export default {
   /**
@@ -7,7 +7,14 @@ export default {
    *
    * This gives you an opportunity to extend code.
    */
-  register(/* { strapi }: { strapi: Core.Strapi } */) {},
+  register({ strapi }: { strapi: Core.Strapi }) {
+    // The server must know the underlying database type before it can load a
+    // content type that uses the admin custom field registered in app.tsx.
+    strapi.customFields.register({
+      name: 'tiptap-html',
+      type: 'text',
+    });
+  },
 
   /**
    * An asynchronous bootstrap function that runs before

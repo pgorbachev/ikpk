@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "start": "strapi start",
     "strapi": "strapi",
+    "test:poc": "node --test tests/tiptap-poc-wiring.test.mjs",
     "typecheck": "tsc --noEmit",
     "audit:prod": "npm audit --omit=dev --audit-level=critical",
     "upgrade": "npx @strapi/upgrade latest",
@@ -21,6 +22,9 @@
     "@strapi/plugin-cloud": "5.51.2",
     "@strapi/plugin-users-permissions": "5.51.2",
     "@strapi/strapi": "5.51.2",
+    "@tiptap/extension-table": "^3.30.5",
+    "@tiptap/react": "^3.30.5",
+    "@tiptap/starter-kit": "^3.30.5",
     "better-sqlite3": "13.0.3",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -34,8 +38,8 @@
     "@types/react-dom": "^18",
     "eslint": "^9.37.0",
     "globals": "^17.9.0",
-    "typescript-eslint": "^8.66.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript-eslint": "^8.66.0"
   },
   "engines": {
     "node": ">=20.0.0 <=24.x.x",

@@ -1,0 +1,24 @@
+{
+  "kind": "collectionType",
+  "collectionName": "editor_prototypes",
+  "info": {
+    "singularName": "editor-prototype",
+    "pluralName": "editor-prototypes",
+    "displayName": "Прототип редактора",
+    "description": "Изолированная запись для проверки Tiptap в Strapi"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "body": {
+      "type": "customField",
+      "customField": "global::tiptap-html",
+      "required": true
+    }
+  }
+}
