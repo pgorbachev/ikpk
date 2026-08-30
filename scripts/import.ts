@@ -503,7 +503,7 @@ async function importArticles(): Promise<void> {
       title: e.title,
       slug: e.slug,
       body: (e.body_html as string) ?? null,
-      published_at: (e.published_at as string) ?? null,
+      publication_date: (e.published_at as string) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);

@@ -101,7 +101,7 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
         seo_title,
         seo_description,
         image: entity.image,
-        published_at: entity.published_at,
+        published_at: entity.publication_date,
         categories: entity.categories,
       };
     case 'video-playlist':

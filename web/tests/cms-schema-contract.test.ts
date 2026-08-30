@@ -435,6 +435,13 @@ describe('схема CMS: история адресов', () => {
   });
 });
 
+describe('схема CMS: имена полей не сталкиваются с системными колонками Strapi', () => {
+  it('дата материала статьи не объявляет второй published_at поверх Draft & Publish', () => {
+    expect(attr('article', 'published_at')).toBeUndefined();
+    expect(attr('article', 'publication_date')?.type).toBe('datetime');
+  });
+});
+
 /*
  * СЦЕНАРИИ, КОТОРЫЕ СХЕМОЙ НЕ ПРОВЕРЯЮТСЯ
  *

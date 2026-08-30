@@ -32,7 +32,7 @@
         "images"
       ]
     },
-    "published_at": {
+    "publication_date": {
       "type": "datetime"
     },
     "categories": {
