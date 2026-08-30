@@ -1,5 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { UPLOAD_ALLOWED_MIME_TYPES, UPLOAD_SIZE_LIMIT_BYTES } from '../config/plugins';
+import { syncEditorRolePermissions, type EditorRoleStrapi } from './lib/editor-role';
 import { registerContentAddressLifecycle } from './lifecycles/content-address';
 import { registerPublicationLifecycle } from './lifecycles/publication';
 
@@ -22,7 +23,7 @@ export default {
    * файла, а ловит запись в БД в обход контроллеров (например, прямой `db.query(...).create()`
    * из скрипта или другого плагина).
    */
-  bootstrap({ strapi }: { strapi: Core.Strapi }) {
+  async bootstrap({ strapi }: { strapi: Core.Strapi }) {
     strapi.db.lifecycles.subscribe({
       models: ['plugin::upload.file'],
       beforeCreate(event) {
@@ -38,5 +39,6 @@ export default {
 
     registerContentAddressLifecycle(strapi);
     registerPublicationLifecycle(strapi);
+    await syncEditorRolePermissions(strapi as unknown as EditorRoleStrapi);
   },
 };
