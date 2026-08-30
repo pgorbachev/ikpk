@@ -9,10 +9,15 @@
  *   STRAPI_API_TOKEN=xxx tsx import.ts
  *   STRAPI_API_TOKEN=xxx tsx import.ts --dry-run
  *   STRAPI_API_TOKEN=xxx tsx import.ts --skip-media
+ *   STRAPI_API_TOKEN=xxx tsx import.ts --allow-partial   # см. TD-8: не проваливать код
+ *                                                          # выхода при errors/missingRelations
  *
  * Env vars:
  *   STRAPI_URL        – base URL (default http://localhost:1337)
  *   STRAPI_API_TOKEN  – Full-access API token (required unless --dry-run)
+ *
+ * Код выхода (TD-8, docs/tech-debt.md): ненулевой, если есть errors, missingRelations или
+ * неудачные загрузки медиа — если только не передан --allow-partial (осознанный обход).
  */
 
 import fs from "node:fs/promises";
@@ -20,6 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
+import { mediaKey } from "./lib/cms-migration.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -32,12 +38,14 @@ const STRAPI_URL = (process.env.STRAPI_URL || "http://localhost:1337").replace(
 const STRAPI_API_TOKEN = process.env.STRAPI_API_TOKEN ?? "";
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_MEDIA = process.argv.includes("--skip-media");
+const ALLOW_PARTIAL = process.argv.includes("--allow-partial");
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TRANSFER_DIR = legacyTransferDir(path.resolve(__dirname, ".."));
+const MEDIA_CACHE_PATH = path.join(__dirname, ".media-cache.json");
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -62,6 +70,12 @@ interface CacheEntry {
   documentId: string;
 }
 
+interface MediaCacheEntry {
+  fileId: number;
+  /** sha256 содержимого файла (mediaKey из cms-migration.ts) — ключ повторяемости, не url. */
+  hash: string;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Global state
 // ────────────────────────────────────────────────────────────────
@@ -69,8 +83,17 @@ interface CacheEntry {
 const reports: Record<string, EntityReport> = {};
 /** apiName → legacy_id → { id, documentId } */
 const idCache: Record<string, Map<string, CacheEntry>> = {};
-/** downloaded image URL → Strapi media file id */
-const mediaCache = new Map<string, number>();
+/**
+ * Кеш медиа, переживающий отдельные прогоны (TD-8): url → { fileId, hash } на диске
+ * (`.media-cache.json`), плюс производный индекс hash → fileId — одно и то же содержимое под
+ * разными url не должно порождать вторую копию в медиатеке. Внутрипроцессная `Map` одна и та
+ * же не восстанавливает идемпотентность между прогонами — только сам факт, что она указывает
+ * на диск, а не на память процесса.
+ */
+const mediaCacheByUrl = new Map<string, MediaCacheEntry>();
+const mediaCacheByHash = new Map<string, number>();
+/** Неудачные загрузки медиа: не увеличивали никакой счётчик (TD-8) — теперь у них есть свой. */
+let mediaUploadFailures = 0;
 /** Set to true when Strapi is confirmed unreachable (skip API calls in dry-run) */
 let strapiOffline = false;
 
@@ -173,6 +196,31 @@ async function loadJSON<T = Record<string, unknown>>(
 }
 
 // ────────────────────────────────────────────────────────────────
+// Persistent media cache (TD-8): переживает отдельные прогоны процесса
+// ────────────────────────────────────────────────────────────────
+
+async function loadMediaCache(): Promise<void> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(MEDIA_CACHE_PATH, "utf-8");
+  } catch {
+    return; // первый прогон — файла ещё нет, это не ошибка
+  }
+  const parsed = JSON.parse(raw) as Record<string, MediaCacheEntry>;
+  for (const [url, entry] of Object.entries(parsed)) {
+    mediaCacheByUrl.set(url, entry);
+    mediaCacheByHash.set(entry.hash, entry.fileId);
+  }
+  log(`ℹ️  Загружен кеш медиа: ${mediaCacheByUrl.size} записей из ${MEDIA_CACHE_PATH}`);
+}
+
+async function saveMediaCache(): Promise<void> {
+  if (DRY_RUN) return; // в dry-run ничего не загружено — нечего и сохранять
+  const obj = Object.fromEntries(mediaCacheByUrl);
+  await fs.writeFile(MEDIA_CACHE_PATH, JSON.stringify(obj, null, 2));
+}
+
+// ────────────────────────────────────────────────────────────────
 // Media helpers
 // ────────────────────────────────────────────────────────────────
 
@@ -203,7 +251,10 @@ function extractImageUrl(field: unknown): string | null {
  */
 async function uploadImage(url: string | null): Promise<number | null> {
   if (!url || SKIP_MEDIA) return null;
-  if (mediaCache.has(url)) return mediaCache.get(url)!;
+
+  const cached = mediaCacheByUrl.get(url);
+  if (cached) return cached.fileId;
+
   if (DRY_RUN) {
     log(`  📷 [DRY] Would upload: ${url.slice(0, 80)}`);
     return null;
@@ -213,10 +264,25 @@ async function uploadImage(url: string | null): Promise<number | null> {
     // Download
     const res = await fetch(url);
     if (!res.ok) {
+      mediaUploadFailures++;
       log(`  ⚠ Download failed (${res.status}): ${url.slice(0, 80)}`);
       return null;
     }
     const buf = Buffer.from(await res.arrayBuffer());
+
+    // Идемпотентность по содержимому (TD-8): один и тот же файл под разными url —
+    // например, при повторной публикации того же снимка — не должен плодить копии в
+    // медиатеке. Ключ — sha256 байтов (cms-migration.ts `mediaKey`), не url и не память
+    // процесса: он переживает и разные прогоны, и разные исходные адреса.
+    const hash = mediaKey({ bytes: new Uint8Array(buf), sourceUrl: url });
+    const reusedFileId = mediaCacheByHash.get(hash);
+    if (reusedFileId) {
+      mediaCacheByUrl.set(url, { fileId: reusedFileId, hash });
+      await saveMediaCache();
+      log(`  📷 Переиспользован по содержимому (${hash.slice(0, 12)}…): ${url.slice(0, 60)} → media #${reusedFileId}`);
+      return reusedFileId;
+    }
+
     const fname =
       decodeURIComponent(path.basename(new URL(url).pathname)) || "image.jpg";
     const mime = res.headers.get("content-type") || "application/octet-stream";
@@ -235,13 +301,17 @@ async function uploadImage(url: string | null): Promise<number | null> {
       ? (uploaded[0] as { id?: number })?.id
       : undefined;
     if (fileId) {
-      mediaCache.set(url, fileId);
+      mediaCacheByUrl.set(url, { fileId, hash });
+      mediaCacheByHash.set(hash, fileId);
+      await saveMediaCache();
       log(`  📷 Uploaded ${fname} → media #${fileId}`);
       return fileId;
     }
+    mediaUploadFailures++;
     log(`  ⚠ Upload returned no id for ${fname}`);
     return null;
   } catch (err: unknown) {
+    mediaUploadFailures++;
     const msg = err instanceof Error ? err.message : String(err);
     log(`  ⚠ Upload error: ${msg} (${url.slice(0, 60)})`);
     return null;
@@ -384,7 +454,7 @@ async function upsert(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Phase 1 — Independent records (no foreign-key deps)
+// Phase 1 — Base records (institutes precede people that refer to them)
 // ════════════════════════════════════════════════════════════════
 
 async function importInstitutes(): Promise<void> {
@@ -397,7 +467,7 @@ async function importInstitutes(): Promise<void> {
       slug: e.slug,
       shortName: (e.shortName as string) ?? null,
       description: (e.description_html as string) ?? null,
-      order: (e.order as number) ?? 0,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -416,9 +486,27 @@ async function importTeachers(): Promise<void> {
       name: e.name,
       slug: e.slug,
       bio: (e.bio_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     if (photoId) data.photo = photoId;
+
+    // The legacy value is only migration input. Runtime membership is represented
+    // by the CMS relation, so a newly created person can be assigned without any
+    // legacy-only field and moving a person does not depend on an old URL slug.
+    if (e.institute_legacy_id) {
+      const instituteDocumentId = await resolveRelation(
+        "institutes",
+        e.institute_legacy_id as string,
+        report,
+        String(e.legacy_id),
+        "institutes",
+      );
+      if (instituteDocumentId) data.institutes = { set: [instituteDocumentId] };
+    } else {
+      data.institutes = { set: [] };
+    }
+
     await upsert("teachers", e.legacy_id as string, data, report);
   }
 }
@@ -432,7 +520,7 @@ async function importArticles(): Promise<void> {
       title: e.title,
       slug: e.slug,
       body: (e.body_html as string) ?? null,
-      published_at: (e.published_at as string) ?? null,
+      publication_date: (e.published_at as string) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -484,6 +572,7 @@ async function importNewsItems(): Promise<void> {
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       legacy_id: lid,
@@ -502,6 +591,7 @@ async function importPromotions(): Promise<void> {
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       active: true,
@@ -525,6 +615,7 @@ async function importCourseGroups(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -612,7 +703,7 @@ async function importSeminars(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
-      status: (e.status as string) ?? "planned",
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -670,10 +761,12 @@ async function importScheduleEntries(): Promise<void> {
   log("📦 Importing schedule entries …");
   const report = newReport("schedule-entries");
 
-  const [entries, seminars] = await Promise.all([
+  const [entries, seminars, teachers] = await Promise.all([
     loadJSON("schedule_entries.json"),
     loadJSON("seminars.json"),
+    loadJSON("teachers.json"),
   ]);
+  const teacherNumMap = buildTeacherNumericMap(teachers);
 
   // Build slug → legacy_id map for efficient seminar resolution
   const seminarSlugToLid = new Map<string, string>();
@@ -694,15 +787,38 @@ async function importScheduleEntries(): Promise<void> {
       price: (e.newPrice as number) ?? null,
       oldPrice: (e.oldPrice as number) ?? null,
       isFree: (e.isFree as boolean) ?? false,
-      status: (e.status as string) ?? "active",
+      eventStatus: (e.status as string) ?? "active",
       registrationFormLink: (e.registrationFormLink as string) ?? null,
       description: (e.description as string) ?? null,
       additionalText: (e.additionalText as string) ?? null,
       duration: e.duration != null ? String(e.duration) : null,
-      // teachers stored as JSON (not a relation) on schedule-entry
-      teachers: Array.isArray(e.teachers) ? e.teachers : null,
       legacy_id: lid,
     };
+
+    if (Array.isArray(e.teachers)) {
+      const teacherDocumentIds: string[] = [];
+      for (const teacher of e.teachers as { id?: number | string }[]) {
+        const teacherLegacyId = teacherNumMap.get(String(teacher.id));
+        if (!teacherLegacyId) {
+          report.missingRelations.push({
+            legacy_id: lid,
+            relation: "teachers",
+            target: `teachers/id=${String(teacher.id)}`,
+          });
+          continue;
+        }
+
+        const documentId = await resolveRelation(
+          "teachers",
+          teacherLegacyId,
+          report,
+          lid,
+          "teachers",
+        );
+        if (documentId) teacherDocumentIds.push(documentId);
+      }
+      data.teachers = { set: teacherDocumentIds };
+    }
 
     // Resolve seminar relation via slug
     const seminarObj = e.seminar as { slug?: string } | undefined;
@@ -754,7 +870,7 @@ async function importScheduleEntries(): Promise<void> {
 // Report
 // ════════════════════════════════════════════════════════════════
 
-function printReport(): void {
+function printReport(): { totErrors: number; totMissingRelations: number } {
   const sep = "═".repeat(64);
   const thin = "─".repeat(64);
   console.log(`\n${sep}`);
@@ -764,6 +880,7 @@ function printReport(): void {
   let totCreated = 0;
   let totUpdated = 0;
   let totErrors = 0;
+  let totMissingRelations = 0;
 
   for (const [name, r] of Object.entries(reports)) {
     console.log(`\n  ${name}:`);
@@ -773,6 +890,7 @@ function printReport(): void {
     totCreated += r.created;
     totUpdated += r.updated;
     totErrors += r.errors.length;
+    totMissingRelations += r.missingRelations.length;
 
     if (r.errors.length > 0) {
       console.log(`    ❌ Errors (${r.errors.length}):`);
@@ -790,13 +908,17 @@ function printReport(): void {
 
   console.log(`\n${thin}`);
   console.log(
-    `  TOTALS: ✅ ${totCreated} created   ✏️  ${totUpdated} updated   ❌ ${totErrors} errors`,
+    `  TOTALS: ✅ ${totCreated} created   ✏️  ${totUpdated} updated   ❌ ${totErrors} errors   ⚠️  ${totMissingRelations} missing relations   📷 ${mediaUploadFailures} media failures`,
   );
   if (DRY_RUN)
     console.log("  ℹ️   DRY-RUN mode — no data was written to Strapi");
   if (SKIP_MEDIA)
     console.log("  ℹ️   SKIP-MEDIA mode — images were not uploaded");
+  if (ALLOW_PARTIAL)
+    console.log("  ℹ️   --allow-partial: код выхода не отражает найденные проблемы");
   console.log(`${sep}\n`);
+
+  return { totErrors, totMissingRelations };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -809,6 +931,8 @@ async function main(): Promise<void> {
   console.log(`   Dry run:     ${DRY_RUN}`);
   console.log(`   Skip media:  ${SKIP_MEDIA}`);
   console.log(`   Entities:    ${TRANSFER_DIR}\n`);
+
+  await loadMediaCache();
 
   if (!STRAPI_API_TOKEN && !DRY_RUN) {
     console.error(
@@ -844,8 +968,8 @@ async function main(): Promise<void> {
     log("ℹ️  No API token – running fully offline dry-run");
   }
 
-  // ─── Phase 1: Independent records ───────────────────────
-  log("═══ Phase 1: Independent records ═══");
+  // ─── Phase 1: Base records ──────────────────────────────
+  log("═══ Phase 1: Base records ═══");
   await importInstitutes();
   await importTeachers();
   await importArticles();
@@ -867,7 +991,19 @@ async function main(): Promise<void> {
   await importScheduleEntries();
 
   // ─── Report ──────────────────────────────────────────────
-  printReport();
+  const { totErrors, totMissingRelations } = printReport();
+  await saveMediaCache();
+
+  // TD-8: успешный процесс не означает успешный импорт. Потерянные сущности, оборванные
+  // связи и неудачные загрузки медиа должны провалить код выхода — иначе внешний оркестратор
+  // (CI, cron, оператор) не узнаёт о проблеме, кроме как перечитав лог целиком.
+  const hasProblems = totErrors > 0 || totMissingRelations > 0 || mediaUploadFailures > 0;
+  if (hasProblems && !ALLOW_PARTIAL) {
+    console.error(
+      `\n❌ Импорт завершён с проблемами: ${totErrors} ошибок, ${totMissingRelations} потерянных связей, ${mediaUploadFailures} неудачных загрузок медиа. Код выхода 1 (--allow-partial обходит это осознанно).`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 main().catch((err) => {

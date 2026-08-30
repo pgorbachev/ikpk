@@ -1,0 +1,54 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getInstitutes } from '../../lib/data';
+
+const institutes = getInstitutes();
+
+const title = 'Институты — ИКПК';
+const description = 'Институты, входящие в ИКПК: программы обучения и преподаватели.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Институты' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Институты</h1>
+
+      {institutes.length > 0 ? (
+        <div class="grid grid-3">
+          {institutes.map((institute) => (
+            <a href={`/instituty/${institute.slug}`} class="card">
+              <div class="card-body">
+                <h2 class="catalog-card-title">{institute.name}</h2>
+                <p class="text-muted">{excerpt(institute.description_text, 160)}</p>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Институты пока не добавлены.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .catalog-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin: 0 0 0.4rem;
+  }
+
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+</style>

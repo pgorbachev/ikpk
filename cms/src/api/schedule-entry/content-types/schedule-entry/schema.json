@@ -14,16 +14,19 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "startAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "required": false
     },
     "endAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "required": false
     },
     "city": {
-      "type": "string"
+      "type": "string",
+      "required": false
     },
     "price": {
       "type": "decimal"
@@ -35,14 +38,15 @@
       "type": "boolean",
       "default": false
     },
-    "status": {
+    "eventStatus": {
       "type": "enumeration",
       "enum": [
         "active",
         "cancelled",
         "completed"
       ],
-      "default": "active"
+      "default": "active",
+      "required": false
     },
     "registrationFormLink": {
       "type": "string"
@@ -64,10 +68,13 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::seminar.seminar",
-      "inversedBy": "schedule_entries"
+      "inversedBy": "schedule_entries",
+      "required": false
     },
     "teachers": {
-      "type": "json"
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::teacher.teacher"
     }
   }
 }

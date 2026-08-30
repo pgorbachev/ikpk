@@ -5,7 +5,7 @@
     "singularName": "teacher",
     "pluralName": "teachers",
     "displayName": "Teacher",
-    "description": "Instructor/teacher"
+    "description": "Person: teacher or method author"
   },
   "options": {
     "draftAndPublish": true
@@ -14,16 +14,27 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
+    },
+    "trait": {
+      "type": "enumeration",
+      "enum": [
+        "teacher",
+        "method-author"
+      ],
+      "required": false
+    },
+    "order": {
+      "type": "integer"
     },
     "photo": {
       "type": "media",
-      "multiple": false,
+      "multiple": true,
       "allowedTypes": [
         "images"
       ]
@@ -34,6 +45,11 @@
     "legacy_id": {
       "type": "string",
       "unique": true
+    },
+    "institutes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::institute.institute"
     },
     "seminars": {
       "type": "relation",
