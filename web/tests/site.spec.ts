@@ -217,13 +217,36 @@ test.describe('Video', () => {
 
 // ─── Contacts lazy map (FR-08) ───────────────────────────
 test.describe('Contacts map', () => {
-  test('Yandex map is injected by JS (not eager) with the right src', async ({ page }) => {
+  test('Yandex map is injected lazily and fills the map surface without an empty tail', async ({ page }) => {
     await page.goto('/kontakty');
-    await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
+    const map = page.locator('.contact-shell-map');
+    await map.scrollIntoViewIfNeeded();
     // карта подставляется скриптом (IntersectionObserver), а не статикой
-    const iframe = page.locator('.contact-shell-map iframe');
+    const iframe = map.locator('iframe');
     await expect(iframe).toHaveCount(1);
     await expect(iframe).toHaveAttribute('src', /yandex\.ru\/map-widget/);
+
+    // Регрессия: динамически созданный iframe не получает Astro scope-атрибут.
+    // Без :global(iframe) правило размеров не матчится, iframe остаётся высотой
+    // около 150px, а после ссылки внутри карты появляется большой пустой хвост.
+    const geometry = await map.evaluate((node) => {
+      const frame = node.querySelector('iframe');
+      const link = node.querySelector('.contact-shell-map-link');
+      if (!(frame instanceof HTMLElement) || !(link instanceof HTMLElement)) return null;
+
+      const mapRect = node.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const linkRect = link.getBoundingClientRect();
+      const usableHeight = mapRect.height - linkRect.height;
+      return {
+        fillRatio: usableHeight > 0 ? frameRect.height / usableHeight : 0,
+        emptyTail: mapRect.bottom - linkRect.bottom,
+      };
+    });
+
+    expect(geometry).not.toBeNull();
+    expect(geometry!.fillRatio).toBeGreaterThan(0.98);
+    expect(Math.abs(geometry!.emptyTail)).toBeLessThanOrEqual(1);
   });
 });
 
