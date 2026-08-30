@@ -1,4 +1,4 @@
-import { attr, parseDocument, textOf, walk, type Element } from './dom';
+import { attr, parseDocument, textOf, textOfExcluding, walk, type Element } from './dom';
 
 /**
  * Общие ПРИЗНАКИ для проверок change `external-widgets`.
@@ -304,8 +304,16 @@ export function byDataName(html: string, name: string): Element[] {
 const SUMMARY_STEMS = /отзыв|оцен|рейтинг/gi;
 const NUMBER = /\d[\d.,\u00a0\u202f ]*/;
 
+/**
+ * Знак награды (`SEL_AWARD_ROW`) исключён из предмета: его подпись называет ГОД
+ * знака (например, «Хорошее место 2026»), а не число отзывов или рейтинг, но в
+ * развёрнутом тексте страницы он может оказаться в 40 символах от слова «отзыв» —
+ * не потому что описывает то же самое, а потому что элементы смежны в разметке.
+ * Окно вокруг стем-слова этого не различает, дерево — различает.
+ */
 export function ratingSummaryHits(html: string): string[] {
-  return ratingSummaryHitsInText(textOf(parseDocument(html)));
+  const doc = parseDocument(html);
+  return ratingSummaryHitsInText(textOfExcluding(doc, (el) => attr(el, SEL_AWARD_ROW) !== null));
 }
 
 export function ratingSummaryHitsInText(text: string): string[] {

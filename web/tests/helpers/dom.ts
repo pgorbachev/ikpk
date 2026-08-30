@@ -77,6 +77,32 @@ export function textOf(node: unknown): string {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * То же самое, но с поддеревьями, вырезанными ЦЕЛИКОМ на уровне дерева — не
+ * постфактум по строке: признак, ищущий число рядом со словом «отзыв», не умеет
+ * отличить «то же предложение» от «два независимых элемента, случайно смежных
+ * в развёрнутом тексте» (AGENTS.md, «Гейтам нужен парсер, а не регулярки») —
+ * вырезание на уровне узла снимает эту двусмысленность, а не маскирует её.
+ *
+ * Отдельная функция, а не необязательный параметр у `textOf`: у `textOf` есть
+ * вызовы вида `.map(textOf)`, и второй параметр там становится индексом массива
+ * — типизированный как предикат, он сделал бы такие вызовы противоречивыми.
+ */
+export function textOfExcluding(node: unknown, exclude: (el: Element) => boolean): string {
+  let out = '';
+  for (const child of children(node)) {
+    if ('tagName' in child) {
+      const el = child as Element;
+      if (el.tagName === 'script' || el.tagName === 'style') continue;
+      if (exclude(el)) continue;
+      out += textOfExcluding(el, exclude);
+    } else if ('value' in child && (child as { nodeName: string }).nodeName === '#text') {
+      out += (child as { value: string }).value;
+    }
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 export function findAll(html: string, pred: (el: Element) => boolean): Element[] {
   return [...walk(parseDocument(html))].filter(pred);
 }

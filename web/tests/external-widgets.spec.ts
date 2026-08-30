@@ -228,7 +228,11 @@ test.describe('без скриптов секция даёт ссылку, а н
         'без скриптов встраивание всё равно есть: чужой счётчик грузится безусловно и ' +
           'без ленивого порога — ровно у того посетителя, который меньше всего этого ждёт',
       ).toHaveCount(0);
-      const link = page.locator(`[${SEL_REVIEWS_SECTION}] a[href*="${REVIEWS_WIDGET_HOST}"]`);
+      // Скоуп сужен до `.reviews-cta`: с объявленным знаком награды (TD-53) в секции
+      // теперь ДВЕ законные ссылки на `yandex.ru` — noscript-ссылка на отзывы и
+      // ссылка знака на карточку организации (`award-badge`). Предмет проверки — что
+      // фолбэк без скриптов НА МЕСТЕ, а не что ссылка на этот хост ровно одна.
+      const link = page.locator(`[${SEL_REVIEWS_SECTION}] a.reviews-cta[href*="${REVIEWS_WIDGET_HOST}"]`);
       await expect(link, 'без скриптов в секции нет ссылки на отзывы организации').toHaveCount(1);
       expect(
         toExactHost(seen.urls, REVIEWS_WIDGET_HOST),
