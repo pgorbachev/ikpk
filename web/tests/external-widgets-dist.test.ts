@@ -280,6 +280,29 @@ describe('отзывы показываются секцией главной и
   });
 });
 
+describe('знаки наград соответствуют утверждённому мокапу', () => {
+  it('каждый показанный знак несёт сервисную иконку, название и отдельную подпись источника', () => {
+    const section = reviewsSection();
+    const badges = subtree(section).filter((el) => attr(el, SEL_AWARD_BADGE) !== null);
+    expect(
+      badges.length,
+      'на главной нет показанного знака — проверка его структуры была бы вакуумна',
+    ).toBeGreaterThan(0);
+
+    for (const badge of badges) {
+      const inside = subtree(badge);
+      const icons = inside.filter((el) => attr(el, 'data-award-icon') !== null);
+      const titles = inside.filter((el) => attr(el, 'data-award-title') !== null);
+      const sources = inside.filter((el) => attr(el, 'data-award-source') !== null);
+      expect(icons, 'у знака нет ровно одной сервисной иконки').toHaveLength(1);
+      expect(titles, 'название знака не выделено в отдельный элемент').toHaveLength(1);
+      expect(sources, 'источник знака не выделен в отдельный элемент').toHaveLength(1);
+      expect(textOf(titles[0]), 'название знака пусто').not.toBe('');
+      expect(textOf(sources[0]), 'подпись источника пустая').not.toBe('');
+    }
+  });
+});
+
 describe('отзывы выводит официальный виджет, а не мы и не посредник', () => {
   it('единственный внешний адрес, с которого секция ЗАГРУЖАЕТ, — официальный виджет', () => {
     // Предмет — ЗАГРУЗКА, а не «любой внешний адрес», и оговорка нормативна: секция

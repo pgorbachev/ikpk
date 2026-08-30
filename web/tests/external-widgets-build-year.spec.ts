@@ -40,8 +40,18 @@ import {
 interface Measured {
   readonly image: Buffer;
   readonly badges: number;
+  readonly badgePresentations: readonly BadgePresentation[];
   readonly rowRect: Rect | null;
   readonly nextRect: Rect | null;
+}
+
+interface BadgePresentation {
+  readonly iconCount: number;
+  readonly iconRect: Rect | null;
+  readonly title: string | null;
+  readonly titleRect: Rect | null;
+  readonly source: string | null;
+  readonly sourceRect: Rect | null;
 }
 
 interface Rect {
@@ -99,7 +109,7 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
 
     const badges = await page.locator(`[${SEL_AWARD_BADGE}]`).count();
     const rects = await page.evaluate(
-      (rowAttr) => {
+      ({ rowAttr, badgeAttr }) => {
         const round = (r: DOMRect) => ({
           x: Math.round(r.x),
           y: Math.round(r.y + window.scrollY),
@@ -107,14 +117,30 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
           height: Math.round(r.height),
         });
         const row = document.querySelector(`[${rowAttr}]`);
-        if (row === null) return { row: null, next: null };
+        const badgePresentations = Array.from(document.querySelectorAll(`[${badgeAttr}]`)).map(
+          (badge) => {
+            const icons = badge.querySelectorAll('[data-award-icon]');
+            const title = badge.querySelector('[data-award-title]');
+            const source = badge.querySelector('[data-award-source]');
+            return {
+              iconCount: icons.length,
+              iconRect: icons[0] instanceof Element ? round(icons[0].getBoundingClientRect()) : null,
+              title: title?.textContent?.trim() ?? null,
+              titleRect: title instanceof Element ? round(title.getBoundingClientRect()) : null,
+              source: source?.textContent?.trim() ?? null,
+              sourceRect: source instanceof Element ? round(source.getBoundingClientRect()) : null,
+            };
+          },
+        );
+        if (row === null) return { row: null, next: null, badgePresentations };
         const next = row.nextElementSibling;
         return {
           row: round(row.getBoundingClientRect()),
           next: next === null ? null : round(next.getBoundingClientRect()),
+          badgePresentations,
         };
       },
-      SEL_AWARD_ROW,
+      { rowAttr: SEL_AWARD_ROW, badgeAttr: SEL_AWARD_BADGE },
     );
 
     const image = await page.screenshot({
@@ -125,7 +151,13 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
       // покрытия секцию отзывов целиком.
       mask: [page.locator(`[${SEL_AWARD_ROW}]`)],
     });
-    return { image, badges, rowRect: rects.row, nextRect: rects.next };
+    return {
+      image,
+      badges,
+      badgePresentations: rects.badgePresentations,
+      rowRect: rects.row,
+      nextRect: rects.next,
+    };
   } finally {
     await context.close();
   }
@@ -190,6 +222,26 @@ test.describe('датозависимый фрагмент — строка зн
       `при следующем годе сборки показано ${next.badges} знаков: знак не протухает, и ` +
         'зависимость от года не наблюдаема`',
     ).toBe(0);
+  });
+
+  test('знак соответствует утверждённому мокапу: сервисная иконка и две строки текста', async () => {
+    expect(current.badges, 'в сборке нет показанного знака — проверка облика вакуумна').toBeGreaterThan(0);
+    expect(current.badgePresentations).toHaveLength(current.badges);
+
+    const badge = current.badgePresentations[0];
+    expect(badge.iconCount, 'у знака нет ровно одной сервисной иконки').toBe(1);
+    expect(badge.title, 'название знака не выделено в отдельную строку').toBe('Хорошее место 2026');
+    expect(badge.source, 'источник знака не выведен отдельной строкой').toBe('Яндекс Карты');
+    expect(badge.iconRect, 'рамка сервисной иконки не измерена').not.toBeNull();
+    expect(badge.titleRect, 'рамка названия знака не измерена').not.toBeNull();
+    expect(badge.sourceRect, 'рамка подписи источника не измерена').not.toBeNull();
+
+    expect(badge.iconRect!.x + badge.iconRect!.width, 'иконка не стоит слева от текста').toBeLessThanOrEqual(
+      badge.titleRect!.x,
+    );
+    expect(badge.sourceRect!.y, 'подпись источника не находится ниже названия').toBeGreaterThanOrEqual(
+      badge.titleRect!.y + badge.titleRect!.height,
+    );
   });
 
   test('смена года сборки не краснит сравнение облика', async () => {
