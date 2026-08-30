@@ -76,8 +76,8 @@
     "file": "components/contacts/ContactShell.astro",
     "nodeKind": "element",
     "locator": "components/contacts/ContactShell.astro:L168:C1:style",
-    "fingerprint": "dca6edfeb7e60fef6cb4edfeb6254b7fc167f6bed4f93707c8eb2c395277c547",
-    "identity": "style|body:28673b7134c43cdc"
+    "fingerprint": "c18f4effd139455f89e38ac0c6d97fcf54155c1451224414e89b51bd7fec4be1",
+    "identity": "style|body:654a082081c317cd"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L44:C11:svg",

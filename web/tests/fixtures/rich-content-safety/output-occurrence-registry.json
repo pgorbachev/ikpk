@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "f7360cb69527fc2eefd59b519e68d21639e940d2",
+  "generatedFromSha": "8c51e75e12ea1330f6242b619f0c425695b85cb0",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -45501,7 +45501,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/kontakty",
       "placement": "doc-order:6:style",
-      "identity": "style|body:b2333c9b812ffa79",
+      "identity": "style|body:0dbaa1fa1dc5743f",
       "count": 1,
       "builds": [
         "production",
