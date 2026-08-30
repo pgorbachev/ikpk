@@ -45,5 +45,3 @@ openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring
 openspec/changes/cms-content-authoring-and-migration/tasks.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
 openspec/specs/schedule-month-filter/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
-openspec/changes/static-serving-slash-contract/tasks.md :: openspec/change-flow.yaml :: not-committed
-openspec/changes/static-serving-slash-contract/proposal.md :: openspec/change-flow.yaml :: not-committed
