@@ -57,6 +57,16 @@ describe('перенос: связи расписания соответству
   });
 });
 
+describe('перенос: состав института хранится связью с персоной', () => {
+  it('импорт персоны разрешает исходный институт в documentId и записывает relation payload', () => {
+    const source = importFunction('importTeachers', 'importArticles');
+
+    expect(source).toMatch(/resolveRelation\(\s*["']institutes["']/);
+    expect(source).toMatch(/data\.institutes\s*=\s*\{\s*set\s*:/);
+    expect(source).not.toMatch(/data\.institute_legacy_id\s*=/);
+  });
+});
+
 describe('перенос: даты новостей и акций сохраняют исходный момент', () => {
   it.each([
     ['importNewsItems', 'importPromotions'],

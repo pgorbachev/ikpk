@@ -454,7 +454,7 @@ async function upsert(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Phase 1 — Independent records (no foreign-key deps)
+// Phase 1 — Base records (institutes precede people that refer to them)
 // ════════════════════════════════════════════════════════════════
 
 async function importInstitutes(): Promise<void> {
@@ -490,6 +490,23 @@ async function importTeachers(): Promise<void> {
       legacy_id: e.legacy_id,
     };
     if (photoId) data.photo = photoId;
+
+    // The legacy value is only migration input. Runtime membership is represented
+    // by the CMS relation, so a newly created person can be assigned without any
+    // legacy-only field and moving a person does not depend on an old URL slug.
+    if (e.institute_legacy_id) {
+      const instituteDocumentId = await resolveRelation(
+        "institutes",
+        e.institute_legacy_id as string,
+        report,
+        String(e.legacy_id),
+        "institutes",
+      );
+      if (instituteDocumentId) data.institutes = { set: [instituteDocumentId] };
+    } else {
+      data.institutes = { set: [] };
+    }
+
     await upsert("teachers", e.legacy_id as string, data, report);
   }
 }
@@ -951,8 +968,8 @@ async function main(): Promise<void> {
     log("ℹ️  No API token – running fully offline dry-run");
   }
 
-  // ─── Phase 1: Independent records ───────────────────────
-  log("═══ Phase 1: Independent records ═══");
+  // ─── Phase 1: Base records ──────────────────────────────
+  log("═══ Phase 1: Base records ═══");
   await importInstitutes();
   await importTeachers();
   await importArticles();

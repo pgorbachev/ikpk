@@ -392,6 +392,26 @@ describe('схема CMS: событие расписания приведено
   });
 });
 
+describe('схема CMS: состав института задаётся связью с персоной', () => {
+  it('связь с институтами необязательна, легаси-поля состава нет', () => {
+    const attributes = schema(PERSON).attributes ?? {};
+    const institutes = attributes.institutes;
+
+    expect(institutes, 'у персоны нет связи с институтами').toMatchObject({
+      type: 'relation',
+      relation: 'manyToMany',
+      target: 'api::institute.institute',
+    });
+    expect(institutes, 'связь с институтом блокирует публикацию персоны без института').not.toHaveProperty(
+      'required',
+      true,
+    );
+    expect(attributes, 'состав института всё ещё хранится в легаси-поле').not.toHaveProperty(
+      'institute_legacy_id',
+    );
+  });
+});
+
 describe('схема CMS: история адресов', () => {
   // Requirement: Смена адреса опубликованной записи оставляет постоянное перенаправление.
   // Файловая часть требования «история не редактируется ролями»: тип существует и не
