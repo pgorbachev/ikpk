@@ -41,6 +41,12 @@ describe('перенос: wiring порядка и вычисляемого ст
 });
 
 describe('перенос: связи расписания соответствуют схеме CMS', () => {
+  it('состояние события записывается в поле CMS, не занятое Draft & Publish', () => {
+    const source = importFunction('importScheduleEntries', 'printReport');
+    expect(source).toMatch(/\beventStatus\s*:\s*\(e\.status as string\)/);
+    expect(source).not.toMatch(/\n\s*status\s*:/);
+  });
+
   it('преподаватели события разрешаются в documentId и записываются relation payload', () => {
     const source = importFunction('importScheduleEntries', 'printReport');
 

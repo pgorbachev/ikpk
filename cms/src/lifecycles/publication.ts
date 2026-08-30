@@ -116,7 +116,9 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
         startAt: entity.startAt,
         endAt: entity.endAt,
         city: entity.city,
-        status: entity.status,
+        // `status` — имя в независимом публикационном контракте. В Strapi поле
+        // называется иначе, потому что status занят Document Service / REST API.
+        status: entity.eventStatus,
       };
     case 'news-item':
     case 'promotion':

@@ -66,7 +66,7 @@ const scheduleFields = [
   'price',
   'oldPrice',
   'isFree',
-  'status',
+  'eventStatus',
   'registrationFormLink',
   'description',
   'additionalText',

@@ -24,6 +24,12 @@ test('редактор создаёт, читает, меняет и публи�
   }
 });
 
+test('редактор меняет состояние события через поле, не занятое Draft & Publish', () => {
+  const scheduleUpdate = find('api::schedule-entry.schedule-entry', 'update');
+  assert.ok(scheduleUpdate?.properties?.fields.includes('eventStatus'));
+  assert.equal(scheduleUpdate?.properties?.fields.includes('status'), false);
+});
+
 test('у программы редактор меняет только признак категории', () => {
   assert.deepEqual(find('api::course-group.course-group', 'update')?.properties, {
     fields: ['is_article_category'],

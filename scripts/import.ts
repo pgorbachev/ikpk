@@ -770,7 +770,7 @@ async function importScheduleEntries(): Promise<void> {
       price: (e.newPrice as number) ?? null,
       oldPrice: (e.oldPrice as number) ?? null,
       isFree: (e.isFree as boolean) ?? false,
-      status: (e.status as string) ?? "active",
+      eventStatus: (e.status as string) ?? "active",
       registrationFormLink: (e.registrationFormLink as string) ?? null,
       description: (e.description as string) ?? null,
       additionalText: (e.additionalText as string) ?? null,

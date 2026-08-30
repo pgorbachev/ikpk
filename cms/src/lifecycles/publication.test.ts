@@ -96,7 +96,7 @@ test('publish: событие расписания без города откл�
         startAt: '2026-09-01T09:00:00.000Z',
         endAt: '2026-09-01T18:00:00.000Z',
         city: '',
-        status: 'active',
+        eventStatus: 'active',
       },
     },
   });
@@ -104,6 +104,26 @@ test('publish: событие расписания без города откл�
     () => run({ uid: 'api::schedule-entry.schedule-entry', action: 'publish', params: { documentId: 'doc-1' } }),
     /city/,
   );
+});
+
+test('publish: внутренний eventStatus сопоставляется с полем status публикационного контракта', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: {
+      'doc-1': {
+        seminar: { id: 1 },
+        startAt: '2026-09-01T09:00:00.000Z',
+        endAt: '2026-09-01T18:00:00.000Z',
+        city: 'Москва',
+        eventStatus: 'active',
+      },
+    },
+  });
+  const result = await run({
+    uid: 'api::schedule-entry.schedule-entry',
+    action: 'publish',
+    params: { documentId: 'doc-1' },
+  });
+  assert.equal(result, 'next-called');
 });
 
 test('publish: новость без даты отклоняется', async () => {

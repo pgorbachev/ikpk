@@ -320,7 +320,7 @@ describe('схема CMS: обязательные поля публикации
     ['video-playlist', ['name', 'slug']],
     ['news-item', ['name', 'date', 'description']],
     ['promotion', ['name', 'date', 'description']],
-    ['schedule-entry', ['seminar', 'startAt', 'endAt', 'city', 'status']],
+    ['schedule-entry', ['seminar', 'startAt', 'endAt', 'city', 'eventStatus']],
   ])('у типа %s существуют поля публикационного контракта', (name, expected) => {
     const attributes = schema(name).attributes ?? {};
     for (const field of expected as string[]) {
@@ -373,6 +373,12 @@ describe('схема CMS: обязательные поля публикации
 
 describe('схема CMS: событие расписания приведено к составу данных', () => {
   // D1/G5: связь на преподавателей вместо json; G6: цена и длительность только у события.
+  it('состояние события не конфликтует с системным параметром Draft & Publish status', () => {
+    const attributes = schema('schedule-entry').attributes ?? {};
+    expect(attributes, 'пользовательское поле status конфликтует с Document Service').not.toHaveProperty('status');
+    expect(attributes, 'у события нет отдельного поля состояния').toHaveProperty('eventStatus');
+  });
+
   it('преподаватели события — связь, а не json', () => {
     const teachers = attr('schedule-entry', 'teachers');
     expect(teachers, 'нет поля преподавателей у события').toBeDefined();
