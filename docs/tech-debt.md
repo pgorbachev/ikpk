@@ -2677,7 +2677,8 @@ workflow, `workflowRunTrigger`, `web/tests/helpers/workflows.ts`), и без т�
 
 **ЗАКРЫТ 2026-08-30; визуальная сверка усилена 2026-09-04.** `BadgeDeclaration` получил
 типизированное поле `provider`: его стабильный идентификатор выбирает собственную SVG-иконку
-Яндекс Карт или 2ГИС, а `label` даёт отдельную подпись источника без разбора `id` или URL.
+Яндекс Карт или 2ГИС, а `provider.label` даёт отдельную подпись источника без разбора `id`
+или URL.
 Компонент `AwardBadge.astro` теперь воспроизводит именно утверждённый variant E: у Яндекса
 красная метка 18×18 на серой круглой подложке 26×26; у 2ГИС — оранжево-зелёная плитка с
 синим кругом и белой звездой; у белого pill-чипа сохранены тонкая граница и лёгкая тень.
@@ -2696,8 +2697,8 @@ workflow, `workflowRunTrigger`, `web/tests/helpers/workflows.ts`), и без т�
 перегенерированы штатно в порядке `generate-baseline` → `generate-occurrences` по двум
 деревьям (`dist`, `dist-demo`).
 
-**Файлы:** `web/src/components/home/sections/Reviews.astro:30`, `class="award-badge"`
-(разметка знака), `web/src/components/home/sections/Reviews.astro:166`,
+**Файлы:** `web/src/components/home/AwardBadge.astro:11`, `class="award-badge"`
+(разметка знака), `web/src/components/home/AwardBadge.astro:46`,
 `.award-badge {` (стили), `web/src/lib/award-badges.ts:41`,
 `export interface BadgeDeclaration {`
 
@@ -2708,7 +2709,7 @@ workflow, `workflowRunTrigger`, `web/tests/helpers/workflows.ts`), и без т�
 («Яндекс Карты») под ним. Референс — `docs/design/mockups/demo-followups/variant-e/
 home-1280d-02-reviews-block.png`.
 
-Текущая реализация (`Reviews.astro`) рисует знак как один голый текст
+Реализация до исправления на `d180779` (`Reviews.astro`) рисовала знак как один голый текст
 (`{badge.label ?? 'Знак награды'}`) в рамке — без иконки и без второй строки с
 источником. Разрыв стал видимым только сейчас, при закрытии TD-53: до неё
 `DECLARED_AWARD_BADGES` был пуст, рисовать было нечего, и расхождение с мокапом ничем
@@ -2749,12 +2750,13 @@ Change ещё НЕ заархивирован — держат TD-51 (докум
 не разблокировало архивирование само по себе, но убрало реальное визуальное расхождение
 с утверждённым обликом.
 
-**Что сделано.** `.award-badge` в `Reviews.astro` получил иконку (свой SVG, как в мокапе —
-не официальный ассет, его нет) и вторую строку с именем источника, выбираемые по сервису
-знака (сейчас в данных — только Яндекс). Целевой вид сверяется с
+**Что сделано.** `.award-badge` в `AwardBadge.astro` получил иконку (свой SVG, как в
+мокапе — не официальный ассет, его нет) и вторую строку с именем источника, выбираемые
+по сервису знака (сейчас в данных — только Яндекс). Целевой вид сверяется с
 `docs/design/mockups/demo-followups/variant-e/home-1280d-02-reviews-block.png`.
-Регресс-тесты проверяют, что это не ломает `web/tests/external-widgets-build-year.spec.ts` (маска
-`[data-award-row]` в сравнении облика) и `external-widgets-dist.test.ts` (запрет
+Регресс-тесты проверяют, что это не ломает `web/tests/external-widgets-build-year.spec.ts`
+(явное исключение содержимого `[data-award-row]` через внедрённый `visibility: hidden`,
+сохраняющее рамку строки) и `external-widgets-dist.test.ts` (запрет
 посторонних `<img>` в секции отзывов вне знака — новая иконка внутри знака сама по себе
 не «посторонняя фотография»; признак `subtreeHasBadgeAncestor` остаётся зелёным).
 
