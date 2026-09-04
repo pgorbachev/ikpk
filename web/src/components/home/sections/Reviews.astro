@@ -8,6 +8,7 @@
 // молча.
 import { DECLARED_AWARD_BADGES, buildYear, visibleAwardBadges } from '../../../lib/award-badges';
 import { isDemoForms } from '../../../lib/forms';
+import AwardBadge from '../AwardBadge.astro';
 
 const REVIEWS_ORG_ID = '112883331290';
 const REVIEWS_WIDGET_SRC = `https://yandex.ru/maps-reviews-widget/${REVIEWS_ORG_ID}?comments`;
@@ -25,48 +26,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
         остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
         сравнения облика (external-widgets-build-year.spec.ts). */}
     <div class="award-row" data-award-row>
-      {badges.map((badge) => (
-        <a
-          class="award-badge"
-          data-award-badge
-          href={badge.sourceUrl ?? undefined}
-          target="_blank"
-          rel="noopener"
-        >
-          {badge.provider.id === 'yandex-maps' ? (
-            <svg
-              class="award-badge-icon"
-              data-award-icon
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="11" fill="#fc3f1d"></circle>
-              <path
-                fill="#fff"
-                d="M12 5.25a4.4 4.4 0 0 0-4.4 4.4c0 3.18 3.62 7.7 4.02 8.2a.49.49 0 0 0 .76 0c.4-.5 4.02-5.02 4.02-8.2A4.4 4.4 0 0 0 12 5.25Zm0 6.35a1.95 1.95 0 1 1 0-3.9 1.95 1.95 0 0 1 0 3.9Z"
-              ></path>
-            </svg>
-          ) : (
-            <svg
-              class="award-badge-icon"
-              data-award-icon
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <rect x="1" y="1" width="22" height="22" rx="6" fill="#20a86b"></rect>
-              <path fill="#2474c6" d="M7 5h10v8H7z"></path>
-              <path fill="#fff" d="m9 13 3 6 3-6z"></path>
-              <circle cx="12" cy="11" r="3.5" fill="#ffd43b"></circle>
-            </svg>
-          )}
-          <span class="award-badge-copy">
-            <span class="award-badge-title" data-award-title>
-              {badge.label ?? 'Знак награды'}
-            </span>
-            <span class="award-badge-source" data-award-source>{badge.provider.label}</span>
-          </span>
-        </a>
-      ))}
+      {badges.map((badge) => <AwardBadge badge={badge} />)}
     </div>
 
     {isDemoForms ? (
@@ -158,46 +118,9 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
+    gap: 0.6rem;
     min-height: 3rem;
     margin: 0.75rem 0 1.25rem;
-  }
-
-  .award-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    /* Белая поверхность знака остаётся белой в обеих темах, поэтому и чернила
-       задаются той же светлой парой, а не инвертирующимся токеном темы. */
-    color: #1a1a1a;
-    text-decoration: none;
-    border: 1px solid var(--color-gray-150, #e2e2e2);
-    border-radius: 999px;
-    background: var(--color-white, #fff);
-    padding: 0.35rem 0.75rem 0.35rem 0.45rem;
-  }
-
-  .award-badge-icon {
-    flex: 0 0 auto;
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .award-badge-copy {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    line-height: 1.15;
-  }
-
-  .award-badge-title {
-    font-size: var(--font-s);
-    font-weight: 600;
-  }
-
-  .award-badge-source {
-    color: #717171;
-    font-size: 0.75rem;
   }
 
   .reviews-embed {

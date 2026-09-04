@@ -46,8 +46,13 @@ interface Measured {
 }
 
 interface BadgePresentation {
+  readonly provider: string | null;
   readonly iconCount: number;
   readonly iconRect: Rect | null;
+  readonly iconSvgRect: Rect | null;
+  readonly iconBackground: string | null;
+  readonly badgeBackground: string | null;
+  readonly badgeBoxShadow: string | null;
   readonly title: string | null;
   readonly titleRect: Rect | null;
   readonly source: string | null;
@@ -95,6 +100,10 @@ async function declaredBadgeYear(): Promise<number> {
 
 async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  // Утверждённый референс `home-1280d-02-reviews-block.png` снят в тёмной теме.
+  // Значение ставится до первого скрипта страницы, чтобы HeadMeta применил тему без
+  // промежуточного светлого кадра.
+  await context.addInitScript(() => localStorage.setItem('ikpk.theme', 'dark'));
   const page = await context.newPage();
   try {
     await installThirdPartyGuard(page, { chatLoaderSrc: PROBE_CHAT_LOADER_SRC });
@@ -120,11 +129,19 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
         const badgePresentations = Array.from(document.querySelectorAll(`[${badgeAttr}]`)).map(
           (badge) => {
             const icons = badge.querySelectorAll('[data-award-icon]');
+            const iconSvg = icons[0]?.querySelector('svg');
             const title = badge.querySelector('[data-award-title]');
             const source = badge.querySelector('[data-award-source]');
+            const iconStyle = icons[0] instanceof Element ? getComputedStyle(icons[0]) : null;
+            const badgeStyle = getComputedStyle(badge);
             return {
+              provider: badge.getAttribute('data-award-provider'),
               iconCount: icons.length,
               iconRect: icons[0] instanceof Element ? round(icons[0].getBoundingClientRect()) : null,
+              iconSvgRect: iconSvg instanceof Element ? round(iconSvg.getBoundingClientRect()) : null,
+              iconBackground: iconStyle?.backgroundColor ?? null,
+              badgeBackground: badgeStyle.backgroundColor,
+              badgeBoxShadow: badgeStyle.boxShadow,
               title: title?.textContent?.trim() ?? null,
               titleRect: title instanceof Element ? round(title.getBoundingClientRect()) : null,
               source: source?.textContent?.trim() ?? null,
@@ -229,12 +246,28 @@ test.describe('датозависимый фрагмент — строка зн
     expect(current.badgePresentations).toHaveLength(current.badges);
 
     const badge = current.badgePresentations[0];
+    expect(badge.provider).toBe('yandex-maps');
     expect(badge.iconCount, 'у знака нет ровно одной сервисной иконки').toBe(1);
     expect(badge.title, 'название знака не выделено в отдельную строку').toBe('Хорошее место 2026');
     expect(badge.source, 'источник знака не выведен отдельной строкой').toBe('Яндекс Карты');
     expect(badge.iconRect, 'рамка сервисной иконки не измерена').not.toBeNull();
     expect(badge.titleRect, 'рамка названия знака не измерена').not.toBeNull();
     expect(badge.sourceRect, 'рамка подписи источника не измерена').not.toBeNull();
+    expect(badge.iconSvgRect, 'рамка SVG внутри подложки не измерена').not.toBeNull();
+
+    expect(badge.iconRect, 'подложка иконки не 26×26 px, как в утверждённом мокапе').toMatchObject({
+      width: 26,
+      height: 26,
+    });
+    expect(badge.iconSvgRect, 'сама иконка не 18×18 px, как в утверждённом мокапе').toMatchObject({
+      width: 18,
+      height: 18,
+    });
+    expect(badge.iconBackground, 'у иконки нет серой подложки variant E').toBe('rgb(245, 246, 247)');
+    expect(badge.badgeBackground, 'чип не остаётся белым в тёмной теме').toBe('rgb(255, 255, 255)');
+    expect(badge.badgeBoxShadow, 'у чипа пропала лёгкая тень variant E').toContain(
+      'rgba(0, 0, 0, 0.04)',
+    );
 
     expect(badge.iconRect!.x + badge.iconRect!.width, 'иконка не стоит слева от текста').toBeLessThanOrEqual(
       badge.titleRect!.x,
