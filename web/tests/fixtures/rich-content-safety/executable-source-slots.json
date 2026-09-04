@@ -200,6 +200,30 @@
     "identity": "link|as=quoted:image|fetchpriority=quoted:high|href=quoted:/hero-main.svg|rel=quoted:preload"
   },
   {
+    "slotId": "src:components/home/AwardBadge.astro:L21:C7:svg",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L21:C7:svg",
+    "fingerprint": "f66b416f8087dddecc26656fb4d758726c1df8bda578d1d4fd0bdfe5df0b8bf9",
+    "identity": "svg|focusable=quoted:false|height=quoted:18|viewBox=quoted:0 0 24 24|width=quoted:18"
+  },
+  {
+    "slotId": "src:components/home/AwardBadge.astro:L31:C7:svg",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L31:C7:svg",
+    "fingerprint": "d7f9aab23afd7feec06e7b338fabdac012a7242617205c9b2ef945768789b5b0",
+    "identity": "svg|focusable=quoted:false|height=quoted:18|viewBox=quoted:0 0 24 24|width=quoted:18"
+  },
+  {
+    "slotId": "src:components/home/AwardBadge.astro:L45:C1:style",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L45:C1:style",
+    "fingerprint": "6ca374207c8124879994ce8470661cf97788847394c38ec4475e63599697b0a9",
+    "identity": "style|body:bbf84c1fbbed79af"
+  },
+  {
     "slotId": "src:components/home/FeatureCard.astro:L21:C1:style",
     "file": "components/home/FeatureCard.astro",
     "nodeKind": "element",
@@ -400,35 +424,19 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L147:C1:style",
+    "slotId": "src:components/home/sections/Reviews.astro:L107:C1:style",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L147:C1:style",
-    "fingerprint": "d3972d95fc3d434f2db250adeb3299169e82d4b27ccb1bc2ca5a2d8f8561d388",
-    "identity": "style|body:1fdbb7c28acce853"
+    "locator": "components/home/sections/Reviews.astro:L107:C1:style",
+    "fingerprint": "0a3b31f0c578779b8bb47aa5bd6b417017fb90b0e059813c879a340cc26caa6f",
+    "identity": "style|body:7762ab4a4404aaa9"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L37:C13:svg",
+    "slotId": "src:components/home/sections/Reviews.astro:L56:C3:script",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L37:C13:svg",
-    "fingerprint": "b0df25a3ac2e06aa4193e0bcb04760ff8a3a10c11b3702ba7bd3a939e12e38b6",
-    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge-icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
-  },
-  {
-    "slotId": "src:components/home/sections/Reviews.astro:L50:C13:svg",
-    "file": "components/home/sections/Reviews.astro",
-    "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L50:C13:svg",
-    "fingerprint": "2637c0f1cd558e292c96d5420741f21fd6c3364063d31800611bf95b65374a1d",
-    "identity": "svg|aria-hidden=quoted:true|class=quoted:award-badge-icon|data-award-icon=empty:|viewBox=quoted:0 0 24 24"
-  },
-  {
-    "slotId": "src:components/home/sections/Reviews.astro:L96:C3:script",
-    "file": "components/home/sections/Reviews.astro",
-    "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L96:C3:script",
-    "fingerprint": "25f29efc93cf7827b02554eb5673d07f0b0c77ed134db14b67da7d2c17cfc3c2",
+    "locator": "components/home/sections/Reviews.astro:L56:C3:script",
+    "fingerprint": "79f7fd808f0c5118379649dd8c9f4918f6c333e679239505f7d67f0fe14bef78",
     "identity": "script|body:75cf35f093fd012f"
   },
   {
