@@ -165,8 +165,10 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
       animations: 'disabled',
       // ЯВНОЕ исключение фрагмента — вторая ветвь «либо» у `visual-regression-gate`.
       // Первая ветвь (не включать блок в манифест) непригодна: она вычеркнула бы из
-      // покрытия секцию отзывов целиком.
-      mask: [page.locator(`[${SEL_AWARD_ROW}]`)],
+      // покрытия секцию отзывов целиком. `mask` Playwright оставляет на границах
+      // полупрозрачные пиксели, зависящие от содержимого под маской; `visibility`
+      // сохраняет рамку строки и исключает только её содержимое без такого шума.
+      style: `[${SEL_AWARD_ROW}] > * { visibility: hidden !important; }`,
     });
     return {
       image,
