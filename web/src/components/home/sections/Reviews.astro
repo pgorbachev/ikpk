@@ -27,7 +27,7 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
 
     {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
         остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
-        сравнения облика (external-widgets-build-year.spec.ts). */}
+        сравнения облика (external-widgets-config-probe.test.ts, «облик не зависит от года сборки»). */}
     <div class="award-row" data-award-row>
       {badges.map((badge) => <AwardBadge badge={badge} />)}
     </div>

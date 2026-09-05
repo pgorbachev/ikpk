@@ -289,10 +289,12 @@ describe('знак награды выводит сам сервис, а не м
     const badges = subtree(section).filter((el) => attr(el, SEL_AWARD_BADGE) !== null);
     expect(badges.length, 'знака награды в секции нет — предмета нет').toBe(1);
 
-    const src = attr(badges[0], 'data-award-embed');
-    expect(src, 'у знака нет адреса встраивания').toBeTruthy();
-    expect(hostAndPath(src!).host, 'встраивание ведёт не на домен сервиса').toBe('yandex.ru');
-    expect(src!).toContain('/sprav/widget/rating-badge/');
+    const src = attr(badges[0], 'data-award-embed') ?? '';
+    expect(src, 'у знака нет адреса встраивания').not.toBe('');
+    const parsed = hostAndPath(src);
+    expect(parsed, `адрес встраивания не разобран: ${src}`).not.toBeNull();
+    expect(parsed!.host, 'встраивание ведёт не на домен сервиса').toBe('yandex.ru');
+    expect(src).toContain('/sprav/widget/rating-badge/');
 
     // Место под встраивание зарезервировано: появление знака не должно сдвигать соседей.
     expect(

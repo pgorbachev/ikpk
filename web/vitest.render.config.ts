@@ -26,7 +26,6 @@ export default await getViteConfig({
     include: [
       'tests/schedule-filters.render.test.ts',
       'tests/rich-content-render.test.ts',
-      'tests/award-badge-render.test.ts',
     ],
   },
 })({ command: 'serve', mode: 'test' });
