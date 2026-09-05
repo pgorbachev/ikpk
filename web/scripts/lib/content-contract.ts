@@ -193,7 +193,18 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
 export function assertSnapshotContract(snapshot: Snapshot): void {
   const { violations } = validateSnapshotContract(snapshot);
   if (violations.length === 0) return;
-  const first = violations[0]!;
-  const field = first.field ? ` ${first.field}` : '';
-  throw new Error(`${first.recordId}${field} ${first.rule}`);
+  // Отказ обязан называть ПРЕДМЕТ, а не только первую запись: сообщение вида
+  // «85 broken-relation» не говорит ни какая связь сломана, ни сколько их — по нему
+  // нельзя отличить один дефект данных от насыщенной проверки, которая красна на всём.
+  const byRule = new Map<string, number>();
+  for (const v of violations) {
+    const key = `${v.type}.${v.field ?? '—'} ${v.rule}`;
+    byRule.set(key, (byRule.get(key) ?? 0) + 1);
+  }
+  const summary = [...byRule.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => `${key} ×${count}`)
+    .join('; ');
+  const examples = violations.slice(0, 3).map((v) => v.recordId).join(', ');
+  throw new Error(`контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`);
 }
