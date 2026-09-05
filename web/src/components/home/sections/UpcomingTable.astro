@@ -48,12 +48,22 @@ const seminars = getUpcomingSeminars(6);
     margin: 0 auto;
     padding: 0 1.5rem;
   }
+  /* Шапка с заголовком и ссылкой справа. Заголовок обязан быть по центру СЕКЦИИ, а не по
+     центру остатка строки, поэтому он занимает всю ширину, а ссылка выведена из потока.
+     Флекс с `space-between` этого не даёт: там заголовок центрируется внутри своей доли,
+     то есть съезжает влево тем сильнее, чем длиннее ссылка.
+     Ниже 45rem ссылка возвращается в поток под заголовок — иначе на узкой ширине она
+     наезжает на центрированный заголовок. */
   .up-table-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
+    position: relative;
     margin-bottom: 1rem;
+  }
+  .up-table-head .section-title { margin-bottom: 0; }
+  .up-table-head .up-table-all { position: absolute; right: 0; bottom: 0; }
+
+  @media (max-width: 45rem) {
+    .up-table-head { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+    .up-table-head .up-table-all { position: static; }
   }
   .up-table-all {
     font-size: var(--font-s);

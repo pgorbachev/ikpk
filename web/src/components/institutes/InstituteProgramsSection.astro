@@ -53,6 +53,10 @@ const hiddenPrograms = programs.slice(8);
 
   .institute-section-header .section-title {
     margin: 0;
+    /* Шапка осталась флексом с `space-between`, хотя соседа у заголовка сейчас нет: без
+       `flex: 1` он занимает только свою ширину, и центрирование считается по ней, а не по
+       секции — замерено 269 против 720. */
+    flex: 1;
   }
 
   .institute-program-grid {
