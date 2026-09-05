@@ -839,20 +839,27 @@ describe('гашение встраиваний не привязано к ре�
   const REVIEWS = 'src/components/home/sections/Reviews.astro';
   const CHAT = 'src/components/chat/ChatFacade.astro';
 
+  /**
+   * Предмет — ИМПОРТ, а не текст файла. Первая редакция искала подстроку `isDemoForms`
+   * во всём исходнике и краснела на упоминании этого имени в комментарии, который как раз
+   * и объясняет, почему признак сменили. Признак, отбирающий предмет тем же, чем он его
+   * проверяет, — известный класс ложного отказа; здесь он ловил прозу вместо кода.
+   */
+  function importsFormsModule(file: string): boolean {
+    const src = readFileSync(join(dirname(dist), file), 'utf-8');
+    return /^\s*import\s+[^;]*\bfrom\s+['"][^'"]*\/lib\/forms(\.js)?['"]/m.test(src);
+  }
+
   it('секция отзывов не решает по режиму форм, показывать ли виджет', () => {
-    const src = readFileSync(join(dirname(dist), REVIEWS), 'utf-8');
     expect(
-      src.includes('isDemoForms'),
-      `${REVIEWS} гасит встраивание по признаку демо-форм: у флага две цели, и единый признак ` +
-        'делает прод-лайк стенд невозможным (спека, требование о демо-выводе)',
+      importsFormsModule(REVIEWS),
+      `${REVIEWS} читает модуль форм: у флага две цели, и единый признак делает прод-лайк ` +
+        'стенд невозможным (спека, требование о демо-выводе)',
     ).toBe(false);
   });
 
   it('чат не решает по режиму форм, показывать ли себя', () => {
-    const src = readFileSync(join(dirname(dist), CHAT), 'utf-8');
-    expect(src.includes('isDemoForms'), `${CHAT} гасит встраивание по признаку демо-форм`).toBe(
-      false,
-    );
+    expect(importsFormsModule(CHAT), `${CHAT} читает модуль форм`).toBe(false);
   });
 
   it('демо-вывод помечен собственной переменной, а не признаком форм', () => {

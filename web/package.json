@@ -31,7 +31,7 @@
     "test:compare:attached": "playwright test tests/compare.spec.ts --config=playwright.attached.config.ts --project=desktop",
     "verify": "npm test && npm run test:build && npm run test:e2e:smoke && npm run test:e2e:compat",
     "verify:attached": "npm test && npm run test:build && npm run test:e2e:smoke:attached && npm run test:e2e:compat:attached",
-    "build:demo": "PAYMENT_ROLE=preview DEMO_FORMS=stub CHAT_LOADER_FALLBACK=synthetic astro build --outDir dist-demo && pagefind --site dist-demo",
+    "build:demo": "PAYMENT_ROLE=preview DEMO_FORMS=stub DEMO_OUTPUT=1 CHAT_LOADER_FALLBACK=synthetic astro build --outDir dist-demo && pagefind --site dist-demo",
     "build:stand": "PAYMENT_ROLE=stand astro build --outDir dist-stand && pagefind --site dist-stand",
     "test:demo": "npm run build:demo && vitest run --config vitest.demo.config.ts",
     "test:stand": "npm run build:stand && vitest run --config vitest.stand.config.ts",

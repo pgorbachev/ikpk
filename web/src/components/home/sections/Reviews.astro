@@ -7,7 +7,7 @@
 // сам виджет, и держать их у себя значило бы два источника одной цифры, расходящихся
 // молча.
 import { DECLARED_AWARD_BADGES, buildYear, visibleAwardBadges } from '../../../lib/award-badges';
-import { isDemoForms } from '../../../lib/forms';
+import { isDemoOutput } from '../../../lib/external-widgets';
 import AwardBadge from '../AwardBadge.astro';
 
 const REVIEWS_ORG_ID = '112883331290';
@@ -28,7 +28,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
       {badges.map((badge) => <AwardBadge badge={badge} />)}
     </div>
 
-    {isDemoForms ? (
+    {isDemoOutput ? (
       <p class="reviews-cta">
         <a href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
           Смотреть отзывы на Яндекс.Картах
