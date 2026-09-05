@@ -356,6 +356,10 @@ Environment=NODE_ENV=production
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3
+# Остановка ограничена 30 секундами. По умолчанию systemd ждёт 90 и только потом убивает;
+# на стенде именно это съело треть окна проверки живости при смене артефакта
+# («Failed with result 'timeout'» в журнале), и исправная новая версия не успела ответить.
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
