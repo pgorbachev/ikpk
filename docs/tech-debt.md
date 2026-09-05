@@ -207,7 +207,7 @@ errors`), после чего `main()` завершается нормально
 (`import.ts:246`) создаёт сущность без изображения, не увеличивая никакого счётчика.
 
 Тот же класс, что закрыт для `make-derivatives`, `gen-redirects`, `refresh-catalog`,
-`recover-collapsibles`, `download-media` и `localize-upload-links`, но здесь ставка выше:
+`recover-collapsibles` и `download-media`, но здесь ставка выше:
 пишется в CMS заказчика, и повторный запуск не идемпотентен.
 
 **Решение:** ненулевой код выхода при непустых `errors`/`missingRelations`, счётчик
