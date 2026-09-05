@@ -432,7 +432,10 @@ async function importArticles(): Promise<void> {
       title: e.title,
       slug: e.slug,
       body: (e.body_html as string) ?? null,
-      published_at: (e.published_at as string) ?? null,
+      // Атрибут CMS называется `published_date`: `published_at` зарезервирован Strapi 5 при
+      // включённом draftAndPublish и ломает создание таблицы. В снимке поле остаётся
+      // `published_at` — это данные legacy-сайта, а не поле CMS.
+      published_date: (e.published_at as string) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
