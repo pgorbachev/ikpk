@@ -14,20 +14,11 @@ function response(body, status = 200) {
   });
 }
 
-function assertAllowed(path) {
-  for (const pattern of scenario.forbidden ?? []) {
-    if (new RegExp(pattern).test(path)) {
-      throw new Error(`forbidden GitHub API call: ${path}`);
-    }
-  }
-}
-
 globalThis.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url);
   const path = `${url.pathname}${url.search}`;
   const method = init.method ?? 'GET';
   log(method, path);
-  assertAllowed(path);
 
   if (url.pathname === '/graphql') {
     return response({

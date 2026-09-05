@@ -200,7 +200,6 @@ describe('Dependabot policy status CLI', () => {
       prAuthor: 'maintainer',
       actor: 'maintainer',
       autoMergeEnabled: true,
-      forbidden: ['/graphql', '/contents/', '/check-runs'],
       files: [{ filename: 'web/package-lock.json' }],
     });
 

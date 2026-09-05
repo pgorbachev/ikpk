@@ -37,3 +37,11 @@ The new local policy queried the real current PR #216 on head 0710e4d0e155a6859c
 ## Rollout remaining
 
 Publish the reviewed engine commit with a durable immutable reference and switch the dispatcher pin via PR. After merge, inspect actual check conclusions on new human PR events and genuinely new Dependabot heads; old engine evidence is intentionally rejected. Existing checks on old heads are not rewritten. Native marker race risk remains as documented in the approved spec. Related PR #198 implements a conflicting negative-verdict policy and must be reconciled before any later merge.
+
+## Independent reviews
+
+Both independent GPT-6 correctness/completeness reviewers reported no actionable findings for ba82534af0e41d06debcb9ee8ca1f3ae9bb9497b against origin/main ae66800a9fb2c55b5550794b2ec3028d03b2cf4d. They independently confirmed the pinned e93daae650dd40b7d26232af6925239e2a96cf55 workflow and scripts match the reviewed head. Remote availability of that engine has since been checked through GitHub API.
+
+The newly required ponytail-review pass found a duplicate configurable forbidden-call guard in the test API fixture. Accepted: removed the guard and its sole configuration, retaining the actual call-log assertion. Its normal 22-test control passed; bypassing the human early exit still failed specifically on the recorded extra API calls. No findings were rejected. Runtime code is unchanged by this simplification.
+
+After syncing the newly merged AGENTS.md-only change from main before review, exact-pin regression tests, specification references and strict change validation passed again. MODIFIED applicability was rechecked by actual archive application in another disposable worktree; all 10 resulting main specs validated strictly.
