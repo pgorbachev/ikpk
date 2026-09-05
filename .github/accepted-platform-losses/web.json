@@ -138,5 +138,33 @@
     "cpu": "x64",
     "libc": "",
     "reason": "Correct missing lockfile libc metadata to musl for unchanged @img/sharp-linuxmusl-x64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linuxmusl-x64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@astrojs/compiler-binding-linux-arm64-gnu",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @astrojs/compiler-binding-linux-arm64-gnu@0.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@astrojs/compiler-binding-linux-arm64-gnu/0.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@astrojs/compiler-binding-linux-arm64-musl",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @astrojs/compiler-binding-linux-arm64-musl@0.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@astrojs/compiler-binding-linux-arm64-musl/0.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@astrojs/compiler-binding-linux-x64-gnu",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @astrojs/compiler-binding-linux-x64-gnu@0.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@astrojs/compiler-binding-linux-x64-gnu/0.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@astrojs/compiler-binding-linux-x64-musl",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @astrojs/compiler-binding-linux-x64-musl@0.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@astrojs/compiler-binding-linux-x64-musl/0.3.2. No package or platform removed."
   }
 ]
