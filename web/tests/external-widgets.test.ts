@@ -1,6 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
-  BUILD_YEAR_KEY,
   CHAT_LOADER_KEY,
   CHAT_LOADER_NONE,
   type ChatLoaderConfig,
@@ -67,184 +66,78 @@ async function load<T>(specifier: string, name: string): Promise<T> {
 }
 
 // ─── Знак награды ────────────────────────────────────────────────────────────
-
 /**
- * Объявление знака в данных — ЧЕТЫРЕ поля.
+ * Объявление знака в данных — ОДНО поле.
  *
- * Третье и четвёртое названы спекой полями ДАННЫХ, а не только процессом, и это
- * существенно: свидетельство приёмки лежит в документе, которого сборка не читает, —
- * значит без поля в данных реализация не может узнать, подтверждено ли награждение и
- * проверено ли право размещать марку, и у сценариев «награждение не подтверждено» и
- * «право размещать марку не объявлено» не было бы построимого красного состояния.
+ * Прежде их было четыре: год действия, источник, свидетельство награждения и
+ * свидетельство права размещать марку. Все четыре существовали, чтобы НАША отрисовка
+ * марки не утверждала непроверенного. Знак выводит официальное встраивание сервиса
+ * (решение владельца 2026-09-05), копии больше нет, и вместе с ней исчез предмет трёх
+ * полей: утверждает Яндекс, подтверждать нам нечего.
  */
-interface BadgeDeclaration {
-  id: string;
-  label?: string;
-  /** Год действия знака. Сверяется с ГОДОМ СБОРКИ, а не с системными часами. */
-  year: number;
-  /** Карточка организации в сервисе, выдавшем знак. Пусто — источник не объявлен. */
-  sourceUrl?: string | null;
-  /** Чем подтверждено САМО награждение. Пусто — награждение не подтверждено. */
-  awardEvidence?: string | null;
-  /** Чем подтверждено ПРАВО размещать марку. Пусто — право не объявлено. */
-  markUsageEvidence?: string | null;
+interface AwardBadgeDeclaration {
+  provider: 'yandex-maps' | '2gis';
+  /** Идентификатор организации в сервисе. Пусто — знак не показывается. */
+  orgId: string | null;
+  title: string;
 }
 
-describe('знак награды не утверждает непроверенного и не протухает молча', () => {
-  type Visible = (declared: readonly BadgeDeclaration[], buildYear: number) => BadgeDeclaration[];
+describe('знак награды выводит сам сервис, а не мы', () => {
+  type Visible = (declared: readonly AwardBadgeDeclaration[]) => AwardBadgeDeclaration[];
+  type EmbedSrc = (badge: AwardBadgeDeclaration) => string | null;
   const visible = (): Promise<Visible> =>
     load<Visible>('../src/lib/award-badges', 'visibleAwardBadges');
+  const embedSrc = (): Promise<EmbedSrc> =>
+    load<EmbedSrc>('../src/lib/award-badges', 'badgeEmbedSrc');
 
-  const BUILD_YEAR = 2026;
-  const full = (over: Partial<BadgeDeclaration> = {}): BadgeDeclaration => ({
-    id: 'yandex-good-place',
-    label: 'Хорошее место 2026',
-    year: BUILD_YEAR,
-    sourceUrl: `https://${REVIEWS_WIDGET_HOST}/maps/org/112883331290/`,
-    awardEvidence: 'снимок наклейки на двери центра, владелец, 2026-08-23',
-    markUsageEvidence: 'правила использования марки, обращение 2026-08-23, вывод: разрешено',
+  const yandex = (over: Partial<AwardBadgeDeclaration> = {}): AwardBadgeDeclaration => ({
+    provider: 'yandex-maps',
+    orgId: '112883331290',
+    title: 'Награда «Хорошее место» на Яндекс.Картах',
     ...over,
   });
 
-  const EMPTY = [null, undefined, '', '   '] as const;
-
-  it('все четыре поля объявлены и год равен году сборки — знак показывается', async () => {
-    // WHEN сценария перечисляет ВСЕ ЧЕТЫРЕ поля намеренно: редакция, называвшая два,
-    // делала свой WHEN надмножеством WHEN сценария «награждение не подтверждено» при
-    // противоположном THEN — то есть по спеке писались два взаимоисключающих теста.
-    const visibleAwardBadges = await visible();
-    expect(visibleAwardBadges([full()], BUILD_YEAR).map((b) => b.id)).toEqual(['yandex-good-place']);
+  it('идентификатор объявлен — знак показывается, и адрес ведёт на встраивание сервиса', async () => {
+    const badge = yandex();
+    expect((await visible())([badge])).toEqual([badge]);
+    // Адрес замерен 2026-09-05: отвечает 200, отдаёт официальный знак с живым рейтингом.
+    expect((await embedSrc())(badge)).toBe(
+      'https://yandex.ru/sprav/widget/rating-badge/112883331290?type=award',
+    );
   });
 
-  it('год действия МЕНЬШЕ года сборки — знак не показывается', async () => {
-    const visibleAwardBadges = await visible();
-    expect(
-      visibleAwardBadges([full({ year: BUILD_YEAR - 1 })], BUILD_YEAR),
-      'знак с прошедшим годом показан — страница утверждает просроченное',
-    ).toEqual([]);
-  });
-
-  it('год действия БОЛЬШЕ года сборки — знак не показывается', async () => {
-    // Обе стороны названы спекой намеренно: сценарий, покрывавший только прошедший год,
-    // оставлял реализацию `year < BUILD_YEAR` удовлетворяющей всем сценариям при
-    // нарушенной норме, а норма требует РАВЕНСТВА.
-    const visibleAwardBadges = await visible();
-    expect(visibleAwardBadges([full({ year: BUILD_YEAR + 1 })], BUILD_YEAR)).toEqual([]);
-  });
-
-  it('источник знака не объявлен — знак не показывается независимо от года', async () => {
-    const visibleAwardBadges = await visible();
-    for (const source of EMPTY)
-      expect(
-        visibleAwardBadges([full({ sourceUrl: source as string | null })], BUILD_YEAR),
-        `источник '${String(source)}' принят за объявленный`,
-      ).toEqual([]);
-  });
-
-  it('само награждение не подтверждено — знак не показывается', async () => {
-    // Объявленных источника и года недостаточно: они говорят, откуда знак и когда он
-    // действует, но не доказывают самого награждения. Два порога для двух утверждений о
-    // себе на одной странице сводятся к слабейшему.
-    const visibleAwardBadges = await visible();
-    for (const evidence of EMPTY)
-      expect(
-        visibleAwardBadges([full({ awardEvidence: evidence as string | null })], BUILD_YEAR),
-        `свидетельство '${String(evidence)}' принято за подтверждение награждения`,
-      ).toEqual([]);
-  });
-
-  it('право размещать марку не объявлено — знак не показывается', async () => {
-    // Четвёртое поле. Без него знак законно отрендерится при трёх объявленных, когда
-    // условия использования чужой марки никто не проверял, — и построимого красного
-    // состояния у этого нет.
-    const visibleAwardBadges = await visible();
-    for (const evidence of EMPTY)
-      expect(
-        visibleAwardBadges([full({ markUsageEvidence: evidence as string | null })], BUILD_YEAR),
-        `свидетельство '${String(evidence)}' принято за подтверждение права размещать марку`,
-      ).toEqual([]);
-  });
-
-  it('состав знаков вычисляется от переданного ГОДА, а не от момента запуска', async () => {
-    // Спека: «год передаётся проверке значением, и её результат не зависит ни от того,
-    // когда она запущена, ни от часа показа: состав знаков от момента показа не зависит
-    // вовсе, и функция, принимающая момент, приглашала бы проверять несуществующую
-    // зависимость».
-    const visibleAwardBadges = await visible();
-    const declared = [full({ year: BUILD_YEAR })];
-    const first = visibleAwardBadges(declared, BUILD_YEAR).map((b) => b.id);
-
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date('2031-01-02T00:00:00+03:00'));
-      expect(
-        visibleAwardBadges(declared, BUILD_YEAR).map((b) => b.id),
-        'вывод изменился от хода системных часов — год берётся не из аргумента',
-      ).toEqual(first);
-    } finally {
-      vi.useRealTimers();
+  it('идентификатор не объявлен — знака нет', async () => {
+    // Три входа, а не один: пусто, пробел и null — спека называет их одним состоянием,
+    // но реализация, различающая их, прошла бы проверку одного входа незамеченной.
+    for (const orgId of ['', '   ', null]) {
+      const badge = yandex({ orgId });
+      expect((await visible())([badge]), `orgId=${JSON.stringify(orgId)}`).toEqual([]);
+      expect((await embedSrc())(badge)).toBeNull();
     }
   });
 
-  it('состав знаков РАЗЛИЧАЕТСЯ у двух годов сборки — иначе подстановка ничего не меняет', async () => {
-    // Положительный контроль, который спека требует обоими сценариями о сравнении облика
-    // («состав знаков в этих сборках **различается**»). Без него исключение фрагмента и
-    // резервирование рамки проверялись бы на предмете, где различия и не было.
-    const visibleAwardBadges = await visible();
-    const declared = [full({ year: BUILD_YEAR }), full({ id: 'second', year: BUILD_YEAR })];
-    const thisYear = visibleAwardBadges(declared, BUILD_YEAR);
-    const nextYear = visibleAwardBadges(declared, BUILD_YEAR + 1);
-    expect(thisYear.length, 'при годе сборки, равном году знаков, показаны не два знака').toBe(2);
-    expect(nextYear, 'при следующем годе сборки знаки всё равно показаны').toEqual([]);
+  it('у 2ГИС встраивания нет — знак не показывается даже с идентификатором', async () => {
+    // Не «2ГИС его не выдаёт»: это НЕ ПРОВЕРЕНО, карточки ИКПК там нет и измерять было
+    // нечего. Ровно такое непроверенное утверждение про Яндекс уже стояло в спеке и
+    // оказалось ложным, поэтому реализация молчит о чужом продукте, а не утверждает.
+    const badge: AwardBadgeDeclaration = {
+      provider: '2gis',
+      orgId: '70000001017890086',
+      title: 'Знак 2ГИС',
+    };
+    expect((await embedSrc())(badge)).toBeNull();
+    expect((await visible())([badge])).toEqual([]);
   });
 
-  it('пустое объявление даёт пустой вывод, а не исключение', async () => {
-    const visibleAwardBadges = await visible();
-    expect(visibleAwardBadges([], BUILD_YEAR)).toEqual([]);
+  it('различает объявленные и необъявленные в одном списке', async () => {
+    // Различительный тест: проверка, отвергающая всё, была бы зелёной и для реализации,
+    // которая не показывает знак никогда.
+    const good = yandex();
+    const bad = yandex({ orgId: null });
+    expect((await visible())([bad, good, bad])).toEqual([good]);
   });
 });
 
-describe('год сборки берётся из конфигурации, а не из системных часов', () => {
-  const reader = (): Promise<() => number> => load<() => number>('../src/lib/award-badges', 'buildYear');
-
-  afterEach(() => {
-    delete process.env[BUILD_YEAR_KEY];
-  });
-
-  it('объявленный год сборки возвращается как число', async () => {
-    // Без этого механизма подстановка года невозможна вовсе: подменять системные часы
-    // сборки в репозитории нечем, и у сценария «состав знаков в двух сборках
-    // различается» не было бы построимого красного состояния.
-    process.env[BUILD_YEAR_KEY] = '2031';
-    const buildYear = await reader();
-    expect(buildYear()).toBe(2031);
-  });
-
-  it('ключ не задан — берётся год системных часов, обычная сборка настройки не требует', async () => {
-    delete process.env[BUILD_YEAR_KEY];
-    const buildYear = await reader();
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date('2029-03-04T10:00:00+03:00'));
-      expect(buildYear()).toBe(2029);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('негодное значение ключа — отказ, а не молчаливое умолчание', async () => {
-    // «Год сборки 2o26» не должен тихо превращаться в текущий год: тогда сборка,
-    // настроенная с опечаткой, показывает знак вопреки объявлению.
-    const buildYear = await reader();
-    for (const raw of ['', '   ', 'позапрошлый', '20261', '2026.5']) {
-      process.env[BUILD_YEAR_KEY] = raw;
-      expect(
-        () => buildYear(),
-        `значение '${raw}' принято за год сборки, а не отвергнуто`,
-      ).toThrow();
-    }
-  });
-});
 
 // ─── Перечень сторонних хостов ───────────────────────────────────────────────
 

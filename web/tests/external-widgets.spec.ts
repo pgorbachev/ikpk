@@ -211,6 +211,156 @@ test.describe('виджет отзывов не грузится, пока се�
   });
 });
 
+/**
+ * Высота содержимого виджета, измеренная двоичным поиском по живому ответу сервиса
+ * 2026-09-05: 1304 px при ширине 760, 1306 при 736, 1359 при 343. Здесь худшая из трёх —
+ * ровно то число, которое стоит в `Reviews.astro`. Оно продублировано намеренно: гейт,
+ * читающий число из проверяемого файла, зелен при любом его значении.
+ */
+const WIDGET_CONTENT_HEIGHT = 1359;
+
+test.describe('встраивание занимает отведённое ему место', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  /**
+   * Гейт РАСКЛАДКИ, и он обязан быть браузерным: сборка зелена и на сломанной вёрстке.
+   * Предмет — НАША геометрия, а не содержимое виджета: `guard` не пускает запрос к
+   * Яндексу, узел `<iframe>` при этом создаётся, и его коробку считает наш же CSS.
+   * Третья сторона в прогон не попадает.
+   *
+   * Дефект, ради которого гейт написан: Astro метит разметку `data-astro-cid-…` и
+   * переписывает под неё селекторы, а узел, созданный `document.createElement`, метки не
+   * получает — `.reviews-embed iframe` до него не доходил. Измерено на стенде: 304×154
+   * (браузерное умолчание, `display: inline`) внутри контейнера 1168×384. Ни один
+   * существовавший гейт этого не видел, дефект нашёлся глазами по скриншоту.
+   */
+  for (const width of [1280, 375]) {
+    test(`iframe заполняет свой контейнер на ${width}px`, async ({ page }) => {
+      await guard(page);
+      await page.setViewportSize({ width, height: 900 });
+      const response = await page.goto(url('/'));
+      expect(response?.status(), 'главная не отдалась — проверять нечего').toBe(200);
+
+      const box = page.locator('[data-reviews-embed]');
+      await expect(box, 'контейнера встраивания нет — предмета нет').toHaveCount(1);
+      await box.scrollIntoViewIfNeeded();
+
+      const frame = box.locator('iframe');
+      await expect(frame, 'после появления секции встраивание не подставлено').toHaveCount(1);
+
+      const outer = await box.boundingBox();
+      const inner = await frame.boundingBox();
+      expect(outer, 'коробка контейнера не измерена').not.toBeNull();
+      expect(inner, 'коробка встраивания не измерена').not.toBeNull();
+
+      // Ширина — по контейнеру. Допуск 1px на субпиксельное округление, не больше:
+      // дефект давал расхождение в 864px, и широкий допуск скрыл бы его.
+      expect(
+        Math.abs(inner!.width - outer!.width),
+        `встраивание шириной ${inner!.width} в контейнере ${outer!.width}: стиль до него не дошёл`,
+      ).toBeLessThanOrEqual(1);
+
+      // Высота — не меньше контейнера: пустая серая полоса под встраиванием читается
+      // как дефект, ради этого у контейнера и стоит min-height.
+      expect(
+        inner!.height,
+        `встраивание высотой ${inner!.height} в контейнере ${outer!.height}`,
+      ).toBeGreaterThanOrEqual(outer!.height - 1);
+
+      // Блочность: `display: inline` — то самое умолчание, с которого дефект начался.
+      const display = await frame.evaluate((el) => getComputedStyle(el).display);
+      expect(display, 'встраивание осталось инлайновым').not.toBe('inline');
+
+      // Высота — не меньше измеренной высоты содержимого виджета: при меньшей внутри
+      // встраивания появляется собственная прокрутка сервиса, и из пяти отзывов виден один.
+      // Так и было на стенде до 2026-09-05: контейнер 384 px против содержимого 1359.
+      expect(
+        inner!.height,
+        `встраивание высотой ${inner!.height}: отзывы не помещаются, вернётся внутренняя прокрутка`,
+      ).toBeGreaterThanOrEqual(WIDGET_CONTENT_HEIGHT);
+
+      // Знак — отдельной полосой ПОД встраиванием и по ЦЕНТРУ контейнера, на обеих ширинах.
+      // Утверждённый вариант B (владелец, 2026-09-05). Прежние редакции требовали то общего
+      // левого края со знаком (знак стоял над виджетом), то соседства справа (вариант C);
+      // обе проверялись на этом же месте, поэтому здесь названо, что именно сменилось.
+      const badge = page.locator('[data-award-row]');
+      await expect(badge, 'строки знаков нет — сравнивать не с чем').toHaveCount(1);
+
+      // Полосу знака НАДО прокрутить отдельно, и это следствие самого варианта B: она стоит
+      // ниже встраивания высотой 1359, поэтому `scrollIntoViewIfNeeded` на встраивании
+      // оставляет её за нижней границей окна, наблюдатель не срабатывает и знак не
+      // подставляется вовсе. Прежние редакции этого не требовали — знак стоял выше либо
+      // сбоку и попадал в окно вместе с виджетом.
+      await badge.scrollIntoViewIfNeeded();
+      // Подстановка асинхронна: наблюдатель срабатывает после прокрутки, а `evaluate`
+      // выполнился бы сразу и увидел бы пустую коробку. Ожидание — по самому предмету.
+      await expect(
+        page.locator('[data-award-badge] iframe'),
+        'после появления полосы знак не подставлен',
+      ).toHaveCount(1);
+
+      // Дальше всё меряется в координатах ДОКУМЕНТА, одним снимком. Прокрутка между двумя
+      // `boundingBox()` сдвигает систему отсчёта, и сравнение «знак ниже встраивания»
+      // считало бы разницу двух разных начал координат.
+      const geom = await page.evaluate((sectionAttr) => {
+        const docTop = (el: Element): number => el.getBoundingClientRect().top + window.scrollY;
+        const embed = document.querySelector('[data-reviews-embed]')!;
+        const row = document.querySelector('[data-award-row]')!;
+        const container = document.querySelector(`[${sectionAttr}] .container`);
+        const frame = document.querySelector('[data-award-badge] iframe');
+        const rowRect = row.getBoundingClientRect();
+        const embedRect = embed.getBoundingClientRect();
+        const containerRect = container?.getBoundingClientRect() ?? null;
+        const frameRect = frame?.getBoundingClientRect() ?? null;
+        return {
+          embedBottom: docTop(embed) + embedRect.height,
+          embedCentre: embedRect.x + embedRect.width / 2,
+          rowTop: docTop(row),
+          rowCentre: rowRect.x + rowRect.width / 2,
+          containerCentre: containerRect ? containerRect.x + containerRect.width / 2 : null,
+          frame: frameRect ? { w: frameRect.width, h: frameRect.height } : null,
+        };
+      }, SEL_REVIEWS_SECTION);
+
+      expect(
+        geom.rowTop,
+        `знак на ${geom.rowTop}, встраивание кончается на ${geom.embedBottom}: ` +
+          'знак не встал отдельной полосой под отзывами',
+      ).toBeGreaterThanOrEqual(geom.embedBottom);
+
+      // Центр — по КОНТЕЙНЕРУ секции, а не по встраиванию: встраивание уже 760 px и стоит
+      // слева, поэтому «по центру виджета» и «по центру полосы» — разные места, и первое
+      // выглядело бы съехавшим влево.
+      expect(geom.containerCentre, 'контейнера секции нет — центрировать не относительно чего').not.toBeNull();
+      expect(
+        Math.abs(geom.rowCentre - geom.containerCentre!),
+        `центр знака ${geom.rowCentre}, центр контейнера ${geom.containerCentre}: полоса не по центру`,
+      ).toBeLessThanOrEqual(1);
+
+      // Само встраивание — тоже по центру (решение владельца 2026-09-05). Проверяется
+      // отдельным утверждением, а не выводится из предыдущего: знак и виджет центрируются
+      // разными правилами (`align-items` полосы против `margin-inline` встраивания), и
+      // потеря любого из них оставила бы второе зелёным.
+      expect(
+        Math.abs(geom.embedCentre - geom.containerCentre!),
+        `центр встраивания ${geom.embedCentre}, центр контейнера ${geom.containerCentre}: ` +
+          'встраивание не по центру',
+      ).toBeLessThanOrEqual(1);
+
+      // Знак УВЕЛИЧЕН, а не показан натуральным кадром 150×50. Проверяется сам `<iframe>`:
+      // сервис отдаёт только 150×50 (девять проб 2026-09-05), поэтому крупный вид держится
+      // на нашем масштабировании, и потеря `transform` вернула бы марку размером с подпись.
+      expect(geom.frame, 'встраивание знака не подставлено').not.toBeNull();
+      const factor = width >= 482 ? 3 : 2;
+      expect(
+        geom.frame!.w,
+        `знак выведен шириной ${geom.frame!.w} при ожидаемых ${150 * factor}: увеличение не применилось`,
+      ).toBeCloseTo(150 * factor, 0);
+      expect(geom.frame!.h, `высота знака ${geom.frame!.h}`).toBeCloseTo(50 * factor, 0);
+    });
+  }
+});
+
 test.describe('без скриптов секция даёт ссылку, а не встраивание', () => {
   test('при отключённых скриптах виджета нет, ссылка есть', async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });

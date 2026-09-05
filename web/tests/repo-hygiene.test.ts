@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
@@ -362,5 +362,68 @@ describe('гигиена репозитория', () => {
       existsSync(join(ROOT, 'web', 'public', 'robots.txt')),
       'статический public/robots.txt перекроет генерируемый — стенд снова откроется',
     ).toBe(false);
+  });
+});
+
+// ─── Стили Astro не достают до узлов, созданных скриптом ─────────────────────
+
+describe('scoped-стили не целятся в теги, которые создаёт скрипт', () => {
+  /**
+   * Astro метит разметку компонента атрибутом `data-astro-cid-…` и переписывает
+   * селекторы под него. Узел, созданный в рантайме через `document.createElement`,
+   * этой метки не получает, поэтому селектор вида `.box iframe` до него НЕ доходит,
+   * и элемент остаётся с браузерным умолчанием — для `iframe` это `300×150`, `inline`.
+   *
+   * Измерено дважды. Первый раз — карта на `/kontakty` (#202, `41091a5`), где правкой
+   * стало `.contact-shell-map :global(iframe)`. Второй раз — виджет отзывов на главной,
+   * где ровно тот же дефект не был исправлен вместе с первым: на стенде iframe получил
+   * `304×154` при контейнере `1168×384`. Починка одного вызывающего вместо общего места
+   * и есть причина, по которой понадобился этот гейт.
+   *
+   * Корпус берётся ИЗ ДАННЫХ: теги извлекаются из самих вызовов `createElement`, а не из
+   * списка известных. Список отставал бы от предмета молча — ровно то, чем этот дефект и
+   * жил пять дней.
+   */
+  const SRC = join(ROOT, 'web', 'src');
+
+  function astroFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name: string) => {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) return astroFiles(full);
+      return full.endsWith('.astro') ? [full] : [];
+    });
+  }
+
+  it('каждый созданный скриптом тег стилизуется через :global()', () => {
+    const files = astroFiles(SRC);
+    expect(files.length, 'компонентов .astro не найдено — предмета нет').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    let inspected = 0;
+
+    for (const file of files) {
+      const src = readFileSync(file, 'utf-8');
+      const tags = [...src.matchAll(/createElement\(\s*['"]([a-z][a-z0-9-]*)['"]/gi)].map((m) =>
+        m[1].toLowerCase(),
+      );
+      if (tags.length === 0) continue;
+      const style = /<style>([\s\S]*?)<\/style>/.exec(src)?.[1];
+      if (!style) continue;
+      inspected += 1;
+
+      for (const tag of new Set(tags)) {
+        // Селектор, оканчивающийся голым тегом: `.box iframe {`, `.a > button {`.
+        const bare = new RegExp(`(^|[\\s>~+,])${tag}\\s*(,|\\{)`, 'gm');
+        for (const m of style.matchAll(bare)) {
+          const line = style.slice(0, m.index).split('\n').length;
+          const before = style.slice(Math.max(0, (m.index ?? 0) - 12), m.index);
+          if (before.includes(':global(')) continue;
+          offenders.push(`${file.slice(ROOT.length + 1)}: селектор с голым '${tag}' (строка ${line} блока стилей)`);
+        }
+      }
+    }
+
+    expect(inspected, 'ни один компонент не создаёт узлы скриптом — проверять нечего').toBeGreaterThan(0);
+    expect(offenders, 'scoped-селектор не достанет до узла, созданного скриптом').toEqual([]);
   });
 });

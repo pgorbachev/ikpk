@@ -6,30 +6,26 @@
 // Своей сводки чисел (рейтинг/число отзывов) страница не показывает: эти числа несёт
 // сам виджет, и держать их у себя значило бы два источника одной цифры, расходящихся
 // молча.
-import { DECLARED_AWARD_BADGES, buildYear, visibleAwardBadges } from '../../../lib/award-badges';
-import { isDemoForms } from '../../../lib/forms';
+import { DECLARED_AWARD_BADGES, visibleAwardBadges } from '../../../lib/award-badges';
+import { isDemoOutput } from '../../../lib/external-widgets';
 import AwardBadge from '../AwardBadge.astro';
 
 const REVIEWS_ORG_ID = '112883331290';
 const REVIEWS_WIDGET_SRC = `https://yandex.ru/maps-reviews-widget/${REVIEWS_ORG_ID}?comments`;
 const REVIEWS_PAGE_HREF = `https://yandex.ru/maps/org/${REVIEWS_ORG_ID}/reviews/`;
 
-const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
+// Знак — третье стороннее встраивание, и гасится он тем же признаком, что остальные:
+// в невыкладываемом демо-выводе сторонних встраиваний нет. Строка знаков при этом
+// остаётся на месте — её рамка не зависит от состава по принятому требованию, иначе
+// гашение сдвигало бы соседа и уводило сравнение облика за пределы маски.
+const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
 ---
 
 <section class="reviews section" data-reviews-section>
   <div class="container">
-    <h2 class="section-title">Отзывы на Яндекс.Картах</h2>
-    <p class="section-sub">Оценки и комментарии слушателей и пациентов — на независимой площадке.</p>
+    <h2 class="section-title">Отзывы</h2>
 
-    {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
-        остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
-        сравнения облика (external-widgets-build-year.spec.ts). */}
-    <div class="award-row" data-award-row>
-      {badges.map((badge) => <AwardBadge badge={badge} />)}
-    </div>
-
-    {isDemoForms ? (
+    {isDemoOutput ? (
       <p class="reviews-cta">
         <a href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
           Смотреть отзывы на Яндекс.Картах
@@ -45,6 +41,27 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
         </noscript>
       </div>
     )}
+
+    {/* Знак — отдельной полосой ПОД отзывами, крупно и по центру (утверждённый вариант B,
+        владелец 2026-09-05). Отдельная полоса, а не соседство с виджетом: рядом с ним знак
+        читался как часть его содержимого, то есть как утверждение сервиса о себе, а не
+        свидетельство, которое приводит сайт.
+
+        Поясняющей подписи здесь нет намеренно: владелец снял поясняющий абзац из этой
+        секции 23.08.2026, и гейт на него стоит (`tests/external-widgets-dist.test.ts`,
+        «вводного абзаца о площадке в секции нет»). Из мокапа берётся раскладка, а не
+        отменённое им решение. */}
+    <div class="award-band">
+      {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
+          остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
+          сравнения облика (external-widgets-config-probe.test.ts, «облик не зависит от года сборки»). */}
+      <div class="award-row" data-award-row>
+        {badges.map((badge) => <AwardBadge badge={badge} />)}
+      </div>
+      <a class="reviews-link" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+        Карточка института на Яндекс.Картах
+      </a>
+    </div>
   </div>
 
   {/* Скрипт — ВНУТРИ секции (не после её закрывающего тега): Astro размещает
@@ -62,16 +79,23 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
   // умолчание '0px' — событие только при фактическом пересечении), а fallback без
   // IntersectionObserver больше не грузит виджет немедленно: он проверяет реальную
   // видимость границ секции и, если её ещё нет, ждёт scroll/resize.
-  document.querySelectorAll<HTMLElement>('[data-reviews-embed]').forEach((box) => {
-    const src = box.dataset.reviewsEmbed;
+  // Наблюдатель обслуживает ОБА встраивания секции — виджет отзывов и знак награды.
+  // Второй наблюдатель означал бы два признака одной цели: оба узла живут внутри секции
+  // и появляются одновременно, а расхождение между двумя реализациями «появилось» не
+  // видно ни одной из них.
+  document
+    .querySelectorAll<HTMLElement>('[data-reviews-embed], [data-award-embed]')
+    .forEach((box) => {
+    const src = box.dataset.reviewsEmbed ?? box.dataset.awardEmbed;
     if (!src) return;
     const load = (): void => {
       if (box.querySelector('iframe')) return;
       const iframe = document.createElement('iframe');
       iframe.src = src;
-      iframe.title = 'Отзывы организации на Яндекс.Картах';
+      iframe.title = box.dataset.awardEmbedTitle ?? 'Отзывы организации на Яндекс.Картах';
       iframe.loading = 'lazy';
-      box.querySelector('.reviews-embed-placeholder')?.remove();
+      iframe.setAttribute('scrolling', 'no');
+      box.querySelector('.reviews-embed-placeholder, .award-badge-placeholder')?.remove();
       box.prepend(iframe);
     };
     if (typeof IntersectionObserver === 'function') {
@@ -114,27 +138,86 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
     margin-bottom: 1.5rem;
   }
 
+  /* Полоса знака: отдельный блок под отзывами, всё по центру. Отбивка сверху линией, а не
+     только отступом — полоса должна читаться как отдельное утверждение, а не как подпись
+     виджета. */
+  .award-band {
+    margin-top: 3rem;
+    padding-top: 2.5rem;
+    border-top: 1px solid var(--color-gray-200, #e5e5e5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .reviews-link {
+    font-size: var(--font-s);
+    font-weight: 500;
+  }
+
+  /* Рамка строки знаков не зависит от их состава — отсюда `min-height` под увеличенный
+     кадр (150 × 3 = 450 по ширине, 50 × 3 = 150 по высоте; ниже 482 px окна множитель 2).
+     При нуле знаков высота остаётся прежней, иначе гашение сдвигало бы соседа. */
   .award-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 0.6rem;
-    min-height: 3rem;
-    margin: 0.75rem 0 1.25rem;
+    min-height: 150px;
+  }
+
+  @media (max-width: 481px) {
+    .award-row {
+      min-height: 100px;
+    }
   }
 
   .reviews-embed {
     position: relative;
-    min-height: 24rem;
+    /* Ширина ограничена ФАКТИЧЕСКОЙ шириной содержимого виджета, а не шириной колонки.
+       Замерено на стенде пиксельным сканом кадра 1168×385: последний столбец с белым
+       фоном карточки — 759-й, дальше 408 px собственной серой заливки виджета, то есть
+       35 % блока пустовало.
+
+       Единица — ПИКСЕЛИ, и это единственное место в проекте, где rem был бы ошибкой.
+       Корневой размер шрифта намеренно не задан (`web/src/styles/base.css:10`, `html {`) —
+       он следует настройке пользователя, — а ширина содержимого виджета задана ЧУЖИМ
+       документом внутри cross-origin iframe и от нашего корня не зависит. При корне 20 px
+       `47.5rem` дали бы 950 px, и пустая заливка вернулась бы. Найдено независимым ревью.
+
+       Ниже 760 px ограничение не действует: на 736 и 343 виджет занимает всю ширину
+       (замерено на стенде). */
+    max-width: 760px;
+
+    /* По центру секции — заодно со знаком (решение владельца 2026-09-05). Прежде
+       `margin-inline: auto` отсюда СНИМАЛИ, и причина была: знак стоял у левого края, а
+       встраивание уезжало к центру — 136 против 340 на 1440. Теперь по центру оба, и
+       довод против отпал вместе с расхождением. */
+    margin-inline: auto;
+
+    /* Высота — тоже в ПИКСЕЛЯХ и по той же причине, что ширина: содержимое отдаёт чужой
+       документ, и наш корневой размер шрифта на него не влияет. Число измерено двоичным
+       поиском по живому ответу 2026-09-05 — высота, при которой внутренняя прокрутка
+       виджета исчезает: 1304 px при ширине 760, 1306 при 736, 1359 при 343. Берём худшую:
+       она вмещает все пять отзывов на любой из измеренных ширин.
+
+       Точного совпадения тут быть не может — длина текстов отзывов меняется на стороне
+       сервиса, а измерить её нечем: документ cross-origin, `scrollHeight` недоступен,
+       сообщений о размере сервис не шлёт. Из двух отказов выбран тот, при котором отзывы
+       остаются достижимыми: при росте текстов вернётся прокрутка внутри встраивания, при
+       сокращении останется полоса собственного фона виджета. Обрезка не принимается. */
+    min-height: 1359px;
     background: var(--color-light-300, #f5f5f5);
     border-radius: 12px;
     overflow: hidden;
   }
 
-  .reviews-embed iframe {
+  .reviews-embed :global(iframe) {
     display: block;
     width: 100%;
-    height: 24rem;
+    height: 1359px;
     border: 0;
   }
 
@@ -142,7 +225,7 @@ const badges = visibleAwardBadges(DECLARED_AWARD_BADGES, buildYear());
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 24rem;
+    height: 1359px;
     color: var(--color-gray-500, #767676);
     font-size: var(--font-s);
   }

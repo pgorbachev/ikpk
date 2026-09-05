@@ -68,14 +68,29 @@ ssh-copy-id -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519_ikpk_vps.pu
 cd /Users/pgorbachev/projects/private/ikpk
 
 # стенд: формы ведут на локальную заглушку /demo-zayavka
-DEPLOY_MODE=stand ./scripts/deploy-web.sh <ip-сервера>
+DEPLOY_MODE=stand CHAT_LOADER_SRC=none ./scripts/deploy-web.sh <ip-сервера>
 
 # боевой сайт: формы ведут в CRM заказчика
-DEPLOY_MODE=prod ./scripts/deploy-web.sh <ip>
+DEPLOY_MODE=prod CHAT_LOADER_SRC=none ./scripts/deploy-web.sh <ip>
 
 # стенд со своим тестовым порталом Bitrix24 вместо заглушки
-DEPLOY_MODE=stand DEMO_FORMS=b24-test123.bitrix24site.ru ./scripts/deploy-web.sh <ip>
+DEPLOY_MODE=stand CHAT_LOADER_SRC=none DEMO_FORMS=b24-test123.bitrix24site.ru \
+  ./scripts/deploy-web.sh <ip>
 ```
+
+**`CHAT_LOADER_SRC` обязателен, умолчания у него нет.** Необъявленная конфигурация — отказ
+гейта `chat_widget_matches_mode`, а не молчаливое «чата нет»: иначе «собрано не то, что
+заказано» осталось бы невидимым. Значения два:
+
+- `none` — объявление отсутствия. Сегодня это фактическое состояние: адреса загрузчика
+  заказчик не передал (`client-requests.md`, пункт 8);
+- адрес со схемой — загрузчик подключается. **Для стенда он обязан вести на тестовый
+  портал:** выкладка сверяет хост с порталами Bitrix24, встречающимися в контенте
+  заказчика, и на совпадении отказывает — обращения приёмщиков ушли бы в живые Открытые
+  линии.
+
+Прежняя редакция этого раздела переменную не упоминала вовсе, и оператор, идущий по
+документу, упирался в отказ гейта без единой подсказки, как из него выйти.
 
 **Аргумент — ssh-цель, а не адрес сайта.** Пока стенд отвечает по IP без TLS, это одно
 и то же, и health-check по умолчанию идёт на `http://<аргумент>/`. Как только появится

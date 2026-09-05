@@ -280,26 +280,39 @@ describe('отзывы показываются секцией главной и
   });
 });
 
-describe('знаки наград соответствуют утверждённому мокапу', () => {
-  it('каждый показанный знак несёт сервисную иконку, название и отдельную подпись источника', () => {
+describe('знак награды выводит сам сервис, а не мы', () => {
+  it('знак объявлен встраиванием и своей марки мы не рисуем', () => {
+    // Прежде здесь проверялась анатомия НАШЕЙ отрисовки — сервисная иконка, название и
+    // подпись источника. Предмет исчез: знак выводит официальное встраивание Яндекса
+    // (решение владельца 2026-09-05), и рисовать чужую марку мы перестали.
     const section = reviewsSection();
     const badges = subtree(section).filter((el) => attr(el, SEL_AWARD_BADGE) !== null);
-    expect(
-      badges.length,
-      'на главной нет показанного знака — проверка его структуры была бы вакуумна',
-    ).toBeGreaterThan(0);
+    expect(badges.length, 'знака награды в секции нет — предмета нет').toBe(1);
 
-    for (const badge of badges) {
-      const inside = subtree(badge);
-      const icons = inside.filter((el) => attr(el, 'data-award-icon') !== null);
-      const titles = inside.filter((el) => attr(el, 'data-award-title') !== null);
-      const sources = inside.filter((el) => attr(el, 'data-award-source') !== null);
-      expect(icons, 'у знака нет ровно одной сервисной иконки').toHaveLength(1);
-      expect(titles, 'название знака не выделено в отдельный элемент').toHaveLength(1);
-      expect(sources, 'источник знака не выделен в отдельный элемент').toHaveLength(1);
-      expect(textOf(titles[0]), 'название знака пусто').not.toBe('');
-      expect(textOf(sources[0]), 'подпись источника пустая').not.toBe('');
-    }
+    const src = attr(badges[0], 'data-award-embed') ?? '';
+    expect(src, 'у знака нет адреса встраивания').not.toBe('');
+    const parsed = hostAndPath(src);
+    expect(parsed, `адрес встраивания не разобран: ${src}`).not.toBeNull();
+    expect(parsed!.host, 'встраивание ведёт не на домен сервиса').toBe('yandex.ru');
+    expect(src).toContain('/sprav/widget/rating-badge/');
+
+    // Место под встраивание зарезервировано: появление знака не должно сдвигать соседей.
+    expect(
+      subtree(badges[0]).some((el) => (attr(el, 'class') ?? '').includes('award-badge-placeholder')),
+      'место под знак не зарезервировано — подстановка сдвинет соседей',
+    ).toBe(true);
+  });
+
+  it('нашей отрисовки марки в выводе нет ни на одной странице', () => {
+    // Признак — наши узлы прежней копии. Проверка отдельная от предыдущей: та смотрит
+    // главную, эта — весь вывод, потому что копия могла остаться на любой странице.
+    const leftovers = [...pages.entries()].filter(([, html]) =>
+      /data-award-(icon|title|source)\b/.test(html),
+    );
+    expect(
+      leftovers.map(([path]) => path),
+      'в выводе осталась наша отрисовка марки сервиса',
+    ).toEqual([]);
   });
 });
 
@@ -781,5 +794,101 @@ describe('бюджеты производительности обязатель
     expect(rc).toContain("'total-blocking-time': ['error', { maxNumericValue: 200");
     expect(rc).toContain("'cumulative-layout-shift': ['error', { maxNumericValue: 0.1");
     expect(rc).toContain("'categories:accessibility': ['error', { minScore: 0.9");
+  });
+});
+
+// ─── Облик секции отзывов: то, что выбрал владелец по мокапам ────────────────
+
+describe('секция отзывов подана так, как утверждено мокапом (вариант E)', () => {
+  // Предмет — НАШ текст вокруг виджета, а не сам виджет. Различие существенно: раскладку
+  // ленты официальный виджет не даёт (`docs/design/mockups/demo-followups/README.md:545`,
+  // `Это неправда: kkpk.pro грузит скрипт стороннего сервиса`), и владелец 23.08.2026
+  // решил взять стандартный виджет, подогнав облик под него. Заголовок и вводный абзац
+  // виджету не принадлежат — они наши, и на них это решение не распространяется.
+
+  it('заголовок секции — «Отзывы», без уточнения площадки', () => {
+    // Решение владельца 23.08.2026, снято в README мокапов:
+    // `docs/design/mockups/demo-followups/README.md:549`,
+    // `заголовок «Отзывы» (у конкурента он «Отзывы учеников» — по решению владельца`.
+    // Длинная форма «Отзывы на Яндекс.Картах» дублирует ссылку под секцией и на
+    // утверждённых кадрах не встречается ни в одном из пяти вариантов.
+    const section = reviewsSection();
+    const headings = subtree(section)
+      .filter((el) => el.tagName === 'h2')
+      .map((el) => textOf(el).trim());
+    expect(
+      headings.length,
+      'в секции отзывов не ровно один h2 — предмет утверждения не определён',
+    ).toBe(1);
+    expect(headings[0]).toBe('Отзывы');
+  });
+
+  it('вводного абзаца о площадке в секции нет', () => {
+    // Основание — сам утверждённый кадр: `docs/design/mockups/demo-followups/variant-e/`
+    // содержит заголовок «Отзывы» и НЕ содержит поясняющего абзаца под ним.
+    //
+    // Прежняя редакция ссылалась на README `:984` («по просьбе владельца: убран поясняющий
+    // абзац»). Ссылка неточна и снята независимым ревью: там речь о ДРУГОМ абзаце —
+    // «Отзывы собираются на Яндекс.Картах…», — а строки «Оценки и комментарии» в README нет
+    // вовсе. Слово «вернулся» тоже было неверным: абзац добавлялся один раз.
+    const section = reviewsSection();
+    const paragraphs = subtree(section)
+      .filter((el) => el.tagName === 'p')
+      .map((el) => textOf(el).trim())
+      .filter((text) => text.length > 0);
+    const explanatory = paragraphs.filter((text) => /независимой площадк|собираются на/i.test(text));
+    expect(
+      explanatory,
+      'в секции отзывов есть поясняющий абзац, снятый решением владельца',
+    ).toEqual([]);
+  });
+});
+
+// ─── Стенд прод-лайк: встраивания не зависят от режима форм ──────────────────
+
+describe('гашение встраиваний не привязано к режиму форм (решение владельца 2026-09-05)', () => {
+  // Проверка СТРУКТУРНАЯ, и это сказано вслух: выкладываемый стенд собирается тем же
+  // `npm run build`, что и бой (`scripts/deploy-web.sh:112`, `npm --prefix "$WEB_DIR" run build`),
+  // отличаясь только переменными окружения. Значит отдельного артефакта «стенд» не существует,
+  // и утверждение «на стенде встраивание есть» проверяется не третьей сборкой, а тем, что
+  // признак гашения не читает режим форм. Пока читал — стенд показывал ссылку вместо виджета,
+  // и заказчик счёл это дефектом.
+  const REVIEWS = 'src/components/home/sections/Reviews.astro';
+  const CHAT = 'src/components/chat/ChatFacade.astro';
+
+  /**
+   * Предмет — ИМПОРТ, а не текст файла. Первая редакция искала подстроку `isDemoForms`
+   * во всём исходнике и краснела на упоминании этого имени в комментарии, который как раз
+   * и объясняет, почему признак сменили. Признак, отбирающий предмет тем же, чем он его
+   * проверяет, — известный класс ложного отказа; здесь он ловил прозу вместо кода.
+   */
+  function importsFormsModule(file: string): boolean {
+    const src = readFileSync(join(dirname(dist), file), 'utf-8');
+    return /^\s*import\s+[^;]*\bfrom\s+['"][^'"]*\/lib\/forms(\.js)?['"]/m.test(src);
+  }
+
+  it('секция отзывов не решает по режиму форм, показывать ли виджет', () => {
+    expect(
+      importsFormsModule(REVIEWS),
+      `${REVIEWS} читает модуль форм: у флага две цели, и единый признак делает прод-лайк ` +
+        'стенд невозможным (спека, требование о демо-выводе)',
+    ).toBe(false);
+  });
+
+  it('чат не решает по режиму форм, показывать ли себя', () => {
+    expect(importsFormsModule(CHAT), `${CHAT} читает модуль форм`).toBe(false);
+  });
+
+  it('демо-вывод помечен собственной переменной, а не признаком форм', () => {
+    // Признак невыкладываемого артефакта задаётся скриптом сборки демо-вывода и только им —
+    // тем же приёмом, что синтетический адрес загрузчика (`CHAT_LOADER_FALLBACK`).
+    const pkg = readFileSync(join(dirname(dist), 'package.json'), 'utf-8');
+    const scripts = JSON.parse(pkg).scripts as Record<string, string>;
+    expect(scripts['build:demo'], 'build:demo не объявляет признак демо-вывода').toContain(
+      'DEMO_OUTPUT=1',
+    );
+    expect(scripts.build, 'боевая сборка не должна объявлять признак демо-вывода').not.toContain(
+      'DEMO_OUTPUT',
+    );
   });
 });

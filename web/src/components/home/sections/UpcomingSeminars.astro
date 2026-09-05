@@ -29,7 +29,20 @@ const seminars = getUpcomingSeminars(3);
 )}
 
 <style>
-  .upcoming-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.25rem; gap: 1rem; }
+  /* Шапка с заголовком и ссылкой справа. Заголовок обязан быть по центру СЕКЦИИ, а не по
+     центру остатка строки, поэтому он занимает всю ширину, а ссылка выведена из потока.
+     Флекс с `space-between` этого не даёт: там заголовок центрируется внутри своей доли,
+     то есть съезжает влево тем сильнее, чем длиннее ссылка.
+     Ниже 45rem ссылка возвращается в поток под заголовок — иначе на узкой ширине она
+     наезжает на центрированный заголовок. */
+  .upcoming-head { position: relative; margin-bottom: 1.25rem; }
+  .upcoming-head .section-title { margin-bottom: 0; }
+  .upcoming-head .upcoming-all { position: absolute; right: 0; bottom: 0; }
+
+  @media (max-width: 45rem) {
+    .upcoming-head { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+    .upcoming-head .upcoming-all { position: static; }
+  }
   .upcoming-all { font-size: var(--font-s); font-weight: 600; color: var(--color-accent-600); text-decoration: none; white-space: nowrap; }
   .upcoming-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
   .upcoming-card {
