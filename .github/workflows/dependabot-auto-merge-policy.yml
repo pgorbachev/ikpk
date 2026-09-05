@@ -139,12 +139,28 @@ jobs:
     if: always() && (inputs.source-action == 'opened' || inputs.source-action == 'synchronize')
     runs-on: ubuntu-latest
     permissions: {}
+    outputs:
+      # Вердикт передаётся ЗНАЧЕНИЕМ, а не цветом джоба. Прежняя редакция склеивала
+      # «оценка не выполнена» и «происхождение не допустимо» в один `exit 1`, поэтому
+      # неуспех означал сразу две несовместимые вещи, а на человеческом PR прогон
+      # механизма краснел при полностью исправной работе.
+      verdict: ${{ steps.provenance.outputs.verdict }}
     steps:
       - name: Record independently evaluated provenance
+        id: provenance
         env:
           ASSESS_RESULT: ${{ needs.assess.result }}
           ORIGIN_POSITIVE: ${{ needs.assess.outputs.origin-positive }}
-        run: test "$ASSESS_RESULT" = success && test "$ORIGIN_POSITIVE" = true
+        run: |
+          if [ "$ASSESS_RESULT" != success ]; then
+            echo "::error::оценка происхождения не выполнена — вердикт неопределим"
+            exit 1
+          fi
+          if [ "$ORIGIN_POSITIVE" = true ]; then
+            echo "verdict=positive" >> "$GITHUB_OUTPUT"
+          else
+            echo "verdict=negative" >> "$GITHUB_OUTPUT"
+          fi
 
   eligibility-gate:
     name: Eligibility gate
@@ -152,8 +168,11 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
+    outputs:
+      verdict: ${{ steps.gate.outputs.verdict }}
     steps:
       - name: Enforce fail-closed automatic-merge policy
+        id: gate
         env:
           ASSESS_RESULT: ${{ needs.assess.result }}
           FRESH_SNAPSHOT_RESULT: ${{ needs.snapshot.result }}
@@ -161,12 +180,21 @@ jobs:
           GATE_OK: ${{ needs.assess.outputs.gate-ok }}
           REASON: ${{ needs.assess.outputs.reason }}
         run: |
+          # Неуспех означает РОВНО ОДНО: вердикт определить не удалось. Отрицательный
+          # вердикт — нормальный исход измерения и сообщается значением.
           if [ "$FRESH_SNAPSHOT_RESULT" != success ] || [ "$FRESH_HEAD_MATCHES_CURRENT" != true ]; then
+            echo "::error::снимок вершины несвежий — вердикт неопределим"
             exit 1
           fi
-          if [ "$ASSESS_RESULT" != success ] || [ "$GATE_OK" != true ]; then
-            echo "$REASON"
+          if [ "$ASSESS_RESULT" != success ]; then
+            echo "::error::оценка допустимости не выполнена — вердикт неопределим"
             exit 1
+          fi
+          if [ "$GATE_OK" = true ]; then
+            echo "verdict=positive" >> "$GITHUB_OUTPUT"
+          else
+            echo "verdict=negative" >> "$GITHUB_OUTPUT"
+            echo "$REASON"
           fi
 
   publish-checks:
@@ -182,11 +210,11 @@ jobs:
           ASSESSMENT_RESULT: ${{ needs.assess.result }}
           EVENT_ACTION: ${{ inputs.source-action }}
           FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
-          GATE_RESULT: ${{ needs.eligibility-gate.result }}
+          GATE_VERDICT: ${{ needs.eligibility-gate.outputs.verdict }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.snapshot.outputs.head-sha }}
           POLICY_SHA: ${{ job.workflow_sha }}
-          PROVENANCE_RESULT: ${{ needs.provenance-evidence.result }}
+          PROVENANCE_VERDICT: ${{ needs.provenance-evidence.outputs.verdict }}
           SOURCE_RUN_ATTEMPT: ${{ inputs.source-run-attempt }}
           SOURCE_RUN_ID: ${{ inputs.source-run-id }}
         run: |
@@ -230,16 +258,23 @@ jobs:
             fi
           }
 
+          # `neutral` — единственный исход, который не красит PR и при этом отличим от
+          # успеха. Пустой вердикт означает «определить не удалось» и остаётся неуспехом:
+          # публикация обязана оставаться fail closed.
           gate_conclusion=failure
-          if [ "$GATE_RESULT" = success ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
+          if [ "$GATE_VERDICT" = positive ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
             gate_conclusion=success
+          elif [ "$GATE_VERDICT" = negative ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
+            gate_conclusion=neutral
           fi
           publish_check eligibility "Dependabot auto-merge / Eligibility gate" "$gate_conclusion"
 
           if [ "$EVENT_ACTION" = opened ] || [ "$EVENT_ACTION" = synchronize ]; then
             provenance_conclusion=failure
-            if [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_RESULT" = success ]; then
+            if [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_VERDICT" = positive ]; then
               provenance_conclusion=success
+            elif [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_VERDICT" = negative ]; then
+              provenance_conclusion=neutral
             fi
             publish_check provenance "Dependabot auto-merge / Provenance evidence" "$provenance_conclusion"
           fi
@@ -250,7 +285,10 @@ jobs:
       always() &&
       needs.assess.result == 'success' &&
       needs.eligibility-gate.result == 'success' &&
+      needs.eligibility-gate.outputs.verdict == 'positive' &&
       (needs.provenance-evidence.result == 'success' || needs.provenance-evidence.result == 'skipped') &&
+      (needs.provenance-evidence.result == 'skipped' ||
+      needs.provenance-evidence.outputs.verdict == 'positive') &&
       needs.assess.outputs.enable-auto-merge == 'true'
     runs-on: ubuntu-latest
     permissions:

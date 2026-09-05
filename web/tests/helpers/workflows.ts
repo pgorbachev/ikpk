@@ -36,6 +36,9 @@ export interface WorkflowJob {
   /** `continue-on-error` джоба: при `true` его провал не делает прогон неуспешным,
    *  то есть проверка внутри такого джоба гейтом не является. */
   continueOnError?: unknown;
+  /** `outputs` джоба: значения, которые джоб передаёт зависящим от него. Нужны там, где
+   *  вердикт передаётся значением, а не цветом джоба. */
+  outputs?: Record<string, string>;
 }
 
 export interface Workflow {
@@ -68,6 +71,15 @@ function asStringList(value: unknown): string[] {
  * Читает все workflow-файлы. Отсутствие каталога или пустой список — исключение:
  * «проверять нечего» это провал проверки, а не её успех.
  */
+function asStringMap(value: unknown): Record<string, string> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = raw === null || raw === undefined ? '' : String(raw);
+  }
+  return out;
+}
+
 export function loadWorkflows(): Workflow[] {
   if (!existsSync(WORKFLOWS_DIR)) throw new Error(`нет каталога ${WORKFLOWS_DIR}`);
   const files = readdirSync(WORKFLOWS_DIR).filter((f) => /\.ya?ml$/.test(f));
@@ -113,6 +125,7 @@ export function loadWorkflows(): Workflow[] {
         concurrency: job.concurrency,
         environment: job.environment,
         continueOnError: job['continue-on-error'],
+        outputs: asStringMap(job.outputs),
       };
     }
     return {
