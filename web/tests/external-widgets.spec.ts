@@ -314,6 +314,7 @@ test.describe('встраивание занимает отведённое ем
         const frameRect = frame?.getBoundingClientRect() ?? null;
         return {
           embedBottom: docTop(embed) + embedRect.height,
+          embedCentre: embedRect.x + embedRect.width / 2,
           rowTop: docTop(row),
           rowCentre: rowRect.x + rowRect.width / 2,
           containerCentre: containerRect ? containerRect.x + containerRect.width / 2 : null,
@@ -334,6 +335,16 @@ test.describe('встраивание занимает отведённое ем
       expect(
         Math.abs(geom.rowCentre - geom.containerCentre!),
         `центр знака ${geom.rowCentre}, центр контейнера ${geom.containerCentre}: полоса не по центру`,
+      ).toBeLessThanOrEqual(1);
+
+      // Само встраивание — тоже по центру (решение владельца 2026-09-05). Проверяется
+      // отдельным утверждением, а не выводится из предыдущего: знак и виджет центрируются
+      // разными правилами (`align-items` полосы против `margin-inline` встраивания), и
+      // потеря любого из них оставила бы второе зелёным.
+      expect(
+        Math.abs(geom.embedCentre - geom.containerCentre!),
+        `центр встраивания ${geom.embedCentre}, центр контейнера ${geom.containerCentre}: ` +
+          'встраивание не по центру',
       ).toBeLessThanOrEqual(1);
 
       // Знак УВЕЛИЧЕН, а не показан натуральным кадром 150×50. Проверяется сам `<iframe>`:
