@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
@@ -387,7 +387,6 @@ describe('scoped-стили не целятся в теги, которые со
   const SRC = join(ROOT, 'web', 'src');
 
   function astroFiles(dir: string): string[] {
-    const { readdirSync, statSync } = require('fs') as typeof import('fs');
     return readdirSync(dir).flatMap((name: string) => {
       const full = join(dir, name);
       if (statSync(full).isDirectory()) return astroFiles(full);
