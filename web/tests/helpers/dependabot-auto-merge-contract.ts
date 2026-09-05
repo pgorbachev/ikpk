@@ -30,23 +30,27 @@ export interface ClassificationInput {
 export interface Decision {
   ok: boolean;
   reason: string;
+  conclusion?: 'success' | 'failure' | 'neutral' | 'skipped';
 }
 
 export interface ClassificationDecision extends Decision {
   eligible: boolean;
+  status?: 'eligible' | 'manual-review' | 'error';
 }
 
 export interface StoredResult {
   sha: string;
   kind: 'provenance' | 'eligibility-gate';
   producer: string;
-  conclusion: 'positive' | 'negative';
+  conclusion: 'positive' | 'negative' | 'success' | 'failure' | 'neutral' | 'skipped';
 }
 
 export interface HeadEvaluationInput {
   sha: string;
   autoMergeEnabled: boolean;
   classificationEligible: boolean;
+  classificationStatus?: 'eligible' | 'manual-review' | 'error' | 'not-applicable';
+  action?: 'opened' | 'synchronize' | 'reopened' | 'auto_merge_enabled' | 'auto_merge_disabled';
   prAuthor: string;
   signature: {
     valid: boolean;
@@ -66,6 +70,9 @@ export interface HeadEvaluationInput {
 export interface HeadEvaluation {
   gate: Decision;
   evidence: StoredResult;
+  enableAutoMerge?: boolean;
+  disableAutoMerge?: boolean;
+  recordEvidence?: boolean;
 }
 
 export interface MergeReadinessInput {
@@ -78,7 +85,7 @@ export interface ProvenanceEvidenceCandidate {
   sha: string;
   name: string;
   status: 'queued' | 'in_progress' | 'completed';
-  conclusion: 'success' | 'failure' | null;
+  conclusion: 'success' | 'failure' | 'neutral' | 'skipped' | null;
   appSlug: string;
   appId: number;
   eventName: string;
