@@ -40,8 +40,23 @@ import {
 interface Measured {
   readonly image: Buffer;
   readonly badges: number;
+  readonly badgePresentations: readonly BadgePresentation[];
   readonly rowRect: Rect | null;
   readonly nextRect: Rect | null;
+}
+
+interface BadgePresentation {
+  readonly provider: string | null;
+  readonly iconCount: number;
+  readonly iconRect: Rect | null;
+  readonly iconSvgRect: Rect | null;
+  readonly iconBackground: string | null;
+  readonly badgeBackground: string | null;
+  readonly badgeBoxShadow: string | null;
+  readonly title: string | null;
+  readonly titleRect: Rect | null;
+  readonly source: string | null;
+  readonly sourceRect: Rect | null;
 }
 
 interface Rect {
@@ -85,6 +100,10 @@ async function declaredBadgeYear(): Promise<number> {
 
 async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  // Утверждённый референс `home-1280d-02-reviews-block.png` снят в тёмной теме.
+  // Значение ставится до первого скрипта страницы, чтобы HeadMeta применил тему без
+  // промежуточного светлого кадра.
+  await context.addInitScript(() => localStorage.setItem('ikpk.theme', 'dark'));
   const page = await context.newPage();
   try {
     await installThirdPartyGuard(page, { chatLoaderSrc: PROBE_CHAT_LOADER_SRC });
@@ -99,7 +118,7 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
 
     const badges = await page.locator(`[${SEL_AWARD_BADGE}]`).count();
     const rects = await page.evaluate(
-      (rowAttr) => {
+      ({ rowAttr, badgeAttr }) => {
         const round = (r: DOMRect) => ({
           x: Math.round(r.x),
           y: Math.round(r.y + window.scrollY),
@@ -107,14 +126,38 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
           height: Math.round(r.height),
         });
         const row = document.querySelector(`[${rowAttr}]`);
-        if (row === null) return { row: null, next: null };
+        const badgePresentations = Array.from(document.querySelectorAll(`[${badgeAttr}]`)).map(
+          (badge) => {
+            const icons = badge.querySelectorAll('[data-award-icon]');
+            const iconSvg = icons[0]?.querySelector('svg');
+            const title = badge.querySelector('[data-award-title]');
+            const source = badge.querySelector('[data-award-source]');
+            const iconStyle = icons[0] instanceof Element ? getComputedStyle(icons[0]) : null;
+            const badgeStyle = getComputedStyle(badge);
+            return {
+              provider: badge.getAttribute('data-award-provider'),
+              iconCount: icons.length,
+              iconRect: icons[0] instanceof Element ? round(icons[0].getBoundingClientRect()) : null,
+              iconSvgRect: iconSvg instanceof Element ? round(iconSvg.getBoundingClientRect()) : null,
+              iconBackground: iconStyle?.backgroundColor ?? null,
+              badgeBackground: badgeStyle.backgroundColor,
+              badgeBoxShadow: badgeStyle.boxShadow,
+              title: title?.textContent?.trim() ?? null,
+              titleRect: title instanceof Element ? round(title.getBoundingClientRect()) : null,
+              source: source?.textContent?.trim() ?? null,
+              sourceRect: source instanceof Element ? round(source.getBoundingClientRect()) : null,
+            };
+          },
+        );
+        if (row === null) return { row: null, next: null, badgePresentations };
         const next = row.nextElementSibling;
         return {
           row: round(row.getBoundingClientRect()),
           next: next === null ? null : round(next.getBoundingClientRect()),
+          badgePresentations,
         };
       },
-      SEL_AWARD_ROW,
+      { rowAttr: SEL_AWARD_ROW, badgeAttr: SEL_AWARD_BADGE },
     );
 
     const image = await page.screenshot({
@@ -122,10 +165,18 @@ async function measure(browser: Browser, site: StaticSite): Promise<Measured> {
       animations: 'disabled',
       // ЯВНОЕ исключение фрагмента — вторая ветвь «либо» у `visual-regression-gate`.
       // Первая ветвь (не включать блок в манифест) непригодна: она вычеркнула бы из
-      // покрытия секцию отзывов целиком.
-      mask: [page.locator(`[${SEL_AWARD_ROW}]`)],
+      // покрытия секцию отзывов целиком. `mask` Playwright оставляет на границах
+      // полупрозрачные пиксели, зависящие от содержимого под маской; `visibility`
+      // сохраняет рамку строки и исключает только её содержимое без такого шума.
+      style: `[${SEL_AWARD_ROW}] > * { visibility: hidden !important; }`,
     });
-    return { image, badges, rowRect: rects.row, nextRect: rects.next };
+    return {
+      image,
+      badges,
+      badgePresentations: rects.badgePresentations,
+      rowRect: rects.row,
+      nextRect: rects.next,
+    };
   } finally {
     await context.close();
   }
@@ -190,6 +241,42 @@ test.describe('датозависимый фрагмент — строка зн
       `при следующем годе сборки показано ${next.badges} знаков: знак не протухает, и ` +
         'зависимость от года не наблюдаема`',
     ).toBe(0);
+  });
+
+  test('знак соответствует утверждённому мокапу: сервисная иконка и две строки текста', async () => {
+    expect(current.badges, 'в сборке нет показанного знака — проверка облика вакуумна').toBeGreaterThan(0);
+    expect(current.badgePresentations).toHaveLength(current.badges);
+
+    const badge = current.badgePresentations[0];
+    expect(badge.provider).toBe('yandex-maps');
+    expect(badge.iconCount, 'у знака нет ровно одной сервисной иконки').toBe(1);
+    expect(badge.title, 'название знака не выделено в отдельную строку').toBe('Хорошее место 2026');
+    expect(badge.source, 'источник знака не выведен отдельной строкой').toBe('Яндекс Карты');
+    expect(badge.iconRect, 'рамка сервисной иконки не измерена').not.toBeNull();
+    expect(badge.titleRect, 'рамка названия знака не измерена').not.toBeNull();
+    expect(badge.sourceRect, 'рамка подписи источника не измерена').not.toBeNull();
+    expect(badge.iconSvgRect, 'рамка SVG внутри подложки не измерена').not.toBeNull();
+
+    expect(badge.iconRect, 'подложка иконки не 26×26 px, как в утверждённом мокапе').toMatchObject({
+      width: 26,
+      height: 26,
+    });
+    expect(badge.iconSvgRect, 'сама иконка не 18×18 px, как в утверждённом мокапе').toMatchObject({
+      width: 18,
+      height: 18,
+    });
+    expect(badge.iconBackground, 'у иконки нет серой подложки variant E').toBe('rgb(245, 246, 247)');
+    expect(badge.badgeBackground, 'чип не остаётся белым в тёмной теме').toBe('rgb(255, 255, 255)');
+    expect(badge.badgeBoxShadow, 'у чипа пропала лёгкая тень variant E').toContain(
+      'rgba(0, 0, 0, 0.04)',
+    );
+
+    expect(badge.iconRect!.x + badge.iconRect!.width, 'иконка не стоит слева от текста').toBeLessThanOrEqual(
+      badge.titleRect!.x,
+    );
+    expect(badge.sourceRect!.y, 'подпись источника не находится ниже названия').toBeGreaterThanOrEqual(
+      badge.titleRect!.y + badge.titleRect!.height,
+    );
   });
 
   test('смена года сборки не краснит сравнение облика', async () => {

@@ -14,6 +14,15 @@ const BUILD_YEAR_KEY = 'BUILD_YEAR';
 
 const YEAR_PATTERN = /^\d{4}$/;
 
+export type AwardProviderId = 'yandex-maps' | '2gis';
+
+export interface AwardProvider {
+  /** Стабильный идентификатор выбирает сервисную иконку без разбора URL или `id` знака. */
+  id: AwardProviderId;
+  /** Подпись источника во второй строке знака. */
+  label: string;
+}
+
 /** Год сборки: `BUILD_YEAR` окружения, тем же приёмом двух источников, что
  *  `chatLoaderConfig()` (`web/src/lib/external-widgets.ts`). */
 export function buildYear(): number {
@@ -32,6 +41,8 @@ export function buildYear(): number {
 export interface BadgeDeclaration {
   id: string;
   label?: string;
+  /** Площадка, выдавшая знак: одновременно источник подписи и ключ сервисной иконки. */
+  provider: AwardProvider;
   /** Год действия знака. Сверяется с годом сборки, а не с системными часами. */
   year: number;
   /** Карточка организации в сервисе, выдавшем знак. Пусто — источник не объявлен. */
@@ -89,6 +100,7 @@ export const DECLARED_AWARD_BADGES: BadgeDeclaration[] = [
   {
     id: 'yandex-good-place',
     label: 'Хорошее место 2026',
+    provider: { id: 'yandex-maps', label: 'Яндекс Карты' },
     year: 2026,
     sourceUrl: 'https://yandex.ru/maps/org/112883331290/',
     awardEvidence: 'снимок наклейки на двери центра, владелец, 2026-08-23',

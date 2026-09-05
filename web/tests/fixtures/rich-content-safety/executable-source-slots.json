@@ -200,6 +200,30 @@
     "identity": "link|as=quoted:image|fetchpriority=quoted:high|href=quoted:/hero-main.svg|rel=quoted:preload"
   },
   {
+    "slotId": "src:components/home/AwardBadge.astro:L21:C7:svg",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L21:C7:svg",
+    "fingerprint": "f66b416f8087dddecc26656fb4d758726c1df8bda578d1d4fd0bdfe5df0b8bf9",
+    "identity": "svg|focusable=quoted:false|height=quoted:18|viewBox=quoted:0 0 24 24|width=quoted:18"
+  },
+  {
+    "slotId": "src:components/home/AwardBadge.astro:L31:C7:svg",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L31:C7:svg",
+    "fingerprint": "d7f9aab23afd7feec06e7b338fabdac012a7242617205c9b2ef945768789b5b0",
+    "identity": "svg|focusable=quoted:false|height=quoted:18|viewBox=quoted:0 0 24 24|width=quoted:18"
+  },
+  {
+    "slotId": "src:components/home/AwardBadge.astro:L45:C1:style",
+    "file": "components/home/AwardBadge.astro",
+    "nodeKind": "element",
+    "locator": "components/home/AwardBadge.astro:L45:C1:style",
+    "fingerprint": "6ca374207c8124879994ce8470661cf97788847394c38ec4475e63599697b0a9",
+    "identity": "style|body:bbf84c1fbbed79af"
+  },
+  {
     "slotId": "src:components/home/FeatureCard.astro:L21:C1:style",
     "file": "components/home/FeatureCard.astro",
     "nodeKind": "element",
@@ -400,19 +424,19 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L116:C1:style",
+    "slotId": "src:components/home/sections/Reviews.astro:L107:C1:style",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L116:C1:style",
-    "fingerprint": "3060a405e9e3bbe7cecacb426f38b12b93ba314cdb2e3819b6b148dca1f733b7",
-    "identity": "style|body:45e90505a26a756a"
+    "locator": "components/home/sections/Reviews.astro:L107:C1:style",
+    "fingerprint": "0a3b31f0c578779b8bb47aa5bd6b417017fb90b0e059813c879a340cc26caa6f",
+    "identity": "style|body:7762ab4a4404aaa9"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L65:C3:script",
+    "slotId": "src:components/home/sections/Reviews.astro:L56:C3:script",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L65:C3:script",
-    "fingerprint": "6abb9cb5f09860dbcd639bb95612ed91c0c5193fd3183190f2d4022567ea473d",
+    "locator": "components/home/sections/Reviews.astro:L56:C3:script",
+    "fingerprint": "79f7fd808f0c5118379649dd8c9f4918f6c333e679239505f7d67f0fe14bef78",
     "identity": "script|body:75cf35f093fd012f"
   },
   {

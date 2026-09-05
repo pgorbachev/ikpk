@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "8c51e75e12ea1330f6242b619f0c425695b85cb0",
+  "generatedFromSha": "7b652c01487d93230493e67355603cd543696aca",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -33,6 +33,9 @@
     "src:components/HeadMeta.astro:L61:C1:link",
     "src:components/HeadMeta.astro:L62:C1:link",
     "src:components/HeadMeta.astro:L64:C17:link",
+    "src:components/home/AwardBadge.astro:L21:C7:svg",
+    "src:components/home/AwardBadge.astro:L31:C7:svg",
+    "src:components/home/AwardBadge.astro:L45:C1:style",
     "src:components/home/FeatureCard.astro:L21:C1:style",
     "src:components/home/sections/Advantages.astro:L59:C1:style",
     "src:components/home/sections/Approach.astro:L40:C1:style",
@@ -58,8 +61,8 @@
     "src:components/home/sections/PositioningEditorial.astro:L26:C1:style",
     "src:components/home/sections/Programs.astro:L58:C1:style",
     "src:components/home/sections/ProgramsCatalog.astro:L46:C1:style",
-    "src:components/home/sections/Reviews.astro:L116:C1:style",
-    "src:components/home/sections/Reviews.astro:L65:C3:script",
+    "src:components/home/sections/Reviews.astro:L107:C1:style",
+    "src:components/home/sections/Reviews.astro:L56:C3:script",
     "src:components/home/sections/Segments.astro:L45:C1:style",
     "src:components/home/sections/Teachers.astro:L57:C1:style",
     "src:components/home/sections/TeachersFeatured.astro:L55:C1:style",
@@ -158,7 +161,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/",
       "placement": "doc-order:8:style",
-      "identity": "style|body:db396c33088a5494",
+      "identity": "style|body:237b55ae52b84104",
       "count": 1,
       "builds": [
         "production",
@@ -265,6 +268,17 @@
       ]
     },
     {
+      "slotId": "src:components/home/AwardBadge.astro:L21:C7:svg",
+      "route": "/",
+      "placement": "after:#upcoming",
+      "identity": "svg|data-astro-cid-e3vmi7u5=|focusable=false|height=18|viewbox=0 0 24 24|width=18",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
       "slotId": "src:components/home/sections/News.astro:L134:C1:script",
       "route": "/",
       "placement": "after:#upcoming",
@@ -298,7 +312,7 @@
       ]
     },
     {
-      "slotId": "src:components/home/sections/Reviews.astro:L65:C3:script",
+      "slotId": "src:components/home/sections/Reviews.astro:L56:C3:script",
       "route": "/",
       "placement": "after:#upcoming",
       "identity": "script|type=module|body:731c9d873bb54122",
