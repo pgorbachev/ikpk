@@ -60,10 +60,27 @@ describe('гигиена репозитория', () => {
       shellScripts.length,
       'в scripts/ не найдено ни одного .sh — проверять нечего',
     ).toBeGreaterThan(0);
-    const notExecutable = shellScripts.filter((s) => s.mode !== '100755').map((s) => s.path);
+    // `scripts/lib/` — не точки входа, а фрагменты, подключаемые через `source`. Бит
+    // исполнения им не нужен и вводил бы в заблуждение: запустить их отдельно нельзя,
+    // они опираются на переменные вызывающего. Требование про бит относится к тому, что
+    // документация зовёт как `./scripts/<имя>`.
+    const entryPoints = shellScripts.filter((s) => !s.path.startsWith('scripts/lib/'));
+    expect(
+      entryPoints.length,
+      'в scripts/ не осталось ни одной точки входа — проверять нечего',
+    ).toBeGreaterThan(0);
+    const notExecutable = entryPoints.filter((s) => s.mode !== '100755').map((s) => s.path);
     expect(
       notExecutable,
       `скрипты без бита исполнения (документация зовёт их как ./scripts/…):\n${notExecutable.join('\n')}`,
+    ).toEqual([]);
+    // Обратная сторона: библиотека с битом исполнения — тоже отклонение, потому что
+    // приглашает запустить её отдельно. Проверяем обе стороны, а не одну.
+    const libs = shellScripts.filter((s) => s.path.startsWith('scripts/lib/'));
+    const wronglyExecutable = libs.filter((s) => s.mode === '100755').map((s) => s.path);
+    expect(
+      wronglyExecutable,
+      `подключаемые фрагменты с битом исполнения (их нельзя запустить отдельно):\n${wronglyExecutable.join('\n')}`,
     ).toEqual([]);
   });
 
