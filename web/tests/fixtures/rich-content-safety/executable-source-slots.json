@@ -144,11 +144,11 @@
     "identity": "style|body:81fa0a5c4b7caea0"
   },
   {
-    "slotId": "src:components/Footer.astro:L108:C1:style",
+    "slotId": "src:components/Footer.astro:L104:C1:style",
     "file": "components/Footer.astro",
     "nodeKind": "element",
-    "locator": "components/Footer.astro:L108:C1:style",
-    "fingerprint": "6ee1fd0d30da0686c3f63125f1dfa25bc012a2910babac9d4f6b7527541b98e3",
+    "locator": "components/Footer.astro:L104:C1:style",
+    "fingerprint": "d5c4cc684291ea4b23605a77d0479fb8b5c739aec7661c9d4c6074c33c5a2b93",
     "identity": "style|body:4d309e4536d94a02"
   },
   {
@@ -910,6 +910,14 @@
     "locator": "pages/oplata.astro:L83:C1:style",
     "fingerprint": "e9c3c6a8c263022c183faf0b3179f7e089c6f2a3b000c20d73a386e23d3b150c",
     "identity": "style|body:d38013dcebc69356"
+  },
+  {
+    "slotId": "src:pages/politika-konfidencialnosti.astro:L212:C1:style",
+    "file": "pages/politika-konfidencialnosti.astro",
+    "nodeKind": "element",
+    "locator": "pages/politika-konfidencialnosti.astro:L212:C1:style",
+    "fingerprint": "5c32e96692549367290f1edd3274d168c6c4ff79316b5158060add3b611f71ae",
+    "identity": "style|body:ad25e17eddcb60c3"
   },
   {
     "slotId": "src:pages/preview/[variant].astro:L118:C3:script",

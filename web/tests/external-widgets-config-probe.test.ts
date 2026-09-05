@@ -249,11 +249,18 @@ describe('состояние 1: конфигурация задана — вст
       ([, html]) => chatLoaderHits(html, PROBE_CHAT_LOADER_SRC).length > 0,
     );
     expect(withChat.length, 'страниц с чатом нет — предмета нет').toBeGreaterThan(0);
+    // Признак — адрес СТРАНИЦЫ документа, а не каталог `/terms/`. Документ переехал с PDF
+    // на страницу: редактируемого исходника PDF не существует нигде, а требование спеки
+    // обязывает документ называть чат и чужой счётчик. Прежний признак после переезда
+    // покраснел бы на исправной странице — ровно тот случай, когда гейт стережёт носитель
+    // вместо предмета. PDF остаётся предыдущей редакцией, и ссылка на него — на самой
+    // странице, а не в подвале каждой.
+    const DOC_HREF = '/politika-konfidencialnosti';
     const without = withChat
       .filter(([, html]) =>
         elements(html)
           .filter((el) => el.tagName === 'a')
-          .every((el) => !(attr(el, 'href') ?? '').includes('/terms/')),
+          .every((el) => !(attr(el, 'href') ?? '').includes(DOC_HREF)),
       )
       .map(([path]) => path);
     expect(without.slice(0, 10), `страницы с чатом без ссылки на документ: ${without.length}`).toEqual([]);

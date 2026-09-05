@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "f8c4e75679e56f4fea098d604b7fa8805f3587ca",
+  "generatedFromSha": "309270ae840f29e1c380030bed3e7bb6158838d2",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -26,7 +26,7 @@
     "src:components/contacts/ContactShell.astro:L90:C11:svg",
     "src:components/contacts/ContactShell.astro:L99:C11:svg",
     "src:components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
-    "src:components/Footer.astro:L108:C1:style",
+    "src:components/Footer.astro:L104:C1:style",
     "src:components/HeadMeta.astro:L26:C1:link",
     "src:components/HeadMeta.astro:L31:C1:script",
     "src:components/HeadMeta.astro:L45:C1:link",
@@ -122,6 +122,7 @@
     "src:pages/kontakty.astro:L72:C1:style",
     "src:pages/oplata.astro:L52:C11:svg",
     "src:pages/oplata.astro:L83:C1:style",
+    "src:pages/politika-konfidencialnosti.astro:L212:C1:style",
     "src:pages/preview/[variant].astro:L118:C3:script",
     "src:pages/preview/[variant].astro:L133:C1:style",
     "src:pages/preview/[variant]/schedule.astro:L146:C1:style",
@@ -46104,6 +46105,247 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:8:link",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/Analytics.astro:L21:C1:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#clip0_519_2005",
+      "identity": "script|body:ef4dc156dc861627",
+      "count": 1,
+      "builds": [
+        "production"
+      ]
+    },
+    {
+      "slotId": "src:components/ArticleCard.astro:L44:C1:style",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:6:style",
+      "identity": "style|body:7a693cbce230f3a0",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/articles/ArticleFilterBar.astro:L36:C1:style",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:8:style",
+      "identity": "style|body:b0b0a67a3cff9bcc",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/chat/ChatFacade.astro:L48:C1:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#clip0_519_2005",
+      "identity": "script|body:ff789ce13f2b07ac",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/contacts/ContactShell.astro:L140:C3:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "script|type=module|body:e6854065516af2f2",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/contacts/ContactShell.astro:L44:C11:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-toggle",
+      "identity": "svg|class=control-icon|data-astro-cid-zmwtb5qm=|fill=none|stroke-width=1.5|stroke=currentColor|viewbox=0 0 24 24",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/contacts/ContactShell.astro:L52:C11:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "svg|aria-hidden=true|data-astro-cid-4tx7svmc=|fill=none|height=18|stroke-width=1.6|stroke=currentColor|viewbox=0 0 24 24|width=18",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/HeadMeta.astro:L26:C1:link",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:0:link",
+      "identity": "link|href=/favicon.svg|rel=icon|type=image/svg+xml",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/HeadMeta.astro:L31:C1:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:1:script",
+      "identity": "script|body:110bf87a85e89395",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/HeadMeta.astro:L45:C1:link",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:2:link",
+      "identity": "link|href=https://ikpk.su/politika-konfidencialnosti|rel=canonical",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/HeadMeta.astro:L61:C1:link",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:3:link",
+      "identity": "link|as=font|crossorigin=|href=/fonts/inter-latin.woff2|rel=preload|type=font/woff2",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/HeadMeta.astro:L62:C1:link",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:4:link",
+      "identity": "link|as=font|crossorigin=|href=/fonts/inter-cyrillic.woff2|rel=preload|type=font/woff2",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/MotionScript.astro:L11:C1:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:5:script",
+      "identity": "script|body:feda24d6d2d8032c",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#clip0_519_1997",
+      "identity": "svg|aria-hidden=true|fill=none|height=132|viewbox=0 0 132 132|width=132|xmlns=http://www.w3.org/2000/svg",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#tlogo-a",
+      "identity": "svg|aria-hidden=true|fill=none|height=132|viewbox=0 0 132 132|width=132|xmlns=http://www.w3.org/2000/svg",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/social-marks/TelegramMark.astro:L4:C1:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "svg|aria-hidden=true|height=128|viewbox=0 0 128 128|width=128|xmlns=http://www.w3.org/2000/svg",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/social-marks/VkontakteMark.astro:L4:C1:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "svg|aria-hidden=true|fill=none|height=48|viewbox=0 0 48 48|width=48|xmlns=http://www.w3.org/2000/svg",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/social-marks/YoutubeMark.astro:L4:C1:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "svg|aria-hidden=true|viewbox=0 0 28.57 20|xmlns=http://www.w3.org/2000/svg",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
+      "route": "/politika-konfidencialnosti",
+      "placement": "after:#header-search-close",
+      "identity": "script|type=module|body:31eb3f4e5d741f84",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:10:svg",
+      "identity": "svg|aria-hidden=true|class=chev|data-astro-cid-4tx7svmc=|viewbox=0 0 12 12",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:9:svg",
+      "identity": "svg|aria-hidden=true|class=chev|data-astro-cid-4tx7svmc=|viewbox=0 0 12 12",
+      "count": 1,
+      "builds": [
+        "production",
+        "demo"
+      ]
+    },
+    {
+      "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
+      "route": "/politika-konfidencialnosti",
+      "placement": "doc-order:7:link",
       "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
