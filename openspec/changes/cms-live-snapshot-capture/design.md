@@ -33,7 +33,7 @@
 **Выбрано:** `origin` в снимке рядом с существующими `fingerprint` и `snapshotId`.
 
 **Имя `provenance` занято, и первая редакция этого решения выбрала именно его.** Поле
-`provenance` уже несёт числа журнала происхождения: `web/scripts/lib/content-snapshot.ts:19`, `provenance?: {`.
+`provenance` уже несёт числа журнала происхождения: `web/scripts/lib/content-snapshot.ts@f4496cd6b2ccffeb7d2eca023d5293868664ed20:19`, `provenance?: {`.
 Его читает гейт публикации: `web/scripts/publication-cli.ts:41`, `provenance?: { observedEntry`.
 Реализация по букве прежней редакции сломала бы гейт **молча**: поле то же, смысл другой.
 

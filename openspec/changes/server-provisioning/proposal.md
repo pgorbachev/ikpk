@@ -4,20 +4,20 @@
 что он неидемпотентен и разбросан по трём носителям, ни один из которых не полон.
 
 **Носитель первый — `scripts/bootstrap-vps.sh`** (241 строка, исполняемый). Он ставит пакеты
-(`scripts/bootstrap-vps.sh:35`, `apt-get install -y nginx rsync`), создаёт каталоги релизов
-(`scripts/bootstrap-vps.sh:37`, `mkdir -p "${WEB_ROOT}/releases"`), назначает владельца, пишет
-vhost и включает службу (`scripts/bootstrap-vps.sh:237`, `systemctl enable nginx`). Он же уже
-принимает окружение явным входом (`scripts/bootstrap-vps.sh:13`, `SITE_NAME="${SITE_NAME:-ikpk}"`).
+(`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:35`, `apt-get install -y nginx rsync`), создаёт каталоги релизов
+(`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:37`, `mkdir -p "${WEB_ROOT}/releases"`), назначает владельца, пишет
+vhost и включает службу (`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:237`, `systemctl enable nginx`). Он же уже
+принимает окружение явным входом (`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:13`, `SITE_NAME="${SITE_NAME:-ikpk}"`).
 Но **повторно его запускать нельзя**, и репозиторий предупреждает об этом прямо:
 `docs/deploy-vps.md:107`, `повторно запускать нельзя` — он пишет vhost
 целиком, только `listen 80`, и снёс бы 443-блок с редиректом, добавленный certbot. Скрипт при этом
 **намеревался** уметь половину нужного: в нём есть отказ перезаписывать существующую конфигурацию
-(`scripts/bootstrap-vps.sh:62`, `exit 3`) и снятие резервной копии при обходе отказа явным флагом
-(`scripts/bootstrap-vps.sh:66`, `cp "$VHOST"`).
+(`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:62`, `exit 3`) и снятие резервной копии при обходе отказа явным флагом
+(`scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:66`, `cp "$VHOST"`).
 
 **Отказ сегодня не работает, и это проверено запуском.** В сообщении, которое печатается перед
-`exit 3`, стоит `${HOST}`: `scripts/bootstrap-vps.sh:58`, `FORCE_VHOST=1`. А на удалённую сторону
-передаются только три переменные: `scripts/bootstrap-vps.sh:29`, `bash -s`. Удалённая часть идёт под `set -u`, поэтому
+`exit 3`, стоит `${HOST}`: `scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:58`, `FORCE_VHOST=1`. А на удалённую сторону
+передаются только три переменные: `scripts/bootstrap-vps.sh@3a4164fffe48246f79d7d0b0d513af59d15de59a:29`, `bash -s`. Удалённая часть идёт под `set -u`, поэтому
 подстановка убивает её кодом 1 **до** `exit 3`: оператор получает `HOST: unbound variable`
 вместо инструкции, что делать дальше. Конфигурация при этом действительно не перезаписывается —
 но по случайности, а не по замыслу.
@@ -43,7 +43,7 @@ vhost и включает службу (`scripts/bootstrap-vps.sh:237`, `systemc
 Три следствия, и все три уже мешают.
 
 Первое: **публиковать можно только закреплённую фикстуру.** Живой захват контента не подключён:
-`web/scripts/capture-content-snapshot.ts:46`, `copyPinned();` вызывается безусловно, а заданный
+`web/scripts/capture-content-snapshot.ts@f4496cd6b2ccffeb7d2eca023d5293868664ed20:40`, `copyPinned();` вызывается безусловно, а заданный
 адрес системы управления даёт лишь предупреждение. Поэтому «обновление сайта через CMS» проверить
 негде — и это блокер, названный своим именем. Утверждение «служба на стенде не развёрнута»
 относится к состоянию живой машины и этой цитатой не доказывается; проверяется оно
