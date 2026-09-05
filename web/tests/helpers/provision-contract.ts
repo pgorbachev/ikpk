@@ -67,6 +67,17 @@ export function listValue(declared: Declared, key: string): string[] {
   return (declared.get(key) ?? '').split(/[,\s]+/).filter(Boolean);
 }
 
+/**
+ * Значения секретов для прогонов провижининга: имена берутся из ОБЪЯВЛЕННОГО состояния.
+ * Литерал в тесте уже отстал один раз — SECRET_NAMES вырос с одного имени до шести, а
+ * фикстуры остались с одним, и провижининг во всех сценариях падал кодом 4 «секрет
+ * отсутствует»: наборы проверяли отказ вместо собственного предмета.
+ */
+export function contractSecrets(environment: string): Record<string, string> {
+  const names = listValue(readDeclared(environment), 'SECRET_NAMES');
+  return Object.fromEntries(names.map((name) => [name, `contract-test-${name.toLowerCase()}`]));
+}
+
 /** Политики обращения с посторонним: ключи вида POLICY_<предмет>. */
 export function policies(declared: Declared): Map<string, string> {
   const out = new Map<string, string>();

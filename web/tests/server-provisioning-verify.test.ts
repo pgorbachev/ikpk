@@ -12,6 +12,7 @@ import { ProvisionTarget, ensureImage } from './helpers/provision-target';
 import {
   DEFAULT_ENVIRONMENT,
   EXIT,
+  contractSecrets,
   VERIFY_SCRIPT,
   numberFromOutput,
   readDeclared,
@@ -34,7 +35,7 @@ afterEach(() => {
 // (сценарий «секрет отсутствует») и пройти (все остальные ~30). Ни одна реализация этого не
 // может, и это дефект фикстуры, а не реализации — сценарий отсутствия ниже собирает своё
 // окружение сам.
-const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT, ADMIN_JWT_SECRET: 'contract-test-secret' };
+const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT, ...contractSecrets(DEFAULT_ENVIRONMENT) };
 
 function provisioned(): ProvisionTarget {
   const t = ProvisionTarget.start();

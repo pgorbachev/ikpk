@@ -14,6 +14,7 @@ import { ProvisionTarget, ensureImage } from './helpers/provision-target';
 import {
   DEFAULT_ENVIRONMENT,
   changeSummary,
+  contractSecrets,
   listValue,
   readDeclared,
   requireKey,
@@ -50,12 +51,7 @@ afterEach(() => {
 // отсутствует») — то есть набор проверял отказ вместо предмета каждого сценария.
 const ENV: Record<string, string> = {
   ENVIRONMENT: DEFAULT_ENVIRONMENT,
-  ...Object.fromEntries(
-    listValue(readDeclared(DEFAULT_ENVIRONMENT), 'SECRET_NAMES').map((name) => [
-      name,
-      `contract-test-${name.toLowerCase()}`,
-    ]),
-  ),
+  ...contractSecrets(DEFAULT_ENVIRONMENT),
 };
 
 /**
