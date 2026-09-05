@@ -17,17 +17,23 @@ const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
 
 function copyPinned(): void {
   const pinned = join(repoRoot, 'fixtures', 'content-snapshot');
-  if (!existsSync(join(pinned, 'snapshot.json'))) {
+  const source = join(pinned, 'snapshot.json');
+  if (!existsSync(source)) {
     throw new Error(`нет закреплённого снимка ${pinned}`);
   }
+
+  // Контракт проверяется ДО записи, а не после. Прежний порядок — скопировать, потом проверить —
+  // оставлял на диске снимок, не прошедший проверку: следующая сборка молча брала именно его,
+  // потому что `prepare-snapshot.ts` контракт не запускает вовсе.
+  const snap = JSON.parse(readFileSync(source, 'utf-8'));
+  assertSnapshotContract(snap);
+
   mkdirSync(outDir, { recursive: true });
-  cpSync(join(pinned, 'snapshot.json'), join(outDir, 'snapshot.json'));
+  cpSync(source, join(outDir, 'snapshot.json'));
   const panels = join(pinned, 'collapsible_panels.json');
   if (existsSync(panels)) cpSync(panels, join(outDir, 'collapsible_panels.json'));
   const urlMap = join(pinned, 'url_map.csv');
   if (existsSync(urlMap)) cpSync(urlMap, join(outDir, 'url_map.csv'));
-  const snap = JSON.parse(readFileSync(join(outDir, 'snapshot.json'), 'utf-8'));
-  assertSnapshotContract(snap);
   console.log(`snapshot:capture → фикстура в ${outDir}`);
 }
 

@@ -20,6 +20,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
+import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
+import { normalizeLegacyId } from "./lib/legacy-id.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -329,10 +331,15 @@ async function resolveRelation(
  */
 async function upsert(
   apiName: string,
-  legacyId: string,
-  data: Record<string, unknown>,
+  rawLegacyId: unknown,
+  rawData: Record<string, unknown>,
   report: EntityReport,
 ): Promise<StrapiEntry | null> {
+  // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
+  // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
+  // строкой, discovery держит его и числом.
+  const legacyId = normalizeLegacyId(rawLegacyId);
+  const data = 'legacy_id' in rawData ? { ...rawData, legacy_id: legacyId } : rawData;
   try {
     const existing = await findByLegacyId(apiName, legacyId);
 
@@ -432,7 +439,10 @@ async function importArticles(): Promise<void> {
       title: e.title,
       slug: e.slug,
       body: (e.body_html as string) ?? null,
-      published_at: (e.published_at as string) ?? null,
+      // Атрибут CMS называется `published_date`: `published_at` зарезервирован Strapi 5 при
+      // включённом draftAndPublish и ломает создание таблицы. В снимке поле остаётся
+      // `published_at` — это данные legacy-сайта, а не поле CMS.
+      published_date: (e.published_at as string) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -551,24 +561,6 @@ async function importCourseGroups(): Promise<void> {
 // Phase 3 — Seminars (depends on course groups + teachers M2M)
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Build a map: teacher numeric-id (string) → teacher legacy_id.
- * Discovery teacher legacy_ids follow the pattern `…/prepodavatel/{numericId}`.
- */
-function buildTeacherNumericMap(
-  teachers: Record<string, unknown>[],
-): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const t of teachers) {
-    const lid = t.legacy_id as string;
-    const parts = lid.split("/");
-    const numPart = parts[parts.length - 1];
-    if (/^\d+$/.test(numPart)) {
-      m.set(numPart, lid);
-    }
-  }
-  return m;
-}
 
 /**
  * Derive seminar → teacher associations from schedule entries.

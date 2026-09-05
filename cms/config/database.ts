@@ -45,7 +45,11 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
     },
     sqlite: {
       connection: {
-        filename: path.join(__dirname, '..', '..', env('DATABASE_FILENAME', '.tmp/data.db')),
+        // resolve, а не join: DATABASE_FILENAME на сервере АБСОЛЮТЕН
+        // (/var/lib/ikpk-cms/<env>/data/data.db), а join абсолютный сегмент не уважает и
+        // склеивает его с каталогом релиза. База оказалась бы ВНУТРИ релиза и умирала бы
+        // при каждой выкатке. resolve верен и для относительного значения по умолчанию.
+        filename: path.resolve(__dirname, '..', '..', env('DATABASE_FILENAME', '.tmp/data.db')),
       },
       useNullAsDefault: true,
     },
