@@ -428,8 +428,8 @@
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L106:C1:style",
-    "fingerprint": "36c01c16dc58159b8bd634364f451ce2743bf45302d452212384ca44976dbaec",
-    "identity": "style|body:c90871969691e3ca"
+    "fingerprint": "9568d84e9c97fa4fbde924c8674b951b3964299d612809d6835739df826884be",
+    "identity": "style|body:956f1f126ac07bf0"
   },
   {
     "slotId": "src:components/home/sections/Reviews.astro:L55:C3:script",
