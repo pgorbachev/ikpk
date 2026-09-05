@@ -122,7 +122,15 @@ check_auto() {
     [[ "$host_part" == "127.0.0.1" || "$host_part" == "::1" || "$host_part" == "localhost" ]]
     ;;
   SERVICE_PROXY)
-    [[ -n "${SERVICE_ADDR:-}" && -n "${SERVICE_PROXY_SNIPPET:-}" ]] &&
+    # Пустой снипет — это ОБЪЯВЛЕННОЕ отключение проксирования, а не «нечего проверять».
+    # Прежде ветвь начиналась с требования непустого значения и возвращала 1, поэтому на
+    # стенде, где проксирование отключено намеренно, проверка состояния не могла вернуть
+    # 0 НИКОГДА: объявленное состояние само же объявлялось несоответствием.
+    if [[ -z "${SERVICE_PROXY_SNIPPET:-}" ]]; then
+      [[ ! -f "$VHOST" ]] || ! grep -qE '^[[:space:]]*include[[:space:]].*ikpk-cms\.conf;' "$VHOST"
+      return $?
+    fi
+    [[ -n "${SERVICE_ADDR:-}" ]] &&
       grep -qF "proxy_pass http://${SERVICE_ADDR}" "$SERVICE_PROXY_SNIPPET" 2>/dev/null &&
       grep -qF "include ${SERVICE_PROXY_SNIPPET};" "$VHOST" 2>/dev/null
     ;;

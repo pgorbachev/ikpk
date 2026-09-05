@@ -50,17 +50,45 @@ if [[ -z "$latest" ]]; then
   exit 1
 fi
 
-target="${WEB_ROOT}/current"
+# Восстановление создаёт НОВЫЙ каталог релиза и переключает симлинк, тем же приёмом, что
+# и выкладка. Прежняя версия писала rsync-ом прямо в `${WEB_ROOT}/current`, и это ломалось
+# двумя способами: если `current` уже симлинк — запись шла СКВОЗЬ него и портила каталог
+# действующего релиза на месте; если `current` ещё не было — `mkdir -p` создавал обычный
+# каталог, и следующий `ln -sfn` из выкладки клал бы ссылку ВНУТРЬ него, а не заменял его,
+# после чего nginx бесконечно отдавал бы восстановленное старое содержимое при «успешных»
+# выкатках.
+release_id="restore-$(date -u +%Y%m%dT%H%M%SZ)"
+target="${WEB_ROOT}/releases/${release_id}"
 mkdir -p "$target"
 rsync -a --delete "${latest}/" "${target}/"
 
+# Считаются ОБА исхода. Прежде инкремент стоял только внутри `cmp -s`, поэтому разошедшийся
+# файл не попадал ни в вывод, ни в код возврата, а `compared=0` (сравнивать было нечего)
+# выглядел успехом — то самое «не смог проверить», выданное за «расхождений нет».
 compared=0
+mismatched=0
 while IFS= read -r -d '' f; do
   rel="${f#"$latest"/}"
-  if cmp -s "$f" "${target}/${rel}"; then
-    compared=$((compared + 1))
+  compared=$((compared + 1))
+  if ! cmp -s "$f" "${target}/${rel}"; then
+    mismatched=$((mismatched + 1))
+    echo "расхождение: ${rel}" >&2
   fi
 done < <(find "$latest" -type f -print0)
 
 echo "predicate=byte-equal-after-restore"
 echo "compared=${compared}"
+echo "mismatched=${mismatched}"
+
+if ((compared == 0)); then
+  echo "Сравнивать было нечего: копия ${latest} не содержит файлов — это НЕ подтверждение восстановления" >&2
+  exit 2
+fi
+if ((mismatched > 0)); then
+  echo "Восстановление не подтверждено: расхождений ${mismatched} из ${compared}" >&2
+  exit 1
+fi
+
+ln -sfn "$target" "${WEB_ROOT}/current.new"
+mv -T "${WEB_ROOT}/current.new" "${WEB_ROOT}/current"
+echo "release=${release_id}"

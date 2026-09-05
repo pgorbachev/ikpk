@@ -443,23 +443,37 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     # против 12 МБ dist). Ставится в ОБЩИЙ каталог, как shared/ у выкладки сайта, и
     # переустанавливается только когда сменился package-lock.json (сверка по sha256).
     shared_deps="${CMS_ARTIFACT_DIR}/shared"
+    mkdir -p "$shared_deps"
+    # Зависимости ставятся в каталог, ИМЕНЕМ которого служит хеш lock-файла, и прежний
+    # каталог не трогается. Раньше и старый, и новый релиз ссылались на ОДИН общий
+    # node_modules, а `npm ci` мутировал его на месте ДО проверки живости: если служба не
+    # отвечала, откат возвращал старый релиз — но уже с чужими зависимостями, а старого
+    # набора больше не существовало. Обрыв установки (кончился диск) ломал сразу оба.
+    deps_link="${shared_deps}/node_modules"
     if [[ -f "${new_release}/package-lock.json" ]]; then
-      mkdir -p "$shared_deps"
-      new_sha="$(sha256sum "${new_release}/package-lock.json" | cut -d' ' -f1)"
-      old_sha="$(cat "${shared_deps}/.lockfile-sha" 2>/dev/null || true)"
-      if [[ "$new_sha" != "$old_sha" ]]; then
-        cp "${new_release}/package.json" "${new_release}/package-lock.json" "$shared_deps/"
-        # ponytail: без ретраев сети и таймаута — неудача здесь просто оставляет
-        # старую sha незаписанной и падает на healthcheck ниже (общий путь отката),
-        # а не в отдельной обработке. set +e/-e — та же причина, что у nginx -t.
+      lock_sha="$(sha256sum "${new_release}/package-lock.json" | cut -c1-16)"
+      deps_dir="${CMS_ARTIFACT_DIR}/deps/${lock_sha}"
+      if [[ ! -f "${deps_dir}/.complete" ]]; then
+        rm -rf "${deps_dir}.partial"
+        mkdir -p "${deps_dir}.partial"
+        cp "${new_release}/package.json" "${new_release}/package-lock.json" "${deps_dir}.partial/"
+        # ponytail: без ретраев сети и таймаута — неудача оставляет каталог .partial и
+        # падает на healthcheck ниже (общий путь отката). Готовым набор считается только
+        # после переименования, поэтому недоустановленный никому не виден.
         set +e
-        (cd "$shared_deps" && npm ci --omit=dev)
+        (cd "${deps_dir}.partial" && npm ci --omit=dev)
         NPM_CI_OK=$?
         set -e
-        ((NPM_CI_OK == 0)) && echo "$new_sha" >"${shared_deps}/.lockfile-sha"
+        if ((NPM_CI_OK == 0)); then
+          touch "${deps_dir}.partial/.complete"
+          mkdir -p "$(dirname "$deps_dir")"
+          rm -rf "$deps_dir"
+          mv -T "${deps_dir}.partial" "$deps_dir"
+        fi
       fi
+      [[ -f "${deps_dir}/.complete" ]] && deps_link="${deps_dir}/node_modules"
     fi
-    ln -sfn "${shared_deps}/node_modules" "${new_release}/node_modules"
+    ln -sfn "$deps_link" "${new_release}/node_modules"
     # Владелец релиза. rsync -a переносит ЧУЖИЕ uid/gid с машины оператора (на стенде
     # каталоги оказались с uid 502), поэтому владелец приводится явно. Код остаётся у
     # root: служба не должна иметь права переписать то, что исполняет. Записывать ей
@@ -523,6 +537,13 @@ fi
 
 # --- Vhost: идемпотентность + политика обращения с посторонним ---
 render_vhost() {
+  # Строка include собирается ДО heredoc. Подстановка голого `${SERVICE_PROXY_SNIPPET}`
+  # при объявленном ПУСТОМ значении давала `include ;`, а такой конфиг nginx отвергает:
+  # «invalid number of arguments in "include" directive» (проверено настоящим `nginx -t`).
+  # Ветвь merge пустое значение обрабатывала верно, поэтому дефект жил незамеченным: на
+  # стенде vhost посторонний и идёт слиянием, а сломался бы ПЕРВЫЙ прогон на чистой машине.
+  local PROXY_INCLUDE_LINE="${SERVICE_PROXY_SNIPPET:+include ${SERVICE_PROXY_SNIPPET};}"
+
   # Один heredoc с разделителем NGINX — держит гейт web/tests/serving-config.test.ts
   # (`BOOTSTRAP_REL`/`HEREDOC = 'NGINX'`), который разбирает ИМЕННО этот текст; несколько
   # heredoc'ов подряд с условной веткой между ними этот гейт не видит вовсе (предмет
@@ -584,7 +605,7 @@ server {
   # ВНИМАНИЕ будущим правкам: heredoc НЕ закавычен ($DOMAIN, $WEB_ROOT ниже — настоящие
   # подстановки) - обратные кавычки в комментариях ВНУТРИ него исполняются как команда
   # (исторический дефект этого же скрипта, design.md/proposal.md, найден сессией тестов).
-  include ${SERVICE_PROXY_SNIPPET};
+  ${PROXY_INCLUDE_LINE}
 
   location ~ ^(/.*[^/])/\$ {
     return 301 \$1\$is_args\$args;
@@ -676,6 +697,38 @@ merge_vhost_directives() {
   echo "$status"
 }
 
+# Какие из объявленных маркеров постороннего сейчас есть в файле. Перечень
+# VHOST_FOREIGN_MARKERS до этого не читал НИКТО: он объявлял обязанность сохранить снипет
+# оплаты и сертификаты, а исполнения у обязанности не было — сохранность держалась на том,
+# что слияние только добавляет строки. Обязанность без исполнения — декоративная запись,
+# и оба независимых ревью нашли её первой.
+foreign_markers_present() {
+  local file="$1" marker out=""
+  [[ -f "$file" && -n "${VHOST_FOREIGN_MARKERS:-}" ]] || return 0
+  local IFS=,
+  for marker in ${VHOST_FOREIGN_MARKERS}; do
+    marker="${marker#"${marker%%[![:space:]]*}"}"
+    marker="${marker%"${marker##*[![:space:]]}"}"
+    [[ -n "$marker" ]] || continue
+    grep -qF -- "$marker" "$file" && out+="${marker}"$'\n'
+  done
+  printf '%s' "$out"
+}
+
+# Ни один маркер, БЫВШИЙ в файле до правки, не должен из него исчезнуть.
+assert_foreign_markers_kept() {
+  local file="$1" before="$2" marker missing=()
+  while IFS= read -r marker; do
+    [[ -n "$marker" ]] || continue
+    grep -qF -- "$marker" "$file" || missing+=("$marker")
+  done <<<"$before"
+  if ((${#missing[@]} > 0)); then
+    echo "[bootstrap] Приведение vhost уничтожило объявленное постороннее: ${missing[*]}" >&2
+    return 1
+  fi
+  return 0
+}
+
 manage_vhost() {
   local is_new=0 is_own=0
   if [[ -f "$VHOST" ]]; then
@@ -684,15 +737,30 @@ manage_vhost() {
     is_new=1
   fi
 
-  local desired
+  local desired markers_before
   desired="$(render_vhost)"
+  markers_before="$(foreign_markers_present "$VHOST")"
 
   if ((is_new || is_own)); then
     if [[ -f "$VHOST" ]] && cmp -s <(printf '%s\n' "$desired") "$VHOST"; then
       report unchanged "vhost ${VHOST}"
+      VHOST_OURS=1
       return
     fi
-    printf '%s\n' "$desired" >"$VHOST"
+    # Резервная копия перед ЛЮБОЙ полной перезаписью существующего файла, а не только при
+    # обходе отказа. Прежде наш собственный файл, в который человек дописал строки руками,
+    # затирался бесследно, а чужой — со следом: асимметрия ровно наоборот ожидаемой.
+    if [[ -f "$VHOST" ]]; then
+      local own_backup
+      own_backup="$(backup_single_file "$VHOST" "$BACKUP_DIR" "${SITE_NAME}.conf")" || exit 1
+      report changed "резервная копия перед перезаписью vhost: ${own_backup}"
+    fi
+    local tmp_vhost
+    tmp_vhost="$(mktemp "$(dirname "$VHOST")/.vhost.XXXXXX")"
+    printf '%s\n' "$desired" >"$tmp_vhost"
+    mv -f "$tmp_vhost" "$VHOST"
+    assert_foreign_markers_kept "$VHOST" "$markers_before" || exit 8
+    VHOST_OURS=1
     if ((is_new)); then
       report changed "vhost ${VHOST} создан"
     else
@@ -722,6 +790,12 @@ manage_vhost() {
     local backup_path
     backup_path="$(backup_single_file "$VHOST" "$BACKUP_DIR" "${SITE_NAME}.conf")" || exit 1
     printf '%s\n' "$desired" >"$VHOST"
+    assert_foreign_markers_kept "$VHOST" "$markers_before" || {
+      cp "$backup_path" "$VHOST"
+      echo "[bootstrap] Замена откачена из ${backup_path}" >&2
+      exit 8
+    }
+    VHOST_OURS=1
     report changed "vhost ${VHOST} заменён целиком (обход отказа FORCE_VHOST=1), резервная копия: ${backup_path}"
     return
   fi
@@ -729,6 +803,7 @@ manage_vhost() {
   # policy == merge, без обхода: сойтись без замены целиком.
   local merge_status
   merge_status="$(merge_vhost_directives "$VHOST")" || exit 1
+  assert_foreign_markers_kept "$VHOST" "$markers_before" || exit 8
   if [[ "$merge_status" == changed ]]; then
     report changed "vhost ${VHOST}: объявленные директивы приведены к значениям слиянием, постороннее сохранено"
   else
@@ -801,8 +876,15 @@ if ((NGINX_T_OK == 0)); then
   else
     pgrep -x nginx >/dev/null && nginx -s reload || nginx
   fi
+elif ((${VHOST_OURS:-0})); then
+  # Конфигурацию писали МЫ — значит невалиден наш собственный вывод, а не постороннее.
+  # Прежде оба случая шли одной веткой: печаталось предупреждение, ревизия записывалась,
+  # код выхода оставался нулевым — «конфиг сломан» было неотличимо от «всё применено», и
+  # nginx не поднялся бы на ближайшем перезапуске.
+  echo "[bootstrap] nginx -t отверг конфигурацию, которую записал провижининг — ревизия не пишется" >&2
+  exit 9
 else
-  echo "[bootstrap] ВНИМАНИЕ: nginx -t обнаружил ошибку конфигурации — reload пропущен, раздача продолжается прежним процессом" >&2
+  echo "[bootstrap] ВНИМАНИЕ: nginx -t обнаружил ошибку в ПОСТОРОННЕЙ конфигурации — reload пропущен, раздача продолжается прежним процессом" >&2
 fi
 
 # --- Ревизия объявленного состояния: запись ПОСЛЕ успешного применения, атомарно
