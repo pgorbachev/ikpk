@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "dd0c73469850b2fdbb3b54242acb4243794b6928",
+  "generatedFromSha": "f66394e69aceca2c03fbd7fc63bc386478a8789f",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",

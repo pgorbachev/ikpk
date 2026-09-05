@@ -40,11 +40,11 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
-    "slotId": "src:components/chat/ChatFacade.astro:L42:C1:script",
+    "slotId": "src:components/chat/ChatFacade.astro:L48:C1:script",
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
-    "locator": "components/chat/ChatFacade.astro:L42:C1:script",
-    "fingerprint": "d561ffa732f6c742bdb663a4ce479baca2731b6df49d787e43636dead7e8bd00",
+    "locator": "components/chat/ChatFacade.astro:L48:C1:script",
+    "fingerprint": "202476c5041873031a3a26b00cd9c0d0b25d7519d72572b703e11e4ef13025ce",
     "identity": "script|is:inline=empty:|body:ff789ce13f2b07ac"
   },
   {
