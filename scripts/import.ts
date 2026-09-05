@@ -424,6 +424,9 @@ async function importTeachers(): Promise<void> {
       slug: e.slug,
       bio: (e.bio_html as string) ?? null,
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     if (photoId) data.photo = photoId;
 
@@ -551,6 +554,9 @@ async function importCourseGroups(): Promise<void> {
       slug: e.slug,
       description: (e.description_html as string) ?? null,
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -621,6 +627,9 @@ async function importSeminars(): Promise<void> {
       description: (e.description_html as string) ?? null,
       status: (e.status as string) ?? "planned",
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -638,9 +647,18 @@ async function importSeminars(): Promise<void> {
       if (cgDocId) data.course_group = cgDocId;
     }
 
-    // Resolve teachers M2M (derived from schedule entries)
-    const tLegacyIds = semTeachers.get(e.slug as string);
-    if (tLegacyIds && tLegacyIds.size > 0) {
+    // Связь с преподавателями. Источников ДВА, и прямой полнее производного: у самого семинара
+    // список есть у 124 из 126, а вывод из расписания видит только те семинары, у которых
+    // расписание есть. Прежняя редакция брала лишь производный, и семинары без расписания
+    // теряли преподавателей молча — на сайте вместо нужного показывался первый попавшийся с
+    // фотографией. Берём объединение: прямой источник плюс всё, что дало расписание.
+    const direct = Array.isArray(e.teachers)
+      ? (e.teachers as Record<string, unknown>[])
+          .map((t) => normalizeLegacyId(t.legacy_id ?? t.id))
+          .filter(Boolean)
+      : [];
+    const tLegacyIds = new Set<string>([...direct, ...(semTeachers.get(e.slug as string) ?? [])]);
+    if (tLegacyIds.size > 0) {
       const docIds: string[] = [];
       for (const tLid of tLegacyIds) {
         const cached = getCache("teachers").get(tLid);

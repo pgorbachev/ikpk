@@ -66,11 +66,13 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'institutes', field: 'name', source: 'name' },
   { type: 'institutes', field: 'shortname', source: 'shortName' },
   { type: 'institutes', field: 'slug', source: 'slug' },
+  { type: 'institutes', field: 'order', source: 'order' },
   { type: 'institutes', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'institutes', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'institutes', field: 'description_html', source: 'description' },
   { type: 'institutes', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'institutes', field: 'image', source: 'image', transform: 'mediaRef' },
+  { type: 'institutes', field: 'images', source: 'image', transform: 'mediaUrlList' },
   { type: 'institutes', field: 'order', source: 'order' },
 
   // course_groups
@@ -78,6 +80,8 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'course_groups', field: 'name', source: 'name' },
   { type: 'course_groups', field: 'slug', source: 'slug' },
+  { type: 'course_groups', field: 'order', source: 'order' },
+  { type: 'course_groups', field: 'images', source: 'image', transform: 'mediaUrlList' },
   { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.legacy_id' },
   { type: 'course_groups', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'course_groups', field: 'seo_description', source: 'seo.seo_description' },
@@ -91,6 +95,8 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'seminars', field: 'name', source: 'name' },
   { type: 'seminars', field: 'slug', source: 'slug' },
+  { type: 'seminars', field: 'order', source: 'order' },
+  { type: 'seminars', field: 'images', source: 'image', transform: 'mediaUrlList' },
   { type: 'seminars', field: 'course_group_legacy_id', source: 'course_group.legacy_id' },
   { type: 'seminars', field: 'status', source: 'status' },
   { type: 'seminars', field: 'price', source: 'price' },
@@ -114,6 +120,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'teachers', field: 'bio_html', source: 'bio' },
   { type: 'teachers', field: 'bio_text', source: 'bio', transform: 'htmlToText' },
   { type: 'teachers', field: 'photo', source: 'photo', transform: 'mediaRef' },
+  { type: 'teachers', field: 'order', source: 'order' },
 
   // articles
   { type: 'articles', field: 'legacy_id', source: 'legacy_id' },

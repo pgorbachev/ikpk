@@ -45,6 +45,9 @@
       "relation": "manyToMany",
       "target": "api::seminar.seminar",
       "mappedBy": "teachers"
+    },
+    "order": {
+      "type": "integer"
     }
   }
 }

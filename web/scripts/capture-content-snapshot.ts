@@ -77,16 +77,35 @@ function mediaRef(value: unknown): unknown {
 
 function refList(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
-  return value.map((item) =>
-    item && typeof item === 'object'
-      ? { legacy_id: (item as Record<string, unknown>).legacy_id ?? (item as Record<string, unknown>).id, name: (item as Record<string, unknown>).name ?? (item as Record<string, unknown>).fullName }
-      : item,
-  );
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const r = item as Record<string, unknown>;
+    // `order` входит в форму связи, а не только в саму запись: главная страница выбирает
+    // преподавателя семинара по нему, и без него выбор становится произвольным.
+    const ref: Record<string, unknown> = {
+      legacy_id: r.legacy_id ?? r.id,
+      name: r.name ?? r.fullName,
+    };
+    if (r.order !== undefined && r.order !== null) ref.order = r.order;
+    return ref;
+  });
+}
+
+/**
+ * Массив URL медиа — форма, которую читает сайт (`inst.images?.[0]` в компонентах главной).
+ * В CMS медиа одно и лежит в `image`; в снимке рядом живут оба поля: `image` — объект с
+ * идентификатором содержимого, `images` — список адресов. Совмещать их нельзя: их читают
+ * разные места.
+ */
+function mediaUrlList(value: unknown): unknown {
+  const ref = mediaRef(value) as { url?: string } | undefined;
+  return ref?.url ? [ref.url] : undefined;
 }
 
 const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
+  mediaUrlList,
   refList,
   // `legacy_url` в CMS нет: выводится из `legacy_id`, тем же способом, что и
   // `scripts/refresh-catalog.ts` (`legacy_url: `/${group}/${s.slug}``) — относительный путь,
