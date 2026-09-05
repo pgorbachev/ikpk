@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHAT_OFFLINE_MESSAGE_KEY,
@@ -44,16 +44,27 @@ const CHANGE_SPEC = join(
   'external-widgets',
   'spec.md',
 );
-const ARCHIVED_SPEC = join(
-  ROOT,
-  'openspec',
-  'changes',
-  'archive',
-  'external-widgets',
-  'specs',
-  'external-widgets',
-  'spec.md',
-);
+/**
+ * Спека change после архивирования. Каталог архива именуется С ДАТОЙ
+ * (`2026-09-05-external-widgets`), а не голым именем change — так его создаёт CLI OpenSpec.
+ *
+ * Прежняя редакция ждала `archive/external-widgets/` и была написана вслепую: путь
+ * не существовал ни разу, пока change был активен, поэтому ветвь падения ни разу не
+ * исполнялась. В день архивирования она сработала и дала «измерить не удалось» на
+ * исправном архиве — непройденная ветвь оказалась таким же обещанием, как непроверенный
+ * гейт.
+ *
+ * Имя ищется по суффиксу, а не собирается из сегодняшней даты: дата в имени — дата
+ * архивирования, и вычислять её из часов машины значило бы получить путь, который
+ * перестаёт существовать назавтра.
+ */
+function archivedSpec(): string | null {
+  const archiveDir = join(ROOT, 'openspec', 'changes', 'archive');
+  if (!existsSync(archiveDir)) return null;
+  const matches = readdirSync(archiveDir).filter((name) => name.endsWith('-external-widgets'));
+  if (matches.length !== 1) return null;
+  return join(archiveDir, matches[0], 'specs', 'external-widgets', 'spec.md');
+}
 
 /**
  * Байтовый предел страницы 404, названный спекой действующим. Обновлён при слиянии
@@ -340,7 +351,9 @@ describe('у приёмочного утверждения есть запись
 
 describe('приёмочные пункты сверены со спекой и с настоящим файлом', () => {
   const specText = (): string => {
-    for (const path of [CHANGE_SPEC, ARCHIVED_SPEC]) if (existsSync(path)) return readFileSync(path, 'utf-8');
+    const archived = archivedSpec();
+    for (const path of [CHANGE_SPEC, ...(archived ? [archived] : [])])
+      if (existsSync(path)) return readFileSync(path, 'utf-8');
     throw new Error(
       `спеки change нет ни в '${CHANGE_SPEC}', ни в архиве — сверить имена приёмочных ` +
         'сценариев не с чем. Это «измерить не удалось», а не «расхождений нет»',
