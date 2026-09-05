@@ -103,7 +103,19 @@ if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]
   CMS_ARTIFACT_RELEASE="$(date -u +%Y%m%dT%H%M%SZ)"
   release_dir="${CMS_ARTIFACT_DIR_DECLARED}/releases/${CMS_ARTIFACT_RELEASE}"
   /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" "mkdir -p '${release_dir}'"
-  rsync -a --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" "${CMS_ARTIFACT_SOURCE_DECLARED}/" "${SSH_USER}@${HOST}:${release_dir}/"
+  # Каждый релиз — новый каталог, поэтому без --link-dest rsync шлёт артефакт целиком
+  # заново. Замерено: 13 МБ на этом канале идут ~30 минут, то есть каждая выкатка стоит
+  # получаса даже при неизменном артефакте. С --link-dest неизменные файлы связываются
+  # жёсткой ссылкой на месте и по сети не идут. Прежняя версия по-прежнему цела: жёсткая
+  # ссылка не копия, но и не общий файл — rsync заменяет изменившийся файл новым inode.
+  link_dest_args=()
+  prev_release="$(/usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+    "readlink -f '${CMS_ARTIFACT_DIR_DECLARED}/current' 2>/dev/null || true")"
+  # `readlink -f` на висячей ссылке возвращает САМ путь — тот же капкан, что в откате.
+  if [[ -n "$prev_release" && "$prev_release" != "${CMS_ARTIFACT_DIR_DECLARED}/current" ]]; then
+    link_dest_args=(--link-dest="$prev_release")
+  fi
+  rsync -a "${link_dest_args[@]}" --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" "${CMS_ARTIFACT_SOURCE_DECLARED}/" "${SSH_USER}@${HOST}:${release_dir}/"
 fi
 
 # Транспорт секретов — СТАНДАРТНЫЙ ВВОД, а не `SendEnv`.
