@@ -262,6 +262,19 @@ test.describe('встраивание занимает отведённое ем
       // Блочность: `display: inline` — то самое умолчание, с которого дефект начался.
       const display = await frame.evaluate((el) => getComputedStyle(el).display);
       expect(display, 'встраивание осталось инлайновым').not.toBe('inline');
+
+      // Левый край — общий со знаком награды. Ограничение ширины встраивания ввело
+      // `margin-inline: auto`, и знак остался у левого края секции, а встраивание уехало
+      // к центру: измерено 136 против 340 на 1440 px. Утверждённый кадр варианта E держит
+      // знак и содержимое на одной вертикали.
+      const badge = page.locator('[data-award-row]');
+      await expect(badge, 'строки знаков нет — сравнивать не с чем').toHaveCount(1);
+      const badgeBox = await badge.boundingBox();
+      expect(badgeBox, 'коробка строки знаков не измерена').not.toBeNull();
+      expect(
+        Math.abs(outer!.x - badgeBox!.x),
+        `встраивание начинается на ${outer!.x}, знак — на ${badgeBox!.x}: левые края разошлись`,
+      ).toBeLessThanOrEqual(1);
     });
   }
 });
