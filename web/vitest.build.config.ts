@@ -46,6 +46,7 @@ export default defineConfig({
       'tests/cms-article-catalog-snapshot.build.test.ts',
       'tests/external-widgets-dist.test.ts',
       'tests/external-widgets-config-probe.test.ts',
+      'tests/external-widgets-privacy-doc.test.ts',
     ],
   },
 });
