@@ -456,10 +456,21 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     unit_name="$(basename "${SERVICE_UNIT:-ikpk-cms.service}")"
     command -v systemctl >/dev/null 2>&1 && systemctl restart "$unit_name" || true
     sleep 1
+    # Срок ожидания объявляется, а не зашит: прежние ~16 секунд короче настоящего старта
+    # Strapi на этой машине (замерено 142 с при 948 МБ памяти), поэтому исправная служба
+    # признавалась мёртвой и провижининг откатывался. Ожидание при этом не слепое: службу,
+    # которую systemd признал упавшей, ждать весь срок незачем — ранний выход возможен
+    # именно потому, что у юнита есть предел перезапусков.
+    health_timeout="${SERVICE_HEALTH_TIMEOUT:-240}"
     healthy=0
-    for _ in 1 2 3 4 5; do
+    health_deadline=$((SECONDS + health_timeout))
+    while ((SECONDS < health_deadline)); do
       curl -s -m 2 -o /dev/null "http://${SERVICE_ADDR:-127.0.0.1:0}/" && { healthy=1; break; }
-      sleep 1
+      if command -v systemctl >/dev/null 2>&1 && [[ "$(systemctl is-active "$unit_name" 2>/dev/null)" == "failed" ]]; then
+        echo "[bootstrap] служба признана упавшей за ${SECONDS}с — жать срок до конца нечего" >&2
+        break
+      fi
+      sleep 3
     done
     if ((healthy)); then
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"

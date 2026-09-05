@@ -360,6 +360,51 @@ describe('server-provisioning: секреты не утекают', () => {
   }, T);
 });
 
+describe('server-provisioning: юнит службы принимается настоящим systemd', () => {
+  /**
+   * Эти три проверки — регресс на дефекты, которые контейнер прежде не видел, а живая
+   * машина показала сразу. Предмет у них общий: юнит, ПРИНЯТЫЙ systemd, а не юнит,
+   * совпавший с ожидаемым текстом.
+   */
+
+  it('Сценарий: ни одна директива юнита не отброшена', async () => {
+    const t = target();
+    expect(t.provision(ENV).status).toBe(0);
+    const unit = '/etc/systemd/system/ikpk-cms.service';
+    expect(t.read(unit) ?? '', 'юнит не создан — проверять нечего').toContain('[Service]');
+    const verify = t.exec(`systemd-analyze verify ${unit} 2>&1 || true`);
+    // Код возврата у systemd-analyze нулевой и в случае отброшенной директивы (проверено
+    // на стенде), поэтому признак — текст, а не код. Директива в неверной секции не
+    // отвергается, а МОЛЧА игнорируется: именно так предел перезапусков оказался
+    // декоративным, и счётчик дошёл до 185.
+    expect(verify.output, 'systemd отбросил директиву юнита').not.toMatch(/Unknown (key|section|lvalue)/);
+  }, T);
+
+  it('Сценарий: предел перезапусков объявлен в принимаемой секции', async () => {
+    const t = target();
+    expect(t.provision(ENV).status).toBe(0);
+    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
+    const unitSection = unit.slice(unit.indexOf('[Unit]'), unit.indexOf('[Service]'));
+    expect(unitSection, 'StartLimitBurst вне [Unit] systemd игнорирует').toContain('StartLimitBurst=');
+  }, T);
+
+  it('Сценарий: служба может писать в свой домашний каталог и каталог данных', async () => {
+    const t = target();
+    expect(t.provision(ENV).status).toBe(0);
+    const declared = readDeclared(DEFAULT_ENVIRONMENT);
+    const account = requireKey(declared, DEFAULT_ENVIRONMENT, 'SERVICE_ACCOUNT');
+    const dataDir = requireKey(declared, DEFAULT_ENVIRONMENT, 'CMS_DATA_DIR');
+    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
+    // Учётная запись создаётся без домашнего каталога, а приложение туда пишет: без HOME
+    // старт падает с EACCES на mkdir /home/<служба>.
+    expect(unit, 'HOME не объявлен — служба будет писать в несуществующий /home').toContain('Environment=HOME=');
+    const owner = t.execOrThrow(`stat -c '%U' ${dataDir}`).trim();
+    expect(owner, 'каталог данных не принадлежит службе — база в нём не создастся').toBe(account);
+    const probe = t.exec(`sudo -u ${account} touch ${dataDir}/.write-probe && echo ok`);
+    expect(probe.stdout.trim(), 'служба не может писать в каталог данных').toBe('ok');
+  }, T);
+});
+
 describe('server-provisioning: служба системы управления не доступна снаружи напрямую', () => {
   /** Годится любая программа на объявленном адресе (спека, требование об объёме). */
   function startDeclaredService(t: ProvisionTarget, addr: string): void {
