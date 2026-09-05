@@ -7,8 +7,6 @@
     "lockfileNodes": [
       "node_modules/dom-serializer/node_modules/entities",
       "node_modules/entities",
-      "node_modules/hast-util-from-html/node_modules/entities",
-      "node_modules/hast-util-from-html/node_modules/parse5",
       "node_modules/parse5"
     ]
   },
