@@ -21,6 +21,11 @@
       "targetField": "name",
       "required": true
     },
+    "institute": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::institute.institute"
+    },
     "photo": {
       "type": "media",
       "multiple": false,
@@ -40,6 +45,9 @@
       "relation": "manyToMany",
       "target": "api::seminar.seminar",
       "mappedBy": "teachers"
+    },
+    "order": {
+      "type": "integer"
     }
   }
 }

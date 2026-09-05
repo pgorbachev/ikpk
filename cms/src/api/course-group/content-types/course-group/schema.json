@@ -51,6 +51,9 @@
       "type": "component",
       "component": "shared.seo",
       "repeatable": false
+    },
+    "order": {
+      "type": "integer"
     }
   }
 }

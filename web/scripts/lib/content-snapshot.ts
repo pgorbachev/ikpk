@@ -5,6 +5,20 @@ export interface SnapshotMedia {
   contentId: string;
 }
 
+/**
+ * Отметка происхождения снимка: живой захват или закреплённая фикстура (design.md, решение 3,
+ * change `cms-live-snapshot-capture`). Отдельно от `provenance` ниже: то поле уже несёт числа
+ * журнала происхождения и читается гейтом публикации (`publication-cli.ts`), и совмещение двух
+ * смыслов в одном поле сломало бы его молча.
+ */
+export interface SnapshotOrigin {
+  kind: 'live' | 'pinned';
+  /** Адрес системы управления — только для живого. */
+  url?: string;
+  /** Время снятия, ISO — только для живого. */
+  capturedAt?: string;
+}
+
 export interface SnapshotContent {
   types: Record<string, Record<string, unknown>[]>;
   media: SnapshotMedia[];
@@ -16,6 +30,7 @@ export interface Snapshot {
   pinned?: boolean;
   fingerprint?: string;
   snapshotId?: string;
+  origin?: SnapshotOrigin;
   provenance?: {
     observedEntry: number;
     revision: number | null;
