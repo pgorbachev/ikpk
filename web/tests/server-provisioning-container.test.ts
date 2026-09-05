@@ -39,7 +39,12 @@ afterEach(() => {
   while (probes.length) ProvisionTarget.stopProbe(probes.pop()!);
 });
 
-const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT };
+// Общее окружение НЕСЁТ обязательный секрет: спека требует безусловного отказа без него, и
+// без секрета здесь фикстура требовала бы от одного и того же вызова одновременно упасть
+// (сценарий «секрет отсутствует») и пройти (все остальные ~30). Ни одна реализация этого не
+// может, и это дефект фикстуры, а не реализации — сценарий отсутствия ниже собирает своё
+// окружение сам.
+const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT, ADMIN_JWT_SECRET: 'contract-test-secret' };
 
 /**
  * Правка ОБЪЯВЛЕННОГО СОСТОЯНИЯ внутри цели: политика, ревизия и адреса живут в
@@ -149,6 +154,11 @@ describe('server-provisioning: провижининг идемпотентен �
     // прогон, прерванный до завершения, не оставляет записанной ревизии от этого запуска
     const fresh = target();
     fresh.write('/etc/nginx/sites-available/ikpk.conf', 'server {\n  listen 80;\n  # постороннее\n}\n');
+    // Политика задаётся ЯВНО: предмет этого сценария — «прерванный прогон не оставляет
+    // ревизии», а не выбор умолчания. Умолчание для vhost по `design.md` — `merge` (из-за
+    // 443-блока certbot), поэтому опора на него давала бы приведение вместо прерывания, и
+    // сценарий проверял бы не то, что заявлено.
+    setDeclared(fresh, 'POLICY_VHOST', 'refuse');
     setDeclared(fresh, 'PROVISION_REVISION', 'rev-refused');
     const refused = fresh.provision(ENV);
     expect(refused.status, 'прогон должен был прерваться на постороннем состоянии').not.toBe(0);
@@ -283,7 +293,8 @@ describe('server-provisioning: секреты не утекают', () => {
   it('Сценарий: секрет отсутствует', async () => {
     const t = target();
     const declared = readDeclared(DEFAULT_ENVIRONMENT);
-    const run = t.provision(ENV);
+    // Именно здесь окружение БЕЗ секрета — предмет этого сценария.
+    const run = t.provision({ ENVIRONMENT: DEFAULT_ENVIRONMENT });
     expect(run.status, 'провижининг без обязательного секрета обязан отказать').not.toBe(0);
     expect(run.output, 'недостающий секрет не назван').toContain(secretName());
     const file = requireKey(declared, DEFAULT_ENVIRONMENT, 'SECRET_FILE');
@@ -302,7 +313,17 @@ describe('server-provisioning: секреты не утекают', () => {
       `grep -rl ${JSON.stringify(sentinel)} /var/log /root /tmp /repo 2>/dev/null || true`,
     );
     expect(grep.stdout.trim(), 'контрольное значение найдено в логах или артефактах').toBe('');
-    const ps = t.exec(`ps -eo args | grep -c ${JSON.stringify(sentinel)} || true`);
+    // Проверка утечки в argv не должна САМА нести секрет в argv, иначе она считает себя.
+    // Снятие в файл этого не решает: обёртка `bash -lc '…grep "<секрет>"…'` тоже процесс, и
+    // `ps` снимает её же — счётчик остаётся ненулевым при отсутствии утечки. Поэтому значение
+    // читается ВНУТРИ контейнера из файла секрета в переменную: в командной строке остаётся
+    // только путь.
+    const secretFile = requireKey(readDeclared(DEFAULT_ENVIRONMENT), DEFAULT_ENVIRONMENT, 'SECRET_FILE');
+    const ps = t.exec(
+      `v=$(cut -d= -f2- ${JSON.stringify(secretFile)} | head -1); ` +
+        `ps -eo args > /tmp/ps-snapshot.txt 2>/dev/null; ` +
+        `if [ -n "$v" ]; then grep -c -- "$v" /tmp/ps-snapshot.txt || true; else echo НЕТ-СЕКРЕТА-НА-ДИСКЕ; fi`,
+    );
     expect(ps.stdout.trim(), 'секрет виден в аргументах команд').toBe('0');
   }, T);
 
@@ -364,7 +385,12 @@ describe('server-provisioning: служба системы управления 
   it('Сценарий: слушающие сокеты сверены с перечнем', async () => {
     const t = target();
     const declared = readDeclared(DEFAULT_ENVIRONMENT);
-    const allow = new Set(listValue(declared, 'LISTEN_ALLOWLIST'));
+    // `ss` печатает адрес «любой интерфейс» по-разному: на живом стенде — `0.0.0.0:80`
+    // (проверено по ssh), в контейнере — `*:80`. Это одна и та же запись, поэтому сравнивать
+    // надо нормализованные формы, иначе тест падает на различии нотации, а не на дефекте.
+    const normalizeSocket = (value: string): string =>
+      value.replace(/^\*:/, '0.0.0.0:').replace(/^\[::\]:/, '[::]:');
+    const allow = new Set(listValue(declared, 'LISTEN_ALLOWLIST').map(normalizeSocket));
     expect(allow.size, 'объявленный перечень слушающих сокетов пуст').toBeGreaterThan(0);
     expect(t.provision(ENV).status).toBe(0);
     const addr = requireKey(declared, DEFAULT_ENVIRONMENT, 'SERVICE_ADDR');
@@ -375,7 +401,7 @@ describe('server-provisioning: служба системы управления 
       .map((s) => s.trim())
       .filter(Boolean);
     expect(sockets.length, 'перечень фактически слушающих сокетов пуст — непройденная проверка').toBeGreaterThan(0);
-    const unexpected = sockets.filter((s) => !allow.has(s));
+    const unexpected = sockets.filter((s) => !allow.has(normalizeSocket(s)));
     for (const socket of unexpected) {
       const port = socket.split(':').pop();
       const outside = ProvisionTarget.probe(
@@ -404,8 +430,10 @@ describe('server-provisioning: резервная копия предшеств�
     const t = target();
     t.write('/etc/nginx/sites-available/ikpk.conf', 'server {\n  listen 80;\n  # постороннее\n}\n');
     const before = t.execOrThrow('md5sum /etc/nginx/sites-available/ikpk.conf').split(' ')[0];
-    // снятие копии невозможно: каталог копий не создать
-    t.execOrThrow('mkdir -p /var/backups/ikpk && chmod 500 /var/backups/ikpk');
+    // Снятие копии невозможно: каталог копий не создать. `chmod 500` для этого не годится —
+    // провижининг идёт под root, а root биты доступа игнорирует, и `mkdir -p` проходит. Делаем
+    // родителя ОБЫЧНЫМ ФАЙЛОМ: `mkdir` внутрь файла не может даже root («Not a directory»).
+    t.execOrThrow('rm -rf /var/backups/ikpk && mkdir -p /var/backups && : > /var/backups/ikpk');
     setDeclared(t, 'BACKUP_DIR', '/var/backups/ikpk/denied');
     const run = t.provision({ ...ENV, FORCE_VHOST: '1' });
     expect(run.status, 'разрушающее действие выполнено без снятой копии').not.toBe(0);

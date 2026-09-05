@@ -103,13 +103,27 @@ if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]
   rsync -a --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" "${CMS_ARTIFACT_SOURCE_DECLARED}/" "${SSH_USER}@${HOST}:${release_dir}/"
 fi
 
-MAIN_SSH_ARGS=("${SSH_ARGS[@]}")
+# Транспорт секретов — СТАНДАРТНЫЙ ВВОД, а не `SendEnv`.
+#
+# `SendEnv` требует, чтобы sshd принимал эти имена: на стенде стоит
+# `AcceptEnv LANG LC_* COLORTERM NO_COLOR` (проверено), то есть сервер МОЛЧА отбросил бы их,
+# файл секретов вышел бы с пустыми значениями, и служба не поднялась бы. Настроить `AcceptEnv`
+# провижинингом нельзя без курицы и яйца: чтобы послать секреты, сначала надо послать секреты.
+#
+# Контейнерные тесты этого не видели: там `ssh` — заглушка локального исполнения, и окружение
+# наследуется напрямую. Ограничение настоящего транспорта не проверял никто.
+#
+# Значения уходят тем же зашифрованным потоком, что и тело скрипта: в argv не попадают
+# (иначе их видно в `ps`), на диск клиента не пишутся, настройки сервера не требуют.
+secret_exports=""
 for name in "${SECRET_NAME_LIST[@]}"; do
-  MAIN_SSH_ARGS+=(-o "SendEnv=${name}")
+  value="${!name-}"
+  secret_exports+="export ${name}=$(printf '%q' "$value")"$'\n'
 done
 
-/usr/bin/ssh "${MAIN_SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
-  "ENVIRONMENT='${ENVIRONMENT}' DOMAIN='${DOMAIN}' FORCE_VHOST='${FORCE_VHOST}' BACKUP_ONLY='${BACKUP_ONLY}' CMS_ARTIFACT_RELEASE='${CMS_ARTIFACT_RELEASE}' bash -s" <<'REMOTE'
+{
+  printf '%s' "$secret_exports"
+  cat <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -260,7 +274,22 @@ if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
 fi
 
 # --- Unit-файл службы: годится любая программа на объявленном локальном адресе. ---
+#
+# `ExecStart` берётся из объявленного состояния и ОБЯЗАТЕЛЕН: юнит без него systemd не
+# принимает вовсе — «Service has no ExecStart=, ExecStop=, or SuccessAction=. Refusing.»
+# (проверено `systemd-analyze verify` на самом стенде). Прежняя редакция его не выводила, и
+# служба не поднялась бы никогда; контейнерные тесты этого не видели, потому что `systemctl`
+# там заглушка — она сверяет ФАЙЛ, а не то, что он запускается.
+#
+# `HOST`/`PORT` разбираются из `SERVICE_ADDR`: Strapi читает именно их
+# (`cms/config/server.ts`), а не `LISTEN_ADDR`.
 if [[ -n "${SERVICE_UNIT:-}" ]]; then
+  SERVICE_HOST="${SERVICE_ADDR%%:*}"
+  SERVICE_PORT="${SERVICE_ADDR##*:}"
+  if [[ -z "${SERVICE_EXEC_START:-}" ]]; then
+    echo "[bootstrap] SERVICE_EXEC_START не объявлен: юнит без ExecStart systemd отвергнет" >&2
+    exit 1
+  fi
   unit_desired="$(
     cat <<UNITEOF
 [Unit]
@@ -275,6 +304,12 @@ WorkingDirectory=${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current
 EnvironmentFile=-${SECRET_FILE:-/dev/null}
 Environment=CMS_DATA_DIR=${CMS_DATA_DIR:-/var/lib/ikpk-cms}
 Environment=LISTEN_ADDR=${SERVICE_ADDR:-127.0.0.1:0}
+Environment=HOST=${SERVICE_HOST}
+Environment=PORT=${SERVICE_PORT}
+Environment=DATABASE_CLIENT=${CMS_DB_CLIENT:-sqlite}
+Environment=DATABASE_FILENAME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}/data.db
+Environment=NODE_ENV=production
+ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3
 
@@ -682,3 +717,5 @@ echo "[bootstrap] Done. Nginx serves ${WEB_ROOT}/current"
 echo "changed=${CHANGED}"
 echo "unchanged=${UNCHANGED}"
 REMOTE
+} | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+  "ENVIRONMENT='${ENVIRONMENT}' DOMAIN='${DOMAIN}' FORCE_VHOST='${FORCE_VHOST}' BACKUP_ONLY='${BACKUP_ONLY}' CMS_ARTIFACT_RELEASE='${CMS_ARTIFACT_RELEASE}' bash -s"

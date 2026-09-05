@@ -29,7 +29,12 @@ afterEach(() => {
   while (started.length) started.pop()!.stop();
 });
 
-const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT };
+// Общее окружение НЕСЁТ обязательный секрет: спека требует безусловного отказа без него, и
+// без секрета здесь фикстура требовала бы от одного и того же вызова одновременно упасть
+// (сценарий «секрет отсутствует») и пройти (все остальные ~30). Ни одна реализация этого не
+// может, и это дефект фикстуры, а не реализации — сценарий отсутствия ниже собирает своё
+// окружение сам.
+const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT, ADMIN_JWT_SECRET: 'contract-test-secret' };
 
 function provisioned(): ProvisionTarget {
   const t = ProvisionTarget.start();
