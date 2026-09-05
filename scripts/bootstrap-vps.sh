@@ -578,13 +578,25 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
 fi
 
 # --- Vhost: идемпотентность + политика обращения с посторонним ---
+# Проксирование добавляется ПОСЛЕ отрисовки, тем же приёмом, что и при слиянии с
+# посторонним vhost, а не подстановкой внутри heredoc. Причина в дефекте: голый
+# `include ${SERVICE_PROXY_SNIPPET};` при объявленном ПУСТОМ значении давал `include ;`,
+# который nginx отвергает («invalid number of arguments in "include" directive» —
+# проверено настоящим `nginx -t`). Ветвь слияния пустое значение обрабатывала верно,
+# поэтому дефект жил незамеченным: на стенде vhost посторонний и идёт слиянием, а ломался
+# бы ПЕРВЫЙ прогон на чистой машине. Заодно heredoc остаётся полностью статическим —
+# гейт web/tests/serving-config.test.ts разбирает его текст как конфигурацию, и строка,
+# не завершённая «;», делает неразбираемым весь следующий блок.
+add_proxy_include() {
+  local text="$1"
+  [[ -n "${SERVICE_PROXY_SNIPPET:-}" ]] || { printf '%s' "$text"; return; }
+  # Вставляем перед последней закрывающей скобкой server-блока.
+  printf '%s' "$text" | awk -v line="  include ${SERVICE_PROXY_SNIPPET};" '
+    { buf[NR]=$0 }
+    END { for (i=1;i<=NR;i++) { if (i==NR) print line; print buf[i] } }'
+}
+
 render_vhost() {
-  # Строка include собирается ДО heredoc. Подстановка голого `${SERVICE_PROXY_SNIPPET}`
-  # при объявленном ПУСТОМ значении давала `include ;`, а такой конфиг nginx отвергает:
-  # «invalid number of arguments in "include" directive» (проверено настоящим `nginx -t`).
-  # Ветвь merge пустое значение обрабатывала верно, поэтому дефект жил незамеченным: на
-  # стенде vhost посторонний и идёт слиянием, а сломался бы ПЕРВЫЙ прогон на чистой машине.
-  local PROXY_INCLUDE_LINE="${SERVICE_PROXY_SNIPPET:+include ${SERVICE_PROXY_SNIPPET};}"
 
   # Один heredoc с разделителем NGINX — держит гейт web/tests/serving-config.test.ts
   # (`BOOTSTRAP_REL`/`HEREDOC = 'NGINX'`), который разбирает ИМЕННО этот текст; несколько
@@ -647,7 +659,6 @@ server {
   # ВНИМАНИЕ будущим правкам: heredoc НЕ закавычен ($DOMAIN, $WEB_ROOT ниже — настоящие
   # подстановки) - обратные кавычки в комментариях ВНУТРИ него исполняются как команда
   # (исторический дефект этого же скрипта, design.md/proposal.md, найден сессией тестов).
-  ${PROXY_INCLUDE_LINE}
 
   location ~ ^(/.*[^/])/\$ {
     return 301 \$1\$is_args\$args;
@@ -780,7 +791,7 @@ manage_vhost() {
   fi
 
   local desired markers_before
-  desired="$(render_vhost)"
+  desired="$(add_proxy_include "$(render_vhost)")"
   markers_before="$(foreign_markers_present "$VHOST")"
 
   if ((is_new || is_own)); then
