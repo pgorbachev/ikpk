@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "4a2a345c630300bf894949954b230d2c1cce8ea4",
+  "generatedFromSha": "d6d43b7fe8d651bbdd71b15807bc9c91a966da88",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -412,7 +412,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -423,7 +423,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -653,7 +653,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/404.html",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -894,7 +894,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/aktsii-i-skidki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -1105,7 +1105,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/demo-zayavka",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -1345,7 +1345,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_institute_.BDFOaAHY.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_institute_.IaWBtNpY.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -1356,7 +1356,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -1586,7 +1586,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/dolgoletie",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -1838,7 +1838,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -2068,7 +2068,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/imunnyj-otvet",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -2320,7 +2320,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -2550,7 +2550,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -2791,7 +2791,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -3043,7 +3043,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -3284,7 +3284,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -3525,7 +3525,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -3766,7 +3766,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -4007,7 +4007,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -4248,7 +4248,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -4489,7 +4489,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -4730,7 +4730,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -4971,7 +4971,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -5212,7 +5212,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -5442,7 +5442,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/mozg",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -5694,7 +5694,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/mozg/mozg-govorit-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -5935,7 +5935,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/mozg/mozg-govorit-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -6165,7 +6165,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -6417,7 +6417,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -6658,7 +6658,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -6899,7 +6899,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -7140,7 +7140,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/63",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -7381,7 +7381,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/64",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -7622,7 +7622,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/65",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -7863,7 +7863,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/66",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -8104,7 +8104,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/67",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -8345,7 +8345,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/68",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -8586,7 +8586,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/74",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -8827,7 +8827,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/77",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -9068,7 +9068,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/prepodavatel/79",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -9298,7 +9298,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -9550,7 +9550,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -9791,7 +9791,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -10032,7 +10032,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -10273,7 +10273,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -10514,7 +10514,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -10755,7 +10755,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -10996,7 +10996,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -11226,7 +11226,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -11478,7 +11478,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -11719,7 +11719,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -11960,7 +11960,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -12201,7 +12201,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -12442,7 +12442,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -12683,7 +12683,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -12924,7 +12924,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_institute_.BDFOaAHY.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_institute_.IaWBtNpY.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -12935,7 +12935,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -13165,7 +13165,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -13417,7 +13417,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -13658,7 +13658,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -13899,7 +13899,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -14140,7 +14140,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -14381,7 +14381,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -14611,7 +14611,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -14863,7 +14863,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -15104,7 +15104,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -15345,7 +15345,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -15586,7 +15586,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prepodavatel/69",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -15827,7 +15827,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prepodavatel/70",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -16068,7 +16068,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prepodavatel/71",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -16298,7 +16298,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -16550,7 +16550,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -16791,7 +16791,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -17021,7 +17021,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/specializirovannye-programmy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -17273,7 +17273,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -17503,7 +17503,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/tehniki-vyslushivaniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -17755,7 +17755,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -17985,7 +17985,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -18237,7 +18237,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -18478,7 +18478,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -18719,7 +18719,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -18960,7 +18960,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -19201,7 +19201,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -19442,7 +19442,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -19683,7 +19683,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-barralya/visceralnye-tehniki/taz",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -19924,7 +19924,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_institute_.BDFOaAHY.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_institute_.IaWBtNpY.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -19935,7 +19935,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -20165,7 +20165,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -20417,7 +20417,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/bezopasnost-kak-bazovaya-potrebnost-cheloveka",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -20658,7 +20658,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -20899,7 +20899,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -21140,7 +21140,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -21381,7 +21381,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -21622,7 +21622,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -21863,7 +21863,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -22093,7 +22093,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -22345,7 +22345,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -22586,7 +22586,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -22827,7 +22827,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -23057,7 +23057,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -23309,7 +23309,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -23550,7 +23550,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -23791,7 +23791,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -24021,7 +24021,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -24273,7 +24273,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -24514,7 +24514,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -24755,7 +24755,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -24996,7 +24996,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -25237,7 +25237,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -25478,7 +25478,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -25708,7 +25708,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -25960,7 +25960,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -26201,7 +26201,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -26442,7 +26442,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -26683,7 +26683,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -26913,7 +26913,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -27165,7 +27165,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -27406,7 +27406,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -27647,7 +27647,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -27888,7 +27888,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -28129,7 +28129,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -28370,7 +28370,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -28611,7 +28611,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -28852,7 +28852,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -29093,7 +29093,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/53",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -29334,7 +29334,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/54",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -29575,7 +29575,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/55",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -29816,7 +29816,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/56",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -30057,7 +30057,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/57",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -30298,7 +30298,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/58",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -30539,7 +30539,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/60",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -30780,7 +30780,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/61",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -31021,7 +31021,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/73",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -31262,7 +31262,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/76",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -31503,7 +31503,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/78",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -31744,7 +31744,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/80",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -31985,7 +31985,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/81",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -32226,7 +32226,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/82",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -32467,7 +32467,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -32708,7 +32708,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/84",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -32949,7 +32949,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/85",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -33179,7 +33179,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -33420,7 +33420,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -33672,7 +33672,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -33913,7 +33913,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -34154,7 +34154,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -34395,7 +34395,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -34636,7 +34636,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -34877,7 +34877,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -35118,7 +35118,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -35359,7 +35359,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -35600,7 +35600,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -35841,7 +35841,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -36082,7 +36082,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -36323,7 +36323,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -36553,7 +36553,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -36805,7 +36805,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -37046,7 +37046,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -37287,7 +37287,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -37528,7 +37528,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -37769,7 +37769,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -38010,7 +38010,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -38251,7 +38251,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -38492,7 +38492,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -38733,7 +38733,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -38974,7 +38974,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/proshenie",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -39215,7 +39215,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -39456,7 +39456,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -39697,7 +39697,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -39927,7 +39927,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -40179,7 +40179,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -40420,7 +40420,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/endokrinotoksichnost",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -40661,7 +40661,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -40902,7 +40902,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -41143,7 +41143,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -41384,7 +41384,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -41625,7 +41625,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -41866,7 +41866,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -42107,7 +42107,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -42348,7 +42348,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -42589,7 +42589,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -42830,7 +42830,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -43071,7 +43071,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -43312,7 +43312,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -43542,7 +43542,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -43794,7 +43794,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -44035,7 +44035,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -44276,7 +44276,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-endokrinotoksichnost-vneshnej-sredy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -44517,7 +44517,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -44758,7 +44758,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -44988,7 +44988,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -45240,7 +45240,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -45481,7 +45481,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -45821,7 +45821,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/kontakty",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -46104,7 +46104,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/oplata",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -46315,7 +46315,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/b",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46325,7 +46325,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/b",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46335,7 +46335,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/b",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46545,7 +46545,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/c",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46555,7 +46555,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/c",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46565,7 +46565,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/c",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46805,7 +46805,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/d",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46815,7 +46815,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/d",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -46825,7 +46825,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/d",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47075,7 +47075,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47085,7 +47085,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47095,7 +47095,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47315,7 +47315,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial/schedule",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47525,7 +47525,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial/seminar",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47745,7 +47745,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial/seminar-undated",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47995,7 +47995,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48005,7 +48005,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48015,7 +48015,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48235,7 +48235,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty/schedule",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48445,7 +48445,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty/seminar",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48665,7 +48665,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty/seminar-undated",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48885,7 +48885,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/hub",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49115,7 +49115,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/_variant_.d-nu7OKc.css|rel=stylesheet",
+      "identity": "link|href=/_astro/_variant_.BSgIB0UG.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49125,7 +49125,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.Cae-0xhA.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49135,7 +49135,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49355,7 +49355,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular/schedule",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49565,7 +49565,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular/seminar",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -49785,7 +49785,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular/seminar-undated",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -50057,7 +50057,7 @@
       "slotId": "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
       "route": "/raspisanie-i-tseny",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -50287,7 +50287,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/rich-content-canary",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -50528,7 +50528,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/sitemap",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -50802,7 +50802,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/sotrudnichestvo-s-nami",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -51065,7 +51065,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -52054,7 +52054,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -52295,7 +52295,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/beremennost-rody-i-vozmozhnosti-osteopatii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -52536,7 +52536,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -52777,7 +52777,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -53018,7 +53018,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/gipertenziya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -53259,7 +53259,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -53500,7 +53500,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/gryzha-pishevodnogo-otverstiya-diafragmy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -53741,7 +53741,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -53982,7 +53982,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -54223,7 +54223,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -54464,7 +54464,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -54705,7 +54705,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -54946,7 +54946,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -55187,7 +55187,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -55428,7 +55428,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -55669,7 +55669,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -55910,7 +55910,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -56151,7 +56151,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -56392,7 +56392,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -56633,7 +56633,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/lechenie-allergij-v-hiropraktike",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -56874,7 +56874,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/lechenie-bronhialnoj-astmy",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -57115,7 +57115,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/metody-issledovaniya-mochi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -57356,7 +57356,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -57597,7 +57597,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -57838,7 +57838,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -58079,7 +58079,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -58320,7 +58320,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -58561,7 +58561,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -58802,7 +58802,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/osnovnye-principy-osteopatii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -59043,7 +59043,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -59284,7 +59284,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -59525,7 +59525,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/pishevoj-faktor-v-hiropraktike",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -59766,7 +59766,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -60007,7 +60007,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/predmet-prikladnoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -60248,7 +60248,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -60489,7 +60489,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -60730,7 +60730,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -60971,7 +60971,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/principy-balansirovaniya-myshc",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -61212,7 +61212,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/problemy-kolennogo-sustava",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -61453,7 +61453,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/provokaciya-shejnyh-pozvonkov",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -61694,7 +61694,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -61935,7 +61935,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -62176,7 +62176,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/respiratornye-funkcii-cherepa",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -62417,7 +62417,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/sakroiliokalnye-i-iliosakralnye-narusheniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -62658,7 +62658,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -62899,7 +62899,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -63140,7 +63140,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/shizofreniya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -63381,7 +63381,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/sindrom-tarzalnogo-tunnelya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -63622,7 +63622,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/sluchaj-lecheniya-enureza",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -63863,7 +63863,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -64104,7 +64104,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -64345,7 +64345,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -64586,7 +64586,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/ustalost-i-borba-s-neyu",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -64827,7 +64827,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/visceralnaya-manipulyaciya",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -65068,7 +65068,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -65309,7 +65309,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -65550,7 +65550,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -65791,7 +65791,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -66032,7 +66032,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -66273,7 +66273,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -66514,7 +66514,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -66755,7 +66755,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -66996,7 +66996,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -67237,7 +67237,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -67478,7 +67478,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -67719,7 +67719,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -67960,7 +67960,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -68201,7 +68201,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -68442,7 +68442,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/svedeniya-ob-obrazovatelnoy-organizatsii",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -68683,7 +68683,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -68957,7 +68957,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/31",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -69220,7 +69220,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/32",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -69483,7 +69483,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/33",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -69746,7 +69746,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/34",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -70009,7 +70009,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/36",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -70272,7 +70272,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/video/37",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/global.TCMV2iiG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/global.CU_Ib8_c.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
