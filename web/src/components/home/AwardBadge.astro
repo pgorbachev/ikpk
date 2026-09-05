@@ -1,94 +1,82 @@
 ---
-import type { BadgeDeclaration } from '../../lib/award-badges';
+// Официальное встраивание знака награды. Своей марки не рисуем — см. шапку
+// `lib/award-badges.ts`: копия была бы нашим утверждением о чужой награде.
+//
+// Встраивание ЛЕНИВОЕ и подставляется тем же наблюдателем, что виджет отзывов
+// (`Reviews.astro`): знак живёт внутри секции отзывов, появляется одновременно с ней, и
+// второй наблюдатель означал бы два признака одной цели. Разметка несёт адрес в
+// `data-award-embed`, скрипт секции создаёт `<iframe>` по появлении.
+import { badgeEmbedSrc, type AwardBadgeDeclaration } from '../../lib/award-badges';
 
 interface Props {
-  badge: BadgeDeclaration;
+  badge: AwardBadgeDeclaration;
 }
 
 const { badge } = Astro.props;
+const src = badgeEmbedSrc(badge);
 ---
 
-<a
-  class="award-badge"
-  data-award-badge
-  data-award-provider={badge.provider.id}
-  href={badge.sourceUrl ?? undefined}
-  target="_blank"
-  rel="noopener"
->
-  {badge.provider.id === 'yandex-maps' ? (
-    <span class="award-mark award-mark-ym" data-award-icon aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-        <path
-          d="M12 1.8c-3.9 0-7 3-7 6.8 0 4.9 5.6 11.4 6.4 12.3.3.4.9.4 1.2 0C13.4 20 19 13.5 19 8.6c0-3.8-3.1-6.8-7-6.8Z"
-          fill="#fc3f1d"
-        />
-        <circle cx="12" cy="8.4" r="2.6" fill="#fff" />
-      </svg>
-    </span>
-  ) : (
-    <span class="award-mark award-mark-gis" data-award-icon aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-        <rect x="1" y="3" width="22" height="7" fill="#f2911b" />
-        <rect x="1" y="10" width="22" height="11" fill="#5db335" />
-        <circle cx="12" cy="11" r="6" fill="#1a8ce0" />
-        <path d="m12 7.4 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4Z" fill="#fff" />
-      </svg>
-    </span>
-  )}
-  <span class="award-copy">
-    <span class="award-title" data-award-title>{badge.label ?? 'Знак награды'}</span>
-    <span class="award-source" data-award-source>{badge.provider.label}</span>
-  </span>
-</a>
+{src && (
+  <div
+    class="award-badge"
+    data-award-badge
+    data-award-provider={badge.provider}
+    data-award-embed={src}
+    data-award-embed-title={badge.title}
+  >
+    <div class="award-badge-placeholder" aria-hidden="true"></div>
+  </div>
+)}
 
 <style>
-  .award-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #21201f;
-    text-decoration: none;
-    background: #fff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: var(--radius-pill, 999px);
-    padding: 0.4rem 0.85rem 0.4rem 0.5rem;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
+  /* Кадр знака задан сервисом и увеличен нами.
 
-  .award-mark {
-    display: inline-flex;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    align-items: center;
-    justify-content: center;
+     Крупнее сервис не отдаёт: девять проб 2026-09-05 (без параметров, `type` = award,
+     alt, rating, main, big; `theme=dark`; `size=large`; `lang=ru`) вернули ровно 150×50
+     каждая. Содержимое рисуется 150×50 и внутри большего кадра — увеличить окно нельзя,
+     останется пустое поле, поэтому масштабируется само встраивание.
+
+     Способ — `transform`, а не `zoom`. `zoom` семантически вернее (пересчитывает
+     раскладку, резкость гарантирована), но он моложе, а `transform` поддержан везде и
+     проверен снимками: в Chromium текст остаётся резким и на обычном экране, без
+     удвоенной плотности. В WebKit и Firefox НЕ проверено — движки локально не
+     установлены; названо здесь, чтобы это не читалось как проверенное.
+
+     Коробка резервирует ИТОГОВЫЙ размер (`transform` из потока не считается), иначе
+     появление встраивания сдвигало бы соседей — тот же инвариант, что у виджета отзывов. */
+  .award-badge {
+    --award-badge-scale: 3;
+    width: calc(150px * var(--award-badge-scale));
+    height: calc(50px * var(--award-badge-scale));
     flex: none;
-    background: #f5f6f7;
     overflow: hidden;
   }
 
-  .award-mark-gis svg {
-    border-radius: 4px;
+  /* 450 px не помещаются в контейнер уже ниже 482 px ширины окна (343 px содержимого на
+     375). Порог в пикселях намеренно: кадр знака задан чужим документом и от корневого
+     размера шрифта не зависит — тот же довод, что у ширины и высоты виджета отзывов. */
+  @media (max-width: 481px) {
+    .award-badge {
+      --award-badge-scale: 2;
+    }
   }
 
-  .award-copy {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.15;
-    text-align: left;
+  .award-badge-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: var(--color-light-300, #fafafa);
   }
 
-  /* Плашка белая в обеих темах, поэтому её чернила не берутся из
-     инвертирующихся токенов темы. */
-  .award-title {
-    color: #21201f;
-    font-size: var(--font-s);
-    font-weight: 600;
-  }
-
-  .award-source {
-    color: #6f7276;
-    font-size: var(--font-xs);
+  /* Узел создаёт скрипт, поэтому scoped-селектор до него не доходит: Astro метит только
+     разметку компонента. Тот же класс дефекта, что чинили для карты (#202) и для виджета
+     отзывов; гейт на него стоит в `tests/repo-hygiene.test.ts`. */
+  .award-badge :global(iframe) {
+    display: block;
+    width: 150px;
+    height: 50px;
+    border: 0;
+    transform: scale(var(--award-badge-scale));
+    transform-origin: top left;
   }
 </style>

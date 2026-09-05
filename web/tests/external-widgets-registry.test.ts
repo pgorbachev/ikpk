@@ -201,7 +201,11 @@ const NEW_OUTPUT_CHECKS = [
 const NEW_BROWSER_CHECKS = [
   'external-widgets.spec.ts',
   'external-widgets-baseline-repeat.spec.ts',
-  'external-widgets-build-year.spec.ts',
+  // `external-widgets-build-year.spec.ts` снят 2026-09-05 вместе с предметом: знак
+  // награды выводит официальное встраивание, года в нём нет, и сравнивать две сборки
+  // при разных `BUILD_YEAR` стало нечем. Проверка не исчезла, а перевернулась и
+  // переехала в `external-widgets-config-probe.test.ts` — там она сравнивает разметку
+  // двух сборок и требует СОВПАДЕНИЯ; браузер для этого не нужен.
 ];
 
 describe('новая проверка зарегистрирована во всех реестрах, которые её требуют', () => {

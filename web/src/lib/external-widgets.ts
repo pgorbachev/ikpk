@@ -97,3 +97,27 @@ export function demoChatLoaderSrc(): string {
   const config = chatLoaderConfig();
   return config.state === 'address' ? config.src : SYNTHETIC_CHAT_LOADER_SRC;
 }
+
+/**
+ * Признак НЕВЫКЛАДЫВАЕМОГО демо-вывода (`dist-demo`).
+ *
+ * Отдельная переменная, а не `isDemoForms`, — по решению владельца 2026-09-05 и по
+ * требованию спеки «В демо-выводе оба встраивания отсутствуют, а выкладываемый стенд их
+ * несёт». У флага демо-форм две цели: не писать в системы заказчика (это относится и к
+ * стенду) и не показывать сторонние встраивания в артефакте, который никуда не
+ * выкладывается (это относится только к `dist-demo`). Единый признак делал вторую цель
+ * невыполнимой без нарушения первой: стенд показывал заказчику ссылку вместо виджета.
+ *
+ * Переменную выставляет скрипт сборки демо-вывода и только он — тем же приёмом, что
+ * `CHAT_LOADER_FALLBACK`, и это проверяется чтением манифеста пакета, а не догадкой о
+ * назначении прогона.
+ *
+ * Читается из обоих источников по той же причине, что `DEMO_FORMS` в `forms.ts`: Astro
+ * прокидывает переменную в `import.meta.env`, а vitest без плагина Astro пишет только
+ * `process.env`.
+ */
+const demoOutputEnv =
+  (import.meta as ImportMeta & { env?: { DEMO_OUTPUT?: unknown } }).env?.DEMO_OUTPUT ??
+  (typeof process !== 'undefined' ? process.env?.DEMO_OUTPUT : undefined);
+
+export const isDemoOutput = String(demoOutputEnv ?? '').trim().length > 0;

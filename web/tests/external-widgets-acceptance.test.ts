@@ -73,7 +73,6 @@ const DECLARED_404_LIMIT = 34 * 1024;
  * «требование не выполнено».
  */
 const CONFIG_MODULE = '../src/lib/external-widgets';
-const BADGES_MODULE = '../src/lib/award-badges';
 
 // ─── Применимость условных пунктов: вычисляется из репозитория ───────────────
 
@@ -135,18 +134,9 @@ async function offlineMessageDeclaration(): Promise<'configured' | 'absent' | nu
   }
 }
 
-async function declaredBadgeCount(): Promise<number | null> {
-  try {
-    const mod = (await import(BADGES_MODULE)) as { DECLARED_AWARD_BADGES?: unknown[] };
-    const list = mod.DECLARED_AWARD_BADGES;
-    return Array.isArray(list) ? list.length : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
- * Шесть приёмочных пунктов с вычисленной применимостью.
+ * Четыре приёмочных пункта с вычисленной применимостью.
  *
  * ШОВ, названный вслух: спека называет механизм применимости для двух условных пунктов из
  * пяти — сообщение панели (ключ `CHAT_OFFLINE_MESSAGE`) и байтовый предел (боевая ветвь
@@ -159,11 +149,9 @@ async function declaredBadgeCount(): Promise<number | null> {
 async function acceptancePoints(): Promise<AcceptancePoint[]> {
   const state = await chatState();
   const offline = await offlineMessageDeclaration();
-  const badges = await declaredBadgeCount();
   const limitSource = join(WEB, 'tests', 'seo-package.test.ts');
   const limit = existsSync(limitSource) ? prodByteLimit(readFileSync(limitSource, 'utf-8')) : null;
 
-  const badgeShown = badges !== null && badges > 0;
   const chatCollected = state === 'address';
 
   return [
@@ -174,23 +162,10 @@ async function acceptancePoints(): Promise<AcceptancePoint[]> {
       measurable: true,
       because: 'пункт безусловный: секция отзывов существует всегда',
     },
-    {
-      scenario: 'Право использования знака подтверждено свидетельством приёмки',
-      conditional: true,
-      applicable: badgeShown,
-      measurable: badges !== null,
-      because:
-        badges === null
-          ? ''
-          : `объявлений знаков в данных: ${badges}`,
-    },
-    {
-      scenario: 'Подтверждение награждения записано свидетельством приёмки',
-      conditional: true,
-      applicable: badgeShown,
-      measurable: badges !== null,
-      because: badges === null ? '' : `объявлений знаков в данных: ${badges}`,
-    },
+    // Два пункта про знак награды сняты 2026-09-05 вместе с предметом: марку выводит
+    // официальное встраивание сервиса, а не наша отрисовка, поэтому подтверждать право
+    // на марку и сам факт награждения нам больше не нужно — утверждает Яндекс.
+    // Соответствующие сценарии удалены из спеки, и пункты без сценария красили бы сверку.
     {
       scenario: 'Согласие подтверждено свидетельством приёмки',
       conditional: true,
@@ -387,17 +362,17 @@ describe('приёмочные пункты сверены со спекой и 
     ).toEqual([]);
   });
 
-  it('приёмочных пунктов ровно шесть, и пять из них условны', async () => {
+  it('приёмочных пунктов ровно четыре, и три из них условны', async () => {
     // Число названо спекой прямо. Проверка держит его измеримым: пункт, добавленный в
     // спеку и не добавленный сюда, иначе остался бы без проверки молча.
     const points = await acceptancePoints();
-    expect(points.length, 'приёмочных пунктов не шесть').toBe(6);
+    expect(points.length, 'приёмочных пунктов не четыре').toBe(4);
     expect(
       points.filter((p) => p.conditional).length,
       'условных пунктов не пять: безусловным объявлено то, что спека объявила условным, — ' +
         'ровно та ошибка, из-за которой архивирование блокировалось записью, которую нечем ' +
         'заполнить',
-    ).toBe(5);
+    ).toBe(3);
   });
 
   it('файл свидетельств существует по названному спекой пути', () => {
