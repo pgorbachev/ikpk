@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
+import { normalizeLegacyId } from "./lib/legacy-id.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -330,10 +331,15 @@ async function resolveRelation(
  */
 async function upsert(
   apiName: string,
-  legacyId: string,
-  data: Record<string, unknown>,
+  rawLegacyId: unknown,
+  rawData: Record<string, unknown>,
   report: EntityReport,
 ): Promise<StrapiEntry | null> {
+  // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
+  // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
+  // строкой, discovery держит его и числом.
+  const legacyId = normalizeLegacyId(rawLegacyId);
+  const data = 'legacy_id' in rawData ? { ...rawData, legacy_id: legacyId } : rawData;
   try {
     const existing = await findByLegacyId(apiName, legacyId);
 

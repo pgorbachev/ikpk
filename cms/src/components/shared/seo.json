@@ -8,7 +8,7 @@
   "attributes": {
     "seo_title": {
       "type": "string",
-      "maxLength": 120
+      "maxLength": 255
     },
     "seo_description": {
       "type": "text",
