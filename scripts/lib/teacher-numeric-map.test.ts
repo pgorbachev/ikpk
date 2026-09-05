@@ -4,6 +4,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildTeacherNumericMap } from './teacher-numeric-map.js';
 
+import { legacyTransferDir } from './legacy-transfer-dir.js';
+
+// Путь берётся через `legacyTransferDir`, а не литералом — см. требование о чтении контента
+// только через снимок: литерал сделал бы тест обходным чтением материала переноса.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 describe('соответствие числового id преподавателя и legacy_id', () => {
@@ -32,7 +36,7 @@ describe('соответствие числового id преподавате�
   // данных, поэтому проверять надо их, а не выдуманные примеры.
   it('на настоящих данных discovery соответствие непусто', () => {
     const raw = JSON.parse(
-      readFileSync(join(REPO_ROOT, 'discovery', 'entities', 'teachers.json'), 'utf-8'),
+      readFileSync(join(legacyTransferDir(REPO_ROOT), 'teachers.json'), 'utf-8'),
     ) as unknown;
     const teachers = (Array.isArray(raw) ? raw : []) as Record<string, unknown>[];
     expect(teachers.length, 'преподавателей в данных нет — проверка вакуумна').toBeGreaterThan(0);

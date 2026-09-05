@@ -1,8 +1,8 @@
 ## Why
 
 Снимок контента снимается **только с закреплённой фикстуры**, живого захвата нет:
-`web/scripts/capture-content-snapshot.ts:40`, `copyPinned();` вызывается безусловно, а заданный
-адрес CMS даёт лишь предупреждение: `web/scripts/capture-content-snapshot.ts:37`, `живой захват ещё не подключён`.
+`web/scripts/capture-content-snapshot.ts:46`, `copyPinned();` вызывается безусловно, а заданный
+адрес CMS даёт лишь предупреждение: `web/scripts/capture-content-snapshot.ts:43`, `живой захват ещё не подключён`.
 
 Отсюда прямое следствие: **правка в CMS на сайт не попадает никак.** Что бы редактор ни изменил,
 сборка возьмёт фикстуру от 31.03.2026. Это делает CMS декоративной — она есть, в неё можно
@@ -48,6 +48,6 @@
 - `web/scripts/capture-content-snapshot.ts`: появляется живой путь; фикстура остаётся законным
   входом, когда адрес CMS не задан.
 - Сборка и выкладка не меняются: формат снимка тот же, контракт тот же
-  (`web/scripts/lib/content-contract.ts:148`, `export function assertSnapshotContract`).
+  (`web/scripts/lib/content-contract.ts:160`, `export function assertSnapshotContract`).
 - Осознанно **вне объёма**: наполнение CMS (`cms-content-authoring-and-migration`), приведение
   сервера (`server-provisioning`), путь публикации (`manual-publication-only`).
