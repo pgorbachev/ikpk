@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "6e3adf0e37b2731217e6aa95a2c1ad40eaf6adc7",
+  "generatedFromSha": "4a2a345c630300bf894949954b230d2c1cce8ea4",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -159,7 +159,7 @@
       "slotId": "src:components/ArticleCard.astro:L44:C1:style",
       "route": "/",
       "placement": "doc-order:8:style",
-      "identity": "style|body:91e525b974784adf",
+      "identity": "style|body:c76819824e1b4530",
       "count": 1,
       "builds": [
         "production",
