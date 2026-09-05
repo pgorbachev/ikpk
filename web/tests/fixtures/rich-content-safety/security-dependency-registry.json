@@ -1,8 +1,16 @@
 {
-  "status": "pending-implementation",
+  "status": "implemented",
   "runtime": {
-    "packages": [],
-    "lockfileNodes": []
+    "packages": [
+      "parse5"
+    ],
+    "lockfileNodes": [
+      "node_modules/dom-serializer/node_modules/entities",
+      "node_modules/entities",
+      "node_modules/hast-util-from-html/node_modules/entities",
+      "node_modules/hast-util-from-html/node_modules/parse5",
+      "node_modules/parse5"
+    ]
   },
   "oracle": {
     "packages": [
@@ -13,5 +21,5 @@
       "node_modules/playwright-core"
     ]
   },
-  "note": "Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет. Oracle lockfileNodes — fail-closed снимок текущего playwright subtree."
+  "note": "Runtime parser: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine."
 }
