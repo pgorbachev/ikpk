@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // Тег меняется вместе с составом образа: закэшированный образ прежнего состава иначе
 // молча используется дальше, и новая проверка не выполняется вовсе.
-export const IMAGE = 'ikpk-provision-target:test-systemd';
+export const IMAGE = 'ikpk-provision-target:test-systemd2';
 
 /**
  * Архитектура образа приравнивается к архитектуре ХОЗЯИНА. Без этого docker тянет образ
@@ -84,13 +84,23 @@ export function requireDocker(): void {
 const SSH_SHIM = `#!/bin/bash
 # Заглушка транспорта: цель провижининга — сам контейнер.
 # Последний аргумент — удалённая команда, stdin — тело удалённого скрипта.
+#
+# Временный файл УДАЛЯЕТСЯ после исполнения, и это не уборка ради чистоты. Тело удалённого
+# скрипта начинается с экспорта секретов; настоящий ssh несёт его потоком и на диск не
+# кладёт. Заглушка, оставлявшая файл в /tmp, создавала утечку, которой в продукте нет, —
+# и сценарий «секрет не попадает в вывод» падал на артефакте самой заглушки.
 cmd="\${@: -1}"
 tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
 cat > "$tmp"
 if [[ "$cmd" == *"bash -s" ]]; then
-  exec bash -c "\${cmd%bash -s}bash $tmp"
+  bash -c "\${cmd%bash -s}bash $tmp"
+else
+  bash -c "$cmd" < "$tmp"
 fi
-exec bash -c "$cmd" < "$tmp"
+rc=$?
+rm -f "$tmp"
+exit $rc
 `;
 
 const SYSTEMCTL_SHIM = `#!/bin/bash

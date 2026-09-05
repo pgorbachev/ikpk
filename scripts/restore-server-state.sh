@@ -75,6 +75,16 @@ if ((mismatched > 0)); then
   exit 1
 fi
 
+# `current` может быть НАСТОЯЩИМ каталогом — так выглядит сервер, поднятый до перехода на
+# релизы. `mv -T` симлинк поверх каталога не кладёт («cannot overwrite directory with
+# non-directory»), поэтому прежнее содержимое сначала переезжает в релизы: оно не теряется,
+# а раскладка приводится к общей.
+if [[ -d "${WEB_ROOT}/current" && ! -L "${WEB_ROOT}/current" ]]; then
+  legacy="${WEB_ROOT}/releases/legacy-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$(dirname "$legacy")"
+  mv "${WEB_ROOT}/current" "$legacy"
+  echo "прежний каталог current сохранён как ${legacy}" >&2
+fi
 ln -sfn "$target" "${WEB_ROOT}/current.new"
 mv -T "${WEB_ROOT}/current.new" "${WEB_ROOT}/current"
 echo "release=${release_id}"

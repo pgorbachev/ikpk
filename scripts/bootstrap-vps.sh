@@ -842,11 +842,13 @@ manage_vhost() {
     local backup_path
     backup_path="$(backup_single_file "$VHOST" "$BACKUP_DIR" "${SITE_NAME}.conf")" || exit 1
     printf '%s\n' "$desired" >"$VHOST"
-    assert_foreign_markers_kept "$VHOST" "$markers_before" || {
-      cp "$backup_path" "$VHOST"
-      echo "[bootstrap] Замена откачена из ${backup_path}" >&2
-      exit 8
-    }
+    # Здесь исчезновение маркеров — ПРЕДУПРЕЖДЕНИЕ, а не отказ, и это не смягчение правила.
+    # FORCE_VHOST=1 означает ровно «заменить целиком»: отказывать ему за то, что он заменил
+    # целиком, значит отменить единственный документированный выход из тупика. Копия снята
+    # выше, её путь назван, непрерывность https проверена отдельной ветвью. Отказ остаётся
+    # там, где путь ОБЕЩАЕТ сохранить постороннее: слияние и правка своего же файла.
+    assert_foreign_markers_kept "$VHOST" "$markers_before" ||
+      echo "[bootstrap] Обход отказа заменил файл целиком; восстановить можно из ${backup_path}" >&2
     VHOST_OURS=1
     report changed "vhost ${VHOST} заменён целиком (обход отказа FORCE_VHOST=1), резервная копия: ${backup_path}"
     return

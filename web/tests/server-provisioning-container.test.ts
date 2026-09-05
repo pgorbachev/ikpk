@@ -461,6 +461,12 @@ describe('server-provisioning: служба системы управления 
     const declared = readDeclared(DEFAULT_ENVIRONMENT);
     const addr = requireKey(declared, DEFAULT_ENVIRONMENT, 'SERVICE_ADDR');
     const path = declared.get('SERVICE_PROXY_PATH') ?? '/admin';
+    // Предмет сценария — САМА возможность отдавать службу через сервер раздачи. На стенде
+    // проксирование объявлено ВЫКЛЮЧЕННЫМ (пустой SERVICE_PROXY_SNIPPET: админка не должна
+    // быть доступна заказчику до появления журнала происхождения), поэтому проверка
+    // включает его в объявленном состоянии цели явно. Без этого сценарий проверял бы не
+    // возможность, а текущий выбор стенда — и падал бы, подтверждая ровно то, что объявлено.
+    setDeclared(t, 'SERVICE_PROXY_SNIPPET', '/etc/nginx/snippets/ikpk-cms.conf');
     expect(t.provision(ENV).status).toBe(0);
     startDeclaredService(t, addr);
     const local = t.exec(`curl -s -m 2 -o /dev/null -w '%{http_code}' http://${addr}/`);
