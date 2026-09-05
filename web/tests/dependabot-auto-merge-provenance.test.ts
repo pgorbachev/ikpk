@@ -56,11 +56,13 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
 
   it.each([false, true])('keeps a Dependabot update with mandatory evaluation errors red when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({
+    const result = evaluateHead(head({
       autoMergeEnabled,
       classificationEligible: false,
       classificationStatus: 'error',
-    })).gate).toMatchObject({ ok: false, conclusion: 'failure' });
+    }));
+    expect(result.gate).toMatchObject({ ok: false, conclusion: 'failure' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
   });
 
   it.each([false, true])('publishes neutral eligibility and positive provenance for a manual Dependabot class when marker=%s', async (autoMergeEnabled) => {
@@ -71,7 +73,7 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
       classificationStatus: 'manual-review',
     }));
     expect(result.gate).toMatchObject({ ok: true, conclusion: 'neutral' });
-    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'success' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
     expect(result.enableAutoMerge).toBe(false);
   });
 
@@ -79,7 +81,7 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
     const { evaluateHead } = await loadDependabotAutoMerge();
     const result = evaluateHead(head({ autoMergeEnabled, classificationStatus: 'eligible' }));
     expect(result.gate).toMatchObject({ ok: true, conclusion: 'success' });
-    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'success' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
   });
 
   it('fails when auto-merge is enabled for an invalid origin', async () => {
@@ -96,7 +98,7 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
       actor: { login: 'maintainer', kind: 'human' },
     }));
     expect(result.gate).toMatchObject({ ok: false, conclusion: 'failure' });
-    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'failure' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'negative' });
   });
 
   it('rejects a Dependabot event actor when the commit lacks a platform signature', async () => {
