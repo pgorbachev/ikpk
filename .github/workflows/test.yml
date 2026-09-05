@@ -225,6 +225,7 @@ jobs:
         if: steps.web-dependency-scope.outputs.dependency_only == 'true' || github.event.pull_request.user.login == 'dependabot[bot]'
         working-directory: .
         env:
+          CHAT_LOADER_SRC: 'none'
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           base="$RUNNER_TEMP/web-base-worktree"
