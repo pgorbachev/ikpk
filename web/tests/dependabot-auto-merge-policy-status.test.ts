@@ -148,6 +148,48 @@ fi
   };
 }
 
+function valueAt(path: string, context: Record<string, unknown>): unknown {
+  return path.split('.').reduce<unknown>((current, segment) => {
+    if (current === null || typeof current !== 'object') return undefined;
+    return (current as Record<string, unknown>)[segment];
+  }, context);
+}
+
+function splitTopLevel(source: string, operator: '&&' | '||'): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (depth === 0 && source.slice(i, i + 2) === operator) {
+      parts.push(source.slice(start, i).trim());
+      start = i + 2;
+      i += 1;
+    }
+  }
+  parts.push(source.slice(start).trim());
+  return parts;
+}
+
+function evaluateEnableCondition(context: Record<string, unknown>): boolean {
+  const raw = POLICY_WORKFLOW.jobs?.['enable-auto-merge']?.if;
+  expect(raw, 'enable-auto-merge job must have an executable condition').toBeTypeOf('string');
+  const condition = String(raw).replace(/\s+/g, ' ').trim();
+  const evaluateTerm = (term: string): boolean => {
+    const clean = term.trim();
+    if (clean === 'always()') return true;
+    if (clean.startsWith('(') && clean.endsWith(')')) {
+      return splitTopLevel(clean.slice(1, -1), '||').some(evaluateTerm);
+    }
+    const match = /^([A-Za-z0-9_.-]+)\s*==\s*'([^']*)'$/.exec(clean);
+    if (!match) throw new Error(`unsupported enable condition term: ${clean}`);
+    return valueAt(match[1], context) === match[2];
+  };
+  return splitTopLevel(condition, '&&').every(evaluateTerm);
+}
+
 afterEach(() => {
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -286,6 +328,28 @@ describe('Dependabot policy conclusions and publisher shell', () => {
 
     expect(result.status).not.toBe(0);
   });
+
+  it.each(['neutral', 'skipped', 'failure'] as const)(
+    'does not enable when upstream jobs succeeded but explicit conclusions are %s',
+    (conclusion) => {
+      const conditionAllowsEnable = evaluateEnableCondition({
+        needs: {
+          assess: {
+            result: 'success',
+            outputs: {
+              'enable-auto-merge': 'true',
+              'eligibility-conclusion': conclusion,
+              'provenance-conclusion': conclusion,
+            },
+          },
+          'eligibility-gate': { result: 'success' },
+          'provenance-evidence': { result: 'success' },
+        },
+      });
+
+      expect(conditionAllowsEnable).toBe(false);
+    },
+  );
 
   it('publishes the explicit neutral/skipped conclusions instead of deriving them from job success', () => {
     const result = runPublisherShell({

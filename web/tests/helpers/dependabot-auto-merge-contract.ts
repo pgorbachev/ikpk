@@ -42,7 +42,7 @@ export interface StoredResult {
   sha: string;
   kind: 'provenance' | 'eligibility-gate';
   producer: string;
-  conclusion: 'positive' | 'negative' | 'success' | 'failure' | 'neutral' | 'skipped';
+  conclusion: 'positive' | 'negative' | 'skipped';
 }
 
 export interface HeadEvaluationInput {
