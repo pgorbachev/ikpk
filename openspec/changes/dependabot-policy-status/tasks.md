@@ -6,16 +6,16 @@
 
 ## 2. Красные тесты в отдельной сессии
 
-- [ ] 2.1 Передать утверждённую спеку независимому автору тестов с чистым контекстом и своим worktree; предъявить RED для human skipped, manual neutral и сохранения человеческого marker.
-- [ ] 2.2 Добавить сценарии отсутствующих metadata/registry, manual+invalid provenance, stale head, bot PR с человеческим actor и marker/reopened без перезаписи provenance.
-- [ ] 2.3 Проверить, что skipped/neutral/отсутствие результата и успешный producer job без положительного check не разрешают enable или потребление provenance; покрыть подмену PR/SHA/run/attempt.
-- [ ] 2.4 Проверить вывод publisher и conclusions jobs: штатный отказ не делает workflow красным, ошибка остаётся красной; тестировать подключение immutable engine.
+- [x] 2.1 Передать утверждённую спеку независимому автору тестов с чистым контекстом и своим worktree; предъявить RED для human skipped, manual neutral и сохранения человеческого marker.
+- [x] 2.2 Добавить сценарии отсутствующих metadata/registry, manual+invalid provenance, stale head, bot PR с человеческим actor и marker/reopened без перезаписи provenance.
+- [x] 2.3 Проверить, что skipped/neutral/отсутствие результата и успешный producer job без положительного check не разрешают enable или потребление provenance; покрыть подмену PR/SHA/run/attempt.
+- [x] 2.4 Проверить вывод publisher и conclusions jobs: штатный отказ не делает workflow красным, ошибка остаётся красной; тестировать подключение immutable engine.
 
 ## 3. Реализация
 
-- [ ] 3.1 Передать реализацию исполнителю, отличному от ревьюеров кода; добавить явные исходы и раннюю неприменимость после свежей аутентификации PR.
-- [ ] 3.2 Обновить mapping publisher, условия jobs и enable permission; сохранить независимый provenance и ограничить disable marker PR Dependabot.
-- [ ] 3.3 Получить GREEN и выполнить негативную проверку: временно разрешить neutral/skipped и убедиться, что тест запрещённого действия падает; вернуть корректное условие.
+- [x] 3.1 Передать реализацию исполнителю, отличному от ревьюеров кода; добавить явные исходы и раннюю неприменимость после свежей аутентификации PR.
+- [x] 3.2 Обновить mapping publisher, условия jobs и enable permission; сохранить независимый provenance и ограничить disable marker PR Dependabot.
+- [x] 3.3 Получить GREEN и выполнить негативную проверку: временно разрешить neutral/skipped и убедиться, что тест запрещённого действия падает; вернуть корректное условие.
 
 ## 4. Ревью и rollout
 

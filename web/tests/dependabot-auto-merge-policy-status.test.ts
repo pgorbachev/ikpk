@@ -329,17 +329,23 @@ describe('Dependabot policy conclusions and publisher shell', () => {
     expect(result.status).not.toBe(0);
   });
 
-  it.each(['neutral', 'skipped', 'failure'] as const)(
-    'does not enable when upstream jobs succeeded but explicit conclusions are %s',
-    (conclusion) => {
+  it.each([
+    ['neutral', 'success', false], ['skipped', 'success', false], ['failure', 'success', false],
+    ['success', 'neutral', false], ['success', 'skipped', false], ['success', 'failure', false],
+    ['', 'success', false], ['success', '', false], ['success', 'success', true],
+  ] as const)(
+    'authorizes only both positive conclusions: eligibility=%s provenance=%s',
+    (eligibility, provenance, expected) => {
       const conditionAllowsEnable = evaluateEnableCondition({
         needs: {
           assess: {
             result: 'success',
             outputs: {
               'enable-auto-merge': 'true',
-              'eligibility-conclusion': conclusion,
-              'provenance-conclusion': conclusion,
+              'eligibility-conclusion': eligibility,
+              'provenance-conclusion': provenance,
+              'gate-ok': 'true',
+              'origin-positive': 'true',
             },
           },
           'eligibility-gate': { result: 'success' },
@@ -347,7 +353,7 @@ describe('Dependabot policy conclusions and publisher shell', () => {
         },
       });
 
-      expect(conditionAllowsEnable).toBe(false);
+      expect(conditionAllowsEnable).toBe(expected);
     },
   );
 
