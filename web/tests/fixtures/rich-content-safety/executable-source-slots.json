@@ -412,8 +412,8 @@
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L131:C1:style",
-    "fingerprint": "8aaed703478ee6923a53f4ca1e90b42b02991d84c6c7bf2bd538b840409787f8",
-    "identity": "style|body:c7575b83c2a6475a"
+    "fingerprint": "54cb737bf73cae74020feb93192f46cc28c3c48bf171677b7a8a2632f6b064b6",
+    "identity": "style|body:9d5043d986febdb1"
   },
   {
     "slotId": "src:components/home/sections/Reviews.astro:L73:C3:script",
