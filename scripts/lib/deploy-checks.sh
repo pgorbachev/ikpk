@@ -329,6 +329,42 @@ chat_widget_matches_mode() {
     expect_carries=0
   fi
 
+  # Адрес стенда обязан вести НЕ на портал заказчика.
+  #
+  # Пока стенд гасил встраивания ветвью сборки, живой чат на нём был невозможен
+  # структурно. После перехода стенда в прод-лайк (решение владельца 2026-09-05) от
+  # живых Открытых линий заказчика отделяла бы одна переменная окружения — то есть
+  # дисциплина оператора, а не проверка. Находка независимого ревью.
+  #
+  # Перечень порталов берётся ИЗ ДАННЫХ заказчика, а не из литерала в коде: их два
+  # (`b24-cbqwqo` и `b24-kbo5ls`), привязка к одному отставала бы от предмета молча —
+  # ровно та же причина, по которой так устроен `form_links_match_mode` выше.
+  if [[ "$mode" == "stand" && "$state" == "address" ]]; then
+    local repo_root portals host
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    if [[ ! -d "$repo_root/discovery" ]]; then
+      echo "chat_widget_matches_mode: нет $repo_root/discovery — перечень порталов заказчика не построен, проверка не выполнена" >&2
+      return 1
+    fi
+    set +e
+    portals=$(grep -rhoE 'b24-[a-z0-9]+\.bitrix24(site)?\.ru' "$repo_root/discovery" 2>/dev/null | sort -u)
+    rc=$?
+    set -e
+    if (( rc > 1 )); then
+      echo "chat_widget_matches_mode: не удалось прочитать discovery (grep код $rc) — проверка не выполнена" >&2
+      return 1
+    fi
+    if [[ -z "$portals" ]]; then
+      echo "chat_widget_matches_mode: в discovery не нашлось ни одного портала заказчика — сверять не с чем, проверка не выполнена" >&2
+      return 1
+    fi
+    host=$(printf '%s' "$src" | sed -E 's|^[a-zA-Z][a-zA-Z0-9+.-]*://||; s|[/?#].*$||; s|^[^@]*@||; s|:[0-9]+$||')
+    if grep -qxF -- "$host" <<<"$portals"; then
+      echo "chat_widget_matches_mode: адрес загрузчика ведёт на портал заказчика (${host}), а это стенд — обращения приёмщиков ушли бы в живые Открытые линии" >&2
+      return 1
+    fi
+  fi
+
   if (( carries == expect_carries )); then
     printf 'встраивание чата: %s, режим %s — соответствует\n' "$state" "$mode"
     return 0
