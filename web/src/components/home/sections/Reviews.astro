@@ -25,43 +25,42 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
   <div class="container">
     <h2 class="section-title">Отзывы</h2>
 
-    {/* Две колонки (утверждённый вариант C): виджет слева, знак и подписи справа. Знак
-        стоял над виджетом и читался как часть его содержимого — то есть как утверждение
-        сервиса о себе, а не свидетельство, которое приводит сайт. */}
-    <div class="reviews-layout">
-      {isDemoOutput ? (
-        <p class="reviews-cta">
-          <a href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+    {isDemoOutput ? (
+      <p class="reviews-cta">
+        <a href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+          Смотреть отзывы на Яндекс.Картах
+        </a>
+      </p>
+    ) : (
+      <div class="reviews-embed" data-reviews-embed={REVIEWS_WIDGET_SRC}>
+        <div class="reviews-embed-placeholder" aria-hidden="true">Загрузка отзывов…</div>
+        <noscript>
+          <a class="reviews-cta" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
             Смотреть отзывы на Яндекс.Картах
           </a>
-        </p>
-      ) : (
-        <div class="reviews-embed" data-reviews-embed={REVIEWS_WIDGET_SRC}>
-          <div class="reviews-embed-placeholder" aria-hidden="true">Загрузка отзывов…</div>
-          <noscript>
-            <a class="reviews-cta" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
-              Смотреть отзывы на Яндекс.Картах
-            </a>
-          </noscript>
-        </div>
-      )}
+        </noscript>
+      </div>
+    )}
 
-      <aside class="reviews-aside">
-        {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
-            остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
-            сравнения облика (external-widgets-config-probe.test.ts, «облик не зависит от года сборки»). */}
-        <div class="award-row" data-award-row>
-          {badges.map((badge) => <AwardBadge badge={badge} />)}
-        </div>
-        {/* Поясняющего абзаца здесь нет намеренно. Мокап варианта C держал под знаком
-            подпись «Оценки собираются на Яндекс.Картах…», но владелец 23.08.2026 уже снял
-            поясняющий абзац из этой секции, и гейт на него стоит
-            (`tests/external-widgets-dist.test.ts`, «вводного абзаца о площадке в секции нет»).
-            Из мокапа берётся раскладка, а не отменённое им решение. */}
-        <a class="reviews-link" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
-          Карточка института на Яндекс.Картах
-        </a>
-      </aside>
+    {/* Знак — отдельной полосой ПОД отзывами, крупно и по центру (утверждённый вариант B,
+        владелец 2026-09-05). Отдельная полоса, а не соседство с виджетом: рядом с ним знак
+        читался как часть его содержимого, то есть как утверждение сервиса о себе, а не
+        свидетельство, которое приводит сайт.
+
+        Поясняющей подписи здесь нет намеренно: владелец снял поясняющий абзац из этой
+        секции 23.08.2026, и гейт на него стоит (`tests/external-widgets-dist.test.ts`,
+        «вводного абзаца о площадке в секции нет»). Из мокапа берётся раскладка, а не
+        отменённое им решение. */}
+    <div class="award-band">
+      {/* Строка знаков наград: рамка не зависит от состава — при нуле знаков внутри она
+          остаётся той же высоты, иначе сдвиг соседа ушёл бы за пределы маски датозависимого
+          сравнения облика (external-widgets-config-probe.test.ts, «облик не зависит от года сборки»). */}
+      <div class="award-row" data-award-row>
+        {badges.map((badge) => <AwardBadge badge={badge} />)}
+      </div>
+      <a class="reviews-link" href={REVIEWS_PAGE_HREF} target="_blank" rel="noopener">
+        Карточка института на Яндекс.Картах
+      </a>
     </div>
   </div>
 
@@ -139,23 +138,16 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
     margin-bottom: 1.5rem;
   }
 
-  /* Две колонки. Виджет не сжимается ниже своей ширины, пока она помещается: его
-     содержимое отдаёт чужой документ, и растягивание колонки под остаток строки вернуло бы
-     ту самую пустую заливку, ради которой ширина и ограничена. Когда боковая колонка рядом
-     не помещается, она переносится вниз — своей медиазапросной точки здесь нет, потому что
-     точка перелома задана суммой 760 + 3rem + 15rem, а не выбранным числом. */
-  .reviews-layout {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 1.5rem 3rem;
-  }
-
-  .reviews-aside {
-    flex: 1 1 15rem;
-    max-width: 20rem;
+  /* Полоса знака: отдельный блок под отзывами, всё по центру. Отбивка сверху линией, а не
+     только отступом — полоса должна читаться как отдельное утверждение, а не как подпись
+     виджета. */
+  .award-band {
+    margin-top: 3rem;
+    padding-top: 2.5rem;
+    border-top: 1px solid var(--color-gray-200, #e5e5e5);
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 1.25rem;
   }
 
@@ -164,12 +156,22 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
     font-weight: 500;
   }
 
+  /* Рамка строки знаков не зависит от их состава — отсюда `min-height` под увеличенный
+     кадр (150 × 3 = 450 по ширине, 50 × 3 = 150 по высоте; ниже 482 px окна множитель 2).
+     При нуле знаков высота остаётся прежней, иначе гашение сдвигало бы соседа. */
   .award-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 0.6rem;
-    min-height: 3rem;
+    min-height: 150px;
+  }
+
+  @media (max-width: 481px) {
+    .award-row {
+      min-height: 100px;
+    }
   }
 
   .reviews-embed {
@@ -188,7 +190,6 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
        Ниже 760 px ограничение не действует: на 736 и 343 виджет занимает всю ширину
        (замерено на стенде). */
     max-width: 760px;
-    flex: 0 1 760px;
 
     /* Высота — тоже в ПИКСЕЛЯХ и по той же причине, что ширина: содержимое отдаёт чужой
        документ, и наш корневой размер шрифта на него не влияет. Число измерено двоичным

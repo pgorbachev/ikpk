@@ -279,27 +279,49 @@ test.describe('встраивание занимает отведённое ем
         `встраивание высотой ${inner!.height}: отзывы не помещаются, вернётся внутренняя прокрутка`,
       ).toBeGreaterThanOrEqual(WIDGET_CONTENT_HEIGHT);
 
-      // Знак — СБОКУ от встраивания там, где колонки помещаются рядом, и НИЖЕ него, где не
-      // помещаются. Прежняя редакция требовала общего левого края: знак стоял над виджетом и
-      // читался как часть его содержимого. Утверждённый вариант C (владелец, 2026-09-05)
-      // ставит его в правую колонку.
+      // Знак — отдельной полосой ПОД встраиванием и по ЦЕНТРУ контейнера, на обеих ширинах.
+      // Утверждённый вариант B (владелец, 2026-09-05). Прежние редакции требовали то общего
+      // левого края со знаком (знак стоял над виджетом), то соседства справа (вариант C);
+      // обе проверялись на этом же месте, поэтому здесь названо, что именно сменилось.
       const badge = page.locator('[data-award-row]');
       await expect(badge, 'строки знаков нет — сравнивать не с чем').toHaveCount(1);
       const badgeBox = await badge.boundingBox();
       expect(badgeBox, 'коробка строки знаков не измерена').not.toBeNull();
-      if (width >= 1280) {
-        expect(
-          badgeBox!.x,
-          `знак начинается на ${badgeBox!.x}, встраивание кончается на ${outer!.x + outer!.width}: ` +
-            'колонки не разошлись по горизонтали',
-        ).toBeGreaterThanOrEqual(outer!.x + outer!.width);
-      } else {
-        expect(
-          badgeBox!.y,
-          `знак на ${badgeBox!.y}, встраивание кончается на ${outer!.y + outer!.height}: ` +
-            'на узкой ширине колонки не сложились в одну',
-        ).toBeGreaterThanOrEqual(outer!.y + outer!.height);
-      }
+      expect(
+        badgeBox!.y,
+        `знак на ${badgeBox!.y}, встраивание кончается на ${outer!.y + outer!.height}: ` +
+          'знак не встал отдельной полосой под отзывами',
+      ).toBeGreaterThanOrEqual(outer!.y + outer!.height);
+
+      // Центр — по КОНТЕЙНЕРУ секции, а не по встраиванию: встраивание уже 760 px и стоит
+      // слева, поэтому «по центру виджета» и «по центру полосы» — разные места, и первое
+      // выглядело бы съехавшим влево.
+      const container = page.locator(`[${SEL_REVIEWS_SECTION}] .container`);
+      await expect(container, 'контейнера секции нет — центрировать не относительно чего').toHaveCount(1);
+      const containerBox = await container.boundingBox();
+      expect(containerBox, 'коробка контейнера не измерена').not.toBeNull();
+      const badgeCentre = badgeBox!.x + badgeBox!.width / 2;
+      const containerCentre = containerBox!.x + containerBox!.width / 2;
+      expect(
+        Math.abs(badgeCentre - containerCentre),
+        `центр знака ${badgeCentre}, центр контейнера ${containerCentre}: полоса не по центру`,
+      ).toBeLessThanOrEqual(1);
+
+      // Знак УВЕЛИЧЕН, а не показан натуральным кадром 150×50. Проверяется сам `<iframe>`:
+      // сервис отдаёт только 150×50 (девять проб 2026-09-05), поэтому крупный вид держится
+      // на нашем масштабировании, и потеря `transform` вернула бы марку размером с подпись.
+      const badgeFrame = page.locator('[data-award-badge] iframe');
+      await expect(badgeFrame, 'встраивание знака не подставлено').toHaveCount(1);
+      const scaled = await badgeFrame.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height };
+      });
+      const factor = width >= 482 ? 3 : 2;
+      expect(
+        scaled.w,
+        `знак выведен шириной ${scaled.w} при ожидаемых ${150 * factor}: увеличение не применилось`,
+      ).toBeCloseTo(150 * factor, 0);
+      expect(scaled.h, `высота знака ${scaled.h}`).toBeCloseTo(50 * factor, 0);
     });
   }
 });
