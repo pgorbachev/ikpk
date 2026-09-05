@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { TEMPLATES } from './helpers/templates';
+import { installThirdPartyGuard } from './helpers/third-party-guard';
+
+// Перехват сторонних запросов обязателен в КАЖДОМ браузерном прогоне — требование спеки
+// change `external-widgets`, и его стережёт `tests/external-widgets-guard.test.ts`. Здесь он
+// нужен и по сути, а не только по правилу: гейт открывает главную, где живут виджет отзывов
+// и знак награды, и без перехвата прогон ходил бы к Яндексу за настоящими ответами.
+// На предмет проверки перехват не влияет: измеряется НАША геометрия заголовков.
+test.beforeEach(async ({ page }) => {
+  await installThirdPartyGuard(page);
+});
 
 /**
  * Единое выравнивание заголовков секций — решение владельца 2026-09-05: «заголовки все
