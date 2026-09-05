@@ -34,6 +34,7 @@ openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
 openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
+openspec/changes/dependabot-policy-status/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
 openspec/changes/education-trust-and-admission-clarity/design.md :: dist/index.html
@@ -53,6 +54,7 @@ openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/comp
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/data.ts:17-22
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/preview/[variant].astro:31,70
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:14-15
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Programs.astro:26
@@ -60,8 +62,11 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: change/edu
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: content-quality.test.ts:474
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/index.html
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/sotrudnichestvo-s-nami/index.html
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: docs/client-input-2026-09-04.md@0710e4d0e155a6859c09c2681c92a354fd330916:1
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/dist
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Advantages.astro:14-15
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
@@ -110,6 +115,3 @@ openspec/specs/static-serving/spec.md :: application/xml
 openspec/specs/static-serving/spec.md :: text/html
 openspec/specs/static-serving/spec.md :: text/javascript
 openspec/specs/static-serving/spec.md :: text/xml
-
-# Git ref literal inherited by the modified dependency policy requirement.
-openspec/changes/dependabot-policy-status/specs/dependency-update-automation/spec.md :: refs/heads/main
