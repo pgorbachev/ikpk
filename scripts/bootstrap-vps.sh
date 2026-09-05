@@ -65,7 +65,10 @@ if [[ -n "$SECRET_NAMES_DECLARED" ]]; then
   done
 fi
 
-if ((${#MISSING_SECRETS[@]} > 0)); then
+# Снятие копии содержимого не касается системы управления и её секретов, поэтому
+# требовать их здесь — значит расширять круг тех, кому секреты нужны, без причины:
+# CI-джобу для резервной копии пришлось бы держать все шесть значений Strapi.
+if ((${#MISSING_SECRETS[@]} > 0)) && [[ "${BACKUP_ONLY:-}" != "1" ]]; then
   echo "[bootstrap] Обязательный секрет отсутствует: ${MISSING_SECRETS[*]}" >&2
   exit 4
 fi
@@ -143,6 +146,18 @@ done
   cat <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+
+# Одновременно на один хост — только один прогон. Без замка два запуска гонятся за сменой
+# симлинка релиза, перезапуском службы и перезаписью vhost, а гейт ревизии их не разводит:
+# при одинаковой объявленной ревизии он пропускает оба. Отказ быстрый и внятный — ждать
+# чужого прогона молча хуже, чем сказать, что он идёт.
+exec 9>/var/lock/ikpk-provision.lock
+if command -v flock >/dev/null 2>&1; then
+  if ! flock -n 9; then
+    echo "[bootstrap] На этом хосте уже идёт провижининг — отказ, чтобы не гоняться за общим состоянием" >&2
+    exit 10
+  fi
+fi
 
 STATE_FILE="/etc/ikpk-provision/state/${ENVIRONMENT}.env"
 if [[ ! -f "$STATE_FILE" ]]; then
@@ -353,6 +368,14 @@ Environment=PORT=${SERVICE_PORT}
 Environment=DATABASE_CLIENT=${CMS_DB_CLIENT:-sqlite}
 Environment=DATABASE_FILENAME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}/data.db
 Environment=NODE_ENV=production
+# Ограничения среды. Владение файлами защищает только от переписывания службой своего
+# кода; всё остальное — чтение доступных всем файлов машины, произвольный /tmp — оставалось
+# открытым. ReadWritePaths называет ровно те места, куда служба обязана писать.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/database ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3
@@ -522,6 +545,25 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       sleep 3
     done
     if ((healthy)); then
+      # Уборка старых релизов — только ПОСЛЕ подтверждённой живости, и текущий с предыдущим
+      # не трогаются никогда. Без уборки каждый прогон и каждое прерывание оставляли каталог
+      # навсегда; на тесном диске стенда это кончается переполнением, которое затем ломает
+      # установку зависимостей куда неприятнее, чем одна неудачная выкатка.
+      keep_releases="${CMS_RELEASES_KEEP:-5}"
+      while IFS= read -r stale; do
+        [[ -n "$stale" ]] || continue
+        [[ "$stale" == "$new_release" || "$stale" == "${previous_target:-}" ]] && continue
+        rm -rf "$stale"
+      done < <(find "${CMS_ARTIFACT_DIR}/releases" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -r | tail -n +$((keep_releases + 1)))
+      # Наборы зависимостей, на которые больше не ссылается ни один релиз, тоже уходят.
+      if [[ -d "${CMS_ARTIFACT_DIR}/deps" ]]; then
+        while IFS= read -r deps_candidate; do
+          [[ -n "$deps_candidate" ]] || continue
+          if ! find "${CMS_ARTIFACT_DIR}/releases" -maxdepth 2 -name node_modules -lname "${deps_candidate}/*" 2>/dev/null | grep -q .; then
+            [[ "$deps_candidate" == "${deps_dir:-}" ]] || rm -rf "$deps_candidate"
+          fi
+        done < <(find "${CMS_ARTIFACT_DIR}/deps" -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+      fi
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"
     else
       if [[ -n "$previous_target" ]]; then
