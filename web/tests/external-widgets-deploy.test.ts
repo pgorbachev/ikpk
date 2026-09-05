@@ -365,6 +365,45 @@ describe('выкладка стенда: своё ожидаемое и то ж�
     expect(run.code, `стенд отверг встраивание при объявленном адресе:\n${run.stderr}`).toBe(0);
   });
 
+  it('адрес стенда, ведущий на портал заказчика, выкладку НЕ проходит', async () => {
+    // Защита, потерянная при переходе стенда в прод-лайк. Раньше стенд физически не мог
+    // унести живой чат: ветвь сборки гасила встраивание при любой конфигурации. Теперь
+    // гашения нет, и «не пиши в системы заказчика» держалось бы на дисциплине оператора —
+    // одна переменная окружения отделяла бы приёмку от живых Открытых линий.
+    //
+    // Перечень порталов берётся ИЗ ДАННЫХ заказчика, а не из литерала: их два
+    // (`b24-cbqwqo` и `b24-kbo5ls`, 125 вхождений в discovery/), и привязка к одному
+    // отставала бы от предмета молча — та же причина, по которой так устроен
+    // `form_links_match_mode`.
+    const customerPortal = 'https://b24-cbqwqo.bitrix24site.ru/crm/site_button/loader_9_x.js';
+    const dir = distRaw({
+      'index.html': `<a href="/demo-zayavka">Записаться</a>\n${withChat(customerPortal)}`,
+    });
+    const run = await chatWidget(dir, 'stand', customerPortal);
+    expect(run.code, 'стенд принял адрес загрузчика на портале заказчика').toBe(1);
+    expect(run.stderr).toMatch(/портал заказчика/i);
+  });
+
+  it('адрес стенда на постороннем портале выкладку проходит', async () => {
+    // Различение, а не запрет: проверка, отвергающая любой адрес, была бы зелёной и для
+    // реализации, которая порталов заказчика не знает вовсе.
+    const dir = distRaw({
+      'index.html': `<a href="/demo-zayavka">Записаться</a>\n${withChat(LOADER_OFF_PORTAL)}`,
+    });
+    const run = await chatWidget(dir, 'stand', LOADER_OFF_PORTAL);
+    expect(run.code, `сторонний портал отвергнут:\n${run.stderr}`).toBe(0);
+  });
+
+  it('боевой режим портал заказчика принимает', async () => {
+    // Запрет относится к стенду и только к нему: на бою портал заказчика — норма.
+    const customerPortal = 'https://b24-cbqwqo.bitrix24site.ru/crm/site_button/loader_9_x.js';
+    const dir = distRaw({
+      'index.html': `<a href="https://b24-cbqwqo.bitrix24site.ru/news/">Записаться</a>\n${withChat(customerPortal)}`,
+    });
+    const run = await chatWidget(dir, 'prod', customerPortal);
+    expect(run.code, `боевой режим отверг портал заказчика:\n${run.stderr}`).toBe(0);
+  });
+
   it('объявленное отсутствие и встраивание в выводе — расхождение и на стенде', async () => {
     // Ветвь, которой раньше не было: при `none` встраивания быть не должно ни в одном
     // режиме. Без неё «стенд теперь всё пропускает» выглядело бы так же, как исправная
