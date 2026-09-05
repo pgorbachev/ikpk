@@ -253,10 +253,7 @@ describe('repository protection activation contract', () => {
     new URL('./fixtures/dependabot-auto-merge/repository-policy-plan.json', import.meta.url),
     'utf8',
   )) as {
-    eligibilityRuleset: {
-      requiredCheck: string;
-      bypassActors: Array<{ actor: string; mode: string }>;
-    };
+    dependabotPolicyStatusesRequiredByBranchProtection: string[];
     ordinaryBranchProtection: {
       branch: string;
       enforceAdmins: boolean;
@@ -265,11 +262,8 @@ describe('repository protection activation contract', () => {
     };
   };
 
-  it('keeps the Eligibility gate in a dedicated owner PR-only bypass ruleset', () => {
-    expect(plan.eligibilityRuleset.requiredCheck).toBe(ELIGIBILITY_NAME);
-    expect(plan.eligibilityRuleset.bypassActors).toEqual([
-      { actor: 'repository-owner', mode: 'pull_request' },
-    ]);
+  it('does not add Dependabot policy statuses to branch protection', () => {
+    expect(plan.dependabotPolicyStatusesRequiredByBranchProtection).toEqual([]);
   });
 
   it('keeps all other main protection enforced for admins without bypass', () => {
@@ -278,6 +272,7 @@ describe('repository protection activation contract', () => {
       enforceAdmins: true,
       bypassActors: [],
     });
-    expect(plan.ordinaryBranchProtection.excludedChecks).toEqual([ELIGIBILITY_NAME]);
+    expect(plan.ordinaryBranchProtection.excludedChecks).not.toContain(ELIGIBILITY_NAME);
+    expect(plan.ordinaryBranchProtection.excludedChecks).not.toContain(PROVENANCE_JOB);
   });
 });

@@ -22,23 +22,27 @@ export interface ClassificationInput {
 export interface Decision {
   ok: boolean;
   reason: string;
+  conclusion?: 'success' | 'failure' | 'neutral' | 'skipped';
 }
 
 export interface ClassificationDecision extends Decision {
   eligible: boolean;
+  status: 'eligible' | 'manual-review' | 'error';
 }
 
 export interface StoredResult {
   sha: string;
   kind: 'provenance' | 'eligibility-gate';
   producer: string;
-  conclusion: 'positive' | 'negative';
+  conclusion: 'positive' | 'negative' | 'skipped';
 }
 
 export interface HeadEvaluationInput {
   sha: string;
   autoMergeEnabled: boolean;
   classificationEligible: boolean;
+  classificationStatus?: ClassificationDecision['status'] | 'not-applicable';
+  action?: 'opened' | 'synchronize' | 'reopened' | 'auto_merge_enabled' | 'auto_merge_disabled';
   prAuthor: string;
   signature: {
     valid: boolean;
@@ -58,6 +62,9 @@ export interface HeadEvaluationInput {
 export interface HeadEvaluation {
   gate: Decision;
   evidence: StoredResult;
+  enableAutoMerge: boolean;
+  disableAutoMerge: boolean;
+  recordEvidence: boolean;
 }
 
 export interface MergeReadinessInput {
@@ -70,7 +77,7 @@ export interface ProvenanceEvidenceCandidate {
   sha: string;
   name: string;
   status: 'queued' | 'in_progress' | 'completed';
-  conclusion: 'success' | 'failure' | null;
+  conclusion: 'success' | 'failure' | 'neutral' | 'skipped' | null;
   appSlug: string;
   appId: number;
   eventName: string;
@@ -125,8 +132,15 @@ export interface AuthoritativeEvidenceRunInput {
   }>;
 }
 
-const allow = (reason: string): ClassificationDecision => ({ ok: true, eligible: true, reason });
-const deny = (reason: string): ClassificationDecision => ({ ok: true, eligible: false, reason });
+const allow = (reason: string): ClassificationDecision => ({
+  ok: true, eligible: true, status: 'eligible', conclusion: 'success', reason,
+});
+const deny = (reason: string): ClassificationDecision => ({
+  ok: true, eligible: false, status: 'manual-review', conclusion: 'neutral', reason,
+});
+const error = (reason: string): ClassificationDecision => ({
+  ok: false, eligible: false, status: 'error', conclusion: 'failure', reason,
+});
 
 export function normalizeDependabotEcosystem(ecosystem: string): string {
   if (ecosystem === 'npm_and_yarn') return 'npm';
@@ -178,7 +192,18 @@ function updateMatchesAllowTable(update: DependencyUpdate): boolean {
 
 export function classifyPullRequest(input: ClassificationInput): ClassificationDecision {
   if (!input.metadata || input.metadata.updates.length === 0) {
-    return deny('Dependabot metadata is unavailable');
+    return error('Dependabot metadata is unavailable; restore metadata and rerun the assessment');
+  }
+
+  if (input.metadata.updates.some((update) =>
+    typeof update.dependencyName !== 'string' || !update.dependencyName.trim() ||
+    !['semver-patch', 'semver-minor', 'semver-major'].includes(update.updateType))) {
+    return error('Dependabot metadata is malformed; restore metadata and rerun the assessment');
+  }
+  // A manual member must not hide a failed mandatory evaluation in a grouped PR.
+  if (input.metadata.updates.some((update) => update.ecosystem === 'npm' && update.packageName === 'web') &&
+      (!input.securityRegistry?.readable || !input.securityRegistry.consistent)) {
+    return error('security dependency registry is missing, unreadable, or stale; repair the registry');
   }
 
   for (const update of input.metadata.updates) {
@@ -187,7 +212,7 @@ export function classifyPullRequest(input: ClassificationInput): ClassificationD
     if (update.ecosystem === 'npm' && update.packageName === 'web') {
       const registry = input.securityRegistry;
       if (!registry?.readable || !registry.consistent) {
-        return deny('security dependency registry is missing, unreadable, or stale');
+        return error('security dependency registry is missing, unreadable, or stale; repair the registry');
       }
       if (registry.directPackages.includes(update.dependencyName)) {
         return deny(`direct security package ${update.dependencyName} requires manual review`);
@@ -222,6 +247,14 @@ function validOrigin(input: HeadEvaluationInput): boolean {
 }
 
 export function evaluateHead(input: HeadEvaluationInput): HeadEvaluation {
+  const recordEvidence = input.action === undefined || input.action === 'opened' || input.action === 'synchronize';
+  if (input.prAuthor && input.prAuthor !== 'dependabot[bot]') {
+    return {
+      gate: { ok: true, conclusion: 'skipped', reason: 'Not a Dependabot PR; follow the ordinary PR review process' },
+      evidence: { sha: input.sha, kind: 'provenance', producer: input.expectedEvidenceProducer, conclusion: 'skipped' },
+      enableAutoMerge: false, disableAutoMerge: false, recordEvidence,
+    };
+  }
   const originIsValid = validOrigin(input);
   const evidence: StoredResult = {
     sha: input.sha,
@@ -230,13 +263,22 @@ export function evaluateHead(input: HeadEvaluationInput): HeadEvaluation {
     conclusion: originIsValid ? 'positive' : 'negative',
   };
 
-  if (!input.classificationEligible) {
-    return { gate: { ok: false, reason: 'update class requires manual review' }, evidence };
-  }
+  const eligible = input.classificationEligible &&
+    (input.classificationStatus === undefined || input.classificationStatus === 'eligible');
+  const actions = {
+    evidence, recordEvidence,
+    enableAutoMerge: eligible && originIsValid && !input.autoMergeEnabled,
+    disableAutoMerge: input.autoMergeEnabled && (!eligible || !originIsValid),
+  };
   if (!originIsValid) {
-    return { gate: { ok: false, reason: 'head provenance is not valid for automatic merge' }, evidence };
+    return { ...actions, gate: { ok: false, conclusion: 'failure', reason: 'head provenance is not valid for automatic merge; have Dependabot regenerate the branch' } };
   }
-  return { gate: { ok: true, reason: 'eligible update with valid provenance' }, evidence };
+  if (!eligible) {
+    return input.classificationStatus === 'manual-review'
+      ? { ...actions, gate: { ok: true, conclusion: 'neutral', reason: 'update class requires manual review' } }
+      : { ...actions, gate: { ok: false, conclusion: 'failure', reason: 'classification could not be confirmed; repair the assessment inputs' } };
+  }
+  return { ...actions, gate: { ok: true, conclusion: 'success', reason: 'eligible update with valid provenance; await required CI checks' } };
 }
 
 export function evaluateMergeReadiness(input: MergeReadinessInput): Decision {

@@ -46,7 +46,10 @@ describe('Dependabot auto-merge classification table', () => {
     ['scripts major', update({ packageName: 'scripts', updateType: 'semver-major' })],
   ])('keeps %s on the manual path', async (_label, candidate) => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
-    expect(classifyPullRequest(input([candidate]))).toMatchObject({ eligible: false });
+    expect(classifyPullRequest(input([candidate]))).toMatchObject({
+      eligible: false,
+      status: 'manual-review',
+    });
   });
 
   it.each([
@@ -56,29 +59,36 @@ describe('Dependabot auto-merge classification table', () => {
   ] as const)('keeps cms %s (%s) manual', async (updateType, dependencySection) => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
     expect(classifyPullRequest(input([update({ packageName: 'cms', updateType, dependencySection })])))
-      .toMatchObject({ eligible: false });
+      .toMatchObject({ eligible: false, status: 'manual-review' });
   });
 
   it('uses the least permissive member of a grouped PR', async () => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
     expect(classifyPullRequest(input([update(), update({ packageName: 'cms' })])))
-      .toMatchObject({ eligible: false });
+      .toMatchObject({ eligible: false, status: 'manual-review' });
   });
 
   it('fails closed when Dependabot metadata is unavailable', async () => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
-    expect(classifyPullRequest(input([], { metadata: null }))).toMatchObject({ eligible: false });
+    expect(classifyPullRequest(input([], { metadata: null }))).toMatchObject({
+      eligible: false,
+      status: 'error',
+      conclusion: 'failure',
+    });
   });
 
   it.each(['parse5', 'playwright'])('keeps direct security package %s manual', async (dependencyName) => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
-    expect(classifyPullRequest(input([update({ dependencyName })]))).toMatchObject({ eligible: false });
+    expect(classifyPullRequest(input([update({ dependencyName })]))).toMatchObject({
+      eligible: false,
+      status: 'manual-review',
+    });
   });
 
   it('keeps a PR manual when an unrelated direct update changes a registered transitive node', async () => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
     expect(classifyPullRequest(input([update()], { changedLockfileNodes: ['node_modules/entities'] })))
-      .toMatchObject({ eligible: false });
+      .toMatchObject({ eligible: false, status: 'manual-review' });
   });
 
   it.each([
@@ -87,6 +97,10 @@ describe('Dependabot auto-merge classification table', () => {
     ['stale registry', { ...registry, consistent: false }],
   ])('keeps web manual for %s', async (_label, securityRegistry) => {
     const { classifyPullRequest } = await loadDependabotAutoMerge();
-    expect(classifyPullRequest(input([update()], { securityRegistry }))).toMatchObject({ eligible: false });
+    expect(classifyPullRequest(input([update()], { securityRegistry }))).toMatchObject({
+      eligible: false,
+      status: 'error',
+      conclusion: 'failure',
+    });
   });
 });

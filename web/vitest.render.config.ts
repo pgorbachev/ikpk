@@ -23,6 +23,9 @@ import { getViteConfig } from 'astro/config';
 // проверки, которые следят за тем, что ни один тест не потерялся.
 export default await getViteConfig({
   test: {
-    include: ['tests/schedule-filters.render.test.ts', 'tests/rich-content-render.test.ts'],
+    include: [
+      'tests/schedule-filters.render.test.ts',
+      'tests/rich-content-render.test.ts',
+    ],
   },
 })({ command: 'serve', mode: 'test' });

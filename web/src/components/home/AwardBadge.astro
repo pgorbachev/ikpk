@@ -1,0 +1,82 @@
+---
+// Официальное встраивание знака награды. Своей марки не рисуем — см. шапку
+// `lib/award-badges.ts`: копия была бы нашим утверждением о чужой награде.
+//
+// Встраивание ЛЕНИВОЕ и подставляется тем же наблюдателем, что виджет отзывов
+// (`Reviews.astro`): знак живёт внутри секции отзывов, появляется одновременно с ней, и
+// второй наблюдатель означал бы два признака одной цели. Разметка несёт адрес в
+// `data-award-embed`, скрипт секции создаёт `<iframe>` по появлении.
+import { badgeEmbedSrc, type AwardBadgeDeclaration } from '../../lib/award-badges';
+
+interface Props {
+  badge: AwardBadgeDeclaration;
+}
+
+const { badge } = Astro.props;
+const src = badgeEmbedSrc(badge);
+---
+
+{src && (
+  <div
+    class="award-badge"
+    data-award-badge
+    data-award-provider={badge.provider}
+    data-award-embed={src}
+    data-award-embed-title={badge.title}
+  >
+    <div class="award-badge-placeholder" aria-hidden="true"></div>
+  </div>
+)}
+
+<style>
+  /* Кадр знака задан сервисом и увеличен нами.
+
+     Крупнее сервис не отдаёт: девять проб 2026-09-05 (без параметров, `type` = award,
+     alt, rating, main, big; `theme=dark`; `size=large`; `lang=ru`) вернули ровно 150×50
+     каждая. Содержимое рисуется 150×50 и внутри большего кадра — увеличить окно нельзя,
+     останется пустое поле, поэтому масштабируется само встраивание.
+
+     Способ — `transform`, а не `zoom`. `zoom` семантически вернее (пересчитывает
+     раскладку, резкость гарантирована), но он моложе, а `transform` поддержан везде и
+     проверен снимками: в Chromium текст остаётся резким и на обычном экране, без
+     удвоенной плотности. В WebKit и Firefox НЕ проверено — движки локально не
+     установлены; названо здесь, чтобы это не читалось как проверенное.
+
+     Коробка резервирует ИТОГОВЫЙ размер (`transform` из потока не считается), иначе
+     появление встраивания сдвигало бы соседей — тот же инвариант, что у виджета отзывов. */
+  .award-badge {
+    --award-badge-scale: 3;
+    width: calc(150px * var(--award-badge-scale));
+    height: calc(50px * var(--award-badge-scale));
+    flex: none;
+    overflow: hidden;
+  }
+
+  /* 450 px не помещаются в контейнер уже ниже 482 px ширины окна (343 px содержимого на
+     375). Порог в пикселях намеренно: кадр знака задан чужим документом и от корневого
+     размера шрифта не зависит — тот же довод, что у ширины и высоты виджета отзывов. */
+  @media (max-width: 481px) {
+    .award-badge {
+      --award-badge-scale: 2;
+    }
+  }
+
+  .award-badge-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: var(--color-light-300, #fafafa);
+  }
+
+  /* Узел создаёт скрипт, поэтому scoped-селектор до него не доходит: Astro метит только
+     разметку компонента. Тот же класс дефекта, что чинили для карты (#202) и для виджета
+     отзывов; гейт на него стоит в `tests/repo-hygiene.test.ts`. */
+  .award-badge :global(iframe) {
+    display: block;
+    width: 150px;
+    height: 50px;
+    border: 0;
+    transform: scale(var(--award-badge-scale));
+    transform-origin: top left;
+  }
+</style>

@@ -9,6 +9,8 @@ import {
   isTrustedPositiveEvidence,
   normalizeDependabotEcosystem,
   type DependencyUpdate,
+  type HeadEvaluation,
+  type HeadEvaluationInput,
   type StoredResult,
 } from './lib/dependabot-auto-merge.ts';
 
@@ -166,7 +168,9 @@ function metadataFromEnvironment(): MetadataDependency[] | null {
   try {
     const parsed = JSON.parse(source) as unknown;
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    if (!parsed.every((item) => item && typeof item === 'object')) return null;
+    if (!parsed.every((item) => item && typeof item === 'object' &&
+      ['dependencyName', 'updateType', 'packageEcosystem'].every((key) =>
+        typeof item[key] === 'string' && item[key].trim().length > 0))) return null;
     return parsed as MetadataDependency[];
   } catch {
     return null;
@@ -176,7 +180,7 @@ function metadataFromEnvironment(): MetadataDependency[] | null {
 function packageRoots(files: string[]): string[] {
   const roots = new Set<string>();
   for (const file of files) {
-    const match = /^(web|scripts|cms)\/(?:package|npm-shrinkwrap)(?:-lock)?\.json$/.exec(file);
+    const match = /^(web|scripts|cms|payments)\/(?:package|npm-shrinkwrap)(?:-lock)?\.json$/.exec(file);
     if (match) roots.add(match[1]);
   }
   return [...roots].sort();
@@ -201,7 +205,7 @@ function metadataUpdates(metadata: MetadataDependency[] | null, files: string[])
   if (ecosystem !== 'npm') return null;
 
   const roots = packageRoots(files);
-  if (roots.length === 0 || !files.every((file) => /^(web|scripts|cms)\/(?:package|npm-shrinkwrap)(?:-lock)?\.json$/.test(file))) {
+  if (roots.length === 0 || !files.every((file) => /^(web|scripts|cms|payments)\/(?:package|npm-shrinkwrap)(?:-lock)?\.json$/.test(file))) {
     return null;
   }
   return roots.flatMap((packageName) => metadata.map((item) => ({
@@ -535,12 +539,63 @@ function output(name: string, value: string | boolean): void {
   appendFileSync(target, `${name}=${String(value).replace(/[\r\n]+/g, ' ')}\n`);
 }
 
+function publishAssessment(
+  current: ApiPullRequest,
+  event: PolicyEvent,
+  classification: { eligible: boolean; reason: string; status: string },
+  evaluation: HeadEvaluation,
+  topologyReason = '',
+): void {
+  const originPositive = evaluation.evidence.conclusion === 'positive';
+  const provenanceConclusion = originPositive ? 'success'
+    : evaluation.evidence.conclusion === 'skipped' ? 'skipped' : 'failure';
+  output('assessment-status', classification.status);
+  output('eligible', classification.eligible);
+  output('origin-positive', originPositive);
+  // gate-ok remains an authorization bit, independent of job completion success.
+  output('gate-ok', evaluation.gate.conclusion === 'success');
+  output('eligibility-conclusion', evaluation.gate.conclusion ?? 'failure');
+  output('provenance-conclusion', provenanceConclusion);
+  output('record-evidence', evaluation.recordEvidence);
+  output('enable-auto-merge', evaluation.enableAutoMerge);
+  output('disable-auto-merge', evaluation.disableAutoMerge);
+  output('auto-merge-enabled', current.auto_merge !== null);
+  output('pr-number', current.number.toString());
+  output('head-sha', current.head.sha);
+  output('reason', [classification.reason, topologyReason, evaluation.gate.reason].filter(Boolean).join('; '));
+  console.log(JSON.stringify({
+    pullRequest: current.number, head: current.head.sha, action: event.action,
+    classification, originPositive, gate: evaluation.gate,
+    enable: evaluation.enableAutoMerge, disable: evaluation.disableAutoMerge,
+  }, null, 2));
+}
+
 async function main(): Promise<void> {
   const event = policyEvent();
   const { owner, repo } = repository();
   const current = await githubApi<ApiPullRequest>(`/repos/${owner}/${repo}/pulls/${event.pullRequestNumber}`);
+  if (!current || current.number !== event.pullRequestNumber ||
+      typeof current.head?.sha !== 'string' || !current.head.sha ||
+      typeof current.user?.login !== 'string' || !current.user.login.trim() ||
+      !Object.hasOwn(current, 'auto_merge') ||
+      (current.auto_merge !== null && (typeof current.auto_merge !== 'object' || Array.isArray(current.auto_merge)))) {
+    throw new Error('fresh pull-request snapshot is malformed');
+  }
   if (current.head.sha !== event.headSha) {
     throw new Error(`event head ${event.headSha} is stale; current head is ${current.head.sha}`);
+  }
+
+  if (current.user.login !== 'dependabot[bot]') {
+    const evaluation = evaluateHead({
+      sha: current.head.sha, autoMergeEnabled: current.auto_merge !== null,
+      classificationEligible: false, classificationStatus: 'not-applicable',
+      action: event.action as HeadEvaluationInput['action'],
+      prAuthor: current.user.login, actor: null,
+      signature: { valid: false, wasSignedByGitHub: false, signerLogin: null },
+      expectedEvidenceProducer: EVIDENCE_PRODUCER,
+    });
+    publishAssessment(current, event, { eligible: false, status: 'not-applicable', reason: '' }, evaluation);
+    return;
   }
 
   const files = await allPullRequestFiles(current.number);
@@ -583,6 +638,8 @@ async function main(): Promise<void> {
     sha: current.head.sha,
     autoMergeEnabled: current.auto_merge !== null,
     classificationEligible: classification.eligible,
+    classificationStatus: classification.status,
+    action: event.action as HeadEvaluationInput['action'],
     prAuthor: current.user.login,
     signature,
     actor: directDependabot
@@ -596,32 +653,7 @@ async function main(): Promise<void> {
     storedResults,
     expectedEvidenceProducer: EVIDENCE_PRODUCER,
   });
-  const originPositive = evaluation.evidence.conclusion === 'positive';
-  const enable = current.user.login === 'dependabot[bot]' && classification.eligible &&
-    originPositive && current.auto_merge === null;
-  const disable = current.auto_merge !== null && (!classification.eligible || !originPositive);
-  const reason = [classification.reason, topologyReason, evaluation.gate.reason].filter(Boolean).join('; ');
-
-  output('eligible', classification.eligible);
-  output('origin-positive', originPositive);
-  output('gate-ok', evaluation.gate.ok);
-  output('record-evidence', introducesHead);
-  output('enable-auto-merge', enable);
-  output('disable-auto-merge', disable);
-  output('auto-merge-enabled', current.auto_merge !== null);
-  output('pr-number', current.number.toString());
-  output('head-sha', current.head.sha);
-  output('reason', reason);
-  console.log(JSON.stringify({
-    pullRequest: current.number,
-    head: current.head.sha,
-    action,
-    classification,
-    originPositive,
-    gate: evaluation.gate,
-    enable,
-    disable,
-  }, null, 2));
+  publishAssessment(current, event, classification, evaluation, topologyReason);
 }
 
 await main();
