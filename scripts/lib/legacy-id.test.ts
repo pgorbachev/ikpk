@@ -3,9 +3,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeLegacyId } from './legacy-id.js';
+import { legacyTransferDir } from './legacy-transfer-dir.js';
 
+// Путь к материалу переноса берётся через `legacyTransferDir`, а не литералом: принятое
+// требование «контент читается только через снимок» стережёт совместное присутствие сегментов
+// пути в исходниках, и литерал здесь сделал бы тест обходным чтением.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const ENTITIES = join(REPO_ROOT, 'discovery', 'entities');
+const ENTITIES = legacyTransferDir(REPO_ROOT);
 
 describe('приведение legacy_id к строке', () => {
   // РЕГРЕСС: импорт терял 28 преподавателей из 29 на HTTP 400

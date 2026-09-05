@@ -98,9 +98,21 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
   const seminarSlugs = slugsOf(seminars);
 
   if (types.programs || types.course_groups) {
+    // Сравнивать надо ОДНОРОДНОЕ с однородным. Семинар ссылается на программу двумя разными
+    // способами, и они живут в разных пространствах имён: `program` — это слуг, а
+    // `course_group_legacy_id` — идентификатор legacy-сайта, что видно прямо из имени поля.
+    // Прежняя редакция брала любое из двух и искала в множестве СЛУГОВ, поэтому объявляла
+    // сломанными все 126 связей при том, что по legacy_id целы все 126.
+    const programLegacyIds = new Set(
+      (programs ?? []).map((record) => String(record.legacy_id ?? '')).filter(Boolean),
+    );
     for (const seminar of seminars) {
-      const program = seminar.program ?? seminar.course_group_legacy_id;
-      if (isEmpty(program) || !programSlugs.has(String(program))) {
+      const bySlug = seminar.program;
+      const byLegacyId = seminar.course_group_legacy_id;
+      const linked = !isEmpty(bySlug)
+        ? programSlugs.has(String(bySlug))
+        : !isEmpty(byLegacyId) && programLegacyIds.has(String(byLegacyId));
+      if (!linked) {
         violations.push({ type: 'seminars', recordId: recordId(seminar), rule: 'broken-relation' });
       }
     }
