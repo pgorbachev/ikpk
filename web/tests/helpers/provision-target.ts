@@ -8,11 +8,16 @@
  * Три ограничения названы вслух, а не обойдены молчанием:
  *
  * 1. **bind-mount недоступен** (colima), поэтому файлы кладутся `docker cp`.
- * 2. **systemd в контейнере не работает.** Вместо него в образе стоит заглушка
+ * 2. **systemd в контейнере не работает** как менеджер служб. Вместо него в образе стоит заглушка
  *    `systemctl`, которая записывает вызовы в `/var/log/systemctl-stub.log` и
  *    поднимает nginx обычным процессом. Значит проверяется НЕ поведение systemd, а
  *    факт и состав вызовов плюс наличие и текст `unit`-файла. Тест, которому нужен
  *    настоящий systemd, обязан это сказать, а не считать заглушку доказательством.
+ *    **Разбор юнита при этом настоящий:** в образе стоит пакет `systemd` ради
+ *    `systemd-analyze verify`, который читает юнит теми же правилами, что и сервер.
+ *    Это закрывает класс, который заглушка не видит по устройству: директива в неверной
+ *    секции systemd не отвергается, а МОЛЧА игнорируется, и сверка текста юнита с
+ *    ожидаемым такой юнит считает верным.
  * 3. **транспорт до цели — заглушка `ssh`.** `scripts/bootstrap-vps.sh` ходит на хост
  *    по ssh; внутри контейнера `/usr/bin/ssh` подменён на исполнение полезной нагрузки
  *    локально. Проверяется тело провижининга, а не транспорт.
@@ -22,7 +27,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-export const IMAGE = 'ikpk-provision-target:test';
+// Тег меняется вместе с составом образа: закэшированный образ прежнего состава иначе
+// молча используется дальше, и новая проверка не выполняется вовсе.
+export const IMAGE = 'ikpk-provision-target:test-systemd';
 
 export type Run = { status: number; stdout: string; stderr: string; output: string };
 
@@ -97,7 +104,10 @@ export function ensureImage(): void {
     dockerOrThrow([
       'exec', id, 'bash', '-c',
       'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && ' +
-        'apt-get install -y -qq --no-install-recommends nginx rsync curl iproute2 procps ca-certificates >/dev/null',
+        // systemd ставится ради НАСТОЯЩЕГО systemd-analyze: он разбирает юнит теми же
+        // правилами, что и systemd на сервере, и ловит директиву в неверной секции —
+        // ровно то, чего заглушка systemctl не видит по устройству.
+        'apt-get install -y -qq --no-install-recommends nginx rsync curl iproute2 procps ca-certificates systemd >/dev/null',
     ]);
     dockerOrThrow(['exec', '-i', id, 'bash', '-c', 'cat > /usr/bin/ssh && chmod +x /usr/bin/ssh'], { input: SSH_SHIM });
     dockerOrThrow(['exec', '-i', id, 'bash', '-c', 'cat > /usr/bin/systemctl && chmod +x /usr/bin/systemctl'], {

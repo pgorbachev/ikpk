@@ -93,7 +93,10 @@ STATE_DIR="/etc/ikpk-provision/state"
 # приёмом, что и содержимое сайта — заранее собранным, в новый releases/<ревизия>,
 # атомарная смена делается на удалённой стороне. Пусто — сборки ещё нет, шаг
 # пропускается: "не наблюдалось в природе" не повод падать. ---
-CMS_ARTIFACT_SOURCE_DECLARED="$(declared_get CMS_ARTIFACT_SOURCE)"
+# Источник артефакта — вход ОПЕРАТОРА (путь на его машине), а не состояние сервера, поэтому
+# окружение имеет приоритет над объявленным. Прежде читалось только объявленное, и переданный
+# оператором путь молча игнорировался: шаг доставки пропускался, а прогон отчитывался успехом.
+CMS_ARTIFACT_SOURCE_DECLARED="${CMS_ARTIFACT_SOURCE:-$(declared_get CMS_ARTIFACT_SOURCE)}"
 CMS_ARTIFACT_DIR_DECLARED="$(declared_get CMS_ARTIFACT_DIR)"
 CMS_ARTIFACT_RELEASE=""
 if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]]; then
@@ -161,7 +164,15 @@ VHOST="/etc/nginx/sites-available/${SITE_NAME}.conf"
 REVISION_FILE="${REVISION_FILE:-/var/lib/ikpk-provision/revision}"
 BACKUP_DIR="${BACKUP_DIR:-/etc/nginx/sites-available}"
 CONTENT_BACKUP_DIR="${CONTENT_BACKUP_DIR:-/var/backups/${SITE_NAME}/current}"
-SERVICE_PROXY_SNIPPET="${SERVICE_PROXY_SNIPPET:-/etc/nginx/snippets/ikpk-cms.conf}"
+# ПУСТОЕ значение здесь означает «проксирование отключено сознательно», а не «не задано».
+# `${VAR:-умолчание}` эти два случая не различает и подставляет умолчание на пустом — так
+# отключение админки молча превратилось в её публикацию на живом стенде. Различаем по НАЛИЧИЮ
+# ключа в объявленном состоянии: объявлен пустым — остаётся пустым; не объявлен вовсе — умолчание.
+if grep -qE "^[[:space:]]*SERVICE_PROXY_SNIPPET=" "$STATE_FILE"; then
+  : "${SERVICE_PROXY_SNIPPET=}"
+else
+  SERVICE_PROXY_SNIPPET="/etc/nginx/snippets/ikpk-cms.conf"
+fi
 VHOST_MARKER="# managed-by: ikpk-provisioning"
 
 CHANGED=0
@@ -252,16 +263,6 @@ else
   report unchanged "владелец ${WEB_ROOT}"
 fi
 
-# --- Каталог данных системы управления ---
-if [[ -n "${CMS_DATA_DIR:-}" ]]; then
-  if [[ -d "$CMS_DATA_DIR" ]]; then
-    report unchanged "каталог данных ${CMS_DATA_DIR}"
-  else
-    mkdir -p "$CMS_DATA_DIR"
-    report changed "каталог данных ${CMS_DATA_DIR}"
-  fi
-fi
-
 # --- Учётная запись службы системы управления (Requirement «Служба системы управления
 # не доступна снаружи напрямую», объём 5b.1 — код самой CMS вне объёма). ---
 if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
@@ -270,6 +271,27 @@ if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
   else
     useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_ACCOUNT"
     report changed "учётная запись ${SERVICE_ACCOUNT} создана"
+  fi
+fi
+
+# --- Каталог данных системы управления. Стоит ПОСЛЕ учётной записи: каталог обязан
+# принадлежать службе, иначе она не создаст в нём базу, а причина видна только в журнале
+# службы, а не в выводе провижининга. ---
+if [[ -n "${CMS_DATA_DIR:-}" ]]; then
+  if [[ -d "$CMS_DATA_DIR" ]]; then
+    report unchanged "каталог данных ${CMS_DATA_DIR}"
+  else
+    mkdir -p "$CMS_DATA_DIR"
+    report changed "каталог данных ${CMS_DATA_DIR}"
+  fi
+  if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+    owner_now="$(stat -c '%U:%G' "$CMS_DATA_DIR" 2>/dev/null || echo '?')"
+    if [[ "$owner_now" == "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" ]]; then
+      report unchanged "владелец ${CMS_DATA_DIR}"
+    else
+      chown -R "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" "$CMS_DATA_DIR"
+      report changed "владелец ${CMS_DATA_DIR} → ${SERVICE_ACCOUNT}"
+    fi
   fi
 fi
 
@@ -295,6 +317,11 @@ if [[ -n "${SERVICE_UNIT:-}" ]]; then
 [Unit]
 Description=IKPK CMS service (${ENVIRONMENT})
 After=network.target
+# Предел перезапусков живёт в [Unit], а не в [Service]: в [Service] systemd его МОЛЧА
+# игнорирует ("Unknown key ... ignoring" в журнале), и защиты нет вовсе. Проверено на
+# стенде: с ключами в [Service] счётчик перезапусков дошёл до 185.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -303,6 +330,9 @@ Group=${SERVICE_ACCOUNT:-root}
 WorkingDirectory=${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current
 EnvironmentFile=-${SECRET_FILE:-/dev/null}
 Environment=CMS_DATA_DIR=${CMS_DATA_DIR:-/var/lib/ikpk-cms}
+# HOME обязателен: учётная запись создаётся без домашнего каталога, а Strapi пишет туда
+# служебные файлы и падает с EACCES на mkdir /home/<служба>.
+Environment=HOME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}
 Environment=LISTEN_ADDR=${SERVICE_ADDR:-127.0.0.1:0}
 Environment=HOST=${SERVICE_HOST}
 Environment=PORT=${SERVICE_PORT}
@@ -325,10 +355,27 @@ UNITEOF
     report changed "unit-файл ${SERVICE_UNIT}"
     command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload || true
   fi
+  # Юнит сверяется с самим systemd, а не только с ожидаемым текстом. Причина: неверную
+  # СЕКЦИЮ systemd не отвергает — он пишет «Unknown key ... ignoring» в журнал и работает
+  # без директивы. Так предел перезапусков в [Service] оказался декоративным, и мы узнали
+  # об этом только по счётчику 185 на стенде. Отсутствие самого systemd-analyze при живом
+  # systemctl — тоже отказ: это «проверить не смог», а не «дефектов нет».
+  if command -v systemctl >/dev/null 2>&1; then
+    if ! command -v systemd-analyze >/dev/null 2>&1; then
+      echo "[bootstrap] systemd есть, а systemd-analyze нет: юнит проверить нечем" >&2
+      exit 1
+    fi
+    unit_verify="$(systemd-analyze verify "$SERVICE_UNIT" 2>&1 || true)"
+    if grep -qE 'Unknown (key|section|lvalue)|Refusing' <<<"$unit_verify"; then
+      echo "[bootstrap] systemd не принимает директивы юнита ${SERVICE_UNIT}:" >&2
+      printf '%s\n' "$unit_verify" >&2
+      exit 1
+    fi
+  fi
 fi
 
-# --- Секрет в покое: значение читается из окружения процесса (доставлено ssh
-# SendEnv/AcceptEnv, design.md Решение 3 — форма, запрещающая аргументы команд),
+# --- Секрет в покое: значение читается из окружения процесса (доставлено потоком stdin
+# удалённой оболочки — sshd отбрасывает всё, чего нет в AcceptEnv, молча),
 # файл пишется атомарно (временное имя в том же каталоге + mv), режим и владелец
 # приводятся к объявленным (Requirement «Секреты не хранятся в репозитории…»). ---
 if [[ -n "${SECRET_FILE:-}" && -n "${SECRET_NAMES:-}" ]]; then
@@ -395,7 +442,15 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       fi
     fi
     ln -sfn "${shared_deps}/node_modules" "${new_release}/node_modules"
-    previous_target="$(readlink -f "$current_link" 2>/dev/null || true)"
+    # ВАЖНО: `readlink -f` на несуществующем симлинке возвращает САМ путь ссылки, а не пустоту.
+    # Откат по такому значению делал `current` ссылкой на себя, служба падала с
+    # «Too many levels of symbolic links» и перезапускалась бесконечно (замерено на стенде:
+    # 179 попыток). Предыдущей версией считаем только то, что реально указывает на релиз.
+    previous_target=""
+    if [[ -L "$current_link" ]]; then
+      candidate="$(readlink -f "$current_link" 2>/dev/null || true)"
+      [[ -n "$candidate" && "$candidate" != "$current_link" && -d "$candidate" ]] && previous_target="$candidate"
+    fi
     ln -sfn "$new_release" "${current_link}.new"
     mv -T "${current_link}.new" "$current_link"
     unit_name="$(basename "${SERVICE_UNIT:-ikpk-cms.service}")"
