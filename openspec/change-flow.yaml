@@ -213,3 +213,11 @@ transitions:
 #    reason: >-
 #      Почему перешёл.
 #    blocked_on: "PR #186"        # обязательно для blocked
+
+  - change: dependabot-policy-status
+    to: active
+    at: 2026-09-05T05:35:40Z
+    reason: >-
+      Owner approved implementation in the current conversation. Fresh origin/main
+      is 7afc15c01485524c9eb9dd4bb3dcd5b95f387473; one active change preceded this entry.
+      This work implements the approved human-skipped/manual-neutral status matrix.

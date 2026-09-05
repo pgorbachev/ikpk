@@ -1,20 +1,9 @@
 {
-  "eligibilityRuleset": {
-    "name": "Dependabot auto-merge eligibility",
-    "requiredCheck": "Dependabot auto-merge / Eligibility gate",
-    "bypassActors": [
-      {
-        "actor": "repository-owner",
-        "mode": "pull_request"
-      }
-    ]
-  },
+  "dependabotPolicyStatusesRequiredByBranchProtection": [],
   "ordinaryBranchProtection": {
     "branch": "main",
     "enforceAdmins": true,
     "bypassActors": [],
-    "excludedChecks": [
-      "Dependabot auto-merge / Eligibility gate"
-    ]
+    "excludedChecks": []
   }
 }

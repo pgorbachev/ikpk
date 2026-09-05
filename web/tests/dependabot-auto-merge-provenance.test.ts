@@ -39,21 +39,49 @@ const update = (overrides: Partial<HeadEvaluationInput> = {}): HeadEvaluationInp
 });
 
 describe('mandatory eligibility gate and separate provenance evidence', () => {
-  it.each([false, true])('keeps an ordinary human PR ineligible when marker=%s', async (autoMergeEnabled) => {
+  it.each([false, true])('skips Dependabot policy for an ordinary human PR when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ autoMergeEnabled, prAuthor: 'maintainer', actor: { login: 'maintainer', kind: 'human' } })).gate)
-      .toMatchObject({ ok: false });
+    const result = evaluateHead(head({
+      autoMergeEnabled,
+      classificationEligible: false,
+      classificationStatus: 'not-applicable',
+      prAuthor: 'maintainer',
+      actor: { login: 'maintainer', kind: 'human' },
+    }));
+    expect(result.gate).toMatchObject({ ok: true, conclusion: 'skipped' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'skipped' });
+    expect(result.enableAutoMerge).toBe(false);
+    expect(result.disableAutoMerge).toBe(false);
   });
 
-  it.each([false, true])('keeps an ineligible Dependabot update red when marker=%s', async (autoMergeEnabled) => {
+  it.each([false, true])('keeps a Dependabot update with mandatory evaluation errors red when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ autoMergeEnabled, classificationEligible: false })).gate)
-      .toMatchObject({ ok: false });
+    const result = evaluateHead(head({
+      autoMergeEnabled,
+      classificationEligible: false,
+      classificationStatus: 'error',
+    }));
+    expect(result.gate).toMatchObject({ ok: false, conclusion: 'failure' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
+  });
+
+  it.each([false, true])('publishes neutral eligibility and positive provenance for a manual Dependabot class when marker=%s', async (autoMergeEnabled) => {
+    const { evaluateHead } = await loadDependabotAutoMerge();
+    const result = evaluateHead(head({
+      autoMergeEnabled,
+      classificationEligible: false,
+      classificationStatus: 'manual-review',
+    }));
+    expect(result.gate).toMatchObject({ ok: true, conclusion: 'neutral' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
+    expect(result.enableAutoMerge).toBe(false);
   });
 
   it.each([false, true])('keeps an eligible valid Dependabot head green when marker=%s', async (autoMergeEnabled) => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ autoMergeEnabled })).gate).toMatchObject({ ok: true });
+    const result = evaluateHead(head({ autoMergeEnabled, classificationStatus: 'eligible' }));
+    expect(result.gate).toMatchObject({ ok: true, conclusion: 'success' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'positive' });
   });
 
   it('fails when auto-merge is enabled for an invalid origin', async () => {
@@ -64,7 +92,13 @@ describe('mandatory eligibility gate and separate provenance evidence', () => {
 
   it('rejects a GitHub-signed API commit when the event actor is a human', async () => {
     const { evaluateHead } = await loadDependabotAutoMerge();
-    expect(evaluateHead(head({ actor: { login: 'maintainer', kind: 'human' } })).gate.ok).toBe(false);
+    const result = evaluateHead(head({
+      classificationEligible: false,
+      classificationStatus: 'manual-review',
+      actor: { login: 'maintainer', kind: 'human' },
+    }));
+    expect(result.gate).toMatchObject({ ok: false, conclusion: 'failure' });
+    expect(result.evidence).toMatchObject({ kind: 'provenance', conclusion: 'negative' });
   });
 
   it('rejects a Dependabot event actor when the commit lacks a platform signature', async () => {

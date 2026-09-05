@@ -110,3 +110,6 @@ openspec/specs/static-serving/spec.md :: application/xml
 openspec/specs/static-serving/spec.md :: text/html
 openspec/specs/static-serving/spec.md :: text/javascript
 openspec/specs/static-serving/spec.md :: text/xml
+
+# Git ref literal inherited by the modified dependency policy requirement.
+openspec/changes/dependabot-policy-status/specs/dependency-update-automation/spec.md :: refs/heads/main
