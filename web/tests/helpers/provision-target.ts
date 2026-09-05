@@ -31,6 +31,15 @@ export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..
 // молча используется дальше, и новая проверка не выполняется вовсе.
 export const IMAGE = 'ikpk-provision-target:test-systemd';
 
+/**
+ * Архитектура образа приравнивается к архитектуре ХОЗЯИНА. Без этого docker тянет образ
+ * по умолчанию реестра — на arm64-машине это оказался x86_64, и весь набор пошёл через
+ * эмуляцию qemu: один сценарий занял 17 минут вместо секунд, а прогон стал неотличим от
+ * зависшего. Скорость здесь не удобство: набор, который не дожидаются, не выполняется.
+ */
+const HOST_ARCH = process.arch === 'arm64' ? 'linux/arm64' : 'linux/amd64';
+const PLATFORM = ['--platform', HOST_ARCH];
+
 export type Run = { status: number; stdout: string; stderr: string; output: string };
 
 function docker(args: string[], opts: { input?: string; timeout?: number } = {}): Run {
@@ -99,7 +108,7 @@ exit 0
 export function ensureImage(): void {
   requireDocker();
   if (docker(['image', 'inspect', IMAGE]).status === 0) return;
-  const id = dockerOrThrow(['run', '-d', 'debian:12-slim', 'sleep', '900']).stdout.trim();
+  const id = dockerOrThrow(['run', '-d', ...PLATFORM, 'debian:12-slim', 'sleep', '900']).stdout.trim();
   try {
     dockerOrThrow([
       'exec', id, 'bash', '-c',
@@ -124,7 +133,7 @@ export class ProvisionTarget {
 
   static start(): ProvisionTarget {
     ensureImage();
-    const id = dockerOrThrow(['run', '-d', IMAGE, 'sleep', '1800']).stdout.trim();
+    const id = dockerOrThrow(['run', '-d', ...PLATFORM, IMAGE, 'sleep', '1800']).stdout.trim();
     const target = new ProvisionTarget(id);
     target.copyRepoDir('scripts');
     target.copyRepoDirIfExists('deploy');
@@ -134,13 +143,13 @@ export class ProvisionTarget {
   /** Второй контейнер той же сети — «снаружи». Netns не разделяется с целью. */
   static probe(command: string): Run {
     ensureImage();
-    return docker(['run', '--rm', IMAGE, 'bash', '-lc', command], { timeout: 60_000 });
+    return docker(['run', '--rm', ...PLATFORM, IMAGE, 'bash', '-lc', command], { timeout: 60_000 });
   }
 
   /** Наблюдатель снаружи, работающий во время провижининга. Возвращает id. */
   static startProbe(command: string): string {
     ensureImage();
-    return dockerOrThrow(['run', '-d', IMAGE, 'bash', '-lc', command]).stdout.trim();
+    return dockerOrThrow(['run', '-d', ...PLATFORM, IMAGE, 'bash', '-lc', command]).stdout.trim();
   }
 
   static probeOutput(id: string): string {
