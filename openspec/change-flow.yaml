@@ -221,3 +221,14 @@ transitions:
       Owner approved implementation in the current conversation. Fresh origin/main
       is 7afc15c01485524c9eb9dd4bb3dcd5b95f387473; one active change preceded this entry.
       This work implements the approved human-skipped/manual-neutral status matrix.
+
+  - change: dependabot-policy-status
+    to: blocked
+    at: 2026-09-05T06:33:47Z
+    reason: >-
+      Implementation merged in PR 218. Live human skipped/skipped and manual bot
+      neutral/success are confirmed; eligible refresh, transition acceptance and archive
+      remain. No command comments have been sent without owner permission.
+    blocked_on: >-
+      Owner permission for a Dependabot rebase command on PR 214, or a genuine new
+      Dependabot head arriving normally, followed by remaining live rollout acceptance.
