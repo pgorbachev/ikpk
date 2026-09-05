@@ -1,1 +1,142 @@
-[]
+[
+  {
+    "packageName": "@bruits/satteri-linux-arm64-gnu",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @bruits/satteri-linux-arm64-gnu@0.9.5; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@bruits/satteri-linux-arm64-gnu/0.9.5. No package or platform removed."
+  },
+  {
+    "packageName": "@bruits/satteri-linux-arm64-musl",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @bruits/satteri-linux-arm64-musl@0.9.5; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@bruits/satteri-linux-arm64-musl/0.9.5. No package or platform removed."
+  },
+  {
+    "packageName": "@bruits/satteri-linux-x64-gnu",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @bruits/satteri-linux-x64-gnu@0.9.5; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@bruits/satteri-linux-x64-gnu/0.9.5. No package or platform removed."
+  },
+  {
+    "packageName": "@bruits/satteri-linux-x64-musl",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @bruits/satteri-linux-x64-musl@0.9.5; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@bruits/satteri-linux-x64-musl/0.9.5. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-arm",
+    "os": "linux",
+    "cpu": "arm",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-arm@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-arm/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-arm64",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-arm64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-arm64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-ppc64",
+    "os": "linux",
+    "cpu": "ppc64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-ppc64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-ppc64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-riscv64",
+    "os": "linux",
+    "cpu": "riscv64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-riscv64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-riscv64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-s390x",
+    "os": "linux",
+    "cpu": "s390x",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-s390x@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-s390x/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linux-x64",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-libvips-linux-x64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linux-x64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linuxmusl-arm64",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @img/sharp-libvips-linuxmusl-arm64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-arm64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-libvips-linuxmusl-x64",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @img/sharp-libvips-linuxmusl-x64@1.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-x64/1.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-arm",
+    "os": "linux",
+    "cpu": "arm",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-arm@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-arm/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-arm64",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-arm64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-arm64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-ppc64",
+    "os": "linux",
+    "cpu": "ppc64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-ppc64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-ppc64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-riscv64",
+    "os": "linux",
+    "cpu": "riscv64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-riscv64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-riscv64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-s390x",
+    "os": "linux",
+    "cpu": "s390x",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-s390x@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-s390x/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linux-x64",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to glibc for unchanged @img/sharp-linux-x64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linux-x64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linuxmusl-arm64",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @img/sharp-linuxmusl-arm64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linuxmusl-arm64/0.35.3. No package or platform removed."
+  },
+  {
+    "packageName": "@img/sharp-linuxmusl-x64",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Correct missing lockfile libc metadata to musl for unchanged @img/sharp-linuxmusl-x64@0.35.3; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@img/sharp-linuxmusl-x64/0.35.3. No package or platform removed."
+  }
+]
