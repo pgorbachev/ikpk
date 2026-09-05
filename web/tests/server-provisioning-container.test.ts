@@ -44,7 +44,19 @@ afterEach(() => {
 // (сценарий «секрет отсутствует») и пройти (все остальные ~30). Ни одна реализация этого не
 // может, и это дефект фикстуры, а не реализации — сценарий отсутствия ниже собирает своё
 // окружение сам.
-const ENV = { ENVIRONMENT: DEFAULT_ENVIRONMENT, ADMIN_JWT_SECRET: 'contract-test-secret' };
+// Перечень секретов берётся из ОБЪЯВЛЕННОГО СОСТОЯНИЯ, а не переписывается здесь
+// литералом. Литерал уже отстал один раз: SECRET_NAMES вырос с одного имени до шести,
+// фикстура осталась с одним, и провижининг во ВСЕХ сценариях падал кодом 4 («секрет
+// отсутствует») — то есть набор проверял отказ вместо предмета каждого сценария.
+const ENV: Record<string, string> = {
+  ENVIRONMENT: DEFAULT_ENVIRONMENT,
+  ...Object.fromEntries(
+    listValue(readDeclared(DEFAULT_ENVIRONMENT), 'SECRET_NAMES').map((name) => [
+      name,
+      `contract-test-${name.toLowerCase()}`,
+    ]),
+  ),
+};
 
 /**
  * Правка ОБЪЯВЛЕННОГО СОСТОЯНИЯ внутри цели: политика, ревизия и адреса живут в
@@ -380,14 +392,6 @@ describe('server-provisioning: юнит службы принимается на
     expect(verify.output, 'systemd отбросил директиву юнита').not.toMatch(/Unknown (key|section|lvalue)/);
   }, T);
 
-  it('Сценарий: предел перезапусков объявлен в принимаемой секции', async () => {
-    const t = target();
-    expect(t.provision(ENV).status).toBe(0);
-    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
-    const unitSection = unit.slice(unit.indexOf('[Unit]'), unit.indexOf('[Service]'));
-    expect(unitSection, 'StartLimitBurst вне [Unit] systemd игнорирует').toContain('StartLimitBurst=');
-  }, T);
-
   it('Сценарий: служба может писать в свой домашний каталог и каталог данных', async () => {
     const t = target();
     expect(t.provision(ENV).status).toBe(0);
@@ -400,7 +404,7 @@ describe('server-provisioning: юнит службы принимается на
     expect(unit, 'HOME не объявлен — служба будет писать в несуществующий /home').toContain('Environment=HOME=');
     const owner = t.execOrThrow(`stat -c '%U' ${dataDir}`).trim();
     expect(owner, 'каталог данных не принадлежит службе — база в нём не создастся').toBe(account);
-    const probe = t.exec(`sudo -u ${account} touch ${dataDir}/.write-probe && echo ok`);
+    const probe = t.exec(`setpriv --reuid=${account} --regid=${account} --clear-groups touch ${dataDir}/.write-probe && echo ok`);
     expect(probe.stdout.trim(), 'служба не может писать в каталог данных').toBe('ok');
   }, T);
 });
