@@ -151,13 +151,26 @@ export DEBIAN_FRONTEND=noninteractive
 # симлинка релиза, перезапуском службы и перезаписью vhost, а гейт ревизии их не разводит:
 # при одинаковой объявленной ревизии он пропускает оба. Отказ быстрый и внятный — ждать
 # чужого прогона молча хуже, чем сказать, что он идёт.
-exec 9>/var/lock/ikpk-provision.lock
-if command -v flock >/dev/null 2>&1; then
-  if ! flock -n 9; then
-    echo "[bootstrap] На этом хосте уже идёт провижининг — отказ, чтобы не гоняться за общим состоянием" >&2
+#
+# Замок — КАТАЛОГ, а не `flock` на файловом дескрипторе. Первая версия брала `flock -n 9`,
+# и она ломала повторный прогон: дескриптор наследуется потомками, а провижининг запускает
+# долгоживущие (nginx). Потомок переживал скрипт и держал замок дальше — второй прогон на
+# том же хосте получал отказ 10, хотя первый давно кончился. Замерено на контейнерном
+# наборе: 13 сценариев из 29 упали именно так. Каталог наследованию не подвержен, а
+# остаточный (владелец мёртв) распознаётся по записанному pid.
+LOCK_DIR="/var/lock/ikpk-provision.lock.d"
+mkdir -p "$(dirname "$LOCK_DIR")"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  lock_pid="$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)"
+  if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+    echo "[bootstrap] На этом хосте уже идёт провижининг (pid ${lock_pid}) — отказ, чтобы не гоняться за общим состоянием" >&2
     exit 10
   fi
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR" || { echo "[bootstrap] Замок ${LOCK_DIR} недоступен" >&2; exit 10; }
 fi
+printf '%s' "$$" >"${LOCK_DIR}/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
 
 STATE_FILE="/etc/ikpk-provision/state/${ENVIRONMENT}.env"
 if [[ ! -f "$STATE_FILE" ]]; then
