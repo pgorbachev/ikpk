@@ -17,7 +17,7 @@ PR #218 merged at 2026-09-05T06:24:57Z as f4496cd6b2ccffeb7d2eca023d5293868664ed
 
 ## Acceptance status
 
-Live checks must be recorded after deployment. Local matrix and mutation checks passed (see dependabot-policy-status-implementation.md). Historical results on old heads are left intact. A new event is required for new published conclusions.
+Local matrix and mutation checks passed (see dependabot-policy-status-implementation.md). Live human opened evidence is recorded below. Historical results on old heads are left intact. A new event is required for new published conclusions.
 
 Dependabot rebase commands require explicit owner permission under AGENTS.md. Requested permission covers PR #212 (manual payments major) and #214 (eligible scripts minor/patch). No bot commands have been sent as of this report preparation.
 
@@ -46,3 +46,17 @@ The accepted native auto-merge race remains; eligibility/provenance are not requ
 ## Final synchronization
 
 Main advanced during CI with PR #204, containing process documentation and the published change-flow journal. The implementation was rebased before renewed review. Journal conflict resolution retained main exactly and appended only this change activation; runtime, tests and dependency-policy specs remained unchanged. Both independent reviewers confirmed the new exact head. All 174 relevant tests, OpenSpec integration, reference checks and strict validation passed again. Actual trial archive in a disposable worktree applied both MODIFIED requirements; all 10 resulting main specs validated. The actual change remains active for rollout acceptance.
+
+## Live human opened acceptance
+
+PR: https://github.com/pgorbachev/ikpk/pull/220
+Head: fd18fbcf484f82456b15bec7d477ab14ffa6d789.
+Trusted source: https://github.com/pgorbachev/ikpk/actions/runs/33949806533 (attempt 1).
+Policy execution: https://github.com/pgorbachev/ikpk/actions/runs/33949815965 (success).
+
+- Eligibility: skipped, https://github.com/pgorbachev/ikpk/runs/101262416090.
+- Provenance: skipped, https://github.com/pgorbachev/ikpk/runs/101262417875.
+- Both check summaries identify head fd18fbcf484f82456b15bec7d477ab14ffa6d789 and engine e93daae650dd40b7d26232af6925239e2a96cf55, explaining that this is not a Dependabot PR.
+- Both native-marker mutation jobs (enable and disable) are skipped. Assessment and publisher jobs completed successfully.
+
+This report update introduces a normal synchronize event on the same human PR. Its resulting checks will be inspected separately. Live bot scenarios still await a genuine new Dependabot head; no historical checks have been rewritten.
