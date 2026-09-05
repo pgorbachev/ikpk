@@ -748,7 +748,20 @@ test.describe('3a.4 согласие на ПДн', () => {
     await expect(label).toBeVisible();
     const labelText = await label.innerText();
     expect(labelText).toMatch(/оплат|платеж/i);
-    const link = page.locator(`${FORM} a[href*="персонал"], ${FORM} a[href*="конфиденциал"], ${FORM} a[href*="/terms/"]`).first();
+    // Признак — набор возможных адресов документа, а НЕ один из них: носитель менялся, и
+    // список это переживает. До 2026-09-05 документ существовал только PDF-ом в `/terms/`;
+    // затем переехал на страницу `/politika-konfidencialnosti`, потому что редактируемого
+    // исходника PDF не существует нигде, а требование обязывает документ называть чат и
+    // чужой счётчик. Прежний набор из трёх подстрок новый адрес не покрывал ни одной —
+    // латиница против кириллицы, — и локатор молча ждал 30 секунд, пока не истёк предел.
+    // Кириллические варианты оставлены: они покрывают возможный возврат к имени файла.
+    const link = page
+      .locator(
+        `${FORM} a[href*="политик"], ${FORM} a[href*="politika"], ${FORM} a[href*="персонал"], ` +
+          `${FORM} a[href*="конфиденциал"], ${FORM} a[href*="/terms/"]`,
+      )
+      .first();
+    await expect(link, 'в форме нет ссылки на документ о персональных данных').toHaveCount(1);
     const href = await link.getAttribute('href');
     expect(href).toBeTruthy();
     expect(href).not.toMatch(/^https?:\/\/(?!([^/]*\.)?ikpk\.su)/);

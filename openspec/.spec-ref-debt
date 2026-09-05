@@ -54,6 +54,7 @@ openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/comp
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/lib/data.ts:17-22
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/design.md :: web/src/pages/preview/[variant].astro:31,70
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:14-15
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: Programs.astro:26
@@ -61,8 +62,11 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: change/edu
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: content-quality.test.ts:474
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/index.html
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: dist/sotrudnichestvo-s-nami/index.html
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: docs/client-input-2026-09-04.md@0710e4d0e155a6859c09c2681c92a354fd330916:1
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: feat/sanitize-rich-html-content@3d10129265f183e2b746a5823012f42a0c115f73
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/dist
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Advantages.astro:14-15
+openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Advantages.astro:25
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/InstitutesStrips.astro:13
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/components/home/sections/Programs.astro:26
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
@@ -87,8 +91,6 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
-openspec/changes/external-widgets/proposal.md :: main@8e93aceabae99f0e31776f25e6967d3edb12cbb1
-openspec/changes/external-widgets/specs/external-widgets/spec.md :: main@b44e600fb55dfbf529ee615375c154b94b29e08e
 openspec/changes/server-hardening/proposal.md :: origin/main
 openspec/changes/server-hardening/tasks.md :: origin/main
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34
@@ -102,6 +104,9 @@ openspec/specs/article-catalog/spec.md :: web/dist/statyi/index.html
 openspec/specs/cms-content-source/spec.md :: state/cms-provenance
 openspec/specs/dependency-update-automation/spec.md :: design.md
 openspec/specs/dependency-update-automation/spec.md :: refs/heads/main
+openspec/specs/external-widgets/spec.md :: main@b44e600fb55dfbf529ee615375c154b94b29e08e
+openspec/specs/external-widgets/spec.md :: proposal.md
+openspec/specs/external-widgets/spec.md :: tasks.md
 openspec/specs/online-payment/spec.md :: design.md
 openspec/specs/online-payment/spec.md :: dist/oplata/index.html
 openspec/specs/online-payment/spec.md :: proposal.md
