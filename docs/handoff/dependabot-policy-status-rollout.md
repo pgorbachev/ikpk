@@ -17,7 +17,7 @@ PR #218 merged at 2026-09-05T06:24:57Z as f4496cd6b2ccffeb7d2eca023d5293868664ed
 
 ## Acceptance status
 
-Local matrix and mutation checks passed (see dependabot-policy-status-implementation.md). Live human opened evidence is recorded below. Historical results on old heads are left intact. A new event is required for new published conclusions.
+Local matrix and mutation checks passed (see dependabot-policy-status-implementation.md). Live human opened/synchronize and valid manual-bot evidence is recorded below. Historical results on old heads are left intact. A new event is required for new published conclusions.
 
 Dependabot rebase commands require explicit owner permission under AGENTS.md. Requested permission covers PR #212 (manual payments major) and #214 (eligible scripts minor/patch). No bot commands have been sent as of this report preparation.
 
@@ -59,4 +59,26 @@ Policy execution: https://github.com/pgorbachev/ikpk/actions/runs/33949815965 (s
 - Both check summaries identify head fd18fbcf484f82456b15bec7d477ab14ffa6d789 and engine e93daae650dd40b7d26232af6925239e2a96cf55, explaining that this is not a Dependabot PR.
 - Both native-marker mutation jobs (enable and disable) are skipped. Assessment and publisher jobs completed successfully.
 
-This report update introduces a normal synchronize event on the same human PR. Its resulting checks will be inspected separately. Live bot scenarios still await a genuine new Dependabot head; no historical checks have been rewritten.
+The report update introduced a normal synchronize event on the same human PR; its results and additional bot events are recorded below. No historical checks have been rewritten.
+
+## Live synchronize and manual-bot acceptance
+
+All executions below completed successfully using engine e93daae650dd40b7d26232af6925239e2a96cf55. Each linked check summary contains its matching full head SHA and policy SHA.
+
+| PR and head | Policy execution | Eligibility | Provenance |
+| --- | --- | --- | --- |
+| #220, ac8e196cc245a89a908529ec6d801e87abe3d7a2 | https://github.com/pgorbachev/ikpk/actions/runs/33949924964 | skipped, https://github.com/pgorbachev/ikpk/runs/101263031986 | skipped, https://github.com/pgorbachev/ikpk/runs/101263033174 |
+| #219, b403ced196acc7c5f70f4f08b24c6aea9f348206 | https://github.com/pgorbachev/ikpk/actions/runs/33949934087 | skipped, https://github.com/pgorbachev/ikpk/runs/101263032679 | skipped, https://github.com/pgorbachev/ikpk/runs/101263034826 |
+| #209, a7f09108f493aab877c313edd4d458281eeb60a8 | https://github.com/pgorbachev/ikpk/actions/runs/33949884333 | neutral, https://github.com/pgorbachev/ikpk/runs/101263042692 | success, https://github.com/pgorbachev/ikpk/runs/101263044425 |
+| #144, 6beb2033d4fc4b84214f937c87e66e2d8718917e | https://github.com/pgorbachev/ikpk/actions/runs/33949883585 | neutral, https://github.com/pgorbachev/ikpk/runs/101263028512 | success, https://github.com/pgorbachev/ikpk/runs/101263030275 |
+| #143, f9dbdb20301792dddf51ac5d1398710b6071980f | https://github.com/pgorbachev/ikpk/actions/runs/33949848750 | neutral, https://github.com/pgorbachev/ikpk/runs/101263031658 | success, https://github.com/pgorbachev/ikpk/runs/101263032955 |
+
+PR #220 source is https://github.com/pgorbachev/ikpk/actions/runs/33949912406; PR #219 source is https://github.com/pgorbachev/ikpk/actions/runs/33949926956. The three bot heads arrived without any command comment from this task and supersede their corresponding predeployment rows above. They are major GitHub Actions updates outside the allow table. For #209 both native marker mutation jobs are skipped, confirming its neutral result does not enable auto-merge.
+
+PR #216 still has its historical failure/failure checks on 0710e4d0e155a6859c09c2681c92a354fd330916; these were observed again and left intact. Its next ordinary synchronize will invoke the new dispatcher.
+
+## Remaining acceptance
+
+The eligible success/success scenario still requires a genuinely new Dependabot head, for example PR #214; its existing head and marker remain as listed before deployment. The remaining old bot heads have not yet been refreshed by this task. Engine-transition/rollback regressions passed locally, but the live eligible refresh and subsequent marker-event acceptance remain outstanding. No live rollback has been performed. Change is not archived.
+
+Owner permission for bot command comments is still pending. Manual-bot status is now independently demonstrated without comments, so PR #214 is the outstanding representative for the eligible scenario.
