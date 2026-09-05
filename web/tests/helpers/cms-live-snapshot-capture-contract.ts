@@ -18,7 +18,7 @@
 // другое расположение и другое имя поля, но тогда обязана поправить константы ЗДЕСЬ,
 // а не завести второй набор имён.
 
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -237,7 +237,16 @@ export interface CaptureRun {
   output: string;
 }
 
-export function runCapture(env: Record<string, string | undefined>): CaptureRun {
+/**
+ * Запуск захвата ДОЧЕРНИМ процессом, асинхронно.
+ *
+ * Синхронный запуск здесь невозможен по построению: заглушка CMS живёт в ЭТОМ же процессе, а
+ * `spawnSync` останавливает его цикл событий на всё время работы ребёнка. Заглушка перестаёт
+ * отвечать, дочерний `fetch` честно упирается в свой таймаут, и падают все сценарии, которым
+ * нужна живая CMS. Измерено: тот же прогон синхронно — 16 с и отказ по таймауту, асинхронно —
+ * 1 с и настоящий результат.
+ */
+export function runCapture(env: Record<string, string | undefined>): Promise<CaptureRun> {
   const clean = { ...process.env };
   // Адрес не должен приезжать из окружения разработчика: сценарий «адрес не задан» обязан
   // быть воспроизводимым на машине, где живая система управления запущена.
@@ -245,15 +254,24 @@ export function runCapture(env: Record<string, string | undefined>): CaptureRun 
   delete clean.STRAPI_URL;
   delete clean.CONTENT_SNAPSHOT_DIR;
 
-  const run = spawnSync(TSX, [CAPTURE_SCRIPT], {
-    cwd: WEB_ROOT,
-    encoding: 'utf-8',
-    env: { ...clean, ...env } as NodeJS.ProcessEnv,
-    timeout: 60_000,
+  return new Promise<CaptureRun>((resolve) => {
+    const child = spawn(TSX, [CAPTURE_SCRIPT], {
+      cwd: WEB_ROOT,
+      env: { ...clean, ...env } as NodeJS.ProcessEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
+    child.stdout.on('data', (chunk: string) => (stdout += chunk));
+    child.stderr.on('data', (chunk: string) => (stderr += chunk));
+    const guard = setTimeout(() => child.kill('SIGKILL'), 60_000);
+    child.on('close', (status) => {
+      clearTimeout(guard);
+      resolve({ status, stdout, stderr, output: `${stdout}\n${stderr}` });
+    });
   });
-  const stdout = run.stdout ?? '';
-  const stderr = run.stderr ?? '';
-  return { status: run.status, stdout, stderr, output: `${stdout}\n${stderr}` };
 }
 
 export function pinnedSnapshot(): Record<string, unknown> {

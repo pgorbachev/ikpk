@@ -179,7 +179,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `захват не прошёл:\n${run.output}`).toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'снимок не записан').toBe(true);
@@ -201,7 +201,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.output, 'вывод не называет адрес, с которого снято').toContain(cms.url);
     // Отрицательная половина: живой прогон не вправе сообщать, что взял фикстуру. Образец узкий
@@ -216,7 +216,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     for (const { label, match, count } of EXPECTED_TYPES) {
       const line = run.output
@@ -232,7 +232,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
 
     const types = typesOf(readSnapshot(dir));
@@ -254,7 +254,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
 
     const types = typesOf(readSnapshot(dir));
@@ -270,7 +270,7 @@ describe('снимок читается из живой системы упра�
     const dir = outDir();
     const dead = await closedPortUrl();
 
-    const run = runCapture({ CMS_URL: dead, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: dead, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `захват завершился успехом при недоступной системе управления:\n${run.output}`).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'файл снимка записан вопреки отказу').toBe(false);
@@ -282,7 +282,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub({ seminars: { records: [], status: 500 } });
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `частичный ответ принят за успех:\n${run.output}`).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'записан частичный снимок').toBe(false);
@@ -296,7 +296,7 @@ describe('снимок читается из живой системы упра�
     const cms = await stub({ articles: { records: broken } });
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `нарушение контракта не остановило захват:\n${run.output}`).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'снимок с нарушением контракта записан').toBe(false);
@@ -304,10 +304,10 @@ describe('снимок читается из живой системы упра�
   });
 
   // Сценарий: адрес не задан
-  it('без адреса берётся закреплённая фикстура и это названо в выводе', () => {
+  it('без адреса берётся закреплённая фикстура и это названо в выводе', async () => {
     const dir = outDir();
 
-    const run = runCapture({ CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, run.output).toBe(0);
     expect(readSnapshot(dir).fingerprint, 'снимок не совпал с фикстурой').toBe(pinnedSnapshot().fingerprint);
@@ -417,7 +417,7 @@ describe('соответствие полей объявлено данными,
     const cms = await stub({ articles: { records: withoutSource } });
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `пропавший источник дал успешный захват:\n${run.output}`).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'записан снимок с пустым полем').toBe(false);
@@ -446,7 +446,7 @@ describe('соответствие полей объявлено данными,
 
     const cms = await stub();
     const dir = outDir();
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     for (const field of unmapped) {
       expect(run.output, `вывод не называет незаявленное поле ${field.type}.${field.field}`).toContain(field.field);
@@ -464,7 +464,7 @@ describe('снимок несёт происхождение', () => {
     const dir = outDir();
     const before = Date.now();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
     const after = Date.now();
 
@@ -481,10 +481,10 @@ describe('снимок несёт происхождение', () => {
   });
 
   // Сценарий: фикстура помечена закреплённой
-  it('снимок из фикстуры несёт отметку закреплённого происхождения', () => {
+  it('снимок из фикстуры несёт отметку закреплённого происхождения', async () => {
     const dir = outDir();
 
-    const run = runCapture({ CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
 
     const origin = readSnapshot(dir)[SNAPSHOT_ORIGIN_FIELD] as { kind?: string; url?: string } | undefined;
@@ -500,7 +500,7 @@ describe('снимок несёт происхождение', () => {
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
 
     const snap = readSnapshot(dir);
@@ -516,7 +516,7 @@ describe('снимок несёт происхождение', () => {
     const cms = await stub();
     const dir = outDir();
 
-    const run = runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
     expect(run.status, run.output).toBe(0);
 
     const snap = readSnapshot(dir);

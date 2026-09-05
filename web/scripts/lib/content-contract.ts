@@ -1,5 +1,38 @@
 import type { Snapshot } from './content-snapshot.ts';
 
+/** Группа обязательных полей: достаточно любого имени из группы (design.md, change
+ *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
+ *  соответствия полей меряется относительно ЭТОГО списка, а не относительно текста функции. */
+export interface RequiredFieldGroup {
+  type: string;
+  anyOf: readonly string[];
+}
+
+export const REQUIRED_SNAPSHOT_FIELDS: readonly RequiredFieldGroup[] = [
+  { type: 'articles', anyOf: ['slug'] },
+  { type: 'articles', anyOf: ['title'] },
+  { type: 'articles', anyOf: ['body', 'body_html'] },
+  { type: 'articles', anyOf: ['page_title', 'seo_title'] },
+  { type: 'articles', anyOf: ['page_description', 'seo_description'] },
+  { type: 'articles', anyOf: ['image'] },
+] as const;
+
+/**
+ * Связи, которые контракт проверяет ОТДЕЛЬНЫМ правилом (`broken-relation`), а не как пустое
+ * обязательное поле. Перечень заведён отдельно намеренно: правила разные, и сваливать их в
+ * `REQUIRED_SNAPSHOT_FIELDS` значило бы ждать от мутации не того нарушения.
+ *
+ * Он существует потому, что без него объявленное расходилось с применяемым: полнота
+ * соответствия полей была зелёной, а контракт на живом снимке отказывал по связи преподавателя
+ * с институтом — её просто не было в модели CMS, и заметить это до прогона было нечем.
+ */
+export const REQUIRED_SNAPSHOT_RELATIONS: readonly RequiredFieldGroup[] = [
+  { type: 'seminars', anyOf: ['program', 'course_group_legacy_id'] },
+  { type: 'course_groups', anyOf: ['institute', 'institute_legacy_id'] },
+  { type: 'teachers', anyOf: ['institute', 'institute_legacy_id'] },
+  { type: 'schedule_entries', anyOf: ['seminar'] },
+] as const;
+
 export interface ContractViolation {
   type: string;
   recordId: string;

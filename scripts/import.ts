@@ -426,6 +426,21 @@ async function importTeachers(): Promise<void> {
       legacy_id: e.legacy_id,
     };
     if (photoId) data.photo = photoId;
+
+    // Связь с институтом. Её не было ни в схеме CMS, ни здесь, хотя в данных переноса она есть
+    // у всех 29 преподавателей — и контракт снимка требует её кодом (`broken-relation`).
+    // Из-за пропуска живой захват отказывал на первом же преподавателе.
+    if (e.institute_legacy_id) {
+      const docId = await resolveRelation(
+        "institutes",
+        e.institute_legacy_id as string,
+        report,
+        String(e.legacy_id),
+        "institute",
+      );
+      if (docId) data.institute = docId;
+    }
+
     await upsert("teachers", e.legacy_id as string, data, report);
   }
 }
