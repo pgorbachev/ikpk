@@ -285,43 +285,67 @@ test.describe('встраивание занимает отведённое ем
       // обе проверялись на этом же месте, поэтому здесь названо, что именно сменилось.
       const badge = page.locator('[data-award-row]');
       await expect(badge, 'строки знаков нет — сравнивать не с чем').toHaveCount(1);
-      const badgeBox = await badge.boundingBox();
-      expect(badgeBox, 'коробка строки знаков не измерена').not.toBeNull();
+
+      // Полосу знака НАДО прокрутить отдельно, и это следствие самого варианта B: она стоит
+      // ниже встраивания высотой 1359, поэтому `scrollIntoViewIfNeeded` на встраивании
+      // оставляет её за нижней границей окна, наблюдатель не срабатывает и знак не
+      // подставляется вовсе. Прежние редакции этого не требовали — знак стоял выше либо
+      // сбоку и попадал в окно вместе с виджетом.
+      await badge.scrollIntoViewIfNeeded();
+      // Подстановка асинхронна: наблюдатель срабатывает после прокрутки, а `evaluate`
+      // выполнился бы сразу и увидел бы пустую коробку. Ожидание — по самому предмету.
+      await expect(
+        page.locator('[data-award-badge] iframe'),
+        'после появления полосы знак не подставлен',
+      ).toHaveCount(1);
+
+      // Дальше всё меряется в координатах ДОКУМЕНТА, одним снимком. Прокрутка между двумя
+      // `boundingBox()` сдвигает систему отсчёта, и сравнение «знак ниже встраивания»
+      // считало бы разницу двух разных начал координат.
+      const geom = await page.evaluate((sectionAttr) => {
+        const docTop = (el: Element): number => el.getBoundingClientRect().top + window.scrollY;
+        const embed = document.querySelector('[data-reviews-embed]')!;
+        const row = document.querySelector('[data-award-row]')!;
+        const container = document.querySelector(`[${sectionAttr}] .container`);
+        const frame = document.querySelector('[data-award-badge] iframe');
+        const rowRect = row.getBoundingClientRect();
+        const embedRect = embed.getBoundingClientRect();
+        const containerRect = container?.getBoundingClientRect() ?? null;
+        const frameRect = frame?.getBoundingClientRect() ?? null;
+        return {
+          embedBottom: docTop(embed) + embedRect.height,
+          rowTop: docTop(row),
+          rowCentre: rowRect.x + rowRect.width / 2,
+          containerCentre: containerRect ? containerRect.x + containerRect.width / 2 : null,
+          frame: frameRect ? { w: frameRect.width, h: frameRect.height } : null,
+        };
+      }, SEL_REVIEWS_SECTION);
+
       expect(
-        badgeBox!.y,
-        `знак на ${badgeBox!.y}, встраивание кончается на ${outer!.y + outer!.height}: ` +
+        geom.rowTop,
+        `знак на ${geom.rowTop}, встраивание кончается на ${geom.embedBottom}: ` +
           'знак не встал отдельной полосой под отзывами',
-      ).toBeGreaterThanOrEqual(outer!.y + outer!.height);
+      ).toBeGreaterThanOrEqual(geom.embedBottom);
 
       // Центр — по КОНТЕЙНЕРУ секции, а не по встраиванию: встраивание уже 760 px и стоит
       // слева, поэтому «по центру виджета» и «по центру полосы» — разные места, и первое
       // выглядело бы съехавшим влево.
-      const container = page.locator(`[${SEL_REVIEWS_SECTION}] .container`);
-      await expect(container, 'контейнера секции нет — центрировать не относительно чего').toHaveCount(1);
-      const containerBox = await container.boundingBox();
-      expect(containerBox, 'коробка контейнера не измерена').not.toBeNull();
-      const badgeCentre = badgeBox!.x + badgeBox!.width / 2;
-      const containerCentre = containerBox!.x + containerBox!.width / 2;
+      expect(geom.containerCentre, 'контейнера секции нет — центрировать не относительно чего').not.toBeNull();
       expect(
-        Math.abs(badgeCentre - containerCentre),
-        `центр знака ${badgeCentre}, центр контейнера ${containerCentre}: полоса не по центру`,
+        Math.abs(geom.rowCentre - geom.containerCentre!),
+        `центр знака ${geom.rowCentre}, центр контейнера ${geom.containerCentre}: полоса не по центру`,
       ).toBeLessThanOrEqual(1);
 
       // Знак УВЕЛИЧЕН, а не показан натуральным кадром 150×50. Проверяется сам `<iframe>`:
       // сервис отдаёт только 150×50 (девять проб 2026-09-05), поэтому крупный вид держится
       // на нашем масштабировании, и потеря `transform` вернула бы марку размером с подпись.
-      const badgeFrame = page.locator('[data-award-badge] iframe');
-      await expect(badgeFrame, 'встраивание знака не подставлено').toHaveCount(1);
-      const scaled = await badgeFrame.evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        return { w: r.width, h: r.height };
-      });
+      expect(geom.frame, 'встраивание знака не подставлено').not.toBeNull();
       const factor = width >= 482 ? 3 : 2;
       expect(
-        scaled.w,
-        `знак выведен шириной ${scaled.w} при ожидаемых ${150 * factor}: увеличение не применилось`,
+        geom.frame!.w,
+        `знак выведен шириной ${geom.frame!.w} при ожидаемых ${150 * factor}: увеличение не применилось`,
       ).toBeCloseTo(150 * factor, 0);
-      expect(scaled.h, `высота знака ${scaled.h}`).toBeCloseTo(50 * factor, 0);
+      expect(geom.frame!.h, `высота знака ${geom.frame!.h}`).toBeCloseTo(50 * factor, 0);
     });
   }
 });
