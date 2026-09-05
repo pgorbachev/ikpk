@@ -143,6 +143,9 @@ done
 
 {
   printf '%s' "$secret_exports"
+  # Общий разбор объявленного состояния вливается в тот же поток: на сервере репозитория
+  # нет, поэтому `source` там невозможен, а копия здесь разошлась бы с проверкой молча.
+  cat "${ROOT}/scripts/lib/declared.sh"
   cat <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -182,22 +185,6 @@ fi
 # быть валидным bash-синтаксисом. `source` на такой строке пытается ИСПОЛНИТЬ её как
 # команду («PROPERTY_X_REASON=нужен настоящий домен» запускает команду «настоящий»)
 # — обнаружено эмпирически на реальном значении из красных тестов.
-load_declared() {
-  local file="$1" line key value
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" =~ ^[[:space:]]*(#.*)?$ ]] && continue
-    key="${line%%=*}"
-    value="${line#*=}"
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-    printf -v "$key" '%s' "$value"
-  done <"$file"
-}
 load_declared "$STATE_FILE"
 
 SITE_NAME="${SITE_NAME:-ikpk}"
@@ -375,7 +362,6 @@ Environment=CMS_DATA_DIR=${CMS_DATA_DIR:-/var/lib/ikpk-cms}
 # HOME обязателен: учётная запись создаётся без домашнего каталога, а Strapi пишет туда
 # служебные файлы и падает с EACCES на mkdir /home/<служба>.
 Environment=HOME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}
-Environment=LISTEN_ADDR=${SERVICE_ADDR:-127.0.0.1:0}
 Environment=HOST=${SERVICE_HOST}
 Environment=PORT=${SERVICE_PORT}
 Environment=DATABASE_CLIENT=${CMS_DB_CLIENT:-sqlite}
@@ -453,16 +439,15 @@ if [[ -n "${SECRET_FILE:-}" && -n "${SECRET_NAMES:-}" ]]; then
   fi
   if ((rotated)); then
     mv "$tmp_secret" "$SECRET_FILE"
-    chown "${SECRET_OWNER:-root}" "$SECRET_FILE"
-    chmod "${SECRET_MODE:-600}" "$SECRET_FILE"
     report changed "секрет(ы) применены: ${applied_names[*]}"
   else
     rm -f "$tmp_secret"
-    # владелец/режим могли отличаться, даже если значение не изменилось
-    chown "${SECRET_OWNER:-root}" "$SECRET_FILE"
-    chmod "${SECRET_MODE:-600}" "$SECRET_FILE"
     report unchanged "секрет(ы) без изменения значения"
   fi
+  # Владелец и режим приводятся в ОБОИХ случаях: они могли отличаться, даже когда
+  # значение не менялось.
+  chown "${SECRET_OWNER:-root}" "$SECRET_FILE"
+  chmod "${SECRET_MODE:-600}" "$SECRET_FILE"
 fi
 
 # --- Артефакт системы управления: атоматическая смена releases/current, тем же
@@ -485,7 +470,6 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     # node_modules, а `npm ci` мутировал его на месте ДО проверки живости: если служба не
     # отвечала, откат возвращал старый релиз — но уже с чужими зависимостями, а старого
     # набора больше не существовало. Обрыв установки (кончился диск) ломал сразу оба.
-    deps_link="${shared_deps}/node_modules"
     if [[ -f "${new_release}/package-lock.json" ]]; then
       lock_sha="$(sha256sum "${new_release}/package-lock.json" | cut -c1-16)"
       deps_dir="${CMS_ARTIFACT_DIR}/deps/${lock_sha}"
@@ -496,20 +480,22 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
         # ponytail: без ретраев сети и таймаута — неудача оставляет каталог .partial и
         # падает на healthcheck ниже (общий путь отката). Готовым набор считается только
         # после переименования, поэтому недоустановленный никому не виден.
-        set +e
-        (cd "${deps_dir}.partial" && npm ci --omit=dev)
-        NPM_CI_OK=$?
-        set -e
-        if ((NPM_CI_OK == 0)); then
+        if (cd "${deps_dir}.partial" && npm ci --omit=dev); then
           touch "${deps_dir}.partial/.complete"
           mkdir -p "$(dirname "$deps_dir")"
           rm -rf "$deps_dir"
           mv -T "${deps_dir}.partial" "$deps_dir"
         fi
       fi
-      [[ -f "${deps_dir}/.complete" ]] && deps_link="${deps_dir}/node_modules"
+      # Ссылка ставится ТОЛЬКО на готовый набор. Прежде умолчание вело в
+      # ${shared_deps}/node_modules, которого не создаёт ничто, — при отсутствии
+      # package-lock.json получалась висячая ссылка, и служба падала бы на импорте.
+      if [[ -f "${deps_dir}/.complete" ]]; then
+        ln -sfn "${deps_dir}/node_modules" "${new_release}/node_modules"
+      else
+        echo "[bootstrap] Зависимости не установлены (${deps_dir}) — ссылка не ставится" >&2
+      fi
     fi
-    ln -sfn "$deps_link" "${new_release}/node_modules"
     # Владелец релиза. rsync -a переносит ЧУЖИЕ uid/gid с машины оператора (на стенде
     # каталоги оказались с uid 502), поэтому владелец приводится явно. Код остаётся у
     # root: служба не должна иметь права переписать то, что исполняет. Записывать ей

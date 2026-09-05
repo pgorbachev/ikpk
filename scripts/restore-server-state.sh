@@ -22,22 +22,8 @@ fi
 
 # Построчный разбор вместо `source` — см. bootstrap-vps.sh: значения объявленного
 # состояния — свободный текст и не обязаны быть валидным bash-синтаксисом.
-load_declared() {
-  local file="$1" line key value
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" =~ ^[[:space:]]*(#.*)?$ ]] && continue
-    key="${line%%=*}"
-    value="${line#*=}"
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-    printf -v "$key" '%s' "$value"
-  done <"$file"
-}
+# Разбор объявленного состояния — общий для всех трёх скриптов.
+. "$ROOT/scripts/lib/declared.sh"
 load_declared "$ENV_FILE"
 
 SITE_NAME="${SITE_NAME:-ikpk}"
@@ -65,16 +51,16 @@ rsync -a --delete "${latest}/" "${target}/"
 # Считаются ОБА исхода. Прежде инкремент стоял только внутри `cmp -s`, поэтому разошедшийся
 # файл не попадал ни в вывод, ни в код возврата, а `compared=0` (сравнивать было нечего)
 # выглядел успехом — то самое «не смог проверить», выданное за «расхождений нет».
-compared=0
-mismatched=0
-while IFS= read -r -d '' f; do
-  rel="${f#"$latest"/}"
-  compared=$((compared + 1))
-  if ! cmp -s "$f" "${target}/${rel}"; then
-    mismatched=$((mismatched + 1))
-    echo "расхождение: ${rel}" >&2
-  fi
-done < <(find "$latest" -type f -print0)
+# `diff -rq` вместо ручного обхода: он же ловит файлы, которых в цели нет вовсе, и
+# лишние в цели — ручное сравнение по списку копии этого не видело.
+compared="$(find "$latest" -type f | wc -l | tr -d ' ')"
+diff_out="$(diff -rq "$latest" "$target" 2>&1 || true)"
+if [[ -n "$diff_out" ]]; then
+  printf '%s\n' "$diff_out" >&2
+  mismatched="$(printf '%s\n' "$diff_out" | wc -l | tr -d ' ')"
+else
+  mismatched=0
+fi
 
 echo "predicate=byte-equal-after-restore"
 echo "compared=${compared}"

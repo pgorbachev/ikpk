@@ -64,22 +64,8 @@ fi
 # Построчный разбор вместо `source` — см. bootstrap-vps.sh: значения объявленного
 # состояния — свободный текст (PROPERTY_*_REASON) и не обязаны быть валидным
 # bash-синтаксисом.
-load_declared() {
-  local file="$1" line key value
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" =~ ^[[:space:]]*(#.*)?$ ]] && continue
-    key="${line%%=*}"
-    value="${line#*=}"
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-    printf -v "$key" '%s' "$value"
-  done <"$file"
-}
+# Разбор объявленного состояния — общий для всех трёх скриптов.
+. "$ROOT/scripts/lib/declared.sh"
 load_declared "$ENV_FILE"
 
 SITE_NAME="${SITE_NAME:-ikpk}"
@@ -116,7 +102,14 @@ check_auto() {
     ;;
   CMS_DATA_DIR) [[ -n "${CMS_DATA_DIR:-}" && -d "${CMS_DATA_DIR}" ]] ;;
   SERVICE_ACCOUNT) [[ -n "${SERVICE_ACCOUNT:-}" ]] && id "$SERVICE_ACCOUNT" >/dev/null 2>&1 ;;
-  SERVICE_UNIT) [[ -n "${SERVICE_UNIT:-}" && -f "${SERVICE_UNIT}" ]] && grep -qF "${SERVICE_ADDR:-__none__}" "$SERVICE_UNIT" ;;
+  # Сверяем ровно то, что читает приложение: HOST и PORT (cms/config/server.ts).
+  # Прежде проверялся литерал адреса, а его в юните держала строка LISTEN_ADDR, которую
+  # не читал никто, — проверка подтверждала присутствие мёртвой переменной.
+  SERVICE_UNIT)
+    [[ -n "${SERVICE_UNIT:-}" && -f "${SERVICE_UNIT}" ]] &&
+      grep -qF "Environment=HOST=${SERVICE_ADDR%%:*}" "$SERVICE_UNIT" &&
+      grep -qF "Environment=PORT=${SERVICE_ADDR##*:}" "$SERVICE_UNIT"
+    ;;
   SERVICE_ADDR_LOOPBACK)
     local host_part="${SERVICE_ADDR%%:*}"
     [[ "$host_part" == "127.0.0.1" || "$host_part" == "::1" || "$host_part" == "localhost" ]]
