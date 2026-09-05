@@ -211,6 +211,61 @@ test.describe('виджет отзывов не грузится, пока се�
   });
 });
 
+test.describe('встраивание занимает отведённое ему место', () => {
+  test.describe.configure({ timeout: 60_000 });
+
+  /**
+   * Гейт РАСКЛАДКИ, и он обязан быть браузерным: сборка зелена и на сломанной вёрстке.
+   * Предмет — НАША геометрия, а не содержимое виджета: `guard` не пускает запрос к
+   * Яндексу, узел `<iframe>` при этом создаётся, и его коробку считает наш же CSS.
+   * Третья сторона в прогон не попадает.
+   *
+   * Дефект, ради которого гейт написан: Astro метит разметку `data-astro-cid-…` и
+   * переписывает под неё селекторы, а узел, созданный `document.createElement`, метки не
+   * получает — `.reviews-embed iframe` до него не доходил. Измерено на стенде: 304×154
+   * (браузерное умолчание, `display: inline`) внутри контейнера 1168×384. Ни один
+   * существовавший гейт этого не видел, дефект нашёлся глазами по скриншоту.
+   */
+  for (const width of [1280, 375]) {
+    test(`iframe заполняет свой контейнер на ${width}px`, async ({ page }) => {
+      await guard(page);
+      await page.setViewportSize({ width, height: 900 });
+      const response = await page.goto(url('/'));
+      expect(response?.status(), 'главная не отдалась — проверять нечего').toBe(200);
+
+      const box = page.locator('[data-reviews-embed]');
+      await expect(box, 'контейнера встраивания нет — предмета нет').toHaveCount(1);
+      await box.scrollIntoViewIfNeeded();
+
+      const frame = box.locator('iframe');
+      await expect(frame, 'после появления секции встраивание не подставлено').toHaveCount(1);
+
+      const outer = await box.boundingBox();
+      const inner = await frame.boundingBox();
+      expect(outer, 'коробка контейнера не измерена').not.toBeNull();
+      expect(inner, 'коробка встраивания не измерена').not.toBeNull();
+
+      // Ширина — по контейнеру. Допуск 1px на субпиксельное округление, не больше:
+      // дефект давал расхождение в 864px, и широкий допуск скрыл бы его.
+      expect(
+        Math.abs(inner!.width - outer!.width),
+        `встраивание шириной ${inner!.width} в контейнере ${outer!.width}: стиль до него не дошёл`,
+      ).toBeLessThanOrEqual(1);
+
+      // Высота — не меньше контейнера: пустая серая полоса под встраиванием читается
+      // как дефект, ради этого у контейнера и стоит min-height.
+      expect(
+        inner!.height,
+        `встраивание высотой ${inner!.height} в контейнере ${outer!.height}`,
+      ).toBeGreaterThanOrEqual(outer!.height - 1);
+
+      // Блочность: `display: inline` — то самое умолчание, с которого дефект начался.
+      const display = await frame.evaluate((el) => getComputedStyle(el).display);
+      expect(display, 'встраивание осталось инлайновым').not.toBe('inline');
+    });
+  }
+});
+
 test.describe('без скриптов секция даёт ссылку, а не встраивание', () => {
   test('при отключённых скриптах виджета нет, ссылка есть', async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });
