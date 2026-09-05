@@ -204,8 +204,8 @@
     "file": "components/home/AwardBadge.astro",
     "nodeKind": "element",
     "locator": "components/home/AwardBadge.astro:L31:C1:style",
-    "fingerprint": "c6a435a4f96588f32aed9db6e8921ffd976d1f9d7c79a8a513285a12a7a1dbe3",
-    "identity": "style|body:2e2c66c72a4dc0fb"
+    "fingerprint": "5bc8d0e67afd0f1fe12cd2a853bb9562e23cb8ca7b9d81d5b8e79a39c98dc983",
+    "identity": "style|body:0e3d01511df16190"
   },
   {
     "slotId": "src:components/home/FeatureCard.astro:L21:C1:style",
@@ -408,19 +408,19 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L132:C1:style",
+    "slotId": "src:components/home/sections/Reviews.astro:L131:C1:style",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L132:C1:style",
-    "fingerprint": "9e3cd6cd517566d31f6a9dd7edb73beb997c380706270a3263c0994ed899d1a8",
-    "identity": "style|body:0915ede64d1b1be8"
+    "locator": "components/home/sections/Reviews.astro:L131:C1:style",
+    "fingerprint": "8aaed703478ee6923a53f4ca1e90b42b02991d84c6c7bf2bd538b840409787f8",
+    "identity": "style|body:c7575b83c2a6475a"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L74:C3:script",
+    "slotId": "src:components/home/sections/Reviews.astro:L73:C3:script",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L74:C3:script",
-    "fingerprint": "312385340f3499e042738bc4c7e476376125b8aa8b14391f0adac1a07f0128f0",
+    "locator": "components/home/sections/Reviews.astro:L73:C3:script",
+    "fingerprint": "66da7bcdeb561fe534e261b780db4de0aefabf38b95b3a2b9f0f23fcf1efc9f9",
     "identity": "script|body:4d4baebf4698c7db"
   },
   {
