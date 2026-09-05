@@ -280,26 +280,37 @@ describe('отзывы показываются секцией главной и
   });
 });
 
-describe('знаки наград соответствуют утверждённому мокапу', () => {
-  it('каждый показанный знак несёт сервисную иконку, название и отдельную подпись источника', () => {
+describe('знак награды выводит сам сервис, а не мы', () => {
+  it('знак объявлен встраиванием и своей марки мы не рисуем', () => {
+    // Прежде здесь проверялась анатомия НАШЕЙ отрисовки — сервисная иконка, название и
+    // подпись источника. Предмет исчез: знак выводит официальное встраивание Яндекса
+    // (решение владельца 2026-09-05), и рисовать чужую марку мы перестали.
     const section = reviewsSection();
     const badges = subtree(section).filter((el) => attr(el, SEL_AWARD_BADGE) !== null);
-    expect(
-      badges.length,
-      'на главной нет показанного знака — проверка его структуры была бы вакуумна',
-    ).toBeGreaterThan(0);
+    expect(badges.length, 'знака награды в секции нет — предмета нет').toBe(1);
 
-    for (const badge of badges) {
-      const inside = subtree(badge);
-      const icons = inside.filter((el) => attr(el, 'data-award-icon') !== null);
-      const titles = inside.filter((el) => attr(el, 'data-award-title') !== null);
-      const sources = inside.filter((el) => attr(el, 'data-award-source') !== null);
-      expect(icons, 'у знака нет ровно одной сервисной иконки').toHaveLength(1);
-      expect(titles, 'название знака не выделено в отдельный элемент').toHaveLength(1);
-      expect(sources, 'источник знака не выделен в отдельный элемент').toHaveLength(1);
-      expect(textOf(titles[0]), 'название знака пусто').not.toBe('');
-      expect(textOf(sources[0]), 'подпись источника пустая').not.toBe('');
-    }
+    const src = attr(badges[0], 'data-award-embed');
+    expect(src, 'у знака нет адреса встраивания').toBeTruthy();
+    expect(hostAndPath(src!).host, 'встраивание ведёт не на домен сервиса').toBe('yandex.ru');
+    expect(src!).toContain('/sprav/widget/rating-badge/');
+
+    // Место под встраивание зарезервировано: появление знака не должно сдвигать соседей.
+    expect(
+      subtree(badges[0]).some((el) => (attr(el, 'class') ?? '').includes('award-badge-placeholder')),
+      'место под знак не зарезервировано — подстановка сдвинет соседей',
+    ).toBe(true);
+  });
+
+  it('нашей отрисовки марки в выводе нет ни на одной странице', () => {
+    // Признак — наши узлы прежней копии. Проверка отдельная от предыдущей: та смотрит
+    // главную, эта — весь вывод, потому что копия могла остаться на любой странице.
+    const leftovers = [...pages.entries()].filter(([, html]) =>
+      /data-award-(icon|title|source)\b/.test(html),
+    );
+    expect(
+      leftovers.map(([path]) => path),
+      'в выводе осталась наша отрисовка марки сервиса',
+    ).toEqual([]);
   });
 });
 
