@@ -37,8 +37,7 @@ export const IMAGE = 'ikpk-provision-target:test-systemd';
  * эмуляцию qemu: один сценарий занял 17 минут вместо секунд, а прогон стал неотличим от
  * зависшего. Скорость здесь не удобство: набор, который не дожидаются, не выполняется.
  */
-const HOST_ARCH = process.arch === 'arm64' ? 'linux/arm64' : 'linux/amd64';
-const PLATFORM = ['--platform', HOST_ARCH];
+const HOST_PLATFORM = process.arch === 'arm64' ? 'linux/arm64' : 'linux/amd64';
 
 export type Run = { status: number; stdout: string; stderr: string; output: string };
 
@@ -48,6 +47,12 @@ function docker(args: string[], opts: { input?: string; timeout?: number } = {})
     input: opts.input,
     timeout: opts.timeout ?? 300_000,
     maxBuffer: 32 * 1024 * 1024,
+    // Платформа задаётся ОКРУЖЕНИЕМ вызова, а не флагом --platform. У разработчика может
+    // стоять DOCKER_DEFAULT_PLATFORM (у нас linux/amd64 при демоне arm64), и тогда каждый
+    // контейнер идёт через эмуляцию qemu: замерено 17 минут на сценарий вместо секунд.
+    // Флагом это не лечится: на закоммиченном образе --platform ломает поиск локально и
+    // гонит docker в реестр за манифестом, которого у коммита нет.
+    env: { ...process.env, DOCKER_DEFAULT_PLATFORM: HOST_PLATFORM },
   });
   if (res.error) {
     throw new Error(`docker ${args.slice(0, 2).join(' ')} не запустился: ${res.error.message}`);
@@ -107,8 +112,18 @@ exit 0
  */
 export function ensureImage(): void {
   requireDocker();
-  if (docker(['image', 'inspect', IMAGE]).status === 0) return;
-  const id = dockerOrThrow(['run', '-d', ...PLATFORM, 'debian:12-slim', 'sleep', '900']).stdout.trim();
+  // Совпадение по ТЕГУ образа недостаточно: архитектуры в теге нет. Закоммиченный образ,
+  // собранный когда-то из базового другой архитектуры, переиспользуется молча, и весь
+  // набор идёт через эмуляцию — замерено 17 минут на сценарий вместо секунд. Поэтому у
+  // найденного образа спрашиваем архитектуру и пересобираем при несовпадении.
+  if (docker(['image', 'inspect', IMAGE]).status === 0) {
+    const arch = docker(['run', '--rm', IMAGE, 'uname', '-m']).stdout.trim();
+    const want = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+    if (arch === want) return;
+    console.warn(`[provision-target] образ ${IMAGE} собран под ${arch}, хозяин ${want} — пересобираю`);
+    docker(['image', 'rm', '-f', IMAGE]);
+  }
+  const id = dockerOrThrow(['run', '-d', 'debian:12-slim', 'sleep', '900']).stdout.trim();
   try {
     dockerOrThrow([
       'exec', id, 'bash', '-c',
@@ -133,7 +148,7 @@ export class ProvisionTarget {
 
   static start(): ProvisionTarget {
     ensureImage();
-    const id = dockerOrThrow(['run', '-d', ...PLATFORM, IMAGE, 'sleep', '1800']).stdout.trim();
+    const id = dockerOrThrow(['run', '-d', IMAGE, 'sleep', '1800']).stdout.trim();
     const target = new ProvisionTarget(id);
     target.copyRepoDir('scripts');
     target.copyRepoDirIfExists('deploy');
@@ -143,13 +158,13 @@ export class ProvisionTarget {
   /** Второй контейнер той же сети — «снаружи». Netns не разделяется с целью. */
   static probe(command: string): Run {
     ensureImage();
-    return docker(['run', '--rm', ...PLATFORM, IMAGE, 'bash', '-lc', command], { timeout: 60_000 });
+    return docker(['run', '--rm', IMAGE, 'bash', '-lc', command], { timeout: 60_000 });
   }
 
   /** Наблюдатель снаружи, работающий во время провижининга. Возвращает id. */
   static startProbe(command: string): string {
     ensureImage();
-    return dockerOrThrow(['run', '-d', ...PLATFORM, IMAGE, 'bash', '-lc', command]).stdout.trim();
+    return dockerOrThrow(['run', '-d', IMAGE, 'bash', '-lc', command]).stdout.trim();
   }
 
   static probeOutput(id: string): string {
