@@ -30,7 +30,7 @@ afterEach(() => {
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function stepRun(): string {
+function baseStep() {
   const workflow = loadWorkflows().find((w) => w.file === WORKFLOW_FILE);
   if (workflow === undefined) throw new Error(`нет workflow ${WORKFLOW_FILE}`);
   const job = workflow.jobs[JOB_KEY];
@@ -40,7 +40,7 @@ function stepRun(): string {
   if (step.run === undefined || step.run.trim() === '') {
     throw new Error(`${WORKFLOW_FILE}: шаг ${STEP_NAME} не содержит run`);
   }
-  return step.run;
+  return { run: step.run, env: step.env ?? {} };
 }
 
 interface ShellResult {
@@ -54,7 +54,7 @@ interface ShellResult {
  * вместо `git`/`npm`/`npx` — реального worktree и реальной установки npm здесь не нужно,
  * предмет проверки — САМ ФАКТ вызова `npm ci` с нужным `--prefix`, а не результат сборки.
  */
-function runStep(script: string): ShellResult {
+function runStep(script: string, chatLoader: unknown): ShellResult {
   const dir = mkdtempSync(join(tmpdir(), 'base-worktree-payments-deps-'));
   scratch.push(dir);
   const bin = join(dir, 'bin');
@@ -74,10 +74,12 @@ exit 0
 `,
     npm: `#!/usr/bin/env bash
 printf 'NPM %s\\n' "$*" >>"$GIT_CALL_LOG"
+printf 'CHAT %s %s\\n' "$*" "\${CHAT_LOADER_SRC-}" >>"$GIT_CALL_LOG"
 exit 0
 `,
     npx: `#!/usr/bin/env bash
 printf 'NPX %s\\n' "$*" >>"$GIT_CALL_LOG"
+printf 'CHAT %s %s\\n' "$*" "\${CHAT_LOADER_SRC-}" >>"$GIT_CALL_LOG"
 exit 0
 `,
   };
@@ -101,6 +103,7 @@ exit 0
       RUNNER_TEMP: runnerTemp,
       BASE_SHA: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
       GIT_CALL_LOG: callLogPath,
+      CHAT_LOADER_SRC: typeof chatLoader === 'string' ? chatLoader : undefined,
     },
   });
   return {
@@ -112,7 +115,8 @@ exit 0
 
 describe('живая регрессия: измерение базы Vitest не ставит payments/node_modules', () => {
   it('устанавливает зависимости payments в worktree до запуска тестов web', () => {
-    const result = runStep(stepRun());
+    const step = baseStep();
+    const result = runStep(step.run, step.env.CHAT_LOADER_SRC);
 
     expect(result.status, `шаг обязан завершаться успехом: ${result.stderr}`).toBe(0);
     expect(result.calls, 'ожидался npm ci --prefix .../payments до первого npx vitest run')
@@ -126,4 +130,14 @@ describe('живая регрессия: измерение базы Vitest не
     expect(paymentsInstallIndex, 'payments должен быть установлен ДО первого запуска vitest')
       .toBeLessThan(firstVitestIndex);
   });
+});
+
+// PR #209 run 33949845542: the base build and its tests ran without the
+// declared-absent chat configuration already supplied to the head build.
+it('passes the declared chat configuration to both base build and build assertions', () => {
+  const step = baseStep();
+  const result = runStep(step.run, step.env.CHAT_LOADER_SRC);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.calls).toMatch(/^CHAT run build none$/m);
+  expect(result.calls).toMatch(/^CHAT vitest run --config vitest\.build\.config\.ts .* none$/m);
 });

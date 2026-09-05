@@ -98,6 +98,8 @@ jobs:
       eligible: ${{ steps.policy.outputs.eligible }}
       origin-positive: ${{ steps.policy.outputs.origin-positive }}
       gate-ok: ${{ steps.policy.outputs.gate-ok }}
+      eligibility-conclusion: ${{ steps.policy.outputs.eligibility-conclusion }}
+      provenance-conclusion: ${{ steps.policy.outputs.provenance-conclusion }}
       record-evidence: ${{ steps.policy.outputs.record-evidence }}
       enable-auto-merge: ${{ steps.policy.outputs.enable-auto-merge }}
       disable-auto-merge: ${{ steps.policy.outputs.disable-auto-merge }}
@@ -144,7 +146,14 @@ jobs:
         env:
           ASSESS_RESULT: ${{ needs.assess.result }}
           ORIGIN_POSITIVE: ${{ needs.assess.outputs.origin-positive }}
-        run: test "$ASSESS_RESULT" = success && test "$ORIGIN_POSITIVE" = true
+          PROVENANCE_CONCLUSION: ${{ needs.assess.outputs.provenance-conclusion }}
+        run: |
+          test "$ASSESS_RESULT" = success
+          case "$PROVENANCE_CONCLUSION" in
+            success) test "$ORIGIN_POSITIVE" = true ;;
+            skipped) test "$ORIGIN_POSITIVE" = false ;;
+            *) exit 1 ;;
+          esac
 
   eligibility-gate:
     name: Eligibility gate
@@ -159,15 +168,22 @@ jobs:
           FRESH_SNAPSHOT_RESULT: ${{ needs.snapshot.result }}
           FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
           GATE_OK: ${{ needs.assess.outputs.gate-ok }}
+          GATE_CONCLUSION: ${{ needs.assess.outputs.eligibility-conclusion }}
           REASON: ${{ needs.assess.outputs.reason }}
         run: |
           if [ "$FRESH_SNAPSHOT_RESULT" != success ] || [ "$FRESH_HEAD_MATCHES_CURRENT" != true ]; then
             exit 1
           fi
-          if [ "$ASSESS_RESULT" != success ] || [ "$GATE_OK" != true ]; then
+          if [ "$ASSESS_RESULT" != success ]; then
             echo "$REASON"
             exit 1
           fi
+          echo "$REASON"
+          case "$GATE_CONCLUSION" in
+            success) test "$GATE_OK" = true ;;
+            neutral|skipped) test "$GATE_OK" = false ;;
+            *) exit 1 ;;
+          esac
 
   publish-checks:
     name: Publish head-bound policy checks
@@ -183,10 +199,13 @@ jobs:
           EVENT_ACTION: ${{ inputs.source-action }}
           FRESH_HEAD_MATCHES_CURRENT: ${{ needs.snapshot.outputs.head-matches-event }}
           GATE_RESULT: ${{ needs.eligibility-gate.result }}
+          ELIGIBILITY_CONCLUSION: ${{ needs.assess.outputs.eligibility-conclusion }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.snapshot.outputs.head-sha }}
           POLICY_SHA: ${{ job.workflow_sha }}
           PROVENANCE_RESULT: ${{ needs.provenance-evidence.result }}
+          PROVENANCE_CONCLUSION: ${{ needs.assess.outputs.provenance-conclusion }}
+          REASON: ${{ needs.assess.outputs.reason }}
           SOURCE_RUN_ATTEMPT: ${{ inputs.source-run-attempt }}
           SOURCE_RUN_ID: ${{ inputs.source-run-id }}
         run: |
@@ -216,7 +235,7 @@ jobs:
                 -f external_id="$external_id" \
                 -f details_url="$run_url" \
                 -f 'output[title]=Dependabot auto-merge policy' \
-                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA"
+                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA. ${REASON:-Assessment failed; inspect the workflow log.}"
             else
               gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
                 -f name="$name" \
@@ -226,20 +245,26 @@ jobs:
                 -f external_id="$external_id" \
                 -f details_url="$run_url" \
                 -f 'output[title]=Dependabot auto-merge policy' \
-                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA"
+                -f "output[summary]=type=$kind head_sha=$HEAD_SHA policy_sha=$POLICY_SHA. ${REASON:-Assessment failed; inspect the workflow log.}"
             fi
           }
 
           gate_conclusion=failure
-          if [ "$GATE_RESULT" = success ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
-            gate_conclusion=success
+          if [ "$ASSESSMENT_RESULT" = success ] && [ "$GATE_RESULT" = success ] && [ "$FRESH_HEAD_MATCHES_CURRENT" = true ]; then
+            case "${ELIGIBILITY_CONCLUSION:-}" in
+              success|neutral|skipped) gate_conclusion="$ELIGIBILITY_CONCLUSION" ;;
+            esac
           fi
           publish_check eligibility "Dependabot auto-merge / Eligibility gate" "$gate_conclusion"
 
           if [ "$EVENT_ACTION" = opened ] || [ "$EVENT_ACTION" = synchronize ]; then
             provenance_conclusion=failure
             if [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_RESULT" = success ]; then
-              provenance_conclusion=success
+              case "${PROVENANCE_CONCLUSION:-}" in
+                success|skipped) provenance_conclusion="$PROVENANCE_CONCLUSION" ;;
+              esac
+            elif [ "$ASSESSMENT_RESULT" = success ] && [ "$PROVENANCE_RESULT" = skipped ] && [ "${PROVENANCE_CONCLUSION:-}" = skipped ]; then
+              provenance_conclusion=skipped
             fi
             publish_check provenance "Dependabot auto-merge / Provenance evidence" "$provenance_conclusion"
           fi
@@ -250,6 +275,10 @@ jobs:
       always() &&
       needs.assess.result == 'success' &&
       needs.eligibility-gate.result == 'success' &&
+      needs.assess.outputs.eligibility-conclusion == 'success' &&
+      needs.assess.outputs.provenance-conclusion == 'success' &&
+      needs.assess.outputs.gate-ok == 'true' &&
+      needs.assess.outputs.origin-positive == 'true' &&
       (needs.provenance-evidence.result == 'success' || needs.provenance-evidence.result == 'skipped') &&
       needs.assess.outputs.enable-auto-merge == 'true'
     runs-on: ubuntu-latest

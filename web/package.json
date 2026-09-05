@@ -59,7 +59,7 @@
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
-    "astro": "^7.2.0",
+    "astro": "^7.2.10",
     "parse5": "^8.0.1"
   },
   "devDependencies": {
@@ -69,14 +69,14 @@
     "@eslint/js": "^10.0.1",
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.62.1",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.1",
     "eslint-plugin-astro": "^3.1.0",
     "globals": "^17.11.0",
     "pagefind": "^1.5.2",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "tsx": "^4.23.12",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.67.0",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^4.1.11",
     "yaml": "^2.9.0"
   },
