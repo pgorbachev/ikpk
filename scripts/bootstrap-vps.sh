@@ -454,6 +454,23 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       fi
     fi
     ln -sfn "${shared_deps}/node_modules" "${new_release}/node_modules"
+    # Владелец релиза. rsync -a переносит ЧУЖИЕ uid/gid с машины оператора (на стенде
+    # каталоги оказались с uid 502), поэтому владелец приводится явно. Код остаётся у
+    # root: служба не должна иметь права переписать то, что исполняет. Записывать ей
+    # нужно ровно три места, и они называются поимённо, а не выдаются целиком:
+    #   database/migrations — Strapi создаёт каталог при старте (EACCES иначе);
+    #   public/uploads      — загрузки; живут в ОБЩЕМ каталоге и переживают выкатку;
+    #   .strapi             — служебный кэш.
+    chown -R root:root "$new_release"
+    if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+      mkdir -p "${new_release}/database/migrations" "${new_release}/.strapi"
+      mkdir -p "${shared_deps}/uploads"
+      rm -rf "${new_release}/public/uploads"
+      mkdir -p "${new_release}/public"
+      ln -sfn "${shared_deps}/uploads" "${new_release}/public/uploads"
+      chown -R "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" \
+        "${new_release}/database" "${new_release}/.strapi" "${shared_deps}/uploads"
+    fi
     # ВАЖНО: `readlink -f` на несуществующем симлинке возвращает САМ путь ссылки, а не пустоту.
     # Откат по такому значению делал `current` ссылкой на себя, служба падала с
     # «Too many levels of symbolic links» и перезапускалась бесконечно (замерено на стенде:
