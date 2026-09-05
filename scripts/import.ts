@@ -20,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
+import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -554,24 +555,6 @@ async function importCourseGroups(): Promise<void> {
 // Phase 3 — Seminars (depends on course groups + teachers M2M)
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Build a map: teacher numeric-id (string) → teacher legacy_id.
- * Discovery teacher legacy_ids follow the pattern `…/prepodavatel/{numericId}`.
- */
-function buildTeacherNumericMap(
-  teachers: Record<string, unknown>[],
-): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const t of teachers) {
-    const lid = t.legacy_id as string;
-    const parts = lid.split("/");
-    const numPart = parts[parts.length - 1];
-    if (/^\d+$/.test(numPart)) {
-      m.set(numPart, lid);
-    }
-  }
-  return m;
-}
 
 /**
  * Derive seminar → teacher associations from schedule entries.
