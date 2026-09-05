@@ -43,10 +43,7 @@ openspec/changes/cms-content-authoring-and-migration/design.md :: web/src/lib/sc
 openspec/changes/cms-content-authoring-and-migration/proposal.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
 openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
 openspec/changes/cms-content-authoring-and-migration/tasks.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
-openspec/changes/server-provisioning/design.md :: deploy/environments/prod.env :: will-create
 openspec/changes/server-provisioning/design.md :: deploy/environments/stand.env :: will-create
-openspec/changes/server-provisioning/proposal.md :: deploy/environments/ :: will-create
-openspec/changes/server-provisioning/tasks.md :: deploy/environments/prod.env :: will-create
-openspec/changes/server-provisioning/tasks.md :: deploy/environments/stand.env :: will-create
+openspec/changes/server-provisioning/tasks.md :: deploy/environments/ :: will-create
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
 openspec/specs/schedule-month-filter/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
