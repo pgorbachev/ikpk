@@ -44,7 +44,10 @@ describe('адрес каталога загрузок переписывает�
   });
 
   it('абсолютный адрес системы управления тоже не доживает до страницы', () => {
-    const out = localizeAssetUrls(`https://cms.example.invalid${CMS_UPLOADS_PREFIX}c.webp`);
+    const out = localizeAssetUrls(
+      `https://cms.example.invalid${CMS_UPLOADS_PREFIX}c.webp`,
+      'https://cms.example.invalid',
+    );
     expect(out, `в выводе остался хост системы управления: ${out}`).not.toContain(
       'cms.example.invalid',
     );
@@ -64,6 +67,12 @@ describe('адрес каталога загрузок переписывает�
     // Легаси-бакет продолжает локализоваться прежним способом.
     expect(localizeAssetUrls(`${BUCKET_PREFIX}/media/users/1/images/x.webp`)).toBe(
       '/media/users/1/images/x.webp',
+    );
+    expect(localizeAssetUrls('https://third.example/uploads/report.pdf')).toBe(
+      'https://third.example/uploads/report.pdf',
+    );
+    expect(localizeAssetUrls('https://third.example/?next=/uploads/report.pdf')).toBe(
+      'https://third.example/?next=/uploads/report.pdf',
     );
   });
 });

@@ -30,6 +30,7 @@ const manifest = JSON.parse(
 ) as Record<string, { width?: number; height?: number; widths?: number[] }>;
 
 const media = snapshot.content.media ?? [];
+const imageRef = /\.(?:webp|jpe?g|png|gif)$/i;
 
 describe('производные и размеры отдаваемых изображений', () => {
   // Сценарий: новое изображение получает производные и размеры
@@ -41,7 +42,7 @@ describe('производные и размеры отдаваемых изоб
     const unknown = media
       .filter((m) => {
         const entry = manifest[m.ref];
-        return !entry || !entry.width || !entry.height;
+        return imageRef.test(m.ref) && (!entry || !entry.width || !entry.height);
       })
       .map((m) => m.ref);
 
@@ -55,16 +56,13 @@ describe('производные и размеры отдаваемых изоб
 
   // Сценарий: адаптивный набор не ссылается на отсутствующие файлы.
   //
-  // ИЗВЕСТНОЕ ОТКЛОНЕНИЕ: пустой набор ширин у изображения уже НЕ считается дефектом —
-  // `web/scripts/make-derivatives.ts` не делает апскейла, поэтому у оригинала уже 480px
-  // производных не бывает по замыслу. Измерено на закреплённой фикстуре: 3 из 7 медиа
-  // (`/media/legacy/logo-v2.png` 406×112 и две эмблемы институтов 390×234) имеют пустой
-  // `widths`. Требование спеки «набор SHALL ссылаться только на существующие файлы» здесь и
-  // проверяется — а требование «набор существует» ограничено тем, что апскейл запрещён.
+  // Апскейла нет, но для небольшого оригинала генератор создаёт производную меньшей либо
+  // собственной ширины. Поэтому пустой набор ширин у растрового медиа — уже дефект, а не
+  // допустимое legacy-исключение.
   it('каждая ширина адаптивного набора соответствует существующему файлу', () => {
     const broken: string[] = [];
     let checked = 0;
-    for (const m of media) {
+    for (const m of media.filter((item) => imageRef.test(item.ref))) {
       for (const w of manifest[m.ref]?.widths ?? []) {
         checked += 1;
         const variant = join(dist, 'media', '_w', String(w), decodeURI(m.ref).replace(/^\/media\//, ''));
@@ -73,6 +71,11 @@ describe('производные и размеры отдаваемых изоб
     }
     expect(checked, 'ни у одного медиа снимка нет адаптивного набора — проверка вакуумна').toBeGreaterThan(0);
     expect(broken, `набор ссылается на отсутствующие файлы:\n${broken.join('\n')}`).toEqual([]);
+    const withoutVariants = media
+      .filter((item) => imageRef.test(item.ref))
+      .filter((item) => !(manifest[item.ref]?.widths?.length))
+      .map((item) => item.ref);
+    expect(withoutVariants, `медиа без производных ширин:\n${withoutVariants.join('\n')}`).toEqual([]);
   });
 
   // Сценарий: изображение без известных размеров останавливает сборку.

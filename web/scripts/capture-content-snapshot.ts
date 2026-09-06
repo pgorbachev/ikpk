@@ -73,7 +73,9 @@ function normalizeCmsMediaUrl(value: string): string {
   if (value.startsWith('/')) return value.split(/[?#]/, 1)[0]!;
   try {
     const parsed = new URL(value);
-    if (parsed.pathname.startsWith('/uploads/')) return parsed.pathname;
+    if (parsed.pathname.startsWith('/uploads/') && parsed.origin === new URL(cmsUrl).origin) {
+      return parsed.pathname;
+    }
   } catch {
     // Обычный контракт снимка сообщит о некорректном значении позже.
   }
@@ -200,7 +202,8 @@ function uploadRefsIn(value: unknown): string[] {
       pattern.lastIndex = 0;
       for (const match of node.matchAll(pattern)) {
         const candidate = match[1]!;
-        found.add(normalizeCmsMediaUrl(candidate));
+        const normalized = normalizeCmsMediaUrl(candidate);
+        if (normalized.startsWith('/uploads/')) found.add(normalized);
       }
       return;
     }
@@ -235,6 +238,9 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length === 0) {
+      throw new Error(`медиа ${sourceRef}: CMS вернула пустой файл`);
+    }
     const contentId = contentIdOf(bytes);
     mkdirSync(storeDir, { recursive: true });
     const stored = join(storeDir, contentId);

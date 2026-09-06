@@ -22,21 +22,38 @@ interface ManifestEntry {
 
 const MANIFEST = manifest as Record<string, ManifestEntry>;
 
-/** Заменяет все URL бакета на локальные пути в произвольной строке (включая HTML/JSON). */
-export function localizeAssetUrls(text: string): string {
+/** Заменяет URL медиа на локальные пути в произвольной строке (включая HTML/JSON). */
+export function localizeAssetUrls(text: string, cmsUrl?: string): string {
   if (!text) return text;
   let localized = text.replaceAll(BUCKET_PREFIX, '');
 
   // The capture keeps CMS records in their source shape; this rewrite runs once on the raw
   // snapshot before JSON parsing, so it covers string fields, MediaRef objects and rich HTML.
-  // Restrict the match to a URL boundary: a nested `/uploads/` in an unrelated external URL is
-  // content and must survive unchanged.
+  // Absolute CMS URLs are normalized only when the snapshot records its CMS origin. Without
+  // that proof, a third-party URL containing `/uploads/` is ordinary content and must be kept.
+  if (cmsUrl) {
+    try {
+      const cmsOrigin = new URL(cmsUrl).origin;
+      localized = localized.replace(
+        /https?:\/\/[^/"'\s]+\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+/g,
+        (value) => {
+          try {
+            const parsed = new URL(value);
+            return parsed.origin === cmsOrigin ? parsed.pathname : value;
+          } catch {
+            return value;
+          }
+        },
+      );
+    } catch {
+      // An invalid origin cannot authorize rewriting an absolute URL.
+    }
+  }
+
+  // Restrict the root-relative match to a quoted value: a nested `/uploads/` in an unrelated
+  // external URL query parameter is content and must survive unchanged.
   localized = localized.replace(
-    /(^|["'=])\/uploads\//g,
-    `$1${SITE_UPLOADS_PREFIX}`,
-  );
-  localized = localized.replace(
-    /(^|["'=])https?:\/\/[^/"'\s]+\/uploads\//g,
+    /(^|["'])\/uploads\//g,
     `$1${SITE_UPLOADS_PREFIX}`,
   );
   return localized;

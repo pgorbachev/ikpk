@@ -121,7 +121,7 @@ fi
 # нельзя оставлять только в CI по закреплённой фикстуре — деплой собирает из
 # CONTENT_SNAPSHOT_DIR и должен остановиться до загрузки неполного релиза.
 echo "[deploy] Проверка разрешимости изображений в собранном dist"
-if ! (cd "$WEB_DIR" && npm exec -- vitest run --config vitest.build.config.ts tests/media-migration.test.ts); then
+if ! (cd "$WEB_DIR" && MEDIA_MIGRATION_DIST_DIR="$DIST_DIR" npm exec -- vitest run --config vitest.build.config.ts tests/media-migration.test.ts); then
   echo "[deploy] Загрузка отменена: гейт медиа-миграции не пройден" >&2
   exit 1
 fi

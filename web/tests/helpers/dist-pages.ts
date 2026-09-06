@@ -4,7 +4,7 @@ import { walkFiles } from './walk';
 
 /** Общие хелперы обхода собранного dist/ для build-гейтов. */
 
-export const dist = join(import.meta.dirname, '..', '..', 'dist');
+export const dist = process.env.MEDIA_MIGRATION_DIST_DIR ?? process.env.DIST_DIR ?? join(import.meta.dirname, '..', '..', 'dist');
 
 export { walkFiles };
 

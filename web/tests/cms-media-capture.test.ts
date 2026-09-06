@@ -171,6 +171,34 @@ describe('снятие снимка забирает медиа содержим
       'неудачный съём оставил снимок на диске',
     ).toBe(false);
   });
+
+  it('пустой ответ файла — отказ съёма с указанием файла', async () => {
+    const cms = await stub({}, { [`${CMS_UPLOADS_PREFIX}img-3.webp`]: { bytes: Buffer.alloc(0) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустой файл принят как медиа: ${run.output}`).not.toBe(0);
+    expect(run.output).toContain('img-3.webp');
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('сторонняя ссылка с сегментом /uploads/ сохраняется и не скачивается из CMS', async () => {
+    const baseDataset = mediaDataset();
+    const current = baseDataset.articles.records[0]!;
+    const external = 'https://third.example/uploads/report.pdf';
+    const cms = await stub({
+      articles: { records: [{ ...current, body: `<p><a href="${external}">report</a></p>` }] },
+    });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `захват внешней ссылки ошибочно не прошёл: ${run.output}`).toBe(0);
+    const article = readSnapshot(dir).content.types.articles?.[0];
+    expect(article?.body_html).toContain(external);
+    expect(cms.uploadRequests).not.toContain('/uploads/report.pdf');
+  });
 });
 
 // ════════════ Требование: форма поля снимка совпадает с формой, которую читает сайт ═══════

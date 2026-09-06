@@ -29,6 +29,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
   { width?: number; height?: number; widths?: number[] }
 >;
 const failures: string[] = [];
+const IMAGE_REF = /\.(?:webp|jpe?g|png|gif)$/i;
 
 for (const item of media) {
   const ref = item.ref.startsWith('/uploads/') ? `/media${item.ref}` : item.ref;
@@ -46,8 +47,12 @@ for (const item of media) {
   }
 
   const entry = manifest[ref];
-  if (!entry?.width || !entry.height) {
+  const isImage = IMAGE_REF.test(rel);
+  if (isImage && (!entry?.width || !entry.height)) {
     failures.push(`${ref}: в манифесте нет width/height`);
+  }
+  if (isImage && !entry?.widths?.length) {
+    failures.push(`${ref}: в манифесте нет производных ширин`);
   }
   for (const width of entry?.widths ?? []) {
     const variant = join(mediaRoot, '_w', String(width), rel);

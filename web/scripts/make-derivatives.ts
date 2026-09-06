@@ -23,7 +23,9 @@
  * коллизию полностью.
  *
  * Апскейла нет: вариант шире оригинала не создаётся — это дало бы мыло вместо
- * детализации.
+ * детализации. Для изображения уже меньше минимальной целевой ширины создаётся
+ * производная его собственной ширины, чтобы у каждого растрового файла оставался
+ * хотя бы один проверяемый производный вариант.
  *
  * Запуск: из web/ — `npm run media:derivatives` (или `tsx scripts/make-derivatives.ts`).
  *
@@ -66,7 +68,7 @@ const QUALITY = 80;
  * Одновременно герой рассчитан на подлинный портрет 2477px, которому 1200px не
  * хватает. Одной шириной эти два требования не закрыть.
  */
-const TARGET_WIDTHS = [480, 768, 1200, 1600, 2400];
+const TARGET_WIDTHS = [160, 240, 480, 768, 1200, 1600, 2400];
 
 const force = process.argv.includes('--force');
 const RASTER = /\.(webp|jpe?g|png)$/i;
@@ -145,8 +147,9 @@ for (const originalsRoot of ORIGINAL_ROOTS) {
       }
 
       // ── адаптивный набор
-      for (const w of TARGET_WIDTHS) {
-        if (w > origWidth) continue; // без апскейла
+      const variantWidths = TARGET_WIDTHS.filter((w) => w <= origWidth);
+      if (variantWidths.length === 0 && origWidth > 0) variantWidths.push(origWidth);
+      for (const w of variantWidths) {
         const variant = join(VARIANTS_DIR, String(w), rel);
         if (isFresh(variant, src)) continue;
         const buf = await encode(sharp(src).resize({ width: w }), ext).toBuffer();
