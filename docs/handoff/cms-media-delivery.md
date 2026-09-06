@@ -31,17 +31,21 @@ curl -s http://193.124.115.99/ | grep -o '<img class="teacher-photo"[^>]*>' | he
 - поле для медиа в снимке объявлено — `web/scripts/lib/content-snapshot.ts:24`, `media: SnapshotMedia[];`
   — и в живом снимке пусто: `capture-content-snapshot.ts` создаёт содержимое как
   `const content: SnapshotContent = { types, media: [] };` и больше к `media` не возвращается;
-- живой снимок ссылается на **287 уникальных** файлов по `/uploads/**`, всего **313**
-  вхождений. Распределение по типам: `articles` 221, `course_groups` 53, `teachers` 29,
-  `news` 4, `promotions` 4, `institutes` 2. Внешних (не наших) адресов картинок — 0.
+- живой снимок ссылается на **131 уникальный** файл CMS, всего **157** вхождений. Считать
+  надо по границе значения (`"` перед адресом): из 313 вхождений подстроки `/uploads/` ровно
+  156 — это легаси-пути `/media/uploads/**`, у которых `/uploads/` лишь хвост, они уже лежат
+  в репозитории (213 файлов в `web/public/media/uploads/`) и отдаются. Первый счёт по голой
+  подстроке дал 287/313 и был неверен: он смешал два разных класса. Внешних (не наших)
+  адресов картинок — 0.
   Пересчитывается на снимке своим выражением:
 
   ```bash
   node -e "
   const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));
   const txt=JSON.stringify(s.content.types);
-  const refs=[...txt.matchAll(/\/uploads\/[A-Za-z0-9_.\-]+/g)].map(m=>m[0]);
-  console.log('вхождений',refs.length,'уникальных',new Set(refs).size);
+  const cms=[...txt.matchAll(/["'](\/uploads\/[^"'\\ ]+)/g)].map(m=>m[1]);
+  const legacy=[...txt.matchAll(/(\/media\/uploads\/[^"'\\ ]+)/g)].map(m=>m[1]);
+  console.log('CMS',cms.length,new Set(cms).size,'| легаси',legacy.length,new Set(legacy).size);
   " <путь к snapshot.json>
   ```
 
