@@ -5,7 +5,7 @@
  * Публикующий прогон подменяет источник живым артефактом до этого шага.
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { materializeInto } from './lib/content-media-store.ts';
 
@@ -28,6 +28,16 @@ for (const dest of [join(webRoot, '.snapshot'), join(webRoot, 'dist-snapshot')])
   // Карта адресов — часть артефакта снимка (задача 6.3): генератор редиректов читает её отсюда.
   const urlMap = join(source, 'url_map.csv');
   if (existsSync(urlMap)) cpSync(urlMap, join(dest, 'url_map.csv'));
+  // Хранилище содержимого переносится вместе со снимком, а не остаётся в каталоге съёма.
+  // Иначе снимок, доехавший до сборки артефактом (джоб `content-snapshot` копирует
+  // `.snapshot/.`), несёт ссылки на медиа и не несёт байтов: следующий запуск этого же
+  // скрипта в сборочном джобе не находит хранилища и валит prebuild. Пока в закреплённой
+  // фикстуре нет ни одной записи `/media/uploads/**`, отказ не наступает — то есть зелёный
+  // цвет здесь означал бы «медиа CMS ещё не появились», а не «перенос работает».
+  const store = join(source, 'media');
+  if (existsSync(store) && resolve(store) !== resolve(join(dest, 'media'))) {
+    cpSync(store, join(dest, 'media'), { recursive: true });
+  }
 }
 
 // CMS originals are an input to the same derivative generator as repository originals, but
@@ -40,8 +50,11 @@ const prepared = JSON.parse(readFileSync(join(webRoot, '.snapshot', 'snapshot.js
 };
 const cmsMedia = (prepared.content?.media ?? []).filter((item) => item.ref.startsWith('/media/uploads/'));
 if (cmsMedia.length > 0) {
+  // Хранилище берётся из уже перенесённого `.snapshot/media`, а не из каталога-источника:
+  // во втором прогоне (сборочный джоб) источником служит артефакт, и путь совпадает; в
+  // первом — перенос только что состоялся. Одно место чтения вместо двух.
   const result = materializeInto({
-    storeDir: join(source, 'media'),
+    storeDir: join(webRoot, '.snapshot', 'media'),
     destDir: materializedDir,
     media: cmsMedia,
   });
