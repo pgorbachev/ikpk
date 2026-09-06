@@ -274,6 +274,24 @@ async function liveCapture(): Promise<void> {
     origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
 
+  // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте
+  // проходит по определению: нарушать нечего. Замерено 06.09.2026 — снятие пришлось на
+  // перезапуск CMS после смены артефакта, снимок вышел с нулём записей, контракт его
+  // пропустил, и сайт собрался бы БЕЗ содержимого. Остановил это чужой гейт по случайности.
+  const emptyTypes = Object.entries(types)
+    .filter(([, rows]) => !Array.isArray(rows) || rows.length === 0)
+    .map(([name]) => name);
+  const filled = Object.keys(types).length - emptyTypes.length;
+  if (filled === 0) {
+    throw new Error(
+      `живой съём с ${cmsUrl} не дал ни одной записи ни в одном типе — источник недоступен ` +
+        'или пуст; снимок не записан',
+    );
+  }
+  if (emptyTypes.length > 0) {
+    console.warn(`snapshot:capture: пустые типы (${emptyTypes.length}): ${emptyTypes.join(', ')}`);
+  }
+
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
   assertSnapshotContract(snap);
