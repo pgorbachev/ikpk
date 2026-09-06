@@ -11,6 +11,7 @@ import manifest from './media-manifest.json';
 // Продублирован в scripts/download-media.ts (разные npm-пакеты) —
 // при изменении бакета править ОБА места.
 export const BUCKET_PREFIX = 'https://storage.yandexcloud.net/ikpk-image';
+const SITE_UPLOADS_PREFIX = '/media/uploads/';
 
 interface ManifestEntry {
   width?: number;
@@ -24,7 +25,21 @@ const MANIFEST = manifest as Record<string, ManifestEntry>;
 /** Заменяет все URL бакета на локальные пути в произвольной строке (включая HTML/JSON). */
 export function localizeAssetUrls(text: string): string {
   if (!text) return text;
-  return text.replaceAll(BUCKET_PREFIX, '');
+  let localized = text.replaceAll(BUCKET_PREFIX, '');
+
+  // The capture keeps CMS records in their source shape; this rewrite runs once on the raw
+  // snapshot before JSON parsing, so it covers string fields, MediaRef objects and rich HTML.
+  // Restrict the match to a URL boundary: a nested `/uploads/` in an unrelated external URL is
+  // content and must survive unchanged.
+  localized = localized.replace(
+    /(^|["'=])\/uploads\//g,
+    `$1${SITE_UPLOADS_PREFIX}`,
+  );
+  localized = localized.replace(
+    /(^|["'=])https?:\/\/[^/"'\s]+\/uploads\//g,
+    `$1${SITE_UPLOADS_PREFIX}`,
+  );
+  return localized;
 }
 
 /**
@@ -135,4 +150,3 @@ export function injectImgDimensions(html: string): string {
     return out;
   });
 }
-

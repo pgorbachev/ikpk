@@ -155,7 +155,16 @@ let stubs: CmsStub[] = [];
 const outDir = (): string => mkdtempSync(join(tmpdir(), 'lsc-snapshot-'));
 
 async function stub(over: Record<string, StubCollection> = {}): Promise<CmsStub> {
-  const started = await startCmsStub(dataset(over));
+  // Live capture now downloads every `/uploads/**` reference. Keep this broader
+  // fixture independent from the media-delivery fixture while still supplying
+  // bytes for all image records (articles use ids through ARTICLE_COUNT).
+  const uploads = Object.fromEntries(
+    Array.from({ length: ARTICLE_COUNT }, (_, i) => [
+      `/uploads/img-${i + 1}.webp`,
+      { bytes: Buffer.from(`live-capture-image-${i + 1}`) },
+    ]),
+  );
+  const started = await startCmsStub(dataset(over), uploads);
   stubs.push(started);
   return started;
 }

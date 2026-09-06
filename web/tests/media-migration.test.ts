@@ -29,6 +29,13 @@ describe('media migration (Этап 2)', () => {
     // схемы. Внешние картинки (любой хост) запрещены: домен может умереть.
     const external: string[] = [];
     const missing: string[] = [];
+    // Третий класс: ссылка, которая не является ни схемой, ни путём от корня сайта.
+    // Прежде такие молча пропускались (`if (!ref.startsWith('/')) continue;`) — и вместе с
+    // ними проходило `src="[object Object]"`, наблюдённое на стенде у карточек
+    // преподавателей: поле снимка пришло объектом там, где сайт читает строку. Тишина здесь
+    // была тем же, чем «дефектов нет» вместо «я не смогла проверить»: адрес, которого не
+    // существует ни в каком прочтении, гейт признавал не своим предметом.
+    const unresolvable: string[] = [];
 
     for (const file of walkFiles(dist, ['.html'])) {
       const html = readFileSync(file, 'utf-8');
@@ -73,7 +80,14 @@ describe('media migration (Этап 2)', () => {
           external.push(`${page}: ${ref}`);
           continue;
         }
-        if (!ref.startsWith('/')) continue; // относительные внутри страницы не используем
+        // Ссылка на фрагмент того же документа — законный предмет у `url()` внутри inline-SVG
+        // (`fill="url(#clip0_519_1997)"`). Измерено на этой сборке: таких три, все из логотипа
+        // в шапке; всё остальное, не начинающееся со слэша, адресом не является.
+        if (ref.startsWith('#')) continue;
+        if (!ref.startsWith('/')) {
+          unresolvable.push(`${page}: ${ref}`);
+          continue;
+        }
         const local = join(dist, decodeURI(ref.split('?')[0].split('#')[0]));
         if (!existsSync(local)) missing.push(`${page}: ${ref}`);
       }
@@ -94,6 +108,12 @@ describe('media migration (Этап 2)', () => {
 
     expect(external, `внешние картинки (домен может умереть):\n${external.slice(0, 15).join('\n')}`).toEqual([]);
     expect(missing, `битые локальные ссылки:\n${missing.slice(0, 15).join('\n')}`).toEqual([]);
+    expect(
+      unresolvable.slice(0, 15),
+      `адрес изображения не является ни схемой, ни путём от корня сайта ` +
+        `(так выглядит поле снимка, пришедшее объектом), всего ${unresolvable.length}:\n` +
+        unresolvable.slice(0, 15).join('\n'),
+    ).toEqual([]);
   });
 
   // Гейт на класс «ссылка/действие работает только благодаря старому сайту».

@@ -119,7 +119,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'teachers', field: 'institute_legacy_id', source: 'institute.legacy_id' },
   { type: 'teachers', field: 'bio_html', source: 'bio' },
   { type: 'teachers', field: 'bio_text', source: 'bio', transform: 'htmlToText' },
-  { type: 'teachers', field: 'photo', source: 'photo', transform: 'mediaRef' },
+  { type: 'teachers', field: 'photo', source: 'photo', transform: 'mediaUrl' },
   { type: 'teachers', field: 'order', source: 'order' },
 
   // articles
@@ -131,7 +131,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'articles', field: 'body_text', source: 'body', transform: 'htmlToText' },
   { type: 'articles', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'articles', field: 'seo_description', source: 'seo.seo_description' },
-  { type: 'articles', field: 'image', source: 'image', transform: 'mediaRef' },
+  { type: 'articles', field: 'image', source: 'image', transform: 'mediaUrl' },
   { type: 'articles', field: 'published_at', source: 'published_date' },
 
   // schedule_entries — уже CMS-нативный тип, без legacy-иерархии: поля называются как в схеме.

@@ -46,6 +46,9 @@ export default defineConfig({
       // cms-content-publication). Без сборки проверять нечего, поэтому файл живёт
       // в наборе vitest.build.config.ts, как остальные *.build.test.ts.
       'tests/cms-article-catalog-snapshot.build.test.ts',
+      // Предмет — собранное дерево и манифест производных (спека cms-media-pipeline):
+      // без сборки проверять нечего.
+      'tests/cms-media-derivatives.build.test.ts',
       // Внешние виджеты: у каждого файла свой предмет — боевой вывод и демо-вывод, —
       // поэтому оба живут в специализированных конфигурациях, а не здесь.
       'tests/external-widgets-dist.test.ts',

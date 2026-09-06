@@ -159,7 +159,20 @@ export interface CmsStub {
   url: string;
   /** Журнал запросов: по нему видно, был ли постраничный обход. */
   requests: { endpoint: string; page: number; pageSize: number }[];
+  /** Журнал обращений к каталогу загрузок: по нему видно, скачивались ли байты медиа. */
+  uploadRequests: string[];
   close(): Promise<void>;
+}
+
+/**
+ * Файл каталога загрузок: байты либо код отказа. Ключ — путь целиком (`/uploads/img-1.webp`),
+ * а не имя: у Strapi адрес медиа приходит в поле `url` записи, и заглушка обязана отвечать
+ * ровно на него, иначе проверка «скачано ли» подтверждала бы другое обращение.
+ */
+export interface StubUpload {
+  bytes?: Buffer;
+  /** Отвечать этим кодом вместо байтов: имитация недокачанного файла. */
+  status?: number;
 }
 
 function collectionOf(pathname: string): string {
@@ -179,11 +192,37 @@ function paginationOf(params: URLSearchParams): { page: number; pageSize: number
   return { page: Number(params.get('pagination[page]') ?? '1'), pageSize };
 }
 
-export async function startCmsStub(dataset: Record<string, StubCollection>): Promise<CmsStub> {
+export async function startCmsStub(
+  dataset: Record<string, StubCollection>,
+  uploads: Record<string, StubUpload> = {},
+): Promise<CmsStub> {
   const requests: CmsStub['requests'] = [];
+  const uploadRequests: string[] = [];
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
     const parsed = new URL(req.url ?? '/', 'http://localhost');
+
+    // Каталог загрузок отвечает БАЙТАМИ, а не JSON: снятие снимка обязано скачать файл, а не
+    // прочитать про него запись. Ветка стоит до разбора коллекций: последний сегмент
+    // `/uploads/img-1.webp` — имя файла, и обычный разбор принял бы его за тип контента.
+    const upload = uploads[parsed.pathname];
+    if (parsed.pathname.startsWith('/uploads/') || upload) {
+      uploadRequests.push(parsed.pathname);
+      if (!upload) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('нет такого файла');
+        return;
+      }
+      if (upload.status && upload.status >= 400) {
+        res.writeHead(upload.status, { 'content-type': 'text/plain' });
+        res.end('сбой отдачи файла');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'image/webp' });
+      res.end(upload.bytes ?? Buffer.alloc(0));
+      return;
+    }
+
     const endpoint = collectionOf(parsed.pathname);
     const collection = dataset[endpoint];
     if (!collection) {
@@ -216,6 +255,7 @@ export async function startCmsStub(dataset: Record<string, StubCollection>): Pro
   return {
     url: `http://127.0.0.1:${address.port}`,
     requests,
+    uploadRequests,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
 }

@@ -50,6 +50,8 @@ import sharp, { type Sharp } from 'sharp';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ORIGINALS = join(ROOT, 'media-originals');
+const SNAPSHOT_ORIGINALS = join(ROOT, 'web', '.snapshot', 'media-originals');
+const ORIGINAL_ROOTS = [ORIGINALS, SNAPSHOT_ORIGINALS];
 const SHIPPED = join(ROOT, 'web', 'public', 'media');
 const VARIANTS_DIR = join(SHIPPED, '_w');
 const MANIFEST_PATH = join(ROOT, 'web', 'src', 'lib', 'media-manifest.json');
@@ -106,52 +108,55 @@ let variants = 0;
 let upToDate = 0;
 let failed = 0;
 
-for (const src of walk(ORIGINALS)) {
-  const rel = relative(ORIGINALS, src);
-  const out = join(SHIPPED, rel);
+for (const originalsRoot of ORIGINAL_ROOTS) {
+  if (!existsSync(originalsRoot)) continue;
+  for (const src of walk(originalsRoot)) {
+    const rel = relative(originalsRoot, src);
+    const out = join(SHIPPED, rel);
 
-  // PDF, SVG и прочее переносим как есть: уменьшать нечего
-  if (!RASTER.test(src)) {
-    if (isFresh(out, src)) {
-      upToDate++;
-    } else {
-      mkdirSync(dirname(out), { recursive: true });
-      copyFileSync(src, out);
-      copied++;
-    }
-    continue;
-  }
-
-  try {
-    const meta = await sharp(src).metadata();
-    const origWidth = meta.width ?? 0;
-    const ext = src.match(/\.([a-z0-9]+)$/i)![1].toLowerCase();
-
-    // ── базовая версия
-    if (isFresh(out, src)) {
-      upToDate++;
-    } else {
-      let pipeline = sharp(src);
-      if (origWidth > BASE_WIDTH) pipeline = pipeline.resize({ width: BASE_WIDTH });
-      const buf = await encode(pipeline, ext).toBuffer();
-      // уже оптимизированный файл не портим: если пережатие не даёт выигрыша,
-      // отдаём оригинал как есть
-      await writeAtomic(out, buf.length < statSync(src).size ? buf : readFileSync(src));
-      base++;
+    // PDF, SVG и прочее переносим как есть: уменьшать нечего
+    if (!RASTER.test(src)) {
+      if (isFresh(out, src)) {
+        upToDate++;
+      } else {
+        mkdirSync(dirname(out), { recursive: true });
+        copyFileSync(src, out);
+        copied++;
+      }
+      continue;
     }
 
-    // ── адаптивный набор
-    for (const w of TARGET_WIDTHS) {
-      if (w > origWidth) continue; // без апскейла
-      const variant = join(VARIANTS_DIR, String(w), rel);
-      if (isFresh(variant, src)) continue;
-      const buf = await encode(sharp(src).resize({ width: w }), ext).toBuffer();
-      await writeAtomic(variant, buf);
-      variants++;
+    try {
+      const meta = await sharp(src).metadata();
+      const origWidth = meta.width ?? 0;
+      const ext = src.match(/\.([a-z0-9]+)$/i)![1].toLowerCase();
+
+      // ── базовая версия
+      if (isFresh(out, src)) {
+        upToDate++;
+      } else {
+        let pipeline = sharp(src);
+        if (origWidth > BASE_WIDTH) pipeline = pipeline.resize({ width: BASE_WIDTH });
+        const buf = await encode(pipeline, ext).toBuffer();
+        // уже оптимизированный файл не портим: если пережатие не даёт выигрыша,
+        // отдаём оригинал как есть
+        await writeAtomic(out, buf.length < statSync(src).size ? buf : readFileSync(src));
+        base++;
+      }
+
+      // ── адаптивный набор
+      for (const w of TARGET_WIDTHS) {
+        if (w > origWidth) continue; // без апскейла
+        const variant = join(VARIANTS_DIR, String(w), rel);
+        if (isFresh(variant, src)) continue;
+        const buf = await encode(sharp(src).resize({ width: w }), ext).toBuffer();
+        await writeAtomic(variant, buf);
+        variants++;
+      }
+    } catch (err) {
+      console.error(`  ✗ ${rel}: ${(err as Error).message}`);
+      failed++;
     }
-  } catch (err) {
-    console.error(`  ✗ ${rel}: ${(err as Error).message}`);
-    failed++;
   }
 }
 
