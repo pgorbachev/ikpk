@@ -5,7 +5,7 @@
  *
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSnapshotContract } from './lib/content-contract.ts';
@@ -264,6 +264,14 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
 }
 
 async function liveCapture(): Promise<void> {
+  // Прежний снимок убирается ДО первого запроса, а не переписывается в конце. Каталог съёма
+  // переиспользуют, и при отказе на середине — скажем, на 60-м файле из 131 — старый
+  // `snapshot.json` оставался лежать рядом с наполовину заполненным хранилищем. Отказ съёма
+  // при этом честно возвращал ненулевой код, а следующая сборка молча брала прежний снимок:
+  // «недокачанный файл — отказ, а не тихий пропуск» было верно про код возврата и неверно про
+  // последствие.
+  rmSync(join(outDir, 'snapshot.json'), { force: true });
+
   const rawByType: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
     try {

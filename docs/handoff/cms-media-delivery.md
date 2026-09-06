@@ -65,7 +65,7 @@ curl -s http://193.124.115.99/ | grep -o '<img class="teacher-photo"[^>]*>' | he
 
 ## 4. Второй дефект, независимый: форма поля `photo`
 
-`web/src/lib/data.ts:194`, `  photo: string;` — сайт читает адрес строкой. Соответствие
+`web/src/lib/data.ts:196`, `  photo: string;` — сайт читает адрес строкой. Соответствие
 полей кладёт туда объект:
 
 `web/scripts/lib/content-field-map.ts:122`,
@@ -74,7 +74,7 @@ curl -s http://193.124.115.99/ | grep -o '<img class="teacher-photo"[^>]*>' | he
 `mediaRef` возвращает `{ url, id }`, поэтому в разметку попадает `[object Object]`.
 
 У акций и новостей форма поля другая и **правильная**: `Promotion.image` и `NewsItem.image`
-объявлены объектом (`web/src/lib/data.ts:238` — `NewsItem`, `web/src/lib/data.ts:248` — `Promotion`; обе строки `  image: { url: string; id: string };`), и
+объявлены объектом (`web/src/lib/data.ts:240` — `NewsItem`, `web/src/lib/data.ts:250` — `Promotion`; обе строки `  image: { url: string; id: string };`), и
 компоненты берут `.url`. Там дефект только корневой (п. 3). Не «исправляйте» их заодно —
 сломаете.
 
@@ -141,7 +141,7 @@ curl -s http://193.124.115.99/ | grep -o '<img class="teacher-photo"[^>]*>' | he
    чтобы медиа CMS получили производные и записи манифеста;
 5. `web/src/lib/media.ts`, `localizeAssetUrls` — переписывает `/uploads/<файл>` в
    `/media/uploads/<файл>`. Место выбрано потому, что рерайт применяется к **сырому тексту
-   снимка до разбора** (`web/src/lib/data.ts:81`, `  _snapshot = JSON.parse(localizeAssetUrls(raw)) as SnapshotFile;`),
+   снимка до разбора** (`web/src/lib/data.ts:83`, `  _snapshot = JSON.parse(localizeAssetUrls(raw, source.origin?.url)) as SnapshotFile;`),
    то есть одним изменением накрывает и поля-строки, и поля-объекты, и картинки внутри
    HTML-тел статей. Рерайт обязан быть привязан к границе (кавычка, `=`), иначе зацепит
    внешний адрес, содержащий `/uploads/`;

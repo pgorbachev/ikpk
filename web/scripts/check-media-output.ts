@@ -29,7 +29,12 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
   { width?: number; height?: number; widths?: number[] }
 >;
 const failures: string[] = [];
+// Размеры известны и у gif: генератор заносит их в манифест. А вот производных у gif не
+// бывает — он копируется как есть (`RASTER` в make-derivatives.ts перечисляет webp/jpeg/png),
+// поэтому требовать от него набор ширин значит остановить сборку на первой же gif-загрузке
+// без способа исправить это содержимым. Схема CMS gif разрешает.
 const IMAGE_REF = /\.(?:webp|jpe?g|png|gif)$/i;
+const DERIVED_REF = /\.(?:webp|jpe?g|png)$/i;
 
 for (const item of media) {
   const ref = item.ref.startsWith('/uploads/') ? `/media${item.ref}` : item.ref;
@@ -51,7 +56,7 @@ for (const item of media) {
   if (isImage && (!entry?.width || !entry.height)) {
     failures.push(`${ref}: в манифесте нет width/height`);
   }
-  if (isImage && !entry?.widths?.length) {
+  if (DERIVED_REF.test(rel) && !entry?.widths?.length) {
     failures.push(`${ref}: в манифесте нет производных ширин`);
   }
   for (const width of entry?.widths ?? []) {

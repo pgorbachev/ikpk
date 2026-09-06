@@ -68,7 +68,7 @@ const QUALITY = 80;
  * Одновременно герой рассчитан на подлинный портрет 2477px, которому 1200px не
  * хватает. Одной шириной эти два требования не закрыть.
  */
-const TARGET_WIDTHS = [160, 240, 480, 768, 1200, 1600, 2400];
+const TARGET_WIDTHS = [480, 768, 1200, 1600, 2400];
 
 const force = process.argv.includes('--force');
 const RASTER = /\.(webp|jpe?g|png)$/i;
