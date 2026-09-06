@@ -1,5 +1,38 @@
 import type { Snapshot } from './content-snapshot.ts';
 
+/** Группа обязательных полей: достаточно любого имени из группы (design.md, change
+ *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
+ *  соответствия полей меряется относительно ЭТОГО списка, а не относительно текста функции. */
+export interface RequiredFieldGroup {
+  type: string;
+  anyOf: readonly string[];
+}
+
+export const REQUIRED_SNAPSHOT_FIELDS: readonly RequiredFieldGroup[] = [
+  { type: 'articles', anyOf: ['slug'] },
+  { type: 'articles', anyOf: ['title'] },
+  { type: 'articles', anyOf: ['body', 'body_html'] },
+  { type: 'articles', anyOf: ['page_title', 'seo_title'] },
+  { type: 'articles', anyOf: ['page_description', 'seo_description'] },
+  { type: 'articles', anyOf: ['image'] },
+] as const;
+
+/**
+ * Связи, которые контракт проверяет ОТДЕЛЬНЫМ правилом (`broken-relation`), а не как пустое
+ * обязательное поле. Перечень заведён отдельно намеренно: правила разные, и сваливать их в
+ * `REQUIRED_SNAPSHOT_FIELDS` значило бы ждать от мутации не того нарушения.
+ *
+ * Он существует потому, что без него объявленное расходилось с применяемым: полнота
+ * соответствия полей была зелёной, а контракт на живом снимке отказывал по связи преподавателя
+ * с институтом — её просто не было в модели CMS, и заметить это до прогона было нечем.
+ */
+export const REQUIRED_SNAPSHOT_RELATIONS: readonly RequiredFieldGroup[] = [
+  { type: 'seminars', anyOf: ['program', 'course_group_legacy_id'] },
+  { type: 'course_groups', anyOf: ['institute', 'institute_legacy_id'] },
+  { type: 'teachers', anyOf: ['institute', 'institute_legacy_id'] },
+  { type: 'schedule_entries', anyOf: ['seminar'] },
+] as const;
+
 export interface ContractViolation {
   type: string;
   recordId: string;
@@ -98,9 +131,21 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
   const seminarSlugs = slugsOf(seminars);
 
   if (types.programs || types.course_groups) {
+    // Сравнивать надо ОДНОРОДНОЕ с однородным. Семинар ссылается на программу двумя разными
+    // способами, и они живут в разных пространствах имён: `program` — это слуг, а
+    // `course_group_legacy_id` — идентификатор legacy-сайта, что видно прямо из имени поля.
+    // Прежняя редакция брала любое из двух и искала в множестве СЛУГОВ, поэтому объявляла
+    // сломанными все 126 связей при том, что по legacy_id целы все 126.
+    const programLegacyIds = new Set(
+      (programs ?? []).map((record) => String(record.legacy_id ?? '')).filter(Boolean),
+    );
     for (const seminar of seminars) {
-      const program = seminar.program ?? seminar.course_group_legacy_id;
-      if (isEmpty(program) || !programSlugs.has(String(program))) {
+      const bySlug = seminar.program;
+      const byLegacyId = seminar.course_group_legacy_id;
+      const linked = !isEmpty(bySlug)
+        ? programSlugs.has(String(bySlug))
+        : !isEmpty(byLegacyId) && programLegacyIds.has(String(byLegacyId));
+      if (!linked) {
         violations.push({ type: 'seminars', recordId: recordId(seminar), rule: 'broken-relation' });
       }
     }
@@ -148,7 +193,18 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
 export function assertSnapshotContract(snapshot: Snapshot): void {
   const { violations } = validateSnapshotContract(snapshot);
   if (violations.length === 0) return;
-  const first = violations[0]!;
-  const field = first.field ? ` ${first.field}` : '';
-  throw new Error(`${first.recordId}${field} ${first.rule}`);
+  // Отказ обязан называть ПРЕДМЕТ, а не только первую запись: сообщение вида
+  // «85 broken-relation» не говорит ни какая связь сломана, ни сколько их — по нему
+  // нельзя отличить один дефект данных от насыщенной проверки, которая красна на всём.
+  const byRule = new Map<string, number>();
+  for (const v of violations) {
+    const key = `${v.type}.${v.field ?? '—'} ${v.rule}`;
+    byRule.set(key, (byRule.get(key) ?? 0) + 1);
+  }
+  const summary = [...byRule.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => `${key} ×${count}`)
+    .join('; ');
+  const examples = violations.slice(0, 3).map((v) => v.recordId).join(', ');
+  throw new Error(`контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`);
 }

@@ -27,7 +27,7 @@
       ]
     },
     "link": {
-      "type": "string"
+      "type": "text"
     },
     "priority": {
       "type": "integer",

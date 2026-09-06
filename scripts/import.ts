@@ -20,6 +20,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
+import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
+import { normalizeLegacyId } from "./lib/legacy-id.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -329,10 +331,15 @@ async function resolveRelation(
  */
 async function upsert(
   apiName: string,
-  legacyId: string,
-  data: Record<string, unknown>,
+  rawLegacyId: unknown,
+  rawData: Record<string, unknown>,
   report: EntityReport,
 ): Promise<StrapiEntry | null> {
+  // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
+  // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
+  // строкой, discovery держит его и числом.
+  const legacyId = normalizeLegacyId(rawLegacyId);
+  const data = 'legacy_id' in rawData ? { ...rawData, legacy_id: legacyId } : rawData;
   try {
     const existing = await findByLegacyId(apiName, legacyId);
 
@@ -417,8 +424,26 @@ async function importTeachers(): Promise<void> {
       slug: e.slug,
       bio: (e.bio_html as string) ?? null,
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     if (photoId) data.photo = photoId;
+
+    // Связь с институтом. Её не было ни в схеме CMS, ни здесь, хотя в данных переноса она есть
+    // у всех 29 преподавателей — и контракт снимка требует её кодом (`broken-relation`).
+    // Из-за пропуска живой захват отказывал на первом же преподавателе.
+    if (e.institute_legacy_id) {
+      const docId = await resolveRelation(
+        "institutes",
+        e.institute_legacy_id as string,
+        report,
+        String(e.legacy_id),
+        "institute",
+      );
+      if (docId) data.institute = docId;
+    }
+
     await upsert("teachers", e.legacy_id as string, data, report);
   }
 }
@@ -432,7 +457,10 @@ async function importArticles(): Promise<void> {
       title: e.title,
       slug: e.slug,
       body: (e.body_html as string) ?? null,
-      published_at: (e.published_at as string) ?? null,
+      // Атрибут CMS называется `published_date`: `published_at` зарезервирован Strapi 5 при
+      // включённом draftAndPublish и ломает создание таблицы. В снимке поле остаётся
+      // `published_at` — это данные legacy-сайта, а не поле CMS.
+      published_date: (e.published_at as string) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -526,6 +554,9 @@ async function importCourseGroups(): Promise<void> {
       slug: e.slug,
       description: (e.description_html as string) ?? null,
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -551,24 +582,6 @@ async function importCourseGroups(): Promise<void> {
 // Phase 3 — Seminars (depends on course groups + teachers M2M)
 // ════════════════════════════════════════════════════════════════
 
-/**
- * Build a map: teacher numeric-id (string) → teacher legacy_id.
- * Discovery teacher legacy_ids follow the pattern `…/prepodavatel/{numericId}`.
- */
-function buildTeacherNumericMap(
-  teachers: Record<string, unknown>[],
-): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const t of teachers) {
-    const lid = t.legacy_id as string;
-    const parts = lid.split("/");
-    const numPart = parts[parts.length - 1];
-    if (/^\d+$/.test(numPart)) {
-      m.set(numPart, lid);
-    }
-  }
-  return m;
-}
 
 /**
  * Derive seminar → teacher associations from schedule entries.
@@ -614,6 +627,9 @@ async function importSeminars(): Promise<void> {
       description: (e.description_html as string) ?? null,
       status: (e.status as string) ?? "planned",
       legacy_id: e.legacy_id,
+      // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
+      // переноса он есть у всех записей этих типов.
+      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -631,9 +647,18 @@ async function importSeminars(): Promise<void> {
       if (cgDocId) data.course_group = cgDocId;
     }
 
-    // Resolve teachers M2M (derived from schedule entries)
-    const tLegacyIds = semTeachers.get(e.slug as string);
-    if (tLegacyIds && tLegacyIds.size > 0) {
+    // Связь с преподавателями. Источников ДВА, и прямой полнее производного: у самого семинара
+    // список есть у 124 из 126, а вывод из расписания видит только те семинары, у которых
+    // расписание есть. Прежняя редакция брала лишь производный, и семинары без расписания
+    // теряли преподавателей молча — на сайте вместо нужного показывался первый попавшийся с
+    // фотографией. Берём объединение: прямой источник плюс всё, что дало расписание.
+    const direct = Array.isArray(e.teachers)
+      ? (e.teachers as Record<string, unknown>[])
+          .map((t) => normalizeLegacyId(t.legacy_id ?? t.id))
+          .filter(Boolean)
+      : [];
+    const tLegacyIds = new Set<string>([...direct, ...(semTeachers.get(e.slug as string) ?? [])]);
+    if (tLegacyIds.size > 0) {
       const docIds: string[] = [];
       for (const tLid of tLegacyIds) {
         const cached = getCache("teachers").get(tLid);
