@@ -72,6 +72,7 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/co
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: web/src/pages/oplata.astro:36
 openspec/changes/education-trust-and-admission-clarity/specs/organization-license-identity/spec.md :: Л035-01271-78/00330375
+openspec/changes/education-trust-and-admission-clarity/specs/verifiable-public-claims/spec.md :: web/src/components/home/sections/Advantages.astro:14-15
 openspec/changes/education-trust-and-admission-clarity/specs/verifiable-public-claims/spec.md :: web/src/components/home/sections/Approach.astro:23-36
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: .gitignore
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: Advantages.astro:25

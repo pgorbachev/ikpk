@@ -232,7 +232,10 @@ describe('Parity audit against original site', () => {
     expect(text).toContain('Наш подход к обучению');
     expect(text).toContain('Наши программы');
     expect(text).toContain('Подпишитесь на наши новости');
-    expect(text).toContain('единственный официальный представитель институтов Апледжера и Барраля');
+    // Текст карточки заменён владельцем 2026-09-06 на предложенный заказчиком (вход
+    // docs/client-input-2026-09-04.md); институты остаются те же, формулировка про
+    // «единственного представителя» больше не проверяется этим тестом.
+    expect(text).toContain('Института Барраля (Франция) и Института Апледжера (США)');
   });
 
   it('article page keeps rich content and Article JSON-LD', () => {
