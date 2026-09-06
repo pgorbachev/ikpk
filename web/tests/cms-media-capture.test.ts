@@ -187,8 +187,14 @@ describe('снятие снимка забирает медиа содержим
     const baseDataset = mediaDataset();
     const current = baseDataset.articles.records[0]!;
     const external = 'https://third.example/uploads/report.pdf';
+    const externalQuery = 'https://third.example/?next=/uploads/query-report.pdf';
     const cms = await stub({
-      articles: { records: [{ ...current, body: `<p><a href="${external}">report</a></p>` }] },
+      articles: {
+        records: [{
+          ...current,
+          body: `<p><a href="${external}">report</a><a href="${externalQuery}">query</a></p>`,
+        }],
+      },
     });
     const dir = outDir();
 
@@ -197,7 +203,9 @@ describe('снятие снимка забирает медиа содержим
     expect(run.status, `захват внешней ссылки ошибочно не прошёл: ${run.output}`).toBe(0);
     const article = readSnapshot(dir).content.types.articles?.[0];
     expect(article?.body_html).toContain(external);
+    expect(article?.body_html).toContain(externalQuery);
     expect(cms.uploadRequests).not.toContain('/uploads/report.pdf');
+    expect(cms.uploadRequests).not.toContain('/uploads/query-report.pdf');
   });
 });
 

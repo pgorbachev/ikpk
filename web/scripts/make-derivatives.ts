@@ -184,6 +184,12 @@ for (const shipped of walk(SHIPPED)) {
   try {
     const { width, height } = await sharp(shipped).metadata();
     const widths = TARGET_WIDTHS.filter((w) => existsSync(join(VARIANTS_DIR, String(w), rel)));
+    // The generator creates a same-width fallback for an image narrower than the smallest
+    // target. Keep that actual width in the manifest instead of making the gate reject a file
+    // whose derivative exists.
+    if (widths.length === 0 && width && existsSync(join(VARIANTS_DIR, String(width), rel))) {
+      widths.push(width);
+    }
     manifest[key] = widths.length ? { width, height, widths } : { width, height };
   } catch {
     manifest[key] = {};

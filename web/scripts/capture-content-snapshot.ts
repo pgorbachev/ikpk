@@ -195,7 +195,10 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
 /** Finds actual root upload URLs in mapped records, including rich HTML fields. */
 function uploadRefsIn(value: unknown): string[] {
   const found = new Set<string>();
-  const pattern = /(?:^|["'=])((?:https?:\/\/[^/"'\s]+)?\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
+  // A quoted value is the boundary for both relative and absolute URLs. Including `=` here
+  // would also match the query value in `https://third.example/?next=/uploads/x` and make an
+  // unrelated external URL look like a CMS asset.
+  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
 
   const walk = (node: unknown): void => {
     if (typeof node === 'string') {
