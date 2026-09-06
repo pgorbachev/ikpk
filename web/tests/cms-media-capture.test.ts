@@ -15,7 +15,7 @@
 //
 // Соответствие «сценарий спеки → проверка» — в отчёте сессии и в комментариях ниже.
 
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -83,7 +83,7 @@ const fileNameOf = (ref: string): string => ref.split('/').pop() ?? ref;
 describe('снятие снимка забирает медиа содержимым', () => {
   // Сценарий: страница с загруженным изображением не ссылается на систему управления.
   // Проверяется у ИСТОЧНИКА: пока байтов нет в снимке, отдать их со статического адреса
-  // нечем — именно это и наблюдалось на стенде (404 на всех 287 файлах).
+  // нечем — именно это и наблюдалось на стенде (404 на всех 131 файле).
   it('каждое медиа записей снимка попало в content.media с идентификатором содержимого', async () => {
     const store = await mediaStoreModule();
     const cms = await stub();
@@ -285,5 +285,36 @@ describe('содержимое снимка не зависит от систе�
     );
     // И после локализации адресов — тем же путём, каким тело читает сайт.
     expect(localizeAssetUrls(String(article?.body_html))).toContain(EXTERNAL_LINK_IN_BODY);
+  });
+
+  // Регресс: прерванный съём заклинивал хранилище навсегда. Имя файла в хранилище — это хеш
+  // его содержимого, поэтому обрыв посреди записи оставлял под верным именем обрезанные
+  // байты; следующий прогон видел расхождение и ОТКАЗЫВАЛ, никто повреждённый файл не
+  // перезаписывал, и каждый последующий съём падал, пока человек не сотрёт его руками.
+  it('повреждённый файл в хранилище лечится записью, а не заклинивает съём', async () => {
+    const store = await mediaStoreModule();
+    const cms = await stub();
+    const dir = outDir();
+
+    const first = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(first.status, `первый съём не прошёл:\n${first.output}`).toBe(0);
+
+    const snap = readSnapshot(dir);
+    const victim = snap.content.media[0];
+    expect(victim, 'заглушка не отдала ни одного медиа — проверка стала бы вакуумной').toBeTruthy();
+    const stored = join(dir, 'media', victim.contentId);
+    const original = readFileSync(stored);
+    writeFileSync(stored, original.subarray(0, Math.max(1, original.length - 3)));
+    expect(
+      store.readFromStore({ storeDir: join(dir, 'media'), contentId: victim.contentId }).ok,
+      'подготовка: файл должен был стать повреждённым',
+    ).toBe(false);
+
+    const second = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(second.status, `повторный съём после повреждения:\n${second.output}`).toBe(0);
+    expect(
+      store.readFromStore({ storeDir: join(dir, 'media'), contentId: victim.contentId }).ok,
+      'повреждённый файл не восстановлен',
+    ).toBe(true);
   });
 });

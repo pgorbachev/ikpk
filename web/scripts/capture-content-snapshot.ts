@@ -5,7 +5,7 @@
  *
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSnapshotContract } from './lib/content-contract.ts';
@@ -247,13 +247,19 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
     const contentId = contentIdOf(bytes);
     mkdirSync(storeDir, { recursive: true });
     const stored = join(storeDir, contentId);
-    if (existsSync(stored)) {
-      const existing = readFromStore({ storeDir, contentId });
-      if (!existing.ok) {
-        throw new Error(`медиа ${sourceRef}: хранилище повреждено (${existing.reason})`);
-      }
-    } else {
-      writeFileSync(stored, bytes);
+    // Имя файла И ЕСТЬ хеш его содержимого, поэтому расхождение лечится записью, а не отказом:
+    // байты у нас на руках и они заведомо верные. Прежняя ветвь отказывала — и прерывание
+    // посреди записи заклинивало хранилище навсегда: обрезанный файл под именем-хешем давал
+    // `content-id-mismatch`, никто его не перезаписывал, и каждый следующий съём падал, пока
+    // человек не сотрёт руками файл, названный sha256.
+    //
+    // Запись через временное имя с переименованием: обрыв не оставляет усечённого файла под
+    // финальным именем. Тот же приём, что в `make-derivatives.ts` (`writeAtomic`).
+    const intact = existsSync(stored) && readFromStore({ storeDir, contentId }).ok;
+    if (!intact) {
+      const tmp = `${stored}.tmp`;
+      writeFileSync(tmp, bytes);
+      renameSync(tmp, stored);
     }
 
     // The snapshot keeps the source records in CMS form. The separate media index is already
