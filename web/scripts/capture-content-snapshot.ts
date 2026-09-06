@@ -5,7 +5,7 @@
  *
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertSnapshotContract } from './lib/content-contract.ts';
@@ -17,6 +17,7 @@ import {
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
 import { contentFingerprint, snapshotId, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
+import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(webRoot, '..');
@@ -68,11 +69,31 @@ function htmlToText(html: string): string {
 }
 
 /** Ссылка на медиа без хоста CMS: то, что отдал REST в `url` (обычно относительный путь). */
+function normalizeCmsMediaUrl(value: string): string {
+  if (value.startsWith('/')) return value.split(/[?#]/, 1)[0]!;
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.startsWith('/uploads/') && parsed.origin === new URL(cmsUrl).origin) {
+      return parsed.pathname;
+    }
+  } catch {
+    // Обычный контракт снимка сообщит о некорректном значении позже.
+  }
+  return value;
+}
+
 function mediaRef(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return undefined;
   const v = value as Record<string, unknown>;
   if (typeof v.url !== 'string' || v.url === '') return undefined;
-  return { url: v.url, id: v.documentId ?? v.id };
+  return { url: normalizeCmsMediaUrl(v.url), id: v.documentId ?? v.id };
+}
+
+/** Поля, которые сайт читает именно как строковый адрес, а не как MediaRef. */
+function mediaUrl(value: unknown): unknown {
+  if (value === null) return null;
+  const ref = mediaRef(value) as { url?: string } | undefined;
+  return ref?.url;
 }
 
 function refList(value: unknown): unknown {
@@ -105,6 +126,7 @@ function mediaUrlList(value: unknown): unknown {
 const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
+  mediaUrl,
   mediaUrlList,
   refList,
   // `legacy_url` в CMS нет: выводится из `legacy_id`, тем же способом, что и
@@ -170,7 +192,92 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   return records;
 }
 
+/** Finds actual root upload URLs in mapped records, including rich HTML fields. */
+function uploadRefsIn(value: unknown): string[] {
+  const found = new Set<string>();
+  // A quoted value is the boundary for both relative and absolute URLs. Including `=` here
+  // would also match the query value in `https://third.example/?next=/uploads/x` and make an
+  // unrelated external URL look like a CMS asset.
+  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
+
+  const walk = (node: unknown): void => {
+    if (typeof node === 'string') {
+      pattern.lastIndex = 0;
+      for (const match of node.matchAll(pattern)) {
+        const candidate = match[1]!;
+        const normalized = normalizeCmsMediaUrl(candidate);
+        if (normalized.startsWith('/uploads/')) found.add(normalized);
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const item of Object.values(node as Record<string, unknown>)) walk(item);
+    }
+  };
+
+  walk(value);
+  return [...found];
+}
+
+async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<SnapshotContent['media']> {
+  const refs = uploadRefsIn(types);
+  const storeDir = join(outDir, 'media');
+  const media: SnapshotContent['media'] = [];
+
+  for (const sourceRef of refs) {
+    const url = new URL(sourceRef, cmsUrl).toString();
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    } catch (err) {
+      throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+    }
+    if (!response.ok) {
+      throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length === 0) {
+      throw new Error(`медиа ${sourceRef}: CMS вернула пустой файл`);
+    }
+    const contentId = contentIdOf(bytes);
+    mkdirSync(storeDir, { recursive: true });
+    const stored = join(storeDir, contentId);
+    // Имя файла И ЕСТЬ хеш его содержимого, поэтому расхождение лечится записью, а не отказом:
+    // байты у нас на руках и они заведомо верные. Прежняя ветвь отказывала — и прерывание
+    // посреди записи заклинивало хранилище навсегда: обрезанный файл под именем-хешем давал
+    // `content-id-mismatch`, никто его не перезаписывал, и каждый следующий съём падал, пока
+    // человек не сотрёт руками файл, названный sha256.
+    //
+    // Запись через временное имя с переименованием: обрыв не оставляет усечённого файла под
+    // финальным именем. Тот же приём, что в `make-derivatives.ts` (`writeAtomic`).
+    const intact = existsSync(stored) && readFromStore({ storeDir, contentId }).ok;
+    if (!intact) {
+      const tmp = `${stored}.tmp`;
+      writeFileSync(tmp, bytes);
+      renameSync(tmp, stored);
+    }
+
+    // The snapshot keeps the source records in CMS form. The separate media index is already
+    // in the static-site address space, so build steps can use it without another rewrite.
+    media.push({ ref: `/media${sourceRef}`, contentId });
+  }
+  return media;
+}
+
 async function liveCapture(): Promise<void> {
+  // Прежний снимок убирается ДО первого запроса, а не переписывается в конце. Каталог съёма
+  // переиспользуют, и при отказе на середине — скажем, на 60-м файле из 131 — старый
+  // `snapshot.json` оставался лежать рядом с наполовину заполненным хранилищем. Отказ съёма
+  // при этом честно возвращал ненулевой код, а следующая сборка молча брала прежний снимок:
+  // «недокачанный файл — отказ, а не тихий пропуск» было верно про код возврата и неверно про
+  // последствие.
+  rmSync(join(outDir, 'snapshot.json'), { force: true });
+
   const rawByType: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
     try {
@@ -263,7 +370,8 @@ async function liveCapture(): Promise<void> {
     }
   }
 
-  const content: SnapshotContent = { types, media: [] };
+  const media = await captureMedia(types);
+  const content: SnapshotContent = { types, media };
   const fingerprint = contentFingerprint(content);
   const referenceDate = new Date().toISOString().slice(0, 10);
   const snap: Snapshot = {

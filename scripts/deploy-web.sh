@@ -116,6 +116,16 @@ if [[ ! -d "$DIST_DIR" ]]; then
   exit 1
 fi
 
+# Проверяем именно собранный артефакт: изображения из живого снимка должны быть
+# локальными, существовать в dist и не содержать неразрешимых ссылок. Этот гейт
+# нельзя оставлять только в CI по закреплённой фикстуре — деплой собирает из
+# CONTENT_SNAPSHOT_DIR и должен остановиться до загрузки неполного релиза.
+echo "[deploy] Проверка разрешимости изображений в собранном dist"
+if ! (cd "$WEB_DIR" && MEDIA_MIGRATION_DIST_DIR="$DIST_DIR" npm exec -- vitest run --config vitest.build.config.ts tests/media-migration.test.ts); then
+  echo "[deploy] Загрузка отменена: гейт медиа-миграции не пройден" >&2
+  exit 1
+fi
+
 echo "[deploy] Uploading release ${RELEASE_ID} to ${SSH_USER}@${HOST}:${REMOTE_RELEASE_DIR}"
 COPYFILE_DISABLE=1 tar -C "$DIST_DIR" -cf - . | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
   "mkdir -p '${REMOTE_RELEASE_DIR}' && tar --no-same-owner -xf - -C '${REMOTE_RELEASE_DIR}'"

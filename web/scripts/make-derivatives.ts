@@ -23,7 +23,9 @@
  * коллизию полностью.
  *
  * Апскейла нет: вариант шире оригинала не создаётся — это дало бы мыло вместо
- * детализации.
+ * детализации. Для изображения уже меньше минимальной целевой ширины создаётся
+ * производная его собственной ширины, чтобы у каждого растрового файла оставался
+ * хотя бы один проверяемый производный вариант.
  *
  * Запуск: из web/ — `npm run media:derivatives` (или `tsx scripts/make-derivatives.ts`).
  *
@@ -50,6 +52,8 @@ import sharp, { type Sharp } from 'sharp';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ORIGINALS = join(ROOT, 'media-originals');
+const SNAPSHOT_ORIGINALS = join(ROOT, 'web', '.snapshot', 'media-originals');
+const ORIGINAL_ROOTS = [ORIGINALS, SNAPSHOT_ORIGINALS];
 const SHIPPED = join(ROOT, 'web', 'public', 'media');
 const VARIANTS_DIR = join(SHIPPED, '_w');
 const MANIFEST_PATH = join(ROOT, 'web', 'src', 'lib', 'media-manifest.json');
@@ -106,52 +110,56 @@ let variants = 0;
 let upToDate = 0;
 let failed = 0;
 
-for (const src of walk(ORIGINALS)) {
-  const rel = relative(ORIGINALS, src);
-  const out = join(SHIPPED, rel);
+for (const originalsRoot of ORIGINAL_ROOTS) {
+  if (!existsSync(originalsRoot)) continue;
+  for (const src of walk(originalsRoot)) {
+    const rel = relative(originalsRoot, src);
+    const out = join(SHIPPED, rel);
 
-  // PDF, SVG и прочее переносим как есть: уменьшать нечего
-  if (!RASTER.test(src)) {
-    if (isFresh(out, src)) {
-      upToDate++;
-    } else {
-      mkdirSync(dirname(out), { recursive: true });
-      copyFileSync(src, out);
-      copied++;
-    }
-    continue;
-  }
-
-  try {
-    const meta = await sharp(src).metadata();
-    const origWidth = meta.width ?? 0;
-    const ext = src.match(/\.([a-z0-9]+)$/i)![1].toLowerCase();
-
-    // ── базовая версия
-    if (isFresh(out, src)) {
-      upToDate++;
-    } else {
-      let pipeline = sharp(src);
-      if (origWidth > BASE_WIDTH) pipeline = pipeline.resize({ width: BASE_WIDTH });
-      const buf = await encode(pipeline, ext).toBuffer();
-      // уже оптимизированный файл не портим: если пережатие не даёт выигрыша,
-      // отдаём оригинал как есть
-      await writeAtomic(out, buf.length < statSync(src).size ? buf : readFileSync(src));
-      base++;
+    // PDF, SVG и прочее переносим как есть: уменьшать нечего
+    if (!RASTER.test(src)) {
+      if (isFresh(out, src)) {
+        upToDate++;
+      } else {
+        mkdirSync(dirname(out), { recursive: true });
+        copyFileSync(src, out);
+        copied++;
+      }
+      continue;
     }
 
-    // ── адаптивный набор
-    for (const w of TARGET_WIDTHS) {
-      if (w > origWidth) continue; // без апскейла
-      const variant = join(VARIANTS_DIR, String(w), rel);
-      if (isFresh(variant, src)) continue;
-      const buf = await encode(sharp(src).resize({ width: w }), ext).toBuffer();
-      await writeAtomic(variant, buf);
-      variants++;
+    try {
+      const meta = await sharp(src).metadata();
+      const origWidth = meta.width ?? 0;
+      const ext = src.match(/\.([a-z0-9]+)$/i)![1].toLowerCase();
+
+      // ── базовая версия
+      if (isFresh(out, src)) {
+        upToDate++;
+      } else {
+        let pipeline = sharp(src);
+        if (origWidth > BASE_WIDTH) pipeline = pipeline.resize({ width: BASE_WIDTH });
+        const buf = await encode(pipeline, ext).toBuffer();
+        // уже оптимизированный файл не портим: если пережатие не даёт выигрыша,
+        // отдаём оригинал как есть
+        await writeAtomic(out, buf.length < statSync(src).size ? buf : readFileSync(src));
+        base++;
+      }
+
+      // ── адаптивный набор
+      const variantWidths = TARGET_WIDTHS.filter((w) => w <= origWidth);
+      if (variantWidths.length === 0 && origWidth > 0) variantWidths.push(origWidth);
+      for (const w of variantWidths) {
+        const variant = join(VARIANTS_DIR, String(w), rel);
+        if (isFresh(variant, src)) continue;
+        const buf = await encode(sharp(src).resize({ width: w }), ext).toBuffer();
+        await writeAtomic(variant, buf);
+        variants++;
+      }
+    } catch (err) {
+      console.error(`  ✗ ${rel}: ${(err as Error).message}`);
+      failed++;
     }
-  } catch (err) {
-    console.error(`  ✗ ${rel}: ${(err as Error).message}`);
-    failed++;
   }
 }
 
@@ -176,6 +184,12 @@ for (const shipped of walk(SHIPPED)) {
   try {
     const { width, height } = await sharp(shipped).metadata();
     const widths = TARGET_WIDTHS.filter((w) => existsSync(join(VARIANTS_DIR, String(w), rel)));
+    // The generator creates a same-width fallback for an image narrower than the smallest
+    // target. Keep that actual width in the manifest instead of making the gate reject a file
+    // whose derivative exists.
+    if (widths.length === 0 && width && existsSync(join(VARIANTS_DIR, String(width), rel))) {
+      widths.push(width);
+    }
     manifest[key] = widths.length ? { width, height, widths } : { width, height };
   } catch {
     manifest[key] = {};

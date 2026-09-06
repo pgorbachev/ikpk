@@ -50,6 +50,7 @@ type SnapshotFile = {
   referenceDate: string;
   fingerprint?: string;
   snapshotId?: string;
+  origin?: { url?: string };
   content: { types: Record<string, unknown> };
 };
 
@@ -78,7 +79,8 @@ function snapshotDir(): string {
 function loadSnapshot(): SnapshotFile {
   if (_snapshot) return _snapshot;
   const raw = readFileSync(join(snapshotDir(), 'snapshot.json'), 'utf-8');
-  _snapshot = JSON.parse(localizeAssetUrls(raw)) as SnapshotFile;
+  const source = JSON.parse(raw) as SnapshotFile;
+  _snapshot = JSON.parse(localizeAssetUrls(raw, source.origin?.url)) as SnapshotFile;
   return _snapshot;
 }
 
