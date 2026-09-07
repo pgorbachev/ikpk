@@ -58,7 +58,7 @@
     "test:e2e:section-titles": "node tests/helpers/preview-reset.mjs && playwright test tests/section-titles.spec.ts --project=desktop --project=mobile"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.3",
+    "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.3.1",
     "parse5": "^8.0.1"
   },
