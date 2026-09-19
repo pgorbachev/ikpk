@@ -1,0 +1,337 @@
+✔ positive control: broker and native installed worker execute and emit the recovery audit (131.72625ms)
+✖ recover executes fixed installed runtime without main and suppresses raw worker secrets (55.234042ms)
+✖ accept-state executes fixed installed runtime without main and suppresses raw worker secrets (48.195792ms)
+✖ accept-state invalid confirmation refuses before credential broker (50.269167ms)
+✖ accept-state invalid observed-entry refuses before credential broker (52.831084ms)
+✖ accept-state invalid fingerprint refuses before credential broker (138.112542ms)
+✖ accept-state invalid actor refuses before credential broker (63.604375ms)
+✖ accept-state invalid source refuses before credential broker (49.797291ms)
+✖ accept-state invalid duplicate refuses before credential broker (51.878958ms)
+✖ recover rejects caller-provided operation/evidence before broker (61.335084ms)
+✖ recovery-noop is a valid typed success without inventing a published pair (69.732708ms)
+✖ recovery-cancelled is a valid typed success without inventing a published pair (58.084292ms)
+✖ acceptance audit binds observed entry to explicit confirmation and requires exactly the next revision (56.591333ms)
+✖ recover surfaces only its curated refusal (70.995875ms)
+✖ accept-state surfaces only its curated refusal (60.562833ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 1
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1099.500958
+
+✖ failing tests:
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:50:52
+✖ recover executes fixed installed runtime without main and suppresses raw worker secrets (55.234042ms)
+  AssertionError [ERR_ASSERTION]: {"status":"refused","reason":"untrusted-ref"}
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:51:68)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:50:52
+✖ accept-state executes fixed installed runtime without main and suppresses raw worker secrets (48.195792ms)
+  AssertionError [ERR_ASSERTION]: {"status":"refused","reason":"untrusted-ref"}
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:51:68)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid confirmation refuses before credential broker (50.269167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid observed-entry refuses before credential broker (52.831084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid fingerprint refuses before credential broker (138.112542ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid actor refuses before credential broker (63.604375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid source refuses before credential broker (49.797291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:55:104
+✖ accept-state invalid duplicate refuses before credential broker (51.878958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:63:76)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:66:1
+✖ recover rejects caller-provided operation/evidence before broker (61.335084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:68:45)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:70:61
+✖ recovery-noop is a valid typed success without inventing a published pair (69.732708ms)
+  AssertionError [ERR_ASSERTION]: {"status":"refused","reason":"untrusted-ref"}
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:72:37)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:70:61
+✖ recovery-cancelled is a valid typed success without inventing a published pair (58.084292ms)
+  AssertionError [ERR_ASSERTION]: {"status":"refused","reason":"untrusted-ref"}
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:72:37)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:74:1
+✖ acceptance audit binds observed entry to explicit confirmation and requires exactly the next revision (56.591333ms)
+  AssertionError [ERR_ASSERTION]: audit refusal must reach worker
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:77:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:81:52
+✖ recover surfaces only its curated refusal (70.995875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:83:37)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-recovery.test.mjs:81:52
+✖ accept-state surfaces only its curated refusal (60.562833ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-operator-recovery-red/scripts/tests/publication-launcher-recovery.test.mjs:83:37)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
