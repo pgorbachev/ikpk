@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 /**
  * Тесты по спеке change `external-widgets` — ЧУЖИЕ ИНВАРИАНТЫ, которые change ломает
@@ -304,16 +305,19 @@ describe('новая проверка зарегистрирована во вс
     expect(problems, problems.join('\n')).toEqual([]);
   });
 
-  it('вызов гейта ссылок на формы с тремя аргументами не тронут', () => {
-    // Он сверяется БУКВАЛЬНЫМ текстом (`web/tests/repo-hygiene.test.ts:165`,
-    // `form_links_match_mode`) и служит якорем проверки порядка вызовов, то есть
-    // четвёртый аргумент ронял бы обязательный прогон ДВАЖДЫ по причине, не связанной с
-    // предметом новой работы. Спека выбрала путь, который тела вызова не меняет, —
-    // проверка держит этот выбор.
-    const deploy = readFileSync(join(WEB, '..', 'scripts', 'deploy-web.sh'), 'utf-8');
-    const calls = [...deploy.matchAll(/form_links_match_mode[^\n]*/g)].map((m) => m[0]);
-    expect(calls.length, 'вызова form_links_match_mode в скрипте выкладки нет').toBeGreaterThan(0);
-    const withFour = calls.filter((call) => (call.match(/"\$?\{?[A-Za-z_]/g) ?? []).length > 3);
-    expect(withFour, `у вызова появился четвёртый аргумент: ${withFour.join('\n')}`).toEqual([]);
+  it('фиксированный набор публикации вызывает гейт ссылок на формы с тремя аргументами', () => {
+    // Ручная публикация вызывает прежний shell-гейт из фиксированного Vitest-набора.
+    // AST отличает исполняемый вызов от комментария и считает аргументы с вложенными вызовами.
+    const path = join(WEB, 'tests/publication/destination.test.ts');
+    const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+    const calls: ts.CallExpression[] = [];
+    function visit(node: ts.Node) {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'deployCheck' &&
+          node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === 'form_links_match_mode') calls.push(node);
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+    expect(calls, 'обязательный вызов гейта ссылок отсутствует или дублируется').toHaveLength(1);
+    expect(calls[0].arguments, 'после имени shell-гейта требуются ровно три аргумента').toHaveLength(4);
   });
 });
