@@ -92,6 +92,14 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
+openspec/changes/manual-publication-only/design.md :: origin/main
+openspec/changes/manual-publication-only/proposal.md :: change/manual-publication-only-rewrite@2dfd574c9d518106f41e85283177a36212d500f8
+openspec/changes/manual-publication-only/proposal.md :: origin/main
+openspec/changes/manual-publication-only/proposal.md :: origin/main@36b58cecb919076e15253696345d822dda9e7803
+openspec/changes/manual-publication-only/proposal.md :: state/cms-provenance
+openspec/changes/manual-publication-only/specs/cms-content-source/spec.md :: state/cms-provenance
+openspec/changes/manual-publication-only/specs/deploy-gating/spec.md :: origin/main
+openspec/changes/manual-publication-only/tasks.md :: origin/main
 openspec/changes/server-hardening/proposal.md :: origin/main
 openspec/changes/server-hardening/tasks.md :: origin/main
 openspec/changes/visual-regression-gate/design.md :: HeadMeta.astro:34

@@ -46,3 +46,5 @@ openspec/changes/cms-content-authoring-and-migration/tasks.md :: web/src/lib/sch
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: 0710e4d0e155a6859c09c2681c92a354fd330916 :: external-revision
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
 openspec/specs/schedule-month-filter/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
+
+* :: 2dfd574c9d518106f41e85283177a36212d500f8 :: external-revision
