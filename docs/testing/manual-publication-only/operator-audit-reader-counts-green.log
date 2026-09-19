@@ -1,0 +1,16 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-audit-counts-fix/web
+
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > positive control reads actual fixed report counts before constructing audit 19ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > a zero-test CI artifact remains explicitly zero in the runner and worker audit 13ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > a completed zero-test local reporter remains explicitly zero in the coordinator and worker audit 14ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > CI refusal retains the total across all readable reports when one required report is empty 7ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > an empty later local group preserves the count from completed earlier groups 42ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > unknown CI counts do not become zero or a partial report total 27ms
+ ✓ tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > unreadable or inconsistent local reports do not invent zero or expose report contents 30ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  18:27:22
+   Duration  1.30s (transform 134ms, setup 26ms, import 904ms, tests 155ms, environment 0ms)
+

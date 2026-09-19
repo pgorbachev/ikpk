@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PUBLICATION_CI_POLICY, ciEvidenceProblem, type CiEvidence } from './publish-gate.ts';
+import { PublicationReportError } from './publication-report-error.ts';
 
 export interface CiArtifact {
   id: number; name: string; archive_download_url: string; expired?: boolean;
@@ -108,11 +109,14 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
       artifact.archive_download_url !== `${API}/actions/artifacts/${artifact.id}/zip`) throw new Error('missing-trusted-ci-counts');
   const reports = await (options.readReports ?? downloadReports)(artifact, { fetch: fetcher, token: options.token });
   let count = 0;
+  let emptyReport: string | undefined;
   for (const name of REPORT_NAMES) {
     const report = reports[name] as { numPassedTests?: number; numFailedTests?: number } | undefined;
-    if (!report || !Number.isSafeInteger(report.numPassedTests) || Number(report.numPassedTests) <= 0 || report.numFailedTests !== 0) throw new Error(`ci-report-count:${name}:${report?.numPassedTests ?? 0}`);
+    if (!report || !Number.isSafeInteger(report.numPassedTests) || Number(report.numPassedTests) < 0 || report.numFailedTests !== 0) throw new Error(`ci-report-count:${name}`);
+    if (report.numPassedTests === 0) emptyReport ??= name;
     count += report.numPassedTests!;
   }
+  if (emptyReport) throw new PublicationReportError(`ci-report-count:${emptyReport}:0`, 'ci', count);
   const evidence: CiEvidence = { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
     branch: 'main', commit: options.commit, runId: run.id, event: run.event, conclusion: 'success', executedTests: count,
     jobs: jobs.filter((job) => PUBLICATION_CI_POLICY.requiredJobs.includes(job.name)).map(({ name }) => ({ name, conclusion: 'success' })),

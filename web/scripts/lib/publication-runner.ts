@@ -9,6 +9,7 @@ import type { PublicationStateStore } from './publication-state-store.ts';
 import type { WorkerAudit } from '../publication-worker.ts';
 import { PUBLICATION_GROUPS } from './publish-gate.ts';
 import { PublicationProvenanceMismatchError } from './publication-state-store.ts';
+import { PublicationReportError } from './publication-report-error.ts';
 
 export interface NewPublicationInput extends PublicationCheckInput {
   publicationId: string; releaseId: string; actor: string; origin: string;
@@ -164,6 +165,9 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
       return structuredClone(operation);
     } finally { usable = false; }
   } catch (error) {
+    if (error instanceof PublicationReportError && error.source === 'ci' && audit.code === 'ci-failed') {
+      audit.ciExecutedTests = error.executedTests;
+    }
     // Only typed metadata from the fixed check runner crosses the audit boundary.
     if (error instanceof Error && 'audit' in error && error.audit && typeof error.audit === 'object') {
       const detail = error.audit as Partial<WorkerAudit>;
@@ -178,4 +182,3 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     throw failure;
   }
 }
-

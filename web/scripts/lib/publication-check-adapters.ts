@@ -5,6 +5,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { digestTree } from '../../../scripts/publication-launcher.mjs';
 import { publicationObservation, readPublicationSnapshot } from './publication-snapshot.ts';
+import { PublicationReportError } from './publication-report-error.ts';
 import type { CheckResult, PublicationCheckContext } from './publication-checks.ts';
 import type { PublicationCheckPorts } from './publication-checks.ts';
 
@@ -105,9 +106,10 @@ function vitestResult(value: unknown): CheckResult {
     if (result.status !== 'passed') throw new Error('Vitest suite did not pass');
     return array(result.assertionResults);
   });
-  if (!assertions.length || assertions.some((test) => object(test).status !== 'passed') || report.success !== true ||
+  if (assertions.some((test) => object(test).status !== 'passed') || report.success !== true ||
       report.numTotalTests !== assertions.length || report.numPassedTests !== assertions.length ||
       report.numFailedTests !== 0 || report.numPendingTests !== 0 || report.numTodoTests !== 0) throw new Error('incomplete Vitest evidence');
+  if (!assertions.length) throw new PublicationReportError('incomplete Vitest evidence', 'local', 0);
   return { conclusion: 'success', executedTests: assertions.length };
 }
 function playwrightResult(value: unknown): CheckResult {

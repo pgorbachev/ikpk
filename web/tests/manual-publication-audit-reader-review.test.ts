@@ -44,4 +44,46 @@ describe('independent review: real report readers retain zero-count audit eviden
     expect(local.commands.some((command) => command.args.includes('tests/publication/snapshot.test.ts'))).toBe(true);
     expect(audit).toMatchObject({ code: 'checks-failed', check: 'snapshot-provenance', localExecutedTests: 0 });
   });
+
+  it('CI refusal retains the total across all readable reports when one required report is empty', async () => {
+    const ci = ciFixture();
+    Object.assign(ci.reports[REPORT_NAMES[0]] as object, { numPassedTests: 0 });
+    const runner = runnerFixture(); cleanup.push(runner.clean);
+    runner.ports.readCiEvidence = () => readCiEvidence(ci.input);
+    expect(await refused(() => runNewPublication(runner.input, runner.ports)))
+      .toMatchObject({ code: 'ci-failed', ciExecutedTests: 24 });
+  });
+
+  it('an empty later local group preserves the count from completed earlier groups', async () => {
+    const local = await adapterFixture(); cleanup.push(local.clean);
+    local.state.reports.build = vitestReport(0);
+    const ports = createPublicationCheckPorts(local.options, local.runtime);
+    expect(await refused(() => runPublicationChecks(local.context, ports)))
+      .toMatchObject({ code: 'checks-failed', check: 'build-content', localExecutedTests: 3 });
+  });
+
+  it('unknown CI counts do not become zero or a partial report total', async () => {
+    for (const invalid of [undefined, { numPassedTests: '0', numFailedTests: 0 }, { numPassedTests: -1, numFailedTests: 0 }]) {
+      const ci = ciFixture();
+      Object.assign(ci.reports[REPORT_NAMES[0]] as object, { numPassedTests: 0 });
+      ci.reports[REPORT_NAMES[1]] = invalid;
+      const runner = runnerFixture(); cleanup.push(runner.clean);
+      runner.ports.readCiEvidence = () => readCiEvidence(ci.input);
+      const audit = await refused(() => runNewPublication(runner.input, runner.ports));
+      expect(audit.code).toBe('ci-failed');
+      expect(audit).not.toHaveProperty('ciExecutedTests');
+    }
+  });
+
+  it('unreadable or inconsistent local reports do not invent zero or expose report contents', async () => {
+    for (const rawReport of ['secret-canary: localExecutedTests=0', JSON.stringify({ ...vitestReport(0), numTotalTests: 5, secret: 'secret-canary' })]) {
+      const local = await adapterFixture(); cleanup.push(local.clean);
+      local.state.rawReport = rawReport;
+      const ports = createPublicationCheckPorts(local.options, local.runtime);
+      const audit = await refused(() => runPublicationChecks(local.context, ports));
+      expect(audit).toMatchObject({ code: 'checks-failed', check: 'snapshot-provenance' });
+      expect(audit).not.toHaveProperty('localExecutedTests');
+      expect(JSON.stringify(audit)).not.toContain('secret-canary');
+    }
+  });
 });

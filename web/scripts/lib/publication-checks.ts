@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { digestTree } from '../../../scripts/publication-launcher.mjs';
 import { localChecksProblem } from './publish-gate.ts';
+import { PublicationReportError } from './publication-report-error.ts';
 import type { WorkerAudit } from '../publication-worker.ts';
 import type { CheckConclusion, LocalChecks } from './publish-gate.ts';
 
@@ -119,6 +120,9 @@ export async function runPublicationChecks(input: PublicationCheckInput, ports: 
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
     return report;
   } catch (error) {
+    if (error instanceof PublicationReportError && error.source === 'local') {
+      audit.localExecutedTests = executedTests + error.executedTests;
+    }
     const failure = error instanceof Error ? error : new Error('publication checks failed');
     Object.assign(failure, { audit });
     throw failure;
