@@ -12,7 +12,7 @@ it('runner state machine positive control performs counted effects and actual lo
     const proof = { commit: operation.commit, snapshotId: operation.snapshotId, destinationId: operation.destinationId, treeDigest: operation.treeDigest };
     await f.ports.createTransport({ authorize: async () => proof }).withLock(async (session) => {
       await session.stage({ releaseId: operation.releaseId, sourceDir: f.input.treeDir, expectedDigest: operation.treeDigest });
-      await session.activate({ releaseId: operation.releaseId, operation,
+      await session.activate({ redirectsPath: 'deploy/nginx-redirects.conf', releaseId: operation.releaseId, operation,
         async beforeActivate() {
           expect(f.current()).toBe('old'); expect(existsSync(f.pendingPath)).toBe(true);
           await f.ports.readMain(); await f.ports.state.read(f.snapshot.fingerprint!);

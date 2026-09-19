@@ -5,6 +5,7 @@ Stdout: JSON replies only. No retained release code is imported or executed.
 """
 import base64
 import fcntl
+import fnmatch
 import hashlib
 import json
 import os
@@ -223,8 +224,25 @@ class PublicationSession:
         require(matching, "nginx destination root/current binding missing")
         require(all(block["directives"].count(target_include) == 1 for block in matching),
                 "nginx redirect include binding missing for destination")
-        require(all(target_include not in block["directives"] for block in servers if block not in matching),
-                "nginx redirect include shared with another destination")
+        # Dumped snippets are separate top-level text, not expanded into callers.
+        # Count every potential consumer, including wrapper and wildcard includes.
+        files = re.findall(r"^# configuration file (.+):$", dump, re.MULTILINE)
+        prefix = os.path.dirname(files[0]) if files else "/etc/nginx"
+        fragment = target_include[1]
+        aliases = {fragment, os.path.realpath(fragment)}
+        aliases.update(path for path in files if os.path.realpath(path) == os.path.realpath(fragment))
+        consumers = []
+        for block in [stack[0], *blocks]:
+            for item in block["directives"]:
+                if len(item) != 2 or item[0] != "include":
+                    continue
+                pattern = os.path.normpath(item[1] if os.path.isabs(item[1]) else os.path.join(prefix, item[1]))
+                if any(fnmatch.fnmatchcase(path, candidate) for path in aliases
+                       for candidate in (pattern, os.path.realpath(pattern))):
+                    consumers.append((block, item))
+        require(len(consumers) == len(matching) and
+                all(block in matching and item == target_include for block, item in consumers),
+                "nginx redirect include shared or ambiguous across destinations")
 
     def nginx_command(self, reload=False):
         argv = (["/usr/bin/sudo", "-n", "/bin/systemctl", "reload", "nginx"] if reload else
