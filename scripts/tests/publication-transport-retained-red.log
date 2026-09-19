@@ -1,0 +1,396 @@
+✖ retained read copies actual binary files and metadata without changing the remote release or index (290.164208ms)
+✖ retained read and rollback share the same locked SSH session without staging bytes again (252.608584ms)
+✖ retained download is cleaned after a failed caller check and session cannot be reused (311.794333ms)
+✖ retained scripts are copied as data and are never executed (292.791666ms)
+✖ retained read reports missing target as not retained (259.024834ms)
+✖ retained read reports pruned target as not retained (267.037791ms)
+✖ retained read refuses invalid release ID "../retained" (420.173667ms)
+✖ retained read refuses invalid release ID "/retained" (319.4965ms)
+✖ retained read refuses invalid release ID ".." (269.913292ms)
+✖ retained read refuses invalid release ID "retained/child" (277.301084ms)
+✖ retained read refuses invalid release ID "retained\\child" (252.714417ms)
+✖ retained read refuses root symlink (283.827292ms)
+✖ retained read refuses file symlink (312.778917ms)
+✖ retained read refuses directory symlink (264.681917ms)
+✖ retained read refuses FIFO (382.241333ms)
+✖ retained read refuses backslash traversal (248.93325ms)
+✖ retained read rejects absent target binding in authorization before requesting bytes (422.5585ms)
+✖ retained read rejects different target binding in authorization before requesting bytes (282.613791ms)
+✖ malicious absolute download path cannot escape the local copy (293.966417ms)
+✖ malicious traversal download path cannot escape the local copy (266.314083ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 0
+ℹ fail 20
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6040.553875
+
+✖ failing tests:
+
+test at scripts/tests/publication-transport-retained.test.mjs:72:1
+✖ retained read copies actual binary files and metadata without changing the remote release or index (290.164208ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + {}
+  - {
+  -   'assets/κείμενο with space.bin': Buffer(6) [Uint8Array] [
+  -     0,
+  -     255,
+  -     128,
+  -     10,
+  -     13,
+  -     0
+  -   ],
+  -   'empty.txt': Buffer(0) [Uint8Array] [],
+  -   'index.html': Buffer(23) [Uint8Array] [
+  -     60,
+  -     104,
+  -     49,
+  -     62,
+  -     114,
+  -     101,
+  -     116,
+  -     97,
+  -     105,
+  -     110,
+  -     101,
+  -     100,
+  -     32,
+  -     98,
+  -     121,
+  -     116,
+  -     101,
+  -     115,
+  -     60,
+  -     47,
+  -     104,
+  -     49,
+  -     62
+  -   ],
+  -   'safe-file.txt': Buffer(13) [Uint8Array] [
+  -     110,
+  -     111,
+  -     116,
+  -     32,
+  -     97,
+  -     32,
+  -     99,
+  -     111,
+  -     109,
+  -     109,
+  -     97,
+  -     110,
+  -     100
+  -   ]
+  - }
+  
+      at file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:80:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/publication-transport.mjs:189:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:74:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: {},
+    expected: { 'assets/κείμενο with space.bin': <Buffer 00 ff 80 0a 0d 00>, 'empty.txt': <Buffer >, 'index.html': <Buffer 3c 68 31 3e 72 65 74 61 69 6e 65 64 20 62 79 74 65 73 3c 2f 68 31 3e>, 'safe-file.txt': <Buffer 6e 6f 74 20 61 20 63 6f 6d 6d 61 6e 64> },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:94:1
+✖ retained read and rollback share the same locked SSH session without staging bytes again (252.608584ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+  - '97589cc228d0f421d7118aff030bbf8194fa209c37f00736740fd0e2f1eaa3ac'
+  
+      at file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:99:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/publication-transport.mjs:189:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:97:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    expected: '97589cc228d0f421d7118aff030bbf8194fa209c37f00736740fd0e2f1eaa3ac',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:111:1
+✖ retained download is cleaned after a failed caller check and session cannot be reused (311.794333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:117:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:122:1
+✖ retained scripts are copied as data and are never executed (292.791666ms)
+  AssertionError [ERR_ASSERTION]: retained scripts must be present as data
+      at file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:130:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/publication-transport.mjs:189:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:128:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:137:44
+✖ retained read reports missing target as not retained (259.024834ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:140:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /not[- ]retained|retained.*(missing|absent|unavailable)/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:137:44
+✖ retained read reports pruned target as not retained (267.037791ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:140:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /not[- ]retained|retained.*(missing|absent|unavailable)/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:144:91
+✖ retained read refuses invalid release ID "../retained" (420.173667ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:146:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /release|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:144:91
+✖ retained read refuses invalid release ID "/retained" (319.4965ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:146:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /release|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:144:91
+✖ retained read refuses invalid release ID ".." (269.913292ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:146:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /release|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:144:91
+✖ retained read refuses invalid release ID "retained/child" (277.301084ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:146:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /release|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:144:91
+✖ retained read refuses invalid release ID "retained\\child" (252.714417ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:146:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /release|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:150:106
+✖ retained read refuses root symlink (283.827292ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:158:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|symbolic|member|regular|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:150:106
+✖ retained read refuses file symlink (312.778917ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:158:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|symbolic|member|regular|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:150:106
+✖ retained read refuses directory symlink (264.681917ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:158:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|symbolic|member|regular|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:150:106
+✖ retained read refuses FIFO (382.241333ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:158:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|symbolic|member|regular|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:150:106
+✖ retained read refuses backslash traversal (248.93325ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:158:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|symbolic|member|regular|path|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:162:48
+✖ retained read rejects absent target binding in authorization before requesting bytes (422.5585ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:169:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /authoriz|release|binding|mismatch/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:162:48
+✖ retained read rejects different target binding in authorization before requesting bytes (282.613791ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:169:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /authoriz|release|binding|mismatch/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:174:47
+✖ malicious absolute download path cannot escape the local copy (293.966417ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:179:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /path|escape|invalid|protocol/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retained.test.mjs:174:47
+✖ malicious traversal download path cannot escape the local copy (266.314083ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-retained-read-red/scripts/tests/publication-transport-retained.test.mjs:179:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /path|escape|invalid|protocol/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
