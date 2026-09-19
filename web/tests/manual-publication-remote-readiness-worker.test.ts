@@ -125,7 +125,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); for (const path of t
 // files exercise the actual adapter and the actual readiness assertion subprocess.
 function active(f: Awaited<ReturnType<typeof fixture>>, role: 'stand' | 'prod') {
   f.config.paymentRole = role;
-  f.config.payment = { endpoint: 'https://payments.test.invalid/api', mode: role === 'prod' ? 'prod' : 'test', shopId: 'shop-42', siteOrigin: f.config.siteUrl };
+  f.config.payment = { endpoint: 'https://payments.test.invalid/api', mode: role === 'prod' ? 'prod' : 'test', shopId: role === 'prod' ? '409285' : '1440249', siteOrigin: f.config.siteUrl };
   f.saveConfig();
 }
 describe('concrete worker binds readiness to the publication destination SSH transport', () => {
@@ -133,7 +133,7 @@ describe('concrete worker binds readiness to the publication destination SSH tra
     const f = await fixture(); active(f, role); await f.run();
     expect(f.remoteProbe).toHaveBeenCalledExactlyOnceWith();
     expect(f.events).toEqual(['readiness', 'stage', 'activate']);
-    expect(f.readinessValues).toEqual([{ status: 200, contentType: 'application/json', body: { status: 'ready', mode: f.config.payment!.mode, shopId: 'shop-42' } }]);
+    expect(f.readinessValues).toEqual([{ status: 200, contentType: 'application/json', body: { status: 'ready', mode: f.config.payment!.mode, shopId: f.config.payment!.shopId } }]);
     expect(f.state.appendPublication).toHaveBeenCalledTimes(1);
     for (const [options] of f.transport.mock.calls) expect(options).toMatchObject({ host: 'stand.test.invalid', user: 'deploy', root: '/var/www/ikpk', destinationId: 'stand', knownHostsFile: f.config.knownHostsFile });
     const probe = f.proofs.find((entry) => entry.action === 'payment-readiness')!;
@@ -142,6 +142,15 @@ describe('concrete worker binds readiness to the publication destination SSH tra
     for (const action of ['stage', 'activate', 'recover', 'rollback']) {
       await expect(authorize({ action, destinationId: 'stand', expectedDigest: 'a'.repeat(64) })).rejects.toThrow();
     }
+  });
+
+  it.each(['stand', 'prod'] as const)('%s rejects an incorrect mode or shop before dependency installation', async (role) => {
+    const f = await fixture(); active(f, role);
+    f.config.payment!.mode = role === 'stand' ? 'prod' : 'test'; f.saveConfig();
+    await expect(f.run()).rejects.toThrow('untrusted-config');
+    active(f, role); f.config.payment!.shopId = '9999999'; f.saveConfig();
+    await expect(f.run()).rejects.toThrow('untrusted-config');
+    expect(f.installs).toHaveLength(0); expect(f.transport).not.toHaveBeenCalled();
   });
 
   it('does not use obsolete config or environment URLs to select the remote probe', async () => {

@@ -96,7 +96,8 @@ function readConfig(path: string): DestinationConfig {
   protectedFile(config.knownHostsFile);
   if (config.paymentRole !== 'ci') {
     const payment = config.payment;
-    if (!payment || !['test', 'prod'].includes(payment.mode) || typeof payment.shopId !== 'string' || !payment.shopId.trim()) throw new Error('untrusted-config');
+    const expected = config.paymentRole === 'stand' ? { mode: 'test', shopId: '1440249' } : { mode: 'prod', shopId: '409285' };
+    if (!payment || payment.mode !== expected.mode || payment.shopId !== expected.shopId) throw new Error('untrusted-config');
     publicUrl(payment.endpoint); publicUrl(payment.siteOrigin, true);
   }
   return config;

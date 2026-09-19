@@ -35,7 +35,7 @@ export function redirectRules() {
   expect(redirects.length).toBeGreaterThan(0);
   return redirects;
 }
-type DeployCheck = 'form_links_match_mode' | 'chat_widget_matches_mode' | 'payment_endpoint_matches' | 'payment_readiness_matches' | 'payment_endpoint_reachable' | 'payment_cors_allows';
+type DeployCheck = 'form_links_match_mode' | 'chat_widget_matches_mode' | 'payment_endpoint_matches' | 'payment_endpoint_reachable' | 'payment_cors_allows';
 export function deployCheck(name: DeployCheck, ...args: string[]) {
   const script = 'set -euo pipefail; source "$1"; shift; fn="$1"; shift; "$fn" "$@"';
   const result = spawnSync('/bin/bash', ['-c', script, 'publication-check', join(repoRoot, 'scripts/lib/deploy-checks.sh'), name, ...args], {
