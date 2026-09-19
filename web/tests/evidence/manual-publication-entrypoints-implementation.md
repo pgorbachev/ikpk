@@ -59,7 +59,7 @@ restore failures**, as above. No mutation remains in the committed source.
 
 ## Contract conflict resolved (2026-09-19)
 
-Owner decision: backup restoration stages the copy into `releases/restore-<timestamp>` and
+Owner decision: backup restoration stages the copy into `restored/restore-<timestamp>` (outside the `releases/` retention window) and
 verifies it byte-for-byte, but never switches serving; activation of any tree goes through the
 protected launcher only. `scripts/restore-server-state.sh` was rewritten accordingly (no
 `current` pointer write remains), so it is no longer an independent publisher. With that

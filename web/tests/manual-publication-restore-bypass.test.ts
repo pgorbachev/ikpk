@@ -46,6 +46,11 @@ describe('backup restoration cannot independently publish the web tree', () => {
   it('the current utility leaves the live release unchanged without an approved publication', () => {
     const { run, previous, active } = runRestore(join(repository, 'scripts/restore-server-state.sh'));
     expect(run.error).toBeUndefined();
+    // A broken script would also leave serving untouched; the staging itself must succeed.
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('predicate=byte-equal-after-restore');
+    expect(run.stdout).toMatch(/^restored=restore-\S+$/m);
+    expect(run.stdout).toContain('activation=launcher-only');
     expect(active, `independent activation escaped the publication path; exit=${run.status}; ${run.stdout}`).toBe(previous);
   });
 });

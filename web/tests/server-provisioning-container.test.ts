@@ -544,9 +544,10 @@ describe('server-provisioning: резервная копия предшеств�
     expect(run.output, 'предикат сравнения не назван').toMatch(/predicate=|предикат/i);
     // Восстановление ставит копию в каталог релизов и НЕ переключает раздачу: путь публикации
     // один (deploy-gating, «Опубликованное состояние сайта одно»), решение владельца 19.09.2026.
-    const release = (run.output.match(/^\s*release\s*=\s*(\S+)\s*$/m) ?? [])[1];
-    expect(release, 'восстановленный релиз не назван в выводе').toBeTruthy();
-    expect(t.read(`/var/www/ikpk/releases/${release}/index.html`) ?? '').toContain('ORIGINAL');
+    const restored = (run.output.match(/^\s*restored\s*=\s*(\S+)\s*$/m) ?? [])[1];
+    expect(restored, 'восстановленная копия не названа в выводе').toBeTruthy();
+    expect(t.read(`/var/www/ikpk/restored/${restored}/index.html`) ?? '').toContain('ORIGINAL');
+    expect(t.exec('ls /var/www/ikpk/releases').stdout, 'копия попала в окно удержания релизов').not.toContain(restored);
     expect(t.read('/var/www/ikpk/current/index.html') ?? '', 'восстановление переключило раздачу само').toContain('DAMAGED');
   }, T);
 

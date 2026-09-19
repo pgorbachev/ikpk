@@ -579,10 +579,12 @@ class PublicationSession:
                 os.chmod(directory, 0o755)
                 sync_dir(directory)
             require(not os.path.lexists(target), "release collision")
-            os.rename(temporary, target)
             # A staged tree is a candidate, not a publication: the marker outlives a
             # cancelled or abandoned upload so retention can tell it from served releases.
+            # It is written BEFORE the rename: a crash between the two leaves a marker
+            # without a directory (harmless, pruned later), never a directory without a marker.
             self.mark_candidate(command["releaseId"])
+            os.rename(temporary, target)
             sync_dir(self.releases)
             self.staged[command["releaseId"]] = expected
         finally:
@@ -711,10 +713,16 @@ class PublicationSession:
                         releases.append((info.st_mtime_ns, entry.name))
             current = operation["releaseId"]
             require(any(name == current for _, name in releases), "active release directory missing during retention")
+            protected = {current}
+            preparation = self.read_preparation(operation)
+            if preparation and preparation["previousCurrent"]:
+                target = os.path.normpath(os.path.join(self.root, preparation["previousCurrent"]["target"]))
+                if os.path.dirname(target) == self.releases:
+                    protected.add(valid_id(os.path.basename(target)))
             # Candidates never served (cancelled or abandoned uploads) are not retained
-            # releases: they leave first and never count against the promised depth.
-            candidates = self.candidate_ids()
-            candidates.discard(current)
+            # releases: they leave first and never count against the promised depth. A
+            # served release whose marker survived a failed unlink is still protected here.
+            candidates = self.candidate_ids() - protected
             for name in sorted(candidates):
                 self.active_is(operation)
                 if any(name == existing for _, existing in releases):
@@ -722,12 +730,6 @@ class PublicationSession:
                     os.fsync(releases_fd)
                 self.mark_published(name)
             releases = [(mtime, name) for mtime, name in releases if name not in candidates]
-            protected = {current}
-            preparation = self.read_preparation(operation)
-            if preparation and preparation["previousCurrent"]:
-                target = os.path.normpath(os.path.join(self.root, preparation["previousCurrent"]["target"]))
-                if os.path.dirname(target) == self.releases:
-                    protected.add(valid_id(os.path.basename(target)))
             # Cancelled candidates are directories too. They must never displace
             # the last actually served release, even when newer by mtime.
             previous = sorted((mtime, name) for mtime, name in releases if name not in protected)

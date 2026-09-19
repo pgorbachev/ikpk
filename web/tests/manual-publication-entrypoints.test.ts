@@ -24,7 +24,7 @@ function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-entry-inventory-'));
   temporary.push(root);
   // Real executable trust chain, including private native entry guards. The backup
-  // restore utility is deliberately tested separately: it currently bypasses this chain.
+  // restore utility is tested separately (restore-bypass): it stages only and never switches serving.
   for (const name of [approved, 'scripts/deploy-web.sh', 'scripts/publication-transport.mjs',
     'scripts/lib/publication-remote.py', 'web/scripts/publication-worker.ts',
     'web/scripts/publication-operator.ts', 'web/scripts/publication-context.ts',
