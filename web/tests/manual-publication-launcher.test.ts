@@ -242,6 +242,15 @@ describe('deterministic digest binds relative file paths and bytes', () => {
 });
 
 describe('review probes at 838eb7b4', () => {
+  it('REVIEW: a tag named main cannot replace an absent canonical main branch', () => {
+    const f = fixture();
+    git(f.repo, 'tag', 'main');
+    git(f.repo, 'push', 'origin', 'refs/tags/main');
+    git(f.remote, 'update-ref', '-d', 'refs/heads/main');
+    expect(git(f.remote, 'show-ref', '--tags')).toContain('refs/tags/main');
+    const result = launch(f);
+    assertRefused(f, result, 'source-unavailable');
+  });
   it('REVIEW: local git fsmonitor must not execute while rejecting an untrusted source', () => {
     const f = fixture();
     const hook = join(f.repo, '.git', 'fsmonitor-probe');
