@@ -123,6 +123,9 @@ jobs:
         working-directory: web
         env:
           CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          # Посев фикстурой здесь намеренный — он назван и в имени шага. Объявление делает
+          # это намерение видимым скрипту, а не только читателю.
+          SNAPSHOT_SOURCE: pinned
         run: |
           npm run snapshot:prepare
           mkdir -p "$CONTENT_SNAPSHOT_DIR"

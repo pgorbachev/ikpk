@@ -43,6 +43,10 @@ jobs:
       - name: Prepare content snapshot artifact
         env:
           CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+          # Каталог здесь ПУСТ по замыслу: шаг раскладывает в него закреплённую фикстуру.
+          # Объявление обязательно — без него скрипт откажет, потому что «заданный каталог
+          # без snapshot.json» иначе неотличимо от отказа живого съёма.
+          SNAPSHOT_SOURCE: pinned
         run: |
           npm run snapshot:prepare
           mkdir -p "$CONTENT_SNAPSHOT_DIR"
