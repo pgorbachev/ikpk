@@ -8,6 +8,7 @@ import { publicationObservation, readPublicationSnapshot } from './publication-s
 import { PublicationReportError } from './publication-report-error.ts';
 import type { CheckResult, PublicationCheckContext } from './publication-checks.ts';
 import type { PublicationCheckPorts } from './publication-checks.ts';
+import type { RollbackCheckContext, RollbackCheckPorts } from './publication-rollback-checks.ts';
 
 export interface PublicationCommand {
   file: string; args: string[]; cwd: string; env: Record<string, string | undefined>;
@@ -28,6 +29,11 @@ export interface PublicationAdapterOptions {
   payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 
+export interface RollbackAdapterOptions {
+  webRoot: string; treeDir: string; reportsDir: string;
+  payment?: PublicationAdapterOptions['payment'];
+}
+type CheckContext = PublicationCheckContext | RollbackCheckContext;
 
 export const PUBLICATION_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'] as const;
 const safeNames = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'HOME', 'TMPDIR', 'DEMO_FORMS', 'CHAT_LOADER_SRC'] as const;
@@ -138,15 +144,19 @@ function playwrightResult(value: unknown): CheckResult {
 }
 
 /** Installed-worker API: operator data cannot select commands, assertions or runtime effects. */
-export function createPublicationCheckPorts(options: PublicationAdapterOptions, overrides: Partial<PublicationAdapterRuntime> = {}): PublicationCheckPorts {
+function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOptions, overrides: Partial<PublicationAdapterRuntime>) {
   const runtime = { ...defaultRuntime, ...overrides };
-  const webRoot = resolve(options.webRoot); const output = join(webRoot, 'dist');
+  const webRoot = resolve(options.webRoot);
+  const retained = 'treeDir' in options;
+  if (retained && !isAbsolute(options.treeDir)) throw new Error('absolute retained tree required');
+  const output = retained ? canonical(options.treeDir) : join(webRoot, 'dist');
   if (inside(canonical(output), canonical(options.reportsDir))) throw new Error('reports inside artifact');
-  function contextEnv(context: PublicationCheckContext) {
-    if (canonical(context.treeDir) !== canonical(output) || canonical(context.snapshotDir) !== canonical(options.snapshotDir)) throw new Error('foreign publication tree or snapshot');
-    const env: Record<string, string | undefined> = { ...safeEnv(context.env), CONTENT_SNAPSHOT_DIR: options.snapshotDir,
+  function contextEnv(context: CheckContext) {
+    if (canonical(context.treeDir) !== canonical(output) || (!retained && (!('snapshotDir' in context) || canonical(context.snapshotDir) !== canonical(options.snapshotDir)))) throw new Error('foreign publication tree or snapshot');
+    const env: Record<string, string | undefined> = { ...safeEnv(context.env),
+      ...(retained ? { PUBLICATION_RETAINED_TREE: '1' } : { CONTENT_SNAPSHOT_DIR: options.snapshotDir, PUBLICATION_LEDGER_DIR: options.ledgerDir }),
       DEPLOY_MODE: context.deployMode, PAYMENT_ROLE: context.paymentRole, PUBLICATION_TREE_DIR: output,
-      PUBLICATION_LEDGER_DIR: options.ledgerDir, PUBLICATION_DESTINATION_ID: context.destinationId,
+      PUBLICATION_DESTINATION_ID: context.destinationId,
       PUBLICATION_COMMIT: context.commit, PUBLICATION_SNAPSHOT_ID: context.snapshotId,
       PUBLICATION_CHROMIUM_EXECUTABLE: chromium.executablePath() };
     if (context.paymentRole !== 'ci') {
@@ -167,13 +177,14 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
     if (existsSync(path)) throw new Error('publication report already exists');
     mkdirSync(options.reportsDir, { recursive: true }); return path;
   }
-  async function suite(stage: string, context: PublicationCheckContext, extraEnv: Record<string, string> = {}) {
+  async function suite(stage: string, context: CheckContext, extraEnv: Record<string, string> = {}) {
     const env = { ...contextEnv(context), ...extraEnv }; const path = reportPath(stage);
     await run(join(webRoot, 'node_modules/.bin/vitest'), ['run', '--config', 'vitest.publication.config.ts', `tests/publication/${stage}.test.ts`, '--reporter=json', `--outputFile=${path}`], env);
     return vitestResult(JSON.parse(readFileSync(path, 'utf8')));
   }
   return {
     async capture() {
+      if (retained) throw new Error('retained checks cannot capture');
       const source = options.captureEnv.CMS_URL ?? options.captureEnv.STRAPI_URL;
       if (!source) throw new Error('live CMS URL required');
       const env = { ...safeEnv(options.captureEnv), ...Object.fromEntries(['CMS_URL', 'STRAPI_URL', 'CMS_TOKEN', 'STRAPI_API_TOKEN'].filter((name) => options.captureEnv[name] !== undefined).map((name) => [name, options.captureEnv[name]])), CONTENT_SNAPSHOT_DIR: options.snapshotDir };
@@ -185,12 +196,12 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
       writeFileSync(join(options.snapshotDir, 'snapshot.json'), `${JSON.stringify(snapshot, null, 2)}\n`);
       return { snapshotId: snapshot.snapshotId!, snapshotDir: options.snapshotDir };
     },
-    async build(context) { await run('npm', ['run', 'build'], contextEnv(context)); },
-    checkSnapshot: (context) => suite('snapshot', context),
-    checkBuild: (context) => suite('build', context),
-    checkDestination: (context) => suite('destination', context),
-    checkPaymentAbsent: (context) => { if (context.paymentRole !== 'ci') throw new Error('payment absence requires ci role'); return suite('payment-absence', context); },
-    async checkPaymentReadiness(context) {
+    async build(context: CheckContext) { if (retained) throw new Error('retained checks cannot build'); await run('npm', ['run', 'build'], contextEnv(context)); },
+    checkSnapshot: (context: CheckContext) => suite('snapshot', context),
+    checkBuild: (context: CheckContext) => suite('build', context),
+    checkDestination: (context: CheckContext) => suite('destination', context),
+    checkPaymentAbsent: (context: CheckContext) => { if (context.paymentRole !== 'ci') throw new Error('payment absence requires ci role'); return suite('payment-absence', context); },
+    async checkPaymentReadiness(context: CheckContext) {
       if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API');
       contextEnv(context);
       if (!runtime.paymentReadiness) throw new Error('destination readiness probe required');
@@ -203,8 +214,8 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
       writeFileSync(path, encoded, { mode: 0o600, flag: 'wx' });
       return suite('payment-readiness', context, { PUBLICATION_PAYMENT_READY_RESPONSE_FILE: path });
     },
-    checkPaymentPreflight: (context) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-preflight', context); },
-    async checkBrowser(context) {
+    checkPaymentPreflight: async (context: CheckContext) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-preflight', context); },
+    async checkBrowser(context: CheckContext) {
       const env = contextEnv(context); const path = reportPath('browser');
       const preview = await runtime.startPreview({ treeDir: context.treeDir, env });
       try {
@@ -213,6 +224,16 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
         return playwrightResult(JSON.parse(readFileSync(path, 'utf8')));
       } finally { await preview.close(); }
     },
-    digest: (treeDir) => digestTree(treeDir, treeFiles(treeDir)),
+    digest: (treeDir: string) => digestTree(treeDir, treeFiles(treeDir)),
   };
+}
+
+export function createPublicationCheckPorts(options: PublicationAdapterOptions, overrides: Partial<PublicationAdapterRuntime> = {}): PublicationCheckPorts {
+  return createCheckPorts(options, overrides);
+}
+
+/** Only trusted installed checks are exposed for an already downloaded retained release. */
+export function createRollbackCheckPorts(options: RollbackAdapterOptions, overrides: Partial<PublicationAdapterRuntime> = {}): RollbackCheckPorts {
+  const { checkDestination, checkBrowser, checkPaymentAbsent, checkPaymentReadiness, checkPaymentPreflight, digest } = createCheckPorts(options, overrides);
+  return { checkDestination, checkBrowser, checkPaymentAbsent, checkPaymentReadiness, checkPaymentPreflight, digest };
 }

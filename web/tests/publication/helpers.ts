@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { walkHtml } from '../helpers/dist-pages';
 
 export const webRoot = resolve(import.meta.dirname, '../..');
@@ -13,7 +13,7 @@ export function required(name: string): string {
 }
 export function tree(): string {
   const path = required('PUBLICATION_TREE_DIR');
-  expect(resolve(path)).toBe(join(webRoot, 'dist'));
+  expect(isAbsolute(path), 'absolute artifact path required').toBe(true);
   expect(statSync(path).isDirectory()).toBe(true);
   return path;
 }

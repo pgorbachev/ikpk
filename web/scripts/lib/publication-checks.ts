@@ -30,12 +30,12 @@ export interface PublicationCheckPorts {
   digest(treeDir: string): Promise<string>;
 }
 
-function canonicalPath(path: string): string {
+export function canonicalPath(path: string): string {
   let existing = resolve(path); const missing: string[] = [];
   while (!existsSync(existing)) { missing.unshift(existing.slice(dirname(existing).length + 1)); existing = dirname(existing); }
   return join(realpathSync(existing), ...missing);
 }
-function inside(parent: string, child: string): boolean {
+export function inside(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`));
 }
@@ -52,7 +52,7 @@ function files(root: string): string[] {
   }
   walk(root); return result;
 }
-const publicEnvironment = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'DEMO_FORMS', 'CHAT_LOADER_SRC',
+export const publicEnvironment = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'DEMO_FORMS', 'CHAT_LOADER_SRC',
   'PAYMENT_ENDPOINT_STAND', 'PAYMENT_ENDPOINT_PROD'] as const;
 
 /** Effect adapters are fixed by the installed worker; operator input cannot choose checks. */
