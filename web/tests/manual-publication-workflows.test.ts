@@ -102,6 +102,11 @@ function fixture(extra: Document = {}): Source[] {
   } }];
 }
 describe('manual publication: hosted configuration', () => {
+  it('obsolete CI/bootstrap publication commands are removed from the executable surface', () => {
+    const scripts = record(record(JSON.parse(readFileSync(join(REPO_ROOT, 'web/package.json'), 'utf8'))).scripts);
+    expect(Object.keys(scripts).filter((name) => /^publication:/.test(name))).toEqual([]);
+    expect(existsSync(join(REPO_ROOT, 'web/scripts/publication-cli.ts'))).toBe(false);
+  });
   it('all parsed workflows contain no hosted publication capability', () => {
     const sources = repositoryWorkflows();
     expect(sources.length).toBeGreaterThan(0);

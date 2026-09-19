@@ -34,7 +34,7 @@
 
 **Имя `provenance` занято, и первая редакция этого решения выбрала именно его.** Поле
 `provenance` уже несёт числа журнала происхождения: `web/scripts/lib/content-snapshot.ts@f4496cd6b2ccffeb7d2eca023d5293868664ed20:19`, `provenance?: {`.
-Его читает гейт публикации: `web/scripts/publication-cli.ts:41`, `provenance?: { observedEntry`.
+Его читает гейт публикации: `web/scripts/publication-cli.ts@062044082bb17188e8cb683f6c750959f253a2d9:41`, `provenance?: { observedEntry`.
 Реализация по букве прежней редакции сломала бы гейт **молча**: поле то же, смысл другой.
 
 Ошибка тем показательнее, что абзац ниже предостерегает ровно от неё — от совмещения двух

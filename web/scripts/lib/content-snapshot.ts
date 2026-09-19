@@ -8,7 +8,7 @@ export interface SnapshotMedia {
 /**
  * Отметка происхождения снимка: живой захват или закреплённая фикстура (design.md, решение 3,
  * change `cms-live-snapshot-capture`). Отдельно от `provenance` ниже: то поле уже несёт числа
- * журнала происхождения и читается гейтом публикации (`publication-cli.ts`), и совмещение двух
+ * журнала происхождения и читается гейтом публикации (`publication-runner.ts`), и совмещение двух
  * смыслов в одном поле сломало бы его молча.
  */
 export interface SnapshotOrigin {

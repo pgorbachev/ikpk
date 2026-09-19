@@ -84,124 +84,13 @@ describe('гигиена репозитория', () => {
     ).toEqual([]);
   });
 
-  // Режим форм: проверяется ПОВЕДЕНИЕ скрипта, а не наличие строк в тексте.
-  //
-  // Первая редакция искала `DEPLOY_MODE` и `exit 2` где угодно в файле и была
-  // декоративной: замена всего блока обязательности на
-  // `DEPLOY_MODE="${DEPLOY_MODE:-stand}"` оставляла её зелёной, то есть умолчание
-  // возвращалось незамеченным (проверено ревью). Скрипт отказывает до сборки и до
-  // обращений к сети, поэтому его можно просто запустить.
-  it('деплой отказывается работать без явного режима форм', () => {
-    const run = (env: Record<string, string>): { status: number; out: string } => {
-      try {
-        const out = execFileSync('bash', [join(ROOT, 'scripts', 'deploy-web.sh'), '203.0.113.1'], {
-          cwd: ROOT,
-          encoding: 'utf-8',
-          env: { ...process.env, ...env },
-          stdio: 'pipe',
-        });
-        return { status: 0, out };
-      } catch (err) {
-        const e = err as { status?: number; stdout?: string; stderr?: string };
-        return { status: e.status ?? -1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
-      }
-    };
-
-    const noMode = run({ DEPLOY_MODE: '', DEMO_FORMS: '' });
-    expect(noMode.status, `без DEPLOY_MODE скрипт не отказал:\n${noMode.out}`).toBe(2);
-    expect(noMode.out, 'отказ не называет допустимые режимы').toMatch(/stand/);
-
-    const both = run({ DEPLOY_MODE: 'prod', DEMO_FORMS: 'stub' });
-    expect(both.status, `prod + DEMO_FORMS не отвергнут:\n${both.out}`).toBe(2);
-
-    const wrong = run({ DEPLOY_MODE: 'staging-maybe', DEMO_FORMS: '' });
-    expect(wrong.status, `неизвестный режим принят:\n${wrong.out}`).toBe(2);
-
-    // Runbook обязан показывать режим: иначе оператор снова позовёт скрипт без него.
-    const runbook = readFileSync(join(ROOT, 'docs', 'deploy-vps.md'), 'utf-8');
-    expect(/DEPLOY_MODE=(stand|prod)/.test(runbook), 'runbook не показывает явный режим').toBe(true);
-  });
-
-  // Файл редиректов должен попадать на сервер: генератор его создаёт, но пока
-  // bootstrap не подключал `include`, а deploy не загружал файл, 265 правил
-  // существовали только в репозитории.
-  it('конфигурация стенда подключает файл редиректов, а деплой его загружает', () => {
-    const bootstrap = readFileSync(join(ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8');
-    const deploy = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8');
-
-    expect(
-      existsSync(join(ROOT, 'deploy', 'nginx-redirects.conf')),
-      'нет deploy/nginx-redirects.conf — запустите npm run redirects:gen',
-    ).toBe(true);
-    // Смотрим на ИСПОЛНЯЕМЫЙ код, а не на любое упоминание имени файла: первая
-    // редакция искала подстроку по всему тексту, и удаление блока загрузки с
-    // оставленным комментарием её не роняло (проверено ревью).
-    const strip = (text: string): string =>
-      text
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('#'))
-        .join('\n');
-
-    expect(
-      /include\s+\S*nginx-redirects\.conf/.test(strip(bootstrap)),
-      'include файла редиректов закомментирован или отсутствует в vhost — правила на сервере не действуют',
-    ).toBe(true);
-    // Требуем именно передачу файла на сервер, а не упоминание его имени.
-    const deployCode = strip(deploy);
-    expect(
-      /nginx-redirects\.conf/.test(deployCode),
-      'deploy-web.sh не обращается к файлу редиректов',
-    ).toBe(true);
-    expect(
-      /shared\/nginx-redirects\.conf/.test(deployCode) && /\bcat\b/.test(deployCode),
-      'deploy-web.sh не загружает файл редиректов на сервер (блок передачи отсутствует)',
-    ).toBe(true);
-  });
-
-  // Деплой обязан проверять то, что реально уедет на сервер, и отказываться до
-  // необратимых шагов. Проверяем присутствие обеих проверок в исполняемом коде и их
-  // ПОРЯДОК: сверка артефакта и preflight должны стоять раньше переключения релиза.
-  it('деплой сверяет артефакт с режимом и подключение редиректов до переключения релиза', () => {
-    const code = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8')
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
-
-    // Артефакт сверяется по ВСЕМУ набору адресов форм и против заказанного режима.
-    // ЧТО именно сверяется — предмет поведенческого теста
-    // (web/tests/deploy-form-links.test.ts): здесь утверждается только, что вызов
-    // есть и стоит до необратимого шага. Прежняя редакция грепала внутренности
-    // гейта (`form_links=`, `EXPECT_RE`, `DEMO_FORMS" == "stub"`) прямо в этом
-    // файле — то есть утверждала о ТЕКСТЕ реализации, а не о её поведении, и
-    // ломалась от любого выноса кода, ничего при этом не проверив по существу.
-    // Проверяются ВСЕ ТРИ аргумента, а не только каталог. Находка ревью (F6): якорь
-    // по одному `"$DIST_DIR"` оставался бы зелёным при захардкоженном режиме
-    // (`form_links_match_mode "$DIST_DIR" prod ""`), тогда как текст отказа обещает
-    // проверку «по заказанному режиму». Сообщение утверждало больше, чем признак.
-    expect(
-      /form_links_match_mode "\$DIST_DIR" "\$DEPLOY_MODE" "\$DEMO_FORMS"/.test(code),
-      'гейт ссылок на формы не вызывается по заказанному режиму и режиму форм',
-    ).toBe(true);
-
-    // Preflight по развёрнутой конфигурации, а не по загруженному файлу.
-    expect(/nginx -T/.test(code), 'нет preflight по развёрнутой конфигурации nginx').toBe(true);
-
-    const posArtifact = code.indexOf(String.raw`form_links_match_mode "$DIST_DIR" "$DEPLOY_MODE" "$DEMO_FORMS"`);
-    const posPreflight = code.indexOf('nginx -T');
-    const posSwitch = code.indexOf('Switching current symlink');
-    expect(posArtifact, 'сверки артефакта нет').toBeGreaterThan(0);
-    expect(posPreflight, 'preflight отсутствует').toBeGreaterThan(0);
-    expect(posSwitch, 'переключение релиза не найдено').toBeGreaterThan(0);
-    expect(
-      posArtifact < posSwitch && posPreflight < posSwitch,
-      'проверки стоят ПОСЛЕ переключения релиза — отказ уже ничего не спасает',
-    ).toBe(true);
-
-    // Провал health-check — провал деплоя.
-    expect(
-      /Health check ПРОВАЛЕН/.test(code) && /exit 1/.test(code),
-      'провал health-check не роняет деплой',
-    ).toBe(true);
+  // Manual publication behavior is covered by concrete worker/runner tests and
+  // scripts/tests/publication-redirect-transaction.test.mjs, not shell-text order.
+  it('bootstrap подключает отслеживаемый файл редиректов', () => {
+    const bootstrap = readFileSync(join(ROOT, 'scripts/bootstrap-vps.sh'), 'utf8')
+      .split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
+    expect(existsSync(join(ROOT, 'deploy/nginx-redirects.conf'))).toBe(true);
+    expect(/include\s+\S*nginx-redirects\.conf/.test(bootstrap)).toBe(true);
   });
 
   // Bootstrap не должен перезаписывать существующий vhost: там правки certbot.
