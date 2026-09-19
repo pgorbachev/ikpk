@@ -1,0 +1,18 @@
+{
+  "reviewedRevision": "6318961597bfd440437d229d3d855b14082c985e",
+  "removedCards": 57,
+  "remainingCards": 0,
+  "accepted": false,
+  "failure": "Error: publication check process did not complete successfully",
+  "browserStats": {
+    "startTime": "2026-09-19T15:44:01.430Z",
+    "duration": 5785.863,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  },
+  "beforeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "restoredDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "reportsDirectory": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-review-red-0sVitb"
+}
