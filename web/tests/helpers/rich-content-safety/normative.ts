@@ -117,8 +117,3 @@ export const CMS_RICHTEXT_SELECTORS: CmsRichtextSelector[] = [
   },
   { id: 'cms:teacher.bio', singularName: 'teacher', attr: 'bio', jsonFile: 'teachers.json', jsonField: 'bio_html' },
 ];
-
-export const ALL_SELECTOR_IDS = [
-  ...JSON_SELECTORS.map((s) => s.id),
-  ...CMS_RICHTEXT_SELECTORS.map((s) => s.id),
-];

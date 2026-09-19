@@ -155,8 +155,3 @@ export function isMappedDeclaration(property: string, value: string): boolean {
   if (prop === 'margin-left' && val === '15px') return true;
   return false;
 }
-
-export function fingerprintHash(fp: SourceFingerprint): string {
-  const { sha256, ...rest } = fp;
-  return sha(`${sha256}:${JSON.stringify(rest)}`);
-}

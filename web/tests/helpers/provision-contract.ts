@@ -18,17 +18,12 @@ import { REPO_ROOT } from './provision-target';
 
 export const ENV_DIR = 'deploy/environments';
 export const ENVIRONMENTS = ['stand', 'prod'] as const;
-export const PROVISION_SCRIPT = process.env.PROVISION_SCRIPT ?? 'scripts/bootstrap-vps.sh';
 export const VERIFY_SCRIPT = process.env.PROVISION_VERIFY ?? 'scripts/verify-server-state.sh';
 
 export type Declared = Map<string, string>;
 
 export function declaredStatePath(env: string): string {
   return join(REPO_ROOT, ENV_DIR, `${env}.env`);
-}
-
-export function declaredStateExists(env: string): boolean {
-  return existsSync(declaredStatePath(env));
 }
 
 /** Читает объявленное состояние окружения. Отсутствие файла — провал, а не пропуск. */
