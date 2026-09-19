@@ -5,6 +5,7 @@ import type { PublicationCheckInput } from './publication-checks.ts';
 import type { Snapshot } from './content-snapshot.ts';
 import type { CiEvidence, LocalChecks, PublicationRecord } from './publish-gate.ts';
 import type { PublicationStateStore } from './publication-state-store.ts';
+import { PublicationProvenanceMismatchError } from './publication-state-store.ts';
 
 export interface NewPublicationInput extends PublicationCheckInput {
   publicationId: string; releaseId: string; actor: string; origin: string;
@@ -66,21 +67,29 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     throw new Error('unverified live snapshot identity');
   }
   const provenance = snapshot.provenance;
+  const capturedProvenance = `observedEntry=${provenance?.observedEntry ?? 'missing'} revision=${provenance?.revision ?? 'missing'}`;
   if (!provenance || ![provenance.observedEntry, provenance.revision, provenance.highWaterMark]
     .every((value) => Number.isSafeInteger(value) && Number(value) > 0) ||
-    provenance.revision! < provenance.highWaterMark) throw new Error('snapshot provenance requires accepted current state');
+    provenance.revision! < provenance.highWaterMark) {
+    throw new Error(`snapshot provenance requires accepted current state: ${capturedProvenance} highWaterMark=${provenance?.highWaterMark ?? 'missing'}`);
+  }
   const treeDigest = await ports.digest(input.treeDir);
   const identity = { commit: input.commit, snapshotId: snapshot.snapshotId!, destinationId: input.destinationId, treeDigest };
   if (!/^[a-f0-9]{64}$/.test(treeDigest)) throw new Error('invalid artifact digest');
   const reportProblem = localChecksProblem(report, identity);
   if (reportProblem) throw new Error(reportProblem);
   async function checkState() {
-    const state = await ports.state.read(snapshot.fingerprint!);
+    const state = await ports.state.read(snapshot.fingerprint!).catch((error: unknown) => {
+      if (error instanceof PublicationProvenanceMismatchError) {
+        throw new Error(`publication provenance changed: ${capturedProvenance} latestEntry=${error.latestEntry} highWaterMark=${error.highWaterMark}`);
+      }
+      throw error;
+    });
     const last = state.entries.at(-1);
     if (!last || last.fingerprint !== snapshot.fingerprint || last.number !== provenance!.observedEntry ||
         state.observation.requiresConfirmation || state.observation.observedEntry !== provenance!.observedEntry ||
         state.observation.revision !== provenance!.revision || state.observation.highWaterMark !== provenance!.highWaterMark) {
-      throw new Error('publication provenance changed or requires confirmation');
+      throw new Error(`publication provenance changed or requires confirmation: ${capturedProvenance} latestEntry=${last?.number ?? 'missing'} highWaterMark=${state.observation.highWaterMark}`);
     }
     return state;
   }

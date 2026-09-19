@@ -25,6 +25,15 @@ export interface PublicationStateStore {
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
     Promise<{ head: string; entry: LedgerEntry & { confirmedBy: string } }>;
 }
+export class PublicationProvenanceMismatchError extends Error {
+  readonly latestEntry: number;
+  readonly highWaterMark: number;
+  constructor(latestEntry: number, highWaterMark: number) {
+    super(`current provenance fingerprint mismatch: latestEntry=${latestEntry} highWaterMark=${highWaterMark}`);
+    this.latestEntry = latestEntry;
+    this.highWaterMark = highWaterMark;
+  }
+}
 export function createPublicationStateStore(options: PublicationStateStoreOptions): PublicationStateStore {
   const attempts = options.maxPushAttempts ?? 3;
   if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 10) throw new Error('invalid retry attempt limit');
@@ -96,7 +105,9 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
   return {
     read: (fingerprint) => serial(async () => {
       const state = await snapshot(fingerprint);
-      if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) throw new Error('current provenance fingerprint mismatch');
+      if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) {
+        throw new PublicationProvenanceMismatchError(state.entries.at(-1)!.number, state.observation.highWaterMark);
+      }
       return state;
     }),
     appendPublication: (record) => serial(async () => {
