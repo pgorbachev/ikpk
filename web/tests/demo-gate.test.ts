@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { dirname, join, relative, resolve } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
+import ts from 'typescript';
 import {
   DEFAULT_BRANCH,
   REPO_ROOT,
@@ -293,7 +294,27 @@ function declaresDir(src: string, dir: string): boolean {
 /** Локальные импорты файла, разрешённые до существующих путей внутри web. */
 function localImports(fileRelWeb: string): string[] {
   const src = sourceOf(fileRelWeb);
-  const specs = [...src.matchAll(/(?:from|import)\s*\(?\s*(['"])(\.[^'"]+)\1/g)].map((m) => m[2]);
+  const specs: string[] = [];
+  const source = ts.createSourceFile(fileRelWeb, src, ts.ScriptTarget.Latest, true);
+  const add = (node: ts.Expression | undefined) => {
+    if (node && ts.isStringLiteralLike(node) && node.text.startsWith('.')) specs.push(node.text);
+  };
+  function visit(node: ts.Node) {
+    if (ts.isImportDeclaration(node)) {
+      const clause = node.importClause;
+      const bindings = clause?.namedBindings;
+      const typesOnly = clause?.isTypeOnly || (!clause?.name && bindings && ts.isNamedImports(bindings) &&
+        bindings.elements.length > 0 && bindings.elements.every((item) => item.isTypeOnly));
+      if (!typesOnly) add(node.moduleSpecifier);
+    } else if (ts.isExportDeclaration(node) && !node.isTypeOnly) {
+      const bindings = node.exportClause;
+      if (!bindings || !ts.isNamedExports(bindings) || !bindings.elements.length || bindings.elements.some((item) => !item.isTypeOnly)) add(node.moduleSpecifier);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      add(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
   const base = dirname(join(WEB, fileRelWeb));
   const out: string[] = [];
   for (const spec of specs) {
