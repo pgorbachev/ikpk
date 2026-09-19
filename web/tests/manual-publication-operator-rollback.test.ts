@@ -123,12 +123,12 @@ describe('fixed installed rollback operator binds real coordinator and retained 
       } };
     });
     f.adapters.mockImplementation((_options, overrides) => ({ ...f.adapterPorts,
-      async checkPaymentReadiness(context) {
+      checkPaymentReadiness: vi.fn(async (context: RollbackCheckContext) => {
         expect(overrides).toMatchObject({ paymentReadiness: expect.any(Function) });
         const response = await (overrides as { paymentReadiness(): Promise<unknown> }).paymentReadiness();
         expect(response).toMatchObject({ status: 200, body: { mode: 'test', shopId: '1440249' } });
         return f.adapterPorts.checkPaymentReadiness(context);
-      },
+      }),
     }));
     const result = await f.run();
     expect(result.paymentRole).toBe('stand'); expect(locks).toBe(1); expect(probe).toHaveBeenCalledTimes(1);
