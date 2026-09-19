@@ -1,0 +1,354 @@
+{
+  "sourceRevision": "5fdc5da0b7c2fc529cf720e2e29f43044aca4b61",
+  "classification": "43 actual unresolved links from inherited auxiliary content; no matching published document or accepted redirect. Fixture normalization is not a production remediation. Query strings need the absent document first.",
+  "captureSource": "web/scripts/capture-content-snapshot.ts:424-440",
+  "checkedRedirectMap": "deploy/nginx-redirects.conf",
+  "count": 43,
+  "distinctUrls": 9,
+  "occurrences": [
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/svedeniya-ob-obrazovatelnoy-organizatsii",
+      "panel": "Руководство. Педагогический (научно-педагогический) состав",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=2",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/educational-organization?section=3",
+      "fixtureOnlyReplacement": "/svedeniya-ob-obrazovatelnoy-organizatsii"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=213",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=214",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 3,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=215",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 4,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=217",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 5,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=218",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=213",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=214",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 3,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=215",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 4,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=216",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 5,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=218",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=218",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
+      "panel": "Выдаваемые документы",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=214",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=213",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=214",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 3,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=216",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 4,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=217",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 5,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=218",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=213",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=214",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 3,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=215",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 4,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=216",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 5,
+      "url": "https://ikpk.su/institute-clinical-kinesiology/programs-form/152?seminarId=217",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "panel": "Для кого подойдет",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-upledgera/programs-form/158?seminarId=244",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 1,
+      "url": "https://ikpk.su/institute-upledgera/programs-form/158?seminarId=244",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 2,
+      "url": "https://ikpk.su/institute-upledgera/programs-form/158?seminarId=244",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    },
+    {
+      "sourcePath": "fixtures/content-snapshot/collapsible_panels.json",
+      "page": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "panel": "Учебный план",
+      "occurrenceInPanel": 3,
+      "url": "https://ikpk.su/institute-upledgera/programs-form/158?seminarId=244",
+      "fixtureOnlyReplacement": "/raspisanie-i-tseny"
+    }
+  ]
+}

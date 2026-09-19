@@ -8,6 +8,7 @@ import {
   stripShellComments,
   type Workflow,
 } from './helpers/workflows';
+import { PUBLICATION_BROWSER_ARGS } from '../scripts/lib/publication-check-adapters';
 import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 
 // ─── Мета-гейт: браузерная проверка обязана исполняться в гейте публикации ────
@@ -224,6 +225,8 @@ function gatingPlaywrightArgs(all: Workflow[]): string[][] {
     invocations.length,
     'в гейтующих workflow не нашлось ни одного вызова playwright — сверять набор не с чем',
   ).toBeGreaterThan(0);
+  // This fixed local suite is required by the manual publication coordinator.
+  invocations.push(PUBLICATION_BROWSER_ARGS.slice(1).filter((arg) => arg !== '--reporter=json'));
   return invocations;
 }
 
@@ -343,7 +346,7 @@ const monthTagsOf = (tests: CollectedTest[]): CollectedTest[] =>
   tests.filter((test) => test.tags.some((tag) => tag.startsWith('month-')));
 
 describe('браузерные проверки и гейт публикации', () => {
-  it('каждый файл либо исполняется гейтующим workflow, либо назван в списке долга', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
+  it('каждый файл исполняется CI или fixed local publication suite либо назван в списке долга', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
     const executed = executedSpecFiles(loadWorkflows());
     expect(executed.size, 'ни один файл браузерных проверок не исполняется — разбор workflow сломан')
       .toBeGreaterThan(0);

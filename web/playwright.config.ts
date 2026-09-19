@@ -32,6 +32,7 @@ export default defineConfig({
       // Этот config раздаёт `dist`, у которого после 5.10 роль `ci` и формы нет: набор,
       // оставленный тут, потерял бы предмет молча.
       testIgnore: [
+        '**/publication-smoke.spec.ts',
         '**/compat.spec.ts',
         '**/payment-form-demo.spec.ts',
         '**/payment-form.spec.ts',
@@ -43,6 +44,7 @@ export default defineConfig({
       name: 'mobile',
       use: { viewport: { width: 375, height: 812 } },
       testIgnore: [
+        '**/publication-smoke.spec.ts',
         '**/compat.spec.ts',
         '**/payment-form-demo.spec.ts',
         '**/payment-form.spec.ts',

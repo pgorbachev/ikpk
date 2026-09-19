@@ -18,8 +18,8 @@ export interface OracleHarness {
  * Инертный Chromium oracle: about:blank заранее, DOMParser, abort всех request,
  * запрет goto/setContent/live innerHTML для hostile bytes.
  */
-export async function openOracleHarness(): Promise<OracleHarness> {
-  const browser: Browser = await chromium.launch({ headless: true });
+export async function openOracleHarness(options: { executablePath?: string } = {}): Promise<OracleHarness> {
+  const browser: Browser = await chromium.launch({ headless: true, ...options });
   const context: BrowserContext = await browser.newContext();
   const continued: string[] = [];
   let aborted = 0;
