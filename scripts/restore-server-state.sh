@@ -65,12 +65,16 @@ echo "predicate=byte-equal-after-restore"
 echo "compared=${compared}"
 echo "mismatched=${mismatched}"
 
+# Неподтверждённая копия не остаётся на диске: частичный каталог рядом с подтверждёнными
+# выглядел бы как годная копия для следующего оператора.
 if ((compared == 0)); then
-  echo "Сравнивать было нечего: копия ${latest} не содержит файлов — это НЕ подтверждение восстановления" >&2
+  rm -rf -- "$target"
+  echo "Сравнивать было нечего: копия ${latest} не содержит файлов — это НЕ подтверждение восстановления; ${target} удалён" >&2
   exit 2
 fi
 if ((mismatched > 0)); then
-  echo "Восстановление не подтверждено: расхождений ${mismatched} из ${compared}" >&2
+  rm -rf -- "$target"
+  echo "Восстановление не подтверждено: расхождений ${mismatched} из ${compared}; ${target} удалён" >&2
   exit 1
 fi
 
