@@ -497,4 +497,19 @@ describe('snapshot_origin_matches — выкладка не публикует �
     const f = snapshotWith({ kind: 'сомнительное' });
     expect(await runFn(`snapshot_origin_matches '${f}' 'pinned'`)).not.toBe(0);
   });
+
+  // Проводка, а не вывод. Шесть проверок выше показывают, что функция отвечает верно, и все
+  // шесть остаются зелёными, если строку вызова удалить из `deploy-web.sh` целиком: предмет
+  // у них — функция, а не выкладка. Ровно так на этом проекте уже уходил гейт JSON-LD.
+  //
+  // Порядок здесь часть предмета: проверка ПОСЛЕ загрузки байтов бесполезна — фикстура уже
+  // на сервере, и отказ лишь оставляет релиз неподключённым.
+  it('deploy-web.sh зовёт проверку, и зовёт её до загрузки байтов', () => {
+    const src = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8');
+    const call = src.search(/^\s*if ! snapshot_origin_matches\b/m);
+    expect(call, 'deploy-web.sh не зовёт snapshot_origin_matches').toBeGreaterThanOrEqual(0);
+    const upload = src.search(/^\s*COPYFILE_DISABLE=1 tar -C "\$DIST_DIR"/m);
+    expect(upload, 'в deploy-web.sh не нашлась загрузка релиза — проверять порядок не с чем').toBeGreaterThanOrEqual(0);
+    expect(call, 'происхождение снимка проверяется после загрузки байтов').toBeLessThan(upload);
+  });
 });
