@@ -8,6 +8,7 @@ import { createPublicationStateStore, type PublicationStateStoreOptions } from '
 import { verifyServedPublication } from '../scripts/lib/published-state.ts';
 import { rollbackFixture } from './helpers/publication-rollback-fixture.ts';
 import type { PublicationRecord } from '../scripts/lib/publish-gate.ts';
+import { ROLLBACK_GROUPS } from '../scripts/lib/publish-gate.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const OPERATOR = join(ROOT, 'web/scripts/publication-operator.ts');
@@ -136,6 +137,29 @@ describe('installed accept-state binds the shared Git ledger protocol', () => {
 });
 
 describe('installed recovery reconnects pending operation to verified served pair and immutable index', () => {
+  it.each(['valid', 'wrong-pair', 'missing-group', 'failed-group'])('independent review: pending rollback %s evidence is validated before recovery effects', async (fault) => {
+    const f = await fixture();
+    await f.realState.appendPublication(structuredClone(f.operation));
+    const rollbackChecks = { ...structuredClone(f.operation.localChecks),
+      groups: ROLLBACK_GROUPS.map((name) => ({ name, conclusion: 'success' as const, executedTests: 3 })) };
+    if (fault === 'wrong-pair') rollbackChecks.treeDigest = 'e'.repeat(64);
+    if (fault === 'missing-group') rollbackChecks.groups.pop();
+    if (fault === 'failed-group') Object.assign(rollbackChecks.groups[0], { conclusion: 'failure' });
+    Object.assign(f.operation, { publicationId: 'pending-rollback', rollbackOfPublicationId: f.operation.publicationId,
+      reason: 'Restore navigation', rollbackChecks });
+    const before = f.head();
+    if (fault === 'valid') {
+      await expect(f.run(['recover'])).resolves.toMatchObject({ code: 'recovered' });
+      expect(f.appended).toEqual([f.operation]);
+      expect(f.state.pending).toBe(false);
+    } else {
+      await expect(f.run(['recover'])).rejects.toThrow();
+      expect(f.head()).toBe(before);
+      expect(f.appended).toEqual([]);
+      expect(f.state.pending).toBe(true);
+      expect(f.events).not.toContain('served-pair');
+    }
+  });
   it('positive control real served-pair verifier reaches fixture and rejects wrong pair', async () => {
     const f = await fixture(false); f.state.locked = true;
     await verifyServedPublication(f.operation, new URL(f.config.siteUrl), f.fetch);
