@@ -197,16 +197,10 @@ describe('host lock contains final source checks switch health and append', () =
     expect(result.localChecks.groups).toHaveLength(5);
   });
 
-  it('the runner-created transport authorizer binds destination digest and full operation identity', async () => {
+  it('the runner-created transport authorization expires after publication', async () => {
     const f = fixture(); await runNewPublication(f.input, f.ports);
     expect(f.state.authorize).toBeTypeOf('function');
-    for (const field of ['publicationId', 'releaseId', 'destinationId', 'treeDigest', 'commit', 'snapshotId'] as const) {
-      const operation = { ...f.operation(), [field]: field === 'commit' ? OTHER_SHA : 'foreign' };
-      await expect(f.state.authorize!({ action: 'activate', destinationId: 'stand', operation })).rejects.toThrow();
-    }
-    await expect(f.state.authorize!({ action: 'connect', destinationId: 'foreign' })).rejects.toThrow();
-    await expect(f.state.authorize!({ action: 'stage', destinationId: 'stand', expectedDigest: '0'.repeat(64) })).rejects.toThrow();
-    await expect(f.state.authorize!({ action: 'rollback', destinationId: 'stand', operation: f.operation() })).rejects.toThrow();
-    await expect(f.state.authorize!({ action: 'recover', destinationId: 'stand', operation: f.operation() })).rejects.toThrow();
+    await expect(f.state.authorize!({ action: 'connect', destinationId: 'stand' })).rejects.toThrow();
+    await expect(f.state.authorize!({ action: 'activate', destinationId: 'stand', operation: f.operation() })).rejects.toThrow();
   });
 });
