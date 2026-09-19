@@ -126,6 +126,16 @@ if ! (cd "$WEB_DIR" && MEDIA_MIGRATION_DIST_DIR="$DIST_DIR" npm exec -- vitest r
   exit 1
 fi
 
+# Происхождение снимка — до загрузки байтов, а не после. Съём, сборка и выкладка суть три
+# отдельные команды, и эта не запускает съём: без проверки забытый экспорт
+# CONTENT_SNAPSHOT_DIR после отказавшего съёма выкладывает на стенд содержимое закреплённой
+# фикстуры, внешне неотличимое от обновлённого.
+echo "[deploy] Проверка происхождения собранного снимка"
+if ! snapshot_origin_matches "${WEB_DIR}/dist-snapshot/snapshot.json" "${SNAPSHOT_SOURCE:-}"; then
+  echo "[deploy] Загрузка отменена: происхождение снимка не подтверждено." >&2
+  exit 1
+fi
+
 echo "[deploy] Uploading release ${RELEASE_ID} to ${SSH_USER}@${HOST}:${REMOTE_RELEASE_DIR}"
 COPYFILE_DISABLE=1 tar -C "$DIST_DIR" -cf - . | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
   "mkdir -p '${REMOTE_RELEASE_DIR}' && tar --no-same-owner -xf - -C '${REMOTE_RELEASE_DIR}'"

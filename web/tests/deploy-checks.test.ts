@@ -447,3 +447,54 @@ describe('ikpk-payments-backup.timer — интервал не дольше гр
     expect(timer).toMatch(/^Persistent=true$/m);
   });
 });
+
+// Происхождение снимка проверяется ПЕРЕД выкладкой, потому что цепочка «съём → сборка →
+// выкладка» разорвана: это три отдельные команды, и `deploy-web.sh` съёма не запускает.
+//
+// #234 сделал пустой живой съём отказом, #252 запретил подменять отказавший съём фикстурой
+// при ЗАДАННОМ `CONTENT_SNAPSHOT_DIR`. Оставался последний путь: переменную не экспортировали
+// вовсе. Тогда сборка законно берёт фикстуру (это обычный локальный режим), и отличить
+// «собрал из фикстуры намеренно» от «забыл экспортировать после отказавшего съёма» нечем —
+// стенд уезжает с содержимым фикстуры, внешне неотличимым от обновлённого.
+//
+// Поэтому предмет проверки — САМ АРТЕФАКТ, а не окружение: собранный снимок несёт
+// `origin.kind`, и выкладка отказывает на `pinned`, пока это не объявлено.
+describe('snapshot_origin_matches — выкладка не публикует фикстуру молча', () => {
+  const snapshotWith = (origin: unknown): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'origin-check-'));
+    const body: Record<string, unknown> = { content: { types: {} } };
+    if (origin !== undefined) body.origin = origin;
+    writeFileSync(join(dir, 'snapshot.json'), JSON.stringify(body));
+    return join(dir, 'snapshot.json');
+  };
+
+  it('живой снимок проходит без объявлений', async () => {
+    const f = snapshotWith({ kind: 'live', url: 'http://cms.invalid' });
+    expect(await runFn(`snapshot_origin_matches '${f}' ''`)).toBe(0);
+  });
+
+  it('фикстура без объявления — отказ', async () => {
+    const f = snapshotWith({ kind: 'pinned' });
+    expect(await runFn(`snapshot_origin_matches '${f}' ''`)).not.toBe(0);
+  });
+
+  it('фикстура с объявлением — проходит', async () => {
+    const f = snapshotWith({ kind: 'pinned' });
+    expect(await runFn(`snapshot_origin_matches '${f}' 'pinned'`)).toBe(0);
+  });
+
+  it('снимка нет — «не смогли измерить», а не «нарушений нет»', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'origin-missing-'));
+    expect(await runFn(`snapshot_origin_matches '${join(dir, 'snapshot.json')}' ''`)).not.toBe(0);
+  });
+
+  it('происхождение не объявлено вовсе — отказ, а не молчаливый пропуск', async () => {
+    const f = snapshotWith(undefined);
+    expect(await runFn(`snapshot_origin_matches '${f}' ''`)).not.toBe(0);
+  });
+
+  it('объявление не спасает снимок неизвестного происхождения', async () => {
+    const f = snapshotWith({ kind: 'сомнительное' });
+    expect(await runFn(`snapshot_origin_matches '${f}' 'pinned'`)).not.toBe(0);
+  });
+});
