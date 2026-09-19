@@ -35,6 +35,7 @@
 #
 # Список сверяется поимённо и в обе стороны (`--write-absent`).
 * :: 2ccee7b131cf5512672686271f8647dea50af683 :: external-revision
+* :: 2dfd574c9d518106f41e85283177a36212d500f8 :: external-revision
 * :: 3d10129265f183e2b746a5823012f42a0c115f73 :: external-revision
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :: will-create
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
@@ -44,8 +45,6 @@ openspec/changes/cms-content-authoring-and-migration/proposal.md :: web/src/lib/
 openspec/changes/cms-content-authoring-and-migration/specs/cms-content-authoring/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
 openspec/changes/cms-content-authoring-and-migration/tasks.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
 openspec/changes/education-trust-and-admission-clarity/proposal.md :: 0710e4d0e155a6859c09c2681c92a354fd330916 :: external-revision
+openspec/changes/manual-publication-only/proposal.md :: .github/workflows/deploy.yml :: deleted-deliberately
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
 openspec/specs/schedule-month-filter/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
-
-* :: 2dfd574c9d518106f41e85283177a36212d500f8 :: external-revision
-openspec/changes/manual-publication-only/proposal.md :: .github/workflows/deploy.yml :: deleted-deliberately
