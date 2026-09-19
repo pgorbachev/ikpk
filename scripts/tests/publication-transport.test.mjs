@@ -173,6 +173,29 @@ test('a retained release refusal survives a broken large upload pipe', options, 
   assert.equal(existsSync(f.pendingPath), false);
 });
 
+for (const reply of ['silent', 'unexpected-success']) {
+  test(`a broken upload with ${reply} remains a bounded failure without stderr leakage`, options, async (t) => {
+    const f = setup(t);
+    const executable = join(f.root, '..', 'closed-upload.mjs');
+    writeFileSync(executable, `
+      import { closeSync } from 'node:fs';
+      closeSync(0);
+      process.stdout.write(JSON.stringify({ ok: true, value: { locked: true } }) + '\\n');
+      process.stderr.write('PRIVATE-SSH-DIAGNOSTIC');
+      ${reply === 'unexpected-success' ? "process.stdout.write(JSON.stringify({ ok: true }) + '\\n');" : ''}
+      setInterval(() => {}, 1000);
+    `);
+    const transport = createSshTransport({ ...f.config, sshCommand: [process.execPath, executable] });
+    const started = Date.now();
+    await assert.rejects(transport.withLock((session) => f.stage(session)), (error) => {
+      assert.equal(error.message, 'SSH upload stream failed');
+      return true;
+    });
+    assert.ok(Date.now() - started < 5000, 'a silent peer must not prevent bounded teardown');
+    assert.equal(f.active(), 'old');
+  });
+}
+
 test('release IDs cannot traverse outside the releases directory', options, async (t) => {
   const f = setup(t);
   await assert.rejects(f.transport.withLock((session) => f.stage(session, { releaseId: '../../escaped' })), /release|path|invalid/i);

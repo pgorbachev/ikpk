@@ -130,7 +130,20 @@ async function connect(config) {
     }
     return reply.value;
   }
-  const write = (bytes) => new Promise((resolve, reject) => child.stdin.write(bytes, (error) => error ? reject(new Error('SSH upload stream failed')) : resolve()));
+  async function write(bytes) {
+    try {
+      await new Promise((resolve, reject) => child.stdin.write(bytes, (error) => error ? reject(error) : resolve()));
+    } catch {
+      // A header refusal can close stdin before its response has been read.
+      // Preserve that bounded protocol error instead of replacing it with EPIPE;
+      // neither a missing response nor an unexpected success repairs the upload.
+      let timer;
+      try {
+        await Promise.race([response(), new Promise((resolve) => { timer = setTimeout(resolve, 1000); })]);
+      } finally { clearTimeout(timer); }
+      throw new Error('SSH upload stream failed');
+    }
+  }
   async function request(header, files = []) {
     if (closed || broken || busy) throw new Error('publication session is closed or busy');
     busy = true;
