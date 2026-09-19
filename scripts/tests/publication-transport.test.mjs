@@ -11,6 +11,7 @@ import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createSshTransport } from '../publication-transport.mjs';
+import { createTestAuthorizer } from './fixtures/transport-authorization.mjs';
 
 const fixtureDir = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const newBody = 'VERIFIED-STATIC-PAYLOAD-0123456789-ABCDEFGHIJKLMNO';
@@ -60,6 +61,7 @@ function setup(t, fault = {}) {
     publicationId: 'operation-new', releaseId: 'new', destinationId: 'stand',
     commit: 'a'.repeat(40), snapshotId: 'snapshot-new', treeDigest: digest(source),
   };
+  config.authorize = createTestAuthorizer(operation);
   const transport = createSshTransport(config);
   const pendingPath = join(root, '.publication-pending.json');
   const connections = () => readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
