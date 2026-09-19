@@ -44,6 +44,7 @@ jobs:
         env:
           CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/fixtures/content-snapshot
           SNAPSHOT_ARTIFACT_DIR: ${{ github.workspace }}/content-snapshot
+          SNAPSHOT_SOURCE: pinned
         run: |
           npm run snapshot:prepare
           mkdir -p "$SNAPSHOT_ARTIFACT_DIR"
