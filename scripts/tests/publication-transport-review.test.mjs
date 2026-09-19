@@ -118,7 +118,7 @@ test('REVIEW: prepared cancellation remains bound to the operation already autho
       assert.deepEqual(request.operation, f.operation);
       const replacement = { ...f.operation, snapshotId: 'other-pending-snapshot' };
       f.writeJson(f.pending, replacement);
-      writeFileSync(f.sidecar, saved.replace('\"snapshot-1\"', '\"other-pending-snapshot\"'));
+      writeFileSync(f.sidecar, saved.replace('"snapshot-1"', '"other-pending-snapshot"'));
     }
     return { ...f.proof };
   };

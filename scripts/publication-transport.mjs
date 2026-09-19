@@ -144,8 +144,10 @@ export function createSshTransport(config) {
       return connection.request(...args);
     };
     async function record(operation, recordIndex) {
-      try { await recordIndex(structuredClone(operation)); } catch (error) { throw indexFailure(error, operation); }
-      await call({ command: 'finish', publicationId: operation.publicationId });
+      try {
+        await recordIndex(structuredClone(operation));
+        await call({ command: 'finish', operation });
+      } catch (error) { throw indexFailure(error, operation); }
     }
     async function activate({ releaseId: id, operation, recordIndex, expectedDigest, beforeActivate, rollback = false }) {
       releaseId(id);
@@ -157,14 +159,14 @@ export function createSshTransport(config) {
       await call({ command: 'prepare', releaseId: id, operation, expectedDigest, rollback });
       try { if (beforeActivate) await beforeActivate(); }
       catch (error) {
-        try { await call({ command: 'cancel', publicationId: operation.publicationId }); }
+        try { await call({ command: 'cancel', operation }); }
         catch (cancelError) {
           throw new Error('final publication check refused; pending preparation could not be cleared', { cause: cancelError });
         }
         throw error;
       }
       // No transfer, build or tree checks follow the final source check.
-      await call({ command: 'activate', publicationId: operation.publicationId });
+      await call({ command: 'activate', operation });
       await record(operation, recordIndex);
     }
     const session = {
@@ -191,7 +193,7 @@ export function createSshTransport(config) {
       const { operation, prepared } = pending;
       await authorizeAction('recover', { operation });
       if (prepared) {
-        await call({ command: 'cancel-recovery', publicationId: operation.publicationId });
+        await call({ command: 'cancel-recovery', operation });
         return { recovered: false, cancelled: true, operation };
       }
       await record(operation, recordIndex);

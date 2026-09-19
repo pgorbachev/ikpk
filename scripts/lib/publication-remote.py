@@ -256,9 +256,11 @@ class PublicationSession:
         self.prepared = operation
 
     def activate(self, command):
-        require(self.prepared and command.get("publicationId") == self.prepared["publicationId"], "publication was not prepared")
+        require(self.prepared and command.get("operation") == self.prepared, "publication operation was not prepared")
+        require(self.read_pending() == self.prepared, "pending operation changed")
         preparation = self.read_preparation(self.prepared)
         require(preparation and preparation["phase"] == "prepared", "missing preparation evidence")
+        require(self.current_identity() == preparation["previousCurrent"], "current changed during preparation")
         preparation["phase"] = "committing"
         # This durable intent makes an old current ambiguous after activation starts.
         write_json(self.preparation, preparation)
@@ -273,8 +275,8 @@ class PublicationSession:
         self.prepared = None
 
     def cancel(self, command):
-        require(self.prepared and command.get("publicationId") == self.prepared["publicationId"], "publication was not prepared")
-        require(self.prepared_operation(command.get("publicationId")) == self.prepared, "pending operation changed")
+        require(self.prepared and command.get("operation") == self.prepared, "publication operation was not prepared")
+        require(self.prepared_operation(self.prepared["publicationId"]) == self.prepared, "pending operation changed")
         self.clear_pending()
         self.prepared = None
 
@@ -291,12 +293,14 @@ class PublicationSession:
         return {"operation": operation, "prepared": False}
 
     def cancel_recovery(self, command):
-        self.prepared_operation(command.get("publicationId"))
+        operation = self.operation(command.get("operation"))
+        require(self.prepared_operation(operation["publicationId"]) == operation, "pending operation changed")
         self.clear_pending()
 
     def finish(self, command):
         operation = self.read_pending()
-        require(operation["publicationId"] == command.get("publicationId"), "pending publication identity mismatch")
+        require(operation == command.get("operation"), "pending publication operation mismatch")
+        self.read_preparation(operation)
         self.active_is(operation)
         self.clear_pending()
 
