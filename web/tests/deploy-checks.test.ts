@@ -130,27 +130,9 @@ server {
   });
 });
 
-describe('deploy-web.sh — адрес сайта отделён от ssh-цели', () => {
-  const src = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8');
-
-  // Проверка идёт ПОСЛЕ переключения релиза, поэтому ошибка адреса стоит ложного
-  // «деплой провален» на исправной выкладке. Аргумент скрипта — ssh-цель (runbook
-  // зовёт его с IP), и совпадает с адресом сайта только пока нет домена и TLS.
-  it('health-check идёт по SITE_URL, а не по ssh-хосту', () => {
-    expect(
-      /health_check\s+"\$SITE_URL"|health_check\s+"\$\{SITE_URL\}"/.test(src),
-      'health-check зовётся не по SITE_URL — после появления домена он сломается на исправном деплое',
-    ).toBe(true);
-    expect(
-      /health_check\s+"http:\/\/\$\{HOST\}\//.test(src),
-      'ssh-хост используется как адрес сайта',
-    ).toBe(false);
-  });
-
-  it('SITE_URL по умолчанию собирается из хоста — текущий стенд без TLS работает', () => {
-    expect(/SITE_URL="\$\{SITE_URL:-http:\/\/\$\{HOST\}\/\}"/.test(src)).toBe(true);
-  });
-});
+// Protected siteUrl selection is checked through the real worker/runner in
+// manual-publication-worker.test.ts (different public/SSH hosts; missing URL refusal).
+// The manual path has no implicit URL derived from the SSH target.
 
 describe('health_check — фактический ответ сайта', () => {
   let server: Server;
