@@ -34,6 +34,14 @@ Result: **1 passed / 3 failed**, all three failures specifically assert that no 
 have occurred. Full output: `manual-publication-worker-rollback-review-red.log` beside this file.
 No P0/P1 found in this bounded full pass.
 
+## Fix verification
+
+The coordinator now requires a positive safe-integer revision before constructing the
+transport. The independent regression and existing rollback suite pass together:
+`vitest run tests/manual-publication-rollback.test.ts tests/manual-publication-rollback-review.test.ts`
+— **15 passed**. Invalid stored revisions leave the existing release and pending state
+unchanged. This closes the reported P2; it does not close the unfinished integration scope below.
+
 ## Coverage and verification
 
 Read the full implemented worker, deploy shell entrypoint, new-publication runner, rollback

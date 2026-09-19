@@ -44,7 +44,8 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
       origin.pathname !== '/' || origin.search || origin.hash) throw new Error('invalid rollback origin');
   const { publications } = structuredClone(await ports.state.readHistory());
   const original = publications.find((record) => isPublicationRecord(record) && record.releaseId === input.releaseId && record.destinationId === input.destinationId);
-  if (!original || !isPublicationRecord(original) || original.testRunConclusion !== 'success' ||
+  if (!original || !isPublicationRecord(original) || !Number.isSafeInteger(original.revision) || original.revision <= 0 ||
+      original.testRunConclusion !== 'success' ||
       ciEvidenceProblem(original.ciEvidence, original.commit) || localChecksProblem(original.localChecks, original)) {
     throw new Error('no verified original retained publication');
   }
