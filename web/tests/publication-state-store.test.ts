@@ -93,6 +93,30 @@ const r=cp.spawnSync('/bin/sh',['-c',args.at(-1)],{stdio:'inherit',env:process.e
 }
 
 describe('shared Git state store: real bare-remote contract', () => {
+  it.each([`https://${CANARY}@github.com/pgorbachev/ikpk.git`, `HTTPS://operator:${CANARY}@github.com/pgorbachev/ikpk.git`])('REVIEW: credential URL %s is refused before Git argv or clone config', async (remote) => {
+    const f = await fixture();
+    expect(() => store(f, { remote })).toThrow(/unsafe|credential|remote/i);
+    expect(existsSync(f.workDir)).toBe(false);
+  });
+
+  it.each(['unrecorded-live-state', 'A'])('REVIEW: read cannot assign the latest revision to mismatched fingerprint %s', async (fingerprint) => {
+    const f = await fixture();
+    const other = await otherWriter(f, 'cms');
+    git(other, 'push', 'origin', BRANCH);
+    const api = store(f);
+    const known = await api.read('C');
+    expect(known.observation).toMatchObject({ observedEntry: 4, revision: 4, highWaterMark: 4, requiresConfirmation: false });
+    let unknown;
+    try { unknown = await api.read(fingerprint); }
+    catch (error) {
+      expect(String(error)).toMatch(/fingerprint|provenance|revision|отпечат|ревизи/i);
+      return;
+    }
+    expect(unknown.entries.at(-1)?.fingerprint).toBe('C');
+    expect(unknown.observation.revision, 'different bytes have no revision backed by the current entry').toBeNull();
+    expect(unknown.observation.requiresConfirmation).toBe(true);
+  });
+
   it('positive control: a competing writer really pushes and rejects the stale Git update', async () => {
     const f = await fixture(); const other = await otherWriter(f, 'cms'); const marker = raceNextPush(f, other);
     write(join(f.author, 'verified-pairs.json'), JSON.stringify([record()]));
