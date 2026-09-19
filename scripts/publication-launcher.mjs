@@ -37,7 +37,7 @@ function cleanEnvironment() {
   return env;
 }
 function git(cwd, ...args) {
-  return execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+  return execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
     cwd, env: cleanEnvironment(), encoding: 'utf8', timeout: 120_000, stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
@@ -90,7 +90,8 @@ export async function launch(args) {
     } catch { refuse('source-unavailable'); }
     if (sourceDir && (git(sourceDir, 'rev-parse', 'HEAD') !== head || git(sourceDir, 'remote', 'get-url', 'origin') !== source)) refuse('untrusted-source');
     const worker = join(checkout, 'scripts/deploy-web.sh');
-    if (lstatSync(worker).isSymbolicLink() || !lstatSync(worker).isFile()) refuse('untrusted-source');
+    if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
+        !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
     const broker = spawnSync(config.credentialBroker[0], config.credentialBroker.slice(1), {
       cwd: dirname(configPath), env: cleanEnvironment(), encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024,
     });

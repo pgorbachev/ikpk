@@ -20,11 +20,10 @@ export function readVerifiedPairs(storeDir: string): VerifiedPair[] {
 export function writeVerifiedPairs(storeDir: string, pairs: VerifiedPair[]): void {
   const previous = readVerifiedPairs(storeDir);
   const next = mergeVerifiedPairs([], pairs);
-  for (const record of previous) {
-    const id = (record as Partial<PublicationRecord>).publicationId;
-    if (!id) continue; // Historical pre-publication cache entries are not publication records.
-    const unchanged = next.find((candidate) => (candidate as Partial<PublicationRecord>).publicationId === id);
-    if (!unchanged || !isDeepStrictEqual(record, unchanged)) throw new Error(`publication-history-is-immutable:${id}`);
+  const previousPublications = previous.filter((record) => (record as Partial<PublicationRecord>).publicationId);
+  const nextPublications = next.filter((record) => (record as Partial<PublicationRecord>).publicationId);
+  if (!isDeepStrictEqual(previousPublications, nextPublications.slice(0, previousPublications.length))) {
+    throw new Error('publication-history-is-immutable:append-only-order');
   }
   mkdirSync(storeDir, { recursive: true });
   const target = join(storeDir, VERIFIED_PAIRS_FILE);
