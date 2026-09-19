@@ -32,6 +32,11 @@ export async function runPublicationCheckCommand({ argv, cwd }: CommandInput) {
   const webRoot = realpathSync(cwd);
   const treeDir = join(webRoot, 'dist');
   const snapshotDir = realpathSync(input.snapshotDir), ledgerDir = realpathSync(input.ledgerDir);
+  const outputRoot = canonicalPath(treeDir);
+  if ([snapshotDir, ledgerDir].some((root) => inside(outputRoot, root) || inside(root, outputRoot)) ||
+      [input.configPath, config.knownHostsFile].some((path) => inside(outputRoot, canonicalPath(path)))) {
+    throw new Error('publication-check-input-output-overlap');
+  }
   const reportPath = canonicalPath(input.reportPath), reportsDir = reportPath + '.checks';
   if ([treeDir, snapshotDir, ledgerDir].some((root) => inside(canonicalPath(root), reportPath) || inside(canonicalPath(root), reportsDir)) ||
       existsSync(reportPath) || existsSync(reportsDir)) throw new Error('publication-check-report-path');
