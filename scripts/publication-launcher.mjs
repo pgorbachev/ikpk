@@ -49,6 +49,7 @@ function protectedFile(path) {
 function repositoryRoot(path) { try { return realpathSync(git(path, 'rev-parse', '--show-toplevel')); } catch { return undefined; } }
 
 export async function launch(args) {
+  const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
   if (args[0] !== 'publish') refuse('untrusted-ref');
   const options = new Map();
@@ -65,18 +66,23 @@ export async function launch(args) {
     if (repositoryRoot(dirname(configPath)) || repositoryRoot(dirname(installed))) refuse('untrusted-config');
     config = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch { refuse('untrusted-config'); }
+  checks.push('protected-config');
   const source = options.get('--source-url');
   if (typeof config.canonicalRepository !== 'string' || !source || source !== config.canonicalRepository || source.startsWith('-')) refuse('untrusted-source');
+  checks.push('canonical-repository');
   if (options.get('--source-ref') !== 'main') refuse('untrusted-ref');
+  checks.push('main-ref');
   if (!['stand', 'prod'].includes(config.deployMode) || typeof config.destinationId !== 'string' || !config.destinationId ||
       typeof config.sshTarget !== 'string' || !/^[a-zA-Z0-9_.@:-]+$/.test(config.sshTarget) || config.sshTarget.startsWith('-') ||
       !Array.isArray(config.credentialBroker) || !config.credentialBroker.length ||
       config.credentialBroker.some((arg) => typeof arg !== 'string') || !isAbsolute(config.credentialBroker[0])) refuse('untrusted-config');
+  checks.push('destination-config');
   const sourceDir = options.get('--source-dir');
   if (sourceDir) {
     const root = realpathSync(sourceDir);
     if (inside(root, configPath) || inside(root, installed)) refuse('untrusted-config');
     if (git(root, 'status', '--porcelain', '--untracked-files=all')) refuse('dirty-source');
+    checks.push('operator-source-clean');
   }
   const scratch = mkdtempSync(join(tmpdir(), 'ikpk-publication-'));
   try {
@@ -89,9 +95,11 @@ export async function launch(args) {
       if (!/^[a-f0-9]{40}$/.test(head) || git(checkout, 'status', '--porcelain')) refuse('source-unavailable');
     } catch { refuse('source-unavailable'); }
     if (sourceDir && (git(sourceDir, 'rev-parse', 'HEAD') !== head || git(sourceDir, 'remote', 'get-url', 'origin') !== source)) refuse('untrusted-source');
+    checks.push('fresh-canonical-main');
     const worker = join(checkout, 'scripts/deploy-web.sh');
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
         !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
+    checks.push('contained-worker');
     const broker = spawnSync(config.credentialBroker[0], config.credentialBroker.slice(1), {
       cwd: dirname(configPath), env: cleanEnvironment(), encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024,
     });
@@ -100,6 +108,7 @@ export async function launch(args) {
     try { credentials = JSON.parse(broker.stdout).env; } catch { refuse('credential-broker-failed'); }
     if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) ||
         Object.entries(credentials).some(([name, value]) => !/^(IKPK_[A-Z0-9_]+|SSH_KEY|GH_TOKEN|CMS_[A-Z0-9_]+)$/.test(name) || typeof value !== 'string')) refuse('credential-broker-failed');
+    checks.push('credential-delivery');
     const result = spawnSync('/bin/bash', [worker, config.sshTarget], { cwd: checkout,
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
         PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
@@ -107,7 +116,8 @@ export async function launch(args) {
       encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024 * 1024 });
     // Repository subprocess output is not an audit log: it may contain credentials.
     if (result.error || result.status !== 0) refuse('publication-worker-failed');
-    return { status: 'success', executedChecks: 7, commit: head, destinationId: config.destinationId };
+    checks.push('publication-worker');
+    return { status: 'success', executedChecks: checks.length, checks, commit: head, destinationId: config.destinationId };
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
