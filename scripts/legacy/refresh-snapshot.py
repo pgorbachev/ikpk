@@ -11,6 +11,7 @@
 у них — обвязка страницы (блок согласия заменён блоком подписки), а не контент.
 """
 import json, re, sys, time, urllib.request
+from html.parser import HTMLParser
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
@@ -85,14 +86,34 @@ def meta(markup: str) -> tuple[str, str]:
     «описания нет» становилось неотличимо от «я его не нашла». Из-за этого
     семь записей уехали в снимок с пустым seo_description при живом значении.
     """
-    t = re.search(r"<title>(.*?)</title>", markup, re.S)
-    description = ""
-    for tag in re.findall(r"<meta\b[^>]*>", markup, re.I):
-        attrs = dict(re.findall(r'([a-zA-Z-]+)\s*=\s*"([^"]*)"', tag))
-        if attrs.get("name", "").lower() == "description":
-            description = attrs.get("content", "")
-            break
-    return (unescape(t.group(1)).strip() if t else "", unescape(description).strip())
+    class Head(HTMLParser):
+        title = ""
+        description = ""
+        _in_title = False
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "title":
+                self._in_title = True
+            elif tag == "meta":
+                a = {k.lower(): (v or "") for k, v in attrs}
+                if a.get("name", "").lower() == "description" and not self.description:
+                    self.description = a["content"] if "content" in a else ""
+
+        def handle_endtag(self, tag):
+            if tag == "title":
+                self._in_title = False
+
+        def handle_data(self, data):
+            if self._in_title:
+                self.title += data
+
+    h = Head()
+    h.feed(markup)
+    # Парсер, а не регулярка: `<meta ...>` с сырым `>` внутри значения, с одинарными
+    # кавычками или без них регулярка обрывала и возвращала пустую строку — то есть
+    # класс «не смогла разобрать выдано за „нет описания"» пережил бы прошлую правку,
+    # из него убрали только один частный случай (порядок атрибутов).
+    return (h.title.strip(), h.description.strip())
 
 
 def fetch_live_events() -> list:
@@ -109,8 +130,15 @@ def fetch_live_events() -> list:
         suffix = "" if page == 1 else f"?page={page}"
         data = api_query(get("/raspisanie-i-tseny" + suffix), "getEvent(")
         items = data.get("items") or []
-        if data.get("totalCount") is not None:
-            total = data["totalCount"]
+        declared = data.get("totalCount")
+        if declared is not None:
+            if total is None:
+                total = declared
+            elif declared != total:
+                raise SystemExit(
+                    f"лента объявила разный totalCount ({total}, затем {declared}) — "
+                    "отказ: страница, переобъявившая меньшее число, выдала бы усечение за полноту"
+                )
         fresh = [i for i in items if i["id"] not in collected]
         for i in items:
             collected[i["id"]] = i
@@ -132,7 +160,7 @@ def fetch_live_events() -> list:
             f"лента неполна: собрано {len(collected)}, объявлено {total} — "
             "отказ, иначе недостающие записи были бы удалены как снятые с публикации"
         )
-    return list(collected.values())
+    return {"events": list(collected.values()), "complete": True}
 
 
 def load(ent: Path, name: str):
@@ -147,11 +175,17 @@ def save(ent: Path, name: str, data) -> None:
 
 def main() -> int:
     ent = transfer_dir(Path(sys.argv[1]))
-    # Второй аргумент — только для отладки на сохранённой ленте; по умолчанию
-    # лента снимается сама, иначе инструмент неполон (см. fetch_live_events).
-    live_events = (json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-                   if len(sys.argv) > 2 else fetch_live_events())
-    print(f"живых событий в ленте: {len(live_events)}")
+    # Второй аргумент — сохранённая лента для отладки. Полнота её НЕ доказана:
+    # файл не несёт totalCount и мог быть снят как угодно. Поэтому признак полноты
+    # едет вместе с лентой, а не выводится из способа её получения.
+    if len(sys.argv) > 2:
+        live_events = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+        feed_complete = False
+    else:
+        feed = fetch_live_events()
+        live_events, feed_complete = feed["events"], feed["complete"]
+    print(f"живых событий в ленте: {len(live_events)}"
+          + ("" if feed_complete else " (полнота НЕ подтверждена: лента из файла)"))
     seminars = load(ent, "seminars")
     teachers = load(ent, "teachers")
     schedule = load(ent, "schedule_entries")
@@ -278,27 +312,42 @@ def main() -> int:
     # будущим и отсутствовало в живом списке, но в окно не попадало. Прошедшие
     # записи (startAt раньше сегодняшнего) живой список не отдаёт по определению,
     # и трогать их нельзя.
+    # Проверка стоит у САМОГО удаления, а не у съёма. Прежняя редакция держала её
+    # внутри fetch_live_events, и второй вход — лента из файла — проходил мимо:
+    # сохранённая лента с 10 событиями из 61 удаляла 51 запись и писала файл.
+    # Инвариант обязан жить там, где опасное действие, иначе его обходит любой
+    # новый путь к нему.
     live_ids = {str(e["id"]) for e in live_events}
     # Время МОСКОВСКОЕ, а не UTC: `startAt` у ленты местный, и с 00:00 до 03:00 MSK
     # дата UTC отстаёт на сутки — окно удаления расширялось бы на день назад и
     # захватывало событие, которое по местному времени уже началось, а лента его
     # законно не отдаёт. Замерено: прогон 20.09 в 01:22 MSK видел границу «19.09».
     today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
-    withdrawn = [e for e in schedule
-                 if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
-    for e in withdrawn:
+    candidates = [e for e in schedule
+                  if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
+    if candidates and not feed_complete:
+        for e in candidates:
+            print(f'  ! снято НЕ будет: {e["id"]} {e["name"][:40]}')
+        raise SystemExit(
+            f"лента без подтверждённой полноты, а к удалению подходит {len(candidates)} "
+            "записей — отказ. Удаление разрешено только на ленте, снятой самим "
+            "инструментом и сверенной с её totalCount."
+        )
+    for e in candidates:
         schedule.remove(e)
         changed["events_withdrawn"].append(f'{e["id"]} {e["name"][:40]}')
 
-    save(ent, "seminars", seminars)
-    save(ent, "teachers", teachers)
-    save(ent, "schedule_entries", schedule)
+    # Отчёт ДО записи: иначе оператор узнаёт об удалении, когда оно уже на диске,
+    # и громкость списка приходит слишком поздно, чтобы быть управлением.
     for k, v in changed.items():
         # Снятые перечисляются ВСЕГДА: это единственная разрушающая ветвь, и
         # сокращение списка «если их много» прятало бы ровно тот случай, ради
         # которого список нужен.
         shown = v if (len(v) <= 12 or k == "events_withdrawn") else ""
         print(f"{k}: {len(v)} {shown}")
+    save(ent, "seminars", seminars)
+    save(ent, "teachers", teachers)
+    save(ent, "schedule_entries", schedule)
     return 0
 
 
@@ -332,6 +381,34 @@ def selftest() -> int:
     assert "вложенный" in got and "<!-- -->" not in got, got
     # Контейнера нет — пустая строка, и вызывающий обязан на ней отказать.
     assert container("<div>ничего похожего</div>") == ""
+
+    # Разбор meta парсером, а не шаблоном: сырой `>` в значении и одинарные
+    # кавычки прежде обрывали регулярку и давали пустую строку.
+    assert meta('<meta name="description" content="A > B">')[1] == "A > B"
+    assert meta("<meta name='description' content='Одинарные'>")[1] == "Одинарные"
+
+    # ── Ветви, добавленные фиксами: без них проверка не видела бы своего предмета.
+    # Прошлая редакция selftest оставалась зелёной на трёх мутациях этого кода.
+    def withdraw(schedule, live_ids, complete, today="2026-09-20"):
+        """Та же логика, что в main: кандидаты и запрет на непроверенной ленте."""
+        cand = [e for e in schedule
+                if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
+        if cand and not complete:
+            raise SystemExit("отказ")
+        return [e for e in schedule if e not in cand]
+
+    future = {"id": 1, "name": "будущее", "startAt": "2026-09-25"}
+    past = {"id": 2, "name": "прошедшее", "startAt": "2026-09-01"}
+    # на проверенной ленте будущее снимается, прошедшее — никогда
+    assert [e["id"] for e in withdraw([future, past], set(), True)] == [2]
+    # на непроверенной — отказ, а не удаление
+    try:
+        withdraw([future, past], set(), False)
+        raise AssertionError("непроверенная лента обязана отказывать")
+    except SystemExit:
+        pass
+    # прошедшее в одиночку отказа не вызывает: удалять нечего
+    assert [e["id"] for e in withdraw([past], set(), False)] == [2]
     print("selftest: ок")
     return 0
 
