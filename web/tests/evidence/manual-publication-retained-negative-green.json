@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "kind": "article",
+      "matchingSchemasBefore": 68,
+      "matchingSchemasAfter": 0,
+      "rejected": true,
+      "stats": {
+        "startTime": "2026-09-19T15:33:30.552Z",
+        "duration": 7375.311,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 2,
+        "flaky": 0
+      },
+      "failed": [
+        "desktop: article and seminar routes open on this exact artifact",
+        "mobile: article and seminar routes open on this exact artifact"
+      ],
+      "before": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204"
+    },
+    {
+      "kind": "seminar",
+      "matchingSchemasBefore": 152,
+      "matchingSchemasAfter": 0,
+      "rejected": true,
+      "stats": {
+        "startTime": "2026-09-19T15:33:40.490Z",
+        "duration": 8452.344000000001,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 2,
+        "flaky": 0
+      },
+      "failed": [
+        "desktop: article and seminar routes open on this exact artifact",
+        "mobile: article and seminar routes open on this exact artifact"
+      ],
+      "before": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204"
+    }
+  ],
+  "restoredDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204"
+}
