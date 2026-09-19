@@ -1,0 +1,152 @@
+{
+  "evidence": [
+    {
+      "name": "positive",
+      "accepted": true,
+      "passed": 4,
+      "failed": 0,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.8496250000000032,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "passed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 5655.233625,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 657.9320419999995,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "passed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 853.2704589999994,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    },
+    {
+      "name": "unregistered-script",
+      "accepted": true,
+      "passed": 4,
+      "failed": 0,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.4807500000000005,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "passed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 4718.787458,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 653.7228750000004,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "passed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 973.2856670000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    },
+    {
+      "name": "http-internal-link",
+      "accepted": true,
+      "passed": 4,
+      "failed": 0,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.563416000000018,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "passed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 4722.6286660000005,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 1198.527083,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "passed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 958.6651249999995,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "failures": [
+    "unregistered-script: expected rejection in its own assertion; accepted=true, passed=4, failed=0, target=passed",
+    "http-internal-link: expected rejection in its own assertion; accepted=true, passed=4, failed=0, target=passed"
+  ]
+}
