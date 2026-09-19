@@ -8,15 +8,24 @@
   },
   "/media/legacy/logo-barral-inst.png": {
     "width": 390,
-    "height": 234
+    "height": 234,
+    "widths": [
+      390
+    ]
   },
   "/media/legacy/logo-upledger-inst.png": {
     "width": 390,
-    "height": 234
+    "height": 234,
+    "widths": [
+      390
+    ]
   },
   "/media/legacy/logo-v2.png": {
     "width": 406,
-    "height": 112
+    "height": 112,
+    "widths": [
+      406
+    ]
   },
   "/media/legacy/scienceEducationMinistryIcon.png": {
     "width": 707,
@@ -101,7 +110,10 @@
   },
   "/media/uploads/18779abd-086c-424b-9119-45b179d0633a.webp": {
     "width": 417,
-    "height": 469
+    "height": 469,
+    "widths": [
+      417
+    ]
   },
   "/media/uploads/194d1e86-3e86-4080-aeae-77cbd88ab994.pdf": {},
   "/media/uploads/19516cbd-d4cb-4550-9905-5ef27e7c9db3.webp": {
@@ -617,7 +629,10 @@
   },
   "/media/uploads/736a64e6-278b-4b14-b7c0-4e4f51fd555d.webp": {
     "width": 417,
-    "height": 498
+    "height": 498,
+    "widths": [
+      417
+    ]
   },
   "/media/uploads/73b62399-5a42-4f86-b4e0-144ef8a4452c.webp": {
     "width": 780,
@@ -904,7 +919,10 @@
   },
   "/media/uploads/a749c9a3-8aca-4d84-b583-a06cc86cffdc.webp": {
     "width": 431,
-    "height": 625
+    "height": 625,
+    "widths": [
+      431
+    ]
   },
   "/media/uploads/a842eb2f-1a15-4773-bab2-11bfa8d6c027.pdf": {},
   "/media/uploads/a8a29cf1-be7f-43f8-837e-8bee63428f59.webp": {
@@ -999,7 +1017,10 @@
   },
   "/media/uploads/baa2ec51-e8d1-41d4-a291-fe6c38962adc.webp": {
     "width": 417,
-    "height": 423
+    "height": 423,
+    "widths": [
+      417
+    ]
   },
   "/media/uploads/be867fbb-891c-416e-b650-6a308689891f.webp": {
     "width": 974,
@@ -1452,7 +1473,10 @@
   },
   "/media/users/1/images/1-1727018150594.webp": {
     "width": 300,
-    "height": 300
+    "height": 300,
+    "widths": [
+      300
+    ]
   },
   "/media/users/1/images/1-1727019575554.webp": {
     "width": 682,
@@ -1479,7 +1503,10 @@
   },
   "/media/users/1/images/1-1727022202406.webp": {
     "width": 300,
-    "height": 300
+    "height": 300,
+    "widths": [
+      300
+    ]
   },
   "/media/users/1/images/1-1727024776370.webp": {
     "width": 1080,
@@ -1491,7 +1518,10 @@
   },
   "/media/users/1/images/1-1727025478140.webp": {
     "width": 240,
-    "height": 240
+    "height": 240,
+    "widths": [
+      240
+    ]
   },
   "/media/users/1/images/1-1727026058120.webp": {
     "width": 1080,
@@ -1521,7 +1551,10 @@
   },
   "/media/users/1/images/1-1727027831674.webp": {
     "width": 453,
-    "height": 453
+    "height": 453,
+    "widths": [
+      453
+    ]
   },
   "/media/users/1/images/1-1727028420051.webp": {
     "width": 605,
@@ -1532,7 +1565,10 @@
   },
   "/media/users/1/images/1-1727028881435.webp": {
     "width": 220,
-    "height": 220
+    "height": 220,
+    "widths": [
+      220
+    ]
   },
   "/media/users/1/images/1-1727029713049.webp": {
     "width": 991,
@@ -1552,11 +1588,17 @@
   },
   "/media/users/1/images/1-1727040428511.webp": {
     "width": 400,
-    "height": 400
+    "height": 400,
+    "widths": [
+      400
+    ]
   },
   "/media/users/1/images/1-1727059836134.webp": {
     "width": 220,
-    "height": 220
+    "height": 220,
+    "widths": [
+      220
+    ]
   },
   "/media/users/1/images/1-1727065406681.webp": {
     "width": 1200,
@@ -1630,7 +1672,10 @@
   },
   "/media/users/1/images/1-1732537957896.webp": {
     "width": 427,
-    "height": 320
+    "height": 320,
+    "widths": [
+      427
+    ]
   },
   "/media/users/1/images/1-1732538232696.webp": {
     "width": 547,
@@ -1641,7 +1686,10 @@
   },
   "/media/users/1/images/1-1732538413910.webp": {
     "width": 360,
-    "height": 270
+    "height": 270,
+    "widths": [
+      360
+    ]
   },
   "/media/users/1/images/1-1732862351016.webp": {
     "width": 720,
@@ -1797,7 +1845,10 @@
   },
   "/media/users/1/images/1-1737369322672.webp": {
     "width": 427,
-    "height": 240
+    "height": 240,
+    "widths": [
+      427
+    ]
   },
   "/media/users/1/images/1-1737374547766.webp": {
     "width": 770,
@@ -2190,7 +2241,10 @@
   },
   "/media/users/1/images/1-1738743647069.webp": {
     "width": 256,
-    "height": 192
+    "height": 192,
+    "widths": [
+      256
+    ]
   },
   "/media/users/1/images/1-1739370089958.webp": {
     "width": 514,
@@ -2201,7 +2255,10 @@
   },
   "/media/users/1/images/1-1739370788443.webp": {
     "width": 460,
-    "height": 345
+    "height": 345,
+    "widths": [
+      460
+    ]
   },
   "/media/users/1/images/1-1741670535444.webp": {
     "width": 1024,
@@ -2294,7 +2351,10 @@
   },
   "/media/users/1/images/1-1747745471716.webp": {
     "width": 290,
-    "height": 290
+    "height": 290,
+    "widths": [
+      290
+    ]
   },
   "/media/users/1/images/1-1747748908457.webp": {
     "width": 800,
@@ -2690,7 +2750,10 @@
   },
   "/media/users/1/images/1-1774626737658.webp": {
     "width": 267,
-    "height": 200
+    "height": 200,
+    "widths": [
+      267
+    ]
   },
   "/media/users/1/images/1-1775132739287.webp": {
     "width": 626,
@@ -3041,7 +3104,10 @@
   },
   "/media/video-thumbs/36.jpg": {
     "width": 360,
-    "height": 640
+    "height": 640,
+    "widths": [
+      360
+    ]
   },
   "/media/video-thumbs/37.jpg": {
     "width": 1200,
