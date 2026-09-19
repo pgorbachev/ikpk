@@ -102,7 +102,7 @@ export function classifySnapshotForPublication(input: {
   confirmedBy?: string;
 }): PublicationDecision {
   if (input.observedEntry < input.latestEntry) {
-    return { action: 'cancel-stale', recorded: true, runScheduledForLatestEntry: true };
+    return { action: 'cancel-stale', recorded: true, runScheduledForLatestEntry: false };
   }
   if (input.revision === null || input.revision < input.highWaterMark) {
     if (input.confirmedBy) return { action: 'publish', recorded: true };
@@ -122,7 +122,7 @@ export function classifyEventDrivenPublication(input: {
   if (input.verifiedCommit !== input.headAtLastCheck) {
     return { action: 'refuse', reason: 'head-moved' };
   }
-  return { action: 'publish' };
+  return { action: 'refuse', reason: 'manual-publication-required' };
 }
 
 export function chooseManualPublication(input: {
