@@ -7,7 +7,6 @@ import {
   loadModule,
   type LedgerModule,
   type PublishGateModule,
-  type VerifiedPair,
 } from './helpers/cms-content-publication-contract';
 
 // Спека `deploy-gating` этого change: требования «Публикация только после успешного прогона
@@ -26,16 +25,6 @@ const ledgerModule = (): Promise<LedgerModule> => loadModule<LedgerModule>(MODUL
 const COMMIT_A = 'a'.repeat(40);
 const COMMIT_B = 'b'.repeat(40);
 
-const pair = (over: Partial<VerifiedPair> = {}): VerifiedPair => ({
-  commit: COMMIT_A,
-  snapshotId: 'snap-1',
-  revision: 5,
-  referenceDate: '2026-08-24',
-  capturedAt: '2026-08-24T03:00:00Z',
-  testRunConclusion: 'success',
-  ...over,
-});
-
 describe('гейт публикации: устаревание против регресса', () => {
   // Сценарий: устаревший снимок отменяется без участия человека
   it('есть запись новее НАБЛЮДЁННОЙ — выкладка отменяется, подтверждения не требуется', async () => {
@@ -49,7 +38,7 @@ describe('гейт публикации: устаревание против р�
 
     expect(decision.action).toBe('cancel-stale');
     expect(decision.recorded, 'отмена обязана быть записана').toBe(true);
-    expect(decision.runScheduledForLatestEntry, 'для последней записи гарантирован прогон').toBe(true);
+    expect(decision.runScheduledForLatestEntry, 'устаревание не запускает новую публикацию автоматически').toBe(false);
   });
 
   // Негативная проверка ветви устаревания (tasks.md 7.2): человек не должен появляться вовсе.
@@ -208,9 +197,9 @@ describe('гейт публикации: принятие состояния и 
   });
 });
 
-describe('событийная публикация: проверенная пара и актуальность вершины', () => {
+describe('событийная публикация запрещена', () => {
   // Сценарии: тесты прошли и коммит остаётся вершиной; проверенный коммит остаётся вершиной
-  it('успешный прогон при несдвинувшейся вершине публикует проверенную пару', async () => {
+  it('успешный прогон при несдвинувшейся вершине не публикует без явной команды', async () => {
     const mod = await gateModule();
     expect(
       mod.classifyEventDrivenPublication({
@@ -218,7 +207,7 @@ describe('событийная публикация: проверенная па
         headAtLastCheck: COMMIT_A,
         testRunConclusion: 'success',
       }).action,
-    ).toBe('publish');
+    ).not.toBe('publish');
   });
 
   // Сценарии: тесты упали; прогон отменён
@@ -247,154 +236,9 @@ describe('событийная публикация: проверенная па
     });
 
     expect(decision.action).not.toBe('publish');
-    expect(decision.reason).toBe('head-moved');
   });
 });
 
-describe('ручная публикация: новейшая проверенная пара, отказы и подтверждённый откат', () => {
-  const manual = async (
-    input: Partial<Parameters<PublishGateModule['chooseManualPublication']>[0]> = {},
-  ) => {
-    const mod = await gateModule();
-    return mod.chooseManualPublication({
-      headCommit: COMMIT_A,
-      headAtLastCheck: COMMIT_A,
-      verifiedPairs: [pair()],
-      highWaterMark: 5,
-      now: '2026-08-24T12:00:00Z',
-      retentionDays: mod.SNAPSHOT_RETENTION_DAYS,
-      actor: 'pgorbachev',
-      ...input,
-    });
-  };
-
-  // Сценарий: ручной запуск, вершина не сдвинулась
-  it('из нескольких пар вершины выкладывается НОВЕЙШАЯ, и она названа', async () => {
-    const decision = await manual({
-      verifiedPairs: [
-        pair({ snapshotId: 'snap-вчера', revision: 5, referenceDate: '2026-08-23', capturedAt: '2026-08-23T03:00:00Z' }),
-        pair({ snapshotId: 'snap-сегодня', revision: 5, referenceDate: '2026-08-24', capturedAt: '2026-08-24T03:00:00Z' }),
-      ],
-    });
-
-    expect(decision.action).toBe('publish');
-    expect(decision.pair?.snapshotId, 'выложено вчерашнее календарное состояние без объявления отката').toBe(
-      'snap-сегодня',
-    );
-  });
-
-  it('при разной ревизии новизну решает ревизия, а не опорная дата', async () => {
-    const decision = await manual({
-      highWaterMark: 6,
-      verifiedPairs: [
-        pair({ snapshotId: 'snap-новее', revision: 6, referenceDate: '2026-08-23', capturedAt: '2026-08-23T03:00:00Z' }),
-        pair({ snapshotId: 'snap-старее', revision: 5, referenceDate: '2026-08-24', capturedAt: '2026-08-24T03:00:00Z' }),
-      ],
-    });
-    expect(decision.pair?.snapshotId).toBe('snap-новее');
-  });
-
-  // Сценарий: новейшая проверенная пара отстала от контента
-  it('ревизия новейшей пары ниже отметки — отказ с указанием, что контент новее', async () => {
-    const decision = await manual({ highWaterMark: 9, verifiedPairs: [pair({ revision: 5 })] });
-
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('content-newer-than-verified-pair');
-  });
-
-  // Сценарий: для вершины проверенной пары нет
-  it('без проверенной пары для вершины — отказ, и живая система управления не опрашивается', async () => {
-    const decision = await manual({ verifiedPairs: [pair({ commit: COMMIT_B })] });
-
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('no-verified-pair-for-head');
-  });
-
-  it('пара с неуспешным прогоном проверенной не считается', async () => {
-    const decision = await manual({ verifiedPairs: [pair({ testRunConclusion: 'failure' })] });
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('no-verified-pair-for-head');
-  });
-
-  // Сценарии: подтверждённый откат на более старую проверенную пару; подтверждённый откат на
-  // перекрытый коммит
-  it('подтверждённый откат выкладывает названную пару перекрытого коммита и фиксирует факт', async () => {
-    const decision = await manual({
-      headCommit: COMMIT_B,
-      headAtLastCheck: COMMIT_B,
-      verifiedPairs: [pair({ commit: COMMIT_A, snapshotId: 'snap-старая', revision: 2 })],
-      highWaterMark: 9,
-      rollback: { snapshotId: 'snap-старая', confirmed: true, reasonHeadNotPublished: 'у вершины пары нет' },
-    });
-
-    expect(decision.action).toBe('publish');
-    expect(decision.pair?.snapshotId).toBe('snap-старая');
-    expect(decision.rollbackRecord?.actor).toBe('pgorbachev');
-    expect(decision.rollbackRecord?.snapshotId).toBe('snap-старая');
-    expect(decision.rollbackRecord?.reasonHeadNotPublished).toBeTruthy();
-  });
-
-  // Сценарий: ручная выкладка старой пары не пишет в журнал происхождения
-  it('ручная выкладка старой пары в журнал происхождения не пишет', async () => {
-    const decision = await manual({
-      headCommit: COMMIT_B,
-      headAtLastCheck: COMMIT_B,
-      verifiedPairs: [pair({ commit: COMMIT_A, snapshotId: 'snap-старая', revision: 2 })],
-      highWaterMark: 9,
-      rollback: { snapshotId: 'snap-старая', confirmed: true, reasonHeadNotPublished: 'у вершины пары нет' },
-    });
-
-    expect(decision.writesProvenanceEntry).toBe(false);
-  });
-
-  // Сценарий: откат без подтверждения не выполняется
-  it('указание пары без подтверждения ничего не публикует', async () => {
-    const decision = await manual({
-      headCommit: COMMIT_B,
-      headAtLastCheck: COMMIT_B,
-      verifiedPairs: [pair({ commit: COMMIT_A, snapshotId: 'snap-старая', revision: 2 })],
-      highWaterMark: 9,
-      rollback: { snapshotId: 'snap-старая', confirmed: false },
-    });
-
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('rollback-not-confirmed');
-  });
-
-  // Сценарий: пара старше срока хранения не выкладывается
-  it('пара старше названного срока хранения снимка получает отказ', async () => {
-    const mod = await gateModule();
-    expect(mod.SNAPSHOT_RETENTION_DAYS, 'срок хранения обязан быть названным числом').toBeGreaterThan(0);
-
-    const tooOld = new Date(
-      Date.parse('2026-08-24T12:00:00Z') - (mod.SNAPSHOT_RETENTION_DAYS + 1) * 86_400_000,
-    ).toISOString();
-
-    const decision = await manual({
-      headCommit: COMMIT_B,
-      headAtLastCheck: COMMIT_B,
-      verifiedPairs: [pair({ commit: COMMIT_A, snapshotId: 'snap-древняя', revision: 2, capturedAt: tooOld })],
-      highWaterMark: 9,
-      rollback: { snapshotId: 'snap-древняя', confirmed: true, reasonHeadNotPublished: 'откат' },
-    });
-
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('snapshot-beyond-retention');
-  });
-
-  // Сценарий: ручной запуск, вершина сдвинулась во время сборки
-  it('сдвиг вершины к моменту выкладки останавливает и ручной путь', async () => {
-    const decision = await manual({ headCommit: COMMIT_A, headAtLastCheck: COMMIT_B });
-
-    expect(decision.action).toBe('refuse');
-    expect(decision.reason).toBe('head-moved');
-  });
-
-  // Сценарий: ручной запуск не обходит прогон
-  it('ручной путь не выкладывает содержимое без успешного прогона', async () => {
-    const decision = await manual({
-      verifiedPairs: [pair({ testRunConclusion: 'cancelled' }), pair({ testRunConclusion: 'missing' })],
-    });
-    expect(decision.action).toBe('refuse');
-  });
-});
+// The retired cached-pair selector and snapshot-age rollback contract are replaced by
+// tests/manual-publication-core.test.ts: fresh local pair, retained release and evidence.
+// Ledger/regression scenarios above remain applicable to the local publication path.

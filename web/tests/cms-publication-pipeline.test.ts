@@ -113,6 +113,24 @@ describe('закреплённый снимок обязательного CI', 
     }
   });
 
+  it('успешный Tests сохраняет непустой перечень реальных JSON-отчётов для локального CI gate', () => {
+    const job = tests().jobs['unit-and-build'];
+    const uploads = job.steps.filter((step) => /^actions\/upload-artifact(@|$)/.test(step.uses ?? '') &&
+      step.with?.name === 'publication-ci-counts');
+    expect(uploads).toHaveLength(1);
+    const upload = uploads[0];
+    expect(upload.with?.['if-no-files-found']).toBe('error');
+    expect(upload.if === undefined || upload.if === 'success()').toBe(true);
+    const reports = String(upload.with?.path ?? '').trim().split(/\s+/);
+    expect(reports).toEqual(['web-unit', 'web-render', 'web-build'].map((name) => '${{ runner.temp }}/' + name + '-head.json'));
+    for (const name of ['web-unit', 'web-render', 'web-build']) {
+      const producer = job.steps.find((step) => (step.run ?? '').includes('--outputFile.json="$RUNNER_TEMP/' + name + '-head.json"'));
+      expect(producer, `нет выполняющего тесты производителя ${name}`).toBeDefined();
+      expect(producer!.run).toContain('vitest run');
+      expect(producer!.index).toBeLessThan(upload.index);
+    }
+  });
+
   it('единственный подготовитель Tests явно выбирает закреплённый источник', () => {
     const producers = Object.values(tests().jobs).flatMap((job) => job.steps)
       .filter((step) => /snapshot:prepare/.test(step.run ?? ''));
