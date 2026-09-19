@@ -28,9 +28,6 @@ export const REQUIRED_FIELDS = [
   'Непустота предмета',
 ] as const;
 
-/** Необязательное поле: ссылка на источник, «если он есть». */
-export const OPTIONAL_FIELDS = ['Источник'] as const;
-
 export interface EvidenceRecord {
   /** Заголовок записи — обязан дословно совпадать с именем сценария. */
   readonly heading: string;

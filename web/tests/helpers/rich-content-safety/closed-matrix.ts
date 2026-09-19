@@ -98,11 +98,4 @@ export const ALLOWED_HREF_SCHEMES = ['http', 'https', 'mailto', 'tel'] as const;
 export const RASTER_MEDIA_EXT_RE = /\.(webp|png|jpg|jpeg)$/i;
 export const SRCSET_CANDIDATE_RE = /^(\/media\/_w\/(\d+)\/\S+) (\d+)w$/;
 
-/**
- * Единственный ожидаемый recovered+sanitized DOM для malformed fixture.
- * Recovered tree — HTML5 (Chromium DOMParser); sanitizer удаляет script.
- */
-export const MALFORMED_INPUT = '<b><i>misnested</b></i><p>ok<script>alert(1)</script>';
-export const MALFORMED_EXPECTED_SANITIZED = '<b><i>misnested</i></b><p>ok</p>';
-
 export const PARSER_PACKAGES_RE = /parse5|jsdom|htmlparser2|dompurify|sanitize-html|linkedom|cheerio|node-html-parser/i;

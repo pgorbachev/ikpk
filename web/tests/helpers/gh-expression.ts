@@ -472,8 +472,3 @@ export function usesAlways(expr: string): boolean {
   };
   return walk(parseExpression(expr));
 }
-
-/** Конъюнкция условий: истинна, только если ВСЕ могут быть истинны одновременно. */
-export function conjunctionCanBeTrue(exprs: string[], github: GithubContext): boolean {
-  return exprs.every((e) => canBeTrue(e, github));
-}

@@ -280,10 +280,6 @@ export function pushTrigger(wf: Workflow): { branches: string[] } | null {
   return { branches: asStringList(cfg.branches) };
 }
 
-export function hasTrigger(wf: Workflow, name: string): boolean {
-  return name in wf.triggers;
-}
-
 /** Объявлены ли где-либо в файле права на Pages. */
 export function declaresPagesPermission(wf: Workflow): boolean {
   const check = (perms: unknown): boolean => {

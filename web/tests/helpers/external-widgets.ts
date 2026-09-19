@@ -38,8 +38,6 @@ import { attr, parseDocument, textOf, textOfExcluding, walk, type Element } from
 
 /** Секция отзывов на главной. */
 export const SEL_REVIEWS_SECTION = 'data-reviews-section';
-/** Контейнер, в который подставляется iframe виджета отзывов (ленивое встраивание). */
-export const SEL_REVIEWS_EMBED = 'data-reviews-embed';
 /** Отдельный знак награды внутри строки знаков. */
 export const SEL_AWARD_BADGE = 'data-award-badge';
 /**
@@ -90,8 +88,6 @@ export const CHAT_LOADER_KEY = 'CHAT_LOADER_SRC';
 export const CHAT_LOADER_NONE = 'none';
 /** Ключ объявления настройки сообщения панели вне часов: `configured` либо `absent`. */
 export const CHAT_OFFLINE_MESSAGE_KEY = 'CHAT_OFFLINE_MESSAGE';
-/** Ключ года сборки: состав знаков считается от него, а не от системных часов. */
-export const BUILD_YEAR_KEY = 'BUILD_YEAR';
 /**
  * Признак того, что демо-сборке разрешено подставить синтетический адрес.
  *
@@ -140,20 +136,6 @@ export const FOREIGN_METRIKA_ID = '57020224';
 export const OWN_METRIKA_ID = '39506315';
 /** Адрес тега Метрики: у нас и у виджета он ОДИН И ТОТ ЖЕ, деления не существует. */
 export const METRIKA_TAG_URL = 'https://mc.yandex.ru/metrika/tag.js';
-/** Трекинг-пиксель несёт идентификатор в пути — этим счётчики и различаются. */
-export const metrikaPixelPath = (id: string): string => `/watch/${id}`;
-
-// ─── Значения, к которым проверки привязываться НЕ ИМЕЮТ ПРАВА ───────────────
-/**
- * Сегодняшние рейтинг, число отзывов и число оценок. Лежат здесь ровно для того,
- * чтобы проверка сводки могла доказать, что она их НЕ использует: признак, знающий
- * сегодняшние значения, зелен в день, когда кто-то вставит сводку с другими числами
- * (spec, «Признак SHALL NOT опираться на **текущие** значения»).
- *
- * Ни одна проверка не имеет права подставлять их в признак. Использование — только в
- * фикстурах, и только чтобы показать, что признак ловит и ДРУГИЕ числа.
- */
-export const MEASURED_TODAY = { rating: '4,9', reviews: 33, ratings: 66 } as const;
 
 // ─── Признаки ────────────────────────────────────────────────────────────────
 
@@ -337,11 +319,6 @@ export function ratingSummaryHitsInText(text: string): string[] {
 export function hoursStripText(el: Element): string | null {
   const text = textOf(el);
   return /\b10[:.]\d\d\b/.test(text) && /\b18[:.]\d\d\b/.test(text) ? text : null;
-}
-
-/** Видимый текст поддерева элемента — для проверок содержимого секции. */
-export function elementText(el: Element): string {
-  return textOf(el);
 }
 
 /** Все элементы документа: нужно проверкам, судящим по составу поддерева. */

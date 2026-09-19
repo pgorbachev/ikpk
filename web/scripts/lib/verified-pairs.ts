@@ -4,7 +4,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import type { VerifiedPair, PublicationRecord } from './publish-gate.ts';
 
-export const PROVENANCE_BRANCH = 'state/cms-provenance';
 export const VERIFIED_PAIRS_FILE = 'verified-pairs.json';
 
 export function readVerifiedPairs(storeDir: string): VerifiedPair[] {

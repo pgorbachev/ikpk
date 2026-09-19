@@ -55,8 +55,6 @@ export const RETIRED_NETWORKS = [
 /** Заголовок колонки подвала, в которой живут аккаунты (спека, «Подвал сохраняет раскладку»). */
 export const SOCIAL_COLUMN_HEADING = 'Подписывайтесь';
 
-export type AccountName = (typeof ACCEPTED_ACCOUNTS)[number]['name'];
-
 // ─── Реестр применимости марок: сторона ПРОВЕРКИ ────────────────────────────────────────
 // Requirement «Решение о применимости марки зафиксировано в машиночитаемом реестре»
 // (`design.md`, Решение 18). Реестр — продуктовый файл `web/src/lib/social-marks-registry.ts`,

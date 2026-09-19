@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "form-data": "^4.0.0",
-    "node-fetch": "^3.3.0",
     "tsx": "^4.23.13"
   },
   "devDependencies": {

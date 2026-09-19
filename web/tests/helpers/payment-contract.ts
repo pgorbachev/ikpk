@@ -23,23 +23,15 @@ export const PAYMENT_ENTRY_ATTR = 'data-payment-entry';
 export const PAYMENT_STATE_ATTR = 'data-payment-state';
 export const PAYMENT_CONTINUE_ATTR = 'data-payment-continue';
 export const PAYMENT_OTHER_SEMINAR_ATTR = 'data-payment-other-seminar';
-export const PAYMENT_COPY_ID_ATTR = 'data-payment-copy-id';
 export const PAYMENT_CONFIRM_DUPLICATE_ATTR = 'data-payment-confirm-duplicate';
-export const PAYMENT_ATTEMPTS_ATTR = 'data-payment-attempts';
 export const PAYMENT_HOLD_WARNING_ATTR = 'data-payment-hold-warning';
 export const PAYMENT_SUMMARY_ATTR = 'data-payment-summary';
 export const RETURN_PARAM = 'paymentRequest';
-
-export const STALE_LEAD_IN_COPY =
-  'Готовы произвести оплату за семинар? Кликайте на кнопку, выбирайте направление и записывайтесь к нам на обучение!';
 
 export const TEST_YOOKASSA_SECRET = 'test-yookassa-secret-DO-NOT-SHIP';
 export const TEST_HMAC_CURRENT = 'test-hmac-current-material-v1';
 export const TEST_HMAC_PREVIOUS = 'test-hmac-previous-material-v0';
 export const TEST_HMAC_CURRENT_VERSION = '2026-08-01';
-export const TEST_HMAC_PREVIOUS_VERSION = '2026-07-01';
-
-export const CHANNEL_SOURCE_KEY = 'source';
 
 export type PaymentPayload = {
   requestId: string;
@@ -201,17 +193,6 @@ export const PREVIEW_MOCK_ENDPOINT = PAYMENT_ENDPOINT_BASE.preview;
 /** Прежнее имя того же значения — оставлено, чтобы старые ссылки читались однозначно. */
 export const RETIRED_STAND_ENDPOINT = PREVIEW_MOCK_ENDPOINT;
 
-/**
- * Отображение роли сборки на режим серверного процесса. У `ci` процесса нет вовсе —
- * поэтому `null`, а не какое-то значение режима.
- */
-export const ROLE_TO_SERVICE_MODE: Record<PaymentRole, 'demo' | 'test' | 'prod' | null> = {
-  ci: null,
-  preview: 'demo',
-  stand: 'test',
-  prod: 'prod',
-};
-
 /** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */
 export const PAYMENT_RETURN_BASE_STAND = 'http://193.124.115.99';
 export const PAYMENT_RETURN_BASE_PROD = 'https://ikpk.su';
@@ -227,4 +208,3 @@ export const STAND_BIND_HOST = '127.0.0.1';
 export const STAND_BIND_PORT = '8787';
 /** Гейт публикации спрашивает readiness изнутри host, не через публичный эндпоинт. */
 export const READYZ_PATH = '/readyz';
-export const READYZ_INTERNAL_URL = `http://${STAND_BIND_HOST}:${STAND_BIND_PORT}${READYZ_PATH}`;

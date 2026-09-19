@@ -60,11 +60,3 @@ export const VK_COMMUNITY_URL = hrefOf('ВКонтакте');
 
 /** Канал Rutube — тот же адрес, что в перечне состава, без второго литерала. */
 export const RUTUBE_CHANNEL_URL = hrefOf('Rutube');
-
-/**
- * Магазин. На старом сайте в теле страниц — kinezio.shop, в наших данных
- * приехал medshop.ikpk.su, причём подписью «www.medshop.ikpk.su», а www-хост
- * не отвечает. Какой домен считать актуальным — вопрос к заказчику; пока
- * убираем только заведомо мёртвый www (см. html-cleaner).
- */
-export const SHOP_URL = 'https://kinezio.shop/';

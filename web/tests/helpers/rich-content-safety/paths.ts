@@ -16,7 +16,6 @@ export const MEDIA_MANIFEST = join(WEB_SRC, 'lib', 'media-manifest.json');
 export const PACKAGE_LOCK = join(WEB_ROOT, 'package-lock.json');
 
 export const CHARACTERIZATION_SHA = '2d48e84db36c013fabcbbe9ba389e1f4debca639';
-export const PLANNING_MERGE_SHA = '4cda9b18b98c24ff510dd04e50fe0968449bf1b9';
 
 export const KNOWN_REMOTE_UPLOAD =
   'https://ikpk.su/api/upload/file/0acd713c-1477-4c6c-93ad-1596d2a17304';
