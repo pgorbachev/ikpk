@@ -467,3 +467,41 @@ test('REVIEW: recovery cancels a durably prepared operation after SSH loss befor
   assert.equal(existsSync(f.pendingPath), false, 'recoverable preparation must not block future publications');
   await f.transport.withLock((session) => f.stage(session, { releaseId: 'after-recovery' }));
 });
+
+test('REVIEW: prepared crash recovery refuses when current changed to another retained release', options, async (t) => {
+  const f = setup(t);
+  let prepared = false;
+  let writes = 0;
+  await assert.rejects(f.transport.withLock(async (session) => {
+    await f.stage(session);
+    await f.activate(session, async () => { writes++; }, {
+      beforeActivate: async () => {
+        assert.equal(f.active(), 'old');
+        assert.equal(existsSync(f.pendingPath), true);
+        prepared = true;
+        const pid = f.connections().filter((entry) => entry.kind === 'connection').at(-1).pid;
+        process.kill(pid, 'SIGTERM');
+        for (let attempt = 0; attempt < 1000; attempt++) {
+          try { process.kill(pid, 0); }
+          catch (error) { if (error.code === 'ESRCH') return; throw error; }
+          await delay(5);
+        }
+        assert.fail('the injected SSH loss did not terminate its process');
+      },
+    });
+  }), /SSH|session|stream|closed/i);
+  assert.equal(prepared, true, 'the crash must occur after durable preparation');
+  assert.equal(f.active(), 'old');
+  const pendingBefore = readFileSync(f.pendingPath, 'utf8');
+  cpSync(f.old, join(f.root, 'releases', 'third'), { recursive: true });
+  unlinkSync(join(f.root, 'current'));
+  symlinkSync('releases/third', join(f.root, 'current'));
+  assert.equal(f.active(), 'third', 'the mutation must actually change current');
+
+  await assert.rejects(f.transport.recover({ recordIndex: async () => { writes++; } }), /current|release|mismatch|changed/i);
+  assert.equal(f.active(), 'third', 'refused recovery must not switch current');
+  assert.equal(writes, 0, 'refused recovery must not write publication history');
+  assert.equal(readFileSync(f.pendingPath, 'utf8'), pendingBefore, 'refused recovery must retain the exact pending operation');
+  await assert.rejects(f.transport.withLock((session) => f.stage(session, { releaseId: 'after-refusal' })), /pending|unfinished|unresolved/i);
+  assert.equal(f.active(), 'third');
+});
