@@ -139,8 +139,18 @@ def fetch_live_events() -> list:
         data = api_query(get("/raspisanie-i-tseny" + suffix), "getEvent(")
         items = data.get("items") or []
         pages_read += 1
-        if data.get("pagesCount") is not None and pages_declared is None:
-            pages_declared = data["pagesCount"]
+        pages_now = data.get("pagesCount")
+        if pages_now is not None:
+            if pages_declared is None:
+                pages_declared = pages_now
+            elif pages_now != pages_declared:
+                # Та же строгость, что у totalCount. «Первое побеждает» само по себе не
+                # консервативно: pagesCount 1, затем 5 прошло бы, тогда как правило
+                # totalCount на таком отказывает.
+                raise SystemExit(
+                    f"лента объявила разный pagesCount ({pages_declared}, затем {pages_now}) — "
+                    "отказ: свидетели полноты обязаны быть согласны между собой"
+                )
         declared = data.get("totalCount")
         if declared is not None:
             if total is None:
@@ -265,8 +275,13 @@ def main() -> int:
     # Второй аргумент — сохранённая лента для отладки. Полнота её НЕ доказана:
     # файл не несёт totalCount и мог быть снят как угодно. Поэтому признак полноты
     # едет вместе с лентой, а не выводится из способа её получения.
-    if len(sys.argv) > 2:
-        live_events = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+    # Путь выбирается среди аргументов, НЕ начинающихся с «--». Иначе документированный
+    # выход из отказа — `… . --allow-mass-withdrawal` — читает флаг как имя файла и падает
+    # с FileNotFoundError, причём ровно так же, как падает отсутствующая лента. Человек,
+    # разбирающий отказ, получил бы подсказку в неверную сторону.
+    saved = [a for a in sys.argv[2:] if not a.startswith("--")]
+    if saved:
+        live_events = json.loads(Path(saved[0]).read_text(encoding="utf-8"))
         feed_complete = False
     else:
         feed = fetch_live_events()
@@ -537,6 +552,10 @@ def selftest() -> int:
     # первая страница объявила totalCount ровно по собранному, но страниц больше
     refuses([{"items": ev(0, 2), "totalCount": 2, "pagesCount": 5}],
             "прочитано страниц", "недочитанные страницы обязаны отказывать")
+    # расхождение pagesCount между страницами — отказ, как и у totalCount
+    refuses([{"items": ev(0, 2), "totalCount": 3, "pagesCount": 1},
+             {"items": ev(2, 3), "totalCount": 3, "pagesCount": 5}],
+            "разный pagesCount", "расхождение pagesCount обязано отказывать")
     # честная короткая лента проходит
     assert len(feed([{"items": ev(0, 2), "totalCount": 2, "pagesCount": 1}])["events"]) == 2
     # свидетели симметричны: пропажа pagesCount — тоже отказ, а не тихий пропуск
