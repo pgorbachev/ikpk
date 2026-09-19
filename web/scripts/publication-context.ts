@@ -51,6 +51,8 @@ export function readConfig(path: string): DestinationConfig {
     const expected = config.paymentRole === 'stand' ? { mode: 'test', shopId: '1440249' } : { mode: 'prod', shopId: '409285' };
     if (!payment || payment.mode !== expected.mode || payment.shopId !== expected.shopId) throw new Error('untrusted-config');
     publicUrl(payment.endpoint); publicUrl(payment.siteOrigin, true);
+    // The preflight probes CORS for this origin; a different origin would approve a destination the published site cannot use.
+    if (new URL(payment.siteOrigin).origin !== new URL(config.siteUrl).origin) throw new Error('untrusted-config');
   }
   return config;
 }

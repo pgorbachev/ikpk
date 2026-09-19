@@ -20,7 +20,7 @@ async function scenario(t: TestContext, mismatch: boolean) {
     else res.writeHead(403).end();
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.onTestFinished(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(resolve)); rmSync(temp, { recursive: true, force: true }); });
+  t.onTestFinished(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(temp, { recursive: true, force: true }); });
   const address = server.address(); assert(address && typeof address !== 'string');
   const endpoint = `http://127.0.0.1:${address.port}/api`;
   const known = join(temp, 'known_hosts'); writeFileSync(known, 'fixture', { mode: 0o600 });
