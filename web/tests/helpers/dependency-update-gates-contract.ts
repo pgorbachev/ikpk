@@ -58,6 +58,7 @@ export interface RuntimeAuditScopeInput {
 }
 
 export interface DependencyUpdateGates {
+  isDependencyOnlyChange(changedFiles: string[]): boolean;
   checkLintCoverage(input: LintCoverageInput): GateResult;
   checkPlatformEntries(input: PlatformEntriesInput): GateResult;
   checkTestExecution(input: TestExecutionInput): GateResult;
