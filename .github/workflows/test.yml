@@ -429,7 +429,7 @@ jobs:
         run: npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-head.json"
 
       - name: Verify manual publication transport
-        run: node --test tests/publication-transport.test.mjs tests/publication-transport-harness.test.mjs
+        run: node --test tests/publication-transport*.test.mjs
 
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope

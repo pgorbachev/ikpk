@@ -29,8 +29,12 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
   const attempts = options.maxPushAttempts ?? 3;
   if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 10) throw new Error('invalid retry attempt limit');
   const workDir = resolve(options.workDir);
-  if (!options.remote || options.remote.startsWith('-') ||
-      (/^https?:/.test(options.remote) && new URL(options.remote).password)) throw new Error('unsafe state remote');
+  if (!options.remote || options.remote.startsWith('-')) throw new Error('unsafe state remote');
+  if (options.remote.includes('://')) {
+    let remote: URL;
+    try { remote = new URL(options.remote); } catch { throw new Error('unsafe state remote'); }
+    if (remote.password || (remote.protocol !== 'ssh:' && remote.username)) throw new Error('unsafe state remote credentials');
+  }
   const env = { PATH: process.env.PATH, HOME: process.env.HOME,
     GIT_AUTHOR_NAME: 'IKPK publication', GIT_AUTHOR_EMAIL: 'publication@ikpk.invalid',
     GIT_COMMITTER_NAME: 'IKPK publication', GIT_COMMITTER_EMAIL: 'publication@ikpk.invalid',
@@ -88,7 +92,11 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     try { git(['push', 'origin', `HEAD:refs/heads/${PROVENANCE_BRANCH}`]); return true; } catch { return false; }
   }
   return {
-    read: (fingerprint) => serial(() => snapshot(fingerprint)),
+    read: (fingerprint) => serial(async () => {
+      const state = await snapshot(fingerprint);
+      if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) throw new Error('current provenance fingerprint mismatch');
+      return state;
+    }),
     appendPublication: (record) => serial(async () => {
       if (!isPublicationRecord(record) || !/^[a-f0-9]{40}$/.test(record.commit) || !/^[a-f0-9]{64}$/.test(record.treeDigest) ||
         !Number.isSafeInteger(record.revision) || record.revision <= 0 || record.testRunConclusion !== 'success' ||
