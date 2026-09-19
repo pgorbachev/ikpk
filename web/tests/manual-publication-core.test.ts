@@ -22,7 +22,7 @@ type LocalChecks = {
 type Publication = VerifiedPair & {
   publicationId: string; releaseId: string; destinationId: string; treeDigest: string;
   publishedAt: string; actor: string; ciEvidence: CiEvidence; localChecks: LocalChecks;
-  paymentRole: 'ci' | 'stand' | 'prod'; deployMode: 'stand' | 'production';
+  paymentRole: 'ci' | 'stand' | 'prod'; deployMode: 'stand' | 'prod';
 };
 type Input = {
   headCommit: string; headAtLastCheck: string; highWaterMark: number;
@@ -60,7 +60,7 @@ const pair = (snapshotId = 'snapshot-current'): VerifiedPair => ({
 const publication = (overrides: Partial<Publication> = {}): Publication => ({
   ...pair(), publicationId: 'publication-1', releaseId: 'release-1', destinationId: 'production',
   treeDigest: DIGEST, publishedAt: '2026-09-19T01:00:00Z', actor: 'operator',
-  ciEvidence: ci(), localChecks: checks(), paymentRole: 'ci', deployMode: 'production', ...overrides,
+  ciEvidence: ci(), localChecks: checks(), paymentRole: 'ci', deployMode: 'prod', ...overrides,
 });
 const input = (): Input => ({
   headCommit: SHA, headAtLastCheck: SHA, highWaterMark: 5, actor: 'operator',
