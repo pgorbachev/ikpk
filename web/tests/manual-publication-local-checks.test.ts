@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPublicationChecks, type PublicationCheckInput } from '../scripts/lib/publication-checks.ts';
+import { createWorkerAudit } from '../scripts/publication-worker.ts';
 import { PUBLICATION_GROUPS } from '../scripts/lib/publish-gate.ts';
 import { CANARY, SHA, fixtureDigest, localFixture } from './helpers/publication-readers-fixtures.ts';
 
@@ -10,6 +11,18 @@ function fixture() { const f = localFixture(); directories.push(f.temp); return 
 afterEach(() => { for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 describe('local publication check coordinator (injected effect ports, not an Astro build)', () => {
+  it('retains actual partial and zero counts through a real check failure without leaking exception text', async () => {
+    for (const zero of [true, false]) {
+      const f = fixture();
+      if (zero) f.results.checkSnapshot = { conclusion: 'failure', executedTests: 0 };
+      else f.ports.checkBuild = async () => { throw new Error(CANARY); };
+      const error = await runPublicationChecks(f.input, f.ports).then(() => { throw new Error('unexpected success'); }, (error: unknown) => error);
+      const audit = createWorkerAudit({ error });
+      expect(audit).toMatchObject({ code: 'checks-failed', check: zero ? 'snapshot-provenance' : 'build-content',
+        localExecutedTests: zero ? 0 : f.results.checkSnapshot.executedTests });
+      expect(JSON.stringify(audit)).not.toContain(CANARY);
+    }
+  });
   it('captures and builds once, checks all five groups and records the same snapshot/destination/tree', async () => {
     const f = fixture();
     const result = await runPublicationChecks(f.input, f.ports);

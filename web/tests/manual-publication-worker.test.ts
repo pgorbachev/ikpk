@@ -173,9 +173,37 @@ describe('concrete publication worker integration', () => {
     const f = await fixture(); f.config.deployMode = 'prod'; f.env.DEPLOY_MODE = 'prod'; f.saveConfig(); await f.run();
     expect(f.state.appendPublication).toHaveBeenCalledWith(expect.objectContaining({ deployMode: 'prod', paymentRole: 'ci' }));
   });
+
+  it('uses the configured public site origin independently of the SSH target', async () => {
+    const f = await fixture(); f.config.siteUrl = 'https://public-site.test.invalid'; f.saveConfig();
+    await f.run();
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => new URL(String(url)));
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.every((url) => url.origin === f.config.siteUrl)).toBe(true);
+    expect(f.stage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, '', 'not-a-url', 'https://public.test.invalid/path'])('refuses invalid site origin %s before install or transport', async (siteUrl) => {
+    const f = await fixture();
+    if (siteUrl === undefined) delete (f.config as Partial<typeof f.config>).siteUrl;
+    else f.config.siteUrl = siteUrl;
+    f.saveConfig();
+    await expect(f.run()).rejects.toThrow();
+    expect(f.installs).toHaveLength(0); expect(f.transport).not.toHaveBeenCalled();
+  });
 });
 
 describe('deploy-web.sh executable entrypoint', () => {
+  it('writes one curated fd3 refusal from the real native worker CLI', () => {
+    const temp = temporary();
+    const result = spawnSync(process.execPath, [join(ROOT, 'web/scripts/publication-worker.ts')], {
+      cwd: ROOT, env: { PATH: process.env.PATH, HOME: temp, PUBLICATION_SOURCE_SHA: 'a'.repeat(40) },
+      encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    });
+    expect(result.error).toBeUndefined(); expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toBe('');
+    expect(JSON.parse(String(result.output[3]))).toEqual({ version: 1, status: 'refused', code: 'publication-failed', commit: 'a'.repeat(40) });
+  });
   it('shell dispatches the fixed native Node worker before dependency installation', () => {
     const temp = temporary(); const bin = join(temp, 'bin'); const trace = join(temp, 'node-args'); const npmTrace = join(temp, 'npm-called');
     write(join(bin, 'node'), `#!/bin/sh\nprintf '%s\\n' "$@" > '${trace}'\nexit 73\n`); chmodSync(join(bin, 'node'), 0o700);

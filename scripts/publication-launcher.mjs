@@ -48,6 +48,40 @@ function protectedFile(path) {
 }
 function insideRepository(path) { try { git(path, 'rev-parse', '--absolute-git-dir'); return true; } catch { return false; } }
 
+// Kept in the installed, dependency-free launcher: repository code cannot extend this schema.
+function workerAudit(bytes, commit, exitStatus) {
+  if (typeof bytes !== 'string' || !bytes.length || Buffer.byteLength(bytes) > 16 * 1024) refuse('invalid-worker-audit');
+  let audit;
+  try { audit = JSON.parse(bytes); } catch { refuse('invalid-worker-audit'); }
+  const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const matches = (value, pattern) => typeof value === 'string' && pattern.test(value);
+  const integer = (value) => Number.isSafeInteger(value) && value >= 0;
+  const fields = {
+    version: (value) => value === 1,
+    status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
+    code: (value) => exitStatus === 0 ? value === 'published' :
+      ['publication-failed', 'checks-failed', 'ci-failed', 'provenance-changed', 'active-unindexed', 'main-changed'].includes(value),
+    commit: (value) => value === commit,
+    snapshotId: (value) => matches(value, /^snap:[a-f0-9]{64}$/),
+    treeDigest: (value) => matches(value, /^[a-f0-9]{64}$/),
+    publicationId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+    observedEntry: integer, revision: integer, latestEntry: integer, highWaterMark: integer,
+    localExecutedTests: integer, ciExecutedTests: integer,
+    check: (value) => ['snapshot-provenance', 'build-content', 'destination-mode', 'browser-smoke',
+      'payment-destination', 'payment-readiness', 'payment-preflight', 'capture', 'build'].includes(value),
+    activePair: (value) => object(value) && Object.keys(value).length === 3 &&
+      matches(value.commit, /^[a-f0-9]{40}$/) && matches(value.snapshotId, /^snap:[a-f0-9]{64}$/) &&
+      matches(value.releaseId, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+  };
+  if (!object(audit) || !['version', 'status', 'code', 'commit'].every((key) => Object.hasOwn(audit, key)) ||
+      Object.entries(audit).some(([key, value]) => !Object.hasOwn(fields, key) || !fields[key](value))) refuse('invalid-worker-audit');
+  if (exitStatus === 0 && (!['snapshotId', 'treeDigest', 'publicationId'].every((key) => Object.hasOwn(audit, key)) ||
+      !['observedEntry', 'revision', 'highWaterMark', 'localExecutedTests', 'ciExecutedTests'].every((key) => audit[key] > 0))) refuse('invalid-worker-audit');
+  if ((audit.code === 'active-unindexed') !== Object.hasOwn(audit, 'activePair') ||
+      (Object.hasOwn(audit, 'check') && audit.code !== 'checks-failed')) refuse('invalid-worker-audit');
+  return audit;
+}
+
 export async function launch(args) {
   const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
@@ -121,11 +155,14 @@ export async function launch(args) {
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
         PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
         PUBLICATION_SOURCE_SHA: head, PUBLICATION_LAUNCHER: installed },
-      encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024 * 1024 });
+      encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024,
+      stdio: ['ignore', 'ignore', 'ignore', 'pipe'] });
     // Repository subprocess output is not an audit log: it may contain credentials.
-    if (result.error || result.status !== 0) refuse('publication-worker-failed');
+    if (result.error || result.status === null) refuse('publication-worker-failed');
+    const audit = workerAudit(result.output[3], head, result.status);
+    if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
     checks.push('publication-worker');
-    return { status: 'success', executedChecks: checks.length, checks, commit: head, destinationId: config.destinationId };
+    return { status: 'success', executedChecks: checks.length, checks, commit: head, destinationId: config.destinationId, audit };
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
@@ -133,8 +170,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try { process.stdout.write(`${JSON.stringify(await launch(process.argv.slice(2)))}\n`); }
   catch (error) {
     const reasons = new Set(['hosted-publication-forbidden', 'untrusted-source', 'dirty-source', 'untrusted-ref',
-      'source-unavailable', 'untrusted-config', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed']);
-    process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed' })}\n`);
+      'source-unavailable', 'untrusted-config', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
+    process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed',
+      ...(error.audit ? { audit: error.audit } : {}) })}\n`);
     process.exitCode = 1;
   }
 }

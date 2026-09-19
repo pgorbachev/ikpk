@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { digestTree } from '../../../scripts/publication-launcher.mjs';
 import { localChecksProblem } from './publish-gate.ts';
+import type { WorkerAudit } from '../publication-worker.ts';
 import type { CheckConclusion, LocalChecks } from './publish-gate.ts';
 
 export interface PublicationCheckInput {
@@ -62,6 +63,8 @@ export async function runPublicationChecks(input: PublicationCheckInput, ports: 
   if (inside(treeDir, reportPath)) throw new Error('report-inside-artifact-tree');
   if (existsSync(reportPath)) throw new Error('publication-report-already-exists');
   const home = mkdtempSync(join(tmpdir(), 'ikpk-publication-checks-'));
+  const audit: WorkerAudit = { version: 1, status: 'refused', code: 'checks-failed', check: 'capture' };
+  let executedTests = 0;
   try {
     const snapshot = await ports.capture();
     if (!snapshot?.snapshotId?.trim() || !snapshot.snapshotDir?.trim()) throw new Error('missing-snapshot-identity');
@@ -75,16 +78,23 @@ export async function runPublicationChecks(input: PublicationCheckInput, ports: 
     const context: PublicationCheckContext = Object.freeze({ ...input, ...snapshot, snapshotDir, treeDir, reportPath, env });
     const groups: LocalChecks['groups'] = [];
     function requireResult(name: string, result: CheckResult): CheckResult {
+      audit.check = name;
+      if (result && Number.isSafeInteger(result.executedTests) && result.executedTests >= 0) {
+        executedTests += result.executedTests;
+        audit.localExecutedTests = executedTests;
+      }
       if (!result || result.conclusion !== 'success' || !Number.isSafeInteger(result.executedTests) || result.executedTests <= 0) {
         throw new Error(`publication-group:${name}:executed=${result?.executedTests ?? 0}:conclusion=${result?.conclusion ?? 'missing'}`);
       }
       return { conclusion: 'success', executedTests: result.executedTests };
     }
     async function check(name: string, effect: (context: PublicationCheckContext) => Promise<CheckResult>): Promise<void> {
+      audit.check = name;
       const result = requireResult(name, await effect(context));
       groups.push({ name, ...result });
     }
     await check('snapshot-provenance', ports.checkSnapshot);
+    audit.check = 'build';
     await ports.build(context);
     writeFileSync(join(treeDir, 'release.json'), `${JSON.stringify({ commit: input.commit, snapshotId: snapshot.snapshotId }, null, 2)}\n`, { flag: 'wx' });
     const treeDigest = await ports.digest(treeDir);
@@ -94,7 +104,9 @@ export async function runPublicationChecks(input: PublicationCheckInput, ports: 
     await check('browser-smoke', ports.checkBrowser);
     if (input.paymentRole === 'ci') await check('payment-destination', ports.checkPaymentAbsent);
     else {
+      audit.check = 'payment-readiness';
       const readiness = requireResult('payment-readiness', await ports.checkPaymentReadiness(context));
+      audit.check = 'payment-preflight';
       const preflight = requireResult('payment-preflight', await ports.checkPaymentPreflight(context));
       groups.push({ name: 'payment-destination', conclusion: 'success', executedTests: readiness.executedTests + preflight.executedTests });
     }
@@ -106,5 +118,9 @@ export async function runPublicationChecks(input: PublicationCheckInput, ports: 
     mkdirSync(dirname(reportPath), { recursive: true });
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
     return report;
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error('publication checks failed');
+    Object.assign(failure, { audit });
+    throw failure;
   } finally { rmSync(home, { recursive: true, force: true }); }
 }
