@@ -169,6 +169,11 @@ describe('installed launcher confirms fresh canonical main before releasing cred
     git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'embedded config'); git(f.repo, 'push', 'origin', 'main');
     assertRefused(f, launch(f, { sourceDir: f.repo, config: embedded }), 'untrusted-config');
   });
+  it('REVIEW: configuration inside repository Git metadata is not a protected installation', () => {
+    const f = fixture(); const embedded = join(f.repo, '.git', 'publication-config.json');
+    copyFileSync(f.config, embedded); chmodSync(embedded, 0o600);
+    assertRefused(f, launch(f, { config: embedded }), 'untrusted-config');
+  });
   it.each([0o620, 0o602])('a writable protected config mode %i is refused before broker access', (mode) => {
     const f = fixture(); chmodSync(f.config, mode);
     assertRefused(f, launch(f), 'untrusted-config');
