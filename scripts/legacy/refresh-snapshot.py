@@ -132,10 +132,15 @@ def fetch_live_events() -> list:
     """
     collected: dict = {}
     total = None
+    pages_declared = None
+    pages_read = 0
     for page in range(1, 20):
         suffix = "" if page == 1 else f"?page={page}"
         data = api_query(get("/raspisanie-i-tseny" + suffix), "getEvent(")
         items = data.get("items") or []
+        pages_read += 1
+        if data.get("pagesCount") is not None and pages_declared is None:
+            pages_declared = data["pagesCount"]
         declared = data.get("totalCount")
         if declared is not None:
             if total is None:
@@ -161,6 +166,16 @@ def fetch_live_events() -> list:
     # не удалением.
     if total is None:
         raise SystemExit("лента не объявила totalCount — полноту проверить нечем, отказ")
+    # Второй независимый свидетель. `totalCount`, объявленный ровно равным собранному,
+    # неотличим от честной короткой ленты — это единственный маршрут усечения, который
+    # первая проверка пропускает. `pagesCount` из того же ответа обязан сойтись с числом
+    # прочитанных страниц: чтобы обмануть обе, ответ должен лгать согласованно в двух
+    # полях, а не оборваться.
+    if pages_declared is not None and pages_read < pages_declared:
+        raise SystemExit(
+            f"прочитано страниц {pages_read}, лента объявила {pages_declared} — отказ: "
+            "обрыв на середине неотличим от конца ленты по одному лишь totalCount"
+        )
     if len(collected) != total:
         raise SystemExit(
             f"лента неполна: собрано {len(collected)}, объявлено {total} — "
@@ -442,6 +457,59 @@ def selftest() -> int:
     assert moscow_today(late) == "2026-09-20", moscow_today(late)
     midday = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
     assert moscow_today(midday) == "2026-09-19", moscow_today(midday)
+    # ── Полнота ленты. Ревью измерило, что три мутации этих отказов оставляли
+    # проверку зелёной: у неё не было ни одного входа в fetch_live_events.
+    import builtins as _b
+
+    def feed(pages):
+        """Прогон fetch_live_events на подставленной ленте, без сети."""
+        seq = iter(pages)
+        real_get, real_api, real_time = globals()["get"], globals()["api_query"], globals()["time"]
+        globals()["get"] = lambda path: path
+        globals()["api_query"] = lambda markup, prefix: next(seq, {"items": []})
+        globals()["time"] = type("t", (), {"sleep": staticmethod(lambda s: None)})
+        try:
+            return fetch_live_events()
+        finally:
+            globals()["get"], globals()["api_query"], globals()["time"] = real_get, real_api, real_time
+
+    ev = lambda a, b: [{"id": i} for i in range(a, b)]
+    full = [{"items": ev(0, 2), "totalCount": 3, "pagesCount": 2},
+            {"items": ev(2, 3), "totalCount": 3, "pagesCount": 2}]
+    assert feed(full)["complete"] is True
+    assert len(feed(full)["events"]) == 3
+
+    def refuses(pages, fragment, why):
+        """Отказ засчитывается по ПРИЧИНЕ, а не по факту.
+
+        Иначе мутация одного отказа проходит незамеченной, когда её случайно
+        подхватывает соседний: снятие «нет totalCount» оставляет `len != None`,
+        и лента отказывает по другой ветви с другим смыслом. Измерено — две из
+        четырёх мутаций так и прошли мимо прежней редакции этой проверки.
+        """
+        try:
+            feed(pages)
+        except SystemExit as exc:
+            assert fragment in str(exc), f"{why}: отказ по чужой причине — {exc}"
+            return
+        raise AssertionError(why)
+
+    # обрыв разбора на второй странице
+    refuses([{"items": ev(0, 2), "totalCount": 3, "pagesCount": 2}, {}],
+            "лента неполна", "усечённая лента обязана отказывать")
+    # лента не объявила totalCount — проверять нечем
+    refuses([{"items": ev(0, 2), "pagesCount": 1}],
+            "не объявила totalCount", "лента без totalCount обязана отказывать")
+    # поздняя страница переобъявила меньший totalCount
+    refuses([{"items": ev(0, 2), "totalCount": 3, "pagesCount": 2},
+             {"items": ev(2, 3), "totalCount": 2, "pagesCount": 2}],
+            "разный totalCount", "расхождение totalCount обязано отказывать")
+    # первая страница объявила totalCount ровно по собранному, но страниц больше
+    refuses([{"items": ev(0, 2), "totalCount": 2, "pagesCount": 5}],
+            "прочитано страниц", "недочитанные страницы обязаны отказывать")
+    # честная короткая лента проходит
+    assert len(feed([{"items": ev(0, 2), "totalCount": 2, "pagesCount": 1}])["events"]) == 2
+
     print("selftest: ок")
     return 0
 
