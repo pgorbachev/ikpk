@@ -57,10 +57,16 @@ output: `manual-publication-entrypoints-disabled-current-write.log`.
 Restore original bytes and rerun the complete integrated command: **43 passed, 2 known
 restore failures**, as above. No mutation remains in the committed source.
 
-## Unresolved contract conflict
+## Contract conflict resolved (2026-09-19)
 
-No restore implementation, restore test assertion, provisioning specification or deployment
-contract was changed. `scripts/restore-server-state.sh` remains an independent publisher.
-An owner decision on an offline backup-only restore contract is pending. Tasks 2.9/6.1 must
-not be represented as fully green until that conflict is resolved and both real-repository
-checks pass. The gate does not allowlist or rename the conflicting utility away.
+Owner decision: backup restoration stages the copy into `releases/restore-<timestamp>` and
+verifies it byte-for-byte, but never switches serving; activation of any tree goes through the
+protected launcher only. `scripts/restore-server-state.sh` was rewritten accordingly (no
+`current` pointer write remains), so it is no longer an independent publisher. With that
+revision `manual-publication-restore-bypass.test.ts` (the current utility leaves the live
+release unchanged) and the real-repository inventory assertion both pass, while the legacy
+fixture `web/tests/fixtures/manual-publication/legacy-restore-server-state.sh` still trips the
+gate as the negative control. The container scenario «восстановление подтверждается
+сравнением» now also asserts that the active release is untouched. Named limit: a restored
+directory is not an indexed verified pair, so `rollback` refuses it; content absent from the
+retained releases returns only through a new publication from `main`.
