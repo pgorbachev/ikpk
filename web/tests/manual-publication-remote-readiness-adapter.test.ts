@@ -33,9 +33,10 @@ describe('readiness adapter consumes only the protected worker remote observatio
 
   it('does not forward an unknown obsolete readinessUrl or ambient response file', async () => {
     const f = await fixture(); f.context.paymentRole = 'stand';
-    f.options.payment!.readinessUrl = 'https://operator.invalid/operator-secret-canary';
+    const obsolete = 'https://operator.invalid/operator-secret-canary';
+    Reflect.set(f.options.payment!, 'readinessUrl', obsolete);
     f.context.env.PUBLICATION_PAYMENT_READY_RESPONSE_FILE = '/operator/green.json';
-    f.context.env.PUBLICATION_PAYMENT_READY_URL = f.options.payment!.readinessUrl;
+    f.context.env.PUBLICATION_PAYMENT_READY_URL = obsolete;
     const paymentReadiness = vi.fn(async () => observed);
     await createPublicationCheckPorts(f.options, { ...f.runtime, paymentReadiness }).checkPaymentReadiness(f.context);
     expect(paymentReadiness).toHaveBeenCalledTimes(1);

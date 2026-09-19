@@ -55,7 +55,7 @@ interface DestinationConfig {
   canonicalRepository: string; sshTarget: string; destinationId: string; deployMode: 'stand' | 'prod';
   paymentRole: 'ci' | 'stand' | 'prod'; siteUrl: string; actor: string; webRoot: string;
   knownHostsFile: string; keepReleases: number; chatLoaderSrc: string; demoForms?: string;
-  payment?: { endpoint: string; readinessUrl: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
+  payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 const inside = (root: string, path: string) => {
   const rel = relative(root, path);
@@ -97,7 +97,7 @@ function readConfig(path: string): DestinationConfig {
   if (config.paymentRole !== 'ci') {
     const payment = config.payment;
     if (!payment || !['test', 'prod'].includes(payment.mode) || typeof payment.shopId !== 'string' || !payment.shopId.trim()) throw new Error('untrusted-config');
-    publicUrl(payment.endpoint); publicUrl(payment.readinessUrl); publicUrl(payment.siteOrigin, true);
+    publicUrl(payment.endpoint); publicUrl(payment.siteOrigin, true);
   }
   return config;
 }
@@ -190,20 +190,34 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         .filter((name) => env[name] !== undefined).map((name) => [name, env[name]])) };
       const id = `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
       const [user, host] = config.sshTarget.split('@');
+      const transportConfig = { host, user, root: config.webRoot, destinationId: config.destinationId,
+        knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases };
+      async function paymentReadiness() {
+        if (config.paymentRole === 'ci') throw new Error('ci must not contact payment API');
+        let usable = true;
+        try {
+          const transport = createSshTransport({ ...transportConfig, async authorize(request: { action: string; destinationId: string }) {
+            if (!usable || request.destinationId !== config.destinationId || !['connect', 'payment-readiness'].includes(request.action)) {
+              throw new Error('readiness action not authorized');
+            }
+            return { commit, destinationId: config.destinationId };
+          } });
+          return await transport.withLock((session: { paymentReadiness(): Promise<{ status: number; contentType: string; body: unknown }> }) => session.paymentReadiness());
+        } finally { usable = false; }
+      }
       return await runNewPublication({ commit, destinationId: config.destinationId, deployMode: config.deployMode,
         paymentRole: config.paymentRole, actor: config.actor, origin: config.siteUrl, publicationId: id, releaseId: id,
         treeDir: join(webRoot, 'dist'), reportPath: join(reportsDir, 'publication.json'), env: checkEnv }, {
         readCiEvidence: (sha) => readCiEvidence({ commit: sha, token: env.GH_TOKEN }),
         async runChecks(input) {
           await state.readHistory();
-          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment });
+          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
           const report = await runPublicationChecks(input, ports);
           return { report, snapshot: readPublicationSnapshot(snapshotDir) };
         },
         readMain: async () => readMain(), state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
-        createTransport: ({ authorize }) => createSshTransport({ host, user, root: config.webRoot,
-          destinationId: config.destinationId, knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases, authorize }),
+        createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
         fetch: globalThis.fetch, now: () => new Date().toISOString(),
       });
     } finally { unregister(); }

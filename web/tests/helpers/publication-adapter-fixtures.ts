@@ -66,7 +66,7 @@ export async function adapterFixture() {
   const options: PublicationAdapterOptions = {
     webRoot, snapshotDir, reportsDir, ledgerDir,
     captureEnv: { PATH: process.env.PATH, CMS_URL: 'https://cms.test.invalid', CMS_TOKEN: CANARY },
-    payment: { endpoint: 'https://payments.test.invalid/api', readinessUrl: 'https://payments.test.invalid/readyz', mode: 'test', shopId: 'shop-42', siteOrigin: 'https://site.test.invalid' },
+    payment: { endpoint: 'https://payments.test.invalid/api', mode: 'test', shopId: 'shop-42', siteOrigin: 'https://site.test.invalid' },
   };
   const context: PublicationCheckContext = {
     commit: 'a'.repeat(40), destinationId: 'stand', deployMode: 'stand', paymentRole: 'ci',

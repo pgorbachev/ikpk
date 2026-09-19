@@ -136,7 +136,8 @@ describe('concrete publication worker integration', () => {
     const input = f.checks.mock.calls[0][0] as unknown as { env?: Record<string, string> };
     expect(JSON.stringify(input.env ?? {})).not.toContain(CANARY);
     expect(input.env?.SNAPSHOT_SOURCE).toBeUndefined();
-    expect(f.adapters).toHaveBeenCalledWith(expect.objectContaining({ captureEnv: expect.objectContaining({ CMS_TOKEN: CANARY }) }));
+    expect(f.adapters).toHaveBeenCalledWith(expect.objectContaining({ captureEnv: expect.objectContaining({ CMS_TOKEN: CANARY }) }),
+      expect.objectContaining({ paymentReadiness: expect.any(Function) }));
     const captureEnv = f.adapters.mock.calls[0][0].captureEnv as Record<string, string>;
     for (const name of ['GH_TOKEN', 'SSH_AUTH_SOCK', 'SSH_KEY', 'IKPK_SECRET', 'NODE_OPTIONS', 'SNAPSHOT_SOURCE']) expect(captureEnv[name], name).toBeUndefined();
     expect(f.stage).toHaveBeenCalledTimes(1); // Nonvacuous: publication remained usable.

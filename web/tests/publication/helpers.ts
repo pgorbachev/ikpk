@@ -48,6 +48,6 @@ export function deployCheck(name: DeployCheck, ...args: string[]) {
 export function activePayment() {
   const role = required('PAYMENT_ROLE');
   expect(['stand', 'prod']).toContain(role);
-  return { role, endpoint: required('PUBLICATION_PAYMENT_ENDPOINT'), ready: required('PUBLICATION_PAYMENT_READY_URL'),
+  return { role, endpoint: required('PUBLICATION_PAYMENT_ENDPOINT'),
     mode: required('PUBLICATION_PAYMENT_MODE'), shop: required('PUBLICATION_PAYMENT_SHOP_ID'), origin: required('PUBLICATION_PAYMENT_SITE_ORIGIN') };
 }

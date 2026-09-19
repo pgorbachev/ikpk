@@ -19,11 +19,12 @@ export interface PublicationPreview {
 export interface PublicationAdapterRuntime {
   run(command: PublicationCommand): Promise<PublicationProcessResult>;
   startPreview(input: { treeDir: string; env: Record<string, string | undefined> }): Promise<PublicationPreview>;
+  paymentReadiness?(): Promise<{ status: number; contentType: string; body: unknown }>;
 }
 export interface PublicationAdapterOptions {
   webRoot: string; snapshotDir: string; reportsDir: string; ledgerDir: string;
   captureEnv: Record<string, string | undefined>;
-  payment?: { endpoint: string; readinessUrl: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
+  payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 
 
@@ -135,7 +136,8 @@ function playwrightResult(value: unknown): CheckResult {
 }
 
 /** Installed-worker API: operator data cannot select commands, assertions or runtime effects. */
-export function createPublicationCheckPorts(options: PublicationAdapterOptions, runtime = defaultRuntime): PublicationCheckPorts {
+export function createPublicationCheckPorts(options: PublicationAdapterOptions, overrides: Partial<PublicationAdapterRuntime> = {}): PublicationCheckPorts {
+  const runtime = { ...defaultRuntime, ...overrides };
   const webRoot = resolve(options.webRoot); const output = join(webRoot, 'dist');
   if (inside(canonical(output), canonical(options.reportsDir))) throw new Error('reports inside artifact');
   function contextEnv(context: PublicationCheckContext) {
@@ -147,9 +149,9 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
       PUBLICATION_CHROMIUM_EXECUTABLE: chromium.executablePath() };
     if (context.paymentRole !== 'ci') {
       const payment = options.payment;
-      if (!payment || !payment.endpoint || !payment.readinessUrl || !payment.shopId || !payment.siteOrigin || !['test', 'prod'].includes(payment.mode)) throw new Error('missing payment destination configuration');
+      if (!payment || !payment.endpoint || !payment.shopId || !payment.siteOrigin || !['test', 'prod'].includes(payment.mode)) throw new Error('missing payment destination configuration');
       Object.assign(env, { [`PAYMENT_ENDPOINT_${context.paymentRole.toUpperCase()}`]: payment.endpoint,
-        PUBLICATION_PAYMENT_ENDPOINT: payment.endpoint, PUBLICATION_PAYMENT_READY_URL: payment.readinessUrl,
+        PUBLICATION_PAYMENT_ENDPOINT: payment.endpoint,
         PUBLICATION_PAYMENT_MODE: payment.mode, PUBLICATION_PAYMENT_SHOP_ID: payment.shopId, PUBLICATION_PAYMENT_SITE_ORIGIN: payment.siteOrigin });
     }
     return env;
@@ -163,8 +165,8 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
     if (existsSync(path)) throw new Error('publication report already exists');
     mkdirSync(options.reportsDir, { recursive: true }); return path;
   }
-  async function suite(stage: string, context: PublicationCheckContext) {
-    const env = contextEnv(context); const path = reportPath(stage);
+  async function suite(stage: string, context: PublicationCheckContext, extraEnv: Record<string, string> = {}) {
+    const env = { ...contextEnv(context), ...extraEnv }; const path = reportPath(stage);
     await run(join(webRoot, 'node_modules/.bin/vitest'), ['run', '--config', 'vitest.publication.config.ts', `tests/publication/${stage}.test.ts`, '--reporter=json', `--outputFile=${path}`], env);
     return vitestResult(JSON.parse(readFileSync(path, 'utf8')));
   }
@@ -186,7 +188,19 @@ export function createPublicationCheckPorts(options: PublicationAdapterOptions, 
     checkBuild: (context) => suite('build', context),
     checkDestination: (context) => suite('destination', context),
     checkPaymentAbsent: (context) => { if (context.paymentRole !== 'ci') throw new Error('payment absence requires ci role'); return suite('payment-absence', context); },
-    checkPaymentReadiness: (context) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-readiness', context); },
+    async checkPaymentReadiness(context) {
+      if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API');
+      contextEnv(context);
+      if (!runtime.paymentReadiness) throw new Error('destination readiness probe required');
+      let encoded: string;
+      try {
+        encoded = JSON.stringify(await runtime.paymentReadiness());
+        if (!encoded || Buffer.byteLength(encoded) > 64 * 1024) throw new Error('invalid readiness response');
+      } catch { throw new Error('destination readiness unavailable'); }
+      const path = reportPath('payment-readiness-response');
+      writeFileSync(path, encoded, { mode: 0o600, flag: 'wx' });
+      return suite('payment-readiness', context, { PUBLICATION_PAYMENT_READY_RESPONSE_FILE: path });
+    },
     checkPaymentPreflight: (context) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-preflight', context); },
     async checkBrowser(context) {
       const env = contextEnv(context); const path = reportPath('browser');
