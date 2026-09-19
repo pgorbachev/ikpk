@@ -112,7 +112,7 @@ export async function launch(args) {
     let credentials;
     try { credentials = JSON.parse(broker.stdout).env; } catch { refuse('credential-broker-failed'); }
     if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) ||
-        Object.entries(credentials).some(([name, value]) => !/^(IKPK_[A-Z0-9_]+|SSH_KEY|GH_TOKEN|CMS_[A-Z0-9_]+)$/.test(name) || typeof value !== 'string')) refuse('credential-broker-failed');
+        Object.entries(credentials).some(([name, value]) => !/^(IKPK_[A-Z0-9_]+|SSH_KEY|SSH_AUTH_SOCK|GH_TOKEN|CMS_[A-Z0-9_]+)$/.test(name) || typeof value !== 'string')) refuse('credential-broker-failed');
     checks.push('credential-delivery');
     const result = spawnSync('/bin/bash', [worker, config.sshTarget], { cwd: checkout,
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
