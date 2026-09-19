@@ -170,6 +170,17 @@ describe('concrete publication worker integration', () => {
     expect(f.installs).toHaveLength(0); expect(f.transport).not.toHaveBeenCalled();
   });
 
+  it.each(['missing-mode', 'unknown-mode', 'prod-stub', 'retention2', 'retention4'])('rejects invalid protected %s before dependency installation', async (fault) => {
+    const f = await fixture();
+    if (fault === 'missing-mode') f.config.deployMode = '';
+    if (fault === 'unknown-mode') f.config.deployMode = 'staging-maybe';
+    if (fault === 'prod-stub') { f.config.deployMode = 'prod'; Object.assign(f.config, { demoForms: 'stub' }); }
+    if (fault === 'retention2') f.config.keepReleases = 2;
+    if (fault === 'retention4') f.config.keepReleases = 4;
+    f.env.DEPLOY_MODE = f.config.deployMode; f.saveConfig();
+    await expect(f.run()).rejects.toThrow(); expect(f.installs).toHaveLength(0); expect(f.transport).not.toHaveBeenCalled();
+  });
+
   it('production CRM preserves the explicitly independent ci payment role', async () => {
     const f = await fixture(); f.config.deployMode = 'prod'; f.env.DEPLOY_MODE = 'prod'; f.saveConfig(); await f.run();
     expect(f.state.appendPublication).toHaveBeenCalledWith(expect.objectContaining({ deployMode: 'prod', paymentRole: 'ci' }));
