@@ -232,3 +232,30 @@ describe('deterministic digest binds relative file paths and bytes', () => {
     await expect(digest(root, ['outside/injected.txt'])).rejects.toThrow(/symlink|symbolic|outside|символ/);
   });
 });
+
+describe('review probes at 838eb7b4', () => {
+  it('REVIEW: local git fsmonitor must not execute while rejecting an untrusted source', () => {
+    const f = fixture();
+    const hook = join(f.repo, '.git', 'fsmonitor-probe');
+    write(hook, '#!/bin/sh\ntouch "' + f.malicious + '"\nprintf "token\\0"\n');
+    chmodSync(hook, 0o700);
+    git(f.repo, 'config', 'core.fsmonitor', hook);
+    maliciousEntrypoint(f);
+    const result = launch(f, { sourceDir: f.repo });
+    expect(`${result.stdout}\n${result.stderr}`).toContain('dirty-source');
+    expect(existsSync(f.trace)).toBe(false);
+    expect(existsSync(f.malicious), 'git status executed untrusted fsmonitor before source approval').toBe(false);
+  });
+  it('REVIEW: parent symlinks cannot redirect the verified worker to external code', () => {
+    const f = fixture();
+    const outside = join(f.root, 'outside-code');
+    write(join(outside, 'deploy-web.sh'), '#!/bin/sh\ntouch "' + f.malicious + '"\nexit 0\n');
+    rmSync(join(f.repo, 'scripts'), { recursive: true });
+    symlinkSync(outside, join(f.repo, 'scripts'));
+    git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-m', 'symlink scripts'); git(f.repo, 'push', 'origin', 'main');
+    const result = launch(f);
+    expect(existsSync(f.malicious), 'worker came from outside the verified tree').toBe(false);
+    expect(existsSync(f.trace), 'credentials issued to external worker').toBe(false);
+    expect(result.status).not.toBe(0);
+  });
+});

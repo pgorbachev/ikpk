@@ -288,3 +288,12 @@ describe('observing production uses its last recorded pair, not current main or 
     expect(result.status).toBe('mismatch'); expect(result.reason ?? '').not.toMatch(/pending|unfinished|незаверш/);
   });
 });
+
+describe('review probes at 838eb7b4', () => {
+  it('REVIEW: persisted append-only history cannot reorder past operations', () => {
+    const dir = store(); const first = publication();
+    const second = publication({ publicationId: 'publication-2', releaseId: 'release-2', snapshotId: 'new', publishedAt: '2026-09-19T02:00:00Z' });
+    writeVerifiedPairs(dir, [first, second]);
+    expect(() => writeVerifiedPairs(dir, [second, first])).toThrow();
+  });
+});
