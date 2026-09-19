@@ -408,7 +408,9 @@ jobs:
           # на любом push, тогда как гейт (web/scripts/lib/dependency-update-gates.ts,
           # isDependencyOnlyChange) судит по тем же changed-файлам и говорил true — и
           # требовал базовый отчёт, которого шаг из-за этого не передавал. Замерено:
-          # main красный с 16.09.2026, вершина 36b58cec трогает только манифесты.
+          # На вершине 36b58cec (трогает только манифесты) этот джоб красный с 08.09.2026;
+          # сам main красен и раньше, с 06.09. Прогоны на этой вершине — событие schedule:
+          # push-прогона у неё нет вовсе, автомерж Dependabot событий push не порождает.
           if [ -s "$changed" ]; then
             dependency_only=true
             while IFS= read -r file; do
