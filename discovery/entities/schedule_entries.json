@@ -484,50 +484,6 @@
   "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_bqmqt/"
  },
  {
-  "id": 397,
-  "status": "active",
-  "name": "Миофасциальный массаж тела + Женский массаж",
-  "seminar": {
-   "id": 228,
-   "name": "Миофасциальный массаж тела + Женский массаж",
-   "slug": "miofascialnyj-massazh-tela-zhenskij-massazh"
-  },
-  "institute": {
-   "id": 1,
-   "name": "Институт клинической прикладной кинезиологии",
-   "shortname": "ИКПК"
-  },
-  "startAt": "2026-09-21T00:00:00.000Z",
-  "endAt": "2026-09-23T00:00:00.000Z",
-  "teachers": [
-   {
-    "id": 56,
-    "fullName": "Федорова Татьяна Васильевна"
-   }
-  ],
-  "image": {
-   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1765206437537.webp",
-   "id": "a099770a-8176-4a39-8968-c00f65b67e10"
-  },
-  "isFree": false,
-  "isEventCollection": false,
-  "description": null,
-  "oldPrice": 0,
-  "newPrice": 30000,
-  "city": {
-   "id": 2,
-   "name": "Санкт-Петербург"
-  },
-  "program": {
-   "id": 154,
-   "slug": "massazh",
-   "name": "Массаж"
-  },
-  "additionalText": "Маммологические техники",
-  "duration": "24",
-  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_v8ay3/"
- },
- {
   "id": 469,
   "status": "active",
   "name": "ПК-5. Краниосакральная система. Диагностика и терапия кранио-сакральных нарушений с использованием прикладной кинезиологии. Представление о стоматогностической системе. Уровень 5",
