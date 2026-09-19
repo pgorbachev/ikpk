@@ -86,14 +86,16 @@ async function fixture(load = true) {
     return new Response(url.pathname === '/release.json' ? JSON.stringify({ commit: state.servedMismatch ? 'f'.repeat(40) : operation.commit, snapshotId: operation.snapshotId }) : 'ok', { status: 200 });
   });
   const forbidden = vi.fn(() => { throw new Error('current CMS/main/CI/build must not execute'); });
-  vi.doMock('../scripts/lib/publication-state-store.ts', () => ({ createPublicationStateStore: stateFactory }));
-  vi.doMock('../../scripts/publication-transport.mjs', () => ({ createSshTransport: transport }));
-  vi.doMock('../scripts/lib/publication-ci.ts', () => ({ readCiEvidence: forbidden }));
-  vi.doMock('../scripts/lib/publication-snapshot.ts', () => ({ readPublicationSnapshot: forbidden }));
-  vi.doMock('../scripts/lib/publication-check-adapters.ts', () => ({ createPublicationCheckPorts: forbidden, createRollbackCheckPorts: forbidden }));
-  vi.stubGlobal('fetch', fetch);
   let run: (argv: string[]) => Promise<unknown> = async () => { throw new Error('positive control only'); };
   if (load) {
+    // Controls use real ports directly and must not leave unconsumed operator mocks.
+    vi.doMock('../scripts/lib/publication-state-store.ts', () => ({ createPublicationStateStore: stateFactory }));
+    vi.doMock('../../scripts/publication-transport.mjs', () => ({ createSshTransport: transport }));
+    vi.doMock('../scripts/lib/publication-ci.ts', () => ({ readCiEvidence: forbidden }));
+    vi.doMock('../scripts/lib/publication-snapshot.ts', () => ({ readPublicationSnapshot: forbidden }));
+    vi.doMock('../scripts/lib/publication-check-adapters.ts', () => ({ createPublicationCheckPorts: forbidden, createRollbackCheckPorts: forbidden }));
+    vi.stubGlobal('fetch', fetch);
+
     // Outside rejects: missing code cannot pass refusal tests.
     expect(existsSync(OPERATOR), 'fixed installed recovery/accept-state operator must exist').toBe(true);
     const module = await import(/* @vite-ignore */ OPERATOR); expect(module.runPublicationOperator).toBeTypeOf('function');

@@ -61,7 +61,7 @@ function brokerCredentials(config, configPath) {
 }
 
 // Kept in the installed, dependency-free launcher: repository code cannot extend this schema.
-function workerAudit(bytes, commit, exitStatus, releaseId) {
+function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
   const rollback = releaseId !== undefined;
   if (typeof bytes !== 'string' || !bytes.length || Buffer.byteLength(bytes) > 16 * 1024) refuse('invalid-worker-audit');
   let audit;
@@ -69,6 +69,26 @@ function workerAudit(bytes, commit, exitStatus, releaseId) {
   const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
   const matches = (value, pattern) => typeof value === 'string' && pattern.test(value);
   const integer = (value) => Number.isSafeInteger(value) && value >= 0;
+  if (operatorInput) {
+    const accepting = operatorInput.command === 'accept-state';
+    const fields = { version: (value) => value === 1, status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
+      code: (value) => exitStatus === 0 ? (accepting ? ['state-accepted'] : ['recovered', 'recovery-noop', 'recovery-cancelled']).includes(value) :
+        value === (accepting ? 'accept-state-failed' : 'recovery-failed') };
+    if (exitStatus === 0 && accepting) Object.assign(fields, {
+      observedEntry: (value) => value === operatorInput.observedEntry,
+      revision: (value) => value === operatorInput.observedEntry + 1,
+    });
+    if (exitStatus === 0 && !accepting && audit?.code === 'recovered') Object.assign(fields, {
+      commit: (value) => matches(value, /^[a-f0-9]{40}$/), snapshotId: (value) => matches(value, /^snap:[a-f0-9]{64}$/),
+      releaseId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+      treeDigest: (value) => matches(value, /^[a-f0-9]{64}$/), publicationId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+      revision: (value) => integer(value) && value > 0, localExecutedTests: (value) => integer(value) && value > 0,
+      ciExecutedTests: (value) => integer(value) && value > 0,
+    });
+    if (!object(audit) || Object.keys(fields).some((key) => !Object.hasOwn(audit, key)) ||
+        Object.entries(audit).some(([key, value]) => !Object.hasOwn(fields, key) || !fields[key](value))) refuse('invalid-worker-audit');
+    return audit;
+  }
   const fields = {
     version: (value) => value === 1,
     status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
@@ -100,12 +120,14 @@ function workerAudit(bytes, commit, exitStatus, releaseId) {
 export async function launch(args) {
   const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
-  if (!['publish', 'rollback'].includes(args[0])) refuse('untrusted-ref');
-  const rollback = args[0] === 'rollback';
+  if (!['publish', 'rollback', 'recover', 'accept-state'].includes(args[0])) refuse('untrusted-ref');
+  const command = args[0], rollback = command === 'rollback', accepting = command === 'accept-state';
   const options = new Map();
   for (let i = 1; i < args.length; i++) {
     const key = args[i];
-    const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] : ['--config', '--source-url', '--source-ref', '--source-dir'];
+    const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] :
+      accepting ? ['--config', '--observed-entry', '--fingerprint', '--confirm'] : command === 'recover' ? ['--config'] :
+        ['--config', '--source-url', '--source-ref', '--source-dir'];
     if (!allowed.includes(key) || options.has(key)) refuse('invalid-arguments');
     if (key === '--confirm') options.set(key, true);
     else {
@@ -116,6 +138,11 @@ export async function launch(args) {
   if (rollback && (!options.has('--config') || !options.has('--confirm') ||
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.get('--release-id') ?? '') ||
       !options.get('--reason')?.trim())) refuse('invalid-arguments');
+  if (command === 'recover' && !options.has('--config')) refuse('invalid-arguments');
+  const observedEntry = Number(options.get('--observed-entry'));
+  if (accepting && (!options.has('--config') || !options.has('--confirm') ||
+      !/^[1-9][0-9]*$/.test(options.get('--observed-entry') ?? '') || !Number.isSafeInteger(observedEntry) ||
+      observedEntry >= Number.MAX_SAFE_INTEGER || !options.get('--fingerprint')?.trim())) refuse('invalid-arguments');
   const installed = realpathSync(fileURLToPath(import.meta.url));
   let configPath, config;
   try {
@@ -131,7 +158,7 @@ export async function launch(args) {
       !Array.isArray(config.credentialBroker) || !config.credentialBroker.length ||
       config.credentialBroker.some((arg) => typeof arg !== 'string') || !isAbsolute(config.credentialBroker[0])) refuse('untrusted-config');
   checks.push('destination-config');
-  if (rollback) {
+  if (command !== 'publish') {
     const runtime = join(dirname(installed), 'runtime');
     const entry = join(runtime, 'web/scripts/publication-operator.ts');
     let manifest;
@@ -149,14 +176,16 @@ export async function launch(args) {
     const credentials = brokerCredentials(config, configPath);
     checks.push('credential-delivery');
     const releaseId = options.get('--release-id');
-    const result = spawnSync(process.execPath, [entry, 'rollback', '--release-id', releaseId, '--confirm', '--reason', options.get('--reason')], {
+    const workerArgs = rollback ? ['rollback', '--release-id', releaseId, '--confirm', '--reason', options.get('--reason')] :
+      accepting ? ['accept-state', '--observed-entry', options.get('--observed-entry'), '--fingerprint', options.get('--fingerprint'), '--confirm'] : ['recover'];
+    const result = spawnSync(process.execPath, [entry, ...workerArgs], {
       cwd: runtime, env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
         PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
         PUBLICATION_RUNTIME_SHA: manifest.commit, PUBLICATION_LAUNCHER: installed },
       encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024, stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
     });
     if (result.error || result.status === null) refuse('publication-worker-failed');
-    const audit = workerAudit(result.output[3], undefined, result.status, releaseId);
+    const audit = workerAudit(result.output[3], undefined, result.status, releaseId, rollback ? undefined : { command, observedEntry });
     if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
     checks.push('publication-worker');
     return { status: 'success', executedChecks: checks.length, checks, commit: audit.commit, destinationId: config.destinationId, audit };
