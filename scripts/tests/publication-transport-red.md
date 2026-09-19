@@ -68,8 +68,8 @@ The tests do not prescribe the remote command language or JSON protocol.
   expected and remotely corrupted digest mismatch before activation.
 - Empty and symlink-containing trees, release collisions and path traversal.
 - Activation preserves the previous release; concurrent readers observe only
-  complete old/new documents. Filesystem events check pending-before-current
-  ordering, and the index callback observes the durable pending operation.
+  complete old/new documents. The before-activation callback checks pending plus
+  old current, and the index callback checks the same pending plus new current.
 - Index failure leaves the active pair identifiable and pending durable;
   pending blocks stage, activation and rollback.
 - Recovery retries the identical operation, is idempotent after success, and
@@ -102,3 +102,10 @@ Against the same empty scaffold: exit **1**, **3 tests / 0 passed / 3 failed**,
 current; callback rejection preserves old current and removes pending; a wrong
 activation digest refuses without calling the callback. This addendum does not
 contain transport implementation or change the original 25-case RED evidence.
+
+The earlier filesystem watcher used to assert pending-before-current ordering was
+replaced with these two callback observations. macOS FSEvents can coalesce away a
+pending file created by atomic rename and promptly removed after indexing; its
+absence from watcher events does not mean the durable file was absent. The new
+assertions read the actual pending JSON and current link at the two protocol
+boundaries and require both callbacks in order, without sleeps in production.

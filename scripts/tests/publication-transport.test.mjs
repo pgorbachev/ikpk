@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import {
   existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
-  rmSync, symlinkSync, unlinkSync, writeFileSync, cpSync, watch,
+  rmSync, symlinkSync, unlinkSync, writeFileSync, cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, relative } from 'node:path';
@@ -194,20 +194,21 @@ test('concurrent readers never see a missing current or partial document during 
 test('pending is persisted before current changes and remains visible to the index writer', options, async (t) => {
   const f = setup(t);
   const events = [];
-  const watcher = watch(f.root, (_event, filename) => { events.push(String(filename)); });
-  try {
-    await f.transport.withLock(async (session) => {
-      await f.stage(session);
-      await f.activate(session, async (operation) => {
-        assert.deepEqual(JSON.parse(readFileSync(f.pendingPath, 'utf8')), operation);
-        assert.equal(f.active(), 'new');
-      });
+  await f.transport.withLock(async (session) => {
+    await f.stage(session);
+    await f.activate(session, async (operation) => {
+      events.push('index');
+      assert.deepEqual(JSON.parse(readFileSync(f.pendingPath, 'utf8')), operation);
+      assert.equal(f.active(), 'new');
+    }, {
+      beforeActivate: async () => {
+        events.push('before-activation');
+        assert.deepEqual(JSON.parse(readFileSync(f.pendingPath, 'utf8')), f.operation);
+        assert.equal(f.active(), 'old');
+      },
     });
-    await delay(30);
-  } finally { watcher.close(); }
-  const pendingAt = events.indexOf('.publication-pending.json');
-  assert.ok(pendingAt >= 0, 'the durable pending marker must be written');
-  assert.ok(events.indexOf('current') > pendingAt, JSON.stringify(events));
+  });
+  assert.deepEqual(events, ['before-activation', 'index']);
 });
 
 test('an index write failure rejects activation while leaving active release and pending identifiable', options, async (t) => {
