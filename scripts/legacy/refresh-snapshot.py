@@ -10,6 +10,8 @@
 Тела уже снятых семинаров НЕ трогаются: измерением показано, что расхождение
 у них — обвязка страницы (блок согласия заменён блоком подписки), а не контент.
 """
+from __future__ import annotations  # `X | None` в аннотациях: локально python 3.9
+
 import json, re, sys, time, urllib.request
 from html.parser import HTMLParser
 from datetime import datetime, timedelta, timezone
@@ -92,7 +94,11 @@ def meta(markup: str) -> tuple[str, str]:
         _in_title = False
 
         def handle_starttag(self, tag, attrs):
-            if tag == "title":
+            if tag == "title" and not self.title:
+                # ТОЛЬКО первый <title>. Накопление по любому тегу склеивало
+                # заголовок страницы с <title> внутри инлайнового SVG — без
+                # разделителя и молча: «не смогла разобрать» превращалось в
+                # «разобрала не то». Прежняя нежадная регулярка этим не страдала.
                 self._in_title = True
             elif tag == "meta":
                 a = {k.lower(): (v or "") for k, v in attrs}
@@ -161,6 +167,43 @@ def fetch_live_events() -> list:
             "отказ, иначе недостающие записи были бы удалены как снятые с публикации"
         )
     return {"events": list(collected.values()), "complete": True}
+
+
+def withdrawals(schedule: list, live_ids: set, today: str, feed_complete: bool) -> list:
+    """Записи, снятые с публикации: будущие по местной дате и отсутствующие в ленте.
+
+    Функция уровня модуля, а не копия внутри проверки: `main()` и `selftest()`
+    обязаны звать ОДИН предмет. Прежняя редакция держала в selftest собственную
+    реализацию этой логики — мутация настоящего запрета оставляла проверку зелёной,
+    то есть негативная проверка измеряла копию, а не программу.
+
+    Отказ, а не удаление, когда полнота ленты не подтверждена: лента из файла не
+    несёт totalCount, и сверить её не с чем.
+    """
+    candidates = [e for e in schedule
+                  if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
+    if candidates and not feed_complete:
+        for e in candidates:
+            print(f'  ! снято НЕ будет: {e["id"]} {e["name"][:40]}')
+        raise SystemExit(
+            f"лента без подтверждённой полноты, а к удалению подходит {len(candidates)} "
+            "записей — отказ. Удаление разрешено только на ленте, снятой самим "
+            "инструментом и сверенной с её totalCount."
+        )
+    return candidates
+
+
+def moscow_today(now: datetime | None = None) -> str:
+    """Местная дата сайта. Не UTC: с 00:00 до 03:00 MSK она отстаёт на сутки и
+    расширяет окно удаления назад.
+
+    Момент принимается аргументом, чтобы проверка была детерминированной. Без него
+    её пришлось бы сверять с той же `datetime.now()`, и мутация «MSK → UTC» краснела
+    бы лишь те три часа в сутки, когда даты расходятся, — гейт, зависящий от часа
+    прогона, ровно то же «не смогла проверить», что и всё остальное в этом файле.
+    """
+    moment = now or datetime.now(timezone.utc)
+    return moment.astimezone(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
 
 
 def load(ent: Path, name: str):
@@ -318,22 +361,7 @@ def main() -> int:
     # Инвариант обязан жить там, где опасное действие, иначе его обходит любой
     # новый путь к нему.
     live_ids = {str(e["id"]) for e in live_events}
-    # Время МОСКОВСКОЕ, а не UTC: `startAt` у ленты местный, и с 00:00 до 03:00 MSK
-    # дата UTC отстаёт на сутки — окно удаления расширялось бы на день назад и
-    # захватывало событие, которое по местному времени уже началось, а лента его
-    # законно не отдаёт. Замерено: прогон 20.09 в 01:22 MSK видел границу «19.09».
-    today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
-    candidates = [e for e in schedule
-                  if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
-    if candidates and not feed_complete:
-        for e in candidates:
-            print(f'  ! снято НЕ будет: {e["id"]} {e["name"][:40]}')
-        raise SystemExit(
-            f"лента без подтверждённой полноты, а к удалению подходит {len(candidates)} "
-            "записей — отказ. Удаление разрешено только на ленте, снятой самим "
-            "инструментом и сверенной с её totalCount."
-        )
-    for e in candidates:
+    for e in withdrawals(schedule, live_ids, moscow_today(), feed_complete):
         schedule.remove(e)
         changed["events_withdrawn"].append(f'{e["id"]} {e["name"][:40]}')
 
@@ -387,28 +415,33 @@ def selftest() -> int:
     assert meta('<meta name="description" content="A > B">')[1] == "A > B"
     assert meta("<meta name='description' content='Одинарные'>")[1] == "Одинарные"
 
-    # ── Ветви, добавленные фиксами: без них проверка не видела бы своего предмета.
-    # Прошлая редакция selftest оставалась зелёной на трёх мутациях этого кода.
-    def withdraw(schedule, live_ids, complete, today="2026-09-20"):
-        """Та же логика, что в main: кандидаты и запрет на непроверенной ленте."""
-        cand = [e for e in schedule
-                if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
-        if cand and not complete:
-            raise SystemExit("отказ")
-        return [e for e in schedule if e not in cand]
+    # SVG-<title> не должен приклеиваться к заголовку страницы.
+    assert meta('<title>Страница</title><svg><title>Иконка</title></svg>')[0] == "Страница"
+    assert meta('<svg><title>Иконка</title></svg><title>Страница</title>')[0] == "Иконка"
 
+    # ── Ветви фиксов проверяются на ТОМ ЖЕ коде, что исполняет main(),
+    # а не на копии внутри проверки: копия измеряла бы сама себя.
     future = {"id": 1, "name": "будущее", "startAt": "2026-09-25"}
     past = {"id": 2, "name": "прошедшее", "startAt": "2026-09-01"}
-    # на проверенной ленте будущее снимается, прошедшее — никогда
-    assert [e["id"] for e in withdraw([future, past], set(), True)] == [2]
-    # на непроверенной — отказ, а не удаление
+    today = "2026-09-20"
+    # проверенная лента: снимается будущее, прошедшее не трогается никогда
+    assert [e["id"] for e in withdrawals([future, past], set(), today, True)] == [1]
+    # непроверенная лента: отказ вместо удаления
     try:
-        withdraw([future, past], set(), False)
+        withdrawals([future, past], set(), today, False)
         raise AssertionError("непроверенная лента обязана отказывать")
     except SystemExit:
         pass
-    # прошедшее в одиночку отказа не вызывает: удалять нечего
-    assert [e["id"] for e in withdraw([past], set(), False)] == [2]
+    # удалять нечего — непроверенная лента отказа не вызывает
+    assert withdrawals([past], set(), today, False) == []
+    # событие, которое в ленте есть, кандидатом не становится
+    assert withdrawals([future], {"1"}, today, True) == []
+    # Граница местная, и проверяется на фиксированном моменте, а не на «сейчас»:
+    # 22:30 UTC — это уже следующие сутки в Москве.
+    late = datetime(2026, 9, 19, 22, 30, tzinfo=timezone.utc)
+    assert moscow_today(late) == "2026-09-20", moscow_today(late)
+    midday = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
+    assert moscow_today(midday) == "2026-09-19", moscow_today(midday)
     print("selftest: ок")
     return 0
 
