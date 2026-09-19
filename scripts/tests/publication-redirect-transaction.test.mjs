@@ -329,7 +329,9 @@ test('committed recovery preserves unexpected redirect drift and pending without
   await assert.rejects(f.publish(), /SSH|session|stream|closed/i);
   writeFileSync(f.fragment, 'manual emergency configuration\n');
   f.update({ crashAt: null });
-  const error = await capturedError(f.transport().recover({ recordIndex: async () => assert.fail('drift cannot enter history') }));
+  let records = 0;
+  const error = await capturedError(f.transport().recover({ recordIndex: async () => { records++; } }));
+  assert.equal(records, 0, 'drift cannot enter history');
   assert.match(error.message, /redirect|configuration|drift/i);
   assert.deepEqual(error.activeOperation, f.operation);
   assert.equal(f.current(), 'releases/new');
