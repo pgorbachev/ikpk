@@ -354,3 +354,54 @@ test('recovery cannot commit a pending operation belonging to another destinatio
   assert.equal(writes, 0);
   assert.equal(existsSync(f.pendingPath), true);
 });
+
+test('beforeActivate observes prepared pending and the previous current immediately before the switch', options, async (t) => {
+  const f = setup(t);
+  let calls = 0;
+  await f.transport.withLock(async (session) => {
+    await f.stage(session);
+    await f.activate(session, async () => {}, {
+      beforeActivate: async () => {
+        calls++;
+        assert.equal(f.active(), 'old');
+        assert.deepEqual(JSON.parse(readFileSync(f.pendingPath, 'utf8')), f.operation);
+        assert.equal(digest(join(f.root, 'releases', 'new')), f.operation.treeDigest);
+      },
+    });
+  });
+  assert.equal(calls, 1, 'final CMS/main check must actually execute');
+  assert.equal(f.active(), 'new');
+});
+
+test('a refusing beforeActivate leaves current unchanged and removes its uncommitted pending marker', options, async (t) => {
+  const f = setup(t);
+  let calls = 0;
+  await assert.rejects(f.transport.withLock(async (session) => {
+    await f.stage(session);
+    await f.activate(session, async () => { assert.fail('index cannot be written before activation'); }, {
+      beforeActivate: async () => {
+        calls++;
+        assert.equal(f.active(), 'old');
+        assert.equal(existsSync(f.pendingPath), true);
+        throw new Error('CMS journal advanced before activation');
+      },
+    });
+  }), /CMS journal advanced/);
+  assert.equal(calls, 1);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(f.pendingPath), false);
+});
+
+test('a wrong activation digest refuses before invoking beforeActivate', options, async (t) => {
+  const f = setup(t);
+  let calls = 0;
+  await assert.rejects(f.transport.withLock(async (session) => {
+    await f.stage(session);
+    await f.activate(session, async () => {}, {
+      operation: { ...f.operation, treeDigest: '0'.repeat(64) },
+      beforeActivate: async () => { calls++; },
+    });
+  }), /digest|checksum|mismatch/i);
+  assert.equal(calls, 0);
+  assert.equal(f.active(), 'old');
+});

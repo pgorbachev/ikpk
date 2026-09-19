@@ -84,3 +84,21 @@ the real VPS prerequisites. The coordinator must register the Node test commands
 in CI: the existing `scripts/lib/**/*.test.ts` Vitest discovery does not include
 this directory. After implementation goes green, targeted mutations are still
 required; this RED delivery does not claim to have run them against absent code.
+
+## Final source check before activation: RED addendum
+
+The coordinator subsequently agreed an optional `beforeActivate()` callback on
+`session.activate`. It runs after remote digest verification and durable pending
+preparation, immediately before the atomic current switch. It can therefore make
+the final CMS journal/main check after the upload has finished. Rejection leaves
+the old current intact and clears this uncommitted pending operation.
+
+```sh
+node --test --test-reporter=tap --test-name-pattern=beforeActivate scripts/tests/publication-transport.test.mjs
+```
+
+Against the same empty scaffold: exit **1**, **3 tests / 0 passed / 3 failed**,
+0 skipped, 0 cancelled (115 ms). Cases: the callback observes pending plus the old
+current; callback rejection preserves old current and removes pending; a wrong
+activation digest refuses without calling the callback. This addendum does not
+contain transport implementation or change the original 25-case RED evidence.
