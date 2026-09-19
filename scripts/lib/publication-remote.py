@@ -436,6 +436,42 @@ class PublicationSession:
     def release(self, name):
         return os.path.join(self.releases, valid_id(name))
 
+    # Staged-but-never-served candidates are recorded beside the release tree, not in it:
+    # `releases/` holds release directories only, and the marker survives a cancelled or
+    # abandoned upload so retention can tell a candidate from a release that was served.
+    def candidates_dir(self):
+        path = os.path.join(self.root, ".candidates")
+        if not os.path.lexists(path):
+            os.mkdir(path, 0o755)
+            sync_dir(self.root)
+        regular_directory(path)
+        return path
+
+    def mark_candidate(self, name):
+        directory = self.candidates_dir()
+        fd = os.open(os.path.join(directory, valid_id(name)), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+        os.close(fd)
+        sync_dir(directory)
+
+    def mark_published(self, name):
+        directory = os.path.join(self.root, ".candidates")
+        marker = os.path.join(directory, valid_id(name))
+        if os.path.lexists(marker):
+            os.unlink(marker)
+            sync_dir(directory)
+
+    def candidate_ids(self):
+        directory = os.path.join(self.root, ".candidates")
+        if not os.path.lexists(directory):
+            return set()
+        regular_directory(directory)
+        ids = set()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.is_file(follow_symlinks=False):
+                    ids.add(valid_id(entry.name))
+        return ids
+
     def no_pending(self):
         require(not os.path.lexists(self.pending), "unfinished publication: pending operation must be recovered")
 
@@ -544,6 +580,9 @@ class PublicationSession:
                 sync_dir(directory)
             require(not os.path.lexists(target), "release collision")
             os.rename(temporary, target)
+            # A staged tree is a candidate, not a publication: the marker outlives a
+            # cancelled or abandoned upload so retention can tell it from served releases.
+            self.mark_candidate(command["releaseId"])
             sync_dir(self.releases)
             self.staged[command["releaseId"]] = expected
         finally:
@@ -601,6 +640,7 @@ class PublicationSession:
             os.replace(temporary, self.current)
             self.active_operation = self.prepared
             sync_dir(self.root)
+            self.mark_published(self.prepared["releaseId"])
         finally:
             if os.path.lexists(temporary):
                 os.unlink(temporary)
@@ -641,6 +681,7 @@ class PublicationSession:
         self.active_is(operation)
         self.active_operation = operation
         self.verify_release(operation)
+        self.mark_published(operation["releaseId"])
         if preparation and preparation.get("redirects") is not None:
             self.verify_redirect_binding(self.inspect_serving()["nginxDump"])
             self.replace_redirects(preparation, "new")
@@ -670,6 +711,17 @@ class PublicationSession:
                         releases.append((info.st_mtime_ns, entry.name))
             current = operation["releaseId"]
             require(any(name == current for _, name in releases), "active release directory missing during retention")
+            # Candidates never served (cancelled or abandoned uploads) are not retained
+            # releases: they leave first and never count against the promised depth.
+            candidates = self.candidate_ids()
+            candidates.discard(current)
+            for name in sorted(candidates):
+                self.active_is(operation)
+                if any(name == existing for _, existing in releases):
+                    remove_release(releases_fd, name)
+                    os.fsync(releases_fd)
+                self.mark_published(name)
+            releases = [(mtime, name) for mtime, name in releases if name not in candidates]
             protected = {current}
             preparation = self.read_preparation(operation)
             if preparation and preparation["previousCurrent"]:
