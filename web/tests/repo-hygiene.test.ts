@@ -335,6 +335,7 @@ describe('гигиена репозитория', () => {
 
     const base = await load('vitest.config.ts');
     const specialised = [
+      ...(await load('vitest.publication.config.ts')).include,
       ...(await load('vitest.build.config.ts')).include,
       ...(await load('vitest.demo.config.ts')).include,
       // Вывод сборки роли `stand`: третий артефакт обязательного прогона. Своя
