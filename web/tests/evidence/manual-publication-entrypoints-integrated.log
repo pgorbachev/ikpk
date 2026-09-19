@@ -1,0 +1,50 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-entry-inventory-implementation/web
+
+ ❯ tests/manual-publication-restore-bypass.test.ts (2 tests | 1 failed) 1373ms
+     × the current utility leaves the live release unchanged without an approved publication 724ms
+ ❯ tests/manual-publication-entrypoints.test.ts (15 tests | 1 failed) 5180ms
+     × the actual repository has exactly that one approved publication path 273ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > the actual repository has exactly that one approved publication path
+Error: publication-entrypoints: declared scripts/publication-launcher.mjs; scripts/restore-server-state.sh: current-write
+ ❯ Module.inventoryPublicationEntrypoints tests/helpers/publication-entrypoints.ts:127:28
+    125|     visit(doc, root);
+    126|   }
+    127|   if (problems.size) throw new Error(`publication-entrypoints: declare…
+       |                            ^
+    128|   return [publication.id];
+    129| }
+ ❯ inventory tests/manual-publication-entrypoints.test.ts:15:15
+ ❯ tests/manual-publication-entrypoints.test.ts:52:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/manual-publication-restore-bypass.test.ts > backup restoration cannot independently publish the web tree > the current utility leaves the live release unchanged without an approved publication
+AssertionError: independent activation escaped the publication path; exit=0; predicate=byte-equal-after-restore
+compared=1
+mismatched=0
+release=restore-20260919T164633Z
+: expected '/var/folders/b6/wycqx9812rx5dbv2f9kxm…' to be '/var/folders/b6/wycqx9812rx5dbv2f9kxm…' // Object.is equality
+
+Expected: "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-restore-entry-bypass-fOty9F/site/releases/current-release"
+Received: "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-restore-entry-bypass-fOty9F/site/releases/restore-20260919T164633Z"
+
+ ❯ tests/manual-publication-restore-bypass.test.ts:49:110
+     47|     const { run, previous, active } = runRestore(join(repository, 'scr…
+     48|     expect(run.error).toBeUndefined();
+     49|     expect(active, `independent activation escaped the publication pat…
+       |                                                                                                              ^
+     50|   });
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 43 passed (45)
+   Start at  19:46:32
+   Duration  5.38s (transform 117ms, setup 70ms, import 178ms, tests 6.76s, environment 0ms)
+
