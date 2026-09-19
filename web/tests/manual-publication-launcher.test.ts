@@ -246,6 +246,19 @@ describe('review probes at 838eb7b4', () => {
     expect(existsSync(f.trace)).toBe(false);
     expect(existsSync(f.malicious), 'git status executed untrusted fsmonitor before source approval').toBe(false);
   });
+  it('REVIEW: source clean filters cannot execute before source authorization', () => {
+    const f = fixture();
+    write(join(f.repo, 'tracked.txt'), 'original\n');
+    git(f.repo, 'add', 'tracked.txt'); git(f.repo, 'commit', '-m', 'tracked clean-filter input');
+    git(f.repo, 'push', 'origin', 'main');
+    const probe = join(f.repo, '.git', 'clean-probe.sh');
+    write(probe, '#!/bin/sh\ntouch "' + f.malicious + '"\ncat\n');
+    git(f.repo, 'config', 'filter.probe.clean', '/bin/sh .git/clean-probe.sh');
+    write(join(f.repo, '.gitattributes'), 'tracked.txt filter=probe\n');
+    // Equal byte length forces Git to hash modified content, reaching the clean filter.
+    write(join(f.repo, 'tracked.txt'), 'mutated!\n');
+    assertRefused(f, launch(f, { sourceDir: f.repo }), 'dirty-source');
+  });
   it('REVIEW: parent symlinks cannot redirect the verified worker to external code', () => {
     const f = fixture();
     const outside = join(f.root, 'outside-code');
