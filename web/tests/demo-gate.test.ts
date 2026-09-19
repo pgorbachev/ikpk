@@ -8,10 +8,9 @@ import {
   REPO_ROOT,
   conditionsGuarding,
   loadWorkflows,
-  publishingWorkflows,
+  requiredTestWorkflows,
   pushContext,
   stripShellComments,
-  workflowRunTrigger,
   type Workflow,
   type WorkflowJob,
   type WorkflowStep,
@@ -22,12 +21,8 @@ import { canBeTrue } from './helpers/gh-expression';
 // (`openspec/changes/deploy-gated-on-tests/specs/deploy-gating/spec.md`) и решению 6
 // в `design.md`.
 //
-// Предмет требования — ПОЛОЖЕНИЕ проверок, а не их описание: гейтом является ровно то,
-// что лежит внутри обязательного прогона. Поэтому обязательный прогон здесь не назван
-// строкой, а выводится из самого гейта публикации: публикующий workflow →
-// `workflow_run.workflows` → workflow, чей успех является условием публикации. Так
-// перенос демо-проверок в соседний workflow роняет проверку, даже если перечень
-// входящих в гейт при этом остаётся правдивым.
+// Обязательный источник вердикта — Tests. Публикация теперь локальная, поэтому
+// наличие или отсутствие hosted publisher не определяет состав проверок.
 //
 // Второе: «два вывода — два предмета». Проверяется не текст проверок, а то, КАКОЙ
 // каталог каждая из них читает, и то, что демо-сборка не пишет в боевой каталог.
@@ -65,34 +60,14 @@ const SELF = relative(WEB, import.meta.filename).replaceAll('\\', '/');
 
 const workflows = loadWorkflows();
 
-// ─── обязательный прогон: выводится из гейта публикации ─────────────────────
+// ─── обязательный прогон: Tests ──────────────────────────────────────────
 
-function publishingWorkflow(): Workflow {
-  const found = publishingWorkflows(workflows);
-  if (found.length !== 1)
-    throw new Error(
-      `ожидался ровно один workflow с шагом actions/deploy-pages, найдено ${found.length}: ` +
-        `${found.map((w) => w.file).join(', ') || '—'}`,
-    );
-  return found[0];
-}
-
-/** Имена workflow, успех которых является условием публикации. */
 function gatedNames(): string[] {
-  return workflowRunTrigger(publishingWorkflow())?.workflows ?? [];
+  return gatedWorkflows().map((wf) => wf.displayName);
 }
 
-/** Сами workflow обязательного прогона. Названное, но отсутствующее имя — провал. */
 function gatedWorkflows(): Workflow[] {
-  return gatedNames().map((name) => {
-    const wf = workflows.filter((w) => w.displayName === name);
-    if (wf.length !== 1)
-      throw new Error(
-        `в гейте назван workflow '${name}', а файлов с таким именем ${wf.length}` +
-          (wf.length > 1 ? `: ${wf.map((w) => w.file).join(', ')}` : ''),
-      );
-    return wf[0];
-  });
+  return requiredTestWorkflows(workflows);
 }
 
 /** Workflow, которые в гейт НЕ входят: их падение публикацию не останавливает. */

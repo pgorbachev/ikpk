@@ -374,3 +374,14 @@ export function dispatchContext(refName = DEFAULT_BRANCH): GithubContext {
 }
 
 export const CONTEXT_CONSTANTS = { OWN_REPO, FORK_REPO, TESTED_SHA, TESTED_RUN_ID };
+
+/** Обязательный источник вердикта manual-publication-only — Tests, независимо от публикации. */
+export function requiredTestWorkflows(all: Workflow[]): Workflow[] {
+  if (all.length === 0) throw new Error('нет конфигураций workflow');
+  const required = all.filter((wf) => wf.displayName === 'Tests');
+  if (required.length !== 1)
+    throw new Error(`ожидался ровно один Tests, найдено ${required.length}`);
+  if (Object.values(required[0].jobs).flatMap((job) => job.steps).length === 0)
+    throw new Error('Tests не содержит шагов проверок');
+  return required;
+}

@@ -48,7 +48,7 @@ import {
   CONTROL_PAIR_FACTOR,
   COLOR_DISTANCE_THRESHOLD,
 } from './helpers/contrast';
-import { loadWorkflows, publishingWorkflows, workflowRunTrigger, type Workflow } from './helpers/workflows';
+import { loadWorkflows, requiredTestWorkflows, type Workflow } from './helpers/workflows';
 
 const WEB_ROOT = join(import.meta.dirname, '..');
 const SRC_ROOT = join(WEB_ROOT, 'src');
@@ -285,8 +285,7 @@ describe('состав внешних аккаунтов: покрыта каж�
    * Сценарий «каждая роль проверена своим артефактом».
    *
    * Роли НЕ ПЕРЕЧИСЛЕНЫ здесь константой: перечень имён устареет при добавлении четвёртой
-   * сборки, а отношение — нет. Состав выводится из репозитория: какой workflow публикует
-   * сайт → о завершении какого workflow он ждёт события → какие сборки этот workflow
+   * сборки, а отношение — нет. Состав выводится из обязательного Tests: какие сборки он
    * запускает → в какой каталог и с какой ролью пишет каждая (по скриптам `package.json`).
    *
    * ПОЧЕМУ БЫЛА КРАСНОЙ ДО РЕАЛИЗАЦИИ: обязательный прогон собирал три артефакта, а
@@ -397,9 +396,7 @@ describe('состав внешних аккаунтов: покрыта каж�
 });
 
 function gatingWorkflows(all: Workflow[]): Workflow[] {
-  const publishing = publishingWorkflows(all);
-  const required = new Set(publishing.flatMap((wf) => workflowRunTrigger(wf)?.workflows ?? []));
-  return all.filter((wf) => required.has(wf.displayName));
+  return requiredTestWorkflows(all);
 }
 
 function vitestConfigs(): Array<{ file: string; include: string[] }> {
