@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parse, serialize } from 'parse5';
+import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
 import { chromium } from 'playwright';
 import { serveStatic } from './static-serve.ts';
 import { installThirdPartyGuard } from './third-party-guard.ts';
@@ -19,16 +19,16 @@ const original = readFileSync(page, 'utf8');
 const kind = process.argv[3] === 'empty' ? 'empty' : 'hidden';
 const doc = parse(original);
 let removed = 0;
-function removeCards(node: any) {
-  if (node.childNodes) {
-    node.childNodes = node.childNodes.filter((child: any) => {
-      const card = child.attrs?.some((attr: any) => attr.name === 'data-schedule-item');
+function removeCards(node: DefaultTreeAdapterMap['node']) {
+  if ('childNodes' in node) {
+    node.childNodes = node.childNodes.filter((child) => {
+      const card = 'attrs' in child && child.attrs.some((attr) => attr.name === 'data-schedule-item');
       if (card) removed++;
       return !card;
     });
     node.childNodes.forEach(removeCards);
   }
-  if (node.content) removeCards(node.content);
+  if ('content' in node) removeCards(node.content);
 }
 removeCards(doc);
 assert(removed > 0);

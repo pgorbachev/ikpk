@@ -66,10 +66,13 @@ test('schedule renders its cards and registration links without submitting them'
   const html = readFileSync(`${treeDir}/raspisanie-i-tseny/index.html`, 'utf8');
   const count = [...html.matchAll(/\bdata-schedule-item(?:[\s=>])/g)].length;
   await page.goto('/raspisanie-i-tseny');
+  expect(count, 'empty schedule in checked artifact').toBeGreaterThan(0);
   await expect(page.locator('[data-schedule-item]')).toHaveCount(count);
+  await expect(page.locator('[data-schedule-item]:visible').first(), 'no visible schedule cards').toBeVisible();
   await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
   const links = page.locator('a[href*="bitrix24"], a[href^="/demo-zayavka"]');
   expect(await links.count(), 'no registration or subscription link').toBeGreaterThan(0);
+  await expect(links.filter({ visible: true }).first(), 'no visible registration or subscription link').toBeVisible();
   const role = process.env.DEPLOY_MODE;
   for (const href of await links.evaluateAll((elements) => elements.map((element) => element.getAttribute('href')))) {
     expect(href).toMatch(role === 'stand' && process.env.DEMO_FORMS === 'stub' ? /^\/demo-zayavka/ : /^https:\/\/[^/]+\.bitrix24(?:site)?\.ru\//);

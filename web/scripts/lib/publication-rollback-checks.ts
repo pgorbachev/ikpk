@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { canonicalPath, inside, publicEnvironment } from './publication-checks.ts';
+import { PublicationReportError } from './publication-report-error.ts';
 import { localChecksProblem, ROLLBACK_GROUPS } from './publish-gate.ts';
 import type { WorkerAudit } from '../publication-worker.ts';
 import type { LocalChecks } from './publish-gate.ts';
@@ -73,6 +74,9 @@ export async function runRollbackChecks(input: RollbackCheckInput, ports: Rollba
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
     return report;
   } catch (error) {
+    if (error instanceof PublicationReportError && error.source === 'local') {
+      audit.localExecutedTests = executedTests + error.executedTests;
+    }
     const failure = error instanceof Error ? error : new Error('publication checks failed');
     Object.assign(failure, { audit });
     throw failure;

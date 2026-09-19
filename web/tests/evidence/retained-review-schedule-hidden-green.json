@@ -1,0 +1,41 @@
+{
+  "reviewedRevision": "2899173adf3c346184f63398b87ed148c0329b2c plus the visibility fix in this commit",
+  "kind": "hidden",
+  "beforeVisibility": [
+    {
+      "width": 1280,
+      "cards": 57,
+      "visible": 25
+    },
+    {
+      "width": 375,
+      "cards": 57,
+      "visible": 25
+    }
+  ],
+  "afterVisibility": [
+    {
+      "width": 1280,
+      "cards": 57,
+      "visible": 0
+    },
+    {
+      "width": 375,
+      "cards": 57,
+      "visible": 0
+    }
+  ],
+  "accepted": false,
+  "failure": "Error: publication check process did not complete successfully",
+  "browserStats": {
+    "startTime": "2026-09-19T15:50:05.134Z",
+    "duration": 14950.956,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  },
+  "beforeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "restoredDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "reportsDirectory": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-review-red-EGmVCC"
+}
