@@ -1,0 +1,214 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-worker-red/web
+
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > binds the real runner to fixed CI, state, check and transport modules and reaches index recording 305ms
+   → expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Number of calls: 0
+
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > dependency installation and build/check inputs do not inherit credentials or startup hooks 291ms
+   → expected 0 to be greater than 0
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > CI read failure stops before local checks or transfer even with a supplied success report 290ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_CONFIG fails before install or transfer 290ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_LAUNCHER fails before install or transfer 340ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_SOURCE_SHA fails before install or transfer 345ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > source inconsistency fails before install or transfer 342ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > destination inconsistency fails before install or transfer 315ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > target inconsistency fails before install or transfer 339ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > writable-config inconsistency fails before install or transfer 307ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > CLI cannot replace fixed checks with operator reports or an authorization module 325ms
+   → promise resolved "undefined" instead of rejecting
+ × tests/manual-publication-worker.test.ts > concrete publication worker integration > production CRM preserves the explicitly independent ci payment role 478ms
+   → expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Number of calls: 0
+
+ × tests/manual-publication-worker.test.ts > deploy-web.sh executable entrypoint > shell dispatches the fixed native Node worker before dependency installation 553ms
+   → shell must not install with ambient credentials: expected true to be false // Object.is equality
+ × tests/manual-publication-worker.test.ts > deploy-web.sh executable entrypoint > direct invocation without protected launcher context refuses before executing npm 422ms
+   → untrusted direct worker must not install dependencies: expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > binds the real runner to fixed CI, state, check and transport modules and reaches index recording
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Number of calls: 0
+
+ ❯ tests/manual-publication-worker.test.ts:113:18
+    111|   it('binds the real runner to fixed CI, state, check and transport mo…
+    112|     const f = await fixture(); await f.run();
+    113|     expect(f.ci).toHaveBeenCalledWith(expect.objectContaining({ commit…
+       |                  ^
+    114|     expect(f.stateFactory).toHaveBeenCalledWith(expect.objectContainin…
+    115|     expect(f.adapters).toHaveBeenCalledTimes(1); expect(f.checks).toHa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > dependency installation and build/check inputs do not inherit credentials or startup hooks
+AssertionError: expected 0 to be greater than 0
+ ❯ tests/manual-publication-worker.test.ts:125:31
+    123|   it('dependency installation and build/check inputs do not inherit cr…
+    124|     const f = await fixture(); await f.run();
+    125|     expect(f.installs.length).toBeGreaterThan(0);
+       |                               ^
+    126|     expect(f.installs.some(({ args }) => args.includes('ci'))).toBe(tr…
+    127|     for (const { args, options } of f.installs) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > CI read failure stops before local checks or transfer even with a supplied success report
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-worker.test.ts:148:26
+    146|     const f = await fixture(); f.ci.mockRejectedValueOnce(new Error('n…
+    147|     f.env.PUBLICATION_REPORT = JSON.stringify({ conclusion: 'success',…
+    148|     await expect(f.run()).rejects.toThrow('no-successful-mandatory-mai…
+       |                          ^
+    149|     expect(f.ci).toHaveBeenCalledTimes(1); expect(f.checks).not.toHave…
+    150|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_CONFIG fails before install or transfer
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_LAUNCHER fails before install or transfer
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > missing PUBLICATION_SOURCE_SHA fails before install or transfer
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-worker.test.ts:153:73
+    151|
+    152|   it.each(['PUBLICATION_CONFIG', 'PUBLICATION_LAUNCHER', 'PUBLICATION_…
+    153|     const f = await fixture(); delete f.env[name]; await expect(f.run(…
+       |                                                                         ^
+    154|     expect(f.installs).toHaveLength(0); expect(f.ci).not.toHaveBeenCal…
+    155|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > source inconsistency fails before install or transfer
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > destination inconsistency fails before install or transfer
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > target inconsistency fails before install or transfer
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > writable-config inconsistency fails before install or transfer
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-worker.test.ts:162:90
+    160|     if (fault === 'destination') f.env.PUBLICATION_DESTINATION_ID = 'f…
+    161|     if (fault === 'writable-config') chmodSync(f.configPath, 0o666);
+    162|     await expect(f.run(fault === 'target' ? ['deploy@foreign.test.inva…
+       |                                                                                          ^
+    163|     expect(f.installs).toHaveLength(0); expect(f.ci).not.toHaveBeenCal…
+    164|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > CLI cannot replace fixed checks with operator reports or an authorization module
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-worker.test.ts:168:112
+    166|   it('CLI cannot replace fixed checks with operator reports or an auth…
+    167|     const f = await fixture();
+    168|     await expect(f.run([f.config.sshTarget, '--report', '/tmp/green.js…
+       |                                                                                                                ^
+    169|     expect(f.installs).toHaveLength(0); expect(f.transport).not.toHave…
+    170|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > concrete publication worker integration > production CRM preserves the explicitly independent ci payment role
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Number of calls: 0
+
+ ❯ tests/manual-publication-worker.test.ts:174:39
+    172|   it('production CRM preserves the explicitly independent ci payment r…
+    173|     const f = await fixture(); f.config.deployMode = 'prod'; f.env.DEP…
+    174|     expect(f.state.appendPublication).toHaveBeenCalledWith(expect.obje…
+       |                                       ^
+    175|   });
+    176| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > deploy-web.sh executable entrypoint > shell dispatches the fixed native Node worker before dependency installation
+AssertionError: shell must not install with ambient credentials: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/manual-publication-worker.test.ts:187:85
+    185|     });
+    186|     expect(result.error).toBeUndefined(); expect(result.status).toBe(7…
+    187|     expect(existsSync(npmTrace), 'shell must not install with ambient …
+       |                                                                                     ^
+    188|     expect(existsSync(trace), 'fixed worker invocation must be observe…
+    189|     const args = readFileSync(trace, 'utf8').trim().split('\n');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > deploy-web.sh executable entrypoint > direct invocation without protected launcher context refuses before executing npm
+AssertionError: untrusted direct worker must not install dependencies: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/manual-publication-worker.test.ts:203:88
+    201|     });
+    202|     expect(result.error).toBeUndefined(); expect(result.status).not.to…
+    203|     expect(existsSync(trace), 'untrusted direct worker must not instal…
+       |                                                                                        ^
+    204|   });
+    205| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  14 failed (14)
+   Start at  17:32:36
+   Duration  5.22s (transform 66ms, setup 31ms, import 98ms, tests 4.94s, environment 0ms)
