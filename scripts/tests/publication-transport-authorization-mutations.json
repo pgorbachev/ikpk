@@ -1,0 +1,165 @@
+[
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "auth-connect",
+    "path": "scripts/publication-transport.mjs",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=missing or serialized authorization",
+      "scripts/tests/publication-transport-authorization.test.mjs"
+    ],
+    "before": "    await authorizeAction('connect');",
+    "after": "    // MUTATION: connect authorization removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - missing or serialized authorization refuses withLock and recover before SSH"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "auth-stage",
+    "path": "scripts/publication-transport.mjs",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=stage rejects a mismatched digest",
+      "scripts/tests/publication-transport-authorization.test.mjs"
+    ],
+    "before": "  if (request.expectedDigest !== undefined && proof.treeDigest !== request.expectedDigest) throw new Error('publication authorization digest mismatch');",
+    "after": "  // MUTATION: stage proof binding removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - stage rejects a mismatched digest proof before uploading release bytes"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "auth-operation",
+    "path": "scripts/publication-transport.mjs",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=activate checks every|rollback requires authorization|recover verifies complete",
+      "scripts/tests/publication-transport-authorization.test.mjs"
+    ],
+    "before": "  if (mismatch) throw new Error(`publication authorization ${mismatch} mismatch`);",
+    "after": "  // MUTATION: operation proof binding removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 3,
+    "mutantFailed": 3,
+    "failedTests": [
+      "not ok 1 - activate checks every proof identity field against the complete operation",
+      "not ok 2 - rollback requires authorization for its retained operation identity",
+      "not ok 3 - recover verifies complete pending identity before indexing or clearing pending"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "prepared-current",
+    "path": "scripts/lib/publication-remote.py",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=REVIEW: prepared crash recovery refuses",
+      "scripts/tests/publication-transport.test.mjs"
+    ],
+    "before": "        require(self.current_identity() == preparation[\"previousCurrent\"], \"current changed during preparation\")",
+    "after": "        # MUTATION: previous current identity check removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - REVIEW: prepared crash recovery refuses when current changed to another retained release"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "digest",
+    "path": "scripts/lib/publication-remote.py",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=corruption on the upload channel",
+      "scripts/tests/publication-transport.test.mjs"
+    ],
+    "before": "            require(tree_digest(temporary) == expected, \"remote upload digest mismatch\")",
+    "after": "            # MUTATION: remote upload digest removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - corruption on the upload channel is detected by the remote digest"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "pending",
+    "path": "scripts/lib/publication-remote.py",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=pending is persisted before current changes",
+      "scripts/tests/publication-transport.test.mjs"
+    ],
+    "before": "        write_json(self.pending, operation)",
+    "after": "        # MUTATION: durable pending removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - pending is persisted before current changes and remains visible to the index writer"
+    ]
+  },
+  {
+    "sha": "cfd20525de5f1818c594eb4af1a1c746f11a207c",
+    "mutation": "lock",
+    "path": "scripts/lib/publication-remote.py",
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-name-pattern=two separate operator processes",
+      "scripts/tests/publication-transport.test.mjs"
+    ],
+    "before": "        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)",
+    "after": "        # MUTATION: host lock removed",
+    "originalOccurrences": 1,
+    "mutatedOccurrences": 0,
+    "baselineExit": 0,
+    "mutantExit": 1,
+    "baselinePassed": 1,
+    "mutantFailed": 1,
+    "failedTests": [
+      "not ok 1 - two separate operator processes cannot hold the host publication lock together"
+    ]
+  }
+]
