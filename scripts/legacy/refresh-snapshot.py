@@ -11,7 +11,7 @@
 у них — обвязка страницы (блок согласия заменён блоком подписки), а не контент.
 """
 import json, re, sys, time, urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 
@@ -279,7 +279,11 @@ def main() -> int:
     # записи (startAt раньше сегодняшнего) живой список не отдаёт по определению,
     # и трогать их нельзя.
     live_ids = {str(e["id"]) for e in live_events}
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Время МОСКОВСКОЕ, а не UTC: `startAt` у ленты местный, и с 00:00 до 03:00 MSK
+    # дата UTC отстаёт на сутки — окно удаления расширялось бы на день назад и
+    # захватывало событие, которое по местному времени уже началось, а лента его
+    # законно не отдаёт. Замерено: прогон 20.09 в 01:22 MSK видел границу «19.09».
+    today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
     withdrawn = [e for e in schedule
                  if str(e["id"]) not in live_ids and (e.get("startAt") or "")[:10] >= today]
     for e in withdrawn:
