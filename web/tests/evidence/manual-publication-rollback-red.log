@@ -1,0 +1,225 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web
+
+ ❯ tests/manual-publication-rollback.test.ts (11 tests | 10 failed) 35ms
+     × restores retained bytes with stored role and immutable audit while CMS main old CI and snapshot are unavailable 7ms
+     × requires explicit confirmation actor and reason before opening the transport 3ms
+     × requires original destination record and complete original CI and five local groups 1ms
+     × rejects pruned already-current foreign and misidentified retained targets under the lock 1ms
+     × measures retained bytes before fresh checks and refuses content changed since the original publication 1ms
+     × requires all three fresh rollback groups bound to this same retained tree and destination 1ms
+     × remeasures after checks and refuses changed bytes before requesting a switch 1ms
+     × holds a scoped live authorization for only the selected rollback and revokes it at completion 1ms
+     × refuses an unfinished destination operation without checks or switching 1ms
+     × verifies post-switch release identity and health before append; failures retain the active pending audit 1ms
+ ❯ tests/publication-state-store.test.ts (28 tests | 4 failed) 42284ms
+     × a mismatched current fingerprint exposes the actual latest entry and high-water mark 1314ms
+     × readHistory refreshes only the immutable index when the CMS journal is unavailable 852ms
+     × readHistory refuses duplicate publication keys instead of silently repairing the index 795ms
+     × appends rollback audit without a CMS ledger and preserves original publication evidence 1147ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > restores retained bytes with stored role and immutable audit while CMS main old CI and snapshot are unavailable
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:41:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires explicit confirmation actor and reason before opening the transport
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:59:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires original destination record and complete original CI and five local groups
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:70:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > rejects pruned already-current foreign and misidentified retained targets under the lock
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:83:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > measures retained bytes before fresh checks and refuses content changed since the original publication
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:96:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires all three fresh rollback groups bound to this same retained tree and destination
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:102:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > remeasures after checks and refuses changed bytes before requesting a switch
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:116:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > holds a scoped live authorization for only the selected rollback and revokes it at completion
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:123:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > refuses an unfinished destination operation without checks or switching
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:136:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > verifies post-switch release identity and health before append; failures retain the active pending audit
+Error: Cannot find module 'file:///Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/scripts/lib/publication-rollback.ts' imported from /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web/tests/manual-publication-rollback.test.ts
+ ❯ runner tests/manual-publication-rollback.test.ts:16:18
+     14| async function runner() {
+     15|   const path = new URL('../scripts/lib/publication-rollback.ts', impor…
+     16|   const module = await import(/* @vite-ignore */ path);
+       |                  ^
+     17|   expect(module.runPublicationRollback).toBeTypeOf('function');
+     18|   return module.runPublicationRollback as (input: RollbackInput, ports…
+ ❯ tests/manual-publication-rollback.test.ts:142:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  tests/publication-state-store.test.ts > review: real store preserves stale-snapshot diagnostic evidence > a mismatched current fingerprint exposes the actual latest entry and high-water mark
+AssertionError: expected 'current provenance fingerprint mismat…' to match /latestEntry[=:"\s]+4/
+
+- Expected:
+/latestEntry[=:"\s]+4/
+
++ Received:
+"current provenance fingerprint mismatch {}"
+
+ ❯ tests/publication-state-store.test.ts:280:24
+    278|     expect(failure).toBeInstanceOf(Error);
+    279|     const diagnostic = `${failure.message} ${JSON.stringify(failure)}`;
+    280|     expect(diagnostic).toMatch(/latestEntry[=:"\s]+4/);
+       |                        ^
+    281|     expect(diagnostic).toMatch(/highWaterMark[=:"\s]+4/);
+    282|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  tests/publication-state-store.test.ts > rollback history does not depend on the CMS journal > readHistory refreshes only the immutable index when the CMS journal is unavailable
+AssertionError: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ tests/publication-state-store.test.ts:301:29
+    299|     const f = await fixture(); const original = record('retained'); in…
+    300|     const before = head(f); const api = historyStore(f);
+    301|     expect(api.readHistory).toBeTypeOf('function');
+       |                             ^
+    302|     await expect(api.readHistory()).resolves.toEqual({ head: before, p…
+    303|     expect(head(f)).toBe(before); expect(existsSync(join(f.workDir, 'l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  tests/publication-state-store.test.ts > rollback history does not depend on the CMS journal > readHistory refuses duplicate publication keys instead of silently repairing the index
+AssertionError: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ tests/publication-state-store.test.ts:309:29
+    307|     const f = await fixture(); const original = record('retained'); in…
+    308|     const before = head(f); const api = historyStore(f);
+    309|     expect(api.readHistory).toBeTypeOf('function');
+       |                             ^
+    310|     await expect(api.readHistory()).rejects.toThrow(/duplicate|immutab…
+    311|     expect(head(f)).toBe(before); expect(remotePairs(f)).toEqual([orig…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  tests/publication-state-store.test.ts > rollback history does not depend on the CMS journal > appends rollback audit without a CMS ledger and preserves original publication evidence
+AssertionError: promise rejected "Error: provenance ledger unavailable or u…" instead of resolving
+ ❯ tests/publication-state-store.test.ts:320:55
+    318|       rollbackChecks: { ...structuredClone(original.localChecks),
+    319|         groups: original.localChecks.groups.filter(({ name }) => ['des…
+    320|     await expect(store(f).appendPublication(rollback)).resolves.toMatc…
+       |                                                       ^
+    321|     expect(remotePairs(f)).toEqual([original, rollback]);
+    322|     expect(git(f.root, '--git-dir', f.remote, 'ls-tree', '-r', '--name…
+
+Caused by: Error: provenance ledger unavailable or unsafe
+ ❯ snapshot scripts/lib/publication-state-store.ts:70:72
+ ❯ scripts/lib/publication-state-store.ts:107:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  14 failed | 25 passed (39)
+   Start at  17:37:19
+   Duration  42.63s (transform 134ms, setup 42ms, import 231ms, tests 42.32s, environment 0ms)
+

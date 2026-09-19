@@ -1,0 +1,327 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web
+
+ ❯ tests/manual-publication-rollback.test.ts (11 tests | 10 failed) 72ms
+     × restores retained bytes with stored role and immutable audit while CMS main old CI and snapshot are unavailable 15ms
+     × requires explicit confirmation actor and reason before opening the transport 6ms
+     × requires original destination record and complete original CI and five local groups 5ms
+     × rejects pruned already-current foreign and misidentified retained targets under the lock 5ms
+     × measures retained bytes before fresh checks and refuses content changed since the original publication 5ms
+     × requires all three fresh rollback groups bound to this same retained tree and destination 4ms
+     × remeasures after checks and refuses changed bytes before requesting a switch 5ms
+     × holds a scoped live authorization for only the selected rollback and revokes it at completion 5ms
+     × refuses an unfinished destination operation without checks or switching 5ms
+     × verifies post-switch release identity and health before append; failures retain the active pending audit 5ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > restores retained bytes with stored role and immutable audit while CMS main old CI and snapshot are unavailable
+AssertionError: expected undefined to deeply equal { …(19) }
+
+- Expected:
+{
+  "actor": "rollback-operator",
+  "capturedAt": "2026-09-17T11:50:00.000Z",
+  "ciEvidence": {
+    "branch": "main",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "conclusion": "success",
+    "event": "push",
+    "executedTests": 51,
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "Capture content snapshot",
+      },
+      {
+        "conclusion": "success",
+        "name": "Unit and build tests",
+      },
+      {
+        "conclusion": "success",
+        "name": "Dependency update invariants",
+      },
+      {
+        "conclusion": "success",
+        "name": "Scripts unit tests",
+      },
+      {
+        "conclusion": "success",
+        "name": "Playwright smoke (desktop + mobile)",
+      },
+    ],
+    "repository": "pgorbachev/ikpk",
+    "runId": 42,
+    "workflow": ".github/workflows/test.yml",
+  },
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "deployMode": "prod",
+  "destinationId": "prod",
+  "localChecks": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "destinationId": "prod",
+    "groups": [
+      {
+        "conclusion": "success",
+        "executedTests": 2,
+        "name": "snapshot-provenance",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 2,
+        "name": "build-content",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 2,
+        "name": "destination-mode",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 2,
+        "name": "browser-smoke",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 2,
+        "name": "payment-destination",
+      },
+    ],
+    "snapshotId": "snapshot-old",
+    "treeDigest": "45c38d72c1035238245e346b7a725eb17d18a13f1863c0f0165bc6af53c48864",
+  },
+  "paymentRole": "ci",
+  "publicationId": "rollback-operation",
+  "publishedAt": "2026-09-19T12:00:00.000Z",
+  "reason": "Broken navigation in current release",
+  "referenceDate": "2026-09-17",
+  "releaseId": "old-release",
+  "revision": 7,
+  "rollbackChecks": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "destinationId": "prod",
+    "groups": [
+      {
+        "conclusion": "success",
+        "executedTests": 3,
+        "name": "destination-mode",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 3,
+        "name": "browser-smoke",
+      },
+      {
+        "conclusion": "success",
+        "executedTests": 3,
+        "name": "payment-destination",
+      },
+    ],
+    "snapshotId": "snapshot-old",
+    "treeDigest": "45c38d72c1035238245e346b7a725eb17d18a13f1863c0f0165bc6af53c48864",
+  },
+  "rollbackOfPublicationId": "original-operation",
+  "snapshotId": "snapshot-old",
+  "testRunConclusion": "success",
+  "treeDigest": "45c38d72c1035238245e346b7a725eb17d18a13f1863c0f0165bc6af53c48864",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:45:20
+     43|     f.hooks.afterSwitch = () => { f.original.ciEvidence.jobs[0].conclu…
+     44|     const result = await run(f.input, f.ports);
+     45|     expect(result).toEqual({ ...originalBefore, publicationId: f.input…
+       |                    ^
+     46|       rollbackOfPublicationId: originalBefore.publicationId, reason: f…
+     47|     expect(f.appended).toEqual([result]); expect(f.state.currentReleas…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires explicit confirmation actor and reason before opening the transport
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:64:42
+     62|       if (fault === 'confirmation') f.input.confirmed = false;
+     63|       else f.input[fault] = ' ';
+     64|       await expect(run(f.input, f.ports)).rejects.toThrow(/confirm|act…
+       |                                          ^
+     65|       unswitched(f); expect(names(f)).not.toContain('create-transport'…
+     66|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires original destination record and complete original CI and five local groups
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:77:42
+     75|       if (fault === 'ci') f.original.ciEvidence.jobs.pop();
+     76|       if (fault === 'local') f.original.localChecks.groups.shift();
+     77|       await expect(run(f.input, f.ports)).rejects.toThrow(); unswitche…
+       |                                          ^
+     78|       expect(names(f)).not.toContain('create-transport');
+     79|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > rejects pruned already-current foreign and misidentified retained targets under the lock
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:90:42
+     88|       if (fault === 'destination') f.state.retainedDestination = 'stan…
+     89|       if (fault === 'release') f.state.retainedReleaseId = 'another-re…
+     90|       await expect(run(f.input, f.ports)).rejects.toThrow(fault === 'p…
+       |                                          ^
+     91|       unswitched(f); expect(f.state.checks).toEqual([]);
+     92|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > measures retained bytes before fresh checks and refuses content changed since the original publication
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:97:40
+     95|   it('measures retained bytes before fresh checks and refuses content …
+     96|     const run = await runner(); const f = fixture(); writeFileSync(joi…
+     97|     await expect(run(f.input, f.ports)).rejects.toThrow(/digest|checks…
+       |                                        ^
+     98|     unswitched(f); expect(f.state.checks).toEqual([]);
+     99|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > requires all three fresh rollback groups bound to this same retained tree and destination
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:111:42
+    109|       if (fault === 'destination') f.report.destinationId = 'stand';
+    110|       if (fault === 'digest') f.report.treeDigest = '0'.repeat(64);
+    111|       await expect(run(f.input, f.ports)).rejects.toThrow(); unswitche…
+       |                                          ^
+    112|     }
+    113|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > remeasures after checks and refuses changed bytes before requesting a switch
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:118:40
+    116|     const run = await runner(); const f = fixture();
+    117|     f.hooks.afterChecks = () => writeFileSync(join(f.treeDir, 'index.h…
+    118|     await expect(run(f.input, f.ports)).rejects.toThrow(/digest|checks…
+       |                                        ^
+    119|     unswitched(f); expect(names(f)).not.toContain('rollback');
+    120|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > holds a scoped live authorization for only the selected rollback and revokes it at completion
+TypeError: f.state.authorize is not a function
+ ❯ tests/manual-publication-rollback.test.ts:132:26
+    130|     };
+    131|     await run(f.input, f.ports);
+    132|     await expect(f.state.authorize!({ action: 'connect', destinationId…
+       |                          ^
+    133|   });
+    134|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > refuses an unfinished destination operation without checks or switching
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:138:40
+    136|     const run = await runner(); const f = fixture();
+    137|     f.state.pending = { ...f.original, rollbackOfPublicationId: 'older…
+    138|     await expect(run(f.input, f.ports)).rejects.toThrow(/unfinished|pe…
+       |                                        ^
+    139|   });
+    140|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/manual-publication-rollback.test.ts > installed rollback coordinator > verifies post-switch release identity and health before append; failures retain the active pending audit
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-rollback.test.ts:150:42
+    148|       if (fault === 'append') f.state.appendFailure = true;
+    149|       if (fault === 'callback-operation') f.hooks.indexOperation = (op…
+    150|       await expect(run(f.input, f.ports)).rejects.toMatchObject({ acti…
+       |                                          ^
+    151|       expect(f.state.currentReleaseId).toBe(f.input.releaseId); expect…
+    152|       expect(f.state.requests.every((url) => new URL(url).hostname ===…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  10 failed | 1 passed (11)
+   Start at  17:38:19
+   Duration  307ms (transform 56ms, setup 23ms, import 76ms, tests 72ms, environment 0ms)
+
