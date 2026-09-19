@@ -117,6 +117,18 @@ test('source-only proof opens the read-only session but cannot upload bytes', op
   f.unchanged();
 });
 
+test('source-only probes do not create the release directory on an uninitialized destination', options, async (t) => {
+  const f = setup(t); delete f.proof.snapshotId; delete f.proof.treeDigest;
+  rmSync(join(f.root, 'releases'), { recursive: true });
+  await f.transport().withLock((session) => probe(session, 'inspectServing'));
+  assert.equal(existsSync(join(f.root, 'releases')), false);
+  assert.equal(readlinkSync(join(f.root, 'current')), 'releases/old');
+  assert.equal(readFileSync(f.fragment, 'utf8'), redirects);
+  Object.assign(f.proof, { snapshotId: 'snapshot-1', treeDigest: f.treeDigest });
+  await f.transport().withLock((session) => session.stage({ releaseId: 'new', sourceDir: f.source, expectedDigest: f.treeDigest }));
+  assert.equal(readFileSync(join(f.root, 'releases', 'new', 'index.html'), 'utf8'), 'new release');
+});
+
 for (const method of ['inspectServing', 'paymentReadiness']) {
   test(`${method} rechecks authorization before making its remote observation`, options, async (t) => {
     const f = setup(t);

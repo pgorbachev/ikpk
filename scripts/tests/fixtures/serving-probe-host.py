@@ -25,6 +25,10 @@ def run(argv, **kwargs):
     stderr = "fixture nginx inspection failed" if code else "nginx: configuration file test is successful\n"
     if not kwargs.get("text") and not kwargs.get("encoding"):
         stdout, stderr = stdout.encode(), stderr.encode()
+    # Match subprocess.run when the caller streams stdout to a supplied file.
+    if hasattr(kwargs.get("stdout"), "write"):
+        kwargs["stdout"].write(stdout)
+        stdout = None
     result = subprocess.CompletedProcess(argv, code, stdout, stderr)
     if kwargs.get("check") and code:
         raise subprocess.CalledProcessError(code, argv, stdout, stderr)

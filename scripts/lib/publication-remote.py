@@ -9,16 +9,24 @@ import hashlib
 import json
 import os
 import re
+import resource
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 import uuid
 
 MAX_RETAINED_FILES = 100000
 MAX_RETAINED_BYTES = 16 * 1024 ** 3
 RETAINED_CHUNK_BYTES = 1024 ** 2
 MAX_MANIFEST_BYTES = 8 * 1024 ** 2 - 128
+MAX_NGINX_BYTES = 2 * 1024 ** 2
+MAX_REDIRECT_BYTES = 1024 ** 2
+MAX_READINESS_BYTES = 64 * 1024
+PROBE_TIMEOUT = 10
 
 
 class Refusal(Exception):
@@ -67,6 +75,16 @@ def read_json(path):
 
 def regular_directory(path):
     require(stat.S_ISDIR(os.lstat(path).st_mode), "symlink or invalid release directory")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, url):
+        return None
+
+
+def limit_nginx_output():
+    # The dump goes to an anonymous file: neither memory nor disk grows without bound.
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_NGINX_BYTES + 1, MAX_NGINX_BYTES + 1))
 
 
 def valid_id(value):
@@ -125,9 +143,8 @@ class PublicationSession:
         self.root = os.path.realpath(root)
         self.destination = destination
         self.releases = os.path.join(self.root, "releases")
-        if not os.path.exists(self.releases):
-            os.mkdir(self.releases, 0o755)
-        regular_directory(self.releases)
+        if os.path.lexists(self.releases):
+            regular_directory(self.releases)
         self.pending = os.path.join(self.root, ".publication-pending.json")
         self.preparation = os.path.join(self.root, ".publication-preparation.json")
         self.current = os.path.join(self.root, "current")
@@ -135,6 +152,49 @@ class PublicationSession:
         self.prepared = None
         self.previous_current = None
         self.retained = {}
+
+    def inspect_serving(self):
+        # Resolve both components through descriptors so shared or the fragment cannot
+        # redirect this observation outside the configured publication destination.
+        shared_fd = os.open(os.path.join(self.root, "shared"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fd = os.open("nginx-redirects.conf", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=shared_fd)
+            with os.fdopen(fd, "rb") as source:
+                info = os.fstat(source.fileno())
+                require(stat.S_ISREG(info.st_mode), "redirect fragment is not a regular file")
+                require(info.st_size <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
+                redirects = source.read(MAX_REDIRECT_BYTES + 1)
+                require(len(redirects) <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
+        finally:
+            os.close(shared_fd)
+        with tempfile.TemporaryFile() as output:
+            try:
+                result = subprocess.run(["/usr/bin/sudo", "-n", "/usr/sbin/nginx", "-T"],
+                                        stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
+                                        shell=False, timeout=PROBE_TIMEOUT, preexec_fn=limit_nginx_output)
+            except (OSError, subprocess.SubprocessError):
+                raise Refusal("nginx inspection unavailable")
+            require(result.returncode == 0, "nginx inspection failed")
+            output.seek(0)
+            nginx_dump = output.read(MAX_NGINX_BYTES + 1)
+        require(nginx_dump and len(nginx_dump) <= MAX_NGINX_BYTES, "empty or oversized nginx inspection")
+        return {"nginxDump": nginx_dump.decode("utf-8"), "redirects": redirects.decode("utf-8")}
+
+    def payment_readiness(self):
+        # Ignore proxy environment and refuse redirects: this is evidence from this VPS.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        request = urllib.request.Request("http://127.0.0.1:8787/readyz", method="GET")
+        try:
+            response = opener.open(request, timeout=PROBE_TIMEOUT)
+        except urllib.error.HTTPError as error:
+            response = error
+        except (OSError, urllib.error.URLError):
+            raise Refusal("payment readiness unavailable")
+        with response:
+            body = response.read(MAX_READINESS_BYTES + 1)
+            require(len(body) <= MAX_READINESS_BYTES, "payment readiness exceeds limit")
+            return {"status": response.status, "contentType": response.headers.get("Content-Type", ""),
+                    "body": json.loads(body.decode("utf-8"))}
 
     def open_retained(self, release_id):
         valid_id(release_id)
@@ -296,6 +356,9 @@ class PublicationSession:
 
     def stage(self, command):
         self.no_pending()
+        if not os.path.lexists(self.releases):
+            os.mkdir(self.releases, 0o755)
+        regular_directory(self.releases)
         target = self.release(command.get("releaseId"))
         require(not os.path.lexists(target), "release collision: retained release already exists")
         expected = valid_digest(command.get("expectedDigest"))
@@ -418,6 +481,9 @@ class PublicationSession:
                 return
             if name == "recover":
                 reply(self.recover())
+            elif name in ("inspect-serving", "payment-readiness"):
+                require(set(command) == {"command"}, "unexpected probe parameters")
+                reply(getattr(self, name.replace("-", "_"))())
             elif name in ("read-retained", "read-retained-file"):
                 reply(getattr(self, name.replace("-", "_"))(command))
             else:

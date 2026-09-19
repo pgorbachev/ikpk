@@ -170,8 +170,10 @@ async function authorizeEffect(authorize, request) {
   const proof = await authorize(structuredClone(request));
   if (!proof || typeof proof !== 'object' || Array.isArray(proof) ||
       typeof proof.commit !== 'string' || !/^[a-f0-9]{40}$/.test(proof.commit) ||
-      typeof proof.snapshotId !== 'string' || !proof.snapshotId.trim() ||
       proof.destinationId !== request.destinationId) throw new Error('invalid publication authorization proof');
+  // These observations supply prerequisites for the complete publication report.
+  if (['connect', 'inspect-serving', 'payment-readiness'].includes(request.action)) return;
+  if (typeof proof.snapshotId !== 'string' || !proof.snapshotId.trim()) throw new Error('invalid publication authorization proof');
   checksum(proof.treeDigest);
   if (request.action === 'read-retained' && proof.releaseId !== request.releaseId) throw new Error('publication authorization release mismatch');
   if (request.expectedDigest !== undefined && proof.treeDigest !== request.expectedDigest) throw new Error('publication authorization digest mismatch');
@@ -218,6 +220,16 @@ export function createSshTransport(config) {
       await record(operation, recordIndex);
     }
     const session = {
+      async inspectServing() {
+        if (!open) throw new Error('publication lock is no longer held');
+        await authorizeAction('inspect-serving');
+        return call({ command: 'inspect-serving' });
+      },
+      async paymentReadiness() {
+        if (!open) throw new Error('publication lock is no longer held');
+        await authorizeAction('payment-readiness');
+        return call({ command: 'payment-readiness' });
+      },
       async readRetained({ releaseId: id }) {
         if (!open) throw new Error('publication lock is no longer held');
         releaseId(id);
