@@ -13,8 +13,34 @@ const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(webRoot, '..');
 
 const fromEnv = process.env.CONTENT_SNAPSHOT_DIR;
+const declaredSource = process.env.SNAPSHOT_SOURCE;
 const pinned = join(repoRoot, 'fixtures', 'content-snapshot');
-const source = fromEnv && existsSync(join(fromEnv, 'snapshot.json')) ? fromEnv : pinned;
+
+// Заданный каталог съёма БЕЗ `snapshot.json` — это ровно то, что оставляет за собой отказ
+// живого съёма: `capture-content-snapshot` удаляет файл перед работой и не пишет его, когда
+// отказывает. Прежде это состояние молча означало «взять закреплённую фикстуру», и отказ съёма
+// превращался в сборку из фикстуры: съём и выкладка — две отдельные команды, `deploy-web.sh`
+// съёма не запускает и происхождения снимка не проверяет. Стенд выглядел бы обновлённым.
+//
+// Отличить отказ от ЗАКОННОГО посева по одному отсутствию файла нельзя: джобы «Prepare content
+// snapshot artifact» (test.yml) и «Prepare pinned snapshot for manual dispatch» (deploy.yml)
+// специально зовут этот скрипт с заданным пустым каталогом, чтобы разложить туда фикстуру.
+// Поэтому намерение объявляется явно, а необъявленный случай — отказ: «не смогли измерить» не
+// должно выглядеть как «нарушений нет». Умолчания у объявления нет намеренно.
+// Отдельной проверки значения `SNAPSHOT_SOURCE` здесь нет намеренно: опечатку ловит тот же
+// отказ ниже. `SNAPSHOT_SOURCE=pinnned` не равен `'pinned'`, поэтому объявление не засчитано и
+// шаг падает с названной причиной. Проверено мутацией: снятие отдельной валидации не красило
+// ни одного теста — ветвь без наблюдаемого поведения, а такая ветвь есть обещание, а не гейт.
+const liveReady = fromEnv !== undefined && existsSync(join(fromEnv, 'snapshot.json'));
+if (fromEnv !== undefined && !liveReady && declaredSource !== 'pinned') {
+  throw new Error(
+    `prepare-snapshot: в CONTENT_SNAPSHOT_DIR (${fromEnv}) нет snapshot.json. Так выглядит ` +
+      'отказ живого съёма, и подставлять вместо него закреплённую фикстуру нельзя — сборка ' +
+      "выглядела бы обновлённой. Если фикстура нужна намеренно, объявите SNAPSHOT_SOURCE=pinned",
+  );
+}
+
+const source = liveReady ? fromEnv! : pinned;
 
 if (!existsSync(join(source, 'snapshot.json'))) {
   throw new Error(`prepare-snapshot: нет snapshot.json в ${source}`);
