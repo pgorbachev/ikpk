@@ -1,0 +1,81 @@
+TAP version 13
+# Subtest: REVIEW: committing intent with old current remains blocked and preserves both recovery records
+ok 1 - REVIEW: committing intent with old current remains blocked and preserves both recovery records
+  ---
+  duration_ms: 556.41275
+  type: 'test'
+  ...
+# Subtest: REVIEW: same publication ID cannot hide a different complete sidecar operation
+ok 2 - REVIEW: same publication ID cannot hide a different complete sidecar operation
+  ---
+  duration_ms: 299.732792
+  type: 'test'
+  ...
+# Subtest: REVIEW: completed committing phase has a positive recovery path with the original complete operation
+ok 3 - REVIEW: completed committing phase has a positive recovery path with the original complete operation
+  ---
+  duration_ms: 270.247959
+  type: 'test'
+  ...
+# Subtest: REVIEW: activation must refuse a pending operation changed after durable preparation
+not ok 4 - REVIEW: activation must refuse a pending operation changed after durable preparation
+  ---
+  duration_ms: 336.000291
+  type: 'test'
+  location: '/Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:78:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:80:3)
+    async Test.run (node:internal/test_runner/test:1113:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+  ...
+# Subtest: REVIEW: finish cannot clear a different pending identity after recording the authorized operation
+not ok 5 - REVIEW: finish cannot clear a different pending identity after recording the authorized operation
+  ---
+  duration_ms: 305.087542
+  type: 'test'
+  location: '/Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:91:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:93:3)
+    async Test.run (node:internal/test_runner/test:1113:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+  ...
+# Subtest: REVIEW: prepared cancellation remains bound to the operation already authorized by recover
+not ok 6 - REVIEW: prepared cancellation remains bound to the operation already authorized by recover
+  ---
+  duration_ms: 554.727666
+  type: 'test'
+  location: '/Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:104:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'rejects'
+  stack: |-
+    async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-manual-publication-transport-review/scripts/tests/publication-transport-review.test.mjs:125:3)
+    async Test.run (node:internal/test_runner/test:1113:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 3
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2421.164458
