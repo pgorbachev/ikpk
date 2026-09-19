@@ -5,7 +5,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createLedger } from './provenance-ledger.ts';
 import { ciEvidenceProblem, isPublicationRecord, localChecksProblem } from './publish-gate.ts';
-import { PROVENANCE_BRANCH, VERIFIED_PAIRS_FILE, readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs } from './verified-pairs.ts';
+import { PROVENANCE_BRANCH, VERIFIED_PAIRS_FILE, mergeVerifiedPairs, readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs } from './verified-pairs.ts';
 
 export interface PublicationStateStoreOptions {
   remote: string;
@@ -76,7 +76,9 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
       entries.some((entry, i) => entry.number !== i + 1 || entry.previous !== (i === 0 ? null : i) || !entry.fingerprint)) {
       throw new Error('provenance ledger corrupt sequence or high-water-mark');
     }
-    return { head, entries, observation: await ledger.observe({ fingerprint }), publications: readVerifiedPairs(workDir) };
+    const publications = readVerifiedPairs(workDir);
+    if (mergeVerifiedPairs([], publications).length !== publications.length) throw new Error('duplicate persisted publication index key');
+    return { head, entries, observation: await ledger.observe({ fingerprint }), publications };
   }
   function commit(paths: string[], message: string): void {
     git(['add', '--', ...paths]);
