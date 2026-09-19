@@ -31,6 +31,12 @@ export const getStaticPaths = () => (isDemoForms ? [{ params: { rest: undefined 
         На рабочем сайте эта кнопка открывает CRM-форму Bitrix24, и заявка
         попадает в воронку продаж вместе с UTM-метками источника.
       </p>
+      {!isDemoForms && (
+        <p class="demo-stub-note">
+          <strong>Примечание:</strong> текущая сборка сделана без режима демо —
+          на остальных страницах кнопки ведут на настоящие формы.
+        </p>
+      )}
       <div class="demo-stub-actions">
         <a href="/raspisanie-i-tseny" class="btn btn-primary">Вернуться к расписанию</a>
         <a href="/" class="btn btn-outline">На главную</a>
