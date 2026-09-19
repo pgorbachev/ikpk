@@ -314,40 +314,48 @@ describe('снимок читается из живой системы упра�
     expect(run.status, `пустой съём принят за успех:\n${run.output}`).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'записан пустой снимок').toBe(false);
     expect(run.output, 'отказ не называет источник').toContain(cms.url);
-    // Диагноз проверяется отдельно от факта отказа: полную пустоту ловит и правило про типы
-    // под контрактом, поэтому без этой строки ветвь «источник недоступен или пуст» была бы
-    // ненаблюдаемой — снятие её не красило прогон (проверено мутацией).
-    expect(run.output, 'полная пустота не отличена от пустоты типов под контрактом')
-      .toMatch(/ни одной записи ни в одном типе/);
   });
 
   // Частичная пустота опаснее полной: полную видно сразу, а эта проходила с одним `console.warn`
-  // и записывала снимок. Достаточно одного населённого типа из десяти — например `institutes`,
-  // где записей единицы и меняются они редко, — чтобы сайт собрался БЕЗ статей и семинаров.
-  // Предмет отказа — типы, которые проверяет сам контракт, и берутся они из его же списков,
-  // а не из литерала здесь: добавят требование к новому типу — правило расширится само.
-  it('пустой тип, который проверяет контракт, — отказ, а не предупреждение', async () => {
-    const cms = await stub({ articles: { records: [] } });
-    const dir = outDir();
+  // и записывала снимок. Достаточно одного населённого типа из десяти, чтобы сайт собрался БЕЗ
+  // статей. Каждый каркасный тип проверяется отдельно: правило «какой-нибудь из них» прошло бы
+  // и при дыре ровно в одном, а именно так это и выглядит в природе.
+  for (const [type, endpoint] of [
+    ['articles', 'articles'],
+    ['institutes', 'institutes'],
+    ['seminars', 'seminars'],
+    ['teachers', 'teachers'],
+    ['course_groups', 'course-groups'],
+  ] as const) {
+    it(`пустой каркасный тип ${type} — отказ, а не предупреждение`, async () => {
+      const cms = await stub({ [endpoint]: { records: [] } });
+      const dir = outDir();
 
-    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
-    expect(run.status, `пустые статьи приняты за успех:\n${run.output}`).not.toBe(0);
-    expect(existsSync(join(dir, 'snapshot.json')), 'записан снимок без статей').toBe(false);
-    expect(run.output, 'отказ не называет пустой тип').toMatch(/articles/);
-  });
+      expect(run.status, `пустой ${type} принят за успех:\n${run.output}`).not.toBe(0);
+      expect(existsSync(join(dir, 'snapshot.json')), `записан снимок без ${type}`).toBe(false);
+      expect(run.output, 'отказ не называет пустой тип').toMatch(new RegExp(type));
+    });
+  }
 
-  // Обратная сторона того же правила: типы, за которые контракт не ручается, пустыми быть
-  // вправе. Без этой проверки «отказывать на любой пустоте» выглядело бы таким же верным.
-  it('пустой тип вне контракта — предупреждение, снимок пишется', async () => {
-    const cms = await stub({ promotions: { records: [] }, 'news-items': { records: [] } });
+  // Обратная сторона того же правила, и она не формальность: каркас задан спекой, а не
+  // «всё, что проверяет контракт». Расписание в межсезонье пусто законно, новости и акции
+  // редактор вправе удалить до последней. Отказ на них останавливал бы выкладку без причины —
+  // ровно та ошибка, которую эта проверка и стережёт.
+  it('пустой НЕкаркасный тип — предупреждение, снимок пишется', async () => {
+    const cms = await stub({
+      'schedule-entries': { records: [] },
+      promotions: { records: [] },
+      'news-items': { records: [] },
+    });
     const dir = outDir();
 
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `съём отказал на законной пустоте:\n${run.output}`).toBe(0);
     expect(existsSync(join(dir, 'snapshot.json')), 'снимок не записан').toBe(true);
-    expect(run.output, 'пустые типы не названы в предупреждении').toMatch(/promotions/);
+    expect(run.output, 'пустые типы не названы в предупреждении').toMatch(/schedule_entries/);
   });
 
   // Снимок не появляется на диске, пока не прошёл контракт (tasks.md 3.3). Контракт — тот же,

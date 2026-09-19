@@ -8,11 +8,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  REQUIRED_SNAPSHOT_FIELDS,
-  REQUIRED_SNAPSHOT_RELATIONS,
-  assertSnapshotContract,
-} from './lib/content-contract.ts';
+import { assertSnapshotContract } from './lib/content-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
@@ -386,34 +382,30 @@ async function liveCapture(): Promise<void> {
     origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
 
-  // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте
-  // проходит по определению: нарушать нечего. Замерено 06.09.2026 — снятие пришлось на
-  // перезапуск CMS после смены артефакта, снимок вышел с нулём записей, контракт его
-  // пропустил, и сайт собрался бы БЕЗ содержимого. Остановил это чужой гейт по случайности.
+  // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
+  // по определению: он перебирает записи, а перебирать нечего. Замерено 06.09.2026 — снятие
+  // пришлось на перезапуск CMS после смены артефакта, снимок вышел с нулём записей, контракт
+  // его пропустил, и сайт собрался бы БЕЗ содержимого.
+  //
+  // Порога «хоть один тип населён» мало: одного населённого `institutes` хватало, чтобы пустые
+  // статьи и семинары прошли предупреждением. Предмет отказа — КАРКАС САЙТА, и состав его
+  // задан принятой спекой (`openspec/specs/cms-content-source/spec.md`, требование
+  // «Недоступный или неполный контент останавливает сборку»): институты, программы, семинары,
+  // статьи, преподаватели — «пустота там означает сбой получения, а не решение редактора».
+  //
+  // Выводить состав из списков контракта нельзя, хотя соблазн есть: те списки написаны под
+  // другое правило (обязательные поля и связи), и расходятся с каркасом в обе стороны — в них
+  // нет `institutes` и есть `schedule_entries`. Пустое расписание в межсезонье законно, и
+  // отказ на нём останавливал бы выкладку без причины.
+  const SKELETON_TYPES = ['institutes', 'course_groups', 'seminars', 'articles', 'teachers'];
+
   const emptyTypes = Object.entries(types)
     .filter(([, rows]) => rows.length === 0)
     .map(([name]) => name);
-  if (emptyTypes.length === Object.keys(types).length) {
+  const emptySkeleton = emptyTypes.filter((name) => SKELETON_TYPES.includes(name));
+  if (emptySkeleton.length > 0) {
     throw new Error(
-      `живой съём с ${cmsUrl} не дал ни одной записи ни в одном типе — источник недоступен ` +
-        'или пуст; снимок не записан',
-    );
-  }
-
-  // Частичная пустота опаснее полной, и порогом «хоть один тип населён» не ловится: одного
-  // `institutes` (единицы записей, меняются редко) хватало, чтобы пустые статьи и семинары
-  // прошли предупреждением и снимок записался. Собранный из него сайт — без содержимого.
-  //
-  // Предмет отказа — типы, за которые ручается САМ контракт, и берутся они из его же списков,
-  // а не из литерала здесь: появится требование к новому типу — правило расширится вместе с
-  // ним. Перечислять имена руками значило бы завести второй, молча стареющий список.
-  const contractChecked = new Set(
-    [...REQUIRED_SNAPSHOT_FIELDS, ...REQUIRED_SNAPSHOT_RELATIONS].map((group) => group.type),
-  );
-  const emptyChecked = emptyTypes.filter((name) => contractChecked.has(name));
-  if (emptyChecked.length > 0) {
-    throw new Error(
-      `живой съём с ${cmsUrl}: типы под контрактом пусты (${emptyChecked.join(', ')}) — ` +
+      `живой съём с ${cmsUrl}: каркасные типы пусты (${emptySkeleton.join(', ')}) — ` +
         'контракт на нуле записей проходит по определению, поэтому это отказ, а не ' +
         'предупреждение; снимок не записан',
     );
