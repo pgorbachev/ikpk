@@ -1,0 +1,612 @@
+{
+  "config": {
+    "argv": [
+      "/Users/pgorbachev/.nvm/versions/node/v24.13.0/bin/node",
+      "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/node_modules/.bin/playwright",
+      "test",
+      "tests/publication-smoke.spec.ts",
+      "--config",
+      "playwright.publication.config.ts",
+      "--project=desktop",
+      "--project=mobile",
+      "--reporter=json"
+    ],
+    "configFile": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/playwright.publication.config.ts",
+    "rootDir": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "desktop",
+        "name": "desktop",
+        "testDir": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "publication-smoke.spec.ts"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "mobile",
+        "name": "mobile",
+        "testDir": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "publication-smoke.spec.ts"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "publication-smoke.spec.ts",
+      "file": "publication-smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "main published pages have readable content",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 356,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:18:3",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:18:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:06.461Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-main-published-pages-have-readable-content-desktop/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-37ee88ac24d7166c110c",
+          "file": "publication-smoke.spec.ts",
+          "line": 17,
+          "column": 1
+        },
+        {
+          "title": "desktop and mobile navigation reaches the schedule",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 236,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:27:3",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:27:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:07.954Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-desktop--3d3a7-gation-reaches-the-schedule-desktop/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-a421acb92cfb7f277d10",
+          "file": "publication-smoke.spec.ts",
+          "line": 26,
+          "column": 1
+        },
+        {
+          "title": "captured article and seminar routes open on this exact artifact",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 220,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:39:33",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:39:33"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:08.758Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-captured-16ac5-open-on-this-exact-artifact-desktop/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-3564d5df65be5f8c44a1",
+          "file": "publication-smoke.spec.ts",
+          "line": 38,
+          "column": 1
+        },
+        {
+          "title": "schedule renders its cards and registration links without submitting them",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "desktop",
+              "projectName": "desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 258,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:53:23",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:53:23"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:09.558Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-schedule-85778-nks-without-submitting-them-desktop/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-878aedc96d7e406440cd",
+          "file": "publication-smoke.spec.ts",
+          "line": 52,
+          "column": 1
+        },
+        {
+          "title": "main published pages have readable content",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "mobile",
+              "projectName": "mobile",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 245,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:18:3",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:18:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:10.383Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-main-published-pages-have-readable-content-mobile/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-6419d95d4e0033ca5ba5",
+          "file": "publication-smoke.spec.ts",
+          "line": 17,
+          "column": 1
+        },
+        {
+          "title": "desktop and mobile navigation reaches the schedule",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "mobile",
+              "projectName": "mobile",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 224,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:27:3",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:27:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:11.194Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-desktop--3d3a7-gation-reaches-the-schedule-mobile/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-b3bafbe10a5ab857258d",
+          "file": "publication-smoke.spec.ts",
+          "line": 26,
+          "column": 1
+        },
+        {
+          "title": "captured article and seminar routes open on this exact artifact",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "mobile",
+              "projectName": "mobile",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 224,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:39:33",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:39:33"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:12.004Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-captured-16ac5-open-on-this-exact-artifact-mobile/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-2a886878620ac8bacab4",
+          "file": "publication-smoke.spec.ts",
+          "line": 38,
+          "column": 1
+        },
+        {
+          "title": "schedule renders its cards and registration links without submitting them",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "mobile",
+              "projectName": "mobile",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 219,
+                  "error": {
+                    "message": "Error: owned publication context required",
+                    "stack": "Error: owned publication context required\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:53:23",
+                    "location": {
+                      "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                      "column": 76,
+                      "line": 11
+                    },
+                    "snippet": "   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                        "column": 76,
+                        "line": 11
+                      },
+                      "message": "Error: owned publication context required\n\n   9 |   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;\n  10 |   const treeDir = process.env.PUBLICATION_TREE_DIR;\n> 11 |   if (!snapshotDir || !treeDir || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');\n     |                                                                            ^\n  12 |   return { snapshot: readPublicationSnapshot(snapshotDir), treeDir };\n  13 | }\n  14 | test.beforeEach(async ({ page }) => {\n    at context (/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:11:76)\n    at /Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts:53:23"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-19T15:22:12.805Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-browser-red-2bso_c0v/browser-output/publication-smoke-schedule-85778-nks-without-submitting-them-mobile/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/pgorbachev/projects/private/ikpk-retained-checks-red/web/tests/publication-smoke.spec.ts",
+                    "column": 76,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "1376e4c7d86c8c4507ea-dcd21a3681f8f24f2920",
+          "file": "publication-smoke.spec.ts",
+          "line": 52,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-19T15:22:06.096Z",
+    "duration": 7281.2080000000005,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 8,
+    "flaky": 0
+  }
+}
