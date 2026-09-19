@@ -1,0 +1,268 @@
+✔ harness control executes the real remote upload protocol without real SSH (324.965625ms)
+✖ serving inspection reads actual nginx dump and the existing root-bound redirect fragment over SSH (295.687208ms)
+✖ payment readiness uses fixed GET on VPS loopback and returns HTTP metadata with parsed JSON (302.912625ms)
+✖ source and destination proof permits both probes before snapshot and full report exist (6.22775ms)
+✖ source-only proof opens the read-only session but cannot upload bytes (5.817166ms)
+✖ inspectServing rechecks authorization before making its remote observation (280.248084ms)
+✖ paymentReadiness rechecks authorization before making its remote observation (276.048ms)
+✖ unavailable nginx inspection refuses instead of producing empty evidence (289.627458ms)
+✖ redirect fragment symlinks are not accepted as destination evidence (301.735541ms)
+✖ unreachable service cannot return successful readiness evidence (290.171334ms)
+✖ malformed JSON cannot return successful readiness evidence (324.776417ms)
+✖ readiness body over 64 KiB cannot return successful readiness evidence (278.422375ms)
+✖ non-200 readiness is preserved or refused and never normalized into ready HTTP 200 (284.388375ms)
+✖ nginx dump over 2 MiB is refused as oversized evidence (304.192375ms)
+✖ redirect fragment over 1 MiB is refused as oversized evidence (293.562833ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 1
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3910.806667
+
+✖ failing tests:
+
+test at scripts/tests/publication-serving-probes.test.mjs:71:1
+✖ serving inspection reads actual nginx dump and the existing root-bound redirect fragment over SSH (295.687208ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + undefined
+  - {
+  -   nginxDump: '# configuration file /etc/nginx/sites-enabled/site:\n' +
+  -     'server { listen 80; root /var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-serving-probes-lS3e6m/remote/current; include /var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-serving-probes-lS3e6m/remote/shared/nginx-redirects.conf; }\n',
+  -   redirects: 'location = /old { return 301 /new; }\n'
+  - }
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:74:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { nginxDump: '# configuration file /etc/nginx/sites-enabled/site:\nserver { listen 80; root /var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-serving-probes-lS3e6m/remote/current; include /var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-serving-probes-lS3e6m/remote/shared/nginx-redirects.conf; }\n', redirects: 'location = /old { return 301 /new; }\n' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:83:1
+✖ payment readiness uses fixed GET on VPS loopback and returns HTTP metadata with parsed JSON (302.912625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + undefined
+  - {
+  -   body: {
+  -     mode: 'test',
+  -     shopId: 'shop-42',
+  -     status: 'ready'
+  -   },
+  -   contentType: 'application/json',
+  -   status: 200
+  - }
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:88:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { status: 200, contentType: 'application/json', body: { status: 'ready', mode: 'test', shopId: 'shop-42' } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:96:1
+✖ source and destination proof permits both probes before snapshot and full report exist (6.22775ms)
+  AssertionError [ERR_ASSERTION]: read-only proof must not depend on the report these probes produce
+  + actual - expected
+
+  + 'invalid publication authorization proof'
+  - undefined
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:102:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'invalid publication authorization proof',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:109:1
+✖ source-only proof opens the read-only session but cannot upload bytes (5.817166ms)
+  AssertionError [ERR_ASSERTION]: refusal must guard upload, not prevent prerequisite read-only probes
+
+  false !== true
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:116:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:121:3
+✖ inspectServing rechecks authorization before making its remote observation (280.248084ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:128:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /revoked/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:121:3
+✖ paymentReadiness rechecks authorization before making its remote observation (276.048ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:128:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /revoked/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:134:1
+✖ unavailable nginx inspection refuses instead of producing empty evidence (289.627458ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:136:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:141:1
+✖ redirect fragment symlinks are not accepted as destination evidence (301.735541ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:144:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:154:3
+✖ unreachable service cannot return successful readiness evidence (290.171334ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:156:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:154:3
+✖ malformed JSON cannot return successful readiness evidence (324.776417ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:156:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:154:3
+✖ readiness body over 64 KiB cannot return successful readiness evidence (278.422375ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:156:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:162:1
+✖ non-200 readiness is preserved or refused and never normalized into ready HTTP 200 (284.388375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  undefined !== 503
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:166:29)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:171:1
+✖ nginx dump over 2 MiB is refused as oversized evidence (304.192375ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:173:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-serving-probes.test.mjs:177:1
+✖ redirect fragment over 1 MiB is refused as oversized evidence (293.562833ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-serving-red/scripts/tests/publication-serving-probes.test.mjs:179:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
