@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { verifyServedPublication } from './published-state.ts';
 import { contentFingerprint, snapshotId } from './content-snapshot.ts';
 import { chooseManualPublication, ciEvidenceProblem, localChecksProblem } from './publish-gate.ts';
 import type { PublicationCheckInput } from './publication-checks.ts';
@@ -14,11 +15,11 @@ export interface PublishedOperation extends PublicationRecord {
   observedEntry: number; highWaterMark: number; headAtLastCheck: string;
 }
 export interface PublicationProof {
-  destinationId: string; treeDigest: string; commit: string; snapshotId: string;
+  destinationId: string; treeDigest: string; commit: string; snapshotId: string; releaseId?: string;
 }
 export interface PublicationAuthorizationRequest {
-  action: 'connect' | 'stage' | 'activate' | 'rollback' | 'recover';
-  destinationId: string; expectedDigest?: string;
+  action: 'connect' | 'stage' | 'activate' | 'rollback' | 'recover' | 'read-retained';
+  destinationId: string; expectedDigest?: string; releaseId?: string;
   operation?: PublicationProof & { publicationId: string; releaseId: string };
 }
 export type PublicationAuthorizer = (request: PublicationAuthorizationRequest) => Promise<PublicationProof>;
@@ -129,11 +130,7 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
         },
         recordIndex: async (active) => {
           if (!isDeepStrictEqual(active, operation)) throw new Error('active publication operation mismatch');
-          const release = await servingResponse('/release.json', origin, ports.fetch);
-          const body = await boundedReleaseJson(release);
-          if (!body || body.commit !== operation.commit || body.snapshotId !== operation.snapshotId) throw new Error('served release identity mismatch');
-          const health = await servingResponse('/', origin, ports.fetch);
-          await health.body?.cancel();
+          await verifyServedPublication(operation, origin, ports.fetch);
           await ports.state.appendPublication(structuredClone(operation));
         },
       });
@@ -142,38 +139,3 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
   } finally { usable = false; }
 }
 
-/** Follow redirects explicitly so a foreign host is never contacted. */
-async function servingResponse(path: string, origin: URL, fetch: typeof globalThis.fetch): Promise<Response> {
-  let url = new URL(path, origin); const seen = new Set<string>();
-  for (let count = 0; count < 6; count++) {
-    if (url.hostname !== origin.hostname || !['http:', 'https:'].includes(url.protocol) || url.username || url.password || seen.has(url.href)) {
-      throw new Error('unsafe serving redirect');
-    }
-    seen.add(url.href);
-    const response = await fetch(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(15_000),
-      cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
-    if (response.url && new URL(response.url).hostname !== origin.hostname) {
-      await response.body?.cancel(); throw new Error('serving host mismatch');
-    }
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location'); await response.body?.cancel();
-      if (!location) throw new Error('serving redirect missing location');
-      url = new URL(location, url); continue;
-    }
-    if (response.status !== 200) { await response.body?.cancel(); throw new Error(`serving HTTP ${response.status}`); }
-    return response;
-  }
-  throw new Error('too many serving redirects');
-}
-
-async function boundedReleaseJson(response: Response): Promise<{ commit?: unknown; snapshotId?: unknown } | null> {
-  if (!response.body) throw new Error('missing release response');
-  const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read(); if (done) break;
-      size += value.length; if (size > 32_768) throw new Error('release response too large'); chunks.push(value);
-    }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } finally { await reader.cancel(); }
-}
