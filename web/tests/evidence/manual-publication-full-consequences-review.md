@@ -61,6 +61,11 @@ Known `scripts/restore-server-state.sh` bypass remains a merge blocker and is no
 as an exception. Missing real installation/deploy-user/CMS writer prerequisites and known
 43 legacy content links still prevent operational acceptance.
 
+*Postscript 2026-09-19:* the restore bypass named above was resolved by the owner's decision
+(restore stages into `restored/`, never switches serving); the P1 retention depth loss is fixed
+by candidate markers. See `manual-publication-entrypoints-implementation.md`, section
+«Contract conflict resolved». The prerequisites and the 43 legacy links remain open.
+
 Independent native command:
 
 ```sh
