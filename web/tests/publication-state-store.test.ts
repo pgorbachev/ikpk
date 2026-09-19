@@ -266,3 +266,18 @@ describe('shared Git state store: real bare-remote contract', () => {
     expect(readFileSync(join(f.workDir, '.git/config'), 'utf8')).not.toContain(CANARY); expect(JSON.stringify(result)).not.toContain(CANARY);
   });
 });
+
+describe('review: real store preserves stale-snapshot diagnostic evidence', () => {
+  it('a mismatched current fingerprint exposes the actual latest entry and high-water mark', async () => {
+    const f = await fixture();
+    const api = store(f);
+    expect((await api.read('A')).observation.observedEntry).toBe(3);
+    const other = await otherWriter(f, 'cms');
+    git(other, 'push', 'origin', BRANCH);
+    const failure = await api.read('A').catch((error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    const diagnostic = `${failure.message} ${JSON.stringify(failure)}`;
+    expect(diagnostic).toMatch(/latestEntry[=:"\s]+4/);
+    expect(diagnostic).toMatch(/highWaterMark[=:"\s]+4/);
+  });
+});
