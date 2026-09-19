@@ -105,6 +105,43 @@ describe('fixed installed rollback operator binds real coordinator and retained 
     expect(f.state.requests.map((url) => new URL(url).origin)).toEqual([f.config.siteUrl, f.config.siteUrl]);
   });
 
+  it('active stored role probes readiness once inside the existing retained lock', async () => {
+    const f = await fixture(); f.original.paymentRole = 'stand';
+    let locks = 0;
+    const probe = vi.fn(async () => {
+      expect(f.state.locked).toBe(true);
+      return { status: 200, contentType: 'application/json', body: { status: 'ready', mode: 'test', shopId: '1440249' } };
+    });
+    f.transport.mockImplementation((options) => {
+      const transport = f.ports.createTransport(options);
+      return { async withLock(callback) {
+        expect(++locks, 'rollback readiness must reuse the retained lock').toBe(1);
+        return transport.withLock((session) => {
+          const readySession = { ...session, paymentReadiness: probe };
+          return callback(readySession);
+        });
+      } };
+    });
+    f.adapters.mockImplementation((_options, overrides) => ({ ...f.adapterPorts,
+      async checkPaymentReadiness(context) {
+        expect(overrides).toMatchObject({ paymentReadiness: expect.any(Function) });
+        const response = await (overrides as { paymentReadiness(): Promise<unknown> }).paymentReadiness();
+        expect(response).toMatchObject({ status: 200, body: { mode: 'test', shopId: '1440249' } });
+        return f.adapterPorts.checkPaymentReadiness(context);
+      },
+    }));
+    const result = await f.run();
+    expect(result.paymentRole).toBe('stand'); expect(locks).toBe(1); expect(probe).toHaveBeenCalledTimes(1);
+    expect(f.adapterPorts.checkPaymentPreflight).toHaveBeenCalledTimes(1); expect(f.appended).toHaveLength(1);
+  });
+
+  it('refuses an active retained role when protected configuration supplies another payment identity', async () => {
+    const f = await fixture(); f.original.paymentRole = 'prod';
+    await expect(f.run()).rejects.toThrow();
+    expect(f.events.map(({ name }) => name)).not.toContain('switch');
+    expect(f.adapterPorts.checkPaymentReadiness).not.toHaveBeenCalled(); expect(f.appended).toEqual([]);
+  });
+
   it('keeps broker credentials and caller-controlled snapshot/report/startup inputs out of retained checks', async () => {
     const f = await fixture(); await f.run(); expect(f.contexts).toHaveLength(3);
     for (const context of f.contexts) {
