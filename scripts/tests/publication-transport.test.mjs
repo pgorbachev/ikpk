@@ -92,7 +92,12 @@ function client(t, config) {
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   child.on('message', (message) => messages.push(message));
-  t.after(() => { if (child.connected) child.send({ release: true }); child.kill(); });
+  t.after(() => {
+    // The worker may disconnect after its released message but before cleanup.
+    // Supplying a callback handles that asynchronous closed-channel/EPIPE result.
+    if (child.connected) child.send({ release: true }, () => {});
+    child.kill();
+  });
   return {
     child, messages,
     async until(state) {
