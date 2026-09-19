@@ -1,0 +1,66 @@
+Commit: fae07813aa4a5d60d3f7a58016d2f9bb45539991
+Working directory: web/
+Command: npx vitest run tests/cms-publish-gate.test.ts --reporter=verbose
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ × tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > есть запись новее НАБЛЮДЁННОЙ — выкладка отменяется, подтверждения не требуется 13ms
+   → устаревание не запускает новую публикацию автоматически: expected true to be false // Object.is equality
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > пять правок быстрее одного прогона не требуют ни одного подтверждения 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > наблюдённая запись последняя, а ревизия ниже отметки — регресс, а не устаревание 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > обычный прогон на восстановленной базе не публикует до подтверждения 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > подтверждение участником с правом записи разрешает публикацию и фиксируется 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > ревизия не ниже отметки при последней наблюдённой записи — обычная публикация 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > неопределённая ревизия останавливает публикацию до подтверждения 0ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: принятие состояния и повторный откат > принятие состояния поднимает ревизию восстановленного содержимого до уровня отметки 50ms
+ ✓ tests/cms-publish-gate.test.ts > гейт публикации: принятие состояния и повторный откат > откат после принятого отката снова останавливается до подтверждения 39ms
+ × tests/cms-publish-gate.test.ts > событийная публикация запрещена > успешный прогон при несдвинувшейся вершине не публикует без явной команды 1ms
+   → expected 'publish' not to be 'publish' // Object.is equality
+ ✓ tests/cms-publish-gate.test.ts > событийная публикация запрещена > прогон с исходом failure не публикует 0ms
+ ✓ tests/cms-publish-gate.test.ts > событийная публикация запрещена > прогон с исходом cancelled не публикует 0ms
+ ✓ tests/cms-publish-gate.test.ts > событийная публикация запрещена > прогон с исходом skipped не публикует 0ms
+ ✓ tests/cms-publish-gate.test.ts > событийная публикация запрещена > прогон с исходом missing не публикует 0ms
+ ✓ tests/cms-publish-gate.test.ts > событийная публикация запрещена > перекрытый коммит не публикуется событийным путём ни при каких условиях 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cms-publish-gate.test.ts > гейт публикации: устаревание против регресса > есть запись новее НАБЛЮДЁННОЙ — выкладка отменяется, подтверждения не требуется
+AssertionError: устаревание не запускает новую публикацию автоматически: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/cms-publish-gate.test.ts:41:108
+     39|     expect(decision.action).toBe('cancel-stale');
+     40|     expect(decision.recorded, 'отмена обязана быть записана').toBe(tru…
+     41|     expect(decision.runScheduledForLatestEntry, 'устаревание не запуск…
+       |                                                                                                            ^
+     42|   });
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/cms-publish-gate.test.ts > событийная публикация запрещена > успешный прогон при несдвинувшейся вершине не публикует без явной команды
+AssertionError: expected 'publish' not to be 'publish' // Object.is equality
+ ❯ tests/cms-publish-gate.test.ts:210:11
+    208|         testRunConclusion: 'success',
+    209|       }).action,
+    210|     ).not.toBe('publish');
+       |           ^
+    211|   });
+    212|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 13 passed (15)
+   Start at  14:32:05
+   Duration  273ms (transform 36ms, setup 18ms, import 44ms, tests 104ms, environment 0ms)
+
+
+Exit code: 1
