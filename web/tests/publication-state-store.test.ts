@@ -281,3 +281,45 @@ describe('review: real store preserves stale-snapshot diagnostic evidence', () =
     expect(diagnostic).toMatch(/highWaterMark[=:"\s]+4/);
   });
 });
+
+describe('rollback history does not depend on the CMS journal', () => {
+  function historyStore(f: Fixture) {
+    return store(f) as ReturnType<typeof store> & {
+      readHistory(): Promise<{ head: string; publications: PublicationRecord[] }>;
+    };
+  }
+  function indexWithoutLedger(f: Fixture, records: PublicationRecord[]) {
+    rmSync(join(f.author, 'ledger'), { recursive: true });
+    write(join(f.author, 'verified-pairs.json'), JSON.stringify(records));
+    git(f.author, 'add', '.'); git(f.author, 'commit', '-m', 'retained publication index without CMS journal');
+    git(f.author, 'push', 'origin', BRANCH);
+  }
+
+  it('readHistory refreshes only the immutable index when the CMS journal is unavailable', async () => {
+    const f = await fixture(); const original = record('retained'); indexWithoutLedger(f, [original]);
+    const before = head(f); const api = historyStore(f);
+    expect(api.readHistory).toBeTypeOf('function');
+    await expect(api.readHistory()).resolves.toEqual({ head: before, publications: [original] });
+    expect(head(f)).toBe(before); expect(existsSync(join(f.workDir, 'ledger'))).toBe(false);
+  });
+
+  it('readHistory refuses duplicate publication keys instead of silently repairing the index', async () => {
+    const f = await fixture(); const original = record('retained'); indexWithoutLedger(f, [original, original]);
+    const before = head(f); const api = historyStore(f);
+    expect(api.readHistory).toBeTypeOf('function');
+    await expect(api.readHistory()).rejects.toThrow(/duplicate|immutable|corrupt|history|index/i);
+    expect(head(f)).toBe(before); expect(remotePairs(f)).toEqual([original, original]);
+  });
+
+  it('appends rollback audit without a CMS ledger and preserves original publication evidence', async () => {
+    const f = await fixture(); const original = record('retained'); indexWithoutLedger(f, [original]);
+    const rollback = { ...structuredClone(original), publicationId: 'rollback-without-ledger', actor: 'rollback-operator',
+      publishedAt: '2026-09-19T02:00:00Z', rollbackOfPublicationId: original.publicationId, reason: 'Repair current serving',
+      rollbackChecks: { ...structuredClone(original.localChecks),
+        groups: original.localChecks.groups.filter(({ name }) => ['destination-mode', 'browser-smoke', 'payment-destination'].includes(name)) } };
+    await expect(store(f).appendPublication(rollback)).resolves.toMatchObject({ changed: true });
+    expect(remotePairs(f)).toEqual([original, rollback]);
+    expect(git(f.root, '--git-dir', f.remote, 'ls-tree', '-r', '--name-only', BRANCH)).not.toContain('ledger/');
+    expect(remoteFile(f, 'writer-owned.txt')).toBe('do not stage or modify');
+  });
+});
