@@ -187,6 +187,8 @@ async function authorizeEffect(authorize, request) {
 
 export function createSshTransport(config) {
   const { authorize, ...connectionConfig } = config;
+  const keepReleases = config.keepReleases === undefined ? 5 : config.keepReleases;
+  if (!Number.isSafeInteger(keepReleases) || keepReleases < 5) throw new Error('keepReleases retention must be an integer of at least 5');
   const authorizeAction = (action, details = {}) => authorizeEffect(authorize, { action, destinationId: connectionConfig.destinationId, ...details });
   async function withLock(callback) {
     await authorizeAction('connect');
@@ -200,7 +202,7 @@ export function createSshTransport(config) {
     async function record(operation, recordIndex) {
       try {
         await recordIndex(structuredClone(operation));
-        await call({ command: 'finish', operation });
+        await call({ command: 'finish', operation, keepReleases });
       } catch (error) { throw indexFailure(error, operation); }
     }
     async function activate({ releaseId: id, operation, recordIndex, expectedDigest, beforeActivate, redirectsPath, rollback = false }) {

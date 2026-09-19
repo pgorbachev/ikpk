@@ -134,6 +134,39 @@ for (const keepReleases of [2, 4]) test(`retention rejects configured depth ${ke
   assert.equal(f.events().length, 0); assert.deepEqual(f.list(), [...f.ids].sort()); assert.deepEqual(f.index(), f.history);
 });
 
+for (const keepReleases of [null, '5', true, 5.5, NaN, Infinity]) test(`retention refuses invalid depth ${String(keepReleases)} before SSH`, options, async (t) => {
+  const f = fixture(t, { keepReleases });
+  await assert.rejects(async () => createSshTransport(f.config).withLock(async () => {}), /keepReleases/);
+  assert.equal(f.events().length, 0);
+});
+
+for (const kind of ['file symlink', 'directory symlink', 'FIFO']) test(`retention refuses ${kind} inside an excess tree without touching external bytes`, options, async (t) => {
+  const f = fixture(t); const member = join(f.releases, f.ids[0], 'unsafe');
+  if (kind === 'FIFO') assert.equal(spawnSync('/usr/bin/mkfifo', [member]).status, 0);
+  else symlinkSync(kind === 'file symlink' ? join(f.source, 'index.html') : f.source, member);
+  const oldestTime = new Date(Date.UTC(2020, 0, 1));
+  utimesSync(join(f.releases, f.ids[0]), oldestTime, oldestTime);
+  await assert.rejects(createSshTransport(f.config).withLock(async (session) => {
+    await f.stage(session); await f.activate(session);
+  }), (error) => {
+    assert.match(error.message, /symlink|invalid member/);
+    assert.deepEqual(error.activeOperation, f.operation); return true;
+  });
+  assert.equal(readFileSync(join(f.source, 'index.html'), 'utf8'), body);
+  assert.equal(f.active(), 'releases/new-release');
+  assert.deepEqual(f.index(), [...f.history, f.operation]);
+});
+
+test('retention removes nested regular files in excess release directories', options, async (t) => {
+  const f = fixture(t); const oldest = join(f.releases, f.ids[0]);
+  mkdirSync(join(oldest, 'assets', 'nested'), { recursive: true });
+  writeFileSync(join(oldest, 'assets', 'nested', 'old.js'), 'old immutable asset');
+  const oldestTime = new Date(Date.UTC(2020, 0, 1)); utimesSync(oldest, oldestTime, oldestTime);
+  await createSshTransport(f.config).withLock(async (session) => { await f.stage(session); await f.activate(session); });
+  assert.equal(existsSync(oldest), false);
+  assert.deepEqual(f.list(), [...f.ids.slice(-4), f.operation.releaseId].sort());
+});
+
 test('retention deletion failure refuses success while reporting the actual active and indexed operation', options, async (t) => {
   const f = fixture(t); const oldest = join(f.releases, f.ids[0]);
   chmodSync(oldest, 0o500);
@@ -148,4 +181,24 @@ test('retention deletion failure refuses success while reporting the actual acti
   assert.equal(f.active(), 'releases/new-release'); assert.deepEqual(f.index(), [...f.history, f.operation]);
   assert.equal(readFileSync(join(f.releases, f.operation.releaseId, 'index.html'), 'utf8'), body);
   assert.ok(existsSync(join(f.releases, f.ids.at(-1))), 'cleanup failure must preserve the preceding active rollback target');
+});
+
+test('retention recovery retries a failed prune with an already acknowledged index operation', options, async (t) => {
+  const f = fixture(t); const oldest = join(f.releases, f.ids[0]);
+  chmodSync(oldest, 0o500);
+  assert.throws(() => rmSync(join(oldest, 'index.html')), /EACCES|EPERM/);
+  await assert.rejects(createSshTransport(f.config).withLock(async (session) => {
+    await f.stage(session); await f.activate(session);
+  }));
+  assert.deepEqual(JSON.parse(readFileSync(join(f.root, '.publication-pending.json'), 'utf8')), f.operation);
+  chmodSync(oldest, 0o700);
+  const result = await createSshTransport(f.config).recover({ recordIndex: async (record) => {
+    assert.equal(probeLock(f.root), 73);
+    assert.deepEqual(record, f.index().at(-1), 'idempotent index acknowledgement must not append a second occurrence');
+  } });
+  assert.equal(result.recovered, true);
+  assert.deepEqual(f.list(), [...f.ids.slice(-4), f.operation.releaseId].sort());
+  assert.deepEqual(f.index(), [...f.history, f.operation]);
+  assert.equal(f.active(), 'releases/new-release');
+  assert.equal(existsSync(join(f.root, '.publication-pending.json')), false);
 });

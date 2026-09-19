@@ -81,6 +81,23 @@ def regular_directory(path):
     require(stat.S_ISDIR(os.lstat(path).st_mode), "symlink or invalid release directory")
 
 
+def remove_release(parent_fd, name):
+    # Anchor every traversal to a descriptor and never follow retained-tree links.
+    directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        with os.scandir(directory_fd) as entries:
+            for entry in entries:
+                info = os.stat(entry.name, dir_fd=directory_fd, follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    remove_release(directory_fd, entry.name)
+                else:
+                    require(stat.S_ISREG(info.st_mode), "symlink or invalid member during retention pruning")
+                    os.unlink(entry.name, dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+    os.rmdir(name, dir_fd=parent_fd)
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, url):
         return None
@@ -631,11 +648,35 @@ class PublicationSession:
             self.nginx_command(reload=True)
 
     def finish(self, command):
+        keep = command.get("keepReleases")
+        require(type(keep) is int and keep >= 5, "retention must keep at least 5 releases")
         operation = self.read_pending()
         require(operation == command.get("operation"), "pending publication operation mismatch")
         self.read_preparation(operation)
         self.active_is(operation)
+        # The caller acknowledges the durable index before finish. Keep pending
+        # on pruning failure so recovery can retry without reverting active bytes.
+        self.prune_releases(operation, keep)
         self.clear_pending()
+
+    def prune_releases(self, operation, keep):
+        releases_fd = os.open(self.releases, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            releases = []
+            with os.scandir(releases_fd) as entries:
+                for entry in entries:
+                    info = os.stat(entry.name, dir_fd=releases_fd, follow_symlinks=False)
+                    if stat.S_ISDIR(info.st_mode):
+                        releases.append((info.st_mtime_ns, entry.name))
+            current = operation["releaseId"]
+            require(any(name == current for _, name in releases), "active release directory missing during retention")
+            previous = sorted((mtime, name) for mtime, name in releases if name != current)
+            for _, name in previous[:max(0, len(releases) - keep)]:
+                self.active_is(operation)
+                remove_release(releases_fd, name)
+                os.fsync(releases_fd)
+        finally:
+            os.close(releases_fd)
 
     def run(self):
         reply({"locked": True})
