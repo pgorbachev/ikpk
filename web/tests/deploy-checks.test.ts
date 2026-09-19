@@ -486,12 +486,31 @@ describe('snapshot_origin_matches — выкладка не публикует �
   //
   // Порядок здесь часть предмета: проверка ПОСЛЕ загрузки байтов бесполезна — фикстура уже
   // на сервере, и отказ лишь оставляет релиз неподключённым.
-  it('deploy-web.sh зовёт проверку, и зовёт её до загрузки байтов', () => {
+  it('выкладка зовёт проверку происхождения, и зовёт её до загрузки байтов', () => {
     const src = readFileSync(join(ROOT, 'scripts', 'deploy-web.sh'), 'utf-8');
-    const call = src.search(/^\s*if ! snapshot_origin_matches\b/m);
-    expect(call, 'deploy-web.sh не зовёт snapshot_origin_matches').toBeGreaterThanOrEqual(0);
-    const upload = src.search(/^\s*COPYFILE_DISABLE=1 tar -C "\$DIST_DIR"/m);
-    expect(upload, 'в deploy-web.sh не нашлась загрузка релиза — проверять порядок не с чем').toBeGreaterThanOrEqual(0);
-    expect(call, 'происхождение снимка проверяется после загрузки байтов').toBeLessThan(upload);
+    const wrapper = /^\s*exec node "\$ROOT\/web\/scripts\/publication-worker\.ts"/m.test(src);
+    if (!wrapper) {
+      // Прежний скрипт выкладки: своя проверка перед своей загрузкой.
+      const call = src.search(/^\s*if ! snapshot_origin_matches\b/m);
+      expect(call, 'deploy-web.sh не зовёт snapshot_origin_matches').toBeGreaterThanOrEqual(0);
+      const upload = src.search(/^\s*COPYFILE_DISABLE=1 tar -C "\$DIST_DIR"/m);
+      expect(upload, 'в deploy-web.sh не нашлась загрузка релиза — проверять порядок не с чем').toBeGreaterThanOrEqual(0);
+      expect(call, 'происхождение снимка проверяется после загрузки байтов').toBeLessThan(upload);
+      return;
+    }
+    // Публикация переехала в worker (change manual-publication-only): та же проводка
+    // проверяется там. Читатель снимка отказывает на всём, кроме живого непинованного
+    // происхождения, worker возвращает снимок из фазы проверок именно через него, а runner
+    // выполняет проверки раньше, чем транспорт загрузит хоть байт.
+    const reader = readFileSync(join(ROOT, 'web', 'scripts', 'lib', 'publication-snapshot.ts'), 'utf-8');
+    expect(reader, 'publication-snapshot.ts не отказывает на снимке не из живой CMS').toMatch(/origin\?\.kind !== 'live' \|\| snapshot\.pinned/);
+    const worker = readFileSync(join(ROOT, 'web', 'scripts', 'publication-worker.ts'), 'utf-8');
+    expect(worker.search(/readPublicationSnapshot\(snapshotDir\)/), 'worker не читает снимок через отказывающий reader').toBeGreaterThanOrEqual(0);
+    const runner = readFileSync(join(ROOT, 'web', 'scripts', 'lib', 'publication-runner.ts'), 'utf-8');
+    const checks = runner.search(/await ports\.runChecks\(input\)/);
+    const stage = runner.search(/session\.stage\(/);
+    expect(checks, 'runner не зовёт проверки').toBeGreaterThanOrEqual(0);
+    expect(stage, 'в runner не нашлась загрузка релиза — проверять порядок не с чем').toBeGreaterThanOrEqual(0);
+    expect(checks, 'происхождение снимка проверяется после загрузки байтов').toBeLessThan(stage);
   });
 });
