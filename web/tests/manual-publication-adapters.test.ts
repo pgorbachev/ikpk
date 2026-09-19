@@ -253,7 +253,7 @@ describe('publication production adapters: independently configured payment role
     vitestCommand(f.commands[1], 'payment-readiness', f.reportPath('payment-readiness'));
     expect(f.commands[1].env).toMatchObject({
       PUBLICATION_PAYMENT_ENDPOINT: f.options.payment!.endpoint,
-      PUBLICATION_PAYMENT_READY_URL: f.options.payment!.readinessUrl,
+      PUBLICATION_PAYMENT_READY_RESPONSE_FILE: expect.any(String),
       PUBLICATION_PAYMENT_MODE: 'test', PUBLICATION_PAYMENT_SHOP_ID: 'shop-42',
     });
   });

@@ -84,7 +84,7 @@ export async function adapterFixture() {
     browser: browserReport(),
   };
   const reportPath = (stage: Stage | 'browser') => join(reportsDir, `${stage}.json`);
-  const runtime: PublicationAdapterRuntime = {
+  const runtime: PublicationAdapterRuntime = Object.assign({ paymentReadiness: async () => ({ status: 200, contentType: 'application/json', body: { status: 'ready', mode: options.payment!.mode, shopId: options.payment!.shopId } }) }, {
     async run(command) {
       commands.push(structuredClone(command));
       if (command.args.some((arg) => arg.endsWith('capture-content-snapshot.ts'))) {
@@ -103,7 +103,7 @@ export async function adapterFixture() {
       previews.push(structuredClone(input));
       return { baseUrl: 'http://127.0.0.1:47321', async close() { state.closed++; } };
     },
-  };
+  } satisfies PublicationAdapterRuntime);
   return { temp, options, context, snapshot, ledger, state, commands, previews, runtime, reportPath,
     clean() { rmSync(temp, { recursive: true, force: true }); },
   };
