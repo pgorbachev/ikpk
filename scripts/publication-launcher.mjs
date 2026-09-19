@@ -46,7 +46,7 @@ function protectedFile(path) {
   if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o022)) refuse('untrusted-config');
   return realpathSync(path);
 }
-function repositoryRoot(path) { try { return realpathSync(git(path, 'rev-parse', '--show-toplevel')); } catch { return undefined; } }
+function insideRepository(path) { try { git(path, 'rev-parse', '--absolute-git-dir'); return true; } catch { return false; } }
 
 export async function launch(args) {
   const checks = [];
@@ -63,7 +63,8 @@ export async function launch(args) {
   try {
     configPath = protectedFile(resolve(options.get('--config') ?? ''));
     protectedFile(installed);
-    if (repositoryRoot(dirname(configPath)) || repositoryRoot(dirname(installed))) refuse('untrusted-config');
+    if (configPath !== join(dirname(installed), 'config.json') ||
+        insideRepository(dirname(configPath)) || insideRepository(dirname(installed))) refuse('untrusted-config');
     config = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch { refuse('untrusted-config'); }
   checks.push('protected-config');
