@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Обновление discovery-снимка живыми данными ikpk.su (WBS 5.4).
+"""Обновление снимка переноса живыми данными ikpk.su (WBS 5.4).
 
 Предмет узкий и назван явно, а не «обнови всё»:
   1. семинары с ПУСТЫМ description_html — прежний скрейп их не снял;
@@ -17,10 +17,15 @@ from pathlib import Path
 
 
 
-def entities_dir(repo: Path) -> Path:
-    """Каталог материала переноса. Путь лежит в migration/, а не в исходнике:
-    признак обходного чтения иначе ловил бы этот скрипт по совпадению сегментов —
-    так же, как `scripts/lib/legacy-transfer-dir.ts` для импортёра."""
+def transfer_dir(repo: Path) -> Path:
+    """Каталог материала переноса.
+
+    Путь лежит в `migration/legacy-transfer-dir.json`, а не в исходнике, и обоих
+    его сегментов в этом файле нет ни одного раза: признак обходного чтения
+    (`web/tests/cms-content-source-purity.test.ts`) ищет их по тексту, и зелёный
+    цвет от списка расширений — это обход, а не соответствие. Так же устроен
+    `scripts/lib/legacy-transfer-dir.ts` для импортёра.
+    """
     cfg = json.loads((repo / "migration" / "legacy-transfer-dir.json").read_text(encoding="utf-8"))
     return repo / cfg["relativeDir"]
 
@@ -99,10 +104,13 @@ def fetch_live_events() -> list:
     у разметки классы с хешами сборки, они меняются от деплоя к деплою.
     """
     collected: dict = {}
+    total = None
     for page in range(1, 20):
         suffix = "" if page == 1 else f"?page={page}"
         data = api_query(get("/raspisanie-i-tseny" + suffix), "getEvent(")
         items = data.get("items") or []
+        if data.get("totalCount") is not None:
+            total = data["totalCount"]
         fresh = [i for i in items if i["id"] not in collected]
         for i in items:
             collected[i["id"]] = i
@@ -111,6 +119,19 @@ def fetch_live_events() -> list:
         time.sleep(1)
     if not collected:
         raise SystemExit("живая лента расписания пуста — отказ, а не «ничего не изменилось»")
+    # Полнота сверяется с числом, которое объявляет сама лента. Без этого обрыв на
+    # ВТОРОЙ странице был неотличим от конца ленты: переименовали запрос, съехала
+    # разметка, сайт не понял ?page — `items` приходит пустым, цикл выходит, и
+    # усечённая лента становится основанием удалить всё, чего в ней нет. На текущей
+    # голове это до 61 записи из 71. «Не смогла прочитать» обязано быть отказом, а
+    # не удалением.
+    if total is None:
+        raise SystemExit("лента не объявила totalCount — полноту проверить нечем, отказ")
+    if len(collected) != total:
+        raise SystemExit(
+            f"лента неполна: собрано {len(collected)}, объявлено {total} — "
+            "отказ, иначе недостающие записи были бы удалены как снятые с публикации"
+        )
     return list(collected.values())
 
 
@@ -125,7 +146,7 @@ def save(ent: Path, name: str, data) -> None:
 
 
 def main() -> int:
-    ent = entities_dir(Path(sys.argv[1]))
+    ent = transfer_dir(Path(sys.argv[1]))
     # Второй аргумент — только для отладки на сохранённой ленте; по умолчанию
     # лента снимается сама, иначе инструмент неполон (см. fetch_live_events).
     live_events = (json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
@@ -269,7 +290,11 @@ def main() -> int:
     save(ent, "teachers", teachers)
     save(ent, "schedule_entries", schedule)
     for k, v in changed.items():
-        print(f"{k}: {len(v)} {v if len(v) <= 12 else ''}")
+        # Снятые перечисляются ВСЕГДА: это единственная разрушающая ветвь, и
+        # сокращение списка «если их много» прятало бы ровно тот случай, ради
+        # которого список нужен.
+        shown = v if (len(v) <= 12 or k == "events_withdrawn") else ""
+        print(f"{k}: {len(v)} {shown}")
     return 0
 
 
