@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adapterFixture, browserReport, STAGES, vitestReport, type Stage } from './helpers/publication-adapter-fixtures';
@@ -177,5 +177,19 @@ describe('test:publication standalone check-only command', () => {
     expect(result.error).toBeUndefined(); expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain('publication-check-arguments');
     expect(`${result.stdout}\n${result.stderr}`).not.toContain(SECRET);
+  });
+});
+
+describe('independent check-only input isolation review', () => {
+  it('refuses a journal inside the destructive build output before touching it', async () => {
+    const f = await fixture();
+    const ledgerInOutput = join(f.context.treeDir, 'ledger');
+    cpSync(f.options.ledgerDir, ledgerInOutput, { recursive: true });
+    const original = bytes(ledgerInOutput);
+    f.argv[f.argv.indexOf('--ledger-dir') + 1] = ledgerInOutput;
+    const outcome = await f.run().then(() => 'accepted', () => 'refused');
+    expect({ outcome, journalExists: existsSync(ledgerInOutput), calls: f.calls.length })
+      .toEqual({ outcome: 'refused', journalExists: true, calls: 0 });
+    expect(bytes(ledgerInOutput)).toEqual(original);
   });
 });
