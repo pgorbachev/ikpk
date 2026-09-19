@@ -247,6 +247,18 @@ def withdrawals(schedule: list, live_ids: set, today: str, feed_complete: bool,
     return candidates
 
 
+def saved_feed_path(argv: list) -> str | None:
+    """Путь к сохранённой ленте среди аргументов, или None.
+
+    Флаги отбрасываются: иначе `… . --allow-mass-withdrawal` читает флаг как имя
+    файла и падает FileNotFoundError — тем же способом, каким падает отсутствующая
+    лента, то есть подсказывает неверную причину тому, кто разбирает отказ.
+    Отдельной функцией, чтобы проверка закрепляла разбор, а не его пересказ.
+    """
+    rest = [a for a in argv[2:] if not a.startswith("--")]
+    return rest[0] if rest else None
+
+
 def moscow_today(now: datetime | None = None) -> str:
     """Местная дата сайта. Не UTC: с 00:00 до 03:00 MSK она отстаёт на сутки и
     расширяет окно удаления назад.
@@ -275,13 +287,9 @@ def main() -> int:
     # Второй аргумент — сохранённая лента для отладки. Полнота её НЕ доказана:
     # файл не несёт totalCount и мог быть снят как угодно. Поэтому признак полноты
     # едет вместе с лентой, а не выводится из способа её получения.
-    # Путь выбирается среди аргументов, НЕ начинающихся с «--». Иначе документированный
-    # выход из отказа — `… . --allow-mass-withdrawal` — читает флаг как имя файла и падает
-    # с FileNotFoundError, причём ровно так же, как падает отсутствующая лента. Человек,
-    # разбирающий отказ, получил бы подсказку в неверную сторону.
-    saved = [a for a in sys.argv[2:] if not a.startswith("--")]
+    saved = saved_feed_path(sys.argv)
     if saved:
-        live_events = json.loads(Path(saved[0]).read_text(encoding="utf-8"))
+        live_events = json.loads(Path(saved).read_text(encoding="utf-8"))
         feed_complete = False
     else:
         feed = fetch_live_events()
@@ -575,6 +583,36 @@ def selftest() -> int:
         assert "из 10 будущих записей" in str(exc), exc
     # с явным разрешением человека — проходит
     assert len(withdrawals(many, {"0"}, today, True, allow_mass=True)) == 9
+
+    # Разбор аргументов: флаг не должен приниматься за путь к ленте.
+    assert saved_feed_path(["p", "."]) is None
+    assert saved_feed_path(["p", ".", "--allow-mass-withdrawal"]) is None
+    assert saved_feed_path(["p", ".", "feed.json"]) == "feed.json"
+    assert saved_feed_path(["p", ".", "--allow-mass-withdrawal", "feed.json"]) == "feed.json"
+    assert saved_feed_path(["p", ".", "feed.json", "--allow-mass-withdrawal"]) == "feed.json"
+
+    # Граница «>= сегодня», а не «> сегодня»: событие, начинающееся СЕГОДНЯ и
+    # отсутствующее в ленте, снято с публикации. Без этой фикстуры `>=` и `>`
+    # неразличимы — прежние фикстуры стояли по обе стороны от границы, но не на ней.
+    starts_today = {"id": 3, "name": "сегодня", "startAt": today}
+    assert [e["id"] for e in withdrawals([starts_today], set(), today, True)] == [3]
+
+    # Проводка: selftest зовёт withdrawals() напрямую и не увидит, если main()
+    # перестанет её звать. Предмет тот же, что у теста проводки deploy-web.sh.
+    src = Path(__file__).read_text(encoding="utf-8")
+    # Тело ИМЕННО main(), до следующего определения верхнего уровня. Первая редакция
+    # брала «от def main( до конца файла» — а туда попадает сам selftest, чей исходник
+    # содержит искомую строку литералом. Проверка находила собственный текст и
+    # оставалась зелёной, когда main() переставал звать withdrawals(): измерено
+    # мутацией, вклеившей в main копию отбора — атака проходила, файл менялся.
+    start = src.index("def main(")
+    rest = src[start + 1:]
+    end = rest.index("\ndef ") + 1 if "\ndef " in rest else len(rest)
+    body = src[start:start + 1 + end]
+    assert "def selftest" not in body, "тело main() захватило чужое определение"
+    assert "withdrawals(schedule, live_ids, moscow_today()" in body, \
+        "main() больше не зовёт withdrawals() — проверка ниже измеряет не программу"
+    assert "saved_feed_path(sys.argv)" in body, "main() больше не зовёт saved_feed_path()"
 
     print("selftest: ок")
     return 0
