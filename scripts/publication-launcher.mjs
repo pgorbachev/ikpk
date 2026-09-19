@@ -91,7 +91,10 @@ export async function launch(args) {
       // An empty template and disabled hooks prevent local Git configuration from running code.
       git(scratch, 'clone', '--template=', '--no-local', '--single-branch', '--branch', 'main', '--', source, checkout);
       head = git(checkout, 'rev-parse', 'HEAD');
-      if (!/^[a-f0-9]{40}$/.test(head) || git(checkout, 'status', '--porcelain')) refuse('source-unavailable');
+      if (!/^[a-f0-9]{40}$/.test(head) ||
+          git(checkout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main' ||
+          git(checkout, 'rev-parse', '--verify', 'refs/remotes/origin/main') !== head ||
+          git(checkout, 'status', '--porcelain')) refuse('source-unavailable');
     } catch { refuse('source-unavailable'); }
     if (sourceDir && (git(sourceDir, 'rev-parse', 'HEAD') !== head || git(sourceDir, 'remote', 'get-url', 'origin') !== source)) refuse('untrusted-source');
     if (sourceDir) {
