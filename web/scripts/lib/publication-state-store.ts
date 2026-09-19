@@ -20,6 +20,7 @@ export interface PublicationStateSnapshot {
   publications: VerifiedPair[];
 }
 export interface PublicationStateStore {
+  readHistory(): Promise<{ head: string; publications: VerifiedPair[] }>;
   read(fingerprint: string): Promise<PublicationStateSnapshot>;
   appendPublication(record: PublicationRecord): Promise<{ head: string; changed: boolean }>;
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
@@ -73,9 +74,17 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     if (git(['symbolic-ref', '--short', 'HEAD']) !== PROVENANCE_BRANCH) throw new Error('unsafe state branch');
     return git(['rev-parse', 'HEAD']);
   }
+  function history() {
+    const head = refresh();
+    const path = join(workDir, VERIFIED_PAIRS_FILE);
+    if (!existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error('publication index unavailable or unsafe');
+    const publications = readVerifiedPairs(workDir);
+    if (mergeVerifiedPairs([], publications).length !== publications.length) throw new Error('duplicate persisted publication index key');
+    return { head, publications };
+  }
   async function snapshot(fingerprint: string): Promise<PublicationStateSnapshot> {
-    const head = refresh(); const dir = join(workDir, 'ledger');
-    for (const path of [dir, join(dir, 'high-water-mark'), join(workDir, VERIFIED_PAIRS_FILE)]) {
+    const { head, publications } = history(); const dir = join(workDir, 'ledger');
+    for (const path of [dir, join(dir, 'high-water-mark')]) {
       if (!existsSync(path) || lstatSync(path).isSymbolicLink()) throw new Error('provenance ledger unavailable or unsafe');
     }
     const ledger = createLedger({ dir, hasPublicationHistory: true, initialize: false });
@@ -85,8 +94,6 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
       entries.some((entry, i) => entry.number !== i + 1 || entry.previous !== (i === 0 ? null : i) || !entry.fingerprint)) {
       throw new Error('provenance ledger corrupt sequence or high-water-mark');
     }
-    const publications = readVerifiedPairs(workDir);
-    if (mergeVerifiedPairs([], publications).length !== publications.length) throw new Error('duplicate persisted publication index key');
     return { head, entries, observation: await ledger.observe({ fingerprint }), publications };
   }
   function commit(paths: string[], message: string): void {
@@ -103,6 +110,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     try { git(['push', 'origin', `HEAD:refs/heads/${PROVENANCE_BRANCH}`]); return true; } catch { return false; }
   }
   return {
+    readHistory: () => serial(async () => history()),
     read: (fingerprint) => serial(async () => {
       const state = await snapshot(fingerprint);
       if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) {
@@ -115,7 +123,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         !Number.isSafeInteger(record.revision) || record.revision <= 0 || record.testRunConclusion !== 'success' ||
         ciEvidenceProblem(record.ciEvidence, record.commit) || localChecksProblem(record.localChecks, record)) throw new Error('invalid publication evidence');
       for (let attempt = 0; attempt < attempts; attempt++) {
-        const state = await snapshot('');
+        const state = history();
         const next = upsertVerifiedPair(state.publications, record);
         if (next.length === state.publications.length) return { head: state.head, changed: false };
         writeVerifiedPairs(workDir, next);
