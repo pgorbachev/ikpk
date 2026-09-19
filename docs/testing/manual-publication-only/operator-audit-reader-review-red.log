@@ -1,0 +1,59 @@
+
+ RUN  v4.1.11 /private/tmp/ikpk-audit-probes-review/web
+
+ ❯ tests/manual-publication-audit-reader-review.test.ts (3 tests | 2 failed) 72ms
+     × a zero-test CI artifact remains explicitly zero in the runner and worker audit 25ms
+     × a completed zero-test local reporter remains explicitly zero in the coordinator and worker audit 27ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > a zero-test CI artifact remains explicitly zero in the runner and worker audit
+AssertionError: expected { version: 1, status: 'refused', …(3) } to match object { code: 'ci-failed', …(1) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ciExecutedTests": 0,
+    "code": "ci-failed",
+  }
+
+ ❯ tests/manual-publication-audit-reader-review.test.ts:36:19
+     34|     expect(ci.reportReads).toHaveLength(1);
+     35|     expect(runner.state.connections).toBe(0);
+     36|     expect(audit).toMatchObject({ code: 'ci-failed', ciExecutedTests: …
+       |                   ^
+     37|   });
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/manual-publication-audit-reader-review.test.ts > independent review: real report readers retain zero-count audit evidence > a completed zero-test local reporter remains explicitly zero in the coordinator and worker audit
+AssertionError: expected { version: 1, status: 'refused', …(2) } to match object { code: 'checks-failed', …(2) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "check": "snapshot-provenance",
+    "code": "checks-failed",
+-   "localExecutedTests": 0,
+  }
+
+ ❯ tests/manual-publication-audit-reader-review.test.ts:45:19
+     43|     const audit = await refused(() => runPublicationChecks(local.conte…
+     44|     expect(local.commands.some((command) => command.args.includes('tes…
+     45|     expect(audit).toMatchObject({ code: 'checks-failed', check: 'snaps…
+       |                   ^
+     46|   });
+     47| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  18:20:42
+   Duration  602ms (transform 97ms, setup 16ms, import 405ms, tests 72ms, environment 0ms)
