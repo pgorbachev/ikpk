@@ -42,6 +42,8 @@ export async function adapterFixture() {
   const reportsDir = join(temp, 'reports');
   const ledgerDir = join(temp, 'ledger');
   for (const dir of [webRoot, snapshotDir, reportsDir, join(webRoot, 'dist'), join(temp, 'home')]) mkdirSync(dir, { recursive: true });
+  mkdirSync(join(temp, 'deploy'));
+  writeFileSync(join(temp, 'deploy/nginx-redirects.conf'), 'location = /old { return 301 /new; }\n');
   const content = {
     types: {
       institutes: [{ slug: 'institute', legacy_id: 'institute' }],

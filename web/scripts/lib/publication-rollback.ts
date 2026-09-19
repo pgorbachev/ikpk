@@ -25,7 +25,7 @@ export interface RollbackPorts {
       readRetained(input: { releaseId: string }): Promise<{
         releaseId: string; destinationId: string; currentReleaseId: string; treeDir: string;
       }>;
-      rollback(input: { releaseId: string; expectedDigest: string; operation: RollbackOperation;
+      rollback(input: { redirectsPath: 'deploy/nginx-redirects.conf'; releaseId: string; expectedDigest: string; operation: RollbackOperation;
         recordIndex(operation: RollbackOperation): Promise<void> }): Promise<void>;
     }) => Promise<T>): Promise<T>;
   };
@@ -84,7 +84,7 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
       if (decision.action !== 'publish') throw new Error(decision.reason ?? 'rollback refused');
       operation = { ...original, publicationId: input.publicationId, actor: input.actor, publishedAt,
         rollbackOfPublicationId: original.publicationId, reason: input.reason, rollbackChecks: checks };
-      await session.rollback({ releaseId: input.releaseId, expectedDigest: original.treeDigest, operation: structuredClone(operation),
+      await session.rollback({ redirectsPath: 'deploy/nginx-redirects.conf', releaseId: input.releaseId, expectedDigest: original.treeDigest, operation: structuredClone(operation),
         async recordIndex(active) {
           if (!isDeepStrictEqual(active, operation)) throw new Error('active rollback operation mismatch');
           await verifyServedPublication(operation!, origin, ports.fetch);

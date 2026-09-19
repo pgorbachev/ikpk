@@ -30,7 +30,7 @@ export interface RollbackPorts {
   createTransport(input: { authorize: RollbackAuthorizer }): {
     withLock<T>(callback: (session: {
       readRetained(input: { releaseId: string }): Promise<{ releaseId: string; destinationId: string; currentReleaseId: string; treeDir: string }>;
-      rollback(input: { releaseId: string; expectedDigest: string; operation: RollbackOperation;
+      rollback(input: { redirectsPath: 'deploy/nginx-redirects.conf'; releaseId: string; expectedDigest: string; operation: RollbackOperation;
         recordIndex(operation: RollbackOperation): Promise<void> }): Promise<void>;
     }) => Promise<T>): Promise<T>;
   };
@@ -99,6 +99,7 @@ export function rollbackFixture() {
               return { releaseId: state.retainedReleaseId, destinationId: state.retainedDestination, currentReleaseId: state.currentReleaseId, treeDir };
             },
             async rollback(request) {
+                assert.equal(request.redirectsPath, 'deploy/nginx-redirects.conf', 'checked redirect fragment must accompany activation');
               event('rollback'); await hooks.beforeRollback?.();
               await authorize({ action: 'rollback', destinationId: input.destinationId, operation: request.operation });
               assert.equal(request.releaseId, input.releaseId); assert.equal(request.expectedDigest, fixtureDigest(treeDir));

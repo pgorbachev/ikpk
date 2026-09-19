@@ -196,7 +196,15 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
       writeFileSync(join(options.snapshotDir, 'snapshot.json'), `${JSON.stringify(snapshot, null, 2)}\n`);
       return { snapshotId: snapshot.snapshotId!, snapshotDir: options.snapshotDir };
     },
-    async build(context: CheckContext) { if (retained) throw new Error('retained checks cannot build'); await run('npm', ['run', 'build'], contextEnv(context)); },
+    async build(context: CheckContext) {
+      if (retained) throw new Error('retained checks cannot build');
+      await run('npm', ['run', 'build'], contextEnv(context));
+      // Keep the nginx fragment inside the same immutable, checked release as HTML.
+      const output = join(context.treeDir, 'deploy');
+      mkdirSync(output, { recursive: true });
+      if (lstatSync(output).isSymbolicLink() || !lstatSync(output).isDirectory()) throw new Error('invalid redirect artifact directory');
+      writeFileSync(join(output, 'nginx-redirects.conf'), readFileSync(join(webRoot, '../deploy/nginx-redirects.conf')), { flag: 'wx', mode: 0o644 });
+    },
     checkSnapshot: (context: CheckContext) => suite('snapshot', context),
     checkBuild: (context: CheckContext) => suite('build', context),
     checkDestination: (context: CheckContext) => suite('destination', context),

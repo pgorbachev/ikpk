@@ -100,6 +100,7 @@ describe('publication production adapters: capture and one existing build', () =
     expect(f.commands[0].file).toMatch(/(?:^|\/)npm$/);
     expect(f.commands[0].env).toMatchObject({ CONTENT_SNAPSHOT_DIR: f.options.snapshotDir, DEPLOY_MODE: 'prod', PAYMENT_ROLE: 'ci' });
     expect(existsSync(join(f.context.treeDir, 'index.html'))).toBe(true);
+    expect(readFileSync(join(f.context.treeDir, 'deploy/nginx-redirects.conf'), 'utf8')).toBe(readFileSync(join(f.temp, 'deploy/nginx-redirects.conf'), 'utf8'));
   });
 
   it('rejects failed build even if the command leaves a populated output directory', async () => {

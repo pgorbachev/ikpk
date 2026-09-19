@@ -113,6 +113,7 @@ export function runnerFixture() {
                 hooks.afterStage?.();
               },
               async activate(request) {
+                assert.equal(request.redirectsPath, 'deploy/nginx-redirects.conf', 'checked redirect fragment must accompany activation');
                 event('prepare'); assert.equal(state.locked, true);
                 await authorize({ action: 'activate', destinationId: input.destinationId, operation: request.operation });
                 writeFileSync(pendingPath, JSON.stringify(request.operation));

@@ -29,7 +29,7 @@ export type PublicationAuthorizer = (request: PublicationAuthorizationRequest) =
 export interface NewPublicationSession {
   stage(input: { releaseId: string; sourceDir: string; expectedDigest: string }): Promise<void>;
   activate(input: {
-    releaseId: string; operation: PublishedOperation;
+    releaseId: string; operation: PublishedOperation; redirectsPath: 'deploy/nginx-redirects.conf';
     beforeActivate(): Promise<void>;
     recordIndex(operation: PublishedOperation): Promise<void>;
   }): Promise<void>;
@@ -150,7 +150,7 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     try {
       await transport.withLock(async (session) => {
         await session.stage({ releaseId: operation.releaseId, sourceDir: input.treeDir, expectedDigest: treeDigest });
-        await session.activate({ releaseId: operation.releaseId, operation: structuredClone(operation),
+        await session.activate({ redirectsPath: 'deploy/nginx-redirects.conf', releaseId: operation.releaseId, operation: structuredClone(operation),
           beforeActivate: async () => {
             if (await ports.readMain() !== input.commit) { audit.code = 'main-changed'; throw new Error('main changed before activation'); }
             await checkState();
