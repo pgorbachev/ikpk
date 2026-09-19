@@ -670,7 +670,15 @@ class PublicationSession:
                         releases.append((info.st_mtime_ns, entry.name))
             current = operation["releaseId"]
             require(any(name == current for _, name in releases), "active release directory missing during retention")
-            previous = sorted((mtime, name) for mtime, name in releases if name != current)
+            protected = {current}
+            preparation = self.read_preparation(operation)
+            if preparation and preparation["previousCurrent"]:
+                target = os.path.normpath(os.path.join(self.root, preparation["previousCurrent"]["target"]))
+                if os.path.dirname(target) == self.releases:
+                    protected.add(valid_id(os.path.basename(target)))
+            # Cancelled candidates are directories too. They must never displace
+            # the last actually served release, even when newer by mtime.
+            previous = sorted((mtime, name) for mtime, name in releases if name not in protected)
             for _, name in previous[:max(0, len(releases) - keep)]:
                 self.active_is(operation)
                 remove_release(releases_fd, name)
