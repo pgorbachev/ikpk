@@ -118,7 +118,7 @@ describe('закреплённый снимок обязательного CI', 
       .filter((step) => /snapshot:prepare/.test(step.run ?? ''));
     expect(producers).toHaveLength(1);
     expect(producers[0].env?.CONTENT_SNAPSHOT_DIR).toBe('${{ github.workspace }}/fixtures/content-snapshot');
-    expect(producers[0].run).toMatch(/cp -R \"?\.snapshot\/\./);
+    expect(producers[0].run).toMatch(/cp -R "?\.snapshot\/\./);
   });
 
   it('Tests не обращается к CMS и не сверяет закреплённый снимок с живым журналом или раздачей', () => {
