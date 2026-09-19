@@ -572,6 +572,16 @@ describe('server-provisioning: раздача не прерывается про
       `for i in $(seq 1 2000); do curl -s -m 2 -o /dev/null -w '%{http_code}\\n' http://${t.ip}/; sleep 0.05; done`,
     );
     probes.push(probeId);
+    // Охрана вакуумности считает пробы, снятые ИМЕННО ВО ВРЕМЯ провижининга, а не их общее
+    // число: «адрес ни разу не ответил не-200» истинно и при нуле измерений, но порог вида
+    // «больше трёх» измеряет скорость раннера, а не предмет. Длительность провижининга по
+    // короткому пути «ничего не изменилось» и длительность одного `curl` задаются загрузкой
+    // машины обе, поэтому фиксированное число проб — лотерея (TD-63: ровно 3 пробы и на
+    // раннере, и локально; перезапуск не помогает). Разность «до/после» от скорости не
+    // зависит: она равна нулю тогда и только тогда, когда наблюдатель молчал.
+    const sampleCount = (): number =>
+      ProvisionTarget.probeOutput(probeId).split('\n').map((s) => s.trim()).filter(Boolean).length;
+    const sampledBefore = sampleCount();
     const run = t.provision({ ...ENV, DOMAIN: 'reload.example' });
     expect(run.status, `провижининг упал:\n${run.output}`).toBe(0);
     const codes = ProvisionTarget.probeOutput(probeId).split('\n').map((s) => s.trim()).filter(Boolean);
@@ -579,7 +589,10 @@ describe('server-provisioning: раздача не прерывается про
 
     const reloaded = (t.read('/var/log/systemctl-stub.log') ?? '').includes('reload nginx');
     expect(reloaded, 'перезагрузка сервера раздачи не выполнялась — непройденная проверка').toBe(true);
-    expect(codes.length, 'наблюдатель снаружи не снял ни одного измерения').toBeGreaterThan(3);
+    expect(
+      codes.length - sampledBefore,
+      `наблюдатель снаружи не снял ни одного измерения ВО ВРЕМЯ провижининга (всего ${codes.length})`,
+    ).toBeGreaterThan(0);
     expect(codes.filter((c) => c !== '200'), `адрес переставал отвечать: ${codes.join(',')}`).toEqual([]);
     expect(answersFromOutside(t).code, 'после провижининга адрес не отвечает').toBe('200');
   }, T);
