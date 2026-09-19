@@ -9,7 +9,7 @@ const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const READINESS = 'read-only readiness reports the trusted service mode and shop';
 const ENDPOINT = 'active artifact declares exactly the trusted payment endpoint and role';
-const good = { status: 200, contentType: 'application/json; charset=utf-8', body: { status: 'ready', mode: 'test', shopId: 'shop-42' } };
+const good = { status: 200, contentType: 'application/json; charset=utf-8', body: { status: 'ready', mode: 'test', shopId: '1440249' } };
 const SECRET = 'never-report-remote-payment-secret-52a9';
 
 // Run the actual assertion suite in an isolated miniature artifact. No Astro build,
@@ -29,13 +29,13 @@ function runSuite(observed: unknown, options: { legacyUrl?: boolean; wrongEndpoi
   const responseFile = join(temp, 'readiness-response.json'); writeFileSync(responseFile, JSON.stringify(observed));
   const trace = join(temp, 'operator-curl.log');
   const curl = join(bin, 'curl');
-  writeFileSync(curl, `#!/bin/sh\nprintf '%s\\n' "$*" >> '${trace}'\nprintf '%s\\n200\\tapplication/json' '{"status":"ready","mode":"${role === 'prod' ? 'prod' : 'test'}","shopId":"shop-42"}'\n`); chmodSync(curl, 0o700);
+  writeFileSync(curl, `#!/bin/sh\nprintf '%s\\n' "$*" >> '${trace}'\nprintf '%s\\n200\\tapplication/json' '{"status":"ready","mode":"${role === 'prod' ? 'prod' : 'test'}","shopId":"${role === 'prod' ? '409285' : '1440249'}"}'\n`); chmodSync(curl, 0o700);
   const reportFile = join(temp, 'report.json');
   const result = spawnSync(process.execPath, [join(webRoot, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.publication.config.ts', 'tests/publication/payment-readiness.test.ts', '--reporter=json', `--outputFile=${reportFile}`], {
     cwd: root, encoding: 'utf8', timeout: 20_000,
     env: { PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`, HOME: temp, TMPDIR: temp,
       PUBLICATION_TREE_DIR: join(root, 'dist'), PAYMENT_ROLE: role, PUBLICATION_PAYMENT_ENDPOINT: endpoint,
-      PUBLICATION_PAYMENT_MODE: role === 'prod' ? 'prod' : 'test', PUBLICATION_PAYMENT_SHOP_ID: 'shop-42', PUBLICATION_PAYMENT_SITE_ORIGIN: 'https://site.test.invalid',
+      PUBLICATION_PAYMENT_MODE: role === 'prod' ? 'prod' : 'test', PUBLICATION_PAYMENT_SHOP_ID: role === 'prod' ? '409285' : '1440249', PUBLICATION_PAYMENT_SITE_ORIGIN: 'https://site.test.invalid',
       PUBLICATION_PAYMENT_READY_RESPONSE_FILE: responseFile,
       ...(options.legacyUrl === false ? {} : { PUBLICATION_PAYMENT_READY_URL: 'https://operator.invalid/readyz' }),
     },
@@ -59,7 +59,7 @@ describe('real fixed readiness assertions consume the destination observation, n
     expect(result.endpoint, result.output).toBe('passed'); expect(result.readiness).toBe('passed'); expect(result.status).toBe(0);
   });
   it.each(['stand', 'prod'] as const)('%s succeeds without any operator URL or local API request', (role) => {
-    const result = runSuite({ ...good, body: { ...good.body, mode: role === 'prod' ? 'prod' : 'test' } }, { legacyUrl: false, role });
+    const result = runSuite({ ...good, body: { ...good.body, mode: role === 'prod' ? 'prod' : 'test', shopId: role === 'prod' ? '409285' : '1440249' } }, { legacyUrl: false, role });
     expect(result.endpoint, result.output).toBe('passed'); expect(result.readiness).toBe('passed'); expect(result.status).toBe(0);
     expect(result.curlCalls).toBe('');
   });
@@ -75,8 +75,8 @@ describe('real fixed readiness assertions consume the destination observation, n
     ['malformed body', { ...good, body: '{not-json' }],
     ['null body', { ...good, body: null }],
     ['array body', { ...good, body: [good.body] }],
-    ['missing status', { ...good, body: { mode: 'test', shopId: 'shop-42' } }],
-    ['missing mode', { ...good, body: { status: 'ready', shopId: 'shop-42' } }],
+    ['missing status', { ...good, body: { mode: 'test', shopId: '1440249' } }],
+    ['missing mode', { ...good, body: { status: 'ready', shopId: '1440249' } }],
     ['missing shop', { ...good, body: { status: 'ready', mode: 'test' } }],
     ['not ready', { ...good, body: { ...good.body, status: 'starting' } }],
     ['wrong mode', { ...good, body: { ...good.body, mode: 'prod' } }],
