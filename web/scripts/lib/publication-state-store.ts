@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createLedger } from './provenance-ledger.ts';
-import { ciEvidenceProblem, isPublicationRecord, localChecksProblem } from './publish-gate.ts';
+import { ciEvidenceProblem, isPublicationRecord, localChecksProblem, rollbackEvidenceProblem } from './publish-gate.ts';
 import { PROVENANCE_BRANCH, VERIFIED_PAIRS_FILE, mergeVerifiedPairs, readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs } from './verified-pairs.ts';
 
 export interface PublicationStateStoreOptions {
@@ -121,7 +121,8 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     appendPublication: (record) => serial(async () => {
       if (!isPublicationRecord(record) || !/^[a-f0-9]{40}$/.test(record.commit) || !/^[a-f0-9]{64}$/.test(record.treeDigest) ||
         !Number.isSafeInteger(record.revision) || record.revision <= 0 || record.testRunConclusion !== 'success' ||
-        ciEvidenceProblem(record.ciEvidence, record.commit) || localChecksProblem(record.localChecks, record)) throw new Error('invalid publication evidence');
+        ciEvidenceProblem(record.ciEvidence, record.commit) || localChecksProblem(record.localChecks, record) ||
+        rollbackEvidenceProblem(record)) throw new Error('invalid publication evidence');
       for (let attempt = 0; attempt < attempts; attempt++) {
         const state = history();
         const next = upsertVerifiedPair(state.publications, record);

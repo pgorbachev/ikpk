@@ -322,4 +322,17 @@ describe('rollback history does not depend on the CMS journal', () => {
     expect(git(f.root, '--git-dir', f.remote, 'ls-tree', '-r', '--name-only', BRANCH)).not.toContain('ledger/');
     expect(remoteFile(f, 'writer-owned.txt')).toBe('do not stage or modify');
   });
+
+  it.each(['missing', 'wrong-pair', 'failed-group'] as const)('refuses %s fresh rollback evidence before index effects', async (fault) => {
+    const f = await fixture(); const original = record('retained'); indexWithoutLedger(f, [original]);
+    const before = head(f);
+    const checks = { ...structuredClone(original.localChecks),
+      groups: structuredClone(original.localChecks.groups.filter(({ name }) => ['destination-mode', 'browser-smoke', 'payment-destination'].includes(name))) };
+    if (fault === 'wrong-pair') checks.treeDigest = 'f'.repeat(64);
+    if (fault === 'failed-group') checks.groups[0].conclusion = 'failure';
+    const rollback = { ...structuredClone(original), publicationId: 'bad-rollback', rollbackOfPublicationId: original.publicationId,
+      reason: 'Repair current serving', ...(fault === 'missing' ? {} : { rollbackChecks: checks }) };
+    await expect(store(f).appendPublication(rollback)).rejects.toThrow('invalid publication evidence');
+    expect(head(f)).toBe(before); expect(remotePairs(f)).toEqual([original]);
+  });
 });

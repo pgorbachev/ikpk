@@ -91,6 +91,16 @@ export function isPublicationRecord(pair: VerifiedPair): pair is PublicationReco
     !!record.ciEvidence && !!record.localChecks;
 }
 
+/** A rollback retains original checks and also carries its own fresh three-group report. */
+export function rollbackEvidenceProblem(record: PublicationRecord & {
+  rollbackOfPublicationId?: unknown; reason?: unknown; rollbackChecks?: LocalChecks;
+}): string | undefined {
+  if (!('rollbackOfPublicationId' in record || 'reason' in record || 'rollbackChecks' in record)) return;
+  if (!nonempty(record.rollbackOfPublicationId) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(record.rollbackOfPublicationId) ||
+      record.rollbackOfPublicationId === record.publicationId || !nonempty(record.reason)) return 'invalid-rollback-identity';
+  return localChecksProblem(record.rollbackChecks, record, ROLLBACK_GROUPS);
+}
+
 /** Срок хранения снимка и медиа — граница обещания повторной выкладки. */
 export const SNAPSHOT_RETENTION_DAYS = 90;
 

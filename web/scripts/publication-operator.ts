@@ -92,7 +92,7 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
         knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases };
       if (input.command === 'recover') {
         const { verifyServedPublication } = await import('./lib/published-state.ts');
-        const { isPublicationRecord, ciEvidenceProblem, localChecksProblem } = await import('./lib/publish-gate.ts');
+        const { isPublicationRecord, ciEvidenceProblem, localChecksProblem, rollbackEvidenceProblem } = await import('./lib/publish-gate.ts');
         let usable = true, operation: PublicationRecord | undefined, recorded = false;
         const authorize = async (request: { action: string; destinationId: string; operation?: PublicationRecord }) => {
           if (!usable || request.destinationId !== config.destinationId) throw new Error('recovery authorization destination mismatch');
@@ -104,7 +104,8 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
               !/^snap:[a-f0-9]{64}$/.test(candidate.snapshotId) || !/^[a-f0-9]{64}$/.test(candidate.treeDigest) ||
               ![candidate.publicationId, candidate.releaseId].every((id) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) ||
               !Number.isSafeInteger(candidate.revision) || candidate.revision <= 0 || candidate.testRunConclusion !== 'success' ||
-              ciEvidenceProblem(candidate.ciEvidence, candidate.commit) || localChecksProblem(candidate.localChecks, candidate)) throw new Error('invalid recovery evidence');
+              ciEvidenceProblem(candidate.ciEvidence, candidate.commit) || localChecksProblem(candidate.localChecks, candidate) ||
+              rollbackEvidenceProblem(candidate)) throw new Error('invalid recovery evidence');
           if (operation && !isDeepStrictEqual(candidate, operation)) throw new Error('recovery authorization operation mismatch');
           operation ??= structuredClone(candidate);
           return { destinationId: operation.destinationId, commit: operation.commit, snapshotId: operation.snapshotId, treeDigest: operation.treeDigest };
