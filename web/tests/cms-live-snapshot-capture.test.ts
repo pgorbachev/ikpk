@@ -298,6 +298,53 @@ describe('снимок читается из живой системы упра�
     expect(run.output, 'отказ не называет тип, на котором сорвалось').toMatch(/seminars/i);
   });
 
+  // Ответ 200 с пустым `data` — НЕ то же самое, что 500: прежний отказ держался на `!res.ok`,
+  // то есть пустой съём по коду 200 не проверял никто. Контракт тут не помощник: он перебирает
+  // записи, а на нуле записей перебирать нечего, и он проходит по определению.
+  it('200 с пустым data во всех типах — отказ, а не пустой снимок', async () => {
+    const empty = Object.fromEntries(
+      ['institutes', 'course-groups', 'seminars', 'teachers', 'articles', 'schedule-entries',
+        'news-items', 'promotions', 'pages', 'video-playlists'].map((endpoint) => [endpoint, { records: [] }]),
+    );
+    const cms = await stub(empty);
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустой съём принят за успех:\n${run.output}`).not.toBe(0);
+    expect(existsSync(join(dir, 'snapshot.json')), 'записан пустой снимок').toBe(false);
+    expect(run.output, 'отказ не называет источник').toContain(cms.url);
+  });
+
+  // Частичная пустота опаснее полной: полную видно сразу, а эта проходила с одним `console.warn`
+  // и записывала снимок. Достаточно одного населённого типа из десяти — например `institutes`,
+  // где записей единицы и меняются они редко, — чтобы сайт собрался БЕЗ статей и семинаров.
+  // Предмет отказа — типы, которые проверяет сам контракт, и берутся они из его же списков,
+  // а не из литерала здесь: добавят требование к новому типу — правило расширится само.
+  it('пустой тип, который проверяет контракт, — отказ, а не предупреждение', async () => {
+    const cms = await stub({ articles: { records: [] } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустые статьи приняты за успех:\n${run.output}`).not.toBe(0);
+    expect(existsSync(join(dir, 'snapshot.json')), 'записан снимок без статей').toBe(false);
+    expect(run.output, 'отказ не называет пустой тип').toMatch(/articles/);
+  });
+
+  // Обратная сторона того же правила: типы, за которые контракт не ручается, пустыми быть
+  // вправе. Без этой проверки «отказывать на любой пустоте» выглядело бы таким же верным.
+  it('пустой тип вне контракта — предупреждение, снимок пишется', async () => {
+    const cms = await stub({ promotions: { records: [] }, 'news-items': { records: [] } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём отказал на законной пустоте:\n${run.output}`).toBe(0);
+    expect(existsSync(join(dir, 'snapshot.json')), 'снимок не записан').toBe(true);
+    expect(run.output, 'пустые типы не названы в предупреждении').toMatch(/promotions/);
+  });
+
   // Снимок не появляется на диске, пока не прошёл контракт (tasks.md 3.3). Контракт — тот же,
   // что у фикстуры (design.md, решение 2): второго, более слабого, у живого пути нет.
   it('снимок, не прошедший контракт, на диск не попадает', async () => {

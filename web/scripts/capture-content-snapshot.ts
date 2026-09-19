@@ -8,7 +8,11 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSnapshotContract } from './lib/content-contract.ts';
+import {
+  REQUIRED_SNAPSHOT_FIELDS,
+  REQUIRED_SNAPSHOT_RELATIONS,
+  assertSnapshotContract,
+} from './lib/content-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
@@ -387,13 +391,31 @@ async function liveCapture(): Promise<void> {
   // перезапуск CMS после смены артефакта, снимок вышел с нулём записей, контракт его
   // пропустил, и сайт собрался бы БЕЗ содержимого. Остановил это чужой гейт по случайности.
   const emptyTypes = Object.entries(types)
-    .filter(([, rows]) => !Array.isArray(rows) || rows.length === 0)
+    .filter(([, rows]) => rows.length === 0)
     .map(([name]) => name);
-  const filled = Object.keys(types).length - emptyTypes.length;
-  if (filled === 0) {
+  if (emptyTypes.length === Object.keys(types).length) {
     throw new Error(
       `живой съём с ${cmsUrl} не дал ни одной записи ни в одном типе — источник недоступен ` +
         'или пуст; снимок не записан',
+    );
+  }
+
+  // Частичная пустота опаснее полной, и порогом «хоть один тип населён» не ловится: одного
+  // `institutes` (единицы записей, меняются редко) хватало, чтобы пустые статьи и семинары
+  // прошли предупреждением и снимок записался. Собранный из него сайт — без содержимого.
+  //
+  // Предмет отказа — типы, за которые ручается САМ контракт, и берутся они из его же списков,
+  // а не из литерала здесь: появится требование к новому типу — правило расширится вместе с
+  // ним. Перечислять имена руками значило бы завести второй, молча стареющий список.
+  const contractChecked = new Set(
+    [...REQUIRED_SNAPSHOT_FIELDS, ...REQUIRED_SNAPSHOT_RELATIONS].map((group) => group.type),
+  );
+  const emptyChecked = emptyTypes.filter((name) => contractChecked.has(name));
+  if (emptyChecked.length > 0) {
+    throw new Error(
+      `живой съём с ${cmsUrl}: типы под контрактом пусты (${emptyChecked.join(', ')}) — ` +
+        'контракт на нуле записей проходит по определению, поэтому это отказ, а не ' +
+        'предупреждение; снимок не записан',
     );
   }
   if (emptyTypes.length > 0) {
