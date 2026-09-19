@@ -102,4 +102,20 @@ describe('one declared local publication entrypoint plus hosted inventory', () =
     put(root, 'tools/check.sh', '#!/bin/sh\n# rsync web/dist/ operator@host:/releases\n# mv current.new current\nnode --version\n', true);
     expect(await inventory(root)).toEqual([approved]);
   });
+  it('inspects executable files without a language extension', async () => {
+    const root = fixture();
+    put(root, 'tools/maintenance', '#!/bin/sh\nrsync -az output/ operator@host:/srv/site/releases/new/\n', true);
+    await expect(inventory(root)).rejects.toThrow('web-transfer');
+  });
+  it('allows local launcher wrappers without counting a second implementation', async () => {
+    const root = fixture();
+    put(root, 'tools/maintenance.sh', '#!/bin/sh\nnode scripts/publication-launcher.mjs "$@"\n', true);
+    expect(await inventory(root)).toEqual([approved]);
+  });
+  it('refuses a hosted npm lifecycle invoking the approved local launcher', async () => {
+    const root = fixture();
+    put(root, 'web/package.json', JSON.stringify({ scripts: { pretest: 'node ../scripts/publication-launcher.mjs publish' } }));
+    put(root, '.github/workflows/maintenance.yml', 'name: Maintenance\non: push\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n        working-directory: web\n');
+    await expect(inventory(root)).rejects.toThrow('hosted');
+  });
 });
