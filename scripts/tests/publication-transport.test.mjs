@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { fork } from 'node:child_process';
+import { fork, spawnSync } from 'node:child_process';
 import {
   existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
   rmSync, symlinkSync, unlinkSync, writeFileSync, cpSync,
@@ -293,24 +293,43 @@ test('activation refuses an operation bound to another destination', options, as
   assert.equal(f.active(), 'old');
 });
 
+// Probe the documented host-lock path independently of the transport protocol.
+// Nonblocking acquisition gives a deterministic witness after the owner entered.
+function hostLockState(root) {
+  const program = `import fcntl,sys
+with open(sys.argv[1], 'a+') as lock:
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        print('available')
+    except BlockingIOError:
+        print('held')
+`;
+  const result = spawnSync('/usr/bin/python3', ['-c', program, join(root, '.publication.lock')], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
 test('two separate operator processes cannot hold the host publication lock together', options, async (t) => {
   const f = setup(t);
   const first = client(t, f.config);
   await first.until('entered');
+  assert.equal(hostLockState(f.root), 'held', 'callback must hold the actual host OS lock');
   const second = client(t, f.config);
   await second.until('requesting');
   for (let i = 0; i < 1000; i++) {
     if (f.connections().filter((entry) => entry.kind === 'connection').length >= 2 || second.messages.some((message) => message.state === 'entered')) break;
     await delay(5);
   }
-  await delay(150);
   assert.equal(second.messages.some((message) => message.state === 'entered'), false, 'second operator entered while first still holds the host lock');
   assert.ok(f.connections().filter((entry) => entry.kind === 'connection').length >= 2, 'both operators must actually connect');
   first.child.send({ release: true });
   await first.until('released');
   await second.until('entered');
+  assert.equal(hostLockState(f.root), 'held', 'the next owner must hold the same OS lock');
   second.child.send({ release: true });
   await second.until('released');
+  assert.equal(hostLockState(f.root), 'available', 'positive control: released host lock can be acquired');
 });
 
 test('a throwing lock owner releases the host lock for a different process', options, async (t) => {
