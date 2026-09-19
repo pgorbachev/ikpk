@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-full-review-facts/web
+
+ ❯ tests/manual-publication-payment-origin-review.test.ts (2 tests | 1 failed) 1227ms
+   × publication refuses when preflight checks a different origin from the published site 640ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-payment-origin-review.test.ts > publication refuses when preflight checks a different origin from the published site
+AssertionError: accepted config and fixed preflight falsely approve an unusable payment destination
+ ❯ tests/manual-publication-payment-origin-review.test.ts:61:10
+     59|   assert.equal(result.count, 1, 'the fixed check ran rather than faili…
+     60|   assert.deepEqual(result.requests, [{ method: 'OPTIONS', origin: resu…
+     61|   assert.notEqual(result.status, 0, 'accepted config and fixed preflig…
+       |          ^
+     62| });
+     63|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  19:56:30
+   Duration  1.51s (transform 37ms, setup 24ms, import 59ms, tests 1.23s, environment 0ms)
+
