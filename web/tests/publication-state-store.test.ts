@@ -93,6 +93,25 @@ const r=cp.spawnSync('/bin/sh',['-c',args.at(-1)],{stdio:'inherit',env:process.e
 }
 
 describe('shared Git state store: real bare-remote contract', () => {
+  it.each(['publication', 'legacy'] as const)('REVIEW: duplicate persisted %s records cannot make a new publication falsely idempotent', async (kind) => {
+    const f = await fixture();
+    const publication = record('existing');
+    const existing = kind === 'publication' ? publication : {
+      commit: publication.commit, snapshotId: publication.snapshotId, revision: publication.revision,
+      referenceDate: publication.referenceDate, capturedAt: publication.capturedAt,
+      testRunConclusion: publication.testRunConclusion,
+    };
+    write(join(f.author, 'verified-pairs.json'), JSON.stringify([existing, existing]));
+    git(f.author, 'add', 'verified-pairs.json');
+    git(f.author, 'commit', '-m', 'duplicate historical index record');
+    git(f.author, 'push', 'origin', BRANCH);
+    const before = head(f);
+    expect(remotePairs(f)).toEqual([existing, existing]);
+    await expect(store(f).appendPublication(record('new'))).rejects.toThrow(/duplicate|immutable|corrupt|history|index/i);
+    expect(head(f)).toBe(before);
+    expect(remotePairs(f)).toEqual([existing, existing]);
+  });
+
   it.each([`https://${CANARY}@github.com/pgorbachev/ikpk.git`, `HTTPS://operator:${CANARY}@github.com/pgorbachev/ikpk.git`])('REVIEW: credential URL %s is refused before Git argv or clone config', async (remote) => {
     const f = await fixture();
     expect(() => store(f, { remote })).toThrow(/unsafe|credential|remote/i);
