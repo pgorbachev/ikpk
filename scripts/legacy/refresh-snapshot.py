@@ -90,6 +90,30 @@ def meta(markup: str) -> tuple[str, str]:
     return (unescape(t.group(1)).strip() if t else "", unescape(description).strip())
 
 
+def fetch_live_events() -> list:
+    """Живая лента расписания старого сайта, все страницы.
+
+    Раньше этот шаг жил вне репозитория, а скрипт принимал готовый JSON: то есть
+    «инструмент, которым сняты данные» приезжал наполовину, и повторить WBS 5.4
+    перед go-live было нечем. Читается встроенное состояние Next.js, а не вёрстка:
+    у разметки классы с хешами сборки, они меняются от деплоя к деплою.
+    """
+    collected: dict = {}
+    for page in range(1, 20):
+        suffix = "" if page == 1 else f"?page={page}"
+        data = api_query(get("/raspisanie-i-tseny" + suffix), "getEvent(")
+        items = data.get("items") or []
+        fresh = [i for i in items if i["id"] not in collected]
+        for i in items:
+            collected[i["id"]] = i
+        if not fresh:
+            break
+        time.sleep(1)
+    if not collected:
+        raise SystemExit("живая лента расписания пуста — отказ, а не «ничего не изменилось»")
+    return list(collected.values())
+
+
 def load(ent: Path, name: str):
     return json.loads((ent / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -102,7 +126,11 @@ def save(ent: Path, name: str, data) -> None:
 
 def main() -> int:
     ent = entities_dir(Path(sys.argv[1]))
-    live_events = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+    # Второй аргумент — только для отладки на сохранённой ленте; по умолчанию
+    # лента снимается сама, иначе инструмент неполон (см. fetch_live_events).
+    live_events = (json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+                   if len(sys.argv) > 2 else fetch_live_events())
+    print(f"живых событий в ленте: {len(live_events)}")
     seminars = load(ent, "seminars")
     teachers = load(ent, "teachers")
     schedule = load(ent, "schedule_entries")
