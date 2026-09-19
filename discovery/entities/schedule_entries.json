@@ -453,8 +453,8 @@
    "name": "Институт клинической прикладной кинезиологии",
    "shortname": "ИКПК"
   },
-  "startAt": "2026-09-19T00:00:00.000Z",
-  "endAt": "2026-09-20T00:00:00.000Z",
+  "startAt": "2026-11-14T00:00:00.000Z",
+  "endAt": "2026-11-15T00:00:00.000Z",
   "teachers": [
    {
     "id": 82,
@@ -805,8 +805,8 @@
    "name": "Институт клинической прикладной кинезиологии",
    "shortname": "ИКПК"
   },
-  "startAt": "2026-10-02T00:00:00.000Z",
-  "endAt": "2026-10-04T00:00:00.000Z",
+  "startAt": "2026-10-16T00:00:00.000Z",
+  "endAt": "2026-10-18T00:00:00.000Z",
   "teachers": [
    {
     "id": 53,
@@ -821,7 +821,7 @@
   "isEventCollection": false,
   "description": null,
   "oldPrice": 0,
-  "newPrice": 35000,
+  "newPrice": 30000,
   "city": {
    "id": 2,
    "name": "Санкт-Петербург"
@@ -838,10 +838,10 @@
  {
   "id": 352,
   "status": "active",
-  "name": "НПК-1: Нейропсихокинезиология. Уровень №1",
+  "name": "Н-ПК-1: Нейропсихокинезиология. Уровень №1",
   "seminar": {
    "id": 299,
-   "name": "НПК-1: Нейропсихокинезиология. Уровень №1",
+   "name": "Н-ПК-1: Нейропсихокинезиология. Уровень №1",
    "slug": "nejropsihokineziologiya-1"
   },
   "institute": {
@@ -1669,7 +1669,7 @@
   },
   "additionalText": "",
   "duration": "36",
-  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_x8cwr/"
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_spjdl/"
  },
  {
   "id": 408,
@@ -1806,10 +1806,10 @@
  {
   "id": 353,
   "status": "active",
-  "name": "НПК-2: Нейропсихокинезиология. Уровень №2",
+  "name": "Н-ПК-2: Нейропсихокинезиология. Уровень №2",
   "seminar": {
    "id": 300,
-   "name": "НПК-2: Нейропсихокинезиология. Уровень №2",
+   "name": "Н-ПК-2: Нейропсихокинезиология. Уровень №2",
    "slug": "nejropsihokineziologiya-2"
   },
   "institute": {
@@ -2081,8 +2081,8 @@
    "name": "Институт Апледжера",
    "shortname": "Апледжера"
   },
-  "startAt": "2026-12-17T00:00:00.000Z",
-  "endAt": "2026-12-20T00:00:00.000Z",
+  "startAt": "2026-12-10T00:00:00.000Z",
+  "endAt": "2026-12-13T00:00:00.000Z",
   "teachers": [
    {
     "id": 63,
@@ -2246,10 +2246,10 @@
  {
   "id": 401,
   "status": "active",
-  "name": "НПК-3: Нейропсихокинезиология. Уровень №3",
+  "name": "Н-ПК-3: Нейропсихокинезиология. Уровень №3",
   "seminar": {
    "id": 301,
-   "name": "НПК-3: Нейропсихокинезиология. Уровень №3",
+   "name": "Н-ПК-3: Нейропсихокинезиология. Уровень №3",
    "slug": "nejropsihokineziologiya-3"
   },
   "institute": {
@@ -2770,5 +2770,401 @@
   "additionalText": "",
   "duration": "36",
   "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
+ },
+ {
+  "id": 481,
+  "status": "active",
+  "name": "КСТ без иллюзий: что нужно знать и как подготовиться к семинару",
+  "seminar": {
+   "id": 357,
+   "name": "КСТ без иллюзий: что нужно знать и как подготовиться к семинару",
+   "slug": "kst-bez-ilyuzij-chto-nuzhno-znat"
+  },
+  "institute": {
+   "id": 2,
+   "name": "Институт Апледжера",
+   "shortname": "Апледжера"
+  },
+  "startAt": "2026-09-24T00:00:00.000Z",
+  "endAt": "2026-09-24T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 63,
+    "fullName": "Шрайнер Валерий Эдуардович, MD, CST-D"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1789126229867.webp",
+   "id": "d2b63106-1665-4e2f-8ad4-7793c83dc6ef"
+  },
+  "isFree": true,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 0,
+  "city": {
+   "id": 1,
+   "name": "Онлайн"
+  },
+  "program": {
+   "id": 174,
+   "slug": "vebinary-i-mezhseminarskie-vstrechi",
+   "name": "Вебинары и межсеминарские встречи"
+  },
+  "additionalText": "Начало в 19:00",
+  "duration": "2",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_ve1op/"
+ },
+ {
+  "id": 476,
+  "status": "active",
+  "name": "Биорегуляционная системная медицина. Основы прикладной кинезиологии",
+  "seminar": {
+   "id": 356,
+   "name": "Биорегуляционная системная медицина. Основы прикладной кинезиологии",
+   "slug": "bioregulyacionnaya-sistemnaya-medicina-osnovy-prikladnoj-kineziologii"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-09-26T00:00:00.000Z",
+  "endAt": "2026-09-26T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 86,
+    "fullName": "Зарина Наталия Николаевна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1786434992022.webp",
+   "id": "4d7ba343-5955-4e3c-98ea-03c434779807"
+  },
+  "isFree": true,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 0,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "8",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_6hex0/"
+ },
+ {
+  "id": 477,
+  "status": "active",
+  "name": "Антистрессовая кинезиология. Введение. Уровень 1",
+  "seminar": {
+   "id": 213,
+   "name": "Антистрессовая кинезиология. Введение. Уровень 1",
+   "slug": "antistressovaya-kineziologiya-vvedenie-1"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-10-02T00:00:00.000Z",
+  "endAt": "2026-10-04T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 53,
+    "fullName": "Жарова Людмила Семеновна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1786709708334.webp",
+   "id": "9f5c5fff-1461-4288-a5ac-ba980d69492f"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 152,
+   "slug": "psihokineziologiya",
+   "name": "Психокинезиология"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_5u05b/"
+ },
+ {
+  "id": 478,
+  "status": "active",
+  "name": "Антистрессовая кинезиология. Введение. Уровень 1",
+  "seminar": {
+   "id": 213,
+   "name": "Антистрессовая кинезиология. Введение. Уровень 1",
+   "slug": "antistressovaya-kineziologiya-vvedenie-1"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-11-27T00:00:00.000Z",
+  "endAt": "2026-11-29T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 53,
+    "fullName": "Жарова Людмила Семеновна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1787568931468.webp",
+   "id": "d48e290f-9d2b-41fc-9de1-4128d7b02d6d"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 8,
+   "name": "Казань"
+  },
+  "program": {
+   "id": 152,
+   "slug": "psihokineziologiya",
+   "name": "Психокинезиология"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_5u05b/"
+ },
+ {
+  "id": 482,
+  "status": "active",
+  "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+  "seminar": {
+   "id": 303,
+   "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+   "slug": "seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-12-12T00:00:00.000Z",
+  "endAt": "2026-12-13T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 54,
+    "fullName": "Пилявский Сергей Орестович"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1789559191349.webp",
+   "id": "7c29f428-d67f-416e-8862-a7c3f08cbfdd"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 10000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "16",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_odo5i/"
+ },
+ {
+  "id": 480,
+  "status": "active",
+  "name": "Инфекции и псевдоинфекции. Введение в гельминтологию. Нематоды",
+  "seminar": {
+   "id": 239,
+   "name": "Инфекции и псевдоинфекции. Введение в гельминтологию. Нематоды",
+   "slug": "infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-12-18T00:00:00.000Z",
+  "endAt": "2026-12-19T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 73,
+    "fullName": "Бондаренко Игорь Георгиевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1788773306605.webp",
+   "id": "e4834a2f-8805-4cbe-b4bf-93791d493f83"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "16",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_vcxuq/"
+ },
+ {
+  "id": 473,
+  "status": "active",
+  "name": "ПК-1. Основы мануального мышечного тестирования. Миология. Нейрофизиологические основы мышечного сокращения. Уровень 1",
+  "seminar": {
+   "id": 201,
+   "name": "ПК-1. Основы мануального мышечного тестирования. Миология. Нейрофизиологические основы мышечного сокращения. Уровень 1",
+   "slug": "osnovy-manualnogo-myshechnogo-testirovaniya"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-02-17T00:00:00.000Z",
+  "endAt": "2027-02-21T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 54,
+    "fullName": "Пилявский Сергей Орестович"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1786362287590.webp",
+   "id": "3fd2933b-78e7-463a-a4ae-8ca30ebc32eb"
+  },
+  "isFree": false,
+  "isEventCollection": true,
+  "description": "Полный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+  "oldPrice": 0,
+  "newPrice": 37500,
+  "city": {
+   "id": 76,
+   "name": "Екатеринбург"
+  },
+  "program": {
+   "id": 150,
+   "slug": "prikladnaya-kineziologiya",
+   "name": "Прикладная кинезиология"
+  },
+  "additionalText": "",
+  "duration": "40",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+ },
+ {
+  "id": 474,
+  "status": "active",
+  "name": "ПК-2. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 2",
+  "seminar": {
+   "id": 202,
+   "name": "ПК-2. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 2",
+   "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-04-21T00:00:00.000Z",
+  "endAt": "2027-04-25T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 54,
+    "fullName": "Пилявский Сергей Орестович"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1786362355452.webp",
+   "id": "3f14cce3-b68d-4c0e-bab0-ec4596262c00"
+  },
+  "isFree": false,
+  "isEventCollection": true,
+  "description": "Полный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+  "oldPrice": 0,
+  "newPrice": 37500,
+  "city": {
+   "id": 76,
+   "name": "Екатеринбург"
+  },
+  "program": {
+   "id": 150,
+   "slug": "prikladnaya-kineziologiya",
+   "name": "Прикладная кинезиология"
+  },
+  "additionalText": "",
+  "duration": "40",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+ },
+ {
+  "id": 475,
+  "status": "active",
+  "name": "ПК-3. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 3",
+  "seminar": {
+   "id": 203,
+   "name": "ПК-3. Структурная составляющая треугольника здоровья. Общие диагностические и лечебные процедуры. Уровень 3",
+   "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-09-22T00:00:00.000Z",
+  "endAt": "2027-09-26T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 76,
+    "fullName": "Булатова Татьяна Николаевна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1786362444646.webp",
+   "id": "3c15967e-b49e-4826-ba8c-d79ecdcc18fd"
+  },
+  "isFree": false,
+  "isEventCollection": true,
+  "description": "Полный курс из 8 семинаров за 300 000 ₽. Доступна рассрочка на 4 платежа по 75 000 ₽.\nОтдельные семинары по любой из 8 тем курса. Стоимость каждого семинара — 50 000 ₽ (с выдачей сертификата по итогам).",
+  "oldPrice": 0,
+  "newPrice": 37500,
+  "city": {
+   "id": 76,
+   "name": "Екатеринбург"
+  },
+  "program": {
+   "id": 150,
+   "slug": "prikladnaya-kineziologiya",
+   "name": "Прикладная кинезиология"
+  },
+  "additionalText": "",
+  "duration": "40",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
  }
 ]
