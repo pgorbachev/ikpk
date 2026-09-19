@@ -11,8 +11,11 @@ if (target < 0 || target === args.length - 1) throw new Error('fake SSH requires
 const log = (entry) => appendFileSync(logPath, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
 log({ kind: 'connection', args });
 const remote = spawn('/bin/sh', ['-c', args.slice(target + 1).join(' ')], {
-  stdio: ['pipe', 'inherit', 'inherit'], detached: true,
+  stdio: ['pipe', 'pipe', 'inherit'], detached: true,
 });
+// A fresh pipe keeps Python's unbuffered stdout blocking. Inheriting Node's
+// nonblocking stdout can silently truncate a large write at the socket capacity.
+remote.stdout.pipe(process.stdout);
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   try { process.kill(-remote.pid, signal); } catch { /* Already completed. */ }
 });

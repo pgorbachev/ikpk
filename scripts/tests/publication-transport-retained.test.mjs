@@ -108,6 +108,26 @@ test('retained read and rollback share the same locked SSH session without stagi
   assert.equal(f.commands().filter((command) => command.command === 'stage').length, 0);
 });
 
+test('retained read transfers a large binary file in bounded chunks without truncation', options, async (t) => {
+  const f = fixture(t);
+  const bytes = Buffer.alloc(2 * 1024 ** 2 + 19, 235);
+  writeFileSync(join(f.retained, 'large.bin'), bytes);
+  let local;
+  await createSshTransport(f.config).withLock(async (session) => {
+    local = (await f.read(session)).treeDir;
+    assert.deepEqual(readFileSync(join(local, 'large.bin')), bytes);
+  });
+  const reads = f.commands().filter(({ command, path }) => command === 'read-retained-file' && path === 'large.bin');
+  assert.equal(reads[0].offset, 0);
+  assert.ok(reads.length >= 3, 'a file larger than 2 MiB requires at least three chunks');
+  for (let i = 1; i < reads.length; i++) {
+    assert.ok(reads[i].offset > reads[i - 1].offset);
+    assert.ok(reads[i].offset - reads[i - 1].offset <= 1024 ** 2);
+  }
+  assert.ok(bytes.length - reads.at(-1).offset <= 1024 ** 2);
+  assert.equal(existsSync(local), false);
+});
+
 test('retained download is cleaned after a failed caller check and session cannot be reused', options, async (t) => {
   const f = fixture(t); let local; let escapedSession;
   await assert.rejects(createSshTransport(f.config).withLock(async (session) => {

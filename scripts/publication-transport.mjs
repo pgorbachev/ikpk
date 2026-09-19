@@ -1,8 +1,8 @@
 /** The trusted worker supplies policy; every transport effect requires its bound proof. */
 import { spawn } from 'node:child_process';
-import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, relative } from 'node:path';
-import { createInterface } from 'node:readline';
+import { closeSync, constants, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { digestTree } from './publication-launcher.mjs';
@@ -14,6 +14,38 @@ const releaseId = (value) => {
 const checksum = (value) => {
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('invalid tree digest');
 };
+const MAX_RETAINED_FILES = 100000;
+const MAX_RETAINED_BYTES = 16 * 1024 ** 3;
+const RETAINED_CHUNK_BYTES = 1024 ** 2;
+const MAX_RESPONSE_BYTES = 8 * 1024 ** 2;
+
+function retainedPath(name) {
+  if (typeof name !== 'string' || !name || isAbsolute(name) || name.includes('\\') || name.includes('\0') ||
+      Buffer.byteLength(name) > 4096 || name.split('/').length > 128 ||
+      name.split('/').some((part) => ['', '.', '..'].includes(part))) throw new Error('invalid retained file path');
+}
+
+function retainedManifest(value, id, destinationId) {
+  if (!value || value.releaseId !== id || value.destinationId !== destinationId ||
+      !Array.isArray(value.files) || !value.files.length || value.files.length > MAX_RETAINED_FILES) throw new Error('invalid retained manifest');
+  if (value.currentReleaseId !== null) releaseId(value.currentReleaseId);
+  const names = new Set();
+  let total = 0;
+  for (const file of value.files) {
+    retainedPath(file?.path);
+    if (names.has(file.path) || !Number.isSafeInteger(file.size) || file.size < 0) throw new Error('invalid retained file metadata');
+    names.add(file.path);
+    total += file.size;
+    if (total > MAX_RETAINED_BYTES) throw new Error('retained tree exceeds transfer limit');
+  }
+  for (const name of names) {
+    const parts = name.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      if (names.has(parts.slice(0, i).join('/'))) throw new Error('conflicting retained file paths');
+    }
+  }
+  return value;
+}
 
 function filesIn(sourceDir) {
   if (lstatSync(sourceDir).isSymbolicLink()) throw new Error('symlink source directory');
@@ -67,16 +99,30 @@ async function connect(config) {
     child.once('close', () => { ended = true; resolve(); });
   });
   child.stdin.on('error', () => {}); // Each write callback reports failure to its request.
-  const reader = createInterface({ input: child.stdout, crlfDelay: Infinity });
-  const lines = reader[Symbol.asyncIterator]();
+  const output = child.stdout[Symbol.asyncIterator]();
+  let remaining = Buffer.alloc(0);
   let broken = false;
   let busy = false;
   let closed = false;
   async function response() {
-    const line = await lines.next();
-    if (line.done) throw new Error('SSH publication session closed unexpectedly');
+    const parts = [];
+    let size = 0;
+    while (true) {
+      if (!remaining.length) {
+        const chunk = await output.next();
+        if (chunk.done) throw new Error('SSH publication session closed unexpectedly');
+        remaining = chunk.value;
+      }
+      const newline = remaining.indexOf(10);
+      const part = newline < 0 ? remaining : remaining.subarray(0, newline);
+      size += part.length;
+      if (size > MAX_RESPONSE_BYTES) throw new Error('publication protocol response exceeds limit');
+      parts.push(part);
+      remaining = newline < 0 ? Buffer.alloc(0) : remaining.subarray(newline + 1);
+      if (newline >= 0) break;
+    }
     let reply;
-    try { reply = JSON.parse(line.value); } catch { throw new Error('invalid publication protocol response'); }
+    try { reply = JSON.parse(Buffer.concat(parts, size).toString('utf8')); } catch { throw new Error('invalid publication protocol response'); }
     if (reply.ok !== true) throw new Error(typeof reply.error === 'string' ? reply.error : 'remote publication failed');
     return reply.value;
   }
@@ -106,7 +152,7 @@ async function connect(config) {
     child.stdin.end();
     await Promise.race([exited, delay(1000, undefined, { ref: false })]);
     if (!ended) child.kill('SIGTERM');
-    reader.close();
+    child.stdout.destroy();
   }
   try { await response(); } catch (error) { broken = true; await close(); throw error; }
   return { request, close };
@@ -127,6 +173,7 @@ async function authorizeEffect(authorize, request) {
       typeof proof.snapshotId !== 'string' || !proof.snapshotId.trim() ||
       proof.destinationId !== request.destinationId) throw new Error('invalid publication authorization proof');
   checksum(proof.treeDigest);
+  if (request.action === 'read-retained' && proof.releaseId !== request.releaseId) throw new Error('publication authorization release mismatch');
   if (request.expectedDigest !== undefined && proof.treeDigest !== request.expectedDigest) throw new Error('publication authorization digest mismatch');
   const mismatch = request.operation && ['destinationId', 'treeDigest', 'commit', 'snapshotId'].find((field) => proof[field] !== request.operation[field]);
   if (mismatch) throw new Error(`publication authorization ${mismatch} mismatch`);
@@ -139,6 +186,7 @@ export function createSshTransport(config) {
     await authorizeAction('connect');
     const connection = await connect(connectionConfig); // The ready reply is sent only after remote flock.
     let open = true;
+    const downloads = [];
     const call = (...args) => {
       if (!open) throw new Error('publication lock is no longer held');
       return connection.request(...args);
@@ -170,6 +218,42 @@ export function createSshTransport(config) {
       await record(operation, recordIndex);
     }
     const session = {
+      async readRetained({ releaseId: id }) {
+        if (!open) throw new Error('publication lock is no longer held');
+        releaseId(id);
+        await authorizeAction('read-retained', { releaseId: id });
+        const manifest = retainedManifest(await call({ command: 'read-retained', releaseId: id }), id, connectionConfig.destinationId);
+        const treeDir = mkdtempSync(join(tmpdir(), 'ikpk-retained-'));
+        downloads.push(treeDir);
+        try {
+          for (const file of manifest.files) {
+            const path = join(treeDir, file.path);
+            if (relative(treeDir, path).startsWith('../') || isAbsolute(relative(treeDir, path))) throw new Error('retained path escapes tree');
+            mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+            const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+            try {
+              let offset = 0;
+              do {
+                const chunk = await call({ command: 'read-retained-file', releaseId: id, path: file.path, offset });
+                if (!chunk || typeof chunk.data !== 'string' || chunk.data.length > Math.ceil(RETAINED_CHUNK_BYTES / 3) * 4 ||
+                    typeof chunk.done !== 'boolean') throw new Error('invalid retained file chunk');
+                const bytes = Buffer.from(chunk.data, 'base64');
+                if (bytes.toString('base64') !== chunk.data || bytes.length > RETAINED_CHUNK_BYTES ||
+                    offset + bytes.length > file.size || chunk.done !== (offset + bytes.length === file.size) ||
+                    (!chunk.done && !bytes.length)) throw new Error('invalid retained file chunk length');
+                let written = 0;
+                while (written < bytes.length) written += writeSync(fd, bytes, written, bytes.length - written);
+                offset += bytes.length;
+                if (chunk.done) break;
+              } while (offset < file.size);
+            } finally { closeSync(fd); }
+          }
+          return { releaseId: id, destinationId: manifest.destinationId, currentReleaseId: manifest.currentReleaseId, treeDir };
+        } catch (error) {
+          rmSync(treeDir, { recursive: true, force: true });
+          throw error;
+        }
+      },
       async stage({ releaseId: id, sourceDir, expectedDigest }) {
         releaseId(id); checksum(expectedDigest);
         await authorizeAction('stage', { expectedDigest });
@@ -182,7 +266,11 @@ export function createSshTransport(config) {
       rollback(args) { checksum(args.expectedDigest); return activate({ ...args, rollback: true }); },
     };
     try { return await callback(session, { call, record }); }
-    finally { open = false; await connection.close(); }
+    finally {
+      open = false;
+      try { await connection.close(); }
+      finally { for (const treeDir of downloads) rmSync(treeDir, { recursive: true, force: true }); }
+    }
   }
   return {
     withLock: (callback) => withLock((session) => callback(session)),

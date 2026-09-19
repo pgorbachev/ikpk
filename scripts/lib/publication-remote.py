@@ -3,6 +3,7 @@
 Stdin: a JSON header line, followed (for stage) by exact-length raw file bodies.
 Stdout: JSON replies only. No retained release code is imported or executed.
 """
+import base64
 import fcntl
 import hashlib
 import json
@@ -13,6 +14,11 @@ import stat
 import sys
 import tempfile
 import uuid
+
+MAX_RETAINED_FILES = 100000
+MAX_RETAINED_BYTES = 16 * 1024 ** 3
+RETAINED_CHUNK_BYTES = 1024 ** 2
+MAX_MANIFEST_BYTES = 8 * 1024 ** 2 - 128
 
 
 class Refusal(Exception):
@@ -128,6 +134,99 @@ class PublicationSession:
         self.staged = {}
         self.prepared = None
         self.previous_current = None
+        self.retained = {}
+
+    def open_retained(self, release_id):
+        valid_id(release_id)
+        releases_fd = os.open(self.releases, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            try:
+                info = os.stat(release_id, dir_fd=releases_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                raise Refusal("retained release missing: target not retained")
+            require(stat.S_ISDIR(info.st_mode), "symlink or invalid retained release directory")
+            return os.open(release_id, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=releases_fd)
+        finally:
+            os.close(releases_fd)
+
+    def read_retained(self, command):
+        self.no_pending()
+        release_id = valid_id(command.get("releaseId"))
+        root_fd = self.open_retained(release_id)
+        files = []
+        total = 0
+        manifest_bytes = 0
+
+        def walk(directory_fd, prefix=""):
+            nonlocal total, manifest_bytes
+            with os.scandir(directory_fd) as entries:
+                for entry in entries:
+                    name = prefix + entry.name
+                    member_path("", name)
+                    require(len(name.split("/")) <= 128 and len(name.encode("utf-8")) <= 4096,
+                            "retained path exceeds limit")
+                    info = os.stat(entry.name, dir_fd=directory_fd, follow_symlinks=False)
+                    require(not stat.S_ISLNK(info.st_mode), "symlink in retained tree")
+                    if stat.S_ISDIR(info.st_mode):
+                        child_fd = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
+                        try:
+                            walk(child_fd, name + "/")
+                        finally:
+                            os.close(child_fd)
+                    else:
+                        require(stat.S_ISREG(info.st_mode), "retained tree member is not a regular file")
+                        file = {"path": name, "size": info.st_size}
+                        files.append(file)
+                        total += info.st_size
+                        manifest_bytes += len(json.dumps(file)) + 2
+                        require(len(files) <= MAX_RETAINED_FILES and total <= MAX_RETAINED_BYTES
+                                and manifest_bytes <= MAX_MANIFEST_BYTES, "retained tree exceeds transfer limit")
+        try:
+            walk(root_fd)
+        finally:
+            os.close(root_fd)
+        require(files, "empty retained release tree")
+        current = self.current_identity()
+        current_id = None
+        if current is not None:
+            current_path = os.path.realpath(self.current)
+            current_id = valid_id(os.path.basename(current_path))
+            require(current_path == self.release(current_id), "invalid current release path")
+            regular_directory(current_path)
+        manifest = {"releaseId": release_id, "destinationId": self.destination,
+                    "currentReleaseId": current_id, "files": files}
+        require(len(json.dumps(manifest)) <= MAX_MANIFEST_BYTES, "retained manifest exceeds limit")
+        self.retained[release_id] = {file["path"]: file["size"] for file in files}
+        return manifest
+
+    def read_retained_file(self, command):
+        self.no_pending()
+        release_id = valid_id(command.get("releaseId"))
+        name = command.get("path")
+        member_path("", name)
+        require(release_id in self.retained and name in self.retained[release_id], "retained file not in manifest")
+        size = self.retained[release_id][name]
+        offset = command.get("offset")
+        require(type(offset) is int and 0 <= offset <= size, "invalid retained file offset")
+        directory_fd = self.open_retained(release_id)
+        try:
+            parts = name.split("/")
+            for part in parts[:-1]:
+                child_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = child_fd
+            # NONBLOCK ensures a concurrently substituted FIFO cannot hang the lock.
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+            with os.fdopen(fd, "rb") as source:
+                info = os.fstat(source.fileno())
+                require(stat.S_ISREG(info.st_mode), "retained tree member is not a regular file")
+                require(info.st_size == size, "retained file changed during transfer")
+                source.seek(offset)
+                data = source.read(min(RETAINED_CHUNK_BYTES, size - offset))
+                require(len(data) == min(RETAINED_CHUNK_BYTES, size - offset), "retained file changed during transfer")
+            return {"data": base64.b64encode(data).decode("ascii"), "done": offset + len(data) == size}
+        finally:
+            os.close(directory_fd)
 
     def release(self, name):
         return os.path.join(self.releases, valid_id(name))
@@ -319,6 +418,8 @@ class PublicationSession:
                 return
             if name == "recover":
                 reply(self.recover())
+            elif name in ("read-retained", "read-retained-file"):
+                reply(getattr(self, name.replace("-", "_"))(command))
             else:
                 require(name in ("stage", "prepare", "activate", "cancel", "cancel-recovery", "finish"), "unknown publication command")
                 getattr(self, name.replace("-", "_"))(command)
