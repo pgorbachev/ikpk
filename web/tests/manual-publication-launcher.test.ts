@@ -120,6 +120,9 @@ describe('installed launcher confirms fresh canonical main before releasing cred
   it('positive control reaches the trusted entrypoint and the credential broker in an isolated clean checkout', () => {
     const f = fixture(); assertSuccessful(f, launch(f));
   });
+  it('an explicit clean canonical source reaches the broker and isolated trusted entrypoint', () => {
+    const f = fixture(); assertSuccessful(f, launch(f, { sourceDir: f.repo }));
+  });
   it('an explicitly dirty source is refused before its modified entrypoint or the credential broker executes', () => {
     const f = fixture(); maliciousEntrypoint(f);
     assertRefused(f, launch(f, { sourceDir: f.repo }), 'dirty-source');
