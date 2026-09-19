@@ -33,3 +33,11 @@ The projection obtains scope, route, placement and slot provenance from committe
 ## Separate simplification note
 
 Optional: remove the index-aligned `changed` calculation from `publication-occurrences.test.ts` and assert the payment script rule directly. The present test reconstructs a filtered registry merely to find one known rule; this obscures its target and makes harmless ordering changes look meaningful. This is test readability debt, not a correctness finding or approval blocker.
+# Fix verification
+
+The projection now receives the captured CMS origin explicitly and applies the same
+input URL localization as the snapshot loader. The independent regression supplies that
+origin as the fifth API argument; it still compares against the real loader's output.
+The scanner decodes Chromium's `&nbsp;` serialization before exact identity comparison.
+The three independent cases and two author cases pass together (5/5); the URL remains
+input-derived, and no rendered output is used to create expected identities.

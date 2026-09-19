@@ -18,8 +18,8 @@ function templates(records: typeof article[]) {
     `<template data-article-card data-astro-cid-l6mabxp2 data-page="${Math.floor(index / 6) + 1}" data-title="${escape(record.title.toLowerCase())}" data-body="${escape(record.body_text.slice(0, 300).toLowerCase())}" data-published-at="${escape(record.published_at)}"></template>`,
   ).join('');
 }
-function projected(records: typeof article[]) {
-  return publicationOccurrences(rules, slots, records, 'ci').filter((rule) => rule.route === '/statyi' && rule.identity.startsWith('template|'));
+function projected(records: typeof article[], cmsUrl?: string) {
+  return publicationOccurrences(rules, slots, records, 'ci', cmsUrl).filter((rule) => rule.route === '/statyi' && rule.identity.startsWith('template|'));
 }
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
@@ -40,7 +40,7 @@ it('accepts article attributes after the actual snapshot loader localizes CMS me
     const { getArticles } = await import('../src/lib/data');
     const rendered = getArticles();
     expect(rendered[0].body_text).toBe('See /uploads/guide.png');
-    expect(matchOccurrences(templates(rendered as typeof article[]), '/statyi', projected([captured]), slots)).toEqual([]);
+    expect(matchOccurrences(templates(rendered as typeof article[]), '/statyi', projected([captured], 'https://cms.example.test'), slots)).toEqual([]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { occurrenceIdentity, projectIdentity, type OccurrenceRule } from '../helpers/rich-content-safety/hazard-scan';
 import type { ExecutableSlot } from '../helpers/rich-content-safety/ast-sinks';
+import { localizeAssetUrls } from '../../src/lib/media';
 
 type Article = { title: string; body_text?: string; published_at?: string | null };
 
@@ -8,7 +9,9 @@ type Article = { title: string; body_text?: string; published_at?: string | null
  * Everything else keeps the reviewed registry's exact route/identity/placement/count.
  * Unknown CMS routes intentionally fail closed until their source mapping is reviewed.
  */
-export function publicationOccurrences(rules: OccurrenceRule[], slots: ExecutableSlot[], articles: Article[], paymentRole: string): OccurrenceRule[] {
+export function publicationOccurrences(rules: OccurrenceRule[], slots: ExecutableSlot[], articles: Article[], paymentRole: string, cmsUrl?: string): OccurrenceRule[] {
+  // Match the snapshot loader's input transformation, independently of rendered output.
+  const localized = JSON.parse(localizeAssetUrls(JSON.stringify(articles), cmsUrl)) as Article[];
   const slot = slots.find((item) => item.file === 'pages/statyi/index.astro' && item.identity.startsWith('template|'));
   assert(slot, 'missing reviewed article template source slot');
   const templates = rules.filter((rule) => rule.route === '/statyi' && rule.slotId === slot.slotId);
@@ -26,7 +29,7 @@ export function publicationOccurrences(rules: OccurrenceRule[], slots: Executabl
     }
     return rule;
   });
-  for (const [index, article] of [...articles].sort((a, b) => date(b.published_at) - date(a.published_at)).entries()) {
+  for (const [index, article] of localized.sort((a, b) => date(b.published_at) - date(a.published_at)).entries()) {
     const attrs = { 'data-article-card': '', ...Object.fromEntries(scope),
       'data-page': String(Math.floor(index / 6) + 1), 'data-title': article.title.toLowerCase(),
       'data-body': (article.body_text || '').slice(0, 300).toLowerCase(), 'data-published-at': article.published_at || '' };

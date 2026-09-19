@@ -21,7 +21,7 @@ it('all rendered content satisfies the existing rich-content safety matrix', asy
   const snapshot = JSON.parse(readFileSync(join(required('CONTENT_SNAPSHOT_DIR'), 'snapshot.json'), 'utf8'));
   expect(snapshot.snapshotId).toBe(required('PUBLICATION_SNAPSHOT_ID'));
   expect(Array.isArray(snapshot.content?.types?.articles), 'missing captured articles').toBe(true);
-  const occurrences = publicationOccurrences(registeredOccurrences, sourceSlots, snapshot.content.types.articles, required('PAYMENT_ROLE'));
+  const occurrences = publicationOccurrences(registeredOccurrences, sourceSlots, snapshot.content.types.articles, required('PAYMENT_ROLE'), snapshot.origin?.url);
   expect(occurrences.length, 'empty executable occurrence registry').toBeGreaterThan(0);
   const errors: string[] = []; let regions = 0;
   const oracle = await openOracleHarness({ executablePath: process.env.PUBLICATION_CHROMIUM_EXECUTABLE });
