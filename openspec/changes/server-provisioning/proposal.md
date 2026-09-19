@@ -58,7 +58,7 @@ vhost и включает службу (`scripts/bootstrap-vps.sh@3a4164fffe4824
 непривилегированной учётной записи выкладки с ограниченными правами
 — `openspec/specs/deploy-gating/spec.md:352`, `учётная запись, которой выполняется выкладка,`.
 Сегодня выкладка ходит на хост под root
-(`scripts/deploy-web.sh:36`, `SSH_USER="${SSH_USER:-root}"`), то есть принятое требование не
+(`scripts/deploy-web.sh@9bde6c579033fc97c7760f4da8c7b4cccb920bd3:36`, `SSH_USER="${SSH_USER:-root}"`), то есть принятое требование не
 выполняется, и создать условия для его выполнения нечем.
 
 ## What Changes
