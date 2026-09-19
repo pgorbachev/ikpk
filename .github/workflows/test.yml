@@ -403,7 +403,13 @@ jobs:
               web/package.json|cms/package.json|scripts/package.json) runtime_scope=true ;;
             esac
           done < "$changed"
-          if [ -n "$PR_BASE_SHA" ] && [ -s "$changed" ]; then
+          # Условие НЕ включает непустой PR_BASE_SHA: у push в main его нет, а состав
+          # изменения от этого не меняется. Прежняя редакция давала dependency_only=false
+          # на любом push, тогда как гейт (web/scripts/lib/dependency-update-gates.ts,
+          # isDependencyOnlyChange) судит по тем же changed-файлам и говорил true — и
+          # требовал базовый отчёт, которого шаг из-за этого не передавал. Замерено:
+          # main красный с 16.09.2026, вершина 36b58cec трогает только манифесты.
+          if [ -s "$changed" ]; then
             dependency_only=true
             while IFS= read -r file; do
               case "$file" in
