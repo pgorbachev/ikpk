@@ -31,7 +31,7 @@ async function fixture() {
   write(knownHostsFile, 'fixture-host-key\n');
   const config = { canonicalRepository: remote, sshTarget: 'deploy@stand.test.invalid', destinationId: 'stand', deployMode: 'stand',
     paymentRole: 'ci', siteUrl: 'https://stand.test.invalid', actor: 'operator@example.invalid', webRoot: '/var/www/ikpk',
-    knownHostsFile, keepReleases: 5, credentialBroker: [process.execPath, join(protectedDir, 'broker.mjs')] };
+    knownHostsFile, keepReleases: 5, chatLoaderSrc: 'none', credentialBroker: [process.execPath, join(protectedDir, 'broker.mjs')] };
   function saveConfig() { write(configPath, JSON.stringify(config)); chmodSync(configPath, 0o600); }
   saveConfig();
   const env: Record<string, string> = { PATH: process.env.PATH!, HOME: temp, DEPLOY_MODE: config.deployMode,
