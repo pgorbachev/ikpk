@@ -1,4 +1,4 @@
-/** The caller authorizes the pair; this module exclusively owns SSH transfer/switching. */
+/** The trusted worker supplies policy; every transport effect requires its bound proof. */
 import { spawn } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
@@ -119,22 +119,40 @@ function indexFailure(error, operation) {
   return failure;
 }
 
+async function authorizeEffect(authorize, request) {
+  if (typeof authorize !== 'function') throw new Error('trusted publication authorizer required');
+  const proof = await authorize(structuredClone(request));
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof) ||
+      typeof proof.commit !== 'string' || !/^[a-f0-9]{40}$/.test(proof.commit) ||
+      typeof proof.snapshotId !== 'string' || !proof.snapshotId.trim() ||
+      proof.destinationId !== request.destinationId) throw new Error('invalid publication authorization proof');
+  checksum(proof.treeDigest);
+  if (request.expectedDigest !== undefined && proof.treeDigest !== request.expectedDigest) throw new Error('publication authorization digest mismatch');
+  const mismatch = request.operation && ['destinationId', 'treeDigest', 'commit', 'snapshotId'].find((field) => proof[field] !== request.operation[field]);
+  if (mismatch) throw new Error(`publication authorization ${mismatch} mismatch`);
+}
+
 export function createSshTransport(config) {
+  const { authorize, ...connectionConfig } = config;
+  const authorizeAction = (action, details = {}) => authorizeEffect(authorize, { action, destinationId: connectionConfig.destinationId, ...details });
   async function withLock(callback) {
-    const connection = await connect(config); // The ready reply is sent only after remote flock.
+    await authorizeAction('connect');
+    const connection = await connect(connectionConfig); // The ready reply is sent only after remote flock.
     let open = true;
     const call = (...args) => {
       if (!open) throw new Error('publication lock is no longer held');
       return connection.request(...args);
     };
     async function record(operation, recordIndex) {
-      try { await recordIndex(operation); } catch (error) { throw indexFailure(error, operation); }
+      try { await recordIndex(structuredClone(operation)); } catch (error) { throw indexFailure(error, operation); }
       await call({ command: 'finish', publicationId: operation.publicationId });
     }
     async function activate({ releaseId: id, operation, recordIndex, expectedDigest, beforeActivate, rollback = false }) {
       releaseId(id);
       if (typeof recordIndex !== 'function') throw new Error('index callback required');
       if (beforeActivate !== undefined && typeof beforeActivate !== 'function') throw new Error('invalid final publication check');
+      operation = structuredClone(operation);
+      await authorizeAction(rollback ? 'rollback' : 'activate', { operation });
       // Preparation verifies retained/staged bytes and durably records the pending operation.
       await call({ command: 'prepare', releaseId: id, operation, expectedDigest, rollback });
       try { if (beforeActivate) await beforeActivate(); }
@@ -152,6 +170,7 @@ export function createSshTransport(config) {
     const session = {
       async stage({ releaseId: id, sourceDir, expectedDigest }) {
         releaseId(id); checksum(expectedDigest);
+        await authorizeAction('stage', { expectedDigest });
         const { root, paths } = filesIn(sourceDir);
         if (await digestTree(root, paths) !== expectedDigest) throw new Error('local tree digest mismatch');
         const files = paths.map((path) => ({ path, localPath: join(root, path), size: lstatSync(join(root, path)).size }));
@@ -167,8 +186,14 @@ export function createSshTransport(config) {
     withLock: (callback) => withLock((session) => callback(session)),
     recover: ({ recordIndex }) => withLock(async (_session, { call, record }) => {
       if (typeof recordIndex !== 'function') throw new Error('index callback required');
-      const operation = await call({ command: 'recover' });
-      if (!operation) return { recovered: false };
+      const pending = await call({ command: 'recover' });
+      if (!pending) return { recovered: false };
+      const { operation, prepared } = pending;
+      await authorizeAction('recover', { operation });
+      if (prepared) {
+        await call({ command: 'cancel-recovery', publicationId: operation.publicationId });
+        return { recovered: false, cancelled: true, operation };
+      }
       await record(operation, recordIndex);
       return { recovered: true, operation };
     }),
