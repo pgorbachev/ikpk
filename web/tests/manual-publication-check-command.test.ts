@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adapterFixture, browserReport, STAGES, vitestReport, type Stage } from './helpers/publication-adapter-fixtures';
@@ -114,12 +114,12 @@ describe('test:publication standalone check-only command', () => {
       'tests/publication-smoke.spec.ts', 'tests/publication/payment-absence.test.ts',
     ]);
     for (const call of f.calls) {
-      expect(call.options.cwd).toBe(f.options.webRoot);
-      expect(call.options.env).toMatchObject({ CONTENT_SNAPSHOT_DIR: f.options.snapshotDir, PUBLICATION_LEDGER_DIR: f.options.ledgerDir, DEPLOY_MODE: 'stand', PAYMENT_ROLE: 'ci', CHAT_LOADER_SRC: 'none' });
+      expect(realpathSync(String(call.options.cwd))).toBe(realpathSync(f.options.webRoot));
+      expect(call.options.env).toMatchObject({ CONTENT_SNAPSHOT_DIR: realpathSync(f.options.snapshotDir), PUBLICATION_LEDGER_DIR: realpathSync(f.options.ledgerDir), DEPLOY_MODE: 'stand', PAYMENT_ROLE: 'ci', CHAT_LOADER_SRC: 'none' });
       expect(JSON.stringify(call)).not.toContain(SECRET);
       expect(call.options.env!.NODE_OPTIONS).toBeUndefined(); expect(call.options.env!.NPM_CONFIG_USERCONFIG).toBeUndefined();
       const output = call.args.find((arg) => arg.startsWith('--outputFile='));
-      if (output) expect(output).toContain(`${f.context.reportPath}.checks/`);
+      if (output) expect(output).toContain(`${realpathSync(dirname(f.context.reportPath))}/${basename(f.context.reportPath)}.checks/`);
     }
     expect(bytes(f.options.snapshotDir)).toEqual(snapshotBefore); expect(bytes(f.options.ledgerDir)).toEqual(ledgerBefore);
     expect(f.transport).not.toHaveBeenCalled(); expect(f.probe).not.toHaveBeenCalled();
