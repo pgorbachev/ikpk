@@ -161,6 +161,18 @@ test('release IDs cannot overwrite a retained release', options, async (t) => {
   assert.equal(readFileSync(join(f.old, 'index.html'), 'utf8'), oldBody);
 });
 
+test('a retained release refusal survives a broken large upload pipe', options, async (t) => {
+  const f = setup(t);
+  // Exceed the pipe capacity so Python can refuse the header while the first
+  // payload write is still pending. Exercise the real remote implementation.
+  writeFileSync(join(f.source, '00-large.bin'), Buffer.alloc(16 * 1024 * 1024, 42));
+  f.operation.treeDigest = digest(f.source);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session, { releaseId: 'old' })), /exist|collision|retained/i);
+  assert.equal(readFileSync(join(f.old, 'index.html'), 'utf8'), oldBody);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(f.pendingPath), false);
+});
+
 test('release IDs cannot traverse outside the releases directory', options, async (t) => {
   const f = setup(t);
   await assert.rejects(f.transport.withLock((session) => f.stage(session, { releaseId: '../../escaped' })), /release|path|invalid/i);
