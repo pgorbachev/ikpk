@@ -710,3 +710,63 @@ form_links_match_mode() {
   fi
   echo "[deploy] Проверка форм: ${form_count} различных адресов, все соответствуют ${expect_human}"
 }
+
+# Происхождение собранного снимка. Предмет — САМ АРТЕФАКТ (`dist-snapshot/snapshot.json`,
+# поле `origin.kind`), а не окружение выкладки.
+#
+# Зачем, если съём уже отказывает сам. Цепочка «съём → сборка → выкладка» разорвана: это три
+# отдельные команды, и `deploy-web.sh` съёма не запускает. #234 сделал пустой живой съём
+# отказом; #252 запретил подменять отказавший съём фикстурой, когда `CONTENT_SNAPSHOT_DIR`
+# ЗАДАН. Остался последний путь: переменную не экспортировали вовсе — тогда сборка законно
+# берёт фикстуру (обычный локальный режим), и «собрал из фикстуры намеренно» неотличимо от
+# «забыл экспортировать после отказавшего съёма». Стенд уезжает с содержимым фикстуры,
+# внешне неотличимым от обновлённого.
+#
+# Отказ по умолчанию, объявление — явное: те же правила, что у `DEPLOY_MODE`,
+# `CHAT_LOADER_SRC` и `SNAPSHOT_SOURCE`. Отсутствующий файл и незнакомое происхождение —
+# «не смогли измерить», то есть тоже отказ, а не пропуск.
+#
+# Аргументы: <путь к snapshot.json собранного снимка> <объявленный источник или пусто>.
+snapshot_origin_matches() {
+  local file="${1:-}" declared="${2:-}"
+  if [[ ! -f "$file" ]]; then
+    echo "snapshot_origin_matches: нет $file — происхождение снимка не измерено" >&2
+    return 1
+  fi
+
+  local kind
+  if ! kind=$(node -e '
+      const fs = require("fs");
+      let snap;
+      try { snap = JSON.parse(fs.readFileSync(process.argv[1], "utf-8")); }
+      catch { process.exit(2); }
+      const kind = snap && snap.origin && snap.origin.kind;
+      if (typeof kind !== "string" || kind === "") process.exit(3);
+      process.stdout.write(kind);
+    ' "$file" 2>/dev/null); then
+    echo "snapshot_origin_matches: $file не несёт origin.kind — происхождение не измерено" >&2
+    return 1
+  fi
+
+  case "$kind" in
+    live)
+      echo "происхождение снимка: живой съём"
+      return 0
+      ;;
+    pinned)
+      if [[ "$declared" == "pinned" ]]; then
+        echo "происхождение снимка: закреплённая фикстура, объявлено явно"
+        return 0
+      fi
+      echo "snapshot_origin_matches: снимок собран из закреплённой фикстуры, а выкладка этого" >&2
+      echo "не объявляла. Так выглядит забытый экспорт CONTENT_SNAPSHOT_DIR после отказавшего" >&2
+      echo "съёма: стенд уехал бы с содержимым фикстуры. Если фикстура нужна намеренно," >&2
+      echo "объявите SNAPSHOT_SOURCE=pinned." >&2
+      return 1
+      ;;
+    *)
+      echo "snapshot_origin_matches: неизвестное происхождение снимка ($kind)" >&2
+      return 1
+      ;;
+  esac
+}
