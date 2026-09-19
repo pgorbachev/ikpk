@@ -34,6 +34,7 @@ openspec/changes/article-list-pagination/tasks.md :: shared/
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
 openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
 openspec/changes/cms-content-authoring-and-migration/specs/static-serving/spec.md :: text/html
+openspec/changes/cms-live-snapshot-capture/tasks.md :: main@16cdfbb389d633e111e810cc31dfa491c1f2a3b5
 openspec/changes/dependabot-policy-status/specs/dependency-update-automation/spec.md :: refs/heads/main
 openspec/changes/education-trust-and-admission-clarity/design.md :: change/education-trust
 openspec/changes/education-trust-and-admission-clarity/design.md :: discovery/entities/collapsible_panels.json:200
