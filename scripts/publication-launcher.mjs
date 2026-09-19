@@ -48,8 +48,21 @@ function protectedFile(path) {
 }
 function insideRepository(path) { try { git(path, 'rev-parse', '--absolute-git-dir'); return true; } catch { return false; } }
 
+function brokerCredentials(config, configPath) {
+  const broker = spawnSync(config.credentialBroker[0], config.credentialBroker.slice(1), {
+    cwd: dirname(configPath), env: cleanEnvironment(), encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024,
+  });
+  if (broker.error || broker.status !== 0) refuse('credential-broker-failed');
+  let credentials;
+  try { credentials = JSON.parse(broker.stdout).env; } catch { refuse('credential-broker-failed'); }
+  if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) ||
+      Object.entries(credentials).some(([name, value]) => !/^(IKPK_[A-Z0-9_]+|SSH_KEY|SSH_AUTH_SOCK|GH_TOKEN|CMS_[A-Z0-9_]+)$/.test(name) || typeof value !== 'string')) refuse('credential-broker-failed');
+  return credentials;
+}
+
 // Kept in the installed, dependency-free launcher: repository code cannot extend this schema.
-function workerAudit(bytes, commit, exitStatus) {
+function workerAudit(bytes, commit, exitStatus, releaseId) {
+  const rollback = releaseId !== undefined;
   if (typeof bytes !== 'string' || !bytes.length || Buffer.byteLength(bytes) > 16 * 1024) refuse('invalid-worker-audit');
   let audit;
   try { audit = JSON.parse(bytes); } catch { refuse('invalid-worker-audit'); }
@@ -59,9 +72,10 @@ function workerAudit(bytes, commit, exitStatus) {
   const fields = {
     version: (value) => value === 1,
     status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
-    code: (value) => exitStatus === 0 ? value === 'published' :
-      ['publication-failed', 'checks-failed', 'ci-failed', 'provenance-changed', 'active-unindexed', 'main-changed'].includes(value),
-    commit: (value) => value === commit,
+    code: (value) => exitStatus === 0 ? value === (rollback ? 'rolled-back' : 'published') :
+      (rollback ? ['rollback-failed', 'checks-failed', 'active-unindexed'] : ['publication-failed', 'checks-failed', 'ci-failed', 'provenance-changed', 'active-unindexed', 'main-changed']).includes(value),
+    commit: (value) => rollback ? matches(value, /^[a-f0-9]{40}$/) : value === commit,
+    ...(rollback ? { releaseId: (value) => value === releaseId } : {}),
     snapshotId: (value) => matches(value, /^snap:[a-f0-9]{64}$/),
     treeDigest: (value) => matches(value, /^[a-f0-9]{64}$/),
     publicationId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
@@ -73,25 +87,35 @@ function workerAudit(bytes, commit, exitStatus) {
       matches(value.commit, /^[a-f0-9]{40}$/) && matches(value.snapshotId, /^snap:[a-f0-9]{64}$/) &&
       matches(value.releaseId, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
   };
-  if (!object(audit) || !['version', 'status', 'code', 'commit'].every((key) => Object.hasOwn(audit, key)) ||
+  if (!object(audit) || !['version', 'status', 'code', ...(!rollback || exitStatus === 0 ? ['commit'] : [])].every((key) => Object.hasOwn(audit, key)) ||
       Object.entries(audit).some(([key, value]) => !Object.hasOwn(fields, key) || !fields[key](value))) refuse('invalid-worker-audit');
-  if (exitStatus === 0 && (!['snapshotId', 'treeDigest', 'publicationId'].every((key) => Object.hasOwn(audit, key)) ||
-      !['observedEntry', 'revision', 'highWaterMark', 'localExecutedTests', 'ciExecutedTests'].every((key) => audit[key] > 0))) refuse('invalid-worker-audit');
+  if (exitStatus === 0 && (!['snapshotId', 'treeDigest', 'publicationId', ...(rollback ? ['releaseId'] : [])].every((key) => Object.hasOwn(audit, key)) ||
+      !['revision', 'localExecutedTests', 'ciExecutedTests', ...(!rollback ? ['observedEntry', 'highWaterMark'] : [])].every((key) => audit[key] > 0))) refuse('invalid-worker-audit');
   if ((audit.code === 'active-unindexed') !== Object.hasOwn(audit, 'activePair') ||
-      (Object.hasOwn(audit, 'check') && audit.code !== 'checks-failed')) refuse('invalid-worker-audit');
+      (Object.hasOwn(audit, 'check') && audit.code !== 'checks-failed') ||
+      (rollback && audit.activePair && (audit.activePair.releaseId !== releaseId || audit.activePair.commit !== audit.commit || audit.activePair.snapshotId !== audit.snapshotId))) refuse('invalid-worker-audit');
   return audit;
 }
 
 export async function launch(args) {
   const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
-  if (args[0] !== 'publish') refuse('untrusted-ref');
+  if (!['publish', 'rollback'].includes(args[0])) refuse('untrusted-ref');
+  const rollback = args[0] === 'rollback';
   const options = new Map();
-  for (let i = 1; i < args.length; i += 2) {
-    if (!['--config', '--source-url', '--source-ref', '--source-dir'].includes(args[i]) ||
-        !args[i + 1] || options.has(args[i])) refuse('invalid-arguments');
-    options.set(args[i], args[i + 1]);
+  for (let i = 1; i < args.length; i++) {
+    const key = args[i];
+    const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] : ['--config', '--source-url', '--source-ref', '--source-dir'];
+    if (!allowed.includes(key) || options.has(key)) refuse('invalid-arguments');
+    if (key === '--confirm') options.set(key, true);
+    else {
+      if (typeof args[i + 1] !== 'string' || !args[i + 1] || args[i + 1].startsWith('--')) refuse('invalid-arguments');
+      options.set(key, args[++i]);
+    }
   }
+  if (rollback && (!options.has('--config') || !options.has('--confirm') ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.get('--release-id') ?? '') ||
+      !options.get('--reason')?.trim())) refuse('invalid-arguments');
   const installed = realpathSync(fileURLToPath(import.meta.url));
   let configPath, config;
   try {
@@ -102,16 +126,46 @@ export async function launch(args) {
     config = JSON.parse(readFileSync(configPath, 'utf8'));
   } catch { refuse('untrusted-config'); }
   checks.push('protected-config');
-  const source = options.get('--source-url');
-  if (typeof config.canonicalRepository !== 'string' || !source || source !== config.canonicalRepository || source.startsWith('-')) refuse('untrusted-source');
-  checks.push('canonical-repository');
-  if (options.get('--source-ref') !== 'main') refuse('untrusted-ref');
-  checks.push('main-ref');
   if (!['stand', 'prod'].includes(config.deployMode) || typeof config.destinationId !== 'string' || !config.destinationId ||
       typeof config.sshTarget !== 'string' || !/^[a-zA-Z0-9_.@:-]+$/.test(config.sshTarget) || config.sshTarget.startsWith('-') ||
       !Array.isArray(config.credentialBroker) || !config.credentialBroker.length ||
       config.credentialBroker.some((arg) => typeof arg !== 'string') || !isAbsolute(config.credentialBroker[0])) refuse('untrusted-config');
   checks.push('destination-config');
+  if (rollback) {
+    const runtime = join(dirname(installed), 'runtime');
+    const entry = join(runtime, 'web/scripts/publication-operator.ts');
+    let manifest;
+    try {
+      // Check each installed component before realpath can erase a symlink.
+      for (const path of [runtime, join(runtime, 'web'), join(runtime, 'web/scripts')]) {
+        const stat = lstatSync(path);
+        if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o022)) refuse('untrusted-runtime');
+      }
+      protectedFile(entry);
+      manifest = JSON.parse(readFileSync(protectedFile(join(runtime, 'runtime.json')), 'utf8'));
+      if (manifest.version !== 1 || typeof manifest.commit !== 'string' || !/^[a-f0-9]{40}$/.test(manifest.commit) || insideRepository(runtime)) refuse('untrusted-runtime');
+    } catch { refuse('untrusted-runtime'); }
+    checks.push('protected-runtime');
+    const credentials = brokerCredentials(config, configPath);
+    checks.push('credential-delivery');
+    const releaseId = options.get('--release-id');
+    const result = spawnSync(process.execPath, [entry, 'rollback', '--release-id', releaseId, '--confirm', '--reason', options.get('--reason')], {
+      cwd: runtime, env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
+        PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
+        PUBLICATION_RUNTIME_SHA: manifest.commit, PUBLICATION_LAUNCHER: installed },
+      encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024, stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
+    });
+    if (result.error || result.status === null) refuse('publication-worker-failed');
+    const audit = workerAudit(result.output[3], undefined, result.status, releaseId);
+    if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
+    checks.push('publication-worker');
+    return { status: 'success', executedChecks: checks.length, checks, commit: audit.commit, destinationId: config.destinationId, audit };
+  }
+  const source = options.get('--source-url');
+  if (typeof config.canonicalRepository !== 'string' || !source || source !== config.canonicalRepository || source.startsWith('-')) refuse('untrusted-source');
+  checks.push('canonical-repository');
+  if (options.get('--source-ref') !== 'main') refuse('untrusted-ref');
+  checks.push('main-ref');
   const sourceDir = options.get('--source-dir');
   if (sourceDir) {
     const root = realpathSync(sourceDir);
@@ -142,14 +196,7 @@ export async function launch(args) {
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
         !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
     checks.push('contained-worker');
-    const broker = spawnSync(config.credentialBroker[0], config.credentialBroker.slice(1), {
-      cwd: dirname(configPath), env: cleanEnvironment(), encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024,
-    });
-    if (broker.error || broker.status !== 0) refuse('credential-broker-failed');
-    let credentials;
-    try { credentials = JSON.parse(broker.stdout).env; } catch { refuse('credential-broker-failed'); }
-    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) ||
-        Object.entries(credentials).some(([name, value]) => !/^(IKPK_[A-Z0-9_]+|SSH_KEY|SSH_AUTH_SOCK|GH_TOKEN|CMS_[A-Z0-9_]+)$/.test(name) || typeof value !== 'string')) refuse('credential-broker-failed');
+    const credentials = brokerCredentials(config, configPath);
     checks.push('credential-delivery');
     const result = spawnSync('/bin/bash', [worker, config.sshTarget], { cwd: checkout,
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
@@ -170,7 +217,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try { process.stdout.write(`${JSON.stringify(await launch(process.argv.slice(2)))}\n`); }
   catch (error) {
     const reasons = new Set(['hosted-publication-forbidden', 'untrusted-source', 'dirty-source', 'untrusted-ref',
-      'source-unavailable', 'untrusted-config', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
+      'source-unavailable', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
     process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed',
       ...(error.audit ? { audit: error.audit } : {}) })}\n`);
     process.exitCode = 1;

@@ -132,6 +132,36 @@ describe('installed rollback coordinator', () => {
     await expect(f.state.authorize!({ action: 'connect', destinationId: 'prod' })).rejects.toThrow();
   });
 
+  it('permits readiness only during locked active-role checks and revokes it before switch and after completion', async () => {
+    const run = await runner();
+    for (const paymentRole of ['ci', 'stand', 'prod'] as const) {
+      const f = fixture(); f.original.paymentRole = paymentRole;
+      const probe = () => f.state.authorize!({ action: 'payment-readiness', destinationId: 'prod' });
+      const digest = f.ports.digest;
+      let rejectedOutsideChecks = 0, successfulProbes = 0;
+      f.ports.digest = async (path) => {
+        await expect(probe()).rejects.toThrow(); rejectedOutsideChecks++;
+        return digest(path);
+      };
+      const checks = f.ports.runChecks;
+      f.ports.runChecks = async (input) => {
+        expect(f.state.locked).toBe(true);
+        if (paymentRole === 'ci') await expect(probe()).rejects.toThrow();
+        else {
+          expect(await probe()).toMatchObject({ commit: f.original.commit, destinationId: 'prod', releaseId: f.original.releaseId });
+          successfulProbes++;
+          await expect(f.state.authorize!({ action: 'payment-readiness', destinationId: 'stand' })).rejects.toThrow();
+        }
+        return checks(input);
+      };
+      f.hooks.beforeRollback = async () => { await expect(probe()).rejects.toThrow(); };
+      await run(f.input, f.ports);
+      await expect(probe()).rejects.toThrow();
+      expect(rejectedOutsideChecks).toBe(2); expect(successfulProbes).toBe(paymentRole === 'ci' ? 0 : 1);
+      expect(f.appended).toHaveLength(1);
+    }
+  });
+
   it('refuses an unfinished destination operation without checks or switching', async () => {
     const run = await runner(); const f = fixture();
     f.state.pending = { ...f.original, rollbackOfPublicationId: 'older', reason: 'unfinished', rollbackChecks: f.report };

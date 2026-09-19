@@ -21,7 +21,7 @@ export interface PublicationProof {
   destinationId: string; treeDigest: string; commit: string; snapshotId: string; releaseId?: string;
 }
 export interface PublicationAuthorizationRequest {
-  action: 'connect' | 'stage' | 'activate' | 'rollback' | 'recover' | 'read-retained';
+  action: 'payment-readiness' | 'connect' | 'stage' | 'activate' | 'rollback' | 'recover' | 'read-retained';
   destinationId: string; expectedDigest?: string; releaseId?: string;
   operation?: PublicationProof & { publicationId: string; releaseId: string };
 }
