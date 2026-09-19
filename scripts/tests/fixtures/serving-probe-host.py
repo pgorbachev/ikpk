@@ -96,8 +96,12 @@ real_replace = os.replace
 def replace(source, target, *args, **kwargs):
     root = fixture.get("transactionRoot")
     is_current = root and target == os.path.join(root, "current")
-    if root and target == os.path.join(root, "shared", "nginx-redirects.conf") and fixture.get("restoreFailure"):
-        with open(source, "r", encoding="utf-8") as stream:
+    redirect_target = target == os.path.join(root, "shared", "nginx-redirects.conf") if root else False
+    if root and target == "nginx-redirects.conf" and kwargs.get("dst_dir_fd") is not None:
+        redirect_target = os.fstat(kwargs["dst_dir_fd"]) == os.stat(os.path.join(root, "shared"))
+    if redirect_target and fixture.get("restoreFailure"):
+        fd = os.open(source, os.O_RDONLY, dir_fd=kwargs.get("src_dir_fd"))
+        with os.fdopen(fd, "r", encoding="utf-8") as stream:
             if stream.read() == fixture["oldRedirects"]:
                 log({"kind": "restore-failure"})
                 raise OSError("injected redirect restore failure")

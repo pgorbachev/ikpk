@@ -123,7 +123,11 @@ async function connect(config) {
     }
     let reply;
     try { reply = JSON.parse(Buffer.concat(parts, size).toString('utf8')); } catch { throw new Error('invalid publication protocol response'); }
-    if (reply.ok !== true) throw new Error(typeof reply.error === 'string' ? reply.error : 'remote publication failed');
+    if (reply.ok !== true) {
+      const error = new Error(typeof reply.error === 'string' ? reply.error : 'remote publication failed');
+      if (reply.activeOperation) throw indexFailure(error, reply.activeOperation);
+      throw error;
+    }
     return reply.value;
   }
   const write = (bytes) => new Promise((resolve, reject) => child.stdin.write(bytes, (error) => error ? reject(new Error('SSH upload stream failed')) : resolve()));
@@ -199,14 +203,15 @@ export function createSshTransport(config) {
         await call({ command: 'finish', operation });
       } catch (error) { throw indexFailure(error, operation); }
     }
-    async function activate({ releaseId: id, operation, recordIndex, expectedDigest, beforeActivate, rollback = false }) {
+    async function activate({ releaseId: id, operation, recordIndex, expectedDigest, beforeActivate, redirectsPath, rollback = false }) {
       releaseId(id);
+      if (redirectsPath !== undefined && redirectsPath !== 'deploy/nginx-redirects.conf') throw new Error('invalid redirect artifact path');
       if (typeof recordIndex !== 'function') throw new Error('index callback required');
       if (beforeActivate !== undefined && typeof beforeActivate !== 'function') throw new Error('invalid final publication check');
       operation = structuredClone(operation);
       await authorizeAction(rollback ? 'rollback' : 'activate', { operation });
       // Preparation verifies retained/staged bytes and durably records the pending operation.
-      await call({ command: 'prepare', releaseId: id, operation, expectedDigest, rollback });
+      await call({ command: 'prepare', releaseId: id, operation, expectedDigest, rollback, redirectsPath });
       try { if (beforeActivate) await beforeActivate(); }
       catch (error) {
         try { await call({ command: 'cancel', operation }); }
@@ -296,6 +301,7 @@ export function createSshTransport(config) {
         await call({ command: 'cancel-recovery', operation });
         return { recovered: false, cancelled: true, operation };
       }
+      await call({ command: 'complete-recovery', operation });
       await record(operation, recordIndex);
       return { recovered: true, operation };
     }),

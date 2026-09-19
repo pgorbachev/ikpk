@@ -295,3 +295,45 @@ test('cancel refuses unexpected manual config drift without clearing pending or 
   assert.equal(f.current(), 'releases/old');
   assert.equal(existsSync(f.pending), true, 'refused config restore must preserve pending evidence');
 });
+
+// Supplemental boundary checks on the implementation; the independent RED cases above
+// remain unchanged and provide the implementation's pre-existing acceptance contract.
+test('configuration drift after final validation blocks current without overwriting manual bytes', options, async (t) => {
+  const f = await setup(t);
+  await assert.rejects(f.publish({ beforeActivate: async () => {
+    writeFileSync(f.fragment, 'manual emergency configuration\n');
+  } }), /redirect|configuration|changed/i);
+  assert.equal(f.current(), 'releases/old');
+  assert.equal(f.redirects(), 'manual emergency configuration\n');
+  assert.equal(existsSync(f.pending), true);
+  assert.equal(f.events().some((event) => event.kind === 'switch' || isCommand(event, reload)), false);
+});
+
+test('committed recovery reinstalls recognized old redirect bytes and validates before reload', options, async (t) => {
+  const f = await setup(t, { crashAt: 'after-current' });
+  await assert.rejects(f.publish(), /SSH|session|stream|closed/i);
+  writeFileSync(f.fragment, oldRedirects);
+  f.update({ crashAt: null });
+  const result = await f.transport().recover({ recordIndex: async () => {
+    assert.equal(f.redirects(), newRedirects);
+    const commands = f.commands();
+    assert.deepEqual(commands.slice(-2).map(({ argv }) => argv), [check, reload]);
+    assert.ok(commands.slice(-2).every((event) => event.redirects === newRedirects && event.current === 'releases/new'));
+  } });
+  assert.equal(result.recovered, true);
+  assert.equal(existsSync(f.pending), false);
+});
+
+test('committed recovery preserves unexpected redirect drift and pending without recording', options, async (t) => {
+  const f = await setup(t, { crashAt: 'after-current' });
+  await assert.rejects(f.publish(), /SSH|session|stream|closed/i);
+  writeFileSync(f.fragment, 'manual emergency configuration\n');
+  f.update({ crashAt: null });
+  const error = await capturedError(f.transport().recover({ recordIndex: async () => assert.fail('drift cannot enter history') }));
+  assert.match(error.message, /redirect|configuration|drift/i);
+  assert.deepEqual(error.activeOperation, f.operation);
+  assert.equal(f.current(), 'releases/new');
+  assert.equal(f.redirects(), 'manual emergency configuration\n');
+  assert.equal(existsSync(f.pending), true);
+  assert.equal(f.commands().some((event) => isCommand(event, reload)), false);
+});

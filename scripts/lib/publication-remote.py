@@ -10,6 +10,7 @@ import json
 import os
 import re
 import resource
+import shlex
 import shutil
 import stat
 import subprocess
@@ -38,9 +39,11 @@ def require(condition, message):
         raise Refusal(message)
 
 
-def reply(value=None, error=None):
+def reply(value=None, error=None, active_operation=None):
     payload = {"ok": error is None}
     payload["value" if error is None else "error"] = value if error is None else error
+    if active_operation is not None:
+        payload["activeOperation"] = active_operation
     print(json.dumps(payload, ensure_ascii=True), flush=True)
 
 
@@ -152,19 +155,25 @@ class PublicationSession:
         self.prepared = None
         self.previous_current = None
         self.retained = {}
+        self.active_operation = None
+
+    def shared_directory(self):
+        return os.open(os.path.join(self.root, "shared"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+
+    def read_redirects(self, directory_fd):
+        fd = os.open("nginx-redirects.conf", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            require(stat.S_ISREG(info.st_mode), "redirect fragment is not a regular file")
+            require(info.st_size <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
+            data = source.read(MAX_REDIRECT_BYTES + 1)
+            require(len(data) <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
+            return data
 
     def inspect_serving(self):
-        # Resolve both components through descriptors so shared or the fragment cannot
-        # redirect this observation outside the configured publication destination.
-        shared_fd = os.open(os.path.join(self.root, "shared"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        shared_fd = self.shared_directory()
         try:
-            fd = os.open("nginx-redirects.conf", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=shared_fd)
-            with os.fdopen(fd, "rb") as source:
-                info = os.fstat(source.fileno())
-                require(stat.S_ISREG(info.st_mode), "redirect fragment is not a regular file")
-                require(info.st_size <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
-                redirects = source.read(MAX_REDIRECT_BYTES + 1)
-                require(len(redirects) <= MAX_REDIRECT_BYTES, "redirect fragment exceeds limit")
+            redirects = self.read_redirects(shared_fd)
         finally:
             os.close(shared_fd)
         with tempfile.TemporaryFile() as output:
@@ -179,6 +188,107 @@ class PublicationSession:
             nginx_dump = output.read(MAX_NGINX_BYTES + 1)
         require(nginx_dump and len(nginx_dump) <= MAX_NGINX_BYTES, "empty or oversized nginx inspection")
         return {"nginxDump": nginx_dump.decode("utf-8"), "redirects": redirects.decode("utf-8")}
+
+    def verify_redirect_binding(self, dump):
+        # nginx -T emits the loaded files. Parse directives with comments/quotes and
+        # block scope: a matching basename or an include in another vhost is not proof.
+        lexer = shlex.shlex(dump, posix=True, punctuation_chars="{};")
+        lexer.whitespace_split = True
+        stack = [{"header": [], "directives": []}]
+        blocks = []
+        directive = []
+        for token in lexer:
+            tokens = list(token) if token and all(char in "{};" for char in token) else [token]
+            for part in tokens:
+                if part == "{":
+                    require(directive, "invalid nginx block")
+                    block = {"header": directive, "directives": []}
+                    stack.append(block)
+                    blocks.append(block)
+                    directive = []
+                elif part == "}":
+                    require(len(stack) > 1 and not directive, "invalid nginx block boundary")
+                    stack.pop()
+                elif part == ";":
+                    require(directive, "invalid nginx directive")
+                    stack[-1]["directives"].append(directive)
+                    directive = []
+                else:
+                    directive.append(part)
+        require(len(stack) == 1 and not directive, "incomplete nginx configuration")
+        target_root = ["root", self.current]
+        target_include = ["include", os.path.join(self.root, "shared", "nginx-redirects.conf")]
+        servers = [block for block in blocks if block["header"] == ["server"]]
+        matching = [block for block in servers if target_root in block["directives"]]
+        require(matching, "nginx destination root/current binding missing")
+        require(all(block["directives"].count(target_include) == 1 for block in matching),
+                "nginx redirect include binding missing for destination")
+        require(all(target_include not in block["directives"] for block in servers if block not in matching),
+                "nginx redirect include shared with another destination")
+
+    def nginx_command(self, reload=False):
+        argv = (["/usr/bin/sudo", "-n", "/bin/systemctl", "reload", "nginx"] if reload else
+                ["/usr/bin/sudo", "-n", "/usr/sbin/nginx", "-t"])
+        label = "nginx reload" if reload else "nginx configuration validation"
+        try:
+            result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, shell=False, timeout=PROBE_TIMEOUT)
+        except (OSError, subprocess.SubprocessError):
+            raise Refusal(label + " unavailable")
+        require(result.returncode == 0, label + " failed")
+
+    def redirect_evidence(self, release):
+        shared_fd = self.shared_directory()
+        try:
+            old = self.read_redirects(shared_fd)
+        finally:
+            os.close(shared_fd)
+        deploy_fd = os.open(os.path.join(release, "deploy"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            new = self.read_redirects(deploy_fd)
+        finally:
+            os.close(deploy_fd)
+        observation = self.inspect_serving()
+        self.verify_redirect_binding(observation["nginxDump"])
+        require(observation["redirects"].encode("utf-8") == old, "redirect config changed during inspection")
+        return {name: {"bytes": base64.b64encode(data).decode("ascii"),
+                       "digest": hashlib.sha256(data).hexdigest()} for name, data in (("old", old), ("new", new))}
+
+    def replace_redirects(self, preparation, desired):
+        evidence = preparation.get("redirects")
+        if evidence is None:
+            return
+        require(isinstance(evidence, dict) and set(evidence) == {"old", "new"}, "invalid redirect evidence")
+        values = {}
+        for name, item in evidence.items():
+            require(isinstance(item, dict) and isinstance(item.get("bytes"), str)
+                    and len(item["bytes"]) <= 4 * ((MAX_REDIRECT_BYTES + 2) // 3), "invalid redirect evidence")
+            data = base64.b64decode(item["bytes"], validate=True)
+            require(len(data) <= MAX_REDIRECT_BYTES and hashlib.sha256(data).hexdigest() == item.get("digest"),
+                    "redirect evidence digest mismatch")
+            values[name] = data
+        directory_fd = self.shared_directory()
+        temporary = ".redirects-" + uuid.uuid4().hex
+        try:
+            current = self.read_redirects(directory_fd)
+            require(current in values.values(), "unexpected redirect configuration drift")
+            if current == values[desired]:
+                return
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=directory_fd)
+            with os.fdopen(fd, "wb") as output:
+                os.fchmod(output.fileno(), 0o644)
+                output.write(values[desired])
+                output.flush()
+                os.fsync(output.fileno())
+            require(self.read_redirects(directory_fd) == current, "redirect configuration changed before replacement")
+            os.replace(temporary, "nginx-redirects.conf", src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+            os.fsync(directory_fd)
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+            os.close(directory_fd)
 
     def payment_readiness(self):
         # Ignore proxy environment and refuse redirects: this is evidence from this VPS.
@@ -410,12 +520,29 @@ class PublicationSession:
         operation = self.operation(command.get("operation"), command.get("releaseId"))
         expected = command.get("expectedDigest") if command.get("rollback") else self.staged.get(operation["releaseId"])
         require(expected == operation["treeDigest"], "release not staged or operation digest mismatch")
-        self.verify_release(operation)
+        release = self.verify_release(operation)
+        redirects = None
+        if "redirectsPath" in command:
+            require(command["redirectsPath"] == "deploy/nginx-redirects.conf", "invalid redirect artifact path")
+            redirects = self.redirect_evidence(release)
         self.previous_current = self.current_identity()
         # Until both writes are durable, a crash with old current remains fail-closed.
         write_json(self.pending, operation)
-        write_json(self.preparation, {"operation": operation, "previousCurrent": self.previous_current, "phase": "prepared"})
+        preparation = {"operation": operation, "previousCurrent": self.previous_current, "phase": "prepared"}
+        if redirects is not None:
+            preparation["redirects"] = redirects
+        write_json(self.preparation, preparation)
         self.prepared = operation
+        if redirects is not None:
+            try:
+                self.replace_redirects(preparation, "new")
+                self.nginx_command()
+            except (Refusal, OSError, ValueError):
+                # Do not discard either journal if restoration itself refuses/fails.
+                self.replace_redirects(preparation, "old")
+                self.clear_pending()
+                self.prepared = None
+                raise
 
     def activate(self, command):
         require(self.prepared and command.get("operation") == self.prepared, "publication operation was not prepared")
@@ -423,6 +550,13 @@ class PublicationSession:
         preparation = self.read_preparation(self.prepared)
         require(preparation and preparation["phase"] == "prepared", "missing preparation evidence")
         require(self.current_identity() == preparation["previousCurrent"], "current changed during preparation")
+        if preparation.get("redirects") is not None:
+            directory_fd = self.shared_directory()
+            try:
+                require(self.read_redirects(directory_fd) == base64.b64decode(preparation["redirects"]["new"]["bytes"], validate=True),
+                        "redirect configuration changed after validation")
+            finally:
+                os.close(directory_fd)
         preparation["phase"] = "committing"
         # This durable intent makes an old current ambiguous after activation starts.
         write_json(self.preparation, preparation)
@@ -430,15 +564,19 @@ class PublicationSession:
         try:
             os.symlink("releases/" + self.prepared["releaseId"], temporary)
             os.replace(temporary, self.current)
+            self.active_operation = self.prepared
             sync_dir(self.root)
         finally:
             if os.path.lexists(temporary):
                 os.unlink(temporary)
         self.prepared = None
+        if preparation.get("redirects") is not None:
+            self.nginx_command(reload=True)
 
     def cancel(self, command):
         require(self.prepared and command.get("operation") == self.prepared, "publication operation was not prepared")
         require(self.prepared_operation(self.prepared["publicationId"]) == self.prepared, "pending operation changed")
+        self.replace_redirects(self.read_preparation(self.prepared), "old")
         self.clear_pending()
         self.prepared = None
 
@@ -457,7 +595,22 @@ class PublicationSession:
     def cancel_recovery(self, command):
         operation = self.operation(command.get("operation"))
         require(self.prepared_operation(operation["publicationId"]) == operation, "pending operation changed")
+        self.replace_redirects(self.read_preparation(operation), "old")
         self.clear_pending()
+
+    def complete_recovery(self, command):
+        operation = self.read_pending()
+        require(operation == command.get("operation"), "pending publication operation mismatch")
+        preparation = self.read_preparation(operation)
+        require(not preparation or preparation["phase"] == "committing", "publication was not committed")
+        self.active_is(operation)
+        self.active_operation = operation
+        self.verify_release(operation)
+        if preparation and preparation.get("redirects") is not None:
+            self.verify_redirect_binding(self.inspect_serving()["nginxDump"])
+            self.replace_redirects(preparation, "new")
+            self.nginx_command()
+            self.nginx_command(reload=True)
 
     def finish(self, command):
         operation = self.read_pending()
@@ -487,7 +640,7 @@ class PublicationSession:
             elif name in ("read-retained", "read-retained-file"):
                 reply(getattr(self, name.replace("-", "_"))(command))
             else:
-                require(name in ("stage", "prepare", "activate", "cancel", "cancel-recovery", "finish"), "unknown publication command")
+                require(name in ("stage", "prepare", "activate", "cancel", "cancel-recovery", "complete-recovery", "finish"), "unknown publication command")
                 getattr(self, name.replace("-", "_"))(command)
                 reply()
 
@@ -499,7 +652,14 @@ def main():
     fd = os.open(os.path.join(root, ".publication.lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "r+b") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        PublicationSession(root, destination).run()
+        session = PublicationSession(root, destination)
+        try:
+            session.run()
+        except (Refusal, OSError, ValueError, TypeError, KeyError):
+            error = sys.exc_info()[1]
+            reply(error=str(error) if isinstance(error, Refusal) else "remote publication filesystem or protocol failure",
+                  active_operation=session.active_operation)
+            sys.exit(1)
 
 
 try:
