@@ -51,7 +51,10 @@ const child=spawn('/bin/sh',['-c',args.slice(target+1).join(' ')],{stdio:'inheri
 mkdirSync('fixture-tree');writeFileSync('fixture-tree/index.html','checked bytes');const treeDigest=await digestTree('fixture-tree',['index.html']);
 const transport=createSshTransport({host:'transport.test.invalid',user:'deploy',root:${JSON.stringify(host)},destinationId:'stand',knownHostsFile:${JSON.stringify(hosts)},
 sshCommand:[process.execPath,${JSON.stringify(ssh)}],authorize:async()=>({destinationId:'stand',commit:'a'.repeat(40),snapshotId:'fixture',treeDigest})});
-await transport.withLock(session=>session.stage({releaseId:'agent-probe',sourceDir:'fixture-tree',expectedDigest:treeDigest}));\n`);
+await transport.withLock(session=>session.stage({releaseId:'agent-probe',sourceDir:'fixture-tree',expectedDigest:treeDigest}));
+if(process.env.PUBLICATION_SOURCE_SHA)try{writeFileSync(3,JSON.stringify({version:1,status:'success',code:'published',commit:process.env.PUBLICATION_SOURCE_SHA,
+snapshotId:'snap:'+'a'.repeat(64),treeDigest,publicationId:'20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394',observedEntry:1,revision:1,highWaterMark:1,localExecutedTests:1,ciExecutedTests:1}));}
+catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO')throw error;}\n`);
   write(join(repo, 'scripts/deploy-web.sh'), `#!/bin/sh\nexec '${process.execPath}' scripts/worker.mjs\n`);
   write(broker, `import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(brokerTrace)},'called');process.stdout.write(JSON.stringify({env:{SSH_AUTH_SOCK:${JSON.stringify(socket)}}}));\n`);
   write(configPath, JSON.stringify({ canonicalRepository: remote, destinationId: 'stand', deployMode: 'stand',

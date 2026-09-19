@@ -203,3 +203,63 @@ describe('deploy-web.sh executable entrypoint', () => {
     expect(existsSync(trace), 'untrusted direct worker must not install dependencies').toBe(false);
   });
 });
+
+// Fixed CLI producer: caller-controlled log strings are never audit records.
+async function auditFor(input: { operation?: unknown; error?: unknown }) {
+  const path = join(ROOT, 'web/scripts/publication-worker.ts');
+  const worker = await import(/* @vite-ignore */ path);
+  expect(worker.createWorkerAudit, 'builtin-only worker audit curator must exist').toBeTypeOf('function');
+  return worker.createWorkerAudit(input);
+}
+async function failure(run: () => Promise<unknown>) {
+  try { await run(); } catch (error) { expect(error).toBeInstanceOf(Error); return error; }
+  throw new Error('fixture unexpectedly published; expected a real runner refusal');
+}
+describe('worker audit producer preserves only concrete publication evidence', () => {
+  it('derives identity, digest and executed counts from the actual successful operation', async () => {
+    const f = await fixture(); const operation = await f.run();
+    const audit = await auditFor({ operation });
+    expect(audit).toMatchObject({ version: 1, status: 'success', code: 'published', commit: f.commit,
+      snapshotId: f.snapshot.snapshotId, treeDigest: operation.treeDigest, publicationId: operation.publicationId,
+      observedEntry: 1, revision: 1, highWaterMark: 1, localExecutedTests: PUBLICATION_GROUPS.length * 2, ciExecutedTests: 37 });
+    expect(JSON.stringify(audit)).not.toContain(CANARY); expect(f.stage).toHaveBeenCalledTimes(1);
+  });
+  it('keeps zero executed checks distinct from unavailable counts and names the failing fixed group', async () => {
+    const f = await fixture(); const original = f.checks.getMockImplementation()!;
+    f.checks.mockImplementation(async (...args) => {
+      const report = await original(...args);
+      return { ...report, groups: report.groups.map((group) => ({ ...group, executedTests: 0 })) };
+    });
+    const error = await failure(f.run); const audit = await auditFor({ error });
+    expect(audit).toMatchObject({ version: 1, status: 'refused', code: 'checks-failed', check: 'snapshot-provenance',
+      localExecutedTests: 0, ciExecutedTests: 37 });
+    expect(f.checks).toHaveBeenCalledTimes(1); expect(f.transport).not.toHaveBeenCalled();
+  });
+  it('retains observed/latest entries, revision and high water mark from a real stale-state refusal', async () => {
+    const f = await fixture(); const state = await f.state.read();
+    state.entries.push({ ...state.entries[0], number: 2, fingerprint: 'different-content' });
+    state.observation.highWaterMark = 2; f.state.read.mockResolvedValue(state);
+    const error = await failure(f.run); const audit = await auditFor({ error });
+    expect(audit).toMatchObject({ version: 1, status: 'refused', code: 'provenance-changed',
+      observedEntry: 1, revision: 1, latestEntry: 2, highWaterMark: 2 });
+    expect(f.checks).toHaveBeenCalledTimes(1); expect(f.transport).not.toHaveBeenCalled();
+  });
+  it('reports the already active pair after index failure without serializing its error or cause', async () => {
+    const f = await fixture();
+    f.activate.mockImplementation(async (input) => {
+      await input.beforeActivate();
+      throw Object.assign(new Error(`index failure ${CANARY}`, { cause: new Error(CANARY) }), { activeOperation: input.operation });
+    });
+    const error = await failure(f.run); const audit = await auditFor({ error });
+    const operation = f.activate.mock.calls[0][0].operation as { releaseId: string };
+    expect(audit).toMatchObject({ version: 1, status: 'refused', code: 'active-unindexed',
+      activePair: { commit: f.commit, snapshotId: f.snapshot.snapshotId, releaseId: operation.releaseId } });
+    expect(JSON.stringify(audit)).not.toContain(CANARY); expect(f.stage).toHaveBeenCalledTimes(1);
+  });
+  it('unknown or forged free-text errors yield a generic refusal without invented counts', async () => {
+    for (const message of [CANARY, `publication provenance changed: observedEntry=1 revision=1 latestEntry=2 highWaterMark=2 ${CANARY}`]) {
+      const audit = await auditFor({ error: new Error(message) });
+      expect(audit).toEqual({ version: 1, status: 'refused', code: 'publication-failed' });
+    }
+  });
+});

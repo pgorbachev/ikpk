@@ -44,6 +44,11 @@ writeFileSync(${JSON.stringify(marker)}, JSON.stringify({
   destinationId: process.env.PUBLICATION_DESTINATION_ID, mode: process.env.DEPLOY_MODE,
   argv: process.argv, brokerAlreadyCalled: ${JSON.stringify(trace)} && (await import('node:fs')).existsSync(${JSON.stringify(trace)})
 }));
+// FD 3 belongs to the protected launcher; the standalone fixture control has none.
+if (process.env.PUBLICATION_SOURCE_SHA) try { writeFileSync(3, JSON.stringify({ version: 1, status: 'success', code: 'published',
+  commit: process.env.PUBLICATION_SOURCE_SHA, snapshotId: 'snap:' + 'a'.repeat(64), treeDigest: 'b'.repeat(64),
+  publicationId: '20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394',
+  observedEntry: 4, revision: 4, highWaterMark: 4, localExecutedTests: 23, ciExecutedTests: 37 })); } catch (error) { if (error.code !== 'EBADF' && error.code !== 'EINVAL' && error.code !== 'ENXIO') throw error; }
 console.log(JSON.stringify({ status: 'success', executedChecks: 1 }));
 `);
   write(broker, `
@@ -287,5 +292,61 @@ describe('review probes at 838eb7b4', () => {
     expect(existsSync(f.malicious), 'worker came from outside the verified tree').toBe(false);
     expect(existsSync(f.trace), 'credentials issued to external worker').toBe(false);
     expect(result.status).not.toBe(0);
+  });
+});
+
+
+// manual-publication-only: operator diagnostics survive the protected boundary,
+// while subprocess logs (including deliberately emitted credentials) do not.
+describe('structured operator audit through the installed launcher', () => {
+  const publicationId = '20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394';
+  const success = { version: 1, status: 'success', code: 'published', snapshotId: `snap:${'a'.repeat(64)}`,
+    treeDigest: 'b'.repeat(64), publicationId, observedEntry: 4, revision: 4, highWaterMark: 4,
+    localExecutedTests: 23, ciExecutedTests: 37 };
+  function worker(f: Fixture, audit: Record<string, unknown> | string | null, status = 0, padding = 0) {
+    // The commit cannot be embedded in its own Git tree. The trusted launcher provides it.
+    write(join(f.repo, 'scripts/fixture-worker.mjs'), `
+import { writeFileSync } from 'node:fs';
+const value = ${JSON.stringify(audit)};
+const record = value && typeof value === 'object' ? { commit: process.env.PUBLICATION_SOURCE_SHA, ...value } : value;
+if (record !== null) try { writeFileSync(3, (typeof record === 'string' ? record : JSON.stringify(record)) + ' '.repeat(${padding})); }
+catch (error) { if (error.code !== 'EBADF' && error.code !== 'EINVAL' && error.code !== 'ENXIO') throw error; }
+console.log(${JSON.stringify(CANARY)}); console.error(${JSON.stringify(CANARY)});
+process.exitCode = ${status};
+`);
+    git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'audit producer fixture'); git(f.repo, 'push', 'origin', 'main');
+    f.sha = git(f.repo, 'rev-parse', 'HEAD');
+  }
+  function report(result: ReturnType<typeof launch>) {
+    expect(result.error).toBeUndefined();
+    const output = result.stdout + result.stderr;
+    expect(output).not.toContain(CANARY);
+    return JSON.parse(output.trim());
+  }
+  it('prints the selected pair, digest and actual CI/local counts, never raw worker output', () => {
+    const f = fixture(); worker(f, success); const result = launch(f);
+    expect(result.status).toBe(0);
+    expect(report(result).audit).toEqual({ commit: f.sha, ...success });
+  });
+  it('preserves provenance numbers and the already active pair on nonzero worker exit', () => {
+    const f = fixture();
+    const audit = { ...success, status: 'refused', code: 'active-unindexed', latestEntry: 5,
+      activePair: { commit: 'c'.repeat(40), snapshotId: `snap:${'d'.repeat(64)}`, releaseId: publicationId } };
+    worker(f, audit, 1); const result = launch(f);
+    expect(result.status).not.toBe(0); expect(report(result).audit).toEqual({ commit: f.sha, ...audit });
+  });
+  it('refuses missing, malformed, unknown-code and oversized audit even after worker exit zero', () => {
+    for (const [invalid, padding] of [[null, 0], ['{not-json', 0], [{ ...success, code: CANARY }, 0], [success, 16 * 1024]] as const) {
+      const f = fixture(); worker(f, invalid, 0, padding); const result = launch(f);
+      expect.soft(result.status, `accepted ${invalid === null ? 'missing' : typeof invalid} audit`).not.toBe(0);
+      expect.soft(report(result).status).toBe('refused');
+    }
+  });
+  it('rejects a wrong commit, invalid typed values and free text fields without copying their payload', () => {
+    for (const invalid of [{ ...success, commit: 'f'.repeat(40) }, { ...success, localExecutedTests: CANARY },
+      { ...success, snapshotId: CANARY }, { ...success, message: CANARY }, { ...success, ciExecutedTests: -1 }]) {
+      const f = fixture(); worker(f, invalid); const result = launch(f);
+      expect.soft(result.status).not.toBe(0); expect.soft(report(result).status).toBe('refused');
+    }
   });
 });
