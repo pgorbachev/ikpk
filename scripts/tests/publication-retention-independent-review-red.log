@@ -1,0 +1,26 @@
+✖ REVIEW: cancelled candidates cannot evict the immediately preceding published rollback target (1805.562625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1859.1115
+
+✖ failing tests:
+
+test at scripts/tests/publication-retention-independent-review.test.mjs:10:1
+✖ REVIEW: cancelled candidates cannot evict the immediately preceding published rollback target (1805.562625ms)
+  AssertionError [ERR_ASSERTION]: the immediately preceding active release must remain a rollback target; retained published releases: ["accepted-new"]
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-review-transport-ca183/scripts/tests/publication-retention-independent-review.test.mjs:50:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
