@@ -227,6 +227,17 @@ jobs:
       # не собирает заново: вторая сборка в чужом джобе — как раз то, что ловит
       # demo-gate (решение 6). uses-шаги не наследуют defaults.run.working-directory,
       # путь — от корня репозитория.
+      - name: Save executed test counts for local publication gate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publication-ci-counts
+          path: |
+            ${{ runner.temp }}/web-unit-head.json
+            ${{ runner.temp }}/web-render-head.json
+            ${{ runner.temp }}/web-build-head.json
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload demo site
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

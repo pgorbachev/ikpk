@@ -121,7 +121,7 @@ describe('закреплённый снимок обязательного CI', 
     const upload = uploads[0];
     expect(upload.with?.['if-no-files-found']).toBe('error');
     expect(upload.if === undefined || upload.if === 'success()').toBe(true);
-    const reports = String(upload.with?.path ?? '').trim().split(/\s+/);
+    const reports = String(upload.with?.path ?? '').trim().split(/\r?\n/).map((line) => line.trim());
     expect(reports).toEqual(['web-unit', 'web-render', 'web-build'].map((name) => '${{ runner.temp }}/' + name + '-head.json'));
     for (const name of ['web-unit', 'web-render', 'web-build']) {
       const producer = job.steps.find((step) => (step.run ?? '').includes('--outputFile.json="$RUNNER_TEMP/' + name + '-head.json"'));
