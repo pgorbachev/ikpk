@@ -36,9 +36,14 @@ function cleanEnvironment() {
   // No ambient Git/Node/Bash startup options or deployment credentials reach source validation.
   return env;
 }
+// The canonical clone moves the whole pack (323 MiB on 2026-09-20) over the operator's link;
+// two minutes refused a healthy source as `source-unavailable`. Local Git commands keep the
+// short limit, the network clone gets its own.
+const GIT_TIMEOUT_MS = 120_000, CLONE_TIMEOUT_MS = 1_800_000;
 function git(cwd, ...args) {
+  const timeout = args[0] === 'clone' ? CLONE_TIMEOUT_MS : GIT_TIMEOUT_MS;
   return execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
-    cwd, env: cleanEnvironment(), encoding: 'utf8', timeout: 120_000, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd, env: cleanEnvironment(), encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 function protectedFile(path) {
