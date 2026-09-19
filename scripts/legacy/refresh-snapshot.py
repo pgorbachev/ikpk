@@ -171,7 +171,13 @@ def fetch_live_events() -> list:
     # первая проверка пропускает. `pagesCount` из того же ответа обязан сойтись с числом
     # прочитанных страниц: чтобы обмануть обе, ответ должен лгать согласованно в двух
     # полях, а не оборваться.
-    if pages_declared is not None and pages_read < pages_declared:
+    if pages_declared is None:
+        raise SystemExit(
+            "лента не объявила pagesCount — второго свидетеля полноты нет, отказ. "
+            "Асимметрия недопустима: отсутствие totalCount уже отказ, и молчаливая "
+            "потеря второй проверки была бы тем же «проверять нечем», выданным за «проверено»"
+        )
+    if pages_read < pages_declared:
         raise SystemExit(
             f"прочитано страниц {pages_read}, лента объявила {pages_declared} — отказ: "
             "обрыв на середине неотличим от конца ленты по одному лишь totalCount"
@@ -184,7 +190,14 @@ def fetch_live_events() -> list:
     return {"events": list(collected.values()), "complete": True}
 
 
-def withdrawals(schedule: list, live_ids: set, today: str, feed_complete: bool) -> list:
+# Доля будущих записей, которую снятие вправе удалить без участия человека. Событие
+# отменяют по одному; массовое исчезновение — признак того, что лента отвечает на
+# ДРУГОЙ вопрос, а не того, что отменили половину расписания.
+WITHDRAW_SHARE_LIMIT = 0.2
+
+
+def withdrawals(schedule: list, live_ids: set, today: str, feed_complete: bool,
+                allow_mass: bool = False) -> list:
     """Записи, снятые с публикации: будущие по местной дате и отсутствующие в ленте.
 
     Функция уровня модуля, а не копия внутри проверки: `main()` и `selftest()`
@@ -204,6 +217,22 @@ def withdrawals(schedule: list, live_ids: set, today: str, feed_complete: bool) 
             f"лента без подтверждённой полноты, а к удалению подходит {len(candidates)} "
             "записей — отказ. Удаление разрешено только на ленте, снятой самим "
             "инструментом и сверенной с её totalCount."
+        )
+    # Соразмерность. Оба свидетеля полноты берутся из ОДНОГО ответа и описывают ОДИН
+    # запрос: они доказывают, что чтение не оборвалось, но не то, что запрос всё ещё
+    # значит прежнее. Лента, честно отвечающая на суженный вопрос (сменился фильтр по
+    # умолчанию, добавился период, изменилась видимость), внутренне непротиворечива и
+    # неотличима от полной — и удалила бы 61 запись из 71. Изнутри ленты это не
+    # проверяется ничем, поэтому предел ставится на само разрушающее действие.
+    future = [e for e in schedule if (e.get("startAt") or "")[:10] >= today]
+    if future and len(candidates) > max(1, int(len(future) * WITHDRAW_SHARE_LIMIT)) and not allow_mass:
+        for e in candidates:
+            print(f'  ! снято НЕ будет: {e["id"]} {e["name"][:40]}')
+        raise SystemExit(
+            f"к снятию подходит {len(candidates)} из {len(future)} будущих записей — "
+            f"больше {int(WITHDRAW_SHARE_LIMIT * 100)} %, отказ. События отменяют по одному; "
+            "массовое исчезновение вероятнее означает, что лента отвечает на другой вопрос. "
+            "Сверьте ленту глазами и, если снятие настоящее, повторите с --allow-mass-withdrawal"
         )
     return candidates
 
@@ -376,7 +405,8 @@ def main() -> int:
     # Инвариант обязан жить там, где опасное действие, иначе его обходит любой
     # новый путь к нему.
     live_ids = {str(e["id"]) for e in live_events}
-    for e in withdrawals(schedule, live_ids, moscow_today(), feed_complete):
+    for e in withdrawals(schedule, live_ids, moscow_today(), feed_complete,
+                         allow_mass="--allow-mass-withdrawal" in sys.argv):
         schedule.remove(e)
         changed["events_withdrawn"].append(f'{e["id"]} {e["name"][:40]}')
 
@@ -509,6 +539,23 @@ def selftest() -> int:
             "прочитано страниц", "недочитанные страницы обязаны отказывать")
     # честная короткая лента проходит
     assert len(feed([{"items": ev(0, 2), "totalCount": 2, "pagesCount": 1}])["events"]) == 2
+    # свидетели симметричны: пропажа pagesCount — тоже отказ, а не тихий пропуск
+    refuses([{"items": ev(0, 2), "totalCount": 2}],
+            "не объявила pagesCount", "лента без pagesCount обязана отказывать")
+
+    # ── Соразмерность снятия. Согласованная, но суженная лента проходит обе проверки
+    # полноты — предел стоит на самом удалении.
+    many = [{"id": i, "name": f"с{i}", "startAt": "2026-12-01"} for i in range(10)]
+    # одно снятие из десяти будущих — в пределах доли
+    assert [e["id"] for e in withdrawals(many, {str(i) for i in range(1, 10)}, today, True)] == [0]
+    # снятие половины — отказ без явного разрешения
+    try:
+        withdrawals(many, {"0"}, today, True)
+        raise AssertionError("массовое снятие обязано отказывать")
+    except SystemExit as exc:
+        assert "из 10 будущих записей" in str(exc), exc
+    # с явным разрешением человека — проходит
+    assert len(withdrawals(many, {"0"}, today, True, allow_mass=True)) == 9
 
     print("selftest: ок")
     return 0
