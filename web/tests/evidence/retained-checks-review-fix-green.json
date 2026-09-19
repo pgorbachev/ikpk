@@ -1,0 +1,30 @@
+{
+  "evidenceDirectory": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-real-smoke-cfRlHQ",
+  "fixtureOnly": true,
+  "source": "/Users/pgorbachev/projects/private/ikpk-manual-publication-adapters/web/dist",
+  "downloadedTree": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-real-smoke-cfRlHQ/downloaded-retained-tree",
+  "immutableTreeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "checks": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "snapshotId": "snap:b045e60c4dc43c1a92223bed1f2c301e3beafa7625ebff1478fc20f52a13a642",
+    "destinationId": "fixture-stand",
+    "treeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+    "groups": [
+      {
+        "name": "destination-mode",
+        "conclusion": "success",
+        "executedTests": 4
+      },
+      {
+        "name": "browser-smoke",
+        "conclusion": "success",
+        "executedTests": 8
+      },
+      {
+        "name": "payment-destination",
+        "conclusion": "success",
+        "executedTests": 1
+      }
+    ]
+  }
+}

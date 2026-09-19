@@ -1,0 +1,185 @@
+Tests revision: a08a64ee22f4816d299c587c646da2d5aaa821fc
+Implementation revision: 838eb7b4d527c7d651329de15a201ec7e85f0933
+Command from web/: ["npx", "vitest", "run", "tests/manual-publication-core.test.ts", "tests/manual-publication-launcher.test.ts", "-t", "REVIEW:", "--reporter=verbose"]
+Exit code: 1
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-review-core/web
+
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: complete evidence authorizes production with independent payment role ci
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > first publication uses its freshly tested pair without a historical entry
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > does not substitute a historical pair with a newer reference date
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > historical success does not authorize a call without a freshly tested pair
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > new publication refuses a moved head
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > new publication refuses content older than the high-water mark
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing CI verdict does not inherit success from publication history
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI repository=outsider/ikpk even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI workflow=.github/workflows/lint.yml even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=pull_request even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=workflow_dispatch even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI branch=feature even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb even for a successful run
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: a successful schedule on main is valid evidence
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion failure
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion cancelled
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion skipped
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion missing
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion failure
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion cancelled
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion skipped
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion missing
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing required job is not a successful job
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing run identity cannot become rollback evidence
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed CI tests refuses and reports the count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another commit is refused
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another snapshotId is refused
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another destinationId is refused
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another treeDigest is refused
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing local report is refused
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group snapshot-provenance is refused even with other successful tests
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group build-content is refused even with other successful tests
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group destination-mode is refused even with other successful tests
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group browser-smoke is refused even with other successful tests
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group payment-destination is refused even with other successful tests
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in snapshot-provenance refuses and reports the group and count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in build-content refuses and reports the group and count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in destination-mode refuses and reports the group and count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in browser-smoke refuses and reports the group and count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in payment-destination refuses and reports the group and count
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with failure is not a successful check
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with cancelled is not a successful check
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with skipped is not a successful check
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with missing is not a successful check
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > an unresolved index write blocks the same destination
+ ↓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: an unresolved stand write does not block production
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > positive control: explicit confirmed rollback uses retained bytes and does not request a provenance entry
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained old release works without fresh CI, a fresh snapshot, or a stable current head
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > snapshot age alone cannot disqualify an intact retained release
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a release evicted from retention is refused even while its snapshot is young
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a retained directory without a publication record is not a verified target
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a target in another destination cannot authorize production
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained release location must belong to the selected destination
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > the retained tree must match its recorded digest
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > release identity selects a complete commit+snapshot pair, not the first matching snapshot
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > confirmation is an explicit input
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason: undefined
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason: 
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason:    
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > records the actor, full pair, release and reason
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > pending operation blocks rollback only in its destination
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without ciEvidence cannot authorize rollback
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without localChecks cannot authorize rollback
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without paymentRole cannot authorize rollback
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without deployMode cannot authorize rollback
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without treeDigest cannot authorize rollback
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > unsuccessful original CI cannot be laundered by a successful pair flag
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original local groups cannot be laundered by a successful pair flag
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero destination-mode checks on saved bytes
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero browser-smoke checks on saved bytes
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero payment-destination checks on saved bytes
+ ↓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback report must name the retained tree
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > publishing the same pair twice retains both operation records
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > equal pairs in production and stand retain their distinct destination and digest
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > positive control: retrying the exact operation is idempotent
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > a conflicting reuse of an operation identity cannot rewrite earlier evidence
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history keeps complete pair, count, group outcomes, destination and publication timestamp
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses deletion of an existing record
+ ↓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses replacement and preserves the original file bytes
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > positive control: declared pair matches the record
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > newer main is not the expected pair when publication history exists
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a later stand record does not change production observation
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a different served snapshot is a mismatch even for the same commit
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > an unreadable release declaration is a failed observation
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a pending record explains the mismatch without calling it an out-of-band replacement
+ ↓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > pending stand operation does not explain a production mismatch
+ × tests/manual-publication-core.test.ts > review probes at 838eb7b4 > REVIEW: persisted append-only history cannot reorder past operations 7ms
+   → expected [Function] to throw an error
+ ↓ tests/manual-publication-launcher.test.ts > fixture positive controls > the broker delivers the canary and the trusted marker records actual execution
+ ↓ tests/manual-publication-launcher.test.ts > fixture positive controls > the malicious marker would exist if the untrusted entrypoint were executed
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > positive control reaches the trusted entrypoint and the credential broker in an isolated clean checkout
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an explicitly dirty source is refused before its modified entrypoint or the credential broker executes
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > untracked files also make an explicit source dirty
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an unrelated dirty cwd has no influence on the selected main source
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an untrusted repository URL cannot request credentials even if it offers a main branch
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a non-main ref cannot request credentials
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit is not accepted as an explicit source
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit in cwd is not executed when source-dir was not selected
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > uses fresh remote main even when the operator checkout is stale
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > unavailable canonical source refuses before credential release
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a protected config inside the explicitly supplied source is not trusted
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 400 is refused before broker access
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 386 is refused before broker access
+ ↓ tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > credentials do not appear in child argv, stdout, stderr, or launcher audit artifacts
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > positive control returns a nonempty SHA256 for an actual tree
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > permuting the explicit input file list cannot change the digest
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > changed bytes invalidate a previously tested digest
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > renaming identical bytes changes the tree digest
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > absolute temporary checkout location does not enter the digest
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an empty file list is an unperformed integrity check
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > parent traversal cannot introduce files outside the release root
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an absolute file path is not a relative release member
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked file cannot supply a mutable external release member
+ ↓ tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked parent directory cannot escape the release root
+ × tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: local git fsmonitor must not execute while rejecting an untrusted source 846ms
+   → git status executed untrusted fsmonitor before source approval: expected true to be false // Object.is equality
+ × tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: parent symlinks cannot redirect the verified worker to external code 821ms
+   → worker came from outside the verified tree: expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-core.test.ts > review probes at 838eb7b4 > REVIEW: persisted append-only history cannot reorder past operations
+AssertionError: expected [Function] to throw an error
+ ❯ tests/manual-publication-core.test.ts:297:60
+    295|     const second = publication({ publicationId: 'publication-2', relea…
+    296|     writeVerifiedPairs(dir, [first, second]);
+    297|     expect(() => writeVerifiedPairs(dir, [second, first])).toThrow();
+       |                                                            ^
+    298|   });
+    299| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: local git fsmonitor must not execute while rejecting an untrusted source
+AssertionError: git status executed untrusted fsmonitor before source approval: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/manual-publication-launcher.test.ts:247:103
+    245|     expect(`${result.stdout}\n${result.stderr}`).toContain('dirty-sour…
+    246|     expect(existsSync(f.trace)).toBe(false);
+    247|     expect(existsSync(f.malicious), 'git status executed untrusted fsm…
+       |                                                                                                       ^
+    248|   });
+    249|   it('REVIEW: parent symlinks cannot redirect the verified worker to e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: parent symlinks cannot redirect the verified worker to external code
+AssertionError: worker came from outside the verified tree: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/manual-publication-launcher.test.ts:257:83
+    255|     git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-m', 'symlink scr…
+    256|     const result = launch(f);
+    257|     expect(existsSync(f.malicious), 'worker came from outside the veri…
+       |                                                                                   ^
+    258|     expect(existsSync(f.trace), 'credentials issued to external worker…
+    259|     expect(result.status).not.toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 112 skipped (115)
+   Start at  14:30:22
+   Duration  1.83s (transform 61ms, setup 30ms, import 89ms, tests 1.68s, environment 0ms)
+

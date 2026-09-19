@@ -1,0 +1,62 @@
+✖ REVIEW: cancelled candidates cannot consume the four previous published release slots (2318.971375ms)
+✖ REVIEW: staged-without-prepare candidates cannot consume the four previous published release slots (1921.351042ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4318.340167
+
+✖ failing tests:
+
+test at scripts/tests/publication-retention-depth-review.test.mjs:10:61
+✖ REVIEW: cancelled candidates cannot consume the four previous published release slots (2318.971375ms)
+  AssertionError [ERR_ASSERTION]: the five-release boundary promises current plus four preceding publications, not cancelled candidates
+  + actual - expected
+  
+    [
+      'accepted-new',
+  -   'published-2',
+  -   'published-3',
+  -   'published-4',
+      'published-5'
+    ]
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-consequences-review/scripts/tests/publication-retention-depth-review.test.mjs:58:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'accepted-new', 'published-5' ],
+    expected: [ 'accepted-new', 'published-2', 'published-3', 'published-4', 'published-5' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-retention-depth-review.test.mjs:10:61
+✖ REVIEW: staged-without-prepare candidates cannot consume the four previous published release slots (1921.351042ms)
+  AssertionError [ERR_ASSERTION]: the five-release boundary promises current plus four preceding publications, not cancelled candidates
+  + actual - expected
+  
+    [
+      'accepted-new',
+  -   'published-2',
+  -   'published-3',
+  -   'published-4',
+      'published-5'
+    ]
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-consequences-review/scripts/tests/publication-retention-depth-review.test.mjs:58:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'accepted-new', 'published-5' ],
+    expected: [ 'accepted-new', 'published-2', 'published-3', 'published-4', 'published-5' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

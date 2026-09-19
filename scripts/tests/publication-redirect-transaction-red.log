@@ -1,0 +1,381 @@
+✖ redirect bytes from the digested release are validated before final check and reloaded after current switches (323.821125ms)
+✖ preflight refuses same basename at another path before altering the live pair (347.56075ms)
+✖ preflight refuses include only in a comment before altering the live pair (637.901833ms)
+✖ preflight refuses include in another server block before altering the live pair (333.360916ms)
+✖ nginx inspection failure refuses the new release before final check (308.732375ms)
+✖ incoming nginx validation failure restores old bytes and never switches, reloads, or records (321.943916ms)
+✖ a refusing final provenance check restores redirects as well as preserving current (325.20475ms)
+✖ retained rollback restores its own checked redirect fragment without executing retained scripts (320.678333ms)
+✖ requesting redirect activation without the fixed artifact refuses before switching (326.237541ms)
+✖ activation cannot select an arbitrary relative configuration artifact (335.683208ms)
+✔ digest protection covers redirect bytes changed after upload (343.335042ms)
+✖ symlink fragment cannot redirect configuration writes outside destination (369.533291ms)
+✖ symlink shared cannot redirect configuration writes outside destination (351.011ms)
+✖ prepared crash recovery restores old redirect bytes without activating or indexing (627.198041ms)
+✖ prepared recovery refuses unexpected manual config drift without overwriting it or clearing evidence (658.300666ms)
+✖ committed crash recovery reloads matching new redirects before recording the active pair (694.585292ms)
+✔ committing with old current remains blocked for audited repair instead of silently cancelling (647.924ms)
+✖ reload failure after switch names active pair and retains pending without automatic rollback (330.293083ms)
+✖ index failure after switch names active pair and retains pending without automatic rollback (360.380625ms)
+✖ failure restoring redirects after rejected nginx validation retains recoverable evidence (372.614042ms)
+✖ crash while testing incoming nginx config leaves enough evidence to restore the old pair (320.973584ms)
+✖ cancel refuses unexpected manual config drift without clearing pending or overwriting manual bytes (308.674458ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 2
+ℹ fail 20
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9017.271542
+
+✖ failing tests:
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:74:1
+✖ redirect bytes from the digested release are validated before final check and reloaded after current switches (323.821125ms)
+  AssertionError [ERR_ASSERTION]: the checked incoming fragment must already be installed on disk
+  + actual - expected
+  
+  + 'location = /legacy { return 301 /old-page; }\n'
+  - 'location = /legacy { return 301 /new-page; }\n'
+  
+      at beforeActivate (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:80:14)
+      at Object.activate (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:210:39)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:280:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:76:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'location = /legacy { return 301 /old-page; }\n',
+    expected: 'location = /legacy { return 301 /new-page; }\n',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:111:3
+✖ preflight refuses same basename at another path before altering the live pair (347.56075ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:113:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /include|redirect|destination|serving|root/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:111:3
+✖ preflight refuses include only in a comment before altering the live pair (637.901833ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:113:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /include|redirect|destination|serving|root/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:111:3
+✖ preflight refuses include in another server block before altering the live pair (333.360916ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:113:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /include|redirect|destination|serving|root/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:120:1
+✖ nginx inspection failure refuses the new release before final check (308.732375ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:122:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /nginx|inspection/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:126:1
+✖ incoming nginx validation failure restores old bytes and never switches, reloads, or records (321.943916ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:128:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /nginx|config|validation/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:137:1
+✖ a refusing final provenance check restores redirects as well as preserving current (325.20475ms)
+  AssertionError [ERR_ASSERTION]: final provenance check follows nginx validation
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:144:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:149:1
+✖ retained rollback restores its own checked redirect fragment without executing retained scripts (320.678333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'location = /legacy { return 301 /new-page; }\n'
+  - 'location = /legacy { return 301 /old-page; }\n'
+  
+      at Object.oldPair (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:57:75)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:159:5)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'location = /legacy { return 301 /new-page; }\n',
+    expected: 'location = /legacy { return 301 /old-page; }\n',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:165:1
+✖ requesting redirect activation without the fixed artifact refuses before switching (326.237541ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:168:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /redirect|missing|artifact|file/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:172:1
+✖ activation cannot select an arbitrary relative configuration artifact (335.683208ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:174:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /redirect|path|artifact|invalid/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:189:3
+✖ symlink fragment cannot redirect configuration writes outside destination (369.533291ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:194:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|filesystem|redirect|directory|file/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:189:3
+✖ symlink shared cannot redirect configuration writes outside destination (351.011ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:194:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /symlink|filesystem|redirect|directory|file/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:200:1
+✖ prepared crash recovery restores old redirect bytes without activating or indexing (627.198041ms)
+  AssertionError [ERR_ASSERTION]: crash must happen after candidate configuration was installed
+  + actual - expected
+  
+  + 'location = /legacy { return 301 /old-page; }\n'
+  - 'location = /legacy { return 301 /new-page; }\n'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:207:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'location = /legacy { return 301 /old-page; }\n',
+    expected: 'location = /legacy { return 301 /new-page; }\n',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:211:1
+✖ prepared recovery refuses unexpected manual config drift without overwriting it or clearing evidence (658.300666ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:215:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /redirect|config|changed|drift|mismatch/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:220:1
+✖ committed crash recovery reloads matching new redirects before recording the active pair (694.585292ms)
+  Error: recovered index cannot attest new content with old redirect configuration
+  + actual - expected
+  
+  + 'location = /legacy { return 301 /old-page; }\n'
+  - 'location = /legacy { return 301 /new-page; }\n'
+  ; active release=new commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa snapshotId=snap:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb destination=stand
+      at indexFailure (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:163:19)
+      at record (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:200:31)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:299:7
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:280:18)
+      ... 2 lines matching cause stack trace ...
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    activeOperation: { publicationId: 'publish-new', destinationId: 'stand', commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', snapshotId: 'snap:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', releaseId: 'new', treeDigest: '23df30abe1d5775e03fe21c7db4f1270401d863b11540f55ccf833623a359996' },
+    [cause]: AssertionError [ERR_ASSERTION]: recovered index cannot attest new content with old redirect configuration
+    + actual - expected
+    
+    + 'location = /legacy { return 301 /old-page; }\n'
+    - 'location = /legacy { return 301 /new-page; }\n'
+    
+        at recordIndex (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:228:12)
+        at record (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:198:15)
+        at file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:299:13
+        at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/publication-transport.mjs:280:18)
+        at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:226:18)
+        at async Test.run (node:internal/test_runner/test:1113:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 'location = /legacy { return 301 /old-page; }\n',
+      expected: 'location = /legacy { return 301 /new-page; }\n',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:247:3
+✖ reload failure after switch names active pair and retains pending without automatic rollback (330.293083ms)
+  AssertionError [ERR_ASSERTION]: reload failure must fail the publication
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:250:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:247:3
+✖ index failure after switch names active pair and retains pending without automatic rollback (360.380625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'location = /legacy { return 301 /old-page; }\n'
+  - 'location = /legacy { return 301 /new-page; }\n'
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:254:55)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'location = /legacy { return 301 /old-page; }\n',
+    expected: 'location = /legacy { return 301 /new-page; }\n',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:265:1
+✖ failure restoring redirects after rejected nginx validation retains recoverable evidence (372.614042ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:267:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:277:1
+✖ crash while testing incoming nginx config leaves enough evidence to restore the old pair (320.973584ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:279:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /SSH|session|stream|closed/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-redirect-transaction.test.mjs:288:1
+✖ cancel refuses unexpected manual config drift without clearing pending or overwriting manual bytes (308.674458ms)
+  AssertionError [ERR_ASSERTION]: refused config restore must preserve pending evidence
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-redirect-red/scripts/tests/publication-redirect-transaction.test.mjs:296:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

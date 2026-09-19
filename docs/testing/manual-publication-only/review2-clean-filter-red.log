@@ -1,0 +1,62 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-review2
+
+ ✓ web/tests/manual-publication-launcher.test.ts > fixture positive controls > the broker delivers the canary and the trusted marker records actual execution 672ms
+ ✓ web/tests/manual-publication-launcher.test.ts > fixture positive controls > the malicious marker would exist if the untrusted entrypoint were executed 368ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > positive control reaches the trusted entrypoint and the credential broker in an isolated clean checkout 1198ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an explicitly dirty source is refused before its modified entrypoint or the credential broker executes 483ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > untracked files also make an explicit source dirty 470ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an unrelated dirty cwd has no influence on the selected main source 702ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an untrusted repository URL cannot request credentials even if it offers a main branch 530ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a non-main ref cannot request credentials 682ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit is not accepted as an explicit source 707ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit in cwd is not executed when source-dir was not selected 1211ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > uses fresh remote main even when the operator checkout is stale 1140ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > unavailable canonical source refuses before credential release 824ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a protected config inside the explicitly supplied source is not trusted 702ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 400 is refused before broker access 425ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 386 is refused before broker access 394ms
+ ✓ web/tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > credentials do not appear in child argv, stdout, stderr, or launcher audit artifacts 723ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > positive control returns a nonempty SHA256 for an actual tree 25ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > permuting the explicit input file list cannot change the digest 5ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > changed bytes invalidate a previously tested digest 7ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > renaming identical bytes changes the tree digest 5ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > absolute temporary checkout location does not enter the digest 7ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an empty file list is an unperformed integrity check 4ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > parent traversal cannot introduce files outside the release root 4ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an absolute file path is not a relative release member 3ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked file cannot supply a mutable external release member 4ms
+ ✓ web/tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked parent directory cannot escape the release root 4ms
+ ✓ web/tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: local git fsmonitor must not execute while rejecting an untrusted source 461ms
+ × web/tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: source clean filters cannot execute before source authorization 1046ms
+   → untrusted code executed before refusal: expected true to be false // Object.is equality
+ ✓ web/tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: parent symlinks cannot redirect the verified worker to external code 804ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  web/tests/manual-publication-launcher.test.ts > review probes at 838eb7b4 > REVIEW: source clean filters cannot execute before source authorization
+AssertionError: untrusted code executed before refusal: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ assertRefused web/tests/manual-publication-launcher.test.ts:76:77
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+     76|   expect(existsSync(f.malicious), 'untrusted code executed before refu…
+       |                                                                             ^
+     77| }
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+ ❯ web/tests/manual-publication-launcher.test.ts:260:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+   Start at  14:37:44
+   Duration  14.10s (transform 70ms, setup 0ms, import 75ms, tests 13.61s, environment 0ms)
+

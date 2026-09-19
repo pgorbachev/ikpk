@@ -1,0 +1,53 @@
+
+> web@0.0.1 typecheck
+> astro check
+
+17:37:14 [types] Generated 72ms
+17:37:14 [check] Getting diagnostics for Astro files in /Users/pgorbachev/projects/private/ikpk-publication-rollback-red/web...
+[96meslint.config.mjs[0m:[93m6[0m:[93m25[0m - [93mwarning[0m[90m ts(6387): [0mThe signature '(...configs: InfiniteDepthConfigWithExtends[]): ConfigArray' of 'tseslint.config' is deprecated.
+
+[7m6[0m export default tseslint.config(
+[7m [0m [93m                        ~~~~~~[0m
+
+[96msrc/components/Breadcrumbs.astro[0m:[93m44[0m:[93m9[0m - [93mwarning[0m[90m astro(4000): [0mThis script will be treated as if it has the `is:inline` directive because it contains an attribute. Therefore, features that require processing (e.g. using TypeScript or npm packages in the script) are unavailable.
+
+See docs for more details: https://docs.astro.build/en/guides/client-side-scripts/#script-processing.
+
+Add the `is:inline` directive explicitly to silence this hint.
+
+[7m44[0m <script type="application/ld+json" set:html={serializeJsonLd(schema)} />
+[7m  [0m [93m        ~~~~[0m
+
+[96msrc/components/HeadMeta.astro[0m:[93m66[0m:[93m20[0m - [93mwarning[0m[90m astro(4000): [0mThis script will be treated as if it has the `is:inline` directive because it contains an attribute. Therefore, features that require processing (e.g. using TypeScript or npm packages in the script) are unavailable.
+
+See docs for more details: https://docs.astro.build/en/guides/client-side-scripts/#script-processing.
+
+Add the `is:inline` directive explicitly to silence this hint.
+
+[7m66[0m {schema && <script type="application/ld+json" set:html={serializeJsonLd(schema)} />}
+[7m  [0m [93m                   ~~~~[0m
+
+[96msrc/scripts/payment-form.ts[0m:[93m564[0m:[93m30[0m - [93mwarning[0m[90m ts(6133): [0m'http' is declared but its value is never read.
+
+[7m564[0m   function shouldUnlockAfter(http: number, json: ApiBody): boolean {
+[7m   [0m [93m                             ~~~~[0m
+
+[96mtests/html-cleaner.test.ts[0m:[93m480[0m:[93m12[0m - [93mwarning[0m[90m ts(6387): [0mThe signature '(html: string): string' of 'stripH1' is deprecated.
+
+[7m480[0m     expect(stripH1(html)).toBe('<p>Body</p>');
+[7m   [0m [93m           ~~~~~~~[0m
+[96mtests/html-cleaner.test.ts[0m:[93m2[0m:[93m37[0m - [93mwarning[0m[90m ts(6385): [0m'stripH1' is deprecated.
+
+[7m2[0m import { cleanBodyHtml as cleanRaw, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+[7m [0m [93m                                    ~~~~~~~[0m
+
+[96mtests/payment-form.spec.ts[0m:[93m1268[0m:[93m19[0m - [93mwarning[0m[90m ts(6133): [0m'row' is declared but its value is never read.
+
+[7m1268[0m     seen.forEach((row, i) => {
+[7m    [0m [93m                  ~~~[0m
+
+Result (380 files): 
+- 0 errors
+- 0 warnings
+- 7 hints
+

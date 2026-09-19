@@ -1,0 +1,460 @@
+✔ fixture positive control executes native installed worker and broker with the original release audit (345.439083ms)
+✖ rollback runs fixed installed runtime while canonical main is unavailable and binds audit to selected old release (50.994084ms)
+✖ rollback confirmation is refused before broker access (48.516625ms)
+✖ rollback reason is refused before broker access (48.9815ms)
+✖ rollback release-id is refused before broker access (48.505625ms)
+✖ rollback source is refused before broker access (48.868292ms)
+✖ rollback worker is refused before broker access (49.119667ms)
+✖ rollback duplicate is refused before broker access (49.734458ms)
+✖ rollback missing-manifest refuses before broker access (50.442875ms)
+✖ rollback bad-manifest refuses before broker access (49.337958ms)
+✖ rollback writable-manifest refuses before broker access (49.268292ms)
+✖ rollback writable-worker refuses before broker access (46.964167ms)
+✖ rollback symlink-worker refuses before broker access (49.5355ms)
+✖ rollback symlink-parent refuses before broker access (52.604916ms)
+✖ ambient source and command replacements cannot redirect installed rollback or inherit startup hooks (51.456625ms)
+✖ rollback audit refuses wrong release, unknown fields, wrong operation kind, zero checks and malformed output (52.978583ms)
+✖ preselection rollback refusal may omit commit and never substitutes runtime SHA (51.274ms)
+✖ rollback preserves checked refusal and active-unindexed audit without raw worker logs (59.566041ms)
+✔ hosted CI cannot invoke installed rollback or obtain broker credentials (55.027375ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 2
+ℹ fail 17
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1316.4285
+
+✖ failing tests:
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:62:1
+✖ rollback runs fixed installed runtime while canonical main is unavailable and binds audit to selected old release (50.994084ms)
+  AssertionError [ERR_ASSERTION]: {"status":"refused","reason":"untrusted-ref"}
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:63:59)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback confirmation is refused before broker access (48.516625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback reason is refused before broker access (48.9815ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback release-id is refused before broker access (48.505625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback source is refused before broker access (48.868292ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback worker is refused before broker access (49.119667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:73:96
+✖ rollback duplicate is refused before broker access (49.734458ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'invalid-arguments'
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'invalid-arguments',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback missing-manifest refuses before broker access (50.442875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback bad-manifest refuses before broker access (49.337958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback writable-manifest refuses before broker access (49.268292ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback writable-worker refuses before broker access (46.964167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback symlink-worker refuses before broker access (49.5355ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:83:135
+✖ rollback symlink-parent refuses before broker access (52.604916ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'untrusted-ref'
+  - 'untrusted-runtime'
+                ^
+
+      at refused (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:48:45)
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:91:3)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ref',
+    expected: 'untrusted-runtime',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:94:1
+✖ ambient source and command replacements cannot redirect installed rollback or inherit startup hooks (51.456625ms)
+  AssertionError [ERR_ASSERTION]: file:///private/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-installed-rollback-mExGZx/protected/publication-launcher.mjs:32
+  const refuse = (reason) => { throw new Error(reason); };
+                                     ^
+
+  Error: untrusted-ref
+      at refuse (file:///private/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-installed-rollback-mExGZx/protected/publication-launcher.mjs:32:36)
+      at launch (file:///private/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-installed-rollback-mExGZx/protected/publication-launcher.mjs:88:30)
+      at file:///private/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-installed-rollback-mExGZx/driver.mjs:1:505
+
+  Node.js v24.13.0
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:101:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:105:1
+✖ rollback audit refuses wrong release, unknown fields, wrong operation kind, zero checks and malformed output (52.978583ms)
+  AssertionError [ERR_ASSERTION]: audit refusal must follow actual worker execution
+
+  false !== true
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:109:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:114:1
+✖ preselection rollback refusal may omit commit and never substitutes runtime SHA (51.274ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + undefined
+  - {
+  -   code: 'rollback-failed',
+  -   status: 'refused',
+  -   version: 1
+  - }
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:116:72)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { version: 1, status: 'refused', code: 'rollback-failed' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-rollback.test.mjs:120:1
+✖ rollback preserves checked refusal and active-unindexed audit without raw worker logs (59.566041ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + undefined
+  - {
+  -   check: 'browser-smoke',
+  -   ciExecutedTests: 51,
+  -   code: 'checks-failed',
+  -   commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  -   localExecutedTests: 0,
+  -   publicationId: 'rollback-operation',
+  -   releaseId: 'retained-release',
+  -   revision: 7,
+  -   snapshotId: 'snap:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  -   status: 'refused',
+  -   treeDigest: 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+  -   version: 1
+  - }
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-installed-rollback-red/scripts/tests/publication-launcher-rollback.test.mjs:125:99)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { version: 1, status: 'refused', code: 'checks-failed', commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', releaseId: 'retained-release', snapshotId: 'snap:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', treeDigest: 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', publicationId: 'rollback-operation', revision: 7, localExecutedTests: 0, ciExecutedTests: 51, check: 'browser-smoke' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

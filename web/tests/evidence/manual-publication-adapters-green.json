@@ -1,0 +1,106 @@
+{
+  "implementationRevision": "f8b4d48ad5919a6c4101985ac6d250dec50cf604",
+  "fixtureSmoke": {
+    "fixtureOnly": true,
+    "setupCaptureCount": 1,
+    "publicationCaptures": 1,
+    "publicationBuilds": 1,
+    "cmsRequests": 22,
+    "mediaRequests": 2,
+    "checks": {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "snapshotId": "snap:b045e60c4dc43c1a92223bed1f2c301e3beafa7625ebff1478fc20f52a13a642",
+      "destinationId": "fixture-stand",
+      "treeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+      "groups": [
+        {
+          "name": "snapshot-provenance",
+          "conclusion": "success",
+          "executedTests": 3
+        },
+        {
+          "name": "build-content",
+          "conclusion": "success",
+          "executedTests": 4
+        },
+        {
+          "name": "destination-mode",
+          "conclusion": "success",
+          "executedTests": 4
+        },
+        {
+          "name": "browser-smoke",
+          "conclusion": "success",
+          "executedTests": 8
+        },
+        {
+          "name": "payment-destination",
+          "conclusion": "success",
+          "executedTests": 1
+        }
+      ]
+    }
+  },
+  "mutations": {
+    "digest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+    "snapDigest": "57468ae9c063d853eeb017bc279d9b182408dd99de3e1fa38974357499ae090a",
+    "evidence": [
+      {
+        "name": "snapshot-media-corrupted",
+        "failed": 1
+      },
+      {
+        "name": "build-four-invariants",
+        "failed": 4
+      },
+      {
+        "name": "stand-robots-changed",
+        "failed": 1
+      },
+      {
+        "name": "browser-navigation-broken",
+        "failed": 2
+      },
+      {
+        "name": "ci-payment-present",
+        "failed": 1
+      },
+      {
+        "name": "active-payment",
+        "positiveAssertions": 3,
+        "wrongShopRejected": true,
+        "wrongOriginRejected": true,
+        "requests": [
+          {
+            "method": "GET",
+            "url": "/ready"
+          },
+          {
+            "method": "OPTIONS",
+            "url": "/payments",
+            "origin": "https://fixture-site.invalid"
+          },
+          {
+            "method": "GET",
+            "url": "/ready"
+          },
+          {
+            "method": "OPTIONS",
+            "url": "/payments",
+            "origin": "https://fixture-site.invalid"
+          }
+        ]
+      }
+    ],
+    "active-wrong-shop": {
+      "passed": 1,
+      "failed": 1,
+      "pending": 0
+    },
+    "active-wrong-cors": {
+      "passed": 0,
+      "failed": 1,
+      "pending": 0
+    }
+  }
+}

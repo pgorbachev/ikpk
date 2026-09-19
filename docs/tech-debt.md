@@ -2635,6 +2635,8 @@ build-year.spec.ts:78`, fail-closed throw). Массив пуст: задача 
 
 ## TD-54. `Deploy to GitHub Pages` гарантированно красный — Pages не включён на уровне репозитория
 
+**Исправление 19.09.2026:** change `manual-publication-only` удаляет workflow Pages и его полномочия. Проверка GitHub `has_pages: false`, DNS и HTTP production сохранена в `docs/testing/manual-publication-only/site-topology-readonly.md`. Публичный сайт работает на VPS. Кодовая причина устранена; закрытие на актуальном main подтверждается после merge. Ниже сохранена история находки.
+
 **Файлы:** нет — чисто наблюдаемое поведение, код и тесты не менялись.
 
 **Проблема.** GitHub Pages не включён на уровне настроек репозитория
@@ -2992,6 +2994,8 @@ Strapi, и `curl` не получает ответа за отведённые 1
 ---
 
 ## TD-61. Джоб отметки публикации падает на своём же `mkdir` и держит выкладку красной
+
+**Исправление 19.09.2026:** change `manual-publication-only` удаляет `publication-record` из Tests; запись проверенной пары выполняет локальный путь после проверки фактической раздачи. Зелёные проверки PR не заменяют приёмку main после merge. На main `062044082bb17188e8cb683f6c750959f253a2d9` все пять основных джобов зелёные, старый `publication-record` ещё падает (run `35451464687`). Другие причины CI этим исправлением не закрываются. Ниже сохранена история находки.
 
 **Файлы:** `.github/workflows/test.yml`, джоб «Record verified publication pair», шаг
 «Record verified pair and push state/cms-provenance».

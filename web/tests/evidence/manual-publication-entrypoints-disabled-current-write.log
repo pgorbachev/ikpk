@@ -1,0 +1,61 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-entry-inventory-implementation/web
+
+ ❯ tests/manual-publication-entrypoints.test.ts (15 tests | 2 failed | 13 skipped) 546ms
+     × refuses a local current switch even without SSH or a deploy-like filename 304ms
+     × recognizes the actual legacy backup restore as a second publication path 240ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses a local current switch even without SSH or a deploy-like filename
+AssertionError: promise resolved "[ 'scripts/publication-launcher.mjs' ]" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+[
+  "scripts/publication-launcher.mjs",
+]
+
+ ❯ tests/manual-publication-entrypoints.test.ts:77:34
+     75|     const root = fixture();
+     76|     put(root, 'tools/maintenance.sh', '#!/bin/sh\nWEB_ROOT=/var/www/ik…
+     77|     await expect(inventory(root)).rejects.toThrow();
+       |                                  ^
+     78|   });
+     79|   it('recognizes the actual legacy backup restore as a second publicat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > recognizes the actual legacy backup restore as a second publication path
+AssertionError: promise resolved "[ 'scripts/publication-launcher.mjs' ]" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+[
+  "scripts/publication-launcher.mjs",
+]
+
+ ❯ tests/manual-publication-entrypoints.test.ts:82:34
+     80|     const root = fixture();
+     81|     copyFileSync(join(repository, 'web/tests/fixtures/manual-publicati…
+     82|     await expect(inventory(root)).rejects.toThrow();
+       |                                  ^
+     83|   });
+     84|   it('follows an npm lifecycle wrapper into a private worker bypass', …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 13 skipped (15)
+   Start at  19:46:17
+   Duration  819ms (transform 80ms, setup 32ms, import 45ms, tests 546ms, environment 0ms)
+

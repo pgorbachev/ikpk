@@ -228,19 +228,8 @@ describe('6.13a гейт один, и путь Pages проверяется на
     }
   });
 
-  it('deploy.yml проверяет роль артефакта до публикации Pages', () => {
-    const wf = read(join(repoRoot, '.github/workflows/deploy.yml'));
-    const uploadAt = wf.indexOf('upload-pages-artifact');
-    expect(uploadAt, 'в deploy.yml нет шага публикации артефакта').toBeGreaterThan(-1);
-    const before = wf.slice(0, uploadAt);
-    expect(before, 'до загрузки артефакта роль не проверяется').toMatch(/data-payment-role|payment_endpoint_matches/);
-    expect(before, 'проверка не сослалась на общий скрипт гейта').toMatch(/scripts\/(lib\/)?[A-Za-z0-9_.-]+\.sh/);
-  });
+  // Hosted publication is forbidden altogether by manual-publication-workflows.test.ts.
+  // The former Pages-specific role assertions no longer describe a publication path;
+  // local payment-role/readiness checks above remain mandatory for installed contours.
 
-  it('deploy.yml не публикует артефакт установленного контура', () => {
-    const wf = read(join(repoRoot, '.github/workflows/deploy.yml'));
-    expect(wf, 'путь Pages объявляет роль установленного контура').not.toMatch(
-      /PAYMENT_ROLE\s*[:=]\s*['"]?(stand|prod)\b/,
-    );
-  });
 });

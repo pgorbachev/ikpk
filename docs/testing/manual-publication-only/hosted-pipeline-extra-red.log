@@ -1,0 +1,131 @@
+Commit: 7a273b1193d862c008172e3f6937587d0b542356
+Working directory: web/
+Command: npx vitest run tests/cms-publication-pipeline.test.ts tests/payment-contour-deploy-config.test.ts --reporter=verbose
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10c обратный прокси стенда: наружу открыты только платёжные маршруты > внешний путь /api/payments отображён на 127.0.0.1:8787 7ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10c обратный прокси стенда: наружу открыты только платёжные маршруты > проверка статуса попытки тоже проходит через прокси стенда 5ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10c обратный прокси стенда: наружу открыты только платёжные маршруты > /readyz наружу не публикуется ни одной конфигурацией 5ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10c обратный прокси стенда: наружу открыты только платёжные маршруты > платёжный API стенда не раздаётся через location / — это увело бы весь origin в сервис 5ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 4.10 стенд и production — отдельные инстанции с раздельным состоянием > объявлены два разных env-файла инстанций (/etc/ikpk-payments/stand.env и prod.env) 2ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 4.10 стенд и production — отдельные инстанции с раздельным состоянием > каталоги изменяемого состояния у инстанций разные 2ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 4.10 стенд и production — отдельные инстанции с раздельным состоянием > bind 127.0.0.1:8787 задан конфигурацией явно, а не умолчанием кода 2ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10e база возврата — свойство контура и названа в конфигурации стенда > PAYMENT_RETURN_BASE=http://193.124.115.99 назван в развёртывании стенда 37ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 5.10e база возврата — свойство контура и названа в конфигурации стенда > закреплённые магазины контуров названы в конфигурации развёртывания 3ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 6.13a гейт один, и путь Pages проверяется на роль без активной формы > функция гейта определена ровно один раз — общий скрипт, а не копия на путь 5ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 6.13a гейт один, и путь Pages проверяется на роль без активной формы > разбора платёжной разметки нет за пределами общего скрипта 3ms
+ ✓ tests/payment-contour-deploy-config.test.ts > 6.13a гейт один, и путь Pages проверяется на роль без активной формы > readiness запрашивается по внутреннему адресу 127.0.0.1:8787, а не по публичному 11ms
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > обязательный прогон содержит все пять обязательных джобов и не пишет публикации 4ms
+   → expected [ 'content-snapshot', …(5) ] to deeply equal [ 'content-snapshot', …(4) ]
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > единственный подготовитель Tests явно выбирает закреплённый источник 1ms
+   → expected '${{ github.workspace }}/content-snaps…' to be '${{ github.workspace }}/fixtures/cont…' // Object.is equality
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > Tests не обращается к CMS и не сверяет закреплённый снимок с живым журналом или раздачей 2ms
+   → expected [ …(3) ] to deeply equal []
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > сборки вершины непусты, используют артефакт Tests либо закреплённую фикстуру соседнего CI 2ms
+   → expected [ Array(1) ] to deeply equal []
+ ✓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > артефакт снимка сохраняется и доступен обоим потребителям Tests 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > внешнее событие и календарь сохраняют возможность запустить проверки 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > ни один шаг не берёт ref, коммит или источник контента из тела запроса 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > проверка соответствия закреплённого снимка API — по расписанию, с адресатом, вне PR 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпадение коммита и снимка — совпадение 6ms
+ ✓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > другой коммит на раздаче — расхождение 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпавший коммит при другом снимке — расхождение, а не совпадение 0ms
+ ✓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > нечитаемый ответ — непройденная проверка, а не отсутствие расхождения 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > обязательный прогон содержит все пять обязательных джобов и не пишет публикации
+AssertionError: expected [ 'content-snapshot', …(5) ] to deeply equal [ 'content-snapshot', …(4) ]
+
+- Expected
++ Received
+
+  [
+    "content-snapshot",
+    "dependency-invariants",
+    "e2e-smoke",
++   "publication-record",
+    "scripts-unit",
+    "unit-and-build",
+  ]
+
+ ❯ tests/cms-publication-pipeline.test.ts:106:46
+    104|
+    105|   it('обязательный прогон содержит все пять обязательных джобов и не п…
+    106|     expect(Object.keys(tests().jobs).sort()).toEqual([
+       |                                              ^
+    107|       'content-snapshot', 'dependency-invariants', 'e2e-smoke', 'scrip…
+    108|     ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > единственный подготовитель Tests явно выбирает закреплённый источник
+AssertionError: expected '${{ github.workspace }}/content-snaps…' to be '${{ github.workspace }}/fixtures/cont…' // Object.is equality
+
+Expected: "${{ github.workspace }}/fixtures/content-snapshot"
+Received: "${{ github.workspace }}/content-snapshot"
+
+ ❯ tests/cms-publication-pipeline.test.ts:120:52
+    118|       .filter((step) => /snapshot:prepare/.test(step.run ?? ''));
+    119|     expect(producers).toHaveLength(1);
+    120|     expect(producers[0].env?.CONTENT_SNAPSHOT_DIR).toBe('${{ github.wo…
+       |                                                    ^
+    121|     expect(producers[0].run).toMatch(/cp -R \"?\.snapshot\/\./);
+    122|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > Tests не обращается к CMS и не сверяет закреплённый снимок с живым журналом или раздачей
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Reconcile published state with content snapshot",
++   "Publication gate on content snapshot",
++   "Record verified pair and push state/cms-provenance",
++ ]
+
+ ❯ tests/cms-publication-pipeline.test.ts:130:62
+    128|       SNAPSHOT_PRODUCER.test(stepText(step)) ||
+    129|       /publication-cli\.ts\s+(?:reconcile|gate-snapshot|record-pair|me…
+    130|     expect(forbidden.map((step) => step.name ?? step.index)).toEqual([…
+       |                                                              ^
+    131|   });
+    132|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > сборки вершины непусты, используют артефакт Tests либо закреплённую фикстуру соседнего CI
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deploy.yml: unclassified head build",
++ ]
+
+ ❯ tests/cms-publication-pipeline.test.ts:145:22
+    143|       }
+    144|     }
+    145|     expect(problems).toEqual([]);
+       |                      ^
+    146|   });
+    147|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 20 passed (24)
+   Start at  14:24:11
+   Duration  318ms (transform 82ms, setup 62ms, import 179ms, tests 105ms, environment 0ms)
+
+
+Exit code: 1

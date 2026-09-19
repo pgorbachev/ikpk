@@ -15,6 +15,7 @@ export interface LedgerEntry {
   fingerprint: string;
   previous: number | null;
   marker: EventMarker | null;
+  confirmedBy?: string;
 }
 
 export interface Observation {
@@ -42,7 +43,8 @@ const OPTIONS_FILE = 'options.json';
 
 function checksumOf(entry: LedgerEntry): string {
   return createHash('sha256')
-    .update(JSON.stringify({ number: entry.number, fingerprint: entry.fingerprint, previous: entry.previous, marker: entry.marker }))
+    .update(JSON.stringify({ number: entry.number, fingerprint: entry.fingerprint, previous: entry.previous, marker: entry.marker,
+      ...(entry.confirmedBy === undefined ? {} : { confirmedBy: entry.confirmedBy }) }))
     .digest('hex');
 }
 
@@ -81,7 +83,8 @@ function loadEntries(dir: string): LedgerEntry[] {
   const files = readdirSync(dir).filter((name) => /^entry-\d+\.json$/.test(name));
   const entries = files.map((name) => parseStored(readFileSync(join(dir, name), 'utf-8')));
   entries.sort((a, b) => a.number - b.number);
-  return entries.map(({ number, fingerprint, previous, marker }) => ({ number, fingerprint, previous, marker }));
+  return entries.map(({ number, fingerprint, previous, marker, confirmedBy }) => ({ number, fingerprint, previous, marker,
+    ...(confirmedBy === undefined ? {} : { confirmedBy }) }));
 }
 
 function firstOccurrence(entries: LedgerEntry[], fingerprint: string): LedgerEntry | undefined {
@@ -113,13 +116,15 @@ class FileProvenanceLedger implements ProvenanceLedger {
   constructor(
     private readonly dir: string,
     private readonly hasPublicationHistory: boolean,
+    initialize: boolean,
   ) {
+    if (!initialize) return;
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, OPTIONS_FILE), JSON.stringify({ hasPublicationHistory }), 'utf-8');
     if (!existsSync(join(dir, HWM_FILE))) writeHwm(dir, 0);
   }
 
-  async recordEvent(event: { fingerprint: string; marker: EventMarker | null }): Promise<LedgerEntry> {
+  async recordEvent(event: { fingerprint: string; marker: EventMarker | null; confirmedBy?: string }): Promise<LedgerEntry> {
     mkdirSync(this.dir, { recursive: true });
     for (;;) {
       const current = loadEntries(this.dir);
@@ -130,6 +135,7 @@ class FileProvenanceLedger implements ProvenanceLedger {
         fingerprint: event.fingerprint,
         previous: last?.number ?? null,
         marker: event.marker,
+        ...(event.confirmedBy === undefined ? {} : { confirmedBy: event.confirmedBy }),
       };
       const stored: StoredEntry = { ...entry, checksum: checksumOf(entry) };
       try {
@@ -180,11 +186,11 @@ class FileProvenanceLedger implements ProvenanceLedger {
   }
 
   async acceptState(state: { fingerprint: string; confirmedBy: string }): Promise<LedgerEntry> {
-    void state.confirmedBy;
-    return this.recordEvent({ fingerprint: state.fingerprint, marker: 'accept-state' });
+    if (!state.confirmedBy.trim()) throw new Error('accept-state requires actor');
+    return this.recordEvent({ fingerprint: state.fingerprint, marker: 'accept-state', confirmedBy: state.confirmedBy });
   }
 }
 
-export function createLedger(options: { dir: string; hasPublicationHistory?: boolean }): ProvenanceLedger {
-  return new FileProvenanceLedger(options.dir, options.hasPublicationHistory ?? false);
+export function createLedger(options: { dir: string; hasPublicationHistory?: boolean; initialize?: boolean }): ProvenanceLedger {
+  return new FileProvenanceLedger(options.dir, options.hasPublicationHistory ?? false, options.initialize ?? true);
 }

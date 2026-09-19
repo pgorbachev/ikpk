@@ -4,11 +4,11 @@ import { join } from 'path';
 import { spawnSync } from 'child_process';
 import {
   loadWorkflows,
-  publishingWorkflows,
+  requiredTestWorkflows,
   stripShellComments,
-  workflowRunTrigger,
   type Workflow,
 } from './helpers/workflows';
+import { PUBLICATION_BROWSER_ARGS } from '../scripts/lib/publication-check-adapters';
 import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 
 // ─── Мета-гейт: браузерная проверка обязана исполняться в гейте публикации ────
@@ -24,9 +24,7 @@ import { EXPECTED_MONTH_TAGS, normalizeTag } from './helpers/month-tags';
 // отдельная работа. Поэтому критерий двусоставный: файл либо исполняется workflow,
 // требуемым для публикации, либо ПОИМЕННО назван в списке признанного долга ниже.
 //
-// Требуемые workflow не перечислены здесь константой намеренно: состав обязательного
-// прогона меняется независимо от этой работы. Он выводится из репозитория — какой
-// workflow публикует сайт, и о завершении какого workflow он ждёт события.
+// Обязательный источник вердикта — Tests; локальная публикация не имеет workflow.
 
 const TESTS_DIR = import.meta.dirname;
 const PACKAGE_JSON = join(TESTS_DIR, '..', 'package.json');
@@ -100,22 +98,7 @@ const MONTH_MARKERS = ['data-schedule-filter="month"', 'data-months'];
 
 /** Workflow, успех которых требуется для публикации сайта. */
 function gatingWorkflows(all: Workflow[]): Workflow[] {
-  const publishing = publishingWorkflows(all);
-  expect(publishing.length, 'в репозитории нет workflow, публикующего сайт — проверять нечего')
-    .toBeGreaterThan(0);
-
-  const required = new Set(
-    publishing.flatMap((wf) => workflowRunTrigger(wf)?.workflows ?? []),
-  );
-  expect(
-    [...required],
-    'ни один публикующий workflow не ждёт события о завершении проверок — гейта публикации нет',
-  ).not.toEqual([]);
-
-  const gating = all.filter((wf) => required.has(wf.displayName));
-  const missing = [...required].filter((name) => !all.some((wf) => wf.displayName === name));
-  expect(missing, `публикация ждёт workflow, которых нет в репозитории: ${missing.join(', ')}`).toEqual([]);
-  return gating;
+  return requiredTestWorkflows(all);
 }
 
 /**
@@ -242,6 +225,8 @@ function gatingPlaywrightArgs(all: Workflow[]): string[][] {
     invocations.length,
     'в гейтующих workflow не нашлось ни одного вызова playwright — сверять набор не с чем',
   ).toBeGreaterThan(0);
+  // This fixed local suite is required by the manual publication coordinator.
+  invocations.push(PUBLICATION_BROWSER_ARGS.slice(1).filter((arg) => arg !== '--reporter=json'));
   return invocations;
 }
 
@@ -361,7 +346,7 @@ const monthTagsOf = (tests: CollectedTest[]): CollectedTest[] =>
   tests.filter((test) => test.tags.some((tag) => tag.startsWith('month-')));
 
 describe('браузерные проверки и гейт публикации', () => {
-  it('каждый файл либо исполняется гейтующим workflow, либо назван в списке долга', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
+  it('каждый файл исполняется CI или fixed local publication suite либо назван в списке долга', { timeout: COLLECT_TEST_TIMEOUT_MS }, () => {
     const executed = executedSpecFiles(loadWorkflows());
     expect(executed.size, 'ни один файл браузерных проверок не исполняется — разбор workflow сломан')
       .toBeGreaterThan(0);

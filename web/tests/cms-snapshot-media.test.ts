@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { chooseManualPublication, PUBLICATION_CI_POLICY, PUBLICATION_GROUPS, ROLLBACK_GROUPS, SNAPSHOT_RETENTION_DAYS, type PublicationRecord } from '../scripts/lib/publish-gate.ts';
 import {
   MODULES,
   loadModule,
   type MediaStoreModule,
-  type PublishGateModule,
 } from './helpers/cms-content-publication-contract';
 
 // Спека `cms-content-source`, требование «Снимок воспроизводит медиа, а не ссылается на
@@ -15,7 +15,6 @@ import {
 // КРАСНЫЕ ПО ЗАМЫСЛУ: контент-адресуемого хранилища медиа ещё нет (tasks.md 3.7).
 
 const storeModule = (): Promise<MediaStoreModule> => loadModule<MediaStoreModule>(MODULES.mediaStore);
-const gateModule = (): Promise<PublishGateModule> => loadModule<PublishGateModule>(MODULES.publishGate);
 
 function storeWith(entries: Record<string, string>): { dir: string; ids: Record<string, string> } {
   const dir = mkdtempSync(join(tmpdir(), 'ikpk-media-'));
@@ -80,40 +79,38 @@ describe('медиа снимка: содержимое, а не ссылка н
     if (!read.ok) expect(read.reason).toBe('missing');
   });
 
-  // Сценарий: повторная выкладка внутри обещанного срока
-  it('срок хранения назван числом, и внутри него повторная выкладка выполняется', async () => {
+  // The publication contract now requires an actual retained release and immutable
+  // verification evidence; snapshot age alone cannot authorize a rollback.
+  it('сохранённые медиа воспроизводятся, а откат требует проверенного сохранённого релиза', async () => {
     const store = await storeModule();
-    const gate = await gateModule();
-    expect(gate.SNAPSHOT_RETENTION_DAYS).toBeGreaterThan(0);
-
+    expect(SNAPSHOT_RETENTION_DAYS).toBeGreaterThan(0);
     const bytes = 'медиа проверенной пары';
     const contentId = store.contentIdOf(bytes);
     const { dir } = storeWith({ [contentId]: bytes });
-
-    const now = Date.parse('2026-08-24T12:00:00Z');
-    const withinRetention = new Date(now - (gate.SNAPSHOT_RETENTION_DAYS - 1) * 86_400_000).toISOString();
-
-    const decision = gate.chooseManualPublication({
-      headCommit: 'b'.repeat(40),
-      headAtLastCheck: 'b'.repeat(40),
-      verifiedPairs: [
-        {
-          commit: 'a'.repeat(40),
-          snapshotId: 'snap-внутри-срока',
-          revision: 2,
-          referenceDate: '2026-08-20',
-          capturedAt: withinRetention,
-          testRunConclusion: 'success',
-        },
-      ],
-      highWaterMark: 9,
-      now: new Date(now).toISOString(),
-      retentionDays: gate.SNAPSHOT_RETENTION_DAYS,
-      actor: 'pgorbachev',
-      rollback: { snapshotId: 'snap-внутри-срока', confirmed: true, reasonHeadNotPublished: 'откат' },
-    });
-
-    expect(decision.action).toBe('publish');
-    expect(store.readFromStore({ storeDir: dir, contentId }).ok).toBe(true);
+    const identity = { commit: 'a'.repeat(40), snapshotId: 'snapshot-retained', destinationId: 'stand', treeDigest: '1'.repeat(64) };
+    const groups = (names: readonly string[]) => names.map((name) => ({ name, conclusion: 'success' as const, executedTests: 1 }));
+    const publication: PublicationRecord = {
+      ...identity, publicationId: 'publication-original', releaseId: 'retained-release',
+      revision: 2, referenceDate: '2026-08-20', capturedAt: '2026-08-20T00:00:00Z',
+      testRunConclusion: 'success', publishedAt: '2026-08-20T01:00:00Z', actor: 'operator',
+      paymentRole: 'ci', deployMode: 'stand',
+      ciEvidence: { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
+        branch: 'main', event: 'push', commit: identity.commit, runId: 123, conclusion: 'success', executedTests: 10,
+        jobs: PUBLICATION_CI_POLICY.requiredJobs.map((name) => ({ name, conclusion: 'success' })) },
+      localChecks: { ...identity, groups: groups(PUBLICATION_GROUPS) },
+    };
+    const input = {
+      headCommit: 'b'.repeat(40), headAtLastCheck: 'b'.repeat(40), highWaterMark: 9,
+      now: '2026-08-24T12:00:00Z', retentionDays: SNAPSHOT_RETENTION_DAYS, actor: 'operator',
+      verifiedPairs: [publication], destinationId: identity.destinationId, treeDigest: identity.treeDigest,
+      localChecks: { ...identity, groups: groups(ROLLBACK_GROUPS) },
+      retainedReleases: [{ releaseId: publication.releaseId, destinationId: identity.destinationId, treeDigest: identity.treeDigest }],
+      rollback: { snapshotId: identity.snapshotId, releaseId: publication.releaseId, confirmed: true, reason: 'confirmed rollback' },
+    };
+    expect(chooseManualPublication(input).action).toBe('publish');
+    expect(chooseManualPublication({ ...input, retainedReleases: [] }).action).toBe('refuse');
+    const read = store.readFromStore({ storeDir: dir, contentId });
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(Buffer.from(read.bytes).toString('utf8')).toBe(bytes);
   });
 });

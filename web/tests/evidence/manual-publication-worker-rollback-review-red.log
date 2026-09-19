@@ -1,0 +1,37 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-worker-rollback-review/web
+
+ ❯ tests/manual-publication-rollback-review.test.ts (4 tests | 3 failed) 1947ms
+     × refuses original revision 0 before switching instead of leaving an unrecordable active operation 343ms
+     × refuses original revision -1 before switching instead of leaving an unrecordable active operation 341ms
+     × refuses original revision 1.5 before switching instead of leaving an unrecordable active operation 353ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-rollback-review.test.ts > review: rollback validates evidence before switching with the real state store > refuses original revision 0 before switching instead of leaving an unrecordable active operation
+ FAIL  tests/manual-publication-rollback-review.test.ts > review: rollback validates evidence before switching with the real state store > refuses original revision -1 before switching instead of leaving an unrecordable active operation
+ FAIL  tests/manual-publication-rollback-review.test.ts > review: rollback validates evidence before switching with the real state store > refuses original revision 1.5 before switching instead of leaving an unrecordable active operation
+AssertionError: invalid original evidence must be refused before activation: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/manual-publication-rollback-review.test.ts:41:123
+     39|     const f = fixture(revision);
+     40|     await expect(runPublicationRollback(f.input, f.ports)).rejects.toT…
+     41|     expect(f.events.some(({ name }) => name === 'switch'), 'invalid or…
+       |                                                                                                                           ^
+     42|     expect(f.state.currentReleaseId).toBe(f.newer.releaseId);
+     43|     expect(f.state.pending).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  18:01:20
+   Duration  2.18s (transform 58ms, setup 18ms, import 110ms, tests 1.95s, environment 0ms)
+

@@ -1,0 +1,213 @@
+✖ retention keeps 5 total releases after acknowledged activation (421.937792ms)
+✖ retention keeps 7 total releases after acknowledged activation (384.089791ms)
+✖ retention keeps 5 total releases after acknowledged activation by default (417.655416ms)
+✔ retention positive control leaves all releases when below the configured limit (381.73825ms)
+✔ retention preserves current, pending release and every prior tree when index acknowledgement fails (380.369208ms)
+✖ retention recovery prunes only after the missing publication index entry is acknowledged (713.159875ms)
+✖ retention after rollback preserves the oldest active target and the newest previous releases (359.565667ms)
+✔ retention never prunes when the final source check refuses activation (285.438042ms)
+✖ retention rejects configured depth 2 below the accepted five-release minimum before SSH (271.098459ms)
+✖ retention rejects configured depth 4 below the accepted five-release minimum before SSH (299.432042ms)
+✖ retention deletion failure refuses success while reporting the actual active and indexed operation (408.702ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 3
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4418.691833
+
+✖ failing tests:
+
+test at scripts/tests/publication-transport-retention.test.mjs:60:3
+✖ retention keeps 5 total releases after acknowledged activation (421.937792ms)
+  AssertionError [ERR_ASSERTION]: remove only oldest excess directories, including current in the configured count
+  + actual - expected
+
+    [
+      'a-fourth',
+  +   'b-second',
+      'c-sixth',
+      'm-fifth',
+      'new-release',
+  +   'x-third',
+      'y-seventh',
+  +   'z-oldest'
+    ]
+
+      at file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:69:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/publication-transport.mjs:285:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:62:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'a-fourth', 'b-second', 'c-sixth', 'm-fifth', 'new-release', 'x-third', 'y-seventh', 'z-oldest' ],
+    expected: [ 'a-fourth', 'c-sixth', 'm-fifth', 'new-release', 'y-seventh' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:60:3
+✖ retention keeps 7 total releases after acknowledged activation (384.089791ms)
+  AssertionError [ERR_ASSERTION]: remove only oldest excess directories, including current in the configured count
+  + actual - expected
+
+    [
+      'a-fourth',
+  +   'b-second',
+      'c-sixth',
+      'd-eighth',
+      'm-fifth',
+      'new-release',
+      'x-third',
+      'y-seventh',
+  +   'z-oldest'
+    ]
+
+      at file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:69:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/publication-transport.mjs:285:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:62:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'a-fourth', 'b-second', 'c-sixth', 'd-eighth', 'm-fifth', 'new-release', 'x-third', 'y-seventh', 'z-oldest' ],
+    expected: [ 'a-fourth', 'c-sixth', 'd-eighth', 'm-fifth', 'new-release', 'x-third', 'y-seventh' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:60:3
+✖ retention keeps 5 total releases after acknowledged activation by default (417.655416ms)
+  AssertionError [ERR_ASSERTION]: remove only oldest excess directories, including current in the configured count
+  + actual - expected
+
+    [
+      'a-fourth',
+  +   'b-second',
+      'c-sixth',
+      'm-fifth',
+      'new-release',
+  +   'x-third',
+      'y-seventh',
+  +   'z-oldest'
+    ]
+
+      at file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:69:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/publication-transport.mjs:285:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:62:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'a-fourth', 'b-second', 'c-sixth', 'm-fifth', 'new-release', 'x-third', 'y-seventh', 'z-oldest' ],
+    expected: [ 'a-fourth', 'c-sixth', 'm-fifth', 'new-release', 'y-seventh' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:94:1
+✖ retention recovery prunes only after the missing publication index entry is acknowledged (713.159875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    [
+      'a-fourth',
+  +   'b-second',
+      'c-sixth',
+      'm-fifth',
+      'new-release',
+  +   'x-third',
+      'y-seventh',
+  +   'z-oldest'
+    ]
+
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:103:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'a-fourth', 'b-second', 'c-sixth', 'm-fifth', 'new-release', 'x-third', 'y-seventh', 'z-oldest' ],
+    expected: [ 'a-fourth', 'c-sixth', 'm-fifth', 'new-release', 'y-seventh' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:108:1
+✖ retention after rollback preserves the oldest active target and the newest previous releases (359.565667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    [
+      'a-fourth',
+  +   'b-second',
+      'c-sixth',
+      'm-fifth',
+  +   'x-third',
+      'y-seventh',
+      'z-oldest'
+    ]
+
+      at file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:115:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async withLock (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/publication-transport.mjs:285:18)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:111:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'a-fourth', 'b-second', 'c-sixth', 'm-fifth', 'x-third', 'y-seventh', 'z-oldest' ],
+    expected: [ 'a-fourth', 'c-sixth', 'm-fifth', 'y-seventh', 'z-oldest' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:131:36
+✖ retention rejects configured depth 2 below the accepted five-release minimum before SSH (271.098459ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:133:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /retention|keepReleases|release.*(five|5|minimum|depth)/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:131:36
+✖ retention rejects configured depth 4 below the accepted five-release minimum before SSH (299.432042ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:133:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /retention|keepReleases|release.*(five|5|minimum|depth)/i,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-transport-retention.test.mjs:137:1
+✖ retention deletion failure refuses success while reporting the actual active and indexed operation (408.702ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-publication-retention-red/scripts/tests/publication-transport-retention.test.mjs:142:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }

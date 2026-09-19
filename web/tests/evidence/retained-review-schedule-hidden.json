@@ -1,0 +1,63 @@
+{
+  "reviewedRevision": "6318961597bfd440437d229d3d855b14082c985e",
+  "kind": "hidden",
+  "beforeVisibility": [
+    {
+      "width": 1280,
+      "cards": 57,
+      "visible": 25
+    },
+    {
+      "width": 375,
+      "cards": 57,
+      "visible": 25
+    }
+  ],
+  "afterVisibility": [
+    {
+      "width": 1280,
+      "cards": 57,
+      "visible": 0
+    },
+    {
+      "width": 375,
+      "cards": 57,
+      "visible": 0
+    }
+  ],
+  "accepted": true,
+  "checks": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "snapshotId": "snap:b045e60c4dc43c1a92223bed1f2c301e3beafa7625ebff1478fc20f52a13a642",
+    "destinationId": "fixture-stand",
+    "treeDigest": "2a18302787e49fbf1c2a138d378323e9a94888c095478e3b764acb642a00b7b5",
+    "groups": [
+      {
+        "name": "destination-mode",
+        "conclusion": "success",
+        "executedTests": 4
+      },
+      {
+        "name": "browser-smoke",
+        "conclusion": "success",
+        "executedTests": 8
+      },
+      {
+        "name": "payment-destination",
+        "conclusion": "success",
+        "executedTests": 1
+      }
+    ]
+  },
+  "browserStats": {
+    "startTime": "2026-09-19T15:45:23.162Z",
+    "duration": 6043.068,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "beforeDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "restoredDigest": "b0b50e3f0bdb187cc31e2181d29d83a0fe2f9398917379c15326145be3ad8204",
+  "reportsDirectory": "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-retained-review-red-EcIweC"
+}

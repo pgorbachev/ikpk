@@ -1,0 +1,1051 @@
+Tests revision: 37f7d133f65597cb0ace8990962b55bb7628a5a6
+Implementation baseline: 74df60098d58909f5ce3b3c712cc675469bb0046
+Command (from web/): npx vitest run tests/manual-publication-core.test.ts --reporter=verbose
+Exit code: 1
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red-core/web
+
+ ✓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: complete evidence authorizes production with independent payment role ci 1ms
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > first publication uses its freshly tested pair without a historical entry 4ms
+   → expected { action: 'refuse', …(1) } to match object { action: 'publish', pair: { …(6) } }
+(1 matching property omitted from actual)
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > does not substitute a historical pair with a newer reference date 1ms
+   → expected { action: 'publish', pair: { …(16) } } to match object { action: 'publish', …(1) }
+(29 matching properties omitted from actual)
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > historical success does not authorize a call without a freshly tested pair 1ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ ✓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > new publication refuses a moved head 0ms
+ ✓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > new publication refuses content older than the high-water mark 0ms
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing CI verdict does not inherit success from publication history 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI repository=outsider/ikpk even for a successful run 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI workflow=.github/workflows/lint.yml even for a successful run 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=pull_request even for a successful run 1ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=workflow_dispatch even for a successful run 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI branch=feature even for a successful run 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb even for a successful run 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ ✓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: a successful schedule on main is valid evidence 0ms
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion failure 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion cancelled 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion skipped 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion missing 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion failure 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion cancelled 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion skipped 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion missing 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing required job is not a successful job 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing run identity cannot become rollback evidence 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed CI tests refuses and reports the count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another commit is refused 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another snapshotId is refused 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another destinationId is refused 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another treeDigest is refused 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing local report is refused 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group snapshot-provenance is refused even with other successful tests 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group build-content is refused even with other successful tests 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group destination-mode is refused even with other successful tests 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group browser-smoke is refused even with other successful tests 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group payment-destination is refused even with other successful tests 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in snapshot-provenance refuses and reports the group and count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in build-content refuses and reports the group and count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in destination-mode refuses and reports the group and count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in browser-smoke refuses and reports the group and count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in payment-destination refuses and reports the group and count 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with failure is not a successful check 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with cancelled is not a successful check 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with skipped is not a successful check 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with missing is not a successful check 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > an unresolved index write blocks the same destination 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ ✓ tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > positive control: an unresolved stand write does not block production 0ms
+ ✓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > positive control: explicit confirmed rollback uses retained bytes and does not request a provenance entry 0ms
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained old release works without fresh CI, a fresh snapshot, or a stable current head 0ms
+   → expected { action: 'refuse', …(1) } to match object { action: 'publish', …(2) }
+(1 matching property omitted from actual)
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > snapshot age alone cannot disqualify an intact retained release 0ms
+   → expected 'refuse' to be 'publish' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a release evicted from retention is refused even while its snapshot is young 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ ✓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a retained directory without a publication record is not a verified target 0ms
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a target in another destination cannot authorize production 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained release location must belong to the selected destination 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > the retained tree must match its recorded digest 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > release identity selects a complete commit+snapshot pair, not the first matching snapshot 0ms
+   → expected { action: 'publish', …(3) } to match object { action: 'publish', pair: { …(2) } }
+(33 matching properties omitted from actual)
+ ✓ tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > confirmation is an explicit input 0ms
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason: undefined 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason:  0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason:     0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > records the actor, full pair, release and reason 0ms
+   → expected { actor: 'operator', …(2) } to match object { actor: 'operator', …(3) }
+(1 matching property omitted from actual)
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > pending operation blocks rollback only in its destination 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without ciEvidence cannot authorize rollback 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without localChecks cannot authorize rollback 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without paymentRole cannot authorize rollback 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without deployMode cannot authorize rollback 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without treeDigest cannot authorize rollback 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > unsuccessful original CI cannot be laundered by a successful pair flag 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original local groups cannot be laundered by a successful pair flag 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero destination-mode checks on saved bytes 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero browser-smoke checks on saved bytes 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero payment-destination checks on saved bytes 1ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback report must name the retained tree 0ms
+   → expected 'publish' to be 'refuse' // Object.is equality
+ × tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > publishing the same pair twice retains both operation records 1ms
+   → expected [ { …(16) } ] to deeply equal [ { …(16) }, { …(16) } ]
+ × tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > equal pairs in production and stand retain their distinct destination and digest 1ms
+   → expected [ { …(16) } ] to deeply equal [ { …(16) }, { …(16) } ]
+ ✓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > positive control: retrying the exact operation is idempotent 0ms
+ × tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > a conflicting reuse of an operation identity cannot rewrite earlier evidence 0ms
+   → expected [Function] to throw an error
+ ✓ tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history keeps complete pair, count, group outcomes, destination and publication timestamp 8ms
+ × tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses deletion of an existing record 2ms
+   → expected [Function] to throw an error
+ × tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses replacement and preserves the original file bytes 2ms
+   → expected [Function] to throw an error
+ ✓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > positive control: declared pair matches the record 0ms
+ × tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > newer main is not the expected pair when publication history exists 0ms
+   → expected 'mismatch' to be 'match' // Object.is equality
+ × tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a later stand record does not change production observation 0ms
+   → expected 'mismatch' to be 'match' // Object.is equality
+ ✓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a different served snapshot is a mismatch even for the same commit 0ms
+ ✓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > an unreadable release declaration is a failed observation 0ms
+ × tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a pending record explains the mismatch without calling it an out-of-band replacement 0ms
+   → .toMatch() expects to receive a string, but got undefined
+ ✓ tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > pending stand operation does not explain a production mismatch 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 72 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > first publication uses its freshly tested pair without a historical entry
+AssertionError: expected { action: 'refuse', …(1) } to match object { action: 'publish', pair: { …(6) } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "action": "publish",
+-   "pair": {
+-     "capturedAt": "2026-09-19T00:00:00Z",
+-     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-     "referenceDate": "2026-09-19",
+-     "revision": 5,
+-     "snapshotId": "snapshot-current",
+-     "testRunConclusion": "success",
+-   },
++   "action": "refuse",
+  }
+
+ ❯ tests/manual-publication-core.test.ts:94:55
+     92|   });
+     93|   it('first publication uses its freshly tested pair without a histori…
+     94|     expect(choose({ ...input(), verifiedPairs: [] })).toMatchObject({ …
+       |                                                       ^
+     95|   });
+     96|   it('does not substitute a historical pair with a newer reference dat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > does not substitute a historical pair with a newer reference date
+AssertionError: expected { action: 'publish', pair: { …(16) } } to match object { action: 'publish', …(1) }
+(29 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "action": "publish",
+    "pair": {
+-     "snapshotId": "snapshot-fresh",
++     "snapshotId": "snapshot-current",
+    },
+  }
+
+ ❯ tests/manual-publication-core.test.ts:101:29
+     99|     request.localChecks = checks('snapshot-fresh');
+    100|     request.verifiedPairs = [publication({ referenceDate: '2026-09-20'…
+    101|     expect(choose(request)).toMatchObject({ action: 'publish', pair: {…
+       |                             ^
+    102|   });
+    103|   it('historical success does not authorize a call without a freshly t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > historical success does not authorize a call without a freshly tested pair
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:104:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing CI verdict does not inherit success from publication history
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:108:86
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI repository=outsider/ikpk even for a successful run
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI workflow=.github/workflows/lint.yml even for a successful run
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=pull_request even for a successful run
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI event=workflow_dispatch even for a successful run
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI branch=feature even for a successful run
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > rejects inappropriate CI commit=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb even for a successful run
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:115:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion failure
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion cancelled
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion skipped
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses CI conclusion missing
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:122:75
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion failure
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion cancelled
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion skipped
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > refuses required job conclusion missing
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:125:83
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing required job is not a successful job
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:128:62
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > a missing run identity cannot become rollback evidence
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:131:61
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed CI tests refuses and reports the count
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:135:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another commit is refused
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another snapshotId is refused
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another destinationId is refused
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local report for another treeDigest is refused
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:138:69
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > missing local report is refused
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:140:49
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group snapshot-provenance is refused even with other successful tests
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group build-content is refused even with other successful tests
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group destination-mode is refused even with other successful tests
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group browser-smoke is refused even with other successful tests
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > omitting fixed group payment-destination is refused even with other successful tests
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:143:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in snapshot-provenance refuses and reports the group and count
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in build-content refuses and reports the group and count
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in destination-mode refuses and reports the group and count
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in browser-smoke refuses and reports the group and count
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > zero executed tests in payment-destination refuses and reports the group and count
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:147:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with failure is not a successful check
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with cancelled is not a successful check
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with skipped is not a successful check
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > local group with missing is not a successful check
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:150:86
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > new publication requires current CI and the freshly tested pair > an unresolved index write blocks the same destination
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:152:71
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained old release works without fresh CI, a fresh snapshot, or a stable current head
+AssertionError: expected { action: 'refuse', …(1) } to match object { action: 'publish', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "action": "publish",
+-   "pair": {
+-     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-   },
+-   "writesProvenanceEntry": false,
++   "action": "refuse",
+  }
+
+ ❯ tests/manual-publication-core.test.ts:166:29
+    164|     request.headCommit = OTHER; request.headAtLastCheck = 'c'.repeat(4…
+    165|     request.verifiedPairs[0].capturedAt = '2020-01-01T00:00:00Z';
+    166|     expect(choose(request)).toMatchObject({ action: 'publish', pair: {…
+       |                             ^
+    167|   });
+    168|   it('snapshot age alone cannot disqualify an intact retained release'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > snapshot age alone cannot disqualify an intact retained release
+AssertionError: expected 'refuse' to be 'publish' // Object.is equality
+
+Expected: "publish"
+Received: "refuse"
+
+ ❯ tests/manual-publication-core.test.ts:170:36
+    168|   it('snapshot age alone cannot disqualify an intact retained release'…
+    169|     const request = rollbackInput(); request.verifiedPairs[0].captured…
+    170|     expect(choose(request).action).toBe('publish');
+       |                                    ^
+    171|   });
+    172|   it('a release evicted from retention is refused even while its snaps…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a release evicted from retention is refused even while its snapshot is young
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:173:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > a target in another destination cannot authorize production
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:180:88
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > retained release location must belong to the selected destination
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:183:91
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > the retained tree must match its recorded digest
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:186:95
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > release identity selects a complete commit+snapshot pair, not the first matching snapshot
+AssertionError: expected { action: 'publish', …(3) } to match object { action: 'publish', pair: { …(2) } }
+(33 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "action": "publish",
+    "pair": {
+-     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
++     "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "snapshotId": "snapshot-current",
+    },
+  }
+
+ ❯ tests/manual-publication-core.test.ts:192:29
+    190|     const original = request.verifiedPairs[0];
+    191|     request.verifiedPairs = [publication({ publicationId: 'unrelated',…
+    192|     expect(choose(request)).toMatchObject({ action: 'publish', pair: {…
+       |                             ^
+    193|   });
+    194|   it('confirmation is an explicit input', () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason: undefined
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason: 
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires a nonempty explicit reason:    
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:198:124
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > records the actor, full pair, release and reason
+AssertionError: expected { actor: 'operator', …(2) } to match object { actor: 'operator', …(3) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "actor": "operator",
+-   "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-   "releaseId": "release-1",
+    "snapshotId": "snapshot-current",
+  }
+
+ ❯ tests/manual-publication-core.test.ts:202:37
+    200|   it('records the actor, full pair, release and reason', () => {
+    201|     const request = rollbackInput(); const decision = choose(request);
+    202|     expect(decision.rollbackRecord).toMatchObject({ actor: 'operator',…
+       |                                     ^
+    203|       snapshotId: 'snapshot-current', releaseId: 'release-1' });
+    204|     expect(JSON.stringify(decision.rollbackRecord)).toContain(request.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > pending operation blocks rollback only in its destination
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:206:75
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without ciEvidence cannot authorize rollback
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without localChecks cannot authorize rollback
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without paymentRole cannot authorize rollback
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without deployMode cannot authorize rollback
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original evidence without treeDigest cannot authorize rollback
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:208:93
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > unsuccessful original CI cannot be laundered by a successful pair flag
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:211:98
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > incomplete original local groups cannot be laundered by a successful pair flag
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:214:89
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero destination-mode checks on saved bytes
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero browser-smoke checks on saved bytes
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback requires fresh successful nonzero payment-destination checks on saved bytes
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:217:115
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > rollback authorization uses a retained release and its full original evidence > rollback report must name the retained tree
+AssertionError: expected 'publish' to be 'refuse' // Object.is equality
+
+Expected: "refuse"
+Received: "publish"
+
+ ❯ refuse tests/manual-publication-core.test.ts:80:27
+     78| const refuse = (request: Input) => {
+     79|   const decision = choose(request);
+     80|   expect(decision.action).toBe('refuse');
+       |                           ^
+     81|   expect(decision.reason, 'refusal must name its reason').toBeTruthy();
+     82|   return decision;
+ ❯ tests/manual-publication-core.test.ts:220:88
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > publishing the same pair twice retains both operation records
+AssertionError: expected [ { …(16) } ] to deeply equal [ { …(16) }, { …(16) } ]
+
+- Expected
++ Received
+
+@@ -66,75 +66,6 @@
+      "revision": 5,
+      "snapshotId": "snapshot-current",
+      "testRunConclusion": "success",
+      "treeDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+    },
+-   {
+-     "actor": "operator",
+-     "capturedAt": "2026-09-19T00:00:00Z",
+-     "ciEvidence": {
+-       "branch": "main",
+-       "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       "conclusion": "success",
+-       "event": "push",
+-       "executedTests": 27,
+-       "jobs": [
+-         {
+-           "conclusion": "success",
+-           "name": "Tests",
+-         },
+-         {
+-           "conclusion": "success",
+-           "name": "Browser tests",
+-         },
+-       ],
+-       "repository": "pgorbachev/ikpk",
+-       "runId": 123,
+-       "workflow": ".github/workflows/test.yml",
+-     },
+-     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-     "deployMode": "production",
+-     "destinationId": "production",
+-     "localChecks": {
+-       "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       "destinationId": "production",
+-       "groups": [
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "snapshot-provenance",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "build-content",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "destination-mode",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "browser-smoke",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "payment-destination",
+-         },
+-       ],
+-       "snapshotId": "snapshot-current",
+-       "treeDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+-     },
+-     "paymentRole": "ci",
+-     "publicationId": "publication-2",
+-     "publishedAt": "2026-09-19T02:00:00Z",
+-     "referenceDate": "2026-09-19",
+-     "releaseId": "release-2",
+-     "revision": 5,
+-     "snapshotId": "snapshot-current",
+-     "testRunConclusion": "success",
+-     "treeDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+-   },
+  ]
+
+ ❯ tests/manual-publication-core.test.ts:227:54
+    225|   it('publishing the same pair twice retains both operation records', …
+    226|     const original = publication(); const repeated = publication({ pub…
+    227|     expect(upsertVerifiedPair([original], repeated)).toEqual([original…
+       |                                                      ^
+    228|   });
+    229|   it('equal pairs in production and stand retain their distinct destin…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > equal pairs in production and stand retain their distinct destination and digest
+AssertionError: expected [ { …(16) } ] to deeply equal [ { …(16) }, { …(16) } ]
+
+- Expected
++ Received
+
+@@ -66,75 +66,6 @@
+      "revision": 5,
+      "snapshotId": "snapshot-current",
+      "testRunConclusion": "success",
+      "treeDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+    },
+-   {
+-     "actor": "operator",
+-     "capturedAt": "2026-09-19T00:00:00Z",
+-     "ciEvidence": {
+-       "branch": "main",
+-       "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       "conclusion": "success",
+-       "event": "push",
+-       "executedTests": 27,
+-       "jobs": [
+-         {
+-           "conclusion": "success",
+-           "name": "Tests",
+-         },
+-         {
+-           "conclusion": "success",
+-           "name": "Browser tests",
+-         },
+-       ],
+-       "repository": "pgorbachev/ikpk",
+-       "runId": 123,
+-       "workflow": ".github/workflows/test.yml",
+-     },
+-     "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-     "deployMode": "production",
+-     "destinationId": "stand",
+-     "localChecks": {
+-       "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       "destinationId": "production",
+-       "groups": [
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "snapshot-provenance",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "build-content",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "destination-mode",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "browser-smoke",
+-         },
+-         {
+-           "conclusion": "success",
+-           "executedTests": 2,
+-           "name": "payment-destination",
+-         },
+-       ],
+-       "snapshotId": "snapshot-current",
+-       "treeDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+-     },
+-     "paymentRole": "ci",
+-     "publicationId": "stand-1",
+-     "publishedAt": "2026-09-19T01:00:00Z",
+-     "referenceDate": "2026-09-19",
+-     "releaseId": "release-1",
+-     "revision": 5,
+-     "snapshotId": "snapshot-current",
+-     "testRunConclusion": "success",
+-     "treeDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+-   },
+  ]
+
+ ❯ tests/manual-publication-core.test.ts:231:55
+    229|   it('equal pairs in production and stand retain their distinct destin…
+    230|     const production = publication(); const stand = publication({ publ…
+    231|     expect(mergeVerifiedPairs([production], [stand])).toEqual([product…
+       |                                                       ^
+    232|   });
+    233|   it('positive control: retrying the exact operation is idempotent', (…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > a conflicting reuse of an operation identity cannot rewrite earlier evidence
+AssertionError: expected [Function] to throw an error
+ ❯ tests/manual-publication-core.test.ts:239:63
+    237|     const record = publication();
+    238|     const conflicting = { ...record, treeDigest: '2'.repeat(64) };
+    239|     expect(() => mergeVerifiedPairs([record], [conflicting])).toThrow(…
+       |                                                               ^
+    240|   });
+    241|   it('persistent history keeps complete pair, count, group outcomes, d…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses deletion of an existing record
+AssertionError: expected [Function] to throw an error
+ ❯ tests/manual-publication-core.test.ts:247:47
+    245|   it('persistent history refuses deletion of an existing record', () =…
+    246|     const dir = store(); const record = publication(); writeVerifiedPa…
+    247|     expect(() => writeVerifiedPairs(dir, [])).toThrow();
+       |                                               ^
+    248|     expect(readVerifiedPairs(dir)).toEqual([record]);
+    249|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > publication history is append-only and destination scoped > persistent history refuses replacement and preserves the original file bytes
+AssertionError: expected [Function] to throw an error
+ ❯ tests/manual-publication-core.test.ts:254:58
+    252|     const before = readFileSync(join(dir, 'verified-pairs.json'), 'utf…
+    253|     const conflicting = { ...record, actor: 'someone-else' };
+    254|     expect(() => writeVerifiedPairs(dir, [conflicting])).toThrow();
+       |                                                          ^
+    255|     expect(readFileSync(join(dir, 'verified-pairs.json'), 'utf8')).toB…
+    256|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > newer main is not the expected pair when publication history exists
+AssertionError: expected 'mismatch' to be 'match' // Object.is equality
+
+Expected: "match"
+Received: "mismatch"
+
+ ❯ tests/manual-publication-core.test.ts:270:99
+    268|   it('positive control: declared pair matches the record', () => { exp…
+    269|   it('newer main is not the expected pair when publication history exi…
+    270|     expect(compare(observe({ expected: { commit: OTHER, snapshotId: 'n…
+       |                                                                                                   ^
+    271|   });
+    272|   it('a later stand record does not change production observation', ()…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a later stand record does not change production observation
+AssertionError: expected 'mismatch' to be 'match' // Object.is equality
+
+Expected: "match"
+Received: "mismatch"
+
+ ❯ tests/manual-publication-core.test.ts:274:96
+    272|   it('a later stand record does not change production observation', ()…
+    273|     const stand = publication({ publicationId: 'stand-1', destinationI…
+    274|     expect(compare(observe({ publications: [publication(), stand], exp…
+       |                                                                                                ^
+    275|   });
+    276|   it('a different served snapshot is a mismatch even for the same comm…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/72]⎯
+
+ FAIL  tests/manual-publication-core.test.ts > observing production uses its last recorded pair, not current main or stand > a pending record explains the mismatch without calling it an out-of-band replacement
+TypeError: .toMatch() expects to receive a string, but got undefined
+ ❯ tests/manual-publication-core.test.ts:284:68
+    282|   it('a pending record explains the mismatch without calling it an out…
+    283|     const result = compare(observe({ observed: { commit: OTHER, snapsh…
+    284|     expect(result.status).not.toBe('match'); expect(result.reason).toM…
+       |                                                                    ^
+    285|   });
+    286|   it('pending stand operation does not explain a production mismatch',…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/72]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  72 failed | 14 passed (86)
+   Start at  14:11:49
+   Duration  608ms (transform 53ms, setup 35ms, import 58ms, tests 38ms, environment 0ms)
+

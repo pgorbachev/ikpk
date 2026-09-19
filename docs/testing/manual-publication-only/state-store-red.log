@@ -1,0 +1,322 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-state-red/web
+
+ ✓ tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > positive control: a competing writer really pushes and rejects the stale Git update 2837ms
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > read observes the existing journal without writing any remote commit or tracked bytes, and refreshes later reads 826ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a missing provenance branch is refused instead of bootstrapping a substitute journal 996ms
+   → expected [Function] to throw error matching /state-branch|provenance.*(missing|una…/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > checksum corruption is rejected without repairing or overwriting the remote journal 1216ms
+   → expected [Function] to throw error matching /corrupt|checksum|поврежд|контрольн/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > append commits only the publication index and leaves a clean isolated checkout 1107ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > same-operation retry is idempotent but conflicting reuse cannot replace earlier evidence 988ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a non-fast-forward append retries against the shared branch and preserves a concurrent CMS event 1226ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a non-fast-forward append preserves another publication record in append order 1214ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > exhausting the push budget refuses without force-pushing over the competing writer 1154ms
+   → expected [Function] to throw error matching /retry|attempt|conflict/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > invalid retry budgets fail explicitly instead of enabling unbounded retry or silent success 795ms
+   → expected [Function] to throw error matching /invalid.*(attempt|retry)|retry.*(inva…/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > explicit acceptance persists the actor and a checksum-compatible accept-state entry with the next revision 783ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a previously observed entry cannot confirm a newer current CMS event 709ms
+   → expected [Function] to throw error matching /stale|observed-entry/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > an unknown fingerprint or absent actor cannot manufacture an acceptance event 811ms
+   → expected [Function] to throw error matching /fingerprint/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > loss of the journal refuses acceptance even if the branch and publication index still exist 1191ms
+   → expected [Function] to throw error matching /ledger|journal|журнал/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a CMS event racing the acceptance push invalidates confirmation rather than replaying it on the new event 1431ms
+   → expected [Function] to throw error matching /stale|observed-entry/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a concurrent publication alone does not stale CMS confirmation and survives the acceptance retry 1503ms
+   → publication-state-store-not-implemented
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > an existing operator checkout with executable local hooks is refused as the isolated work directory 1695ms
+   → expected [Function] to throw error matching /work.*(exist|clean|fresh|empty|unsafe…/ but got 'publication-state-store-not-implement…'
+ × tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > real Git SSH transport receives authentication through environment without credentials in argv, config or result 1331ms
+   → publication-state-store-not-implemented
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > read observes the existing journal without writing any remote commit or tracked bytes, and refreshes later reads
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:110:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a missing provenance branch is refused instead of bootstrapping a substitute journal
+AssertionError: expected [Function] to throw error matching /state-branch|provenance.*(missing|una…/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/state-branch|provenance.*(missing|unavailable)/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:120:37
+    118|   it('a missing provenance branch is refused instead of bootstrapping …
+    119|     const f = await fixture(); git(f.author, 'push', 'origin', `:${BRA…
+    120|     await expect(store(f).read('A')).rejects.toThrow(/state-branch|pro…
+       |                                     ^
+    121|     expect(git(f.root, '--git-dir', f.remote, 'branch', '--list', BRAN…
+    122|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > checksum corruption is rejected without repairing or overwriting the remote journal
+AssertionError: expected [Function] to throw error matching /corrupt|checksum|поврежд|контрольн/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/corrupt|checksum|поврежд|контрольн/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:127:61
+    125|     const damaged = JSON.parse(readFileSync(path, 'utf8')); damaged.fi…
+    126|     git(f.author, 'add', '.'); git(f.author, 'commit', '-m', 'corrupte…
+    127|     const before = head(f); await expect(store(f).read('A')).rejects.t…
+       |                                                             ^
+    128|     expect(head(f)).toBe(before);
+    129|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > append commits only the publication index and leaves a clean isolated checkout
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:132:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > same-operation retry is idempotent but conflicting reuse cannot replace earlier evidence
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:140:64
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a non-fast-forward append retries against the shared branch and preserves a concurrent CMS event
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:147:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a non-fast-forward append preserves another publication record in append order
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:154:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > exhausting the push budget refuses without force-pushing over the competing writer
+AssertionError: expected [Function] to throw error matching /retry|attempt|conflict/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/retry|attempt|conflict/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:160:79
+    158|   it('exhausting the push budget refuses without force-pushing over th…
+    159|     const f = await fixture(); const other = await otherWriter(f, 'cms…
+    160|     await expect(store(f, { maxPushAttempts: 1 }).appendPublication(re…
+       |                                                                               ^
+    161|     expect(existsSync(marker)).toBe(true); expect(head(f)).toBe(git(ot…
+    162|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > invalid retry budgets fail explicitly instead of enabling unbounded retry or silent success
+AssertionError: expected [Function] to throw error matching /invalid.*(attempt|retry)|retry.*(inva…/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/invalid.*(attempt|retry)|retry.*(invalid|limit)/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:166:90
+    164|     const f = await fixture();
+    165|     for (const maxPushAttempts of [0, -1, 1.5, Infinity, 1_000_000]) {
+    166|       await expect(Promise.resolve().then(() => store(f, { maxPushAtte…
+       |                                                                                          ^
+    167|     }
+    168|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > explicit acceptance persists the actor and a checksum-compatible accept-state entry with the next revision
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:170:62
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a previously observed entry cannot confirm a newer current CMS event
+AssertionError: expected [Function] to throw error matching /stale|observed-entry/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/stale|observed-entry/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:183:106
+    181|   it('a previously observed entry cannot confirm a newer current CMS e…
+    182|     const f = await fixture(); const before = head(f);
+    183|     await expect(store(f).acceptState({ expectedObservedEntry: 2, fing…
+       |                                                                                                          ^
+    184|     expect(head(f)).toBe(before);
+    185|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > an unknown fingerprint or absent actor cannot manufacture an acceptance event
+AssertionError: expected [Function] to throw error matching /fingerprint/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/fingerprint/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:188:112
+    186|   it('an unknown fingerprint or absent actor cannot manufacture an acc…
+    187|     const f = await fixture(); const before = head(f);
+    188|     await expect(store(f).acceptState({ expectedObservedEntry: 3, fing…
+       |                                                                                                                ^
+    189|     await expect(store(f).acceptState({ expectedObservedEntry: 3, fing…
+    190|     expect(head(f)).toBe(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > loss of the journal refuses acceptance even if the branch and publication index still exist
+AssertionError: expected [Function] to throw error matching /ledger|journal|журнал/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/ledger|journal|журнал/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:195:106
+    193|     const f = await fixture(); git(f.author, 'rm', '-r', 'ledger'); gi…
+    194|     const before = head(f);
+    195|     await expect(store(f).acceptState({ expectedObservedEntry: 3, fing…
+       |                                                                                                          ^
+    196|     expect(head(f)).toBe(before); expect(remotePairs(f)).toEqual([]);
+    197|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a CMS event racing the acceptance push invalidates confirmation rather than replaying it on the new event
+AssertionError: expected [Function] to throw error matching /stale|observed-entry/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/stale|observed-entry/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:200:106
+    198|   it('a CMS event racing the acceptance push invalidates confirmation …
+    199|     const f = await fixture(); const other = await otherWriter(f, 'cms…
+    200|     await expect(store(f).acceptState({ expectedObservedEntry: 3, fing…
+       |                                                                                                          ^
+    201|     expect(existsSync(marker)).toBe(true); expect(head(f)).toBe(git(ot…
+    202|     expect(remoteEntry(f, 4)).toMatchObject({ fingerprint: 'C', marker…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > a concurrent publication alone does not stale CMS confirmation and survives the acceptance retry
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:207:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > an existing operator checkout with executable local hooks is refused as the isolated work directory
+AssertionError: expected [Function] to throw error matching /work.*(exist|clean|fresh|empty|unsafe…/ but got 'publication-state-store-not-implement…'
+
+- Expected:
+/work.*(exist|clean|fresh|empty|unsafe)|isolat/
+
++ Received:
+"publication-state-store-not-implemented"
+
+ ❯ tests/publication-state-store.test.ts:214:60
+    212|     const f = await fixture(); const marker = join(f.root, 'untrusted-…
+    213|     const hook = join(f.author, '.git/hooks/post-checkout'); write(hoo…
+    214|     await expect(store(f, { workDir: f.author }).read('A')).rejects.to…
+       |                                                            ^
+    215|     expect(existsSync(marker)).toBe(false);
+    216|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+ FAIL  tests/publication-state-store.test.ts > shared Git state store: real bare-remote contract > real Git SSH transport receives authentication through environment without credentials in argv, config or result
+Error: publication-state-store-not-implemented
+ ❯ Object.missing scripts/lib/publication-state-store.ts:25:55
+     23| export function createPublicationStateStore(options: PublicationStateS…
+     24|   void options;
+     25|   const missing = async (): Promise<never> => { throw new Error('publi…
+       |                                                       ^
+     26|   return { read: missing, appendPublication: missing, acceptState: mis…
+     27| }
+ ❯ tests/publication-state-store.test.ts:219:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/17]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  17 failed | 1 passed (18)
+   Start at  16:36:44
+   Duration  22.10s (transform 64ms, setup 26ms, import 89ms, tests 21.82s, environment 0ms)
+

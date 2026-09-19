@@ -1,0 +1,153 @@
+{
+  "evidence": [
+    {
+      "name": "positive",
+      "accepted": true,
+      "passed": 4,
+      "failed": 0,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.4413330000000997,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "passed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 6477.4135,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 589.532792,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "passed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 878.5942499999992,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    },
+    {
+      "name": "unregistered-script",
+      "accepted": false,
+      "passed": 3,
+      "failed": 1,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.348459000000048,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "failed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 5668.528375,
+          "failureMessages": [
+            "AssertionError: /: нет occurrence rule для script (script|body:9473f58292977816) placement=after:#clip0_519_2005: expected [ Array(1) ] to deeply equal []\n    at /Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/tests/publication/build.test.ts:42:50\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 515.3077499999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "passed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 842.5355840000002,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    },
+    {
+      "name": "http-internal-link",
+      "accepted": false,
+      "passed": 3,
+      "failed": 1,
+      "assertions": [
+        {
+          "ancestorTitles": [],
+          "fullName": "release marker names the exact commit and snapshot",
+          "status": "passed",
+          "title": "release marker names the exact commit and snapshot",
+          "duration": 1.257249999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all rendered content satisfies the existing rich-content safety matrix",
+          "status": "passed",
+          "title": "all rendered content satisfies the existing rich-content safety matrix",
+          "duration": 5996.925208000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "all image references resolve locally and no old bucket remains in artifact text",
+          "status": "passed",
+          "title": "all image references resolve locally and no old bucket remains in artifact text",
+          "duration": 582.5600420000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [],
+          "fullName": "internal links and every declared legacy redirect resolve in the checked tree",
+          "status": "failed",
+          "title": "internal links and every declared legacy redirect resolve in the checked tree",
+          "duration": 903.8680000000004,
+          "failureMessages": [
+            "AssertionError: /: /__missing_publication_internal_link__: expected [ Array(1) ] to deeply equal []\n    at /Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/tests/publication/build.test.ts:83:50\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)\n    at file:///Users/pgorbachev/projects/private/ikpk-publication-occurrence-review/web/node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

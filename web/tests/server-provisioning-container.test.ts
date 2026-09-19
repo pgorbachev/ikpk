@@ -542,7 +542,13 @@ describe('server-provisioning: резервная копия предшеств�
     const compared = Number((run.output.match(/^\s*compared\s*=\s*(\d+)\s*$/m) ?? [])[1] ?? '0');
     expect(compared, 'сравнение не выполнило ни одного сопоставления — непройденная проверка').toBeGreaterThan(0);
     expect(run.output, 'предикат сравнения не назван').toMatch(/predicate=|предикат/i);
-    expect(t.read('/var/www/ikpk/current/index.html') ?? '').toContain('ORIGINAL');
+    // Восстановление ставит копию в каталог релизов и НЕ переключает раздачу: путь публикации
+    // один (deploy-gating, «Опубликованное состояние сайта одно»), решение владельца 19.09.2026.
+    const restored = (run.output.match(/^\s*restored\s*=\s*(\S+)\s*$/m) ?? [])[1];
+    expect(restored, 'восстановленная копия не названа в выводе').toBeTruthy();
+    expect(t.read(`/var/www/ikpk/restored/${restored}/index.html`) ?? '').toContain('ORIGINAL');
+    expect(t.exec('ls /var/www/ikpk/releases').stdout, 'копия попала в окно удержания релизов').not.toContain(restored);
+    expect(t.read('/var/www/ikpk/current/index.html') ?? '', 'восстановление переключило раздачу само').toContain('DAMAGED');
   }, T);
 
   it('Сценарий: объём данных при копировании — ИСКЛЮЧЕНИЕ 2 (ручная приёмка)', () => {

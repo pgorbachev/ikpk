@@ -22,6 +22,7 @@ export function decodeBasicEntities(raw: string): string {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, '\u00a0')
     .replace(/&amp;/gi, '&');
 }
 

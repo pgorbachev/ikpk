@@ -1,0 +1,247 @@
+Commit: 1ded81895fc23252a28e215747c9c40060c067b9
+Working directory: web/
+Command: npx vitest run tests/manual-publication-workflows.test.ts tests/deploy-gating.test.ts tests/demo-gate.test.ts tests/browser-test-gating.test.ts tests/social-accounts.test.ts --reporter=verbose
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > all parsed workflows contain no hosted publication capability 165ms
+   → expected [ …(9) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > push cannot publish, including a successful upstream run 27ms
+   → expected [ …(4) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > schedule cannot publish, including a successful upstream run 30ms
+   → expected [ …(4) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > repository_dispatch cannot publish, including a successful upstream run 21ms
+   → expected [ …(4) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_run cannot publish, including a successful upstream run 19ms
+   → expected [ …(5) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_dispatch cannot publish, including a successful upstream run 22ms
+   → expected [ …(5) ] to deeply equal []
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > Tests records a verdict without publication-record, reconciliation or write credentials 24ms
+   → expected [ …(4) ] to deeply equal []
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects absent, invalid and semantically empty configurations 1ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > accepts checks and unrelated workflow_run receivers 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages action after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects direct transport after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects guarded transport after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects reusable remote publisher after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects job Pages rights after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects workflow id-token after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects write-all after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages environment after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages concurrency after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects workflow credential after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects job credential after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects step credential after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects inherited credentials after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects renamed record job after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects renamed reconcile step after renaming the workflow file 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > follows npm lifecycle and shell wrappers to the transport 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > does not treat comments as deployment 0ms
+ ✓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > requires one real Tests without inferring it from a publisher 17ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > материал для проверки на месте 1ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > происхождение проверяется до выгрузки кода 1ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > код из стороннего репозитория не выгружается и не собирается 1ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > workflow из гейта запускается на коммиты основной ветки без фильтров путей 0ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > имя workflow из гейта уникально в репозитории 0ms
+ ✓ tests/deploy-gating.test.ts > обязательный CI и происхождение событий > обязательный источник вердикта — ровно Tests 0ms
+ × tests/deploy-gating.test.ts > гейт публикации: документация > документация называет, какие проверки входят в гейт и какие нет 535ms
+   → ни в одном документе нет раздела, который называет и входящие в гейт проверки (["Tests"]), и невходящие (["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]).
+Ближайшие кандидаты:
+AGENTS.md — #### 2. Облегчённая дорога для малого низкорискового улучшения: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Конвейер: кто и на чём делает каждый шаг: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Свой worktree каждому пишущему исполнителю: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Масштаб исполнителя: одна поставка на агента: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Plan mode: до записи артефактов, не вместо них: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Source of Truth: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Локальные quality gates: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Гейт публикации: что блокирует выкладку сайта: не названы входящими [], не названы невходящими ["Deploy to GitHub Pages"]
+AGENTS.md — ## Дефекты: red/green и негативная проверка гейтов: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Definition of Done: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]: expected false to be true // Object.is equality
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > по-событийное условие: успех да, провал нет, ручной запуск да 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > голое сравнение conclusion выключает ручной запуск 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > подстрока условия не считается за условие 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > неизвестный выход шага делает условие выполнимым, но не истинным 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > сравнение происхождения различает свой репозиторий и форк 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > шаблон ref вычисляется до значения 0ms
+ ✓ tests/deploy-gating.test.ts > вычислитель условий GitHub Actions > always() опознаётся 0ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: единый источник > перечень в источнике состава равен принятому 22ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: единый источник > адрес аккаунта не имеет второго определения в продуктовом коде 1323ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: ожидания проверки независимы от источника > ни один файл проверки состава не читает источник состава 108ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: ожидания проверки независимы от источника > перечни ожиданий не пусты и не пересекаются 0ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: проверка различает «нарушений нет» и «не смогла проверить» > пустой или отсутствующий вывод роняет перечисление страниц 2ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: проверка различает «нарушений нет» и «не смогла проверить» > адрес вне подвала не закрывает отсутствие аккаунта в подвале 3ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: проверка различает «нарушений нет» и «не смогла проверить» > снятая сеть обнаруживается вне подвала 1ms
+ ✓ tests/social-accounts.test.ts > состав внешних аккаунтов: покрыта каждая роль артефакта обязательного прогона > у каждой сборки обязательного прогона есть своя проверка состава, исполняемая в том же джобе 251ms
+ ✓ tests/social-accounts.test.ts > отличимость Youtube и Rutube: порог цветового расстояния объявлен и различает цвета > контрольная пара из двух оттенков одного цвета порог не проходит 0ms
+ ✓ tests/social-accounts.test.ts > отличимость Youtube и Rutube: порог цветового расстояния объявлен и различает цвета > контрольная пара выведена из фиксированного якоря по правилу требования 0ms
+ ✓ tests/social-accounts.test.ts > отличимость Youtube и Rutube: порог цветового расстояния объявлен и различает цвета > порог проходим — иначе он не признак, а запрет 0ms
+ ✓ tests/social-accounts.test.ts > реестр применимости марок: запись читается автоматикой, а не человеком > полная запись определяет исход, и оба исхода различимы 0ms
+ ✓ tests/social-accounts.test.ts > реестр применимости марок: запись читается автоматикой, а не человеком > неполная запись равнозначна отсутствию решения — по каждому обязательному полю 0ms
+ ✓ tests/social-accounts.test.ts > реестр применимости марок: запись читается автоматикой, а не человеком > отсутствие записи о сети равнозначно неполной записи 0ms
+ ✓ tests/social-accounts.test.ts > реестр применимости марок: запись читается автоматикой, а не человеком > порог полноты: одна текстовая ссылка законна, две — подача не выполнена 0ms
+ ✓ tests/social-accounts.test.ts > реестр применимости марок: запись читается автоматикой, а не человеком > как только реестр появится, браузерная проверка обязана его читать 4ms
+ ✓ tests/social-accounts.test.ts > происхождение марки: *Mark.astro совпадает с ассетом (TD-45) > нормализованные тела всех пяти SVG равны ассетам 100ms
+ ✓ tests/social-accounts.test.ts > происхождение марки: *Mark.astro совпадает с ассетом (TD-45) > правка только .astro ломает сверку 23ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > каждый файл либо исполняется гейтующим workflow, либо назван в списке долга 6392ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > список долга не содержит имён, которые уже исполняются или которых нет 18ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > под каждую объявленную метку в собранном наборе есть выполняемый тест 14ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > в собранном наборе нет меток месяца, которых нет в объявлении 13ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > у каждого сценария месяца есть метка — непомеченный гейту невидим 68ms
+ ✓ tests/browser-test-gating.test.ts > браузерные проверки и гейт публикации > признаки фильтра месяца не встречаются в файлах из списка долга 3ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > материал для проверки на месте 8708ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > сборка в демо-режиме входит в обязательный прогон 0ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > проверки по выводу демо-сборки входят в обязательный прогон 1673ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > проверки демо-вывода стоят после демо-сборки, в том же джобе 1180ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > решение 6: демо-шаги стоят в том же джобе, что и проверки боевого вывода 1917ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > демо-сборка и её проверки не вынесены в workflow вне гейта 52ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: положение внутри обязательного прогона > падение демо-проверок не замаскировано и они выполняются на коммиты основной ветки 1900ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: два вывода — два предмета > сборка в демо-режиме не пишет в боевой каталог 1ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: два вывода — два предмета > у каждой проверки обязательного прогона ровно один предмет 559ms
+ ✓ tests/demo-gate.test.ts > демо-гейт: предмета нет — «не выполнено» > перечисление демо-вывода считает пустой каталог провалом 3296ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/deploy-gating.test.ts > гейт публикации: документация > документация называет, какие проверки входят в гейт и какие нет
+AssertionError: ни в одном документе нет раздела, который называет и входящие в гейт проверки (["Tests"]), и невходящие (["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]).
+Ближайшие кандидаты:
+AGENTS.md — #### 2. Облегчённая дорога для малого низкорискового улучшения: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Конвейер: кто и на чём делает каждый шаг: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Свой worktree каждому пишущему исполнителю: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Масштаб исполнителя: одна поставка на агента: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ### Plan mode: до записи артефактов, не вместо них: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Source of Truth: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Локальные quality gates: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Гейт публикации: что блокирует выкладку сайта: не названы входящими [], не названы невходящими ["Deploy to GitHub Pages"]
+AGENTS.md — ## Дефекты: red/green и негативная проверка гейтов: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]
+AGENTS.md — ## Definition of Done: не названы входящими ["Tests"], не названы невходящими ["Dependabot auto-merge policy","Dependabot auto-merge signal","Dependabot auto-merge","Dependabot rebase","Dependabot rebase policy","Dependabot rebase signal","Deploy to GitHub Pages","Lighthouse CI","Lint and Typecheck","Nightly full checks","Security","Snapshot fixture compatibility"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/deploy-gating.test.ts:248:7
+    246|         `(${JSON.stringify([...gated])}), и невходящие (${JSON.stringi…
+    247|         `Ближайшие кандидаты:\n${misses.slice(0, 10).join('\n') || '— …
+    248|     ).toBe(true);
+       |       ^
+    249|   });
+    250| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > all parsed workflows contain no hosted publication capability
+AssertionError: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deploy.yml.permissions: publication privilege",
++   "deploy.yml.jobs.build.steps[14].uses: unreviewed action actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
++   "deploy.yml.jobs.deploy.concurrency: Pages concurrency",
++   "deploy.yml.jobs.deploy.environment: Pages environment",
++   "deploy.yml.jobs.deploy.steps[1].uses: unreviewed action actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
++   "test.yml.jobs.unit-and-build.steps[12].run: publication state in Tests",
++   "test.yml.jobs.publication-record: publication job in Tests",
++   "test.yml.jobs.publication-record.permissions: Tests writes repository",
++   "test.yml.jobs.publication-record.steps[4].run: publication state in Tests",
++ ]
+
+ ❯ tests/manual-publication-workflows.test.ts:108:31
+    106|     const sources = repositoryWorkflows();
+    107|     expect(sources.length).toBeGreaterThan(0);
+    108|     expect(findings(sources)).toEqual([]);
+       |                               ^
+    109|   });
+    110|   it.each(['push', 'schedule', 'repository_dispatch', 'workflow_run', …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > push cannot publish, including a successful upstream run
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > schedule cannot publish, including a successful upstream run
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > repository_dispatch cannot publish, including a successful upstream run
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test.yml.jobs.unit-and-build.steps[12].run: publication state in Tests",
++   "test.yml.jobs.publication-record: publication job in Tests",
++   "test.yml.jobs.publication-record.permissions: Tests writes repository",
++   "test.yml.jobs.publication-record.steps[4].run: publication state in Tests",
++ ]
+
+ ❯ tests/manual-publication-workflows.test.ts:115:53
+    113|     // Some events may disappear altogether; the complete parsed input…
+    114|     expect(all.length).toBeGreaterThan(0);
+    115|     expect(sources.length ? findings(sources) : []).toEqual([]);
+       |                                                     ^
+    116|   });
+    117|   it('Tests records a verdict without publication-record, reconciliati…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_run cannot publish, including a successful upstream run
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_dispatch cannot publish, including a successful upstream run
+AssertionError: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deploy.yml.permissions: publication privilege",
++   "deploy.yml.jobs.build.steps[14].uses: unreviewed action actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
++   "deploy.yml.jobs.deploy.concurrency: Pages concurrency",
++   "deploy.yml.jobs.deploy.environment: Pages environment",
++   "deploy.yml.jobs.deploy.steps[1].uses: unreviewed action actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
++ ]
+
+ ❯ tests/manual-publication-workflows.test.ts:115:53
+    113|     // Some events may disappear altogether; the complete parsed input…
+    114|     expect(all.length).toBeGreaterThan(0);
+    115|     expect(sources.length ? findings(sources) : []).toEqual([]);
+       |                                                     ^
+    116|   });
+    117|   it('Tests records a verdict without publication-record, reconciliati…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > Tests records a verdict without publication-record, reconciliation or write credentials
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test.yml.jobs.unit-and-build.steps[12].run: publication state in Tests",
++   "test.yml.jobs.publication-record: publication job in Tests",
++   "test.yml.jobs.publication-record.permissions: Tests writes repository",
++   "test.yml.jobs.publication-record.steps[4].run: publication state in Tests",
++ ]
+
+ ❯ tests/manual-publication-workflows.test.ts:120:31
+    118|     const sources = repositoryWorkflows().filter(({ doc }) => doc.name…
+    119|     expect(sources).toHaveLength(1);
+    120|     expect(findings(sources)).toEqual([]);
+       |                               ^
+    121|   });
+    122| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  8 failed | 67 passed (75)
+   Start at  14:11:22
+   Duration  20.28s (transform 721ms, setup 242ms, import 2.71s, tests 28.51s, environment 0ms)
+
+
+Exit code: 1

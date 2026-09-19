@@ -14,6 +14,13 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ['tests/**/*.test.ts'],
     exclude: [
+      // Live publication assertions need the captured snapshot and completed artifact.
+      'tests/publication/snapshot.test.ts',
+      'tests/publication/build.test.ts',
+      'tests/publication/destination.test.ts',
+      'tests/publication/payment-absence.test.ts',
+      'tests/publication/payment-readiness.test.ts',
+      'tests/publication/payment-preflight.test.ts',
       // dist-зависимые тесты — только в vitest.build.config.ts (после сборки)
       'tests/article-catalog.test.ts',
       'tests/perf-a11y.test.ts',

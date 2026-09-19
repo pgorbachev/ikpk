@@ -1,0 +1,164 @@
+Anchor: fae07813aa4a5d60d3f7a58016d2f9bb45539991
+Baseline: all 147 selected tests passed before mutation.
+Mutation 1: test.yml replace CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/fixtures/content-snapshot with CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot (first occurrence).
+Command: npx vitest run tests/cms-publication-pipeline.test.ts --reporter=verbose -t единственный подготовитель
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > обязательный прогон содержит все пять обязательных джобов и не пишет публикации
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > успешный Tests сохраняет непустой перечень реальных JSON-отчётов для локального CI gate
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > единственный подготовитель Tests явно выбирает закреплённый источник 4ms
+   → expected '${{ github.workspace }}/content-snaps…' to be '${{ github.workspace }}/fixtures/cont…' // Object.is equality
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > Tests не обращается к CMS и не сверяет закреплённый снимок с живым журналом или раздачей
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > сборки вершины непусты, используют артефакт Tests либо закреплённую фикстуру соседнего CI
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > артефакт снимка сохраняется и доступен обоим потребителям Tests
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > внешнее событие и календарь сохраняют возможность запустить проверки
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > ни один шаг не берёт ref, коммит или источник контента из тела запроса
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > проверка соответствия закреплённого снимка API — по расписанию, с адресатом, вне PR
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпадение коммита и снимка — совпадение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > другой коммит на раздаче — расхождение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпавший коммит при другом снимке — расхождение, а не совпадение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > нечитаемый ответ — непройденная проверка, а не отсутствие расхождения
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > единственный подготовитель Tests явно выбирает закреплённый источник
+AssertionError: expected '${{ github.workspace }}/content-snaps…' to be '${{ github.workspace }}/fixtures/cont…' // Object.is equality
+
+Expected: "${{ github.workspace }}/fixtures/content-snapshot"
+Received: "${{ github.workspace }}/content-snapshot"
+
+ ❯ tests/cms-publication-pipeline.test.ts:138:52
+    136|       .filter((step) => /snapshot:prepare/.test(step.run ?? ''));
+    137|     expect(producers).toHaveLength(1);
+    138|     expect(producers[0].env?.CONTENT_SNAPSHOT_DIR).toBe('${{ github.wo…
+       |                                                    ^
+    139|     expect(producers[0].run).toMatch(/cp -R "?\.snapshot\/\./);
+    140|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  14:31:18
+   Duration  273ms (transform 42ms, setup 18ms, import 137ms, tests 5ms, environment 0ms)
+
+Exit code: 1
+Mutation 2: test.yml remove block from Save executed test counts for local publication gate through immediately before Upload demo site.
+Command: npx vitest run tests/cms-publication-pipeline.test.ts --reporter=verbose -t успешный Tests сохраняет
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > обязательный прогон содержит все пять обязательных джобов и не пишет публикации
+ × tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > успешный Tests сохраняет непустой перечень реальных JSON-отчётов для локального CI gate 4ms
+   → expected [] to have a length of 1 but got +0
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > единственный подготовитель Tests явно выбирает закреплённый источник
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > Tests не обращается к CMS и не сверяет закреплённый снимок с живым журналом или раздачей
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > сборки вершины непусты, используют артефакт Tests либо закреплённую фикстуру соседнего CI
+ ↓ tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > артефакт снимка сохраняется и доступен обоим потребителям Tests
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > внешнее событие и календарь сохраняют возможность запустить проверки
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > ни один шаг не берёт ref, коммит или источник контента из тела запроса
+ ↓ tests/cms-publication-pipeline.test.ts > события готовят вердикт и не выбирают чужое содержимое > проверка соответствия закреплённого снимка API — по расписанию, с адресатом, вне PR
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпадение коммита и снимка — совпадение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > другой коммит на раздаче — расхождение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > совпавший коммит при другом снимке — расхождение, а не совпадение
+ ↓ tests/cms-publication-pipeline.test.ts > наблюдение опубликованного состояния: коммит И снимок > нечитаемый ответ — непройденная проверка, а не отсутствие расхождения
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cms-publication-pipeline.test.ts > закреплённый снимок обязательного CI > успешный Tests сохраняет непустой перечень реальных JSON-отчётов для локального CI gate
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/cms-publication-pipeline.test.ts:120:21
+    118|     const uploads = job.steps.filter((step) => /^actions\/upload-artif…
+    119|       step.with?.name === 'publication-ci-counts');
+    120|     expect(uploads).toHaveLength(1);
+       |                     ^
+    121|     const upload = uploads[0];
+    122|     expect(upload.with?.['if-no-files-found']).toBe('error');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+   Start at  14:31:19
+   Duration  243ms (transform 39ms, setup 17ms, import 113ms, tests 5ms, environment 0ms)
+
+Exit code: 1
+Mutation 3: git show 2fb57519cc7f44482c2940cd5650ee11e61b3f35:.github/workflows/deploy.yml > .github/workflows/deploy.yml
+Command: npx vitest run tests/manual-publication-workflows.test.ts --reporter=verbose -t all parsed workflows
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red/web
+
+ × tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > all parsed workflows contain no hosted publication capability 51ms
+   → expected [ …(5) ] to deeply equal []
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > push cannot publish, including a successful upstream run
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > schedule cannot publish, including a successful upstream run
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > repository_dispatch cannot publish, including a successful upstream run
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_run cannot publish, including a successful upstream run
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > workflow_dispatch cannot publish, including a successful upstream run
+ ↓ tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > Tests records a verdict without publication-record, reconciliation or write credentials
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects absent, invalid and semantically empty configurations
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > accepts checks and unrelated workflow_run receivers
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages action after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects direct transport after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects guarded transport after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects reusable remote publisher after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects job Pages rights after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects workflow id-token after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects write-all after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages environment after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects Pages concurrency after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects workflow credential after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects job credential after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects step credential after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects inherited credentials after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects renamed record job after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > rejects renamed reconcile step after renaming the workflow file
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > follows npm lifecycle and shell wrappers to the transport
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > does not treat comments as deployment
+ ↓ tests/manual-publication-workflows.test.ts > hosted configuration gate: targeted negative fixtures > requires one real Tests without inferring it from a publisher
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-workflows.test.ts > manual publication: hosted configuration > all parsed workflows contain no hosted publication capability
+AssertionError: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deploy.yml.permissions: publication privilege",
++   "deploy.yml.jobs.build.steps[14].uses: unreviewed action actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
++   "deploy.yml.jobs.deploy.concurrency: Pages concurrency",
++   "deploy.yml.jobs.deploy.environment: Pages environment",
++   "deploy.yml.jobs.deploy.steps[1].uses: unreviewed action actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
++ ]
+
+ ❯ tests/manual-publication-workflows.test.ts:108:31
+    106|     const sources = repositoryWorkflows();
+    107|     expect(sources.length).toBeGreaterThan(0);
+    108|     expect(findings(sources)).toEqual([]);
+       |                               ^
+    109|   });
+    110|   it.each(['push', 'schedule', 'repository_dispatch', 'workflow_run', …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 26 skipped (27)
+   Start at  14:31:20
+   Duration  274ms (transform 71ms, setup 46ms, import 72ms, tests 51ms, environment 0ms)
+
+Exit code: 1
+Restoration: git status --porcelain empty; git diff --exit-code fae07813aa4a5d60d3f7a58016d2f9bb45539991 exit 0.

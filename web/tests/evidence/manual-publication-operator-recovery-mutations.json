@@ -1,0 +1,205 @@
+{
+  "anchor": "2d98e76761b9d9fdce1a21874120299c37dfcda0",
+  "mutations": [
+    {
+      "name": "served-pair",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "              await verifyServedPublication(operation, new URL(config.siteUrl), globalThis.fetch);",
+      "with": "              // MUTATION: omit served-pair verification",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "served-mismatch",
+        "--reporter=verbose"
+      ],
+      "target": "served-mismatch",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "callback-identity",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": " || !isDeepStrictEqual(active, operation)",
+      "with": "",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "substituted-record",
+        "--reporter=verbose"
+      ],
+      "target": "substituted-record",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "authorization-expiry",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "} finally { usable = false; }",
+      "with": "} finally { usable = true; }",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "recovery authorization excludes",
+        "--reporter=verbose"
+      ],
+      "target": "recovery authorization excludes",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "authorization-action",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "          if (request.action !== 'recover') throw new Error('recovery action not authorized');",
+      "with": "",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "recovery authorization excludes",
+        "--reporter=verbose"
+      ],
+      "target": "recovery authorization excludes",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "authorization-destination",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "!usable || request.destinationId !== config.destinationId",
+      "with": "!usable",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "recovery authorization excludes",
+        "--reporter=verbose"
+      ],
+      "target": "recovery authorization excludes",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "authorization-operation",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "          if (operation && !isDeepStrictEqual(candidate, operation)) throw new Error('recovery authorization operation mismatch');",
+      "with": "",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "recovery authorization excludes",
+        "--reporter=verbose"
+      ],
+      "target": "recovery authorization excludes",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "protected-actor",
+      "path": "web/scripts/publication-operator.ts",
+      "replace": "fingerprint: input.fingerprint, actor: config.actor",
+      "with": "fingerprint: input.fingerprint, actor: \"spoofed\"",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-operator-recovery.test.ts",
+        "-t",
+        "explicit confirmation records protected actor",
+        "--reporter=verbose"
+      ],
+      "target": "explicit confirmation records protected actor",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "acceptance-audit-entry",
+      "path": "scripts/publication-launcher.mjs",
+      "replace": "observedEntry: (value) => value === operatorInput.observedEntry",
+      "with": "observedEntry: (value) => integer(value)",
+      "cwd": ".",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern",
+        "acceptance audit binds observed entry",
+        "scripts/tests/publication-launcher-recovery.test.mjs"
+      ],
+      "target": "acceptance audit binds observed entry",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "recovered-audit-fields",
+      "path": "web/scripts/publication-audit.ts",
+      "replace": "audit.code === 'recovered' ? ['revision'] : ",
+      "with": "",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-recovery-audit.test.ts",
+        "-t",
+        "recovered audit of a real publication shape",
+        "--reporter=verbose"
+      ],
+      "target": "recovered audit of a real publication shape",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    },
+    {
+      "name": "recovered-rollback-counts",
+      "path": "web/scripts/publication-audit.ts",
+      "replace": "typeof source.rollbackOfPublicationId === 'string' ? source.rollbackChecks : source.localChecks",
+      "with": "source.localChecks",
+      "cwd": "web",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "tests/manual-publication-recovery-audit.test.ts",
+        "-t",
+        "recovered rollback reports",
+        "--reporter=verbose"
+      ],
+      "target": "recovered rollback reports",
+      "baselineExit": 0,
+      "mutationExit": 1,
+      "baselinePassedTargets": 1,
+      "mutatedFailedTargets": 1
+    }
+  ],
+  "restoration": "empty git status --porcelain and git diff --exit-code against anchor after every case"
+}

@@ -1,0 +1,529 @@
+Tests and RED-only stub revision: 5a2063f96665754a20b60488411f85877ee0de90
+Planning revision merged: 2fb57519cc7f44482c2940cd5650ee11e61b3f35
+Command (from web/): npx vitest run tests/manual-publication-launcher.test.ts --reporter=verbose
+Exit code: 1
+
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-manual-publication-red-core/web
+
+ ✓ tests/manual-publication-launcher.test.ts > fixture positive controls > the broker delivers the canary and the trusted marker records actual execution 1022ms
+ ✓ tests/manual-publication-launcher.test.ts > fixture positive controls > the malicious marker would exist if the untrusted entrypoint were executed 597ms
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > positive control reaches the trusted entrypoint and the credential broker in an isolated clean checkout 446ms
+   → {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an explicitly dirty source is refused before its modified entrypoint or the credential broker executes 378ms
+   → expected '{"status":"not-implemented","executed…' to contain 'dirty-source'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > untracked files also make an explicit source dirty 376ms
+   → expected '{"status":"not-implemented","executed…' to contain 'dirty-source'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an unrelated dirty cwd has no influence on the selected main source 367ms
+   → {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an untrusted repository URL cannot request credentials even if it offers a main branch 472ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-source'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a non-main ref cannot request credentials 1281ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-ref'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit is not accepted as an explicit source 622ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-source'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit in cwd is not executed when source-dir was not selected 454ms
+   → {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > uses fresh remote main even when the operator checkout is stale 713ms
+   → {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > unavailable canonical source refuses before credential release 353ms
+   → expected '{"status":"not-implemented","executed…' to contain 'source-unavailable'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a protected config inside the explicitly supplied source is not trusted 550ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-config'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 400 is refused before broker access 349ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-config'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 386 is refused before broker access 339ms
+   → expected '{"status":"not-implemented","executed…' to contain 'untrusted-config'
+ × tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > credentials do not appear in child argv, stdout, stderr, or launcher audit artifacts 359ms
+   → {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > positive control returns a nonempty SHA256 for an actual tree 13ms
+   → not-implemented: deterministic publication tree digest
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > permuting the explicit input file list cannot change the digest 3ms
+   → not-implemented: deterministic publication tree digest
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > changed bytes invalidate a previously tested digest 3ms
+   → not-implemented: deterministic publication tree digest
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > renaming identical bytes changes the tree digest 3ms
+   → not-implemented: deterministic publication tree digest
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > absolute temporary checkout location does not enter the digest 3ms
+   → not-implemented: deterministic publication tree digest
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an empty file list is an unperformed integrity check 4ms
+   → expected [Function] to throw error matching /empty|no files|пуст/ but got 'not-implemented: deterministic public…'
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > parent traversal cannot introduce files outside the release root 4ms
+   → expected [Function] to throw error matching /path|escape|outside|пут/ but got 'not-implemented: deterministic public…'
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an absolute file path is not a relative release member 3ms
+   → expected [Function] to throw error matching /path|relative|пут/ but got 'not-implemented: deterministic public…'
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked file cannot supply a mutable external release member 3ms
+   → expected [Function] to throw error matching /symlink|symbolic|символ/ but got 'not-implemented: deterministic public…'
+ × tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked parent directory cannot escape the release root 4ms
+   → expected [Function] to throw error matching /symlink|symbolic|outside|символ/ but got 'not-implemented: deterministic public…'
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 24 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > positive control reaches the trusted entrypoint and the credential broker in an isolated clean checkout
+AssertionError: {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 78
+
+ ❯ assertSuccessful tests/manual-publication-launcher.test.ts:80:63
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+     79|   expect(result.error).toBeUndefined();
+     80|   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+       |                                                               ^
+     81|   const report = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)…
+     82|   expect(report.status).toBe('success');
+ ❯ tests/manual-publication-launcher.test.ts:121:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an explicitly dirty source is refused before its modified entrypoint or the credential broker executes
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'dirty-source'
+
+- Expected
++ Received
+
+- dirty-source
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > untracked files also make an explicit source dirty
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'dirty-source'
+
+- Expected
++ Received
+
+- dirty-source
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:129:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an unrelated dirty cwd has no influence on the selected main source
+AssertionError: {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 78
+
+ ❯ assertSuccessful tests/manual-publication-launcher.test.ts:80:63
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+     79|   expect(result.error).toBeUndefined();
+     80|   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+       |                                                               ^
+     81|   const report = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)…
+     82|   expect(report.status).toBe('success');
+ ❯ tests/manual-publication-launcher.test.ts:133:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > an untrusted repository URL cannot request credentials even if it offers a main branch
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'untrusted-source'
+
+- Expected
++ Received
+
+- untrusted-source
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:138:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a non-main ref cannot request credentials
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'untrusted-ref'
+
+- Expected
++ Received
+
+- untrusted-ref
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:143:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit is not accepted as an explicit source
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'untrusted-source'
+
+- Expected
++ Received
+
+- untrusted-source
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:147:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a local-only commit in cwd is not executed when source-dir was not selected
+AssertionError: {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 78
+
+ ❯ assertSuccessful tests/manual-publication-launcher.test.ts:80:63
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+     79|   expect(result.error).toBeUndefined();
+     80|   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+       |                                                               ^
+     81|   const report = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)…
+     82|   expect(report.status).toBe('success');
+ ❯ tests/manual-publication-launcher.test.ts:151:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > uses fresh remote main even when the operator checkout is stale
+AssertionError: {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 78
+
+ ❯ assertSuccessful tests/manual-publication-launcher.test.ts:80:63
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+     79|   expect(result.error).toBeUndefined();
+     80|   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+       |                                                               ^
+     81|   const report = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)…
+     82|   expect(report.status).toBe('success');
+ ❯ tests/manual-publication-launcher.test.ts:157:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > unavailable canonical source refuses before credential release
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'source-unavailable'
+
+- Expected
++ Received
+
+- source-unavailable
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:161:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a protected config inside the explicitly supplied source is not trusted
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'untrusted-config'
+
+- Expected
++ Received
+
+- untrusted-config
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:167:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 400 is refused before broker access
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > a writable protected config mode 386 is refused before broker access
+AssertionError: expected '{"status":"not-implemented","executed…' to contain 'untrusted-config'
+
+- Expected
++ Received
+
+- untrusted-config
++ {"status":"not-implemented","executedChecks":0}
++
++
+
+ ❯ assertRefused tests/manual-publication-launcher.test.ts:73:48
+     71|   expect(result.error, 'the launcher must actually execute').toBeUndef…
+     72|   expect(result.status).not.toBe(0);
+     73|   expect(`${result.stdout}\n${result.stderr}`).toContain(reason);
+       |                                                ^
+     74|   expect(existsSync(f.trace), 'credentials released before source auth…
+     75|   expect(existsSync(f.marker), 'a build or deploy executed after refus…
+ ❯ tests/manual-publication-launcher.test.ts:171:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > installed launcher confirms fresh canonical main before releasing credentials or executing repository code > credentials do not appear in child argv, stdout, stderr, or launcher audit artifacts
+AssertionError: {"status":"not-implemented","executedChecks":0}
+
+: expected 78 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 78
+
+ ❯ assertSuccessful tests/manual-publication-launcher.test.ts:80:63
+     78| function assertSuccessful(f: Fixture, result: ReturnType<typeof launch…
+     79|   expect(result.error).toBeUndefined();
+     80|   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+       |                                                               ^
+     81|   const report = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)…
+     82|   expect(report.status).toBe('success');
+ ❯ tests/manual-publication-launcher.test.ts:174:67
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > positive control returns a nonempty SHA256 for an actual tree
+Error: not-implemented: deterministic publication tree digest
+ ❯ Module.digestTree ../scripts/publication-launcher.mjs:11:9
+      9|
+     10| export async function digestTree(_rootDir, _filePaths) {
+     11|   throw new Error('not-implemented: deterministic publication tree dig…
+       |         ^
+     12| }
+     13|
+ ❯ digest tests/manual-publication-launcher.test.ts:186:17
+ ❯ tests/manual-publication-launcher.test.ts:195:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > permuting the explicit input file list cannot change the digest
+Error: not-implemented: deterministic publication tree digest
+ ❯ Module.digestTree ../scripts/publication-launcher.mjs:11:9
+      9|
+     10| export async function digestTree(_rootDir, _filePaths) {
+     11|   throw new Error('not-implemented: deterministic publication tree dig…
+       |         ^
+     12| }
+     13|
+ ❯ digest tests/manual-publication-launcher.test.ts:186:17
+ ❯ tests/manual-publication-launcher.test.ts:198:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > changed bytes invalidate a previously tested digest
+Error: not-implemented: deterministic publication tree digest
+ ❯ Module.digestTree ../scripts/publication-launcher.mjs:11:9
+      9|
+     10| export async function digestTree(_rootDir, _filePaths) {
+     11|   throw new Error('not-implemented: deterministic publication tree dig…
+       |         ^
+     12| }
+     13|
+ ❯ digest tests/manual-publication-launcher.test.ts:186:17
+ ❯ tests/manual-publication-launcher.test.ts:203:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > renaming identical bytes changes the tree digest
+Error: not-implemented: deterministic publication tree digest
+ ❯ Module.digestTree ../scripts/publication-launcher.mjs:11:9
+      9|
+     10| export async function digestTree(_rootDir, _filePaths) {
+     11|   throw new Error('not-implemented: deterministic publication tree dig…
+       |         ^
+     12| }
+     13|
+ ❯ digest tests/manual-publication-launcher.test.ts:186:17
+ ❯ tests/manual-publication-launcher.test.ts:208:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > absolute temporary checkout location does not enter the digest
+Error: not-implemented: deterministic publication tree digest
+ ❯ Module.digestTree ../scripts/publication-launcher.mjs:11:9
+      9|
+     10| export async function digestTree(_rootDir, _filePaths) {
+     11|   throw new Error('not-implemented: deterministic publication tree dig…
+       |         ^
+     12| }
+     13|
+ ❯ digest tests/manual-publication-launcher.test.ts:186:17
+ ❯ tests/manual-publication-launcher.test.ts:213:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an empty file list is an unperformed integrity check
+AssertionError: expected [Function] to throw error matching /empty|no files|пуст/ but got 'not-implemented: deterministic public…'
+
+- Expected:
+/empty|no files|пуст/
+
++ Received:
+"not-implemented: deterministic publication tree digest"
+
+ ❯ tests/manual-publication-launcher.test.ts:216:37
+    214|   });
+    215|   it('an empty file list is an unperformed integrity check', async () …
+    216|     await expect(digest(tree(), [])).rejects.toThrow(/empty|no files|п…
+       |                                     ^
+    217|   });
+    218|   it('parent traversal cannot introduce files outside the release root…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > parent traversal cannot introduce files outside the release root
+AssertionError: expected [Function] to throw error matching /path|escape|outside|пут/ but got 'not-implemented: deterministic public…'
+
+- Expected:
+/path|escape|outside|пут/
+
++ Received:
+"not-implemented: deterministic publication tree digest"
+
+ ❯ tests/manual-publication-launcher.test.ts:220:67
+    218|   it('parent traversal cannot introduce files outside the release root…
+    219|     const root = tree(); write(join(root, 'release/index.html'), 'test…
+    220|     await expect(digest(join(root, 'release'), ['../index.html'])).rej…
+       |                                                                   ^
+    221|   });
+    222|   it('an absolute file path is not a relative release member', async (…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > an absolute file path is not a relative release member
+AssertionError: expected [Function] to throw error matching /path|relative|пут/ but got 'not-implemented: deterministic public…'
+
+- Expected:
+/path|relative|пут/
+
++ Received:
+"not-implemented: deterministic publication tree digest"
+
+ ❯ tests/manual-publication-launcher.test.ts:223:80
+    221|   });
+    222|   it('an absolute file path is not a relative release member', async (…
+    223|     const root = tree(); await expect(digest(root, [join(root, 'index.…
+       |                                                                                ^
+    224|   });
+    225|   it('a symlinked file cannot supply a mutable external release member…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked file cannot supply a mutable external release member
+AssertionError: expected [Function] to throw error matching /symlink|symbolic|символ/ but got 'not-implemented: deterministic public…'
+
+- Expected:
+/symlink|symbolic|символ/
+
++ Received:
+"not-implemented: deterministic publication tree digest"
+
+ ❯ tests/manual-publication-launcher.test.ts:227:48
+    225|   it('a symlinked file cannot supply a mutable external release member…
+    226|     const root = tree(); symlinkSync(join(root, 'index.html'), join(ro…
+    227|     await expect(digest(root, ['linked.html'])).rejects.toThrow(/symli…
+       |                                                ^
+    228|   });
+    229|   it('a symlinked parent directory cannot escape the release root', as…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/24]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > deterministic digest binds relative file paths and bytes > a symlinked parent directory cannot escape the release root
+AssertionError: expected [Function] to throw error matching /symlink|symbolic|outside|символ/ but got 'not-implemented: deterministic public…'
+
+- Expected:
+/symlink|symbolic|outside|символ/
+
++ Received:
+"not-implemented: deterministic publication tree digest"
+
+ ❯ tests/manual-publication-launcher.test.ts:232:57
+    230|     const root = tree(); const external = temp(); write(join(external,…
+    231|     symlinkSync(external, join(root, 'outside'));
+    232|     await expect(digest(root, ['outside/injected.txt'])).rejects.toThr…
+       |                                                         ^
+    233|   });
+    234| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/24]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  24 failed | 2 passed (26)
+   Start at  14:20:38
+   Duration  8.89s (transform 38ms, setup 20ms, import 26ms, tests 8.72s, environment 0ms)
+
