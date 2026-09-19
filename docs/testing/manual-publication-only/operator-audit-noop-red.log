@@ -1,0 +1,131 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-audit-red/web
+
+ ❯ tests/manual-publication-worker.test.ts (19 tests | 4 failed) 7009ms
+     × derives identity, digest and executed counts from the actual successful operation 517ms
+     × keeps zero executed checks distinct from unavailable counts and names the failing fixed group 729ms
+     × retains observed/latest entries, revision and high water mark from a real stale-state refusal 486ms
+     × reports the already active pair after index failure without serializing its error or cause 513ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > derives identity, digest and executed counts from the actual successful operation
+AssertionError: expected { version: 1, status: 'refused', …(1) } to match object { Object (version, status, ...) }
+
+- Expected
++ Received
+
+  {
+-   "ciExecutedTests": 37,
+-   "code": "published",
+-   "commit": "928356d9f3e885aa1d8b8d4ca1d20fe0f1d75c76",
+-   "highWaterMark": 1,
+-   "localExecutedTests": 10,
+-   "observedEntry": 1,
+-   "publicationId": "20260919145744094-03ae58dc-8f7a-4e7f-8baa-23d09e637c06",
+-   "revision": 1,
+-   "snapshotId": "snap:e842095cdd72a8963be05069a33833f8c9829fabea96c17a0fb3ca895691042f",
+-   "status": "success",
+-   "treeDigest": "0a313737f61c944dd4a7dd163840a2475d879791a224b9953e08cc0093c84b0f",
++   "code": "publication-failed",
++   "status": "refused",
+    "version": 1,
+  }
+
+ ❯ tests/manual-publication-worker.test.ts:222:19
+    220|     const f = await fixture(); const operation = await f.run();
+    221|     const audit = await auditFor({ operation });
+    222|     expect(audit).toMatchObject({ version: 1, status: 'success', code:…
+       |                   ^
+    223|       snapshotId: f.snapshot.snapshotId, treeDigest: operation.treeDig…
+    224|       observedEntry: 1, revision: 1, highWaterMark: 1, localExecutedTe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > keeps zero executed checks distinct from unavailable counts and names the failing fixed group
+AssertionError: expected { version: 1, status: 'refused', …(1) } to match object { version: 1, status: 'refused', …(4) }
+
+- Expected
++ Received
+
+  {
+-   "check": "snapshot-provenance",
+-   "ciExecutedTests": 37,
+-   "code": "checks-failed",
+-   "localExecutedTests": 0,
++   "code": "publication-failed",
+    "status": "refused",
+    "version": 1,
+  }
+
+ ❯ tests/manual-publication-worker.test.ts:234:19
+    232|     });
+    233|     const error = await failure(f.run); const audit = await auditFor({…
+    234|     expect(audit).toMatchObject({ version: 1, status: 'refused', code:…
+       |                   ^
+    235|       localExecutedTests: 0, ciExecutedTests: 37 });
+    236|     expect(f.checks).toHaveBeenCalledTimes(1); expect(f.transport).not…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > retains observed/latest entries, revision and high water mark from a real stale-state refusal
+AssertionError: expected { version: 1, status: 'refused', …(1) } to match object { version: 1, status: 'refused', …(5) }
+
+- Expected
++ Received
+
+  {
+-   "code": "provenance-changed",
+-   "highWaterMark": 2,
+-   "latestEntry": 2,
+-   "observedEntry": 1,
+-   "revision": 1,
++   "code": "publication-failed",
+    "status": "refused",
+    "version": 1,
+  }
+
+ ❯ tests/manual-publication-worker.test.ts:243:19
+    241|     state.observation.highWaterMark = 2; f.state.read.mockResolvedValu…
+    242|     const error = await failure(f.run); const audit = await auditFor({…
+    243|     expect(audit).toMatchObject({ version: 1, status: 'refused', code:…
+       |                   ^
+    244|       observedEntry: 1, revision: 1, latestEntry: 2, highWaterMark: 2 …
+    245|     expect(f.checks).toHaveBeenCalledTimes(1); expect(f.transport).not…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > reports the already active pair after index failure without serializing its error or cause
+AssertionError: expected { version: 1, status: 'refused', …(1) } to match object { version: 1, status: 'refused', …(2) }
+
+- Expected
++ Received
+
+  {
+-   "activePair": {
+-     "commit": "984ea3e17c0bba5de0722b693fa0bbe8edbbfa50",
+-     "releaseId": "20260919145745825-0a4393c7-754d-44b1-827c-d206d7f716bb",
+-     "snapshotId": "snap:e842095cdd72a8963be05069a33833f8c9829fabea96c17a0fb3ca895691042f",
+-   },
+-   "code": "active-unindexed",
++   "code": "publication-failed",
+    "status": "refused",
+    "version": 1,
+  }
+
+ ❯ tests/manual-publication-worker.test.ts:255:19
+    253|     const error = await failure(f.run); const audit = await auditFor({…
+    254|     const operation = f.activate.mock.calls[0][0].operation as { relea…
+    255|     expect(audit).toMatchObject({ version: 1, status: 'refused', code:…
+       |                   ^
+    256|       activePair: { commit: f.commit, snapshotId: f.snapshot.snapshotI…
+    257|     expect(JSON.stringify(audit)).not.toContain(CANARY); expect(f.stag…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 15 passed (19)
+   Start at  17:57:38
+   Duration  7.21s (transform 98ms, setup 17ms, import 77ms, tests 7.01s, environment 0ms)
+

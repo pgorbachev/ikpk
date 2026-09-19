@@ -1,0 +1,270 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-audit-red/web
+
+ ❯ tests/manual-publication-worker.test.ts (19 tests | 5 failed) 6651ms
+     × derives identity, digest and executed counts from the actual successful operation 472ms
+     × keeps zero executed checks distinct from unavailable counts and names the failing fixed group 436ms
+     × retains observed/latest entries, revision and high water mark from a real stale-state refusal 414ms
+     × reports the already active pair after index failure without serializing its error or cause 733ms
+     × unknown or forged free-text errors yield a generic refusal without invented counts 1ms
+ ❯ tests/manual-publication-launcher.test.ts (36 tests | 4 failed) 29059ms
+     × prints the selected pair, digest and actual CI/local counts, never raw worker output 938ms
+     × preserves provenance numbers and the already active pair on nonzero worker exit 1193ms
+     × refuses missing, malformed, unknown-code and oversized audit even after worker exit zero 5616ms
+     × rejects a wrong commit, invalid typed values and free text fields without copying their payload 5356ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > prints the selected pair, digest and actual CI/local counts, never raw worker output
+AssertionError: expected undefined to deeply equal { …(12) }
+
+- Expected:
+{
+  "ciExecutedTests": 37,
+  "code": "published",
+  "commit": "5ae8ade32d542aca37a7e4c7dfd6ec19629d0c33",
+  "highWaterMark": 4,
+  "localExecutedTests": 23,
+  "observedEntry": 4,
+  "publicationId": "20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394",
+  "revision": 4,
+  "snapshotId": "snap:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "success",
+  "treeDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "version": 1,
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-launcher.test.ts:329:34
+    327|     const f = fixture(); worker(f, success); const result = launch(f);
+    328|     expect(result.status).toBe(0);
+    329|     expect(report(result).audit).toEqual({ commit: f.sha, ...success }…
+       |                                  ^
+    330|   });
+    331|   it('preserves provenance numbers and the already active pair on nonz…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > preserves provenance numbers and the already active pair on nonzero worker exit
+AssertionError: expected undefined to deeply equal { …(14) }
+
+- Expected:
+{
+  "activePair": {
+    "commit": "cccccccccccccccccccccccccccccccccccccccc",
+    "releaseId": "20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394",
+    "snapshotId": "snap:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  },
+  "ciExecutedTests": 37,
+  "code": "active-unindexed",
+  "commit": "2ea7c736b25b9afd20ad60955ef722c36cb29bc9",
+  "highWaterMark": 4,
+  "latestEntry": 5,
+  "localExecutedTests": 23,
+  "observedEntry": 4,
+  "publicationId": "20260919120000000-2f4769ba-c066-4f96-9bd6-b8d0243b6394",
+  "revision": 4,
+  "snapshotId": "snap:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "refused",
+  "treeDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "version": 1,
+}
+
++ Received:
+undefined
+
+ ❯ tests/manual-publication-launcher.test.ts:336:69
+    334|       activePair: { commit: 'c'.repeat(40), snapshotId: `snap:${'d'.re…
+    335|     worker(f, audit, 1); const result = launch(f);
+    336|     expect(result.status).not.toBe(0); expect(report(result).audit).to…
+       |                                                                     ^
+    337|   });
+    338|   it('refuses missing, malformed, unknown-code and oversized audit eve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+AssertionError: accepted missing audit: expected +0 not to be +0 // Object.is equality
+ ❯ tests/manual-publication-launcher.test.ts:341:105
+    339|     for (const [invalid, padding] of [[null, 0], ['{not-json', 0], [{ …
+    340|       const f = fixture(); worker(f, invalid, 0, padding); const resul…
+    341|       expect.soft(result.status, `accepted ${invalid === null ? 'missi…
+       |                                                                                                         ^
+    342|       expect.soft(report(result).status).toBe('refused');
+    343|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+AssertionError: expected 'success' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "success"
+
+ ❯ tests/manual-publication-launcher.test.ts:342:42
+    340|       const f = fixture(); worker(f, invalid, 0, padding); const resul…
+    341|       expect.soft(result.status, `accepted ${invalid === null ? 'missi…
+    342|       expect.soft(report(result).status).toBe('refused');
+       |                                          ^
+    343|     }
+    344|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+AssertionError: accepted string audit: expected +0 not to be +0 // Object.is equality
+ ❯ tests/manual-publication-launcher.test.ts:341:105
+    339|     for (const [invalid, padding] of [[null, 0], ['{not-json', 0], [{ …
+    340|       const f = fixture(); worker(f, invalid, 0, padding); const resul…
+    341|       expect.soft(result.status, `accepted ${invalid === null ? 'missi…
+       |                                                                                                         ^
+    342|       expect.soft(report(result).status).toBe('refused');
+    343|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > refuses missing, malformed, unknown-code and oversized audit even after worker exit zero
+AssertionError: accepted object audit: expected +0 not to be +0 // Object.is equality
+ ❯ tests/manual-publication-launcher.test.ts:341:105
+    339|     for (const [invalid, padding] of [[null, 0], ['{not-json', 0], [{ …
+    340|       const f = fixture(); worker(f, invalid, 0, padding); const resul…
+    341|       expect.soft(result.status, `accepted ${invalid === null ? 'missi…
+       |                                                                                                         ^
+    342|       expect.soft(report(result).status).toBe('refused');
+    343|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+AssertionError: expected +0 not to be +0 // Object.is equality
+ ❯ tests/manual-publication-launcher.test.ts:349:38
+    347|       { ...success, snapshotId: CANARY }, { ...success, message: CANAR…
+    348|       const f = fixture(); worker(f, invalid); const result = launch(f…
+    349|       expect.soft(result.status).not.toBe(0); expect.soft(report(resul…
+       |                                      ^
+    350|     }
+    351|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+ FAIL  tests/manual-publication-launcher.test.ts > structured operator audit through the installed launcher > rejects a wrong commit, invalid typed values and free text fields without copying their payload
+AssertionError: expected 'success' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "success"
+
+ ❯ tests/manual-publication-launcher.test.ts:349:82
+    347|       { ...success, snapshotId: CANARY }, { ...success, message: CANAR…
+    348|       const f = fixture(); worker(f, invalid); const result = launch(f…
+    349|       expect.soft(result.status).not.toBe(0); expect.soft(report(resul…
+       |                                                                                  ^
+    350|     }
+    351|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > derives identity, digest and executed counts from the actual successful operation
+AssertionError: builtin-only worker audit curator must exist: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ auditFor tests/manual-publication-worker.test.ts:211:84
+    209|   const path = join(ROOT, 'web/scripts/publication-worker.ts');
+    210|   const worker = await import(/* @vite-ignore */ path);
+    211|   expect(worker.createWorkerAudit, 'builtin-only worker audit curator …
+       |                                                                                    ^
+    212|   return worker.createWorkerAudit(input);
+    213| }
+ ❯ tests/manual-publication-worker.test.ts:221:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > keeps zero executed checks distinct from unavailable counts and names the failing fixed group
+AssertionError: builtin-only worker audit curator must exist: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ auditFor tests/manual-publication-worker.test.ts:211:84
+    209|   const path = join(ROOT, 'web/scripts/publication-worker.ts');
+    210|   const worker = await import(/* @vite-ignore */ path);
+    211|   expect(worker.createWorkerAudit, 'builtin-only worker audit curator …
+       |                                                                                    ^
+    212|   return worker.createWorkerAudit(input);
+    213| }
+ ❯ tests/manual-publication-worker.test.ts:233:55
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > retains observed/latest entries, revision and high water mark from a real stale-state refusal
+AssertionError: builtin-only worker audit curator must exist: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ auditFor tests/manual-publication-worker.test.ts:211:84
+    209|   const path = join(ROOT, 'web/scripts/publication-worker.ts');
+    210|   const worker = await import(/* @vite-ignore */ path);
+    211|   expect(worker.createWorkerAudit, 'builtin-only worker audit curator …
+       |                                                                                    ^
+    212|   return worker.createWorkerAudit(input);
+    213| }
+ ❯ tests/manual-publication-worker.test.ts:242:55
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > reports the already active pair after index failure without serializing its error or cause
+AssertionError: builtin-only worker audit curator must exist: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ auditFor tests/manual-publication-worker.test.ts:211:84
+    209|   const path = join(ROOT, 'web/scripts/publication-worker.ts');
+    210|   const worker = await import(/* @vite-ignore */ path);
+    211|   expect(worker.createWorkerAudit, 'builtin-only worker audit curator …
+       |                                                                                    ^
+    212|   return worker.createWorkerAudit(input);
+    213| }
+ ❯ tests/manual-publication-worker.test.ts:253:55
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  tests/manual-publication-worker.test.ts > worker audit producer preserves only concrete publication evidence > unknown or forged free-text errors yield a generic refusal without invented counts
+AssertionError: builtin-only worker audit curator must exist: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ auditFor tests/manual-publication-worker.test.ts:211:84
+    209|   const path = join(ROOT, 'web/scripts/publication-worker.ts');
+    210|   const worker = await import(/* @vite-ignore */ path);
+    211|   expect(worker.createWorkerAudit, 'builtin-only worker audit curator …
+       |                                                                                    ^
+    212|   return worker.createWorkerAudit(input);
+    213| }
+ ❯ tests/manual-publication-worker.test.ts:261:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 46 passed (55)
+   Start at  17:56:50
+   Duration  29.43s (transform 171ms, setup 70ms, import 120ms, tests 35.71s, environment 0ms)
+
