@@ -339,3 +339,20 @@ test('committed recovery preserves unexpected redirect drift and pending without
   assert.equal(existsSync(f.pending), true);
   assert.equal(f.commands().some((event) => isCommand(event, reload)), false);
 });
+
+// Independent correctness review: a second destination can consume the same file
+// through nginx's normal wildcard or nested include expansion.
+for (const indirect of ['wildcard', 'wrapper']) {
+  test(`REVIEW: refuses shared redirects consumed by another destination through ${indirect} include`, options, async (t) => {
+    const f = await setup(t);
+    const otherInclude = indirect === 'wildcard' ? join(f.root, 'shared', '*.conf') : '/etc/nginx/snippets/other-redirects.conf';
+    const extraDump = indirect === 'wrapper' ? `\n# configuration file ${otherInclude}:\ninclude ${f.fragment};\n` : '';
+    f.update({ nginxDump: `# configuration file /etc/nginx/nginx.conf:\nevents {}\nhttp {\nserver { listen 8080; root ${f.root}/current; include ${f.fragment}; }\nserver { listen 8081; root /other/current; include ${otherInclude}; }\n}\n# configuration file ${f.fragment}:\n${oldRedirects}${extraDump}` });
+    let records = 0;
+    const error = await capturedError(f.publish({ recordIndex: async () => { records++; } }));
+    assert.equal(records, 0, 'a configuration fragment used by another destination must never be replaced or indexed');
+    assert.ok(error instanceof Error, 'shared include must be refused before publication');
+    f.oldPair();
+    assert.equal(f.commands().some((event) => isCommand(event, reload)), false);
+  });
+}
