@@ -1,0 +1,77 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk-publication-entry-inventory-red/web
+
+ ❯ tests/manual-publication-entrypoints.test.ts (12 tests | 12 failed) 8ms
+     × recognizes the real protected launcher chain as one path in a positive fixture 4ms
+     × the actual repository has exactly that one approved publication path 1ms
+     × refuses zero when the launcher is missing 0ms
+     × does not count an inert file at the declared path as an executable publisher 0ms
+     × refuses a copied second launcher even under an unrelated name 0ms
+     × refuses a renamed executable that transfers the web artifact directly 0ms
+     × refuses a local current switch even without SSH or a deploy-like filename 0ms
+     × recognizes the actual legacy backup restore as a second publication path 0ms
+     × follows an npm lifecycle wrapper into a private worker bypass 1ms
+     × refuses a direct npm private operator entrypoint 0ms
+     × counts a hosted publisher against the same sole-path requirement 0ms
+     × does not count comments or ordinary build/check commands as new publishers 0ms
+ ❯ tests/manual-publication-restore-bypass.test.ts (2 tests | 1 failed) 1935ms
+     × the current utility leaves the live release unchanged without an approved publication 828ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > recognizes the real protected launcher chain as one path in a positive fixture
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > the actual repository has exactly that one approved publication path
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses zero when the launcher is missing
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > does not count an inert file at the declared path as an executable publisher
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses a copied second launcher even under an unrelated name
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses a renamed executable that transfers the web artifact directly
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses a local current switch even without SSH or a deploy-like filename
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > recognizes the actual legacy backup restore as a second publication path
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > follows an npm lifecycle wrapper into a private worker bypass
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > refuses a direct npm private operator entrypoint
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > counts a hosted publisher against the same sole-path requirement
+ FAIL  tests/manual-publication-entrypoints.test.ts > one declared local publication entrypoint plus hosted inventory > does not count comments or ordinary build/check commands as new publishers
+AssertionError: task 6.1 requires the executable local/hosted publication inventory gate: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/manual-publication-entrypoints.test.ts:46:112
+     44|   beforeEach(() => {
+     45|     // Outside rejects.toThrow: a missing gate must never make a negat…
+     46|     expect(existsSync(gateModule), 'task 6.1 requires the executable l…
+       |                                                                                                                ^
+     47|   });
+     48|   it('recognizes the real protected launcher chain as one path in a po…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  tests/manual-publication-restore-bypass.test.ts > backup restoration cannot independently publish the web tree > the current utility leaves the live release unchanged without an approved publication
+AssertionError: independent activation escaped the publication path; exit=0; predicate=byte-equal-after-restore
+compared=1
+mismatched=0
+release=restore-20260919T163846Z
+: expected '/var/folders/b6/wycqx9812rx5dbv2f9kxm…' to be '/var/folders/b6/wycqx9812rx5dbv2f9kxm…' // Object.is equality
+
+Expected: "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-restore-entry-bypass-CrbDyY/site/releases/current-release"
+Received: "/var/folders/b6/wycqx9812rx5dbv2f9kxmlvr0000gp/T/ikpk-restore-entry-bypass-CrbDyY/site/releases/restore-20260919T163846Z"
+
+ ❯ tests/manual-publication-restore-bypass.test.ts:49:110
+     47|     const { run, previous, active } = runRestore(join(repository, 'scr…
+     48|     expect(run.error).toBeUndefined();
+     49|     expect(active, `independent activation escaped the publication pat…
+       |                                                                                                              ^
+     50|   });
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  13 failed | 1 passed (14)
+   Start at  19:38:45
+   Duration  2.15s (transform 63ms, setup 62ms, import 61ms, tests 1.94s, environment 0ms)
+
