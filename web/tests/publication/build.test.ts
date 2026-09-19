@@ -2,7 +2,8 @@ import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { walkFiles } from '../helpers/dist-pages';
-import { extractMarkedRegions, unmarkedDocumentHazards } from '../helpers/rich-content-safety/hazard-scan';
+import { extractMarkedRegions, matchOccurrences, unmarkedDocumentHazards } from '../helpers/rich-content-safety/hazard-scan';
+import type { ExecutableSlot } from '../helpers/rich-content-safety/ast-sinks';
 import { validateClosedMatrixHtml } from '../helpers/rich-content-safety/closed-matrix-validate';
 import { iterateTags } from '../helpers/rich-content-safety/html-scan';
 import { openOracleHarness } from '../helpers/rich-content-safety/chromium-oracle';
@@ -15,10 +16,16 @@ it('release marker names the exact commit and snapshot', () => {
 it('all rendered content satisfies the existing rich-content safety matrix', async () => {
   const oracle = await openOracleHarness({ executablePath: process.env.PUBLICATION_CHROMIUM_EXECUTABLE });
   const knownSinkIds = loadFixture<{ sinks: { id: string }[] }>('rendered-registry.json').sinks.map((sink) => sink.id);
+  const occurrences = loadFixture<{ occurrences: Parameters<typeof matchOccurrences>[2] }>('output-occurrence-registry.json').occurrences;
+  const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+  expect(occurrences.length, 'empty executable occurrence registry').toBeGreaterThan(0);
   const errors: string[] = []; let regions = 0;
   try {
     for (const page of pages()) {
       const html = (await oracle.parse(page.html)).serialized;
+      errors.push(...matchOccurrences(html, page.route, occurrences, sourceSlots, {
+        ignoreMarkedRegions: true, build: required('DEPLOY_MODE') === 'stand' ? 'demo' : 'production',
+      }));
       for (const error of unmarkedDocumentHazards(html)) errors.push(`${page.route}: ${error.reason}`);
       for (const region of extractMarkedRegions(html)) {
         regions++;
@@ -65,7 +72,7 @@ it('internal links and every declared legacy redirect resolve in the checked tre
   for (const page of pages()) for (const tag of iterateTags(page.html)) {
     if (tag.name !== 'a' || !tag.attrs.href) continue;
     const url = new URL(tag.attrs.href, `https://ikpk.su${page.route}`);
-    if (url.origin !== 'https://ikpk.su') continue;
+    if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== 'ikpk.su') continue;
     if (!resolves(url.pathname) && !resolves(destinations.get(url.pathname) ?? '/__missing_publication_target__')) errors.push(`${page.route}: ${url.pathname}`);
   }
   expect(errors, errors.slice(0, 20).join('\n')).toEqual([]);
