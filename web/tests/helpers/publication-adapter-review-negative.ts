@@ -1,11 +1,11 @@
 /** Explicit mutation acceptance probe, excluded from default test selection.
  * Run from a clean isolated worktree's web/:
- *   npx tsx tests/helpers/publication-adapter-review-negative.ts /absolute/known-green/dist /absolute/evidence.json
+ *   npx tsx tests/helpers/publication-adapter-review-negative.ts /absolute/known-green/dist /absolute/evidence.json /absolute/captured-snapshot
  * Requires the adapter smoke's finished artifact, including release.json; never rebuilds.
  * Each mutation must fail its own named real assertion, not collection or another check.
  */
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createPublicationCheckPorts } from '../../scripts/lib/publication-check-adapters';
@@ -13,13 +13,13 @@ import type { PublicationCheckContext } from '../../scripts/lib/publication-chec
 
 const webRoot = resolve(import.meta.dirname, '../..');
 const treeDir = join(webRoot, 'dist');
-const [sourceArg, evidenceArg] = process.argv.slice(2);
-assert(sourceArg && evidenceArg, 'provide known-green artifact directory and evidence JSON path');
+const [sourceArg, evidenceArg, snapshotArg] = process.argv.slice(2);
+assert(sourceArg && evidenceArg && snapshotArg, 'provide known-green artifact, evidence JSON path and its captured snapshot directory');
 assert(!existsSync(treeDir), 'run in an isolated worktree without web/dist; existing output is never replaced');
 const temporary = mkdtempSync(join(tmpdir(), 'publication-adapter-review-'));
 const evidence: unknown[] = [];
 const snapshotDir = join(temporary, 'snapshot');
-mkdirSync(snapshotDir);
+cpSync(resolve(snapshotArg), snapshotDir, { recursive: true });
 const failures: string[] = [];
 try {
   cpSync(resolve(sourceArg), treeDir, { recursive: true });

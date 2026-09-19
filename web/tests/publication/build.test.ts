@@ -2,28 +2,33 @@ import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { walkFiles } from '../helpers/dist-pages';
-import { extractMarkedRegions, matchOccurrences, unmarkedDocumentHazards } from '../helpers/rich-content-safety/hazard-scan';
+import { extractMarkedRegions, htmlFileRoute, matchOccurrences, unmarkedDocumentHazards } from '../helpers/rich-content-safety/hazard-scan';
 import type { ExecutableSlot } from '../helpers/rich-content-safety/ast-sinks';
 import { validateClosedMatrixHtml } from '../helpers/rich-content-safety/closed-matrix-validate';
 import { iterateTags } from '../helpers/rich-content-safety/html-scan';
 import { openOracleHarness } from '../helpers/rich-content-safety/chromium-oracle';
 import { loadFixture } from '../helpers/rich-content-safety/load-fixture';
 import { pages, redirectRules, required, resolves, tree } from './helpers';
+import { publicationOccurrences } from './occurrences';
 
 it('release marker names the exact commit and snapshot', () => {
   expect(JSON.parse(readFileSync(join(tree(), 'release.json'), 'utf8'))).toEqual({ commit: required('PUBLICATION_COMMIT'), snapshotId: required('PUBLICATION_SNAPSHOT_ID') });
 });
 it('all rendered content satisfies the existing rich-content safety matrix', async () => {
-  const oracle = await openOracleHarness({ executablePath: process.env.PUBLICATION_CHROMIUM_EXECUTABLE });
   const knownSinkIds = loadFixture<{ sinks: { id: string }[] }>('rendered-registry.json').sinks.map((sink) => sink.id);
-  const occurrences = loadFixture<{ occurrences: Parameters<typeof matchOccurrences>[2] }>('output-occurrence-registry.json').occurrences;
+  const registeredOccurrences = loadFixture<{ occurrences: Parameters<typeof matchOccurrences>[2] }>('output-occurrence-registry.json').occurrences;
   const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+  const snapshot = JSON.parse(readFileSync(join(required('CONTENT_SNAPSHOT_DIR'), 'snapshot.json'), 'utf8'));
+  expect(snapshot.snapshotId).toBe(required('PUBLICATION_SNAPSHOT_ID'));
+  expect(Array.isArray(snapshot.content?.types?.articles), 'missing captured articles').toBe(true);
+  const occurrences = publicationOccurrences(registeredOccurrences, sourceSlots, snapshot.content.types.articles, required('PAYMENT_ROLE'));
   expect(occurrences.length, 'empty executable occurrence registry').toBeGreaterThan(0);
   const errors: string[] = []; let regions = 0;
+  const oracle = await openOracleHarness({ executablePath: process.env.PUBLICATION_CHROMIUM_EXECUTABLE });
   try {
     for (const page of pages()) {
       const html = (await oracle.parse(page.html)).serialized;
-      errors.push(...matchOccurrences(html, page.route, occurrences, sourceSlots, {
+      errors.push(...matchOccurrences(html, htmlFileRoute(page.file, tree()), occurrences, sourceSlots, {
         ignoreMarkedRegions: true, build: required('DEPLOY_MODE') === 'stand' ? 'demo' : 'production',
       }));
       for (const error of unmarkedDocumentHazards(html)) errors.push(`${page.route}: ${error.reason}`);
