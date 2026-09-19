@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -20,19 +20,4 @@ export function resolveSnapshotDir(webRoot: string, repoRoot: string): string {
   throw new Error(
     'снимок контента не найден: задайте CONTENT_SNAPSHOT_DIR или положите snapshot.json в web/.snapshot / fixtures/content-snapshot',
   );
-}
-
-export interface SnapshotFile {
-  pinned?: boolean;
-  referenceDate: string;
-  fingerprint?: string;
-  snapshotId?: string;
-  content: {
-    types: Record<string, unknown>;
-    media?: unknown[];
-  };
-}
-
-export function readSnapshotFile(dir: string): SnapshotFile {
-  return JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf-8')) as SnapshotFile;
 }

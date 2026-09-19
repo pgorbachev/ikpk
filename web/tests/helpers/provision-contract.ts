@@ -27,10 +27,6 @@ export function declaredStatePath(env: string): string {
   return join(REPO_ROOT, ENV_DIR, `${env}.env`);
 }
 
-export function declaredStateExists(env: string): boolean {
-  return existsSync(declaredStatePath(env));
-}
-
 /** Читает объявленное состояние окружения. Отсутствие файла — провал, а не пропуск. */
 export function readDeclared(env: string): Declared {
   const path = declaredStatePath(env);

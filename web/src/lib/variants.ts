@@ -151,10 +151,6 @@ export const variants: Record<string, Variant> = {
   },
 };
 
-export function getVariant(id: string): Variant | undefined {
-  return variants[id];
-}
-
 /** Три направления каркаса для демо выбора владельца. */
 export const ARCHITECTURE_IDS = ['editorial', 'faculty', 'modular'] as const;
 export type ArchitectureId = (typeof ARCHITECTURE_IDS)[number];

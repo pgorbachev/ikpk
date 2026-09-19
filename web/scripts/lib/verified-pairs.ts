@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { VerifiedPair } from './publish-gate.ts';
 
-export const PROVENANCE_BRANCH = 'state/cms-provenance';
 export const VERIFIED_PAIRS_FILE = 'verified-pairs.json';
 
 export function readVerifiedPairs(storeDir: string): VerifiedPair[] {
