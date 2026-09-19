@@ -81,8 +81,6 @@ export async function launch(args) {
   if (sourceDir) {
     const root = realpathSync(sourceDir);
     if (inside(root, configPath) || inside(root, installed)) refuse('untrusted-config');
-    if (git(root, 'status', '--porcelain', '--untracked-files=all')) refuse('dirty-source');
-    checks.push('operator-source-clean');
   }
   const scratch = mkdtempSync(join(tmpdir(), 'ikpk-publication-'));
   try {
@@ -95,6 +93,12 @@ export async function launch(args) {
       if (!/^[a-f0-9]{40}$/.test(head) || git(checkout, 'status', '--porcelain')) refuse('source-unavailable');
     } catch { refuse('source-unavailable'); }
     if (sourceDir && (git(sourceDir, 'rev-parse', 'HEAD') !== head || git(sourceDir, 'remote', 'get-url', 'origin') !== source)) refuse('untrusted-source');
+    if (sourceDir) {
+      // Read the operator files using the trusted clone's index/config. The operator's
+      // .git/config may define executable clean filters, hooks or fsmonitor commands.
+      if (git(checkout, '--work-tree', realpathSync(sourceDir), 'status', '--porcelain', '--untracked-files=all')) refuse('dirty-source');
+      checks.push('operator-source-clean');
+    }
     checks.push('fresh-canonical-main');
     const worker = join(checkout, 'scripts/deploy-web.sh');
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
