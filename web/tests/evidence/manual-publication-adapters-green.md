@@ -113,7 +113,9 @@ are restored to build/browser children. Capture alone receives CMS credentials.
 
 No real CMS, actual destination payment service, SSH transport or publication was
 performed. Worker/orchestration, CLI/deploy integration and independent review are
-separate deliveries. Actual live publication remains blocked by the 43 inherited
-content links until an independently approved content/redirect repair. Production
-payment build/readiness and production mode analytics require integrated acceptance.
-This evidence does not mark the full OpenSpec change complete.
+separate deliveries. The 43 inherited content links that blocked the first real
+build are resolved by PR #258 (see «Resolution» above and
+`manual-publication-legacy-links.json` → `resolution`). Live publication may still
+be blocked by other gates; this evidence does not mark the full OpenSpec change
+complete. Production payment build/readiness and production mode analytics require
+integrated acceptance.

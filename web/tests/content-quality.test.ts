@@ -206,11 +206,26 @@ describe('rendered content quality', () => {
   // опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
   // проверки зелёной. Межстраничные `#section-N` из тел панелей тот же предмет:
   // прежняя регулярка ловила только `href="#…"` и не видела их вовсе.
+  //
+  // Разбор через URL, а не через две регулярки: иначе абсолютные и
+  // `?…#…` формы выпадают из измерения, а частичный откат к `?section=N`
+  // остаётся зелёным, пока жив хотя бы один `#section-` (ревью PR #258 r4).
   it('every fragment link resolves to an element on the target page', () => {
     const offenders: string[] = [];
+    const sectionQuery: string[] = [];
     let inPage = 0;
     let crossPage = 0;
+    let docsSectionDeep = 0;
     const pageHtml = new Map<string, string>();
+    const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
+
+    function pagePathFromFile(file: string): string {
+      const rel = file.replace(dist, '').replace(/\\/g, '/');
+      if (rel === '/index.html' || rel === 'index.html') return '/';
+      if (rel.endsWith('/index.html')) return rel.slice(0, -'/index.html'.length) || '/';
+      if (rel.endsWith('.html')) return rel.replace(/\.html$/, '');
+      return rel || '/';
+    }
 
     function htmlForPath(pathname: string): string | null {
       const key = pathname === '' ? '/' : pathname;
@@ -223,20 +238,48 @@ describe('rendered content quality', () => {
       return html;
     }
 
+    function norm(path: string): string {
+      return path.replace(/\/$/, '') || '/';
+    }
+
     for (const file of walkHtml()) {
       const html = readFileSync(file, 'utf-8');
-      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
-      for (const a of html.matchAll(/<a\s[^>]*\bhref="#([^"]+)"/gi)) {
-        inPage += 1;
-        const frag = decodeURIComponent(a[1]);
-        if (!ids.has(frag) && frag !== 'top') {
-          offenders.push(`${file.replace(dist, '')}: #${frag}`);
+      const pagePath = pagePathFromFile(file);
+      const base = `https://ikpk.su${pagePath.endsWith('/') ? pagePath : `${pagePath}/`}`;
+
+      for (const a of html.matchAll(/<a\s[^>]*\bhref="([^"]+)"/gi)) {
+        let url: URL;
+        try {
+          url = new URL(a[1], base);
+        } catch {
+          continue;
         }
-      }
-      for (const a of html.matchAll(/<a\s[^>]*\bhref="(\/[^"#?]*)#([^"]+)"/gi)) {
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
+        if (url.hostname !== 'ikpk.su') continue;
+
+        if (url.searchParams.has('section')) {
+          sectionQuery.push(`${file.replace(dist, '')}: ${a[1]}`);
+        }
+
+        if (!url.hash) continue;
+        const frag = decodeURIComponent(url.hash.slice(1));
+        if (!frag) continue;
+
+        const pathname = norm(url.pathname);
+        if (pathname === DOCS && frag.startsWith('section-')) docsSectionDeep += 1;
+
+        const samePage = a[1].startsWith('#') || pathname === norm(pagePath);
+
+        if (samePage) {
+          inPage += 1;
+          const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+          if (!ids.has(frag) && frag !== 'top') {
+            offenders.push(`${file.replace(dist, '')}: #${frag}`);
+          }
+          continue;
+        }
+
         crossPage += 1;
-        const pathname = decodeURIComponent(a[1]).replace(/\/$/, '') || '/';
-        const frag = decodeURIComponent(a[2]);
         const target = htmlForPath(pathname);
         if (target === null) {
           offenders.push(`${file.replace(dist, '')}: ${pathname}#${frag} (страницы нет)`);
@@ -250,6 +293,17 @@ describe('rendered content quality', () => {
     }
     expect(inPage, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
     expect(crossPage, 'межстраничных фрагментных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(
+      sectionQuery,
+      `устаревший ?section= в сборке (должен быть #section-N):\n${sectionQuery.slice(0, 10).join('\n')}`
+    ).toEqual([]);
+    // 17 — измеренный охват панелей «Выдаваемые документы» + «Руководство…» в сборке;
+    // частичный откат к ?section= или вырезание якорей не должен оставаться зелёным
+    // за счёт одного уцелевшего фрагмента на другой странице.
+    expect(
+      docsSectionDeep,
+      'глубоких ссылок на #section-N страницы сведений меньше ожидаемых — проверка потеряла предмет'
+    ).toBeGreaterThanOrEqual(17);
     expect(
       [...new Set(offenders)].slice(0, 10),
       `ссылка ведёт в несуществующий фрагмент:\n${[...new Set(offenders)].slice(0, 10).join('\n')}`
