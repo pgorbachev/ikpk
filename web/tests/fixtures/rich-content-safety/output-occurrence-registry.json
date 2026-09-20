@@ -41,7 +41,7 @@
     "src:components/home/sections/AudienceToc.astro:L39:C1:style",
     "src:components/home/sections/CtaBand.astro:L21:C1:style",
     "src:components/home/sections/CtaEditorial.astro:L15:C1:style",
-    "src:components/home/sections/EventLine.astro:L46:C1:style",
+    "src:components/home/sections/EventLine.astro:L50:C1:style",
     "src:components/home/sections/EventTeacher.astro:L67:C1:style",
     "src:components/home/sections/HeroCentered.astro:L32:C1:style",
     "src:components/home/sections/HeroEditorial.astro:L53:C1:style",

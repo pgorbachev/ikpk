@@ -264,11 +264,11 @@
     "identity": "style|body:510b52f6a2697471"
   },
   {
-    "slotId": "src:components/home/sections/EventLine.astro:L46:C1:style",
+    "slotId": "src:components/home/sections/EventLine.astro:L50:C1:style",
     "file": "components/home/sections/EventLine.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/EventLine.astro:L46:C1:style",
-    "fingerprint": "1709780d217e256df0d9d89bcafa0b896387cd5532a256d8bb2daf61748e2dc9",
+    "locator": "components/home/sections/EventLine.astro:L50:C1:style",
+    "fingerprint": "ccd417ca5ad16e0a4679ea98bfe416682998bba5118dc444837eb199ab22d07c",
     "identity": "style|body:f8d9650a27a51d4c"
   },
   {
