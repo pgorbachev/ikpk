@@ -32,8 +32,12 @@ const [next] = getUpcomingSeminars(1);
           <span>{next.cityName}</span>
           <span class="event-line-sep" aria-hidden="true">·</span>
           <a class="event-line-title" href={next.href}>{next.title}</a>
-          <span class="event-line-sep" aria-hidden="true">·</span>
-          <span class="event-line-price">{next.priceLabel}</span>
+          {next.priceLabel && (
+            <>
+              <span class="event-line-sep" aria-hidden="true">·</span>
+              <span class="event-line-price">{next.priceLabel}</span>
+            </>
+          )}
         </div>
         <a class="event-line-action" href={registrationHref(undefined) || next.href}>
           Записаться<span aria-hidden="true"> →</span>

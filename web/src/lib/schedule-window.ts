@@ -39,5 +39,20 @@ export function isCurrentOrFuture(entry: ScheduleWindowEntry, today: string): bo
   return lastDay(entry) >= today;
 }
 
+/**
+ * Событие ещё не началось на дату `today` (календарная, `YYYY-MM-DD`).
+ *
+ * Это другой вопрос, чем `isCurrentOrFuture`. Страница расписания держит идущий
+ * семинар до последнего дня. Строка «Ближайший семинар» и список ближайших на
+ * главной — про набор, на который ещё можно приехать к началу: живой ikpk.su
+ * (`/api/public/events`) уже начавшиеся из этой выборки убирает.
+ *
+ * Сравнение живёт здесь, а не у вызывающего: гейт `schedule-window.test.ts`
+ * запрещает фильтровать `src/` по `startAt` вне этого модуля.
+ */
+export function isUpcomingStart(entry: ScheduleWindowEntry, today: string): boolean {
+  return (entry.startAt ?? '').slice(0, 10) >= today;
+}
+
 /** Календарная дата «сегодня» для вызывающего, которому нужен реальный день. */
 export const calendarToday = (): string => new Date().toISOString().slice(0, 10);

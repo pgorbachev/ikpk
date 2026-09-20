@@ -40,7 +40,7 @@ const ctaHref = next
           <p class="event-teacher-meta">
             {next.cityName}
             {next.durationLabel && <> · {next.durationLabel}</>}
-            {' · '}{next.priceLabel}
+            {next.priceLabel && <>{' · '}{next.priceLabel}</>}
           </p>
           <h2 class="event-teacher-title">
             <a href={next.href}>{next.title}</a>

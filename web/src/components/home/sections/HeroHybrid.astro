@@ -38,7 +38,7 @@ const next = getUpcomingSeminars(1)[0];
               говорит, на что записываться (D2 списка после демо 2026-08-19). */}
           <span class="hero-d-next-title">{next.title}</span>
           <span class="hero-d-next-value">
-            {next.dateLabel} · {next.cityName} · {next.priceLabel}
+            {[next.dateLabel, next.cityName, next.priceLabel].filter(Boolean).join(' · ')}
           </span>
         </a>
       )}
