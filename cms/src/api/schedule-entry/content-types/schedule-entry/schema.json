@@ -35,7 +35,7 @@
       "type": "boolean",
       "default": false
     },
-    "status": {
+    "entry_status": {
       "type": "enumeration",
       "enum": [
         "active",
