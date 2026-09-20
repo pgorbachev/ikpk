@@ -201,25 +201,55 @@ describe('rendered content quality', () => {
     expect(offenders, `легаси-кнопка ведёт не туда:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  // Свойство шире предыдущего и полезно само по себе: внутристраничная ссылка,
-  // ведущая в несуществующий фрагмент, ничего не делает по клику. Ревью нашло
-  // это опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
-  // проверки зелёной.
-  it('every in-page fragment link resolves to an element on that page', () => {
+  // Свойство шире предыдущего и полезно само по себе: ссылка с фрагментом,
+  // ведущая в несуществующий id, ничего не делает по клику. Ревью нашло это
+  // опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
+  // проверки зелёной. Межстраничные `#section-N` из тел панелей тот же предмет:
+  // прежняя регулярка ловила только `href="#…"` и не видела их вовсе.
+  it('every fragment link resolves to an element on the target page', () => {
     const offenders: string[] = [];
-    let links = 0;
+    let inPage = 0;
+    let crossPage = 0;
+    const pageHtml = new Map<string, string>();
+
+    function htmlForPath(pathname: string): string | null {
+      const key = pathname === '' ? '/' : pathname;
+      if (pageHtml.has(key)) return pageHtml.get(key)!;
+      const rel = key === '/' ? 'index.html' : join(key.replace(/^\//, ''), 'index.html');
+      const file = join(dist, rel);
+      if (!existsSync(file) || !statSync(file).isFile()) return null;
+      const html = readFileSync(file, 'utf-8');
+      pageHtml.set(key, html);
+      return html;
+    }
+
     for (const file of walkHtml()) {
       const html = readFileSync(file, 'utf-8');
       const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
       for (const a of html.matchAll(/<a\s[^>]*\bhref="#([^"]+)"/gi)) {
-        links += 1;
+        inPage += 1;
         const frag = decodeURIComponent(a[1]);
         if (!ids.has(frag) && frag !== 'top') {
           offenders.push(`${file.replace(dist, '')}: #${frag}`);
         }
       }
+      for (const a of html.matchAll(/<a\s[^>]*\bhref="(\/[^"#?]*)#([^"]+)"/gi)) {
+        crossPage += 1;
+        const pathname = decodeURIComponent(a[1]).replace(/\/$/, '') || '/';
+        const frag = decodeURIComponent(a[2]);
+        const target = htmlForPath(pathname);
+        if (target === null) {
+          offenders.push(`${file.replace(dist, '')}: ${pathname}#${frag} (страницы нет)`);
+          continue;
+        }
+        const targetIds = new Set([...target.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+        if (!targetIds.has(frag) && frag !== 'top') {
+          offenders.push(`${file.replace(dist, '')}: ${pathname}#${frag}`);
+        }
+      }
     }
-    expect(links, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(inPage, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(crossPage, 'межстраничных фрагментных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
     expect(
       [...new Set(offenders)].slice(0, 10),
       `ссылка ведёт в несуществующий фрагмент:\n${[...new Set(offenders)].slice(0, 10).join('\n')}`

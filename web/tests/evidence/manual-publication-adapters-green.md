@@ -59,6 +59,13 @@ fixtures are unchanged. Intermediate browser execution exposed a harness selecto
 matching three legitimate navigation links; it now selects the exact visible
 “Расписание” link, with no assertion removed.
 
+**Resolution (2026-09-20, PR #258).** The 43 occurrences are closed in the three
+tracked copies of `collapsible_panels.json`: seminar enrollment links → the seminar
+page; Documents links → `/svedeniya-ob-obrazovatelnoy-organizatsii#section-N` with
+`id="section-N"` emitted by `transformCollapsibles`. The paired JSON gained a
+`resolution` field; this section keeps the original refusal as measured and records
+the production decision separately from the harness’s synthetic mappings above.
+
 ## Negative probes after the implementation commit
 
 Command: `cd web && npx tsx /tmp/ikpk-adapter-probes.mts` (exit 0 means every
