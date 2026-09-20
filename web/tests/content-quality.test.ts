@@ -315,16 +315,17 @@ describe('rendered content quality', () => {
   // 8.4 перенесёт их в CMS как есть. Гейт только по dist оставлял откат этих 96 к
   // ?section= зелёным (ревью PR #258 r5). Агрегаты 113 / 112+1 без привязки к тексту
   // ссылки пропускали обмен «Документы»↔«Контакты» (ревью r7).
+  //
+  // Читаем только закреплённый снимок (и его types-копию): прямой путь к материалу
+  // переноса запрещён гейтом cms-content-source-purity.
   it('panel corpora keep all 113 document deep links as resolving #section-N', () => {
     const repoRoot = join(import.meta.dirname, '..', '..');
     const copies = [
-      'discovery/entities/collapsible_panels.json',
       'fixtures/content-snapshot/collapsible_panels.json',
       'fixtures/content-snapshot/types/collapsible_panels.json',
     ] as const;
     const buffers = copies.map((rel) => readFileSync(join(repoRoot, rel)));
-    expect(buffers[0].equals(buffers[1]), 'копии collapsible_panels.json разошлись').toBe(true);
-    expect(buffers[0].equals(buffers[2]), 'копии collapsible_panels.json разошлись').toBe(true);
+    expect(buffers[0].equals(buffers[1]), 'копии collapsible_panels.json в снимке разошлись').toBe(true);
 
     type Anchor = { href: string; text: string };
     const anchors: Anchor[] = [];
