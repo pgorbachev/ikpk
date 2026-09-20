@@ -310,6 +310,74 @@ describe('rendered content quality', () => {
     ).toEqual([]);
   });
 
+  // Корпус панелей несёт 113 переписанных ссылок; в сборке видны 17. Остальные 96
+  // сидят в панели «Компания», которая не выводится ни на одной странице, но задача
+  // 8.4 перенесёт их в CMS как есть. Гейт только по dist оставлял откат этих 96 к
+  // ?section= зелёным (ревью PR #258 r5).
+  it('panel corpora keep all 113 document deep links as resolving #section-N', () => {
+    const repoRoot = join(import.meta.dirname, '..', '..');
+    const copies = [
+      'discovery/entities/collapsible_panels.json',
+      'fixtures/content-snapshot/collapsible_panels.json',
+      'fixtures/content-snapshot/types/collapsible_panels.json',
+    ] as const;
+    const buffers = copies.map((rel) => readFileSync(join(repoRoot, rel)));
+    expect(buffers[0].equals(buffers[1]), 'копии collapsible_panels.json разошлись').toBe(true);
+    expect(buffers[0].equals(buffers[2]), 'копии collapsible_panels.json разошлись').toBe(true);
+
+    const hrefs: string[] = [];
+    const queryNoise: string[] = [];
+    const walk = (value: unknown): void => {
+      if (typeof value === 'string') {
+        for (const m of value.matchAll(/href="([^"]+)"/gi)) hrefs.push(m[1]);
+        for (const m of value.matchAll(/\?section=\d+/g)) queryNoise.push(m[0]);
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) walk(item);
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const item of Object.values(value as Record<string, unknown>)) walk(item);
+      }
+    };
+    walk(JSON.parse(buffers[0].toString('utf8')));
+
+    expect(queryNoise, `устаревший ?section= в корпусе панелей:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
+
+    const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
+    const docsDeep: string[] = [];
+    for (const href of hrefs) {
+      let url: URL;
+      try {
+        url = new URL(href, 'https://ikpk.su');
+      } catch {
+        continue;
+      }
+      if ((url.pathname.replace(/\/$/, '') || '/') !== DOCS) continue;
+      if (url.searchParams.has('section')) {
+        queryNoise.push(href);
+        continue;
+      }
+      if (url.hash.startsWith('#section-')) docsDeep.push(href);
+    }
+    expect(queryNoise, `устаревший ?section= среди href корпуса:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
+    expect(
+      docsDeep.length,
+      'в корпусе панелей меньше 113 глубоких ссылок на сведения — миграция 8.4 потеряет контракт'
+    ).toBe(113);
+
+    const targetFile = join(dist, 'svedeniya-ob-obrazovatelnoy-organizatsii', 'index.html');
+    expect(existsSync(targetFile), 'страница сведений не собрана — проверить якоря корпуса нечем').toBe(true);
+    const ids = new Set(
+      [...readFileSync(targetFile, 'utf-8').matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1])
+    );
+    const missing = [
+      ...new Set(docsDeep.map((href) => decodeURIComponent(new URL(href, 'https://ikpk.su').hash.slice(1)))),
+    ].filter((frag) => !ids.has(frag));
+    expect(missing, `якорь из корпуса панелей отсутствует на странице сведений:\n${missing.join('\n')}`).toEqual([]);
+  });
+
   it('no unresolved legacy control left in the build', () => {
     const offenders: string[] = [];
     let pages = 0;

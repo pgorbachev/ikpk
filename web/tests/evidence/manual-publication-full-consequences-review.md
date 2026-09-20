@@ -66,6 +66,12 @@ as an exception. Missing real installation/deploy-user/CMS writer prerequisites 
 by candidate markers. See `manual-publication-entrypoints-implementation.md`, section
 «Contract conflict resolved». The prerequisites and the 43 legacy links remain open.
 
+*Postscript 2026-09-20:* the 43 inherited content links are resolved by PR #258
+(panel href rewrite + `#section-N` anchors). See
+`manual-publication-adapters-green.md` «Resolution» and
+`manual-publication-legacy-links.json` → `resolution`. Operational prerequisites for a
+real install may still block acceptance; the 43-link content blocker does not.
+
 Independent native command:
 
 ```sh
