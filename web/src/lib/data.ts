@@ -357,9 +357,7 @@ export function getArticle(slug: string): Article | undefined {
 
 let _schedule: ScheduleEntry[] | null = null;
 export function getScheduleEntries(): ScheduleEntry[] {
-  if (!_schedule) {
-    _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry);
-  }
+  if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry);
   return _schedule;
 }
 
@@ -408,43 +406,10 @@ export function getCourseGroupForSeminar(seminar: Seminar): CourseGroup | undefi
   );
 }
 
-function finiteNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return Number.NaN;
-}
-
-function normalizeCity(city: unknown): ScheduleEntry['city'] {
-  if (typeof city === 'string') return { id: 0, name: city };
-  if (city && typeof city === 'object') {
-    const rec = city as { id?: unknown; name?: unknown };
-    if (typeof rec.name === 'string') {
-      return { id: typeof rec.id === 'number' ? rec.id : 0, name: rec.name };
-    }
-  }
-  return { id: 0, name: '' };
-}
-
-/**
- * CMS пишет `city` строкой и `price`, закреплённая фикстура — `{ name }` и `newPrice`.
- * Сайт читает вторую форму; без сведения живой снимок даёт «Уточняется» и «не число ₽».
- */
-export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unknown>): ScheduleEntry {
-  const record = raw as Record<string, unknown>;
-  return {
-    ...(raw as ScheduleEntry),
-    city: normalizeCity(record.city),
-    newPrice: finiteNumber(record.newPrice ?? record.price),
-  };
-}
-
 // Helper: format price
-export function formatPrice(price: number | null | undefined): string {
+export function formatPrice(price: number): string {
   if (price === 0) return 'Бесплатно';
-  if (typeof price !== 'number' || !Number.isFinite(price)) return '';
+  if (!Number.isFinite(price)) return '';
   return new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 }
 
@@ -471,4 +436,35 @@ export function excerpt(text: string, maxLen = 200): string {
   const clean = stripHtml(text);
   if (clean.length <= maxLen) return clean;
   return clean.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
+}
+
+function finiteNumber(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Number.NaN;
+}
+
+function normalizeCity(city: unknown): ScheduleEntry['city'] {
+  if (typeof city === 'string') return { id: 0, name: city };
+  const rec = city as { id?: unknown; name?: unknown } | null | undefined;
+  if (rec && typeof rec.name === 'string') {
+    return { id: typeof rec.id === 'number' ? rec.id : 0, name: rec.name };
+  }
+  return { id: 0, name: '' };
+}
+
+/**
+ * CMS пишет `city` строкой и `price`, закреплённая фикстура — `{ name }` и `newPrice`.
+ * Сайт читает вторую форму; без сведения живой снимок даёт «Уточняется» и «не число ₽».
+ */
+export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unknown>): ScheduleEntry {
+  const record = raw as Record<string, unknown>;
+  return {
+    ...(raw as ScheduleEntry),
+    city: normalizeCity(record.city),
+    newPrice: finiteNumber(record.newPrice ?? record.price),
+  };
 }

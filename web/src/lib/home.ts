@@ -102,7 +102,6 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
 /**
  * Живые счётчики каталога — для modular-hero и маршрутов.
  * dates — текущие и будущие по последнему дню (`isCurrentOrFuture`).
- * Ближайшие на главной фильтруются иначе: по дате начала.
  * cities — населённые пункты без «Онлайн».
  */
 export function getCatalogStats(now: Date = new Date()) {
