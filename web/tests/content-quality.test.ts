@@ -313,7 +313,8 @@ describe('rendered content quality', () => {
   // Корпус панелей несёт 113 переписанных ссылок; в сборке видны 17. Остальные 96
   // сидят в панели «Компания», которая не выводится ни на одной странице, но задача
   // 8.4 перенесёт их в CMS как есть. Гейт только по dist оставлял откат этих 96 к
-  // ?section= зелёным (ревью PR #258 r5).
+  // ?section= зелёным (ревью PR #258 r5). Агрегаты 113 / 112+1 без привязки к тексту
+  // ссылки пропускали обмен «Документы»↔«Контакты» (ревью r7).
   it('panel corpora keep all 113 document deep links as resolving #section-N', () => {
     const repoRoot = join(import.meta.dirname, '..', '..');
     const copies = [
@@ -325,12 +326,13 @@ describe('rendered content quality', () => {
     expect(buffers[0].equals(buffers[1]), 'копии collapsible_panels.json разошлись').toBe(true);
     expect(buffers[0].equals(buffers[2]), 'копии collapsible_panels.json разошлись').toBe(true);
 
-    const hrefs: string[] = [];
-    const queryNoise: string[] = [];
+    type Anchor = { href: string; text: string };
+    const anchors: Anchor[] = [];
     const walk = (value: unknown): void => {
       if (typeof value === 'string') {
-        for (const m of value.matchAll(/href="([^"]+)"/gi)) hrefs.push(m[1]);
-        for (const m of value.matchAll(/[?&]section=/gi)) queryNoise.push(m[0]);
+        for (const m of value.matchAll(/<a\s[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          anchors.push({ href: m[1], text: m[2].replace(/<[^>]*>/g, '').trim() });
+        }
         return;
       }
       if (Array.isArray(value)) {
@@ -343,12 +345,16 @@ describe('rendered content quality', () => {
     };
     walk(JSON.parse(buffers[0].toString('utf8')));
 
-    expect(queryNoise, `устаревший section= в корпусе панелей:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
-
     const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
-    const docsDeep: URL[] = [];
-    const foreignHost: string[] = [];
-    for (const href of hrefs) {
+    const EXPECTED: Record<string, { frag: string; count: number }> = {
+      Документы: { frag: 'section-3', count: 96 },
+      Положением: { frag: 'section-3', count: 16 },
+      '«Структура и органы управления»': { frag: 'section-2', count: 1 },
+    };
+    const byLabel = new Map<string, string[]>();
+    const offenders: string[] = [];
+
+    for (const { href, text } of anchors) {
       let url: URL;
       try {
         url = new URL(href, 'https://ikpk.su');
@@ -356,46 +362,52 @@ describe('rendered content quality', () => {
         continue;
       }
       if (url.searchParams.has('section')) {
-        queryNoise.push(href);
+        offenders.push(`section= в href: ${text || '(пусто)'} → ${href}`);
         continue;
       }
-      if ((url.pathname.replace(/\/$/, '') || '/') !== DOCS) continue;
-      if (!url.hash.startsWith('#section-')) continue;
-      if (url.hostname !== 'ikpk.su') {
-        foreignHost.push(href);
-        continue;
-      }
-      docsDeep.push(url);
-    }
-    expect(queryNoise, `устаревший section= среди href корпуса:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
-    expect(
-      foreignHost,
-      `глубокая ссылка на сведения ушла на чужой хост:\n${foreignHost.slice(0, 10).join('\n')}`
-    ).toEqual([]);
-    expect(
-      docsDeep.length,
-      'в корпусе панелей не 113 глубоких ссылок на сведения — миграция 8.4 потеряет контракт'
-    ).toBe(113);
+      const path = url.pathname.replace(/\/$/, '') || '/';
+      if (path !== DOCS || !url.hash.startsWith('#section-')) continue;
 
-    // Контракт переписывания: «Документы» → section-3 (112), одна ссылка → section-2.
-    // Счётчик без раскладки пропускал массовый перенос на другой существующий якорь.
-    const byFrag = new Map<string, number>();
-    for (const url of docsDeep) {
+      // Канон переписывания — root-relative без query/порта/чужого хоста.
       const frag = decodeURIComponent(url.hash.slice(1));
-      byFrag.set(frag, (byFrag.get(frag) ?? 0) + 1);
+      const canonical = `${DOCS}#${frag}`;
+      if (href !== canonical) {
+        offenders.push(`неканонический адрес: ${text || '(пусто)'} → ${href}`);
+        continue;
+      }
+      const list = byLabel.get(text) ?? [];
+      list.push(frag);
+      byLabel.set(text, list);
     }
-    expect(
-      Object.fromEntries([...byFrag.entries()].sort()),
-      'раскладка якорей корпуса панелей разошлась с принятым переписыванием'
-    ).toEqual({ 'section-2': 1, 'section-3': 112 });
+
+    expect(offenders, `сломанные глубокие ссылки корпуса:\n${offenders.slice(0, 10).join('\n')}`).toEqual([]);
+
+    const unexpected = [...byLabel.keys()].filter((label) => !(label in EXPECTED));
+    expect(unexpected, `неожиданный текст глубокой ссылки на сведения:\n${unexpected.join('\n')}`).toEqual([]);
+
+    for (const [label, want] of Object.entries(EXPECTED)) {
+      const frags = byLabel.get(label) ?? [];
+      expect(frags.length, `ссылок с текстом «${label}»`).toBe(want.count);
+      const wrong = frags.filter((frag) => frag !== want.frag);
+      expect(
+        wrong,
+        `«${label}» должна вести на #${want.frag}, а ведёт иначе (${wrong.length})`
+      ).toEqual([]);
+    }
 
     const targetFile = join(dist, 'svedeniya-ob-obrazovatelnoy-organizatsii', 'index.html');
     expect(existsSync(targetFile), 'страница сведений не собрана — проверить якоря корпуса нечем').toBe(true);
-    const ids = new Set(
-      [...readFileSync(targetFile, 'utf-8').matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1])
-    );
-    const missing = [...byFrag.keys()].filter((frag) => !ids.has(frag));
-    expect(missing, `якорь из корпуса панелей отсутствует на странице сведений:\n${missing.join('\n')}`).toEqual([]);
+    const page = readFileSync(targetFile, 'utf-8');
+    for (const [frag, title] of [
+      ['section-2', 'Структура и органы управления'],
+      ['section-3', 'Уставные документы'],
+    ] as const) {
+      const re = new RegExp(
+        `<details[^>]*\\bid="${frag}"[^>]*>\\s*<summary>${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</summary>`,
+        'i'
+      );
+      expect(re.test(page), `на странице сведений #${frag} должен быть «${title}»`).toBe(true);
+    }
   });
 
   it('no unresolved legacy control left in the build', () => {
