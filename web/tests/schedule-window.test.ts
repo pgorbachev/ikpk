@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import ts from 'typescript';
-import { isCurrentOrFuture, lastDay } from '../src/lib/schedule-window';
+import { isCurrentOrFuture, isUpcomingStart, lastDay } from '../src/lib/schedule-window';
 
 // Многодневное событие обязано оставаться на страницах до последнего дня. Из 63
 // записей расписания 60 многодневные, поэтому фильтр по `startAt` убирал бы
@@ -32,6 +32,22 @@ describe('окно актуальности записи расписания', 
 
   it('последний день события — сегодня: ещё актуально', () => {
     expect(isCurrentOrFuture({ startAt: '2026-08-01', endAt: TODAY }, TODAY)).toBe(true);
+  });
+
+  describe('ещё не начавшееся событие (ближайшие на главной)', () => {
+    it('будущее начало — upcoming, идущее многодневное — нет', () => {
+      expect(isUpcomingStart({ startAt: '2026-09-01', endAt: '2026-09-03' }, TODAY)).toBe(true);
+      expect(isUpcomingStart({ startAt: '2026-08-05', endAt: '2026-08-08' }, TODAY)).toBe(false);
+      expect(isCurrentOrFuture({ startAt: '2026-08-05', endAt: '2026-08-08' }, TODAY)).toBe(true);
+    });
+
+    it('старт сегодня — upcoming', () => {
+      expect(isUpcomingStart({ startAt: `${TODAY}T00:00:00.000Z` }, TODAY)).toBe(true);
+    });
+
+    it('прошлое начало — не upcoming', () => {
+      expect(isUpcomingStart({ startAt: '2026-07-20', endAt: '2026-07-25' }, TODAY)).toBe(false);
+    });
   });
 
   describe('последний день', () => {

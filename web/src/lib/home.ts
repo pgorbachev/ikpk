@@ -11,7 +11,7 @@ import {
   type SeminarTeacherRef,
   type Teacher,
 } from './data.js';
-import { isCurrentOrFuture } from './schedule-window';
+import { isCurrentOrFuture, isUpcomingStart } from './schedule-window';
 
 export interface UpcomingSeminar {
   id: number;
@@ -101,7 +101,8 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
 
 /**
  * Живые счётчики каталога — для modular-hero и маршрутов.
- * dates — только текущие/будущие (как в getUpcomingSeminars).
+ * dates — текущие и будущие по последнему дню (`isCurrentOrFuture`).
+ * Ближайшие на главной фильтруются иначе: по дате начала.
  * cities — населённые пункты без «Онлайн».
  */
 export function getCatalogStats(now: Date = new Date()) {
@@ -132,7 +133,9 @@ export function getCatalogStats(now: Date = new Date()) {
 
 /**
  * Ближайшие активные семинары с назначенной датой, отсортированные по дате.
- * Прошедшие отфильтровываются по дате сборки (как в расписании).
+ * Уже начавшиеся отфильтровываются: строка «Ближайший семинар» — про набор,
+ * к началу которого ещё можно приехать. Идущие события остаются на странице
+ * расписания (`isCurrentOrFuture`).
  */
 export function getUpcomingSeminars(limit = 3, now: Date = new Date()): UpcomingSeminar[] {
   const instituteByName = new Map(getInstitutes().map((i) => [i.name, i.slug]));
@@ -140,10 +143,9 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
   const today = now.toISOString().slice(0, 10);
 
   return getScheduleEntries()
-    // По последнему дню события, а не по первому: многодневных записей 60 из 63,
-    // и фильтр по startAt убирал бы идущий семинар с главной на второй день —
-    // при том, что расписание его показывает. Общий вывод в schedule-window.ts.
-    .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today))
+    // По первому дню, не по последнему: иначе 20 сентября «ближайшим» остаётся
+    // CST-2, начавшийся 17-го. Сравнение — `isUpcomingStart` в schedule-window.ts.
+    .filter((e) => e.status === 'active' && e.startAt && isUpcomingStart(e, today))
     .sort((a, b) => a.startAt.localeCompare(b.startAt))
     .slice(0, limit)
     .map((e: ScheduleEntry): UpcomingSeminar => {
