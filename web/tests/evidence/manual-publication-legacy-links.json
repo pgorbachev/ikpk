@@ -350,5 +350,7 @@
       "url": "https://ikpk.su/institute-upledgera/programs-form/158?seminarId=244",
       "fixtureOnlyReplacement": "/raspisanie-i-tseny"
     }
-  ]
+  ],
+  "resolvedAt": "2026-09-20",
+  "resolution": "Links rewritten in the panel bodies (all three tracked copies), not redirected: 26 registration links now point at the seminar page matched by their own anchor text, 113 documents links (these 17 plus 96 that already carried a dead ?section= parameter) point at /svedeniya-ob-obrazovatelnoy-organizatsii#section-N, and transformCollapsibles now emits id=\"section-N\". The fixtureOnlyReplacement values below record the harness mapping of the original measurement and are superseded by that rewrite. See task 4.1c of cms-content-authoring-and-migration."
 }
