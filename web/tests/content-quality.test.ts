@@ -330,7 +330,7 @@ describe('rendered content quality', () => {
     const walk = (value: unknown): void => {
       if (typeof value === 'string') {
         for (const m of value.matchAll(/href="([^"]+)"/gi)) hrefs.push(m[1]);
-        for (const m of value.matchAll(/\?section=\d+/g)) queryNoise.push(m[0]);
+        for (const m of value.matchAll(/[?&]section=/gi)) queryNoise.push(m[0]);
         return;
       }
       if (Array.isArray(value)) {
@@ -343,10 +343,11 @@ describe('rendered content quality', () => {
     };
     walk(JSON.parse(buffers[0].toString('utf8')));
 
-    expect(queryNoise, `устаревший ?section= в корпусе панелей:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
+    expect(queryNoise, `устаревший section= в корпусе панелей:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
 
     const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
-    const docsDeep: string[] = [];
+    const docsDeep: URL[] = [];
+    const foreignHost: string[] = [];
     for (const href of hrefs) {
       let url: URL;
       try {
@@ -354,27 +355,46 @@ describe('rendered content quality', () => {
       } catch {
         continue;
       }
-      if ((url.pathname.replace(/\/$/, '') || '/') !== DOCS) continue;
       if (url.searchParams.has('section')) {
         queryNoise.push(href);
         continue;
       }
-      if (url.hash.startsWith('#section-')) docsDeep.push(href);
+      if ((url.pathname.replace(/\/$/, '') || '/') !== DOCS) continue;
+      if (!url.hash.startsWith('#section-')) continue;
+      if (url.hostname !== 'ikpk.su') {
+        foreignHost.push(href);
+        continue;
+      }
+      docsDeep.push(url);
     }
-    expect(queryNoise, `устаревший ?section= среди href корпуса:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
+    expect(queryNoise, `устаревший section= среди href корпуса:\n${queryNoise.slice(0, 10).join('\n')}`).toEqual([]);
+    expect(
+      foreignHost,
+      `глубокая ссылка на сведения ушла на чужой хост:\n${foreignHost.slice(0, 10).join('\n')}`
+    ).toEqual([]);
     expect(
       docsDeep.length,
-      'в корпусе панелей меньше 113 глубоких ссылок на сведения — миграция 8.4 потеряет контракт'
+      'в корпусе панелей не 113 глубоких ссылок на сведения — миграция 8.4 потеряет контракт'
     ).toBe(113);
+
+    // Контракт переписывания: «Документы» → section-3 (112), одна ссылка → section-2.
+    // Счётчик без раскладки пропускал массовый перенос на другой существующий якорь.
+    const byFrag = new Map<string, number>();
+    for (const url of docsDeep) {
+      const frag = decodeURIComponent(url.hash.slice(1));
+      byFrag.set(frag, (byFrag.get(frag) ?? 0) + 1);
+    }
+    expect(
+      Object.fromEntries([...byFrag.entries()].sort()),
+      'раскладка якорей корпуса панелей разошлась с принятым переписыванием'
+    ).toEqual({ 'section-2': 1, 'section-3': 112 });
 
     const targetFile = join(dist, 'svedeniya-ob-obrazovatelnoy-organizatsii', 'index.html');
     expect(existsSync(targetFile), 'страница сведений не собрана — проверить якоря корпуса нечем').toBe(true);
     const ids = new Set(
       [...readFileSync(targetFile, 'utf-8').matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1])
     );
-    const missing = [
-      ...new Set(docsDeep.map((href) => decodeURIComponent(new URL(href, 'https://ikpk.su').hash.slice(1)))),
-    ].filter((frag) => !ids.has(frag));
+    const missing = [...byFrag.keys()].filter((frag) => !ids.has(frag));
     expect(missing, `якорь из корпуса панелей отсутствует на странице сведений:\n${missing.join('\n')}`).toEqual([]);
   });
 
