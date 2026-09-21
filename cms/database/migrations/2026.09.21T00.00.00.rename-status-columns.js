@@ -22,7 +22,8 @@
  * только статьи и пустое значение пропускает.
  *
  * Почему это лечится именно миграцией: `db.migrations.up()` выполняется ДО `syncSchema()`
- * (`@strapi/database/dist/schema/index.js:69-73`). Переименовав колонку здесь, мы приводим
+ * (`@strapi/database/dist/schema/index.js:76`, `await db.migrations.up();` — внутри
+ * `async sync ()` со строки 73). Переименовав колонку здесь, мы приводим
  * базу к объявленной схеме заранее — последующая сверка не видит ни удалённых, ни
  * добавленных колонок и ничего не делает.
  *
@@ -49,7 +50,7 @@ async function rename(knex, { table, from, to }) {
   // Обе колонки сразу. Состояние достижимо не потому, что sync «успел создать» новую рядом:
   // drop и create идут одним `alterTable`. Настоящий путь — устаревшая `strapi_database_schema`:
   // трёхсторонняя сверка прямо игнорирует то, чего нет в сохранённой схеме
-  // (`@strapi/database/dist/schema/index.js:47-52`), поэтому старая колонка остаётся, а новая
+  // (`@strapi/database/dist/schema/index.js:54`, «should be ignored»), поэтому старая колонка остаётся, а новая
   // создаётся.
   if (await knex.schema.hasColumn(table, to)) {
     // ТОЛЬКО пустые: на такой машине админка уже могла записать в новое поле, и безусловный
@@ -59,7 +60,24 @@ async function rename(knex, { table, from, to }) {
       .whereNull(to)
       .whereNotNull(from)
       .update({ [to]: knex.ref(from) });
-    await knex.schema.alterTable(table, (t) => t.dropColumn(from));
+
+    // НЕ `knex.schema.alterTable(...).dropColumn()`: на sqlite knex выполняет это
+    // ПЕРЕСБОРКОЙ таблицы (create tmp → copy → DROP TABLE → rename). Production зовёт
+    // миграцию внутри транзакции, а Strapi держит `pragma foreign_keys = on` на каждом
+    // соединении пула (`@strapi/database/dist/dialects/sqlite/index.js`). Отключить
+    // внешние ключи внутри транзакции нельзя — это документированный no-op, — поэтому
+    // `DROP TABLE seminars` срабатывает каскадом по всем `*_lnk`/`*_cmps`, которые
+    // Strapi создаёт с `onDelete: 'CASCADE'`. Значения статуса при этом сохраняются, а
+    // все связи (преподаватели, программа, институт, компоненты SEO) исчезают молча:
+    // ошибки нет, нарушения внешнего ключа после тоже нет.
+    //
+    // Измерено на форме production (в транзакции, ключи включены): строк связи до 1,
+    // после 0. Вне транзакции или с выключенными ключами — 1, то есть дефект виден
+    // только в том сочетании, в котором миграция и работает.
+    //
+    // Нативный `ALTER TABLE ... DROP COLUMN` пересборки не делает: в sqlite он есть с
+    // 3.35 (здесь 3.53), в postgres и mysql был всегда.
+    await knex.raw(`ALTER TABLE ?? DROP COLUMN ??`, [table, from]);
     return `${table}: перенесено значений ${moved}, старая колонка ${from} убрана`;
   }
 

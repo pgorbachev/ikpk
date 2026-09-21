@@ -40,6 +40,10 @@ async function withDb(fn) {
     useNullAsDefault: true,
   });
   try {
+    // Внешние ключи включены, как их включает Strapi на каждом соединении пула
+    // (`@strapi/database/dist/dialects/sqlite/index.js`). Без этого ветка с пересборкой
+    // таблицы выглядит безобидной: каскад срабатывает только при включённых ключах.
+    await knex.raw('pragma foreign_keys = on');
     // Через транзакцию, потому что ТАК зовёт production: загрузчик оборачивает `up` в
     // `wrapTransaction` (`@strapi/database/dist/migrations/common.js:3`, подключено в
     // `users.js:34`), и внутрь приходит `trx`, а не сам knex. Прогон на голом knex был бы
@@ -148,6 +152,41 @@ test('перенос НЕ затирает то, что админка уже з
       'not_planned',
       'planned',
     ]);
+  });
+});
+
+test('перенос НЕ уносит связи каскадом', async () => {
+  // РЕГРЕСС, и найден он был только на форме production. На sqlite knex выполняет
+  // `dropColumn` ПЕРЕСБОРКОЙ таблицы: create tmp → copy → DROP TABLE → rename. Внутри
+  // транзакции при включённых внешних ключах (а Strapi включает их на каждом соединении)
+  // `DROP TABLE seminars` срабатывает каскадом по всем `*_lnk`/`*_cmps`, которые Strapi
+  // создаёт с `onDelete: 'CASCADE'`. Статусы сохранялись, а преподаватели, программа,
+  // институт и компоненты SEO исчезали молча — без ошибки и без нарушения ключа после.
+  //
+  // Прежние тесты этого не видели, потому что создавали ОДИНОЧНЫЕ таблицы без внешних
+  // ключей: ветка исполнялась без того самого ограничения, которое и уничтожало данные.
+  await withDb(async (knex) => {
+    await knex.schema.createTable('seminars', (t) => {
+      t.increments('id');
+      t.string('status');
+      t.string('seminar_status');
+    });
+    await knex.schema.createTable('seminars_teacher_lnk', (t) => {
+      t.increments('id');
+      t.integer('seminar_id').references('id').inTable('seminars').onDelete('CASCADE');
+      t.integer('teacher_id');
+    });
+    await knex('seminars').insert({ status: 'planned', seminar_status: null });
+    await knex('seminars_teacher_lnk').insert({ seminar_id: 1, teacher_id: 10 });
+
+    await migration.up(knex);
+
+    assert.deepEqual(await knex('seminars').pluck('seminar_status'), ['planned']);
+    assert.equal(
+      (await knex('seminars_teacher_lnk').select()).length,
+      1,
+      'связь семинара с преподавателем унесло каскадом при пересборке таблицы',
+    );
   });
 });
 
