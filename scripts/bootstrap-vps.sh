@@ -374,7 +374,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/database ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
+ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3
@@ -499,10 +499,30 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     # Владелец релиза. rsync -a переносит ЧУЖИЕ uid/gid с машины оператора (на стенде
     # каталоги оказались с uid 502), поэтому владелец приводится явно. Код остаётся у
     # root: служба не должна иметь права переписать то, что исполняет. Записывать ей
-    # нужно ровно три места, и они называются поимённо, а не выдаются целиком:
-    #   database/migrations — Strapi создаёт каталог при старте (EACCES иначе);
+    # нужно ровно два места, и они называются поимённо, а не выдаются целиком:
     #   public/uploads      — загрузки; живут в ОБЩЕМ каталоге и переживают выкатку;
     #   .strapi             — служебный кэш.
+    #
+    # `database/` ОСТАЁТСЯ ЗА root, и это изменение: прежде каталог отдавали службе,
+    # потому что Strapi создаёт его при старте (иначе EACCES), и он всегда был пуст —
+    # исключение ничего не стоило. Теперь там лежат миграции, то есть исполняемый код,
+    # который Strapi подключает через `require` при каждом запуске. Право записи больше
+    # не нужно: каталог приезжает в артефакте и создаётся строкой ниже до первого старта,
+    # единственное обращение провайдера к диску — `fse.ensureDirSync` на уже существующий
+    # путь, а состояние umzug живёт в таблице `strapi_migrations`, а не на диске.
+    # Миграции обязаны ДОЕХАТЬ, а не только существовать в репозитории. Пустой каталог
+    # неотличим от «миграций нет» — Strapi молча выполняет ноль штук и приводит базу к
+    # схеме обычной сверкой, то есть `dropColumn` + `createColumn` с потерей значений.
+    # Проверка стоит здесь, а не только в сборщике артефакта: источник задаёт оператор,
+    # и собрать его можно мимо `scripts/build-cms-artifact.sh`.
+    if ! compgen -G "${new_release}/database/migrations/*.js" >/dev/null &&
+       ! compgen -G "${new_release}/database/migrations/*.sql" >/dev/null; then
+      echo "[cms] в релизе нет ни одной миграции (${new_release}/database/migrations пуст)." >&2
+      echo "[cms] источник артефакта собран мимо scripts/build-cms-artifact.sh: переименование" >&2
+      echo "[cms] колонки пройдёт сверкой схемы и обнулит значения. Выкатка остановлена." >&2
+      exit 1
+    fi
+
     chown -R root:root "$new_release"
     if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
       mkdir -p "${new_release}/database/migrations" "${new_release}/.strapi"
@@ -511,7 +531,7 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       mkdir -p "${new_release}/public"
       ln -sfn "${shared_deps}/uploads" "${new_release}/public/uploads"
       chown -R "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" \
-        "${new_release}/database" "${new_release}/.strapi" "${shared_deps}/uploads"
+        "${new_release}/.strapi" "${shared_deps}/uploads"
     fi
     # ВАЖНО: `readlink -f` на несуществующем симлинке возвращает САМ путь ссылки, а не пустоту.
     # Откат по такому значению делал `current` ссылкой на себя, служба падала с

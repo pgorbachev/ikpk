@@ -40,7 +40,13 @@ async function withDb(fn) {
     useNullAsDefault: true,
   });
   try {
-    await fn(knex);
+    // Через транзакцию, потому что ТАК зовёт production: загрузчик оборачивает `up` в
+    // `wrapTransaction` (`@strapi/database/dist/migrations/common.js:3`, подключено в
+    // `users.js:34`), и внутрь приходит `trx`, а не сам knex. Прогон на голом knex был бы
+    // зелёным на форме вызова, которой в жизни не бывает: у sqlite `dropColumn` может
+    // идти пересборкой таблицы, а пересборка внутри транзакции — ровно то место, где
+    // ломается `PRAGMA foreign_keys`.
+    await knex.transaction((trx) => Promise.resolve(fn(trx)));
   } finally {
     await knex.destroy();
     rmSync(dir, { recursive: true, force: true });

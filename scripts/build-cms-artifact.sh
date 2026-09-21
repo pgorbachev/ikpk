@@ -57,9 +57,11 @@ const migDir = path.join(out, "database", "migrations");
 const migrations = require("fs").existsSync(migDir)
   ? require("fs").readdirSync(migDir).filter((f) => /\.(js|sql)$/.test(f))
   : [];
-const inRepo = require("fs")
-  .readdirSync(path.join(process.argv[2], "cms", "database", "migrations"))
-  .filter((f) => /\.(js|sql)$/.test(f));
+const repoMigDir = path.join(process.argv[2], "cms", "database", "migrations");
+// Отсутствие каталога в репозитории — это «проверить не удалось», а не «миграций нет»:
+// без него readdirSync выбросил бы сырой ENOENT вместо внятного отказа.
+if (!require("fs").existsSync(repoMigDir)) fail(`в репозитории нет ${repoMigDir}: сверять число миграций не с чем`);
+const inRepo = require("fs").readdirSync(repoMigDir).filter((f) => /\.(js|sql)$/.test(f));
 if (migrations.length !== inRepo.length) {
   fail(`миграций в артефакте ${migrations.length}, в репозитории ${inRepo.length}: на сервере они не выполнятся, и переименование колонки обнулит значения`);
 }
