@@ -7,7 +7,7 @@
  * ПО ИМЕНИ колонки и переименования не распознаёт: для него это «старый атрибут удалён,
  * новый добавлен». `@strapi/database/dist/schema/builder.js` в `alterTable` сначала зовёт
  * `dropColumn` для `columns.removed`, затем `createColumn` для `columns.added`, а
- * `@strapi/core/dist/Strapi.js:361` вызывает `db.schema.sync()` при КАЖДОМ старте, включая
+ * `@strapi/core/dist/Strapi.js:360` вызывает `db.schema.sync()` при КАЖДОМ старте, включая
  * `NODE_ENV=production`. Значение по умолчанию у скалярного поля живёт на уровне сущности,
  * а не колонки, поэтому новая колонка остаётся пустой — её никто не заполняет.
  *
@@ -28,6 +28,10 @@
  *
  * Идемпотентность обязательна: на стенде переименование уже произошло (схемы попали в
  * работающий `dist` до появления этой миграции), и там нужно тихо ничего не делать.
+ *
+ * Миграция обязана попасть в АРТЕФАКТ, а не только в репозиторий: Strapi ищет её в
+ * `<корень релиза>/database/migrations`, `strapi build` её туда не кладёт, и пустой каталог
+ * означает ноль миграций без единой жалобы. За этим следит `scripts/build-cms-artifact.sh`.
  */
 
 /** Пары «таблица → старое и новое имя колонки». */
@@ -39,18 +43,24 @@ const RENAMES = [
 async function rename(knex, { table, from, to }) {
   if (!(await knex.schema.hasTable(table))) return `${table}: таблицы нет — пропуск`;
 
-  const hasFrom = await knex.schema.hasColumn(table, from);
-  const hasTo = await knex.schema.hasColumn(table, to);
+  // Нет старой колонки — либо уже переименовано, либо свежая установка. Оба случая: молчим.
+  if (!(await knex.schema.hasColumn(table, from))) return `${table}.${from}: нечего переносить`;
 
-  if (hasTo && !hasFrom) return `${table}.${to}: уже переименована — пропуск`;
-  if (!hasFrom) return `${table}.${from}: колонки нет — пропуск`;
-
-  // Обе сразу означают, что sync уже создал пустую новую колонку рядом со старой:
-  // переносим значения и убираем старую, иначе следующий sync удалит её вместе с данными.
-  if (hasTo && hasFrom) {
-    await knex(table).update({ [to]: knex.ref(from) });
+  // Обе колонки сразу. Состояние достижимо не потому, что sync «успел создать» новую рядом:
+  // drop и create идут одним `alterTable`. Настоящий путь — устаревшая `strapi_database_schema`:
+  // трёхсторонняя сверка прямо игнорирует то, чего нет в сохранённой схеме
+  // (`@strapi/database/dist/schema/index.js:47-52`), поэтому старая колонка остаётся, а новая
+  // создаётся.
+  if (await knex.schema.hasColumn(table, to)) {
+    // ТОЛЬКО пустые: на такой машине админка уже могла записать в новое поле, и безусловный
+    // перенос затёр бы её значение старым (а у новых записей — вообще NULL). Проверено:
+    // без `whereNull` запись со `seminar_status='not_planned'` и пустым `status` обнулялась.
+    const moved = await knex(table)
+      .whereNull(to)
+      .whereNotNull(from)
+      .update({ [to]: knex.ref(from) });
     await knex.schema.alterTable(table, (t) => t.dropColumn(from));
-    return `${table}: значения перенесены ${from} → ${to}, старая колонка убрана`;
+    return `${table}: перенесено значений ${moved}, старая колонка ${from} убрана`;
   }
 
   await knex.schema.alterTable(table, (t) => t.renameColumn(from, to));
@@ -58,15 +68,12 @@ async function rename(knex, { table, from, to }) {
 }
 
 module.exports = {
+  // `down` намеренно нет: во всём Strapi `provider.down()` не зовёт ничто, команды миграций
+  // в CLI тоже нет, — то есть откат недостижим никаким поддерживаемым способом. Метод,
+  // который нельзя вызвать, — не страховка, а её видимость.
   async up(knex) {
     for (const spec of RENAMES) {
       console.log(`[rename-status-columns] ${await rename(knex, spec)}`);
-    }
-  },
-
-  async down(knex) {
-    for (const { table, from, to } of RENAMES) {
-      await rename(knex, { table, from: to, to: from });
     }
   },
 };

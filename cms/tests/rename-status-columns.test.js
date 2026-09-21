@@ -24,33 +24,27 @@ const migration = require_(
 /**
  * Миграция переименования `status` → `seminar_status` / `entry_status`.
  *
- * Предмет проверки — СОХРАНЕНИЕ ЗНАЧЕНИЙ, а не факт переименования. Без миграции Strapi
- * приводит базу к схеме сам: сверяет колонки по имени, не распознаёт переименование и
- * делает `dropColumn` + `createColumn`. Новая колонка остаётся пустой — значение по
- * умолчанию у скалярного поля живёт на уровне сущности, а не колонки. Потеря молчаливая:
- * сайт фильтрует `status === 'active'` в семи местах, и при null расписание исчезает
- * целиком, не уронив ни одной проверки.
+ * Предмет проверки — СОХРАНЕНИЕ ЗНАЧЕНИЙ, а не факт переименования; почему без миграции
+ * они теряются, разобрано в заголовке самой миграции.
  *
  * Без sqlite-файла на диске проверять нечего, поэтому база создаётся во временном
  * каталоге, а не в памяти: `renameColumn` у sqlite пересоздаёт таблицу, и поведение на
  * файле и в памяти стоит мерить там же, где оно работает в жизни.
  */
 
-function withDb(fn) {
+async function withDb(fn) {
   const dir = mkdtempSync(join(tmpdir(), 'ikpk-mig-'));
   const knex = knexLib({
     client: 'better-sqlite3',
     connection: { filename: join(dir, 'test.db') },
     useNullAsDefault: true,
   });
-  return (async () => {
-    try {
-      await fn(knex);
-    } finally {
-      await knex.destroy();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  })();
+  try {
+    await fn(knex);
+  } finally {
+    await knex.destroy();
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** База до переименования: старая колонка со значениями. */
@@ -122,15 +116,31 @@ test('если sync успел создать пустую колонку ряд
   });
 });
 
-test('обратная миграция возвращает и имя, и значения', async () => {
+test('перенос НЕ затирает то, что админка уже записала в новое поле', async () => {
+  // РЕГРЕСС. Перенос был безусловным (`update({ [to]: knex.ref(from) })`) и проходил по всем
+  // строкам, включая те, где старая колонка пуста. На машине с обеими колонками админка уже
+  // могла записать в новое поле — и её значение затиралось пустым старым. Ветка срабатывает
+  // ровно там, где правки руками наиболее вероятны, поэтому дефект был направлен в самое
+  // ценное.
   await withDb(async (knex) => {
-    await seedPreRename(knex);
-    await migration.up(knex);
-    await migration.down(knex);
+    await knex.schema.createTable('seminars', (t) => {
+      t.increments('id');
+      t.string('name');
+      t.string('status');
+      t.string('seminar_status');
+    });
+    await knex('seminars').insert([
+      { name: 'не тронут админом', status: 'planned', seminar_status: null },
+      { name: 'отредактирован в админке', status: null, seminar_status: 'not_planned' },
+      { name: 'заведён после sync', status: null, seminar_status: 'planned' },
+    ]);
 
-    assert.deepEqual(await knex('schedule_entries').orderBy('id').pluck('status'), [
-      'cancelled',
-      'active',
+    await migration.up(knex);
+
+    assert.deepEqual(await knex('seminars').orderBy('id').pluck('seminar_status'), [
+      'planned',
+      'not_planned',
+      'planned',
     ]);
   });
 });
