@@ -235,7 +235,6 @@ describe('гигиена репозитория', () => {
       // vite-плагина Astro, поэтому файл живёт в тех же двух списках, что и остальные
       // тесты с особым предметом.
       ...(await load('vitest.render.config.ts')).include,
-      ...(await load('vitest.cms.config.ts')).include,
     ];
 
     expect(specialised, 'ни один специализированный конфиг ничего не выбирает').not.toEqual([]);

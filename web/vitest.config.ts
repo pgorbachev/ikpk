@@ -21,9 +21,6 @@ export default defineConfig({
       'tests/publication/payment-absence.test.ts',
       'tests/publication/payment-readiness.test.ts',
       'tests/publication/payment-preflight.test.ts',
-      // Живой Strapi: поднимает службу, холодный старт десятки секунд —
-      // только в vitest.cms.config.ts (`npm run test:cms`).
-      'tests/cms/editable.test.ts',
       // dist-зависимые тесты — только в vitest.build.config.ts (после сборки)
       'tests/article-catalog.test.ts',
       'tests/perf-a11y.test.ts',

@@ -50,8 +50,7 @@
     "test:render": "vitest run --config vitest.render.config.ts",
     "test:e2e:widgets": "node tests/helpers/preview-reset.mjs && playwright test tests/external-widgets.spec.ts tests/external-widgets-baseline-repeat.spec.ts --project=desktop --project=mobile",
     "test:e2e:section-titles": "node tests/helpers/preview-reset.mjs && playwright test tests/section-titles.spec.ts --project=desktop --project=mobile",
-    "test:publication": "tsx scripts/publication-check-command.ts",
-    "test:cms": "vitest run --config vitest.cms.config.ts"
+    "test:publication": "tsx scripts/publication-check-command.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
