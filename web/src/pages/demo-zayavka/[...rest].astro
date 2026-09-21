@@ -4,14 +4,14 @@
 // сценарий, но не создавать живых лидов в его продакшен-CRM.
 // В боевой сборке страница не собирается вовсе — см. getStaticPaths ниже.
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { isDemoForms } from '../../lib/forms';
+import { isDemoStub } from '../../lib/forms';
 
 // Заглушка заявки существует только на демо-стенде: в боевой сборке формы ведут
 // в CRM заказчика, и страница-объяснение там лишняя.
 // Динамический маршрут с необязательным остатком — единственный способ
 // ИСКЛЮЧИТЬ страницу из боевой сборки: у статического файла getStaticPaths не
 // вызывается, и страница собирается всегда.
-export const getStaticPaths = () => (isDemoForms ? [{ params: { rest: undefined } }] : []);
+export const getStaticPaths = () => (isDemoStub ? [{ params: { rest: undefined } }] : []);
 ---
 
 <BaseLayout
@@ -31,7 +31,7 @@ export const getStaticPaths = () => (isDemoForms ? [{ params: { rest: undefined 
         На рабочем сайте эта кнопка открывает CRM-форму Bitrix24, и заявка
         попадает в воронку продаж вместе с UTM-метками источника.
       </p>
-      {!isDemoForms && (
+      {!isDemoStub && (
         <p class="demo-stub-note">
           <strong>Примечание:</strong> текущая сборка сделана без режима демо —
           на остальных страницах кнопки ведут на настоящие формы.
