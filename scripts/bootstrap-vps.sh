@@ -649,7 +649,12 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
         echo "[bootstrap] ВНИМАНИЕ: откат на ${previous_target} не отменяет переименование колонок." >&2
         echo "[bootstrap] Если предыдущий релиз старше этого переименования, значения" >&2
         echo "[bootstrap] seminar_status/entry_status будут обнулены его сверкой схемы." >&2
-        echo "[bootstrap] Проверьте статусы в CMS и при необходимости восстановите базу из копии." >&2
+        if [[ "${ENVIRONMENT}" == "stand" ]]; then
+          echo "[bootstrap] Стенд: содержимое регенерируемо — восстановите импортом из снимка." >&2
+        else
+          echo "[bootstrap] Содержимое НЕ регенерируемо: всё, что заведено в админке, живёт" >&2
+          echo "[bootstrap] только в базе. Восстанавливать из копии базы; см. TD-67." >&2
+        fi
       fi
       echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?} после смены артефакта — возврат на ${previous_target:-<нет предыдущей>}" >&2
       exit 7
