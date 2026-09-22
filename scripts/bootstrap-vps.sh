@@ -586,9 +586,29 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"
     else
       if [[ -n "$previous_target" ]]; then
+        # Предыдущий релиз может быть СТАРШЕ появления каталога миграций. Служба при
+        # старте безусловно зовёт `fse.ensureDirSync(<релиз>/database/migrations)`
+        # (`@strapi/database/dist/migrations/users.js:40`), а права на запись внутри
+        # релиза у неё намеренно сняты — значит отсутствующий каталог даёт EACCES, и
+        # откат не поднимается вовсе. Проверено: `ensureDirSync` на каталоге без права
+        # записи падает с `EACCES: permission denied, mkdir`. Каталог создаётся здесь
+        # от root: существующий путь `ensureDirSync` устраивает, создавать ему нечего.
+        mkdir -p "${previous_target}/database/migrations"
         ln -sfn "$previous_target" "${current_link}.new"
         mv -T "${current_link}.new" "$current_link"
         command -v systemctl >/dev/null 2>&1 && systemctl restart "$unit_name" || true
+        # ПЕРЕИМЕНОВАНИЕ КОЛОНКИ ОТКАТОМ НЕ ОТМЕНЯЕТСЯ. Миграция уже отмечена
+        # выполненной в таблице `strapi_migrations`, а предыдущий релиз объявляет
+        # старые имена (`status`). Его `syncSchema` сверяет колонки по имени, не узнаёт
+        # переименования и делает `dropColumn` + `createColumn`: значения статусов
+        # обнуляются молча. Сайт фильтрует `status === 'active'`, поэтому расписание
+        # исчезает, а контракт снимка этого поля не покрывает. Автоматический откат
+        # предупреждает, но не чинит: восстановление статусов — ручная операция из
+        # резервной копии базы.
+        echo "[bootstrap] ВНИМАНИЕ: откат на ${previous_target} не отменяет переименование колонок." >&2
+        echo "[bootstrap] Если предыдущий релиз старше этого переименования, значения" >&2
+        echo "[bootstrap] seminar_status/entry_status будут обнулены его сверкой схемы." >&2
+        echo "[bootstrap] Проверьте статусы в CMS и при необходимости восстановите базу из копии." >&2
       fi
       echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?} после смены артефакта — возврат на ${previous_target:-<нет предыдущей>}" >&2
       exit 7
