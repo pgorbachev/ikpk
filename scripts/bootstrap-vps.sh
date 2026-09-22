@@ -146,6 +146,10 @@ done
   # Общий разбор объявленного состояния вливается в тот же поток: на сервере репозитория
   # нет, поэтому `source` там невозможен, а копия здесь разошлась бы с проверкой молча.
   cat "${ROOT}/scripts/lib/declared.sh"
+  # Проверка состава миграций: тем же способом и по той же причине — на сервере
+  # репозитория нет. Без этой строки функция на сервер не попадает, вызов даёт
+  # `command not found` (127), и `if !` превращает его в отказ каждой выкатки CMS.
+  cat "${ROOT}/scripts/lib/release-migrations.sh"
   cat <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -374,7 +378,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/database ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
+ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3
@@ -499,10 +503,25 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     # Владелец релиза. rsync -a переносит ЧУЖИЕ uid/gid с машины оператора (на стенде
     # каталоги оказались с uid 502), поэтому владелец приводится явно. Код остаётся у
     # root: служба не должна иметь права переписать то, что исполняет. Записывать ей
-    # нужно ровно три места, и они называются поимённо, а не выдаются целиком:
-    #   database/migrations — Strapi создаёт каталог при старте (EACCES иначе);
+    # нужно ровно два места, и они называются поимённо, а не выдаются целиком:
     #   public/uploads      — загрузки; живут в ОБЩЕМ каталоге и переживают выкатку;
     #   .strapi             — служебный кэш.
+    #
+    # `database/` ОСТАЁТСЯ ЗА root, и это изменение: прежде каталог отдавали службе,
+    # потому что Strapi создаёт его при старте (иначе EACCES), и он всегда был пуст —
+    # исключение ничего не стоило. Теперь там лежат миграции, то есть исполняемый код,
+    # который Strapi подключает через `require` при каждом запуске. Право записи больше
+    # не нужно: каталог приезжает в артефакте и создаётся строкой ниже до первого старта,
+    # единственное обращение провайдера к диску — `fse.ensureDirSync` на уже существующий
+    # путь, а состояние umzug живёт в таблице `strapi_migrations`, а не на диске.
+    # Состав миграций в релизе. Функция определена в `scripts/lib/release-migrations.sh` и
+    # вливается в поток выше, рядом с `declared.sh`: на сервер уходит НЕ весь файл, а только
+    # собранный поток, поэтому доставку надо объявлять явно. Подробности — в заголовке того
+    # файла, проводка проверена в `web/tests/release-migrations-gate.test.ts`.
+    if ! check_release_migrations "$new_release"; then
+      exit 1
+    fi
+
     chown -R root:root "$new_release"
     if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
       mkdir -p "${new_release}/database/migrations" "${new_release}/.strapi"
@@ -511,7 +530,7 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       mkdir -p "${new_release}/public"
       ln -sfn "${shared_deps}/uploads" "${new_release}/public/uploads"
       chown -R "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" \
-        "${new_release}/database" "${new_release}/.strapi" "${shared_deps}/uploads"
+        "${new_release}/.strapi" "${shared_deps}/uploads"
     fi
     # ВАЖНО: `readlink -f` на несуществующем симлинке возвращает САМ путь ссылки, а не пустоту.
     # Откат по такому значению делал `current` ссылкой на себя, служба падала с
@@ -566,9 +585,39 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"
     else
       if [[ -n "$previous_target" ]]; then
+        # Служба при старте безусловно зовёт `fse.ensureDirSync(<релиз>/database/migrations)`
+        # (`@strapi/database/dist/migrations/users.js:40`), а права на запись внутри релиза
+        # у неё намеренно сняты. Измерено: на СУЩЕСТВУЮЩЕМ каталоге без права записи
+        # `ensureDirSync` не падает (только проверяет), на ОТСУТСТВУЮЩЕМ под непишущимся
+        # родителем — `EACCES: permission denied, mkdir`, и откат не поднимается вовсе.
+        #
+        # Насколько это достижимо сегодня: каталог создаётся этим же скриптом для каждого
+        # релиза с самой первой выкатки CMS, поэтому у любого предыдущего релиза, созданного
+        # им, он уже есть. Страховка нужна для состояний мимо скрипта — собранный руками
+        # каталог релиза, распаковка из старого архива, будущая смена правил уборки.
+        # Создание от root безвредно и когда каталог уже есть: `ensureDirSync` устраивает
+        # существующий путь.
+        mkdir -p "${previous_target}/database/migrations"
         ln -sfn "$previous_target" "${current_link}.new"
         mv -T "${current_link}.new" "$current_link"
         command -v systemctl >/dev/null 2>&1 && systemctl restart "$unit_name" || true
+        # ПЕРЕИМЕНОВАНИЕ КОЛОНКИ ОТКАТОМ НЕ ОТМЕНЯЕТСЯ. Миграция уже отмечена
+        # выполненной в таблице `strapi_migrations`, а предыдущий релиз объявляет
+        # старые имена (`status`). Его `syncSchema` сверяет колонки по имени, не узнаёт
+        # переименования и делает `dropColumn` + `createColumn`: значения статусов
+        # обнуляются молча. Сайт фильтрует `status === 'active'`, поэтому расписание
+        # исчезает, а контракт снимка этого поля не покрывает. Автоматический откат
+        # предупреждает, но не чинит: восстановление статусов — ручная операция из
+        # резервной копии базы.
+        echo "[bootstrap] ВНИМАНИЕ: откат на ${previous_target} не отменяет переименование колонок." >&2
+        echo "[bootstrap] Если предыдущий релиз старше этого переименования, значения" >&2
+        echo "[bootstrap] seminar_status/entry_status будут обнулены его сверкой схемы." >&2
+        if [[ "${ENVIRONMENT}" == "stand" ]]; then
+          echo "[bootstrap] Стенд: содержимое регенерируемо — восстановите импортом из снимка." >&2
+        else
+          echo "[bootstrap] Содержимое НЕ регенерируемо: всё, что заведено в админке, живёт" >&2
+          echo "[bootstrap] только в базе. Восстанавливать из копии базы; см. TD-67." >&2
+        fi
       fi
       echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?} после смены артефакта — возврат на ${previous_target:-<нет предыдущей>}" >&2
       exit 7

@@ -625,7 +625,7 @@ async function importSeminars(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
-      status: (e.status as string) ?? "planned",
+      seminar_status: (e.status as string) ?? "planned",
       legacy_id: e.legacy_id,
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
       // переноса он есть у всех записей этих типов.
@@ -719,7 +719,7 @@ async function importScheduleEntries(): Promise<void> {
       price: (e.newPrice as number) ?? null,
       oldPrice: (e.oldPrice as number) ?? null,
       isFree: (e.isFree as boolean) ?? false,
-      status: (e.status as string) ?? "active",
+      entry_status: (e.status as string) ?? "active",
       registrationFormLink: (e.registrationFormLink as string) ?? null,
       description: (e.description as string) ?? null,
       additionalText: (e.additionalText as string) ?? null,

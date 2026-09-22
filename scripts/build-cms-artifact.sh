@@ -8,7 +8,13 @@
 #    «Cannot destructure property 'client' of 'db.config.connection'» — сообщение, по
 #    которому причина не видна вовсе;
 # 2. `path.join` в `config/database.ts` не уважал абсолютный `DATABASE_FILENAME`, и база
-#    оказывалась внутри каталога релиза — то есть удалялась следующей выкаткой.
+#    оказывалась внутри каталога релиза — то есть удалялась следующей выкаткой;
+# 3. миграции базы не попадали в артефакт вовсе. `strapi build` их в `dist` не кладёт, а
+#    копировался только `dist`, поэтому на сервере каталог `database/migrations` оказывался
+#    ПУСТЫМ — Strapi создаёт его сам и видит ноль миграций. Переименование колонки при этом
+#    отрабатывало обычной сверкой схемы, то есть `dropColumn` + `createColumn`, и значения
+#    молча обнулялись. Дефект тем опаснее, что в репозитории миграция есть и тесты её
+#    проходят: «миграция написана» и «миграция доехала» — разные утверждения.
 #
 # Поэтому здесь не только сборка, но и проверка обоих условий на СОБРАННОМ выводе.
 set -euo pipefail
@@ -24,6 +30,9 @@ mkdir -p "$OUT"
 # tsconfig.json обязателен: по нему Strapi опознаёт TS-проект и берёт конфигурацию из dist.
 cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
 [[ -d public ]] && cp -R public "$OUT/"
+# Миграции базы: Strapi ищет их в `<корень релиза>/database/migrations`, а не в `dist`.
+[[ -d database ]] && cp -R database "$OUT/"
+mkdir -p "$OUT/database/migrations"
 
 # --- Проверки собранного вывода (не текста исходника) ---
 node -e '
@@ -45,7 +54,27 @@ if (!cfg || !cfg.connection) fail("конфигурация базы пуста"
 // knex-параметры лежат на уровень глубже: strapi ждёт database.connection.connection
 const got = cfg.connection.connection && cfg.connection.connection.filename;
 if (got !== ABS) fail(`абсолютный DATABASE_FILENAME искажён: ${got}`);
-console.log("[artifact] проверки собранного вывода пройдены");
-' "$OUT"
+const migDir = path.join(out, "database", "migrations");
+const migrations = require("fs").existsSync(migDir)
+  ? require("fs").readdirSync(migDir).filter((f) => /\.(js|sql)$/.test(f))
+  : [];
+const repoMigDir = path.join(process.argv[2], "cms", "database", "migrations");
+// Отсутствие каталога в репозитории — это «проверить не удалось», а не «миграций нет»:
+// без него readdirSync выбросил бы сырой ENOENT вместо внятного отказа.
+if (!require("fs").existsSync(repoMigDir)) fail(`в репозитории нет ${repoMigDir}: сверять число миграций не с чем`);
+const inRepo = require("fs").readdirSync(repoMigDir).filter((f) => /\.(js|sql)$/.test(f));
+if (migrations.length !== inRepo.length) {
+  fail(`миграций в артефакте ${migrations.length}, в репозитории ${inRepo.length}: на сервере они не выполнятся, и переименование колонки обнулит значения`);
+}
+// Сколько миграций в артефакте ДОЛЖНО быть — записывается сюда, потому что на сервере
+// репозитория нет и сверять не с чем. Без этого числа серверная проверка вынуждена
+// требовать «хотя бы одну» вечно, и в день, когда последнюю миграцию законно уберут,
+// она начнёт отказывать на каждой выкатке, объясняя это неверной причиной.
+require("fs").writeFileSync(
+  path.join(out, "database", ".migrations-expected"),
+  String(migrations.length) + "\n",
+);
+console.log(`[artifact] проверки собранного вывода пройдены (миграций: ${migrations.length})`);
+' "$OUT" "$REPO_ROOT"
 
 echo "[artifact] готов: $OUT"
