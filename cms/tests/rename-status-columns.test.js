@@ -77,6 +77,20 @@ async function seedPreRename(knex) {
     { name: 'Без дат', status: 'not_planned' },
     { name: 'С датами', status: 'planned' },
   ]);
+
+  // Связь с каскадом — обязательная часть обстановки, а не украшение. У `seminars` в
+  // настоящей схеме Strapi четыре каскадных потребителя (преподаватели, программа,
+  // компоненты SEO, расписание); без единого из них ветка `renameColumn` исполняется
+  // без того ограничения, которое и уничтожает данные при пересборке таблицы.
+  await knex.schema.createTable('seminars_teachers_lnk', (t) => {
+    t.increments('id');
+    t.integer('seminar_id').references('id').inTable('seminars').onDelete('CASCADE');
+    t.integer('teacher_id');
+  });
+  await knex('seminars_teachers_lnk').insert([
+    { seminar_id: 1, teacher_id: 10 },
+    { seminar_id: 2, teacher_id: 11 },
+  ]);
 }
 
 test('значения переезжают в новую колонку, а не теряются', async () => {
@@ -93,6 +107,14 @@ test('значения переезжают в новую колонку, а н�
       'planned',
     ]);
     assert.equal(await knex.schema.hasColumn('schedule_entries', 'status'), false);
+    // Ветка `renameColumn` — обычный путь выкатки, и до этой строки её каскад не стерёг
+    // НИЧТО: замена переименования на пересборку таблицы оставляла все восемь тестов
+    // зелёными, уничтожая при этом все связи на настоящей схеме Strapi.
+    assert.equal(
+      (await knex('seminars_teachers_lnk').select()).length,
+      2,
+      'связи семинаров унесло каскадом при переименовании колонки',
+    );
   });
 });
 
