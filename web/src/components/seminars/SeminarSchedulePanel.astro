@@ -23,6 +23,7 @@
  */
 import { formatDate, formatPrice } from '../../lib/data';
 import { registrationHref, isExternalFormHref } from '../../lib/forms';
+import { MOBILE_PHONE, MOBILE_PHONE_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
 import type { ScheduleEntry } from '../../lib/data';
 
 interface Row {
@@ -144,8 +145,10 @@ function metaLine(entry: ScheduleEntry): string {
         })}
       </ol>
     ) : (
-      <p class="seminar-schedule-empty">
-        К сожалению, данный курс, в настоящий момент еще не запланирован.
+      <p class="seminar-schedule-empty" data-testid="seminar-schedule-empty">
+        Даты пока не назначены. Уточняйте у менеджера:{' '}
+        <a href={PHONE_HREF}>{PHONE}</a>,{' '}
+        <a href={MOBILE_PHONE_HREF}>{MOBILE_PHONE}</a>
       </p>
     )}
   </div>
