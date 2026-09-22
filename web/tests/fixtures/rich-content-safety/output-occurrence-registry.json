@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "309270ae840f29e1c380030bed3e7bb6158838d2",
+  "generatedFromSha": "5f381f628a3efadafce9864b6684beeb5b38d82c",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -25,7 +25,7 @@
     "src:components/contacts/ContactShell.astro:L80:C11:svg",
     "src:components/contacts/ContactShell.astro:L90:C11:svg",
     "src:components/contacts/ContactShell.astro:L99:C11:svg",
-    "src:components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
+    "src:components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
     "src:components/Footer.astro:L104:C1:style",
     "src:components/HeadMeta.astro:L26:C1:link",
     "src:components/HeadMeta.astro:L31:C1:script",
@@ -113,7 +113,7 @@
     "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
     "src:layouts/TopNavLayout.astro:L68:C1:style",
     "src:pages/[institute].astro:L221:C1:style",
-    "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+    "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
     "src:pages/[institute]/[courseGroup]/[seminar].astro:L179:C1:style",
     "src:pages/[institute]/prepodavatel/[id].astro:L71:C1:style",
     "src:pages/404.astro:L19:C1:style",
@@ -1595,10 +1595,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/dolgoletie",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -2077,10 +2077,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/imunnyj-otvet",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -2559,10 +2559,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -2800,10 +2800,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -5451,10 +5451,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/mozg",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -6174,10 +6174,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -9307,10 +9307,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/primenenie-principov-akupunktury",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -11235,10 +11235,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -13174,10 +13174,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/nevralnye-tehniki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -14620,10 +14620,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -16307,10 +16307,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/prodvinutye-visceralnye-tehniki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -17030,10 +17030,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/specializirovannye-programmy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -17512,10 +17512,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/tehniki-vyslushivaniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -17994,10 +17994,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-barralya/visceralnye-tehniki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -20174,10 +20174,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -22102,10 +22102,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -23066,10 +23066,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -24030,10 +24030,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -25717,10 +25717,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -26922,10 +26922,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -33188,10 +33188,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -33429,10 +33429,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -36562,10 +36562,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -39936,10 +39936,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -43551,10 +43551,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
@@ -44997,10 +44997,10 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
       "route": "/institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina",
       "placement": "doc-order:6:style",
-      "identity": "style|body:2e758c290a91ca7c",
+      "identity": "style|body:01a1810a0456c5d6",
       "count": 1,
       "builds": [
         "production",
