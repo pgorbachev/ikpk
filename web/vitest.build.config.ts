@@ -48,7 +48,7 @@ export default defineConfig({
       'tests/external-widgets-dist.test.ts',
       'tests/external-widgets-config-probe.test.ts',
       'tests/external-widgets-privacy-doc.test.ts',
-      'tests/course-group-dates.build.test.ts',
+      'tests/seminar-dates.build.test.ts',
     ],
   },
 });
