@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "6edcea195567b5a790f78e2e66bf56835b1e7110",
+  "generatedFromSha": "2131fc66d181fd6f8d0eb55203fe9d19b4433e96",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",
@@ -1153,7 +1153,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie\"][\"Для кого подойдет\"]",
-      "byteLength": 430,
+      "byteLength": 445,
       "empty": false
     },
     {
@@ -1203,7 +1203,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie\"][\"Учебный план\"]",
-      "byteLength": 630,
+      "byteLength": 659,
       "empty": false
     },
     {
@@ -5013,7 +5013,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5083,7 +5083,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5153,7 +5153,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5223,7 +5223,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5293,7 +5293,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5363,7 +5363,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5433,7 +5433,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5503,7 +5503,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza\"][\"Выдаваемые документы\"]",
-      "byteLength": 1751,
+      "byteLength": 1753,
       "empty": false
     },
     {
@@ -5643,7 +5643,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1\"][\"Выдаваемые документы\"]",
-      "byteLength": 313,
+      "byteLength": 332,
       "empty": false
     },
     {
@@ -5753,7 +5753,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1\"][\"Учебный план\"]",
-      "byteLength": 1342,
+      "byteLength": 1438,
       "empty": false
     },
     {
@@ -5813,7 +5813,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2\"][\"Учебный план\"]",
-      "byteLength": 1342,
+      "byteLength": 1438,
       "empty": false
     },
     {
@@ -5853,7 +5853,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1\"][\"Выдаваемые документы\"]",
-      "byteLength": 301,
+      "byteLength": 313,
       "empty": false
     },
     {
@@ -5903,7 +5903,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1\"][\"Учебный план\"]",
-      "byteLength": 3145,
+      "byteLength": 3254,
       "empty": false
     },
     {
@@ -5963,7 +5963,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2\"][\"Учебный план\"]",
-      "byteLength": 3145,
+      "byteLength": 3254,
       "empty": false
     },
     {
@@ -6733,7 +6733,7 @@
       "field": null,
       "entityId": "collapsible_panels.json",
       "jsonPath": "collapsible_panels.json$[\"/svedeniya-ob-obrazovatelnoy-organizatsii\"][\"Руководство. Педагогический (научно-педагогический) состав\"]",
-      "byteLength": 1238,
+      "byteLength": 1239,
       "empty": false
     },
     {
