@@ -32,6 +32,7 @@ cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
 [[ -d public ]] && cp -R public "$OUT/"
 # Миграции базы: Strapi ищет их в `<корень релиза>/database/migrations`, а не в `dist`.
 [[ -d database ]] && cp -R database "$OUT/"
+mkdir -p "$OUT/database/migrations"
 
 # --- Проверки собранного вывода (не текста исходника) ---
 node -e '
@@ -65,6 +66,14 @@ const inRepo = require("fs").readdirSync(repoMigDir).filter((f) => /\.(js|sql)$/
 if (migrations.length !== inRepo.length) {
   fail(`миграций в артефакте ${migrations.length}, в репозитории ${inRepo.length}: на сервере они не выполнятся, и переименование колонки обнулит значения`);
 }
+// Сколько миграций в артефакте ДОЛЖНО быть — записывается сюда, потому что на сервере
+// репозитория нет и сверять не с чем. Без этого числа серверная проверка вынуждена
+// требовать «хотя бы одну» вечно, и в день, когда последнюю миграцию законно уберут,
+// она начнёт отказывать на каждой выкатке, объясняя это неверной причиной.
+require("fs").writeFileSync(
+  path.join(out, "database", ".migrations-expected"),
+  String(migrations.length) + "\n",
+);
 console.log(`[artifact] проверки собранного вывода пройдены (миграций: ${migrations.length})`);
 ' "$OUT" "$REPO_ROOT"
 

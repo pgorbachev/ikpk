@@ -515,11 +515,27 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     # схеме обычной сверкой, то есть `dropColumn` + `createColumn` с потерей значений.
     # Проверка стоит здесь, а не только в сборщике артефакта: источник задаёт оператор,
     # и собрать его можно мимо `scripts/build-cms-artifact.sh`.
-    if ! compgen -G "${new_release}/database/migrations/*.js" >/dev/null &&
-       ! compgen -G "${new_release}/database/migrations/*.sql" >/dev/null; then
-      echo "[cms] в релизе нет ни одной миграции (${new_release}/database/migrations пуст)." >&2
-      echo "[cms] источник артефакта собран мимо scripts/build-cms-artifact.sh: переименование" >&2
-      echo "[cms] колонки пройдёт сверкой схемы и обнулит значения. Выкатка остановлена." >&2
+    #
+    # Сверяется ЧИСЛО, а не «хотя бы одна». Требование «хотя бы одна» верно только пока
+    # миграции в репозитории есть: в день, когда последнюю законно уберут, такая проверка
+    # начала бы отказывать на каждой выкатке, объясняя это неверной причиной. Ожидаемое
+    # число кладёт в артефакт сборщик — на сервере репозитория нет и сверять не с чем.
+    # Отсутствие файла с числом — это «происхождение не подтверждено», то есть тоже отказ:
+    # ровно так артефакт, собранный мимо сборщика, и выглядит.
+    expected_file="${new_release}/database/.migrations-expected"
+    if [[ ! -f "$expected_file" ]]; then
+      echo "[cms] в релизе нет ${expected_file}: артефакт собран мимо" >&2
+      echo "[cms] scripts/build-cms-artifact.sh, и проверить состав миграций нечем." >&2
+      echo "[cms] Выкатка остановлена." >&2
+      exit 1
+    fi
+    expected_migrations="$(tr -dc '0-9' <"$expected_file")"
+    actual_migrations=$(find "${new_release}/database/migrations" -maxdepth 1 \
+      \( -name '*.js' -o -name '*.sql' \) -type f 2>/dev/null | wc -l | tr -d ' ')
+    if [[ -z "$expected_migrations" || "$actual_migrations" != "$expected_migrations" ]]; then
+      echo "[cms] миграций в релизе ${actual_migrations}, ожидалось ${expected_migrations:-<не число>}." >&2
+      echo "[cms] Часть миграций не доехала: переименование колонки пройдёт сверкой схемы" >&2
+      echo "[cms] и обнулит значения. Выкатка остановлена." >&2
       exit 1
     fi
 
@@ -586,13 +602,18 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"
     else
       if [[ -n "$previous_target" ]]; then
-        # Предыдущий релиз может быть СТАРШЕ появления каталога миграций. Служба при
-        # старте безусловно зовёт `fse.ensureDirSync(<релиз>/database/migrations)`
-        # (`@strapi/database/dist/migrations/users.js:40`), а права на запись внутри
-        # релиза у неё намеренно сняты — значит отсутствующий каталог даёт EACCES, и
-        # откат не поднимается вовсе. Проверено: `ensureDirSync` на каталоге без права
-        # записи падает с `EACCES: permission denied, mkdir`. Каталог создаётся здесь
-        # от root: существующий путь `ensureDirSync` устраивает, создавать ему нечего.
+        # Служба при старте безусловно зовёт `fse.ensureDirSync(<релиз>/database/migrations)`
+        # (`@strapi/database/dist/migrations/users.js:40`), а права на запись внутри релиза
+        # у неё намеренно сняты. Измерено: на СУЩЕСТВУЮЩЕМ каталоге без права записи
+        # `ensureDirSync` не падает (только проверяет), на ОТСУТСТВУЮЩЕМ под непишущимся
+        # родителем — `EACCES: permission denied, mkdir`, и откат не поднимается вовсе.
+        #
+        # Насколько это достижимо сегодня: каталог создаётся этим же скриптом для каждого
+        # релиза с самой первой выкатки CMS, поэтому у любого предыдущего релиза, созданного
+        # им, он уже есть. Страховка нужна для состояний мимо скрипта — собранный руками
+        # каталог релиза, распаковка из старого архива, будущая смена правил уборки.
+        # Создание от root безвредно и когда каталог уже есть: `ensureDirSync` устраивает
+        # существующий путь.
         mkdir -p "${previous_target}/database/migrations"
         ln -sfn "$previous_target" "${current_link}.new"
         mv -T "${current_link}.new" "$current_link"
