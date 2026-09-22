@@ -2,7 +2,9 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import CourseGroupSeminarItem from '../../components/course-groups/CourseGroupSeminarItem.astro';
-import { cleanBodyHtml, getInstitutes, getCourseGroups, getSeminars } from '../../lib/data';
+import { cleanBodyHtml, getInstitutes, getCourseGroups, getScheduleEntries, getSeminars, getSnapshotReferenceDate } from '../../lib/data';
+import { nearestUpcoming } from '../../lib/schedule-window';
+import { formatScheduleDateRange } from '../../lib/home';
 import RichContent from '../../components/RichContent.astro';
 import type { CourseGroup, Institute } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
@@ -28,6 +30,19 @@ const { courseGroup, institute } = Astro.props as {
   institute: Institute;
 };
 const seminars = getSeminars(courseGroup.legacy_id);
+
+// Ближайшая дата по каждому семинару (Q11): на странице программы — только она,
+// весь список запланированного живёт на странице семинара.
+const today = getSnapshotReferenceDate();
+const activeEntries = getScheduleEntries().filter((entry) => entry.status === 'active');
+const nearestBySeminar = new Map<string, string>();
+for (const seminar of seminars) {
+  const entry = nearestUpcoming(
+    activeEntries.filter((candidate) => candidate.seminar?.slug === seminar.slug),
+    today,
+  );
+  if (entry) nearestBySeminar.set(seminar.slug, formatScheduleDateRange(entry.startAt, entry.endAt));
+}
 
 function stripHtml(value: string): string {
   return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -175,6 +190,7 @@ const groupDescription =
             <CourseGroupSeminarItem
               seminar={seminar}
               href={`/${institute.slug}/${courseGroup.slug}/${seminar.slug}`}
+              nearestDate={nearestBySeminar.get(seminar.slug) ?? null}
             />
           ))}
         </div>
