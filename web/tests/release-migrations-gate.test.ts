@@ -21,16 +21,36 @@ import { tmpdir } from 'node:os';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPT = join(ROOT, 'scripts', 'bootstrap-vps.sh');
+const LIB = join(ROOT, 'scripts', 'lib', 'release-migrations.sh');
 
-/** Текст функции из выкатки — ровно тот, что уходит на сервер. */
+/** Тело функции — из того файла, который выкатка вливает в поток; доставку проверяет
+ * отдельный describe выше, потому что тело и его достижимость — разные утверждения. */
 function gateSource(): string {
+  return readFileSync(LIB, 'utf-8');
+}
+
+/**
+ * Что РЕАЛЬНО уходит на сервер: скрипт собирает поток из `cat`-ов и heredoc и отдаёт его
+ * `ssh ... bash -s`. Проверяется именно сборка, а не тело функции.
+ *
+ * РЕГРЕСС, ради которого проверка и написана: функция жила в `bootstrap-vps.sh` ВНЕ
+ * heredoc, поэтому на сервер не попадала. Вызов давал `command not found` (127), `if !`
+ * инвертировал, и каждая выкатка CMS падала — после rsync и `npm ci`. Тест тела при этом
+ * был зелёный: он исполнял функцию в своей оболочке и к достижимости слеп по устройству.
+ */
+function remoteStream(): string {
   const src = readFileSync(SCRIPT, 'utf-8');
-  const from = src.indexOf('# --- BEGIN check_release_migrations ---');
-  const to = src.indexOf('# --- END check_release_migrations ---');
-  if (from < 0 || to < 0) {
-    throw new Error('маркеры функции не найдены: проверять нечего');
-  }
-  return src.slice(from, to);
+  const open = src.indexOf('\n{\n');
+  const close = src.indexOf("\n} | /usr/bin/ssh");
+  if (open < 0 || close < 0) throw new Error('блок сборки потока не найден: проверять нечего');
+  const block = src.slice(open, close);
+
+  // Файлы, которые блок вливает в поток, подставляются содержимым — как это делает `cat`.
+  const withLibs = block.replace(/cat "\$\{ROOT\}\/(scripts\/lib\/[\w.-]+)"/g, (_m, rel) =>
+    readFileSync(join(ROOT, rel), 'utf-8'),
+  );
+  const hd = withLibs.indexOf("cat <<'REMOTE'");
+  return hd < 0 ? withLibs : withLibs.slice(0, hd) + withLibs.slice(hd + "cat <<'REMOTE'".length);
 }
 
 /**
@@ -63,6 +83,30 @@ function runGate(opts: { migrations: string[]; expected?: string }): { code: num
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('доставка проверки на сервер', () => {
+  it('поток, уходящий по ssh, определяет функцию до её вызова', () => {
+    const stream = remoteStream();
+    const defined = /^\s*check_release_migrations\s*\(\)/m.test(stream);
+    const called = stream.indexOf('check_release_migrations "$new_release"');
+    expect(called, 'вызова проверки в потоке нет — тогда она не выполняется вовсе').toBeGreaterThan(
+      0,
+    );
+    expect(
+      defined,
+      'функция вызывается на сервере, но в поток не попадает: `command not found` даёт 127, ' +
+        '`if !` превращает его в отказ, и каждая выкатка CMS падает',
+    ).toBe(true);
+  });
+
+  it('определение идёт раньше вызова', () => {
+    const stream = remoteStream();
+    const def = stream.search(/^\s*check_release_migrations\s*\(\)/m);
+    const call = stream.indexOf('check_release_migrations "$new_release"');
+    expect(def, 'определение не найдено').toBeGreaterThanOrEqual(0);
+    expect(def, 'функция определяется после вызова').toBeLessThan(call);
+  });
+});
 
 describe('состав миграций в релизе', () => {
   it('пропускает релиз, где миграций столько же, сколько объявлено', () => {
