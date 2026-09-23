@@ -1,0 +1,34 @@
+секреты загружены: 6 из 6 (значения не печатаются)
+[bootstrap] Connecting to root@193.124.115.99
+[bootstrap] unchanged: пакеты уже установлены (nginx rsync python3 make g++)
+[bootstrap] unchanged: каталог /var/www/ikpk/releases
+[bootstrap] unchanged: каталог /var/www/ikpk/shared
+[bootstrap] changed: владелец /var/www/ikpk -> root:root
+[bootstrap] unchanged: учётная запись ikpk-cms
+[bootstrap] unchanged: каталог данных /var/lib/ikpk-cms/stand/data
+[bootstrap] unchanged: владелец /var/lib/ikpk-cms/stand/data
+[bootstrap] changed: unit-файл /etc/systemd/system/ikpk-cms.service
+[bootstrap] unchanged: секрет(ы) без изменения значения
+
+added 1366 packages, and audited 1367 packages in 46m
+
+253 packages are looking for funding
+  run `npm fund` for details
+
+39 vulnerabilities (1 low, 26 moderate, 11 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[cms] миграций в релизе 1, как и ожидалось
+[bootstrap] ВНИМАНИЕ: откат на /opt/ikpk-cms/releases/20260912T200557Z не отменяет переименование колонок.
+[bootstrap] Если предыдущий релиз старше этого переименования, значения
+[bootstrap] seminar_status/entry_status будут обнулены его сверкой схемы.
+[bootstrap] Стенд: содержимое регенерируемо — восстановите импортом из снимка.
+[bootstrap] служба системы управления не ответила на 127.0.0.1:1337 после смены артефакта — возврат на /opt/ikpk-cms/releases/20260912T200557Z
+
+[exited with code 0]

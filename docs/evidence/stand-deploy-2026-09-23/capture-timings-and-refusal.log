@@ -1,0 +1,14 @@
+=== прогрев CMS: 2026-09-23T09:47:51Z
+  course-groups -> 200:4.539891
+  seminars -> 200:4.217858
+  schedule-entries -> 200:3.844734
+  teachers -> 200:18.315046
+  articles -> 200:16.186805
+  institutes -> 200:1.139933
+  news-items -> 200:0.588266
+  promotions -> 200:0.485735
+  pages -> 200:5.408018
+  video-playlists -> 200:0.670386
+=== публикация: 2026-09-23T09:48:46Z
+{"status":"refused","reason":"publication-worker-failed","audit":{"version":1,"status":"refused","code":"checks-failed","commit":"80307437ab52d06655b1212e75479d09b6f4b063","publicationId":"20260923095149376-e4634240-ce41-469b-a459-d1fe64a5de07","ciExecutedTests":2193,"check":"capture"}}
+PUBLISH_EXIT=1

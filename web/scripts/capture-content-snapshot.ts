@@ -24,6 +24,62 @@ const repoRoot = join(webRoot, '..');
 const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
+
+/**
+ * Предел ожидания ОДНОГО обращения к CMS.
+ *
+ * Было 15 секунд — «недоступная CMS обязана быть быстрым отказом, а не подвисанием». Замысел
+ * верен, но число смешивало два разных состояния: «порт закрыт» и «жива, но медленная». Первое
+ * отказывает мгновенно само (ECONNREFUSED), таймаут для этого не нужен вовсе; второе на нашей
+ * машине в 15 секунд не укладывается.
+ *
+ * Измерено на стенде 23.09.2026 через туннель (948 МБ памяти, узкий канал), ответы прогретой
+ * CMS: teachers 18,3 с, articles 16,2 с, pages 5,4 с, course-groups 4,5 с (холодным — 15,4 с),
+ * остальные типы меньше пяти. То есть два типа из десяти не проходили порог ДАЖЕ прогретыми, и
+ * съём срывался не по вине CMS, а по вине числа.
+ *
+ * Новое значение выбрано с запасом к худшему замеру, а не подогнано под него: машина медленнее
+ * под нагрузкой, и повторять эту правку при каждом росте контента не хочется.
+ */
+const CMS_REQUEST_TIMEOUT_MS = 120_000;
+
+/**
+ * Предел на ВЕСЬ съём — отдельно от предела на один запрос, и по другой причине.
+ *
+ * Предыдущий предел в 15 секунд служил сразу двум целям: ограничивал один запрос и заодно
+ * держал общее время маленьким. Подняв его до 120 с, вторую цель пришлось назвать отдельно:
+ * последний живой снимок тянул 132 медиафайла плюс постраничные выборки по десяти типам, и
+ * при деградирующей CMS это сотни запросов по две минуты каждый.
+ *
+ * Чем это кончается без своего предела — известно точно. Пусковой скрипт даёт работнику час
+ * (`scripts/publication-launcher.mjs`, `timeout: 3_600_000`), и убитый по этому сроку процесс
+ * даёт `result.status === null`, то есть `refuse('publication-worker-failed')` — ТОТ ЖЕ код
+ * отказа, что и упавший работник. Оператор не отличает «съём не уложился» от «работник
+ * сломался», а это ровно запрещённое правилами «не смогла проверить», выданное за вердикт.
+ *
+ * Поэтому съём отказывается сам и по имени, не дожидаясь анонимного убийства по сроку.
+ * Двадцать минут — с большим запасом к замеру (весь прогретый обход десяти типов занял 55 с)
+ * и с запасом же внутри часа, который делится с остальными шагами публикации.
+ */
+/*
+ * Переопределяется окружением ровно ради проверяемости: сценарий «срок вышел» иначе требовал
+ * бы двадцатиминутного теста, то есть не проверялся бы никогда. Оператору этот ключ не нужен
+ * и нигде не объявлен — значение по умолчанию и есть рабочее.
+ */
+const CAPTURE_TOTAL_BUDGET_MS = Number(process.env.CAPTURE_TOTAL_BUDGET_MS ?? 1_200_000);
+
+const captureStartedAt = Date.now();
+
+/** Отказ по общему сроку: по имени и с числами, а не молчаливым убийством процесса. */
+function assertWithinBudget(what: string): void {
+  const spent = Date.now() - captureStartedAt;
+  if (spent <= CAPTURE_TOTAL_BUDGET_MS) return;
+  throw new Error(
+    `живой захват не уложился в общий срок: ${Math.round(spent / 1000)} с ` +
+      `при пределе ${Math.round(CAPTURE_TOTAL_BUDGET_MS / 1000)} с (остановлено на ${what}). ` +
+      `CMS отвечает, но слишком медленно — это отказ съёма, а не поломка работника публикации.`,
+  );
+}
 const cmsToken = process.env.CMS_TOKEN ?? process.env.STRAPI_API_TOKEN ?? '';
 
 function copyPinned(): void {
@@ -174,12 +230,14 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   const records: Record<string, unknown>[] = [];
   let page = 1;
   for (;;) {
+    assertWithinBudget(`${endpoint}, страница ${page}`);
     const url = `${cmsUrl}/api/${endpoint}?pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
       // Недоступная CMS (закрытый порт, зависший сокет) обязана быть быстрым отказом, а не
-      // подвисанием: спека требует ОТКАЗА при недоступности, а не таймаута процесса.
-      signal: AbortSignal.timeout(15_000),
+      // подвисанием: спека требует ОТКАЗА при недоступности, а не таймаута процесса. Закрытый
+      // порт отказывает сразу и без таймаута; предел нужен только против зависшего сокета.
+      signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`${endpoint}: HTTP ${res.status}`);
@@ -229,10 +287,11 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
   const media: SnapshotContent['media'] = [];
 
   for (const sourceRef of refs) {
+    assertWithinBudget(`медиа ${sourceRef}`);
     const url = new URL(sourceRef, cmsUrl).toString();
     let response: Response;
     try {
-      response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
     } catch (err) {
       throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
     }
