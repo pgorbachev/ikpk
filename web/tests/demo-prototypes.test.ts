@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { allDemoPages, readDemoPage } from './helpers/demo-dist';
+import { attr, findAll, textOf } from './helpers/dom';
 import { getScheduleEntries, getSeminars } from '../src/lib/data.js';
 import { getUpcomingSeminars, seminarTeacherLabel } from '../src/lib/home.js';
 import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window.js';
@@ -165,21 +166,37 @@ describe('прототипы: своя подача первого экрана'
 
     expect(html, 'нет строки-анонса события').toContain('data-event-line');
 
-    const at = html.indexOf('data-event-line');
-    // Граница — закрывающий </section> блока, а не фиксированные 900 символов:
-    // у длинного названия + scoped `data-astro-cid-*` на каждом узле цена уезжала
-    // за окно («30» вместо «30 000 ₽»), и гейт краснел от длины URL, а не от подачи.
-    const sectionEnd = html.indexOf('</section>', at);
-    expect(sectionEnd, 'у строки-анонса нет закрывающего </section>').toBeGreaterThan(at);
-    const line = html.slice(at, sectionEnd);
+    // Предмет берётся ДЕРЕВОМ, а не окном по разметке.
+    //
+    // Прежде здесь стояло `html.slice(at, at + 900)`, и 24.09.2026 это уронило обязательный
+    // прогон при исправном коде: ближайшим событием стало «Меридианы, китайская классическая
+    // медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2», и
+    // длинное название вместе с длинным `href` вытолкнули цену за девятисотый символ. Полученная
+    // строка обрывалась на `<span class="event-line-price">30` — цена БЫЛА отрендерена, её
+    // обрезало окно. То есть вердикт зависел от длины чужого заголовка, а не от предмета.
+    //
+    // PR #258 независимо чинил тот же симптом сдвигом границы на `</section>` вместо
+    // фиксированных 900 — шире, но того же класса: строковая граница, а не разбор. Она ломается
+    // иначе, если блок анонса когда-нибудь получит вложенный `<section>` (виджет, встраивание)
+    // или не закроется этим тегом вовсе. Разбор деревом не зависит от того, чем блок закрыт.
+    const [lineEl] = findAll(html, (el) => attr(el, 'data-event-line') !== null);
+    expect(lineEl, 'элемент строки-анонса не найден разбором — проверять нечего').toBeDefined();
+    const line = textOf(lineEl);
+
     // Город и цена сверяются с КОНКРЕТНЫМ ближайшим событием, а не с белым списком
     // значений: список из шести городов отставал бы от данных молча при первом же
     // рефреше каталога.
+    //
+    // Ожидаемое нормализуется тем же правилом, что и текст: `textOf` схлопывает `\s+`, а
+    // `Intl.NumberFormat('ru-RU')` ставит в разрядах НЕРАЗРЫВНЫЙ пробел (U+00A0). Без этого
+    // «30 000 ₽» из данных не совпало бы с «30 000 ₽» со страницы — сравнение сломалось бы
+    // заново, уже по другой причине.
+    const norm = (value: string): string => value.replace(/\s+/g, ' ').trim();
     expect(line, `в анонсе нет города ближайшего события (${next.cityName})`).toContain(
-      next.cityName,
+      norm(next.cityName),
     );
     expect(line, `в анонсе нет цены ближайшего события (${next.priceLabel})`).toContain(
-      next.priceLabel,
+      norm(next.priceLabel),
     );
   });
 
