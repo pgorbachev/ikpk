@@ -554,11 +554,22 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
     health_timeout="${SERVICE_HEALTH_TIMEOUT:-240}"
     healthy=0
     health_deadline=$((SECONDS + health_timeout))
+    # Признак жизни в канал раз в минуту. Цикл молчал целиком: `curl -s -o /dev/null` и
+    # `sleep` не пишут ничего, поэтому при объявленном на стенде сроке в 1800 с ssh-сессия
+    # проводила полчаса без единого байта. Это две разные беды сразу — промежуточный NAT
+    # или firewall с idle-таймаутом вправе порвать такую сессию (класс TD-59: выкладка
+    # падает от одного оборванного ssh), а оператор всё это время не отличает ожидание от
+    # зависшего прогона. Строка в минуту решает обе и не стоит ничего.
+    health_last_note=0
     while ((SECONDS < health_deadline)); do
       curl -s -m 2 -o /dev/null "http://${SERVICE_ADDR:-127.0.0.1:0}/" && { healthy=1; break; }
       if command -v systemctl >/dev/null 2>&1 && [[ "$(systemctl is-active "$unit_name" 2>/dev/null)" == "failed" ]]; then
         echo "[bootstrap] служба признана упавшей за ${SECONDS}с — жать срок до конца нечего" >&2
         break
+      fi
+      if ((SECONDS - health_last_note >= 60)); then
+        health_last_note=$SECONDS
+        echo "[bootstrap] жду ответа службы: ${SECONDS}с из ${health_timeout}с" >&2
       fi
       sleep 3
     done
