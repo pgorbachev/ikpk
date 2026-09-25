@@ -1,1 +1,86 @@
-[]
+[
+  {
+    "commit": "15a10bc95d4ec5a6eef8098c52f3c95f2aac40bd",
+    "snapshotId": "snap:36074e984ee736b491541252f3a0915ea937472050db2aeebb4747d1a03fd741",
+    "destinationId": "stand",
+    "treeDigest": "432f710d0ca544855c35ce53f2e1ab8129bbc0e434a798d93e5b20348b03abf6",
+    "publicationId": "20260925123720516-43ec8422-3ef8-4f4f-8fa1-40ee90058fe6",
+    "releaseId": "20260925123720516-43ec8422-3ef8-4f4f-8fa1-40ee90058fe6",
+    "actor": "pgorbachev",
+    "revision": 2,
+    "observedEntry": 2,
+    "highWaterMark": 2,
+    "headAtLastCheck": "15a10bc95d4ec5a6eef8098c52f3c95f2aac40bd",
+    "referenceDate": "2026-09-25",
+    "capturedAt": "2026-09-25T12:39:53.257Z",
+    "publishedAt": "2026-09-25T12:44:18.664Z",
+    "testRunConclusion": "success",
+    "ciEvidence": {
+      "repository": "pgorbachev/ikpk",
+      "workflow": ".github/workflows/test.yml",
+      "branch": "main",
+      "commit": "15a10bc95d4ec5a6eef8098c52f3c95f2aac40bd",
+      "runId": 36126464530,
+      "event": "push",
+      "conclusion": "success",
+      "executedTests": 2202,
+      "jobs": [
+        {
+          "name": "Dependency update invariants",
+          "conclusion": "success"
+        },
+        {
+          "name": "Scripts unit tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "Capture content snapshot",
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit and build tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "Playwright smoke (desktop + mobile)",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "localChecks": {
+      "commit": "15a10bc95d4ec5a6eef8098c52f3c95f2aac40bd",
+      "snapshotId": "snap:36074e984ee736b491541252f3a0915ea937472050db2aeebb4747d1a03fd741",
+      "destinationId": "stand",
+      "treeDigest": "432f710d0ca544855c35ce53f2e1ab8129bbc0e434a798d93e5b20348b03abf6",
+      "groups": [
+        {
+          "name": "snapshot-provenance",
+          "conclusion": "success",
+          "executedTests": 3
+        },
+        {
+          "name": "build-content",
+          "conclusion": "success",
+          "executedTests": 4
+        },
+        {
+          "name": "destination-mode",
+          "conclusion": "success",
+          "executedTests": 4
+        },
+        {
+          "name": "browser-smoke",
+          "conclusion": "success",
+          "executedTests": 8
+        },
+        {
+          "name": "payment-destination",
+          "conclusion": "success",
+          "executedTests": 3
+        }
+      ]
+    },
+    "deployMode": "stand",
+    "paymentRole": "stand"
+  }
+]
