@@ -166,7 +166,12 @@ describe('прототипы: своя подача первого экрана'
     expect(html, 'нет строки-анонса события').toContain('data-event-line');
 
     const at = html.indexOf('data-event-line');
-    const line = html.slice(at, at + 900);
+    // Граница — закрывающий </section> блока, а не фиксированные 900 символов:
+    // у длинного названия + scoped `data-astro-cid-*` на каждом узле цена уезжала
+    // за окно («30» вместо «30 000 ₽»), и гейт краснел от длины URL, а не от подачи.
+    const sectionEnd = html.indexOf('</section>', at);
+    expect(sectionEnd, 'у строки-анонса нет закрывающего </section>').toBeGreaterThan(at);
+    const line = html.slice(at, sectionEnd);
     // Город и цена сверяются с КОНКРЕТНЫМ ближайшим событием, а не с белым списком
     // значений: список из шести городов отставал бы от данных молча при первом же
     // рефреше каталога.

@@ -201,29 +201,214 @@ describe('rendered content quality', () => {
     expect(offenders, `легаси-кнопка ведёт не туда:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  // Свойство шире предыдущего и полезно само по себе: внутристраничная ссылка,
-  // ведущая в несуществующий фрагмент, ничего не делает по клику. Ревью нашло
-  // это опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
-  // проверки зелёной.
-  it('every in-page fragment link resolves to an element on that page', () => {
+  // Свойство шире предыдущего и полезно само по себе: ссылка с фрагментом,
+  // ведущая в несуществующий id, ничего не делает по клику. Ревью нашло это
+  // опечаткой в моём же якоре ('-sviaz' вместо '-svyaz'), которая прошла обе
+  // проверки зелёной. Межстраничные `#section-N` из тел панелей тот же предмет:
+  // прежняя регулярка ловила только `href="#…"` и не видела их вовсе.
+  //
+  // Разбор через URL, а не через две регулярки: иначе абсолютные и
+  // `?…#…` формы выпадают из измерения, а частичный откат к `?section=N`
+  // остаётся зелёным, пока жив хотя бы один `#section-` (ревью PR #258 r4).
+  it('every fragment link resolves to an element on the target page', () => {
     const offenders: string[] = [];
-    let links = 0;
+    const sectionQuery: string[] = [];
+    let inPage = 0;
+    let crossPage = 0;
+    let docsSectionDeep = 0;
+    const pageHtml = new Map<string, string>();
+    const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
+
+    function pagePathFromFile(file: string): string {
+      const rel = file.replace(dist, '').replace(/\\/g, '/');
+      if (rel === '/index.html' || rel === 'index.html') return '/';
+      if (rel.endsWith('/index.html')) return rel.slice(0, -'/index.html'.length) || '/';
+      if (rel.endsWith('.html')) return rel.replace(/\.html$/, '');
+      return rel || '/';
+    }
+
+    function htmlForPath(pathname: string): string | null {
+      const key = pathname === '' ? '/' : pathname;
+      if (pageHtml.has(key)) return pageHtml.get(key)!;
+      const rel = key === '/' ? 'index.html' : join(key.replace(/^\//, ''), 'index.html');
+      const file = join(dist, rel);
+      if (!existsSync(file) || !statSync(file).isFile()) return null;
+      const html = readFileSync(file, 'utf-8');
+      pageHtml.set(key, html);
+      return html;
+    }
+
+    function norm(path: string): string {
+      return path.replace(/\/$/, '') || '/';
+    }
+
     for (const file of walkHtml()) {
       const html = readFileSync(file, 'utf-8');
-      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
-      for (const a of html.matchAll(/<a\s[^>]*\bhref="#([^"]+)"/gi)) {
-        links += 1;
-        const frag = decodeURIComponent(a[1]);
-        if (!ids.has(frag) && frag !== 'top') {
-          offenders.push(`${file.replace(dist, '')}: #${frag}`);
+      const pagePath = pagePathFromFile(file);
+      const base = `https://ikpk.su${pagePath.endsWith('/') ? pagePath : `${pagePath}/`}`;
+
+      for (const a of html.matchAll(/<a\s[^>]*\bhref="([^"]+)"/gi)) {
+        let url: URL;
+        try {
+          url = new URL(a[1], base);
+        } catch {
+          continue;
+        }
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
+        if (url.hostname !== 'ikpk.su') continue;
+
+        if (url.searchParams.has('section')) {
+          sectionQuery.push(`${file.replace(dist, '')}: ${a[1]}`);
+        }
+
+        if (!url.hash) continue;
+        const frag = decodeURIComponent(url.hash.slice(1));
+        if (!frag) continue;
+
+        const pathname = norm(url.pathname);
+        if (pathname === DOCS && frag.startsWith('section-')) docsSectionDeep += 1;
+
+        const samePage = a[1].startsWith('#') || pathname === norm(pagePath);
+
+        if (samePage) {
+          inPage += 1;
+          const ids = new Set([...html.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+          if (!ids.has(frag) && frag !== 'top') {
+            offenders.push(`${file.replace(dist, '')}: #${frag}`);
+          }
+          continue;
+        }
+
+        crossPage += 1;
+        const target = htmlForPath(pathname);
+        if (target === null) {
+          offenders.push(`${file.replace(dist, '')}: ${pathname}#${frag} (страницы нет)`);
+          continue;
+        }
+        const targetIds = new Set([...target.matchAll(/\sid="([^"]+)"/gi)].map((m) => m[1]));
+        if (!targetIds.has(frag) && frag !== 'top') {
+          offenders.push(`${file.replace(dist, '')}: ${pathname}#${frag}`);
         }
       }
     }
-    expect(links, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(inPage, 'внутристраничных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(crossPage, 'межстраничных фрагментных ссылок не найдено — проверка ничего не измерила').toBeGreaterThan(0);
+    expect(
+      sectionQuery,
+      `устаревший ?section= в сборке (должен быть #section-N):\n${sectionQuery.slice(0, 10).join('\n')}`
+    ).toEqual([]);
+    // 17 — измеренный охват панелей «Выдаваемые документы» + «Руководство…» в сборке;
+    // частичный откат к ?section= или вырезание якорей не должен оставаться зелёным
+    // за счёт одного уцелевшего фрагмента на другой странице.
+    expect(
+      docsSectionDeep,
+      'глубоких ссылок на #section-N страницы сведений меньше ожидаемых — проверка потеряла предмет'
+    ).toBeGreaterThanOrEqual(17);
     expect(
       [...new Set(offenders)].slice(0, 10),
       `ссылка ведёт в несуществующий фрагмент:\n${[...new Set(offenders)].slice(0, 10).join('\n')}`
     ).toEqual([]);
+  });
+
+  // Корпус панелей несёт 113 переписанных ссылок; в сборке видны 17. Остальные 96
+  // сидят в панели «Компания», которая не выводится ни на одной странице, но задача
+  // 8.4 перенесёт их в CMS как есть. Гейт только по dist оставлял откат этих 96 к
+  // ?section= зелёным (ревью PR #258 r5). Агрегаты 113 / 112+1 без привязки к тексту
+  // ссылки пропускали обмен «Документы»↔«Контакты» (ревью r7).
+  //
+  // Читаем только закреплённый снимок (и его types-копию): прямой путь к материалу
+  // переноса запрещён гейтом cms-content-source-purity.
+  it('panel corpora keep all 113 document deep links as resolving #section-N', () => {
+    const repoRoot = join(import.meta.dirname, '..', '..');
+    const copies = [
+      'fixtures/content-snapshot/collapsible_panels.json',
+      'fixtures/content-snapshot/types/collapsible_panels.json',
+    ] as const;
+    const buffers = copies.map((rel) => readFileSync(join(repoRoot, rel)));
+    expect(buffers[0].equals(buffers[1]), 'копии collapsible_panels.json в снимке разошлись').toBe(true);
+
+    type Anchor = { href: string; text: string };
+    const anchors: Anchor[] = [];
+    const walk = (value: unknown): void => {
+      if (typeof value === 'string') {
+        for (const m of value.matchAll(/<a\s[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          anchors.push({ href: m[1], text: m[2].replace(/<[^>]*>/g, '').trim() });
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) walk(item);
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const item of Object.values(value as Record<string, unknown>)) walk(item);
+      }
+    };
+    walk(JSON.parse(buffers[0].toString('utf8')));
+
+    const DOCS = '/svedeniya-ob-obrazovatelnoy-organizatsii';
+    const EXPECTED: Record<string, { frag: string; count: number }> = {
+      Документы: { frag: 'section-3', count: 96 },
+      Положением: { frag: 'section-3', count: 16 },
+      '«Структура и органы управления»': { frag: 'section-2', count: 1 },
+    };
+    const byLabel = new Map<string, string[]>();
+    const offenders: string[] = [];
+
+    for (const { href, text } of anchors) {
+      let url: URL;
+      try {
+        url = new URL(href, 'https://ikpk.su');
+      } catch {
+        continue;
+      }
+      if (url.searchParams.has('section')) {
+        offenders.push(`section= в href: ${text || '(пусто)'} → ${href}`);
+        continue;
+      }
+      const path = url.pathname.replace(/\/$/, '') || '/';
+      if (path !== DOCS || !url.hash.startsWith('#section-')) continue;
+
+      // Канон переписывания — root-relative без query/порта/чужого хоста.
+      const frag = decodeURIComponent(url.hash.slice(1));
+      const canonical = `${DOCS}#${frag}`;
+      if (href !== canonical) {
+        offenders.push(`неканонический адрес: ${text || '(пусто)'} → ${href}`);
+        continue;
+      }
+      const list = byLabel.get(text) ?? [];
+      list.push(frag);
+      byLabel.set(text, list);
+    }
+
+    expect(offenders, `сломанные глубокие ссылки корпуса:\n${offenders.slice(0, 10).join('\n')}`).toEqual([]);
+
+    const unexpected = [...byLabel.keys()].filter((label) => !(label in EXPECTED));
+    expect(unexpected, `неожиданный текст глубокой ссылки на сведения:\n${unexpected.join('\n')}`).toEqual([]);
+
+    for (const [label, want] of Object.entries(EXPECTED)) {
+      const frags = byLabel.get(label) ?? [];
+      expect(frags.length, `ссылок с текстом «${label}»`).toBe(want.count);
+      const wrong = frags.filter((frag) => frag !== want.frag);
+      expect(
+        wrong,
+        `«${label}» должна вести на #${want.frag}, а ведёт иначе (${wrong.length})`
+      ).toEqual([]);
+    }
+
+    const targetFile = join(dist, 'svedeniya-ob-obrazovatelnoy-organizatsii', 'index.html');
+    expect(existsSync(targetFile), 'страница сведений не собрана — проверить якоря корпуса нечем').toBe(true);
+    const page = readFileSync(targetFile, 'utf-8');
+    for (const [frag, title] of [
+      ['section-2', 'Структура и органы управления'],
+      ['section-3', 'Уставные документы'],
+    ] as const) {
+      const re = new RegExp(
+        `<details[^>]*\\bid="${frag}"[^>]*>\\s*<summary>${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</summary>`,
+        'i'
+      );
+      expect(re.test(page), `на странице сведений #${frag} должен быть «${title}»`).toBe(true);
+    }
   });
 
   it('no unresolved legacy control left in the build', () => {

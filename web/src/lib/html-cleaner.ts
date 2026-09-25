@@ -343,6 +343,16 @@ function transformCollapsibles(
   const stateRe = /<div([^>]*\bdata-state="(?:closed|open)"[^>]*)>/gi;
   let result = html;
   let searchFrom = 0;
+  // Порядковый номер озаглавленной секции на странице. Им адресуются ссылки из тел
+  // страниц: старый сайт открывал раздел параметром `?section=N`, и та же нумерация
+  // теперь живёт в якоре `#section-N`. Счётчик увеличивается и для секции, которую мы
+  // не выводим (пустая), иначе номера разъехались бы с нумерацией источника.
+  //
+  // ponytail: нумерация позиционная. Вставка или перестановка одной секции молча
+  // сдвигает все последующие якоря — 113 ссылок в телах панелей укажут на соседа,
+  // при зелёных гейтах. Слаг из заголовка дешевле после появления транслитератора;
+  // до задачи 8.4 (тела панелей в CMS) позиционный счётчик — принятый размен.
+  let sectionNumber = 0;
 
   for (let guard = 0; guard < 50_000; guard++) {
     stateRe.lastIndex = searchFrom;
@@ -367,6 +377,7 @@ function transformCollapsibles(
       searchFrom = m.index + 1;
       continue;
     }
+    sectionNumber += 1;
 
     // Extract inner content from the collapsible_content div (if visible/open)
     let content = '';
@@ -396,7 +407,7 @@ function transformCollapsibles(
     // обещает контент, которого нет. Часть секций на живом сайте и правда
     // пустая — такие просто не выводим.
     const replacement = content
-      ? `<details open><summary>${title}</summary>${content}</details>`
+      ? `<details open id="section-${sectionNumber}"><summary>${title}</summary>${content}</details>`
       : '';
 
     result = result.slice(0, m.index) + replacement + result.slice(end);
