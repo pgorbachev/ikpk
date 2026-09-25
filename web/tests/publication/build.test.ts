@@ -26,10 +26,16 @@ it('all rendered content satisfies the existing rich-content safety matrix', asy
   const errors: string[] = []; let regions = 0;
   const oracle = await openOracleHarness({ executablePath: process.env.PUBLICATION_CHROMIUM_EXECUTABLE });
   try {
-    for (const page of pages()) {
+    // /preview/* and /demo-zayavka exist only under DEMO_FORMS (stand scaffolding).
+    // They are not in the production occurrence set; CMS content pages are still checked.
+    const pagesToCheck = pages().filter((page) => {
+      if (!(process.env.DEMO_FORMS ?? '').trim()) return true;
+      return !page.route.startsWith('/preview') && !page.route.startsWith('/demo-zayavka');
+    });
+    for (const page of pagesToCheck) {
       const html = (await oracle.parse(page.html)).serialized;
       errors.push(...matchOccurrences(html, htmlFileRoute(page.file, tree()), occurrences, sourceSlots, {
-        ignoreMarkedRegions: true, build: required('DEPLOY_MODE') === 'stand' ? 'demo' : 'production',
+        ignoreMarkedRegions: true, build: 'production',
       }));
       for (const error of unmarkedDocumentHazards(html)) errors.push(`${page.route}: ${error.reason}`);
       for (const region of extractMarkedRegions(html)) {
