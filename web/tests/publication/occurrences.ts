@@ -10,6 +10,10 @@ type Article = { title: string; body_text?: string; published_at?: string | null
  * Unknown CMS routes intentionally fail closed until their source mapping is reviewed.
  */
 export function publicationOccurrences(rules: OccurrenceRule[], slots: ExecutableSlot[], articles: Article[], paymentRole: string, cmsUrl?: string): OccurrenceRule[] {
+  // Stand: DEMO_FORMS omits Analytics (BaseLayout). Production registry still lists it.
+  if ((process.env.DEMO_FORMS ?? '').trim()) {
+    rules = rules.filter((rule) => !rule.slotId.includes('Analytics.astro'));
+  }
   // Match the snapshot loader's input transformation, independently of rendered output.
   const localized = JSON.parse(localizeAssetUrls(JSON.stringify(articles), cmsUrl)) as Article[];
   const slot = slots.find((item) => item.file === 'pages/statyi/index.astro' && item.identity.startsWith('template|'));
