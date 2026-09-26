@@ -69,6 +69,7 @@ export default defineConfig({
       // после переезда документа на страницу он читает `dist` и в обычном прогоне падал бы
       // на «в сборке нет страницы» — то есть по причине, не имеющей к предмету отношения.
       'tests/external-widgets-privacy-doc.test.ts',
+      'tests/seminar-dates.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',

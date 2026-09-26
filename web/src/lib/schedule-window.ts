@@ -56,3 +56,18 @@ export function isUpcomingStart(entry: ScheduleWindowEntry, today: string): bool
 
 /** Календарная дата «сегодня» для вызывающего, которому нужен реальный день. */
 export const calendarToday = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * Ближайшее ещё не закончившееся событие из набора, или `undefined`.
+ *
+ * Дата аргументом по той же причине, что и в `isCurrentOrFuture`: вывод должен
+ * проверяться фикстурами, а не зависеть от хода времени.
+ */
+export function nearestUpcoming<T extends ScheduleWindowEntry>(
+  entries: readonly T[],
+  today: string,
+): T | undefined {
+  return entries
+    .filter((entry) => isCurrentOrFuture(entry, today))
+    .sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''))[0];
+}

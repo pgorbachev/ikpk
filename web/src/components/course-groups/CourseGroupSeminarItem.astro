@@ -1,12 +1,14 @@
 ---
 import type { Seminar } from '../../lib/data';
+import { MOBILE_PHONE, MOBILE_PHONE_HREF } from '../../lib/navigation';
 
 interface Props {
   seminar: Seminar;
   href: string;
+  nearestDate?: string | null;
 }
 
-const { seminar, href } = Astro.props as Props;
+const { seminar, href, nearestDate = null } = Astro.props as Props;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -27,6 +29,16 @@ const lead = description ? clipLead(description) : '';
 ---
 
 <article class="course-group-seminar-item" data-testid="course-group-seminar-card">
+  <div class="cgs-date-row">
+    {nearestDate ? (
+      <span class="cgs-chip" data-testid="seminar-nearest-date">{nearestDate}</span>
+    ) : (
+      <>
+        <span class="cgs-chip cgs-chip--muted" data-testid="seminar-date-fallback">Даты пока не назначены</span>
+        <a class="cgs-phone" href={MOBILE_PHONE_HREF}>уточняйте у менеджера: {MOBILE_PHONE}</a>
+      </>
+    )}
+  </div>
   <a href={href} class="course-group-seminar-main" aria-label={`Семинар "${seminar.name}"`}>
     <h2 class="course-group-seminar-title">{seminar.name}</h2>
     {lead && <p class="course-group-seminar-excerpt">{lead}</p>}
@@ -39,6 +51,37 @@ const lead = description ? clipLead(description) : '';
 </article>
 
 <style>
+  /* Ближайшая дата семинара (D3/Q11): верхняя строка карточки. */
+  .cgs-date-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .cgs-chip {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: #efe7d8;
+    color: #4a3f2a;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .cgs-chip--muted {
+    background: #ecece8;
+    color: #5c5c55;
+    font-weight: 500;
+  }
+
+  .cgs-phone {
+    font-size: 0.85rem;
+    color: inherit;
+  }
+
   .course-group-seminar-item {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -127,5 +170,17 @@ const lead = description ? clipLead(description) : '';
   :root[data-theme='dark'] .course-group-seminar-item {
     border-color: #434a43;
     background: #232723;
+  }
+
+  /* Цвета чипов заданы литералами, поэтому тёмная тема их не подхватывает сама:
+     светлый чип на тёмной карточке остался бы единственным ярким пятном. */
+  :root[data-theme='dark'] .cgs-chip {
+    background: #3a3527;
+    color: #e6dcc6;
+  }
+
+  :root[data-theme='dark'] .cgs-chip--muted {
+    background: #2c302c;
+    color: #b9bdb6;
   }
 </style>
