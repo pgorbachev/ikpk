@@ -6,6 +6,8 @@ category: "Workflow"
 tags: ["workflow", "artifacts", "experimental"]
 ---
 
+**Процесс IKPK.** Когда команда уместна и какой глубины согласование, проверки и ревью нужны — в корневом `AGENTS.md`. Здесь только шаги команды, не вторая копия процесса. Схему OpenSpec и CLI не менять. Если схема требует `proposal`, `design`, `specs` и `tasks`, держать их краткими и не повторять одни требования во всех файлах.
+
 Revise a change's existing planning artifacts and keep them coherent. Never edit code.
 
 **Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `./bin/openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `view`). Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
@@ -56,9 +58,10 @@ Revise a change's existing planning artifacts and keep them coherent. Never edit
    - Revise only files that already exist (`existingOutputPaths`). Do NOT create artifacts that don't exist yet, and do NOT invent new files under a glob artifact - note them and point the user to `/opsx:continue` to create them.
    - If the change is already coherent, say so and make no edits.
 
-5. **Confirm and apply, one artifact at a time**
-   - Show each proposed revision and why. Write only after the user confirms.
-   - If the user rejects a revision, do not write it - leave that artifact unchanged.
+5. **Apply revisions**
+   - Show each proposed revision and why.
+   - Wording, link, and alignment edits that carry out an already accepted decision are written without a separate confirmation for each artifact.
+   - A revision that changes behavior, scope, or substantial risk is written only after the user confirms. If the user rejects it, leave that artifact unchanged.
    - When a substantial rewrite is needed, get that artifact's rules and template first:
      ```bash
      ./bin/openspec instructions <artifact-id> --change "<name>" --json
@@ -81,6 +84,6 @@ After each invocation, show:
 - Use the artifact ids and paths reported by `./bin/openspec status`; never branch on hardcoded artifact names.
 - Edit only the concrete files in `existingOutputPaths`; never write to a glob `resolvedOutputPath`.
 - Do not advance the build frontier: no new artifacts, no new files under glob artifacts - that is `/opsx:continue`'s job.
-- Confirm every edit with the user before writing.
+- Confirm an edit before writing when it changes behavior, scope, or substantial risk. Wording, links, and alignment to an already accepted decision do not wait for confirmation of each artifact.
 - If the request changes the change's *intent* rather than refining it, recommend starting fresh with `/opsx:new` (the "Update vs. Start Fresh" heuristic).
 - `/opsx:continue` and `/opsx:new` may not be installed (core profile). When suggesting one that is unavailable, point to the CLI instead: `./bin/openspec status --change "<name>" --json` shows the next artifact and `./bin/openspec instructions <artifact-id> --change "<name>" --json` explains how to create it.

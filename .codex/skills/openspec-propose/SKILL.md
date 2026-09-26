@@ -1,6 +1,6 @@
 ---
 name: openspec-propose
-description: Propose a new change with all artifacts generated in one step. Use when the user wants to quickly describe what they want to build and get a complete proposal with design, specs, and tasks ready for implementation.
+description: Propose a new change with all artifacts generated in one step. Use only when root AGENTS.md calls for an OpenSpec change — a new user-facing capability or a change of user-visible behavior — and the user wants proposal, design, specs, and tasks ready for implementation.
 allowed-tools: Bash(./bin/openspec:*)
 license: MIT
 compatibility: Requires openspec CLI.
@@ -9,6 +9,8 @@ metadata:
   version: "1.0"
   generatedBy: "1.7.0"
 ---
+
+**Процесс IKPK.** Когда команда уместна и какой глубины согласование, проверки и ревью нужны — в корневом `AGENTS.md`. Здесь только шаги команды, не вторая копия процесса. Схему OpenSpec и CLI не менять. Если схема требует `proposal`, `design`, `specs` и `tasks`, держать их краткими и не повторять одни требования во всех файлах.
 
 Propose a new change - create the change and generate all artifacts in one step.
 

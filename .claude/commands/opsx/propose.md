@@ -1,10 +1,12 @@
 ---
 name: "OPSX: Propose"
-description: "Propose a new change - create it and generate all artifacts in one step"
+description: "Propose a new OpenSpec change when root AGENTS.md requires one: a new user-facing capability or a change of user-visible behavior"
 allowed-tools: Bash(./bin/openspec:*)
 category: "Workflow"
 tags: ["workflow", "artifacts", "experimental"]
 ---
+
+**Процесс IKPK.** Когда команда уместна и какой глубины согласование, проверки и ревью нужны — в корневом `AGENTS.md`. Здесь только шаги команды, не вторая копия процесса. Схему OpenSpec и CLI не менять. Если схема требует `proposal`, `design`, `specs` и `tasks`, держать их краткими и не повторять одни требования во всех файлах.
 
 Propose a new change - create the change and generate all artifacts in one step.
 
