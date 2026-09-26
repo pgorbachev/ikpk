@@ -6,6 +6,8 @@ category: "Workflow"
 tags: ["workflow", "archive", "experimental"]
 ---
 
+**Процесс IKPK.** Когда команда уместна и какой глубины согласование, проверки и ревью нужны — в корневом `AGENTS.md`. Здесь только шаги команды, не вторая копия процесса. Схему OpenSpec и CLI не менять. Если схема требует `proposal`, `design`, `specs` и `tasks`, держать их краткими и не повторять одни требования во всех файлах.
+
 Archive a completed change in the experimental workflow.
 
 **Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `./bin/openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `view`). Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.

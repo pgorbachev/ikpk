@@ -6,6 +6,8 @@ category: "Workflow"
 tags: ["workflow", "specs", "experimental"]
 ---
 
+**Процесс IKPK.** Когда команда уместна и какой глубины согласование, проверки и ревью нужны — в корневом `AGENTS.md`. Здесь только шаги команды, не вторая копия процесса. Схему OpenSpec и CLI не менять. Если схема требует `proposal`, `design`, `specs` и `tasks`, держать их краткими и не повторять одни требования во всех файлах.
+
 Sync delta specs from a change to main specs.
 
 This is an **agent-driven** operation - you will read delta specs and directly edit main specs to apply the changes. This allows intelligent merging (e.g., adding a scenario without copying the entire requirement).
