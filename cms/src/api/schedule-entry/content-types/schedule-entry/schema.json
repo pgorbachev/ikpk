@@ -4,8 +4,8 @@
   "info": {
     "singularName": "schedule-entry",
     "pluralName": "schedule-entries",
-    "displayName": "Schedule Entry",
-    "description": "Scheduled seminar event"
+    "displayName": "Проведение",
+    "description": "Дата и город проведения семинара"
   },
   "options": {
     "draftAndPublish": true
@@ -13,8 +13,10 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string",
-      "required": true
+      "type": "string"
+    },
+    "admin_label": {
+      "type": "string"
     },
     "startAt": {
       "type": "datetime"

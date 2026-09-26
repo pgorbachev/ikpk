@@ -1,20 +1,15 @@
-// import type { Core } from '@strapi/strapi';
+import { applyEditorForms } from './seminar-management/forms';
+import { ensureContentAdminRole } from './seminar-management/content-admin-role';
+import { registerSeminarDocuments, registerSeminarUid } from './seminar-management/documents';
 
 export default {
-  /**
-   * An asynchronous register function that runs before
-   * your application is initialized.
-   *
-   * This gives you an opportunity to extend code.
-   */
-  register(/* { strapi }: { strapi: Core.Strapi } */) {},
+  register({ strapi }) {
+    registerSeminarUid(strapi);
+    registerSeminarDocuments(strapi);
+  },
 
-  /**
-   * An asynchronous bootstrap function that runs before
-   * your application gets started.
-   *
-   * This gives you an opportunity to set up your data model,
-   * run jobs, or perform some special logic.
-   */
-  bootstrap(/* { strapi }: { strapi: Core.Strapi } */) {},
+  async bootstrap({ strapi }) {
+    await applyEditorForms(strapi);
+    await ensureContentAdminRole(strapi);
+  },
 };
