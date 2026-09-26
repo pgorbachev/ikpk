@@ -136,12 +136,12 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
+    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
-    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
-    "fingerprint": "57711bd8cfa56fbbe82f98408c913e7dfd9afd3f46ebea30a5b3b65338252757",
-    "identity": "style|body:81fa0a5c4b7caea0"
+    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
+    "fingerprint": "ed05965f6226d403b79641b877c0635c87e1e1656949374e0d70ec2f8ada6cf8",
+    "identity": "style|body:a46d6650aafc400b"
   },
   {
     "slotId": "src:components/Footer.astro:L104:C1:style",
@@ -624,11 +624,11 @@
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
-    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
+    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L157:C1:style",
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
-    "fingerprint": "771a6a27cc678d051334edcc8b02aac3b6efd51788257357b9f060fd48e8c6ea",
+    "locator": "components/seminars/SeminarSchedulePanel.astro:L157:C1:style",
+    "fingerprint": "fe531c77b3f23cf65a039561de3b3e3e0db104ec2087036ae853877cbf66842f",
     "identity": "style|body:6d08ab9809844292"
   },
   {
@@ -840,11 +840,11 @@
     "identity": "style|body:15f715eb525f64ac"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup].astro:L219:C1:style",
     "file": "pages/[institute]/[courseGroup].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup].astro:L194:C1:style",
-    "fingerprint": "18d5fa75fb6b0cbd17cfb519b34227225334686e79860fc6387420deffc60321",
+    "locator": "pages/[institute]/[courseGroup].astro:L219:C1:style",
+    "fingerprint": "cd03818c73823fdffa1995d99ef5148abe5aa4c25716a3924508c231ab51e1dd",
     "identity": "style|body:8370d74f6937862f"
   },
   {
