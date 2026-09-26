@@ -432,6 +432,29 @@ export function stripHtml(html: string): string {
 }
 
 // Helper: excerpt
+/**
+ * Лид карточки статьи: текст без служебной шапки «Заголовок ДД мес., ГГГГ | Автор».
+ *
+ * Шапка приехала из скрейпа: она есть у всех 68 статей и повторяет то, что карточка уже
+ * показывает заголовком, а заодно выносит на экран дату выкладки — ровно то, что просили
+ * убрать (D22). Снимается только НАЧАЛО текста: дата внутри статьи («12 декабря 2007 г. в
+ * Бирюзовом зале прошла встреча») — содержание, а не подпись, и остаётся как есть.
+ *
+ * Имя автора не снимается: между `|` и телом статьи разделителя нет, и угадывать, где
+ * кончается имя, значило бы резать текст по догадке.
+ */
+const LEAD_DATE_HEADER =
+  /^\s*\d{1,2}\s*(?:янв|фев|мар|апр|ма[йя]|июн|июл|авг|сен|окт|ноя|дек)[а-я]*\.?,?\s*\d{4}\s*(?:г\.)?\s*\|?\s*/i;
+
+export function articleLead(title: string, text: string): string {
+  const normalized = stripHtml(text).replace(/\s+/g, ' ').trim();
+  const head = title.replace(/\s+/g, ' ').trim();
+  const withoutTitle = head && normalized.toLowerCase().startsWith(head.toLowerCase())
+    ? normalized.slice(head.length).trimStart()
+    : normalized;
+  return withoutTitle.replace(LEAD_DATE_HEADER, '');
+}
+
 export function excerpt(text: string, maxLen = 200): string {
   const clean = stripHtml(text);
   if (clean.length <= maxLen) return clean;

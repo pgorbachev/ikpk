@@ -1,7 +1,7 @@
 ---
 import { srcsetFor } from '../lib/media';
 import type { Article } from '../lib/data';
-import { excerpt, formatDate } from '../lib/data';
+import { articleLead, excerpt } from '../lib/data';
 
 interface Props {
   article: Article;
@@ -30,13 +30,8 @@ const { article, variant = 'compact' } = Astro.props as Props;
   )}
   <div class="article-card-body">
     <h3 class="article-card-title">{article.title}</h3>
-    {article.published_at && (
-      <time class="article-card-date" datetime={article.published_at}>
-        {formatDate(article.published_at)}
-      </time>
-    )}
     {article.body_text && (
-      <p class="article-card-excerpt">{excerpt(article.body_text, 150)}</p>
+      <p class="article-card-excerpt">{excerpt(articleLead(article.title, article.body_text), 150)}</p>
     )}
   </div>
 </a>
