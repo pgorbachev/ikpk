@@ -56,14 +56,14 @@
       "file": "pages/statyi/index.astro",
       "kind": "innerHTML",
       "text": "pagination.innerHTML = ''",
-      "locator": "pages/statyi/index.astro:L274:C7:pagination.innerHTML=''",
+      "locator": "pages/statyi/index.astro:L272:C7:pagination.innerHTML=''",
       "allowedEmptyClear": true
     },
     {
       "file": "pages/statyi/index.astro",
       "kind": "innerHTML",
       "text": "grid.innerHTML = ''",
-      "locator": "pages/statyi/index.astro:L336:C7:grid.innerHTML=''",
+      "locator": "pages/statyi/index.astro:L334:C7:grid.innerHTML=''",
       "allowedEmptyClear": true
     }
   ]
