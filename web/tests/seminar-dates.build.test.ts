@@ -65,7 +65,16 @@ describe('страница программы: ближайшая дата по 
         .toBe(seminars.length);
 
       for (const seminar of seminars) {
-        const card = cards.find((el) => norm(textOf(el)).includes(norm(seminar.name)));
+        // Карточка опознаётся по своему ЗАГОЛОВКУ, а не по всему тексту: в лид входит до
+        // 720 символов описания, и имя одного семинара встречается в описании другого —
+        // в фикстуре такая пара есть. Подстрочный поиск по тексту разрешался бы верно
+        // только из-за порядка карточек.
+        const card = cards.find((el) =>
+          [...walk(el)].some(
+            (child) =>
+              child.tagName === 'h2' && norm(textOf(child)) === norm(seminar.name),
+          ),
+        );
         if (!card) {
           problems.push(`${group.slug}/${seminar.slug}: карточка семинара не найдена в выводе`);
           continue;
@@ -80,9 +89,28 @@ describe('страница программы: ближайшая дата по 
           const start = new Date(nearest.startAt);
           const expected = `${start.getUTCDate()} ${MONTHS[start.getUTCMonth()]}`;
           const shown = inCard(card, 'seminar-nearest-date').map((el) => norm(textOf(el)));
-          if (!shown.some((text) => text.includes(String(start.getUTCDate())) && text.includes(MONTHS[start.getUTCMonth()]))) {
+          // День сверяется по ГРАНИЦЕ числа, а не подстрокой: ожидание «1 мая»
+          // удовлетворялось отрисованным «21 мая». Форма диапазона при этом не
+          // воспроизводится — тест не обязан повторять форматтер, чей вывод проверяет:
+          // требуется, чтобы подпись начиналась с дня начала и называла его месяц.
+          const day = String(start.getUTCDate());
+          const monthName = MONTHS[start.getUTCMonth()];
+          const startsWithDay = (text: string): boolean =>
+            text.startsWith(day) && !/\d/.test(text.slice(day.length, day.length + 1));
+          // Год обязателен, когда ближайшая дата не в году опорной даты: без него
+          // «3 фев» на странице, собранной в марте, читается как прошедшая дата.
+          const entryYear = (nearest.endAt || nearest.startAt || '').slice(0, 4);
+          const yearNeeded = entryYear !== today.slice(0, 4);
+          if (
+            !shown.some(
+              (text) =>
+                startsWithDay(text) && text.includes(monthName) && (!yearNeeded || text.includes(entryYear)),
+            )
+          ) {
             problems.push(
-              `${group.slug}/${seminar.slug}: ожидалась ближайшая дата «${expected}», в карточке: ${shown.join(' | ') || '(элемента даты нет)'}`,
+              `${group.slug}/${seminar.slug}: ожидалась ближайшая дата «${expected}»` +
+                `${entryYear !== today.slice(0, 4) ? ` с годом ${entryYear}` : ''}` +
+                `, в карточке: ${shown.join(' | ') || '(элемента даты нет)'}`,
             );
           }
         } else {

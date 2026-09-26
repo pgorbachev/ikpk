@@ -140,8 +140,8 @@
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
     "locator": "components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
-    "fingerprint": "7835f2372fb641981e634bac85073d4ad5e0f22f5cbd50616a9394d207eff1b6",
-    "identity": "style|body:85031b0ecc63a6e4"
+    "fingerprint": "ed05965f6226d403b79641b877c0635c87e1e1656949374e0d70ec2f8ada6cf8",
+    "identity": "style|body:a46d6650aafc400b"
   },
   {
     "slotId": "src:components/Footer.astro:L104:C1:style",
@@ -840,11 +840,11 @@
     "identity": "style|body:15f715eb525f64ac"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup].astro:L210:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup].astro:L219:C1:style",
     "file": "pages/[institute]/[courseGroup].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup].astro:L210:C1:style",
-    "fingerprint": "cc8101ad44e9a4b660383ee33383ffa1cd43432fefdc9b0dcc0304cdb45d2240",
+    "locator": "pages/[institute]/[courseGroup].astro:L219:C1:style",
+    "fingerprint": "cd03818c73823fdffa1995d99ef5148abe5aa4c25716a3924508c231ab51e1dd",
     "identity": "style|body:8370d74f6937862f"
   },
   {
