@@ -33,32 +33,27 @@ const CATALOG = '/statyi';
  * ни (1) в сокращённой форме: она была зелёной при 68 карточках из 68, на каждой из
  * которых посетитель видел дату выкладки.
  */
-const MONTHS_FULL = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-];
-const MONTHS_SHORT = MONTHS_FULL.map((m) => m.slice(0, 3));
+const MONTH_STEM = '(?:янв|фев|мар|апр|ма[йя]|июн|июл|авг|сен|окт|ноя|дек)[а-я]*\\.?';
 
 /**
- * Дата выкладки САМОЙ этой статьи в обеих формах, которые встречаются на странице:
- * «26 февраля 2026» печатает наш шаблон, «20 янв., 2025» приезжает из текста статьи.
+ * Дата выкладки в тексте карточки — в ЛЮБОЙ форме, а не только в нашей.
  *
- * Признак привязан к `published_at` конкретной карточки, а не к «любой дате»: у трёх
- * статей дата есть в самом тексте («12 декабря 2007 г. в Бирюзовом зале…»), это
- * содержание, и запрещать его нельзя.
+ * Привязка к `published_at` этой статьи не работает и была измерена как вакуумная: шапка,
+ * приехавшая из скрейпа, несёт ДРУГУЮ дату («20 янв., 2025»), чем поле данных
+ * (`2025-05-25`), — различных `published_at` всего шесть на 68 статей. Проверка,
+ * сверявшая формы `published_at`, оставалась зелёной при возвращённом дефекте: мутация
+ * «не снимать шапку» не ловилась ни одной из трёх проверок файла.
+ *
+ * Поэтому предмет — начало лида: подпись даты выкладки стоит именно там, а дата ВНУТРИ
+ * текста статьи («12 декабря 2007 г. в Бирюзовом зале прошла встреча») остаётся законной.
+ *
+ * Зона не участвует вовсе: сравнивается форма, а не вычисленная дата. Прежняя редакция
+ * строила формы через `getUTC*`, тогда как страница печатает `toLocaleDateString` без
+ * `timeZone`, — вердикт зависел бы от зоны машины (данные лежат как `…T21:00:00.000Z`).
  */
-function publicationDateForms(publishedAt: string): string[] {
-  const date = new Date(publishedAt);
-  const day = date.getUTCDate();
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
-  return [
-    `${day} ${MONTHS_FULL[month]} ${year}`,
-    `${day} ${MONTHS_SHORT[month]}., ${year}`,
-    `${day} ${MONTHS_SHORT[month]}, ${year}`,
-  ];
-}
+const LEAD_DATE_HEAD = new RegExp(`^\\s*\\d{1,2}\\s*${MONTH_STEM},?\\s*\\d{4}`, 'i');
 
+/** Наша подпись: `<time>` где угодно в карточке либо дата первой строкой лида. */
 const norm = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 describe('каталог статей: порядки сортировки (D25)', () => {
@@ -122,11 +117,6 @@ describe('каталог статей: подпись даты на карточ
       const times = [...walk(card)].filter((el) => el.tagName === 'time');
       if (times.length > 0) offenders.push(`${href}: <time>${norm(textOf(times[0]))}</time>`);
 
-      const text = norm(textOf(card));
-      if (article?.published_at) {
-        const shown = publicationDateForms(article.published_at).filter((form) => text.includes(form));
-        if (shown.length > 0) offenders.push(`${href}: дата выкладки «${shown[0]}» видна в карточке`);
-      }
 
       const lead = [...walk(card)]
         .filter((el) => el.tagName === 'p')
@@ -134,6 +124,8 @@ describe('каталог статей: подпись даты на карточ
         .find((value) => value.length > 0);
       if (lead) {
         leadsChecked += 1;
+        const startsWithDate = lead.match(LEAD_DATE_HEAD);
+        if (startsWithDate) offenders.push(`${href}: лид начинается с даты выкладки — «${startsWithDate[0]}…»`);
         if (article && lead.toLowerCase().startsWith(norm(article.title).toLowerCase().slice(0, 40)))
           offenders.push(`${href}: лид повторяет заголовок карточки — «${lead.slice(0, 60)}…»`);
       }
