@@ -672,6 +672,8 @@ jobs:
           base="$RUNNER_TEMP/browser-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           npm ci --prefix "$base/web"
+          # Use the browser revision pinned by the base checkout's Playwright lockfile.
+          (cd "$base/web" && npx playwright install chromium)
           (
             cd "$base/web"
             npm run build
