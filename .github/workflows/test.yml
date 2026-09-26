@@ -186,6 +186,10 @@ jobs:
           base="$RUNNER_TEMP/web-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
           npm ci --prefix "$base/web"
+          # Dependency PRs can change Playwright itself. The browser installed above
+          # belongs to the PR head, so install the base revision's matching browser
+          # before running its test-count baseline.
+          (cd "$base/web" && npx playwright install chromium)
           npm ci --prefix "$base/payments"
           (
             cd "$base/web"
