@@ -11,6 +11,7 @@ import {
   foreignLinkIds,
   nextSeminarId,
   relationDocumentIds,
+  relationNumericIds,
   runTrustedImport,
   seminarPublicationError,
   trustedImportFromEditorPayload,
@@ -210,12 +211,16 @@ test('подпись в списке показывает дату и город
   assert.equal(adminLabel(null, ''), 'дата не указана · город не указан');
 });
 
-test('идентификаторы связи читаются из connect и set, а не из числового id', () => {
+test('идентификаторы связи читаются из всех форм, которые принимает Strapi', () => {
   assert.deepEqual(
     relationDocumentIds({ connect: [{ documentId: 'a' }, { id: 7 }] }),
     ['a'],
   );
+  assert.deepEqual(relationNumericIds({ connect: [{ documentId: 'a' }, { id: 7 }, 8] }), [7, 8]);
+  assert.deepEqual(relationDocumentIds(['entry-a', { documentId: 'entry-b' }]), ['entry-a', 'entry-b']);
+  assert.deepEqual(relationDocumentIds({ set: ['entry-a'] }), ['entry-a']);
   assert.equal(nextSeminarId({ seminar: { connect: [{ documentId: 'sem-2' }] } }, 'sem-1'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: ['sem-2'] }, 'sem-1'), 'sem-2');
   assert.equal(nextSeminarId({}, 'sem-1'), 'sem-1');
   assert.equal(nextSeminarId({ seminar: { disconnect: [{ documentId: 'sem-1' }] } }, 'sem-1'), null);
 });

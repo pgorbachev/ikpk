@@ -150,10 +150,29 @@ function adminDate(value) {
   return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
+function relationItems(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.flatMap(relationItems);
+  if (typeof value === 'string' || typeof value === 'number') return [value];
+  if (typeof value !== 'object') return [];
+  const hasOperator = value.set || value.connect || value.disconnect;
+  if (!hasOperator && (value.documentId != null || value.id != null)) return [value];
+  return [...relationItems(value.set), ...relationItems(value.connect)];
+}
+
 export function relationDocumentIds(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-  const source = Array.isArray(value.set) ? value.set : Array.isArray(value.connect) ? value.connect : [];
-  return source.map(documentIdOf).filter(Boolean);
+  return relationItems(value).map(documentIdOf).filter(Boolean);
+}
+
+export function relationNumericIds(value) {
+  const ids = [];
+  for (const item of relationItems(value)) {
+    if (documentIdOf(item)) continue;
+    const raw = typeof item === 'number' ? item : item?.id;
+    const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : null;
+    if (Number.isInteger(id)) ids.push(id);
+  }
+  return ids;
 }
 
 export function documentIdOf(item) {
@@ -168,11 +187,17 @@ export function nextSeminarId(data, previousSeminarId) {
   const seminar = data.seminar;
   if (seminar == null) return null;
   if (typeof seminar === 'string') return text(seminar) || null;
-  if (typeof seminar !== 'object') return previousSeminarId || null;
-  if (seminar.documentId) return text(seminar.documentId) || null;
-  const connected = relationDocumentIds({ connect: seminar.connect, set: seminar.set });
+  const connected = relationDocumentIds(seminar);
   if (connected.length > 0) return connected[0];
-  if (Array.isArray(seminar.disconnect) && seminar.disconnect.length > 0 && !seminar.connect && !seminar.set) {
+  if (
+    seminar &&
+    typeof seminar === 'object' &&
+    !Array.isArray(seminar) &&
+    Array.isArray(seminar.disconnect) &&
+    seminar.disconnect.length > 0 &&
+    !seminar.connect &&
+    !seminar.set
+  ) {
     return null;
   }
   return previousSeminarId || null;

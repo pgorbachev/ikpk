@@ -14,6 +14,7 @@ import {
   isTrustedImport,
   nextSeminarId,
   relationDocumentIds,
+  relationNumericIds,
   seminarPublicationError,
 } from './rules.js';
 
@@ -42,25 +43,44 @@ async function seminarName(strapi, documentId) {
   return text(row?.name);
 }
 
+function entryShape(row, documentId) {
+  return {
+    documentId: documentId || row?.documentId,
+    seminarId: seminarIdOf(row),
+    name: text(row?.name),
+    id: row?.id ?? null,
+  };
+}
+
 async function entryRows(strapi, documentIds) {
   const rows = [];
   for (const documentId of documentIds) {
     const row = await findDraft(strapi, SCHEDULE_ENTRY_UID, documentId, ['seminar']);
-    rows.push({
-      documentId,
-      seminarId: seminarIdOf(row),
-      name: text(row?.name),
-      id: row?.id ?? null,
-    });
+    rows.push(entryShape(row, documentId));
   }
   return rows;
 }
 
+async function entryRowsById(strapi, ids) {
+  if (ids.length === 0) return [];
+  const found = await strapi.db.query(SCHEDULE_ENTRY_UID).findMany({
+    where: { id: { $in: ids } },
+    populate: ['seminar'],
+  });
+  return found.map((row) => entryShape(row, row.documentId));
+}
+
+async function linkedRows(strapi, relation) {
+  return [
+    ...(await entryRows(strapi, relationDocumentIds(relation))),
+    ...(await entryRowsById(strapi, relationNumericIds(relation))),
+  ];
+}
+
 async function guardSeminarLinks(strapi, hostDocumentId, data) {
   if (!data || !Object.prototype.hasOwnProperty.call(data, 'schedule_entries')) return;
-  const ids = relationDocumentIds(data.schedule_entries);
-  if (ids.length === 0) return;
-  const rows = await entryRows(strapi, ids);
+  const rows = await linkedRows(strapi, data.schedule_entries);
+  if (rows.length === 0) return;
   const foreign = rows.filter((row) => isForeignAssignment(hostDocumentId, row.seminarId));
   if (foreign.length > 0) {
     throw new ValidationError(FOREIGN_LINK_MESSAGE);
@@ -69,29 +89,45 @@ async function guardSeminarLinks(strapi, hostDocumentId, data) {
 
 async function fillAttachedEntries(strapi, hostDocumentId, data, seminarTitle) {
   if (!data || !seminarTitle) return;
-  const ids = relationDocumentIds(data.schedule_entries);
-  if (ids.length === 0) return;
-  const rows = await entryRows(strapi, ids);
+  const rows = await linkedRows(strapi, data.schedule_entries);
+  if (rows.length === 0) return;
   for (const row of rows) {
     if (classifyScheduleLink(hostDocumentId, row.seminarId) === 'foreign') continue;
-    if (row.name) continue;
     if (!row.id) continue;
     const current = await findDraft(strapi, SCHEDULE_ENTRY_UID, row.documentId);
+    const data: { name?: string; admin_label?: string } = {};
+    if (!row.name) data.name = seminarTitle;
+    if (!text(current?.admin_label)) data.admin_label = adminLabel(current?.startAt, current?.city);
+    if (Object.keys(data).length === 0) continue;
     await strapi.db.query(SCHEDULE_ENTRY_UID).update({
       where: { id: row.id },
-      data: {
-        name: seminarTitle,
-        admin_label: adminLabel(current?.startAt, current?.city),
-      },
+      data,
     });
   }
 }
 
+async function assertPublishedWrite(strapi, context) {
+  if (context.params?.status !== 'published') return;
+  const data = context.params?.data ?? {};
+  const existing = context.params?.documentId
+    ? await findDraft(strapi, SCHEDULE_ENTRY_UID, context.params.documentId, ['seminar'])
+    : null;
+  const seminarId = nextSeminarId(data, seminarIdOf(existing));
+  const messages = entryPublicationErrors({
+    seminarId,
+    seminarName: await seminarName(strapi, seminarId),
+    startAt: Object.prototype.hasOwnProperty.call(data, 'startAt') ? data.startAt : existing?.startAt,
+    endAt: Object.prototype.hasOwnProperty.call(data, 'endAt') ? data.endAt : existing?.endAt,
+  });
+  if (messages.length > 0) throw new ValidationError(messages.join(' '));
+}
+
 async function applyEntryWrite(strapi, context) {
-  const data = context.params?.data;
-  if (!data) return;
+  const data = context.params?.data ?? {};
+  if (!context.params.data) context.params.data = data;
+  const readsExisting = context.action === 'update' || context.action === 'clone';
   const existing =
-    context.action === 'update' && context.params.documentId
+    readsExisting && context.params.documentId
       ? await findDraft(strapi, SCHEDULE_ENTRY_UID, context.params.documentId, ['seminar'])
       : null;
   const previousSeminarId = seminarIdOf(existing);
@@ -191,6 +227,16 @@ async function assertSeminarPublishable(strapi, context) {
 export function registerSeminarDocuments(strapi) {
   strapi.documents.use(async (context, next) => {
     if (context.uid === SEMINAR_UID && (context.action === 'create' || context.action === 'update')) {
+      if (context.params?.status === 'published') {
+        const incoming = context.params.data ?? {};
+        const existing =
+          context.action === 'update' && context.params.documentId
+            ? await findDraft(strapi, SEMINAR_UID, context.params.documentId)
+            : null;
+        const name = Object.prototype.hasOwnProperty.call(incoming, 'name') ? incoming.name : existing?.name;
+        const message = seminarPublicationError(name);
+        if (message) throw new ValidationError(message);
+      }
       const hostId = context.params.documentId || documentIdOf(context.params.data);
       await guardSeminarLinks(strapi, hostId, context.params.data);
       const result = await applySeminarSlug(strapi, context, next);
@@ -209,7 +255,11 @@ export function registerSeminarDocuments(strapi) {
       await assertSeminarPublishable(strapi, context);
       return next();
     }
-    if (context.uid === SCHEDULE_ENTRY_UID && (context.action === 'create' || context.action === 'update')) {
+    if (
+      context.uid === SCHEDULE_ENTRY_UID &&
+      (context.action === 'create' || context.action === 'update' || context.action === 'clone')
+    ) {
+      await assertPublishedWrite(strapi, context);
       await applyEntryWrite(strapi, context);
       return next();
     }
@@ -219,6 +269,20 @@ export function registerSeminarDocuments(strapi) {
     }
     return next();
   });
+}
+
+export async function backfillAdminLabels(strapi) {
+  const rows = await strapi.db.query(SCHEDULE_ENTRY_UID).findMany({
+    where: {
+      $or: [{ admin_label: { $null: true } }, { admin_label: '' }],
+    },
+  });
+  for (const row of rows) {
+    await strapi.db.query(SCHEDULE_ENTRY_UID).update({
+      where: { id: row.id },
+      data: { admin_label: adminLabel(row.startAt, row.city) },
+    });
+  }
 }
 
 export function registerSeminarUid(strapi) {
