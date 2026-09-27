@@ -93,19 +93,6 @@ async function assertSeminarProgram(strapi, relation) {
   }
 }
 
-async function assertProgramNotInUse(strapi, documentId) {
-  if (!documentId) return;
-  const linked = await strapi.db.query(SEMINAR_UID).findOne({
-    where: {
-      publishedAt: { $notNull: true },
-      course_group: { documentId },
-    },
-  });
-  if (linked) {
-    throw new ValidationError('Программа связана с опубликованными семинарами. Сначала снимите их с публикации.');
-  }
-}
-
 async function resolvedSeminarId(strapi, data, previousSeminarId) {
   const specified = specifiedSeminar(data);
   if (specified.kind !== 'numeric') return nextSeminarId(data, previousSeminarId);
@@ -302,10 +289,6 @@ async function assertSeminarPublishable(strapi, context) {
 
 export function registerSeminarDocuments(strapi) {
   strapi.documents.use(async (context, next) => {
-    if (context.uid === COURSE_GROUP_UID && (context.action === 'unpublish' || context.action === 'delete')) {
-      await assertProgramNotInUse(strapi, context.params?.documentId);
-      return next();
-    }
     if (context.uid === SEMINAR_UID && (context.action === 'create' || context.action === 'update')) {
       if (context.params?.status === 'published') {
         const incoming = context.params.data ?? {};

@@ -262,14 +262,6 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       }),
       /нет опубликованного института для сайта/,
     );
-    await assert.rejects(
-      () => programs.unpublish({ documentId: program.documentId }),
-      /связана с опубликованными семинарами/,
-    );
-    await assert.rejects(
-      () => programs.delete({ documentId: program.documentId }),
-      /связана с опубликованными семинарами/,
-    );
   });
 
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
