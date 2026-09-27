@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import ts from 'typescript';
-import { isCurrentOrFuture, isUpcomingStart, lastDay } from '../src/lib/schedule-window';
+import { isCurrentOrFuture, isUpcomingStart, lastDay, nearestUpcoming } from '../src/lib/schedule-window';
 
 // Многодневное событие обязано оставаться на страницах до последнего дня. Из 63
 // записей расписания 60 многодневные, поэтому фильтр по `startAt` убирал бы
@@ -224,5 +224,82 @@ describe('нигде в src нет фильтра расписания по star
       offenders,
       `многодневные события исчезнут после первого дня (в данных таких 60 из 63):\n${offenders.join('\n')}`,
     ).toEqual([]);
+  });
+});
+
+// ─── Порядок выбора «ближайшего» ────────────────────────────────────────────
+// Ключи заданы требованием change `cms-content-authoring-and-migration` («Даты семинара
+// выводятся из расписания»): первый день → последний день → город → идентификатор.
+// В фикстуре расписания пар «семинар + одинаковый первый день» НЕТ НИ ОДНОЙ, поэтому
+// разницу между «сортировать только по началу» и требуемым порядком реальные данные не
+// показывают: проверка возможна только фикстурами, и без неё выбор оставался бы за
+// порядком записей во входном массиве.
+const NEAR_TODAY = '2026-09-01';
+const shuffles = <T,>(items: readonly T[]): T[][] => [[...items], [...items].reverse(),
+  [items[items.length - 1], ...items.slice(0, -1)] as T[]];
+
+describe('ближайшее событие: порядок ключей и устойчивость', () => {
+  it('раньше начавшееся ближе', () => {
+    const early = { id: 2, startAt: '2026-10-01', endAt: '2026-10-09' };
+    const late = { id: 1, startAt: '2026-10-05', endAt: '2026-10-06' };
+    for (const order of shuffles([early, late])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id, 'выбор зависит от порядка записей').toBe(2);
+    }
+  });
+
+  it('при равном первом дне ближе более короткое событие', () => {
+    // Пример из задания: 1–5 и 1–2 октября. Раньше выбиралось первое во входном массиве.
+    const long = { id: 10, startAt: '2026-10-01', endAt: '2026-10-05', city: { name: 'Москва' } };
+    const short = { id: 11, startAt: '2026-10-01', endAt: '2026-10-02', city: { name: 'Москва' } };
+    for (const order of shuffles([long, short])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe(11);
+    }
+  });
+
+  it('при совпадении обеих дат события различаются городом', () => {
+    const spb = { id: 20, startAt: '2026-10-01', endAt: '2026-10-02', city: { name: 'Санкт-Петербург' } };
+    const msk = { id: 21, startAt: '2026-10-01', endAt: '2026-10-02', city: { name: 'Москва' } };
+    for (const order of shuffles([spb, msk])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe(21);
+    }
+  });
+
+  it('при совпадении дат и города выбор устойчив по идентификатору', () => {
+    const a = { id: 9, startAt: '2026-10-01', endAt: '2026-10-02', city: { name: 'Онлайн' } };
+    const b = { id: 10, startAt: '2026-10-01', endAt: '2026-10-02', city: { name: 'Онлайн' } };
+    for (const order of shuffles([a, b])) {
+      // Числовой идентификатор сравнивается как ЧИСЛО: лексикографически 10 шло бы раньше 9.
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe(9);
+    }
+  });
+
+  it('строковый идентификатор сравнивается лексикографически', () => {
+    const a = { id: 'b-event', startAt: '2026-10-01', endAt: '2026-10-02', city: 'Онлайн' };
+    const b = { id: 'a-event', startAt: '2026-10-01', endAt: '2026-10-02', city: 'Онлайн' };
+    for (const order of shuffles([a, b])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe('a-event');
+    }
+  });
+
+  it('идущее многодневное событие остаётся ближайшим, а закончившееся не участвует', () => {
+    const running = { id: 30, startAt: '2026-08-30', endAt: '2026-09-03' };
+    const future = { id: 31, startAt: '2026-09-20', endAt: '2026-09-21' };
+    const done = { id: 32, startAt: '2026-08-01', endAt: '2026-08-02' };
+    for (const order of shuffles([running, future, done])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe(30);
+    }
+  });
+
+  it('запись без первого дня не участвует', () => {
+    const broken = { id: 40, endAt: '2026-10-05' };
+    const good = { id: 41, startAt: '2026-10-02', endAt: '2026-10-03' };
+    for (const order of shuffles([broken, good])) {
+      expect(nearestUpcoming(order, NEAR_TODAY)?.id).toBe(41);
+    }
+    expect(nearestUpcoming([broken], NEAR_TODAY)).toBeUndefined();
+  });
+
+  it('пустой набор даёт undefined', () => {
+    expect(nearestUpcoming([], NEAR_TODAY)).toBeUndefined();
   });
 });
