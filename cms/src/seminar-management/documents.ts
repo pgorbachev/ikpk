@@ -251,6 +251,10 @@ export function registerSeminarDocuments(strapi) {
       }
       return result;
     }
+    if (context.uid === SEMINAR_UID && context.action === 'clone') {
+      await guardSeminarLinks(strapi, null, context.params?.data);
+      return next();
+    }
     if (context.uid === SEMINAR_UID && context.action === 'publish') {
       await assertSeminarPublishable(strapi, context);
       return next();

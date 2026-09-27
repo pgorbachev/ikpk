@@ -21,7 +21,7 @@ function freePort() {
   });
 }
 
-describe('семинары в собранном Strapi', { timeout: 180000 }, () => {
+describe('семинары в собранном Strapi', { timeout: 360000 }, () => {
   /** @type {import('@strapi/strapi').Core.Strapi} */
   let app;
   let base;
@@ -141,6 +141,14 @@ describe('семинары в собранном Strapi', { timeout: 180000 }, (
         }),
       /другому семинару/,
     );
+    await assert.rejects(
+      () =>
+        seminars.update({
+          documentId: seminarB.documentId,
+          data: { schedule_entries: { connect: [String(entry.id)] } },
+        }),
+      /другому семинару/,
+    );
     const kept = await entries.findOne({ documentId: entry.documentId, populate: ['seminar'] });
     assert.equal(kept.seminar.documentId, seminarA.documentId);
 
@@ -204,6 +212,64 @@ describe('семинары в собранном Strapi', { timeout: 180000 }, (
     assert.notEqual(ctx.body.data.name, 'Forged via content-admin clone');
     assert.equal(ctx.body.data.name, 'Для клона');
     assert.equal(role.code, 'content-admin');
+
+    const publishedSeminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Опубликованный' },
+    });
+    const published = await entries.create({
+      status: 'published',
+      data: {
+        seminar: publishedSeminar.documentId,
+        startAt: '2026-07-01T00:00:00.000Z',
+        endAt: '2026-07-02T00:00:00.000Z',
+      },
+    });
+    const beforeRemoval = await entries.findOne({
+      documentId: published.documentId,
+      status: 'published',
+      populate: ['seminar'],
+    });
+    assert.equal(beforeRemoval.seminar.documentId, publishedSeminar.documentId);
+    for (const seminarPayload of [
+      { set: [] },
+      [],
+      { disconnect: [publishedSeminar.documentId], connect: [] },
+    ]) {
+      await assert.rejects(
+        () =>
+          entries.update({
+            documentId: published.documentId,
+            status: 'published',
+            data: { seminar: seminarPayload },
+          }),
+        /Укажите семинар/,
+      );
+    }
+    const stillPublished = await entries.findOne({
+      documentId: published.documentId,
+      status: 'published',
+      populate: ['seminar'],
+    });
+    assert.equal(stillPublished.seminar.documentId, publishedSeminar.documentId);
+    assert.ok(stillPublished.publishedAt);
+
+    const other = await seminars.create({ data: { name: 'Чужой' } });
+    const foreign = await entries.create({ data: { seminar: other.documentId } });
+    await assert.rejects(
+      () =>
+        seminars.clone({
+          documentId: seminar.documentId,
+          data: {
+            name: 'Клон',
+            slug: `klon-${Date.now()}`,
+            schedule_entries: { connect: [foreign.documentId] },
+          },
+        }),
+      /другому семинару/,
+    );
+    const foreignAfter = await entries.findOne({ documentId: foreign.documentId, populate: ['seminar'] });
+    assert.equal(foreignAfter.seminar.documentId, other.documentId);
   });
 
   test('пустая подпись прежней строки заполняется без смены имени', async () => {

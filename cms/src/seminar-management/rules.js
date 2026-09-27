@@ -164,41 +164,67 @@ export function relationDocumentIds(value) {
   return relationItems(value).map(documentIdOf).filter(Boolean);
 }
 
+function numericId(raw) {
+  if (typeof raw === 'number' && Number.isInteger(raw)) return raw;
+  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+  return null;
+}
+
 export function relationNumericIds(value) {
   const ids = [];
   for (const item of relationItems(value)) {
     if (documentIdOf(item)) continue;
-    const raw = typeof item === 'number' ? item : item?.id;
-    const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : null;
-    if (Number.isInteger(id)) ids.push(id);
+    const raw =
+      typeof item === 'number' || typeof item === 'string'
+        ? item
+        : numericId(item?.documentId) != null
+          ? item.documentId
+          : item?.id;
+    const id = numericId(raw);
+    if (id != null) ids.push(id);
   }
   return ids;
 }
 
 export function documentIdOf(item) {
-  if (typeof item === 'string' && item.trim()) return item.trim();
+  if (typeof item === 'string') {
+    const trimmed = item.trim();
+    if (!trimmed || numericId(trimmed) != null) return null;
+    return trimmed;
+  }
   if (!item || typeof item !== 'object') return null;
-  if (typeof item.documentId === 'string' && item.documentId.trim()) return item.documentId.trim();
+  if (typeof item.documentId === 'string' && item.documentId.trim() && numericId(item.documentId) == null) {
+    return item.documentId.trim();
+  }
   return null;
+}
+
+/** Пустой set, пустой массив и disconnect без нового connect снимают связь. */
+export function relationClears(value) {
+  if (value == null) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value !== 'object') return false;
+  const hasSet = Object.prototype.hasOwnProperty.call(value, 'set');
+  const hasConnect = Object.prototype.hasOwnProperty.call(value, 'connect');
+  const hasDisconnect = Object.prototype.hasOwnProperty.call(value, 'disconnect');
+  const setEmpty = hasSet && relationItems(value.set).length === 0;
+  const connectEmpty = !hasConnect || relationItems(value.connect).length === 0;
+  const disconnects = hasDisconnect && relationItems(value.disconnect).length > 0;
+  if (setEmpty && connectEmpty) return true;
+  if (!hasSet && connectEmpty && disconnects) return true;
+  return false;
 }
 
 export function nextSeminarId(data, previousSeminarId) {
   if (!data || !Object.prototype.hasOwnProperty.call(data, 'seminar')) return previousSeminarId || null;
   const seminar = data.seminar;
-  if (seminar == null) return null;
-  if (typeof seminar === 'string') return text(seminar) || null;
+  if (relationClears(seminar)) return null;
+  if (typeof seminar === 'string') {
+    const trimmed = text(seminar);
+    if (numericId(trimmed) != null) return previousSeminarId || null;
+    return trimmed || null;
+  }
   const connected = relationDocumentIds(seminar);
   if (connected.length > 0) return connected[0];
-  if (
-    seminar &&
-    typeof seminar === 'object' &&
-    !Array.isArray(seminar) &&
-    Array.isArray(seminar.disconnect) &&
-    seminar.disconnect.length > 0 &&
-    !seminar.connect &&
-    !seminar.set
-  ) {
-    return null;
-  }
   return previousSeminarId || null;
 }

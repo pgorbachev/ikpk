@@ -11,6 +11,7 @@ import {
   foreignLinkIds,
   nextSeminarId,
   relationDocumentIds,
+  relationClears,
   relationNumericIds,
   runTrustedImport,
   seminarPublicationError,
@@ -216,11 +217,17 @@ test('идентификаторы связи читаются из всех ф�
     relationDocumentIds({ connect: [{ documentId: 'a' }, { id: 7 }] }),
     ['a'],
   );
-  assert.deepEqual(relationNumericIds({ connect: [{ documentId: 'a' }, { id: 7 }, 8] }), [7, 8]);
+  assert.deepEqual(relationNumericIds({ connect: [{ documentId: 'a' }, { id: 7 }, 8, '9'] }), [7, 8, 9]);
+  assert.deepEqual(relationDocumentIds({ connect: ['9'] }), []);
   assert.deepEqual(relationDocumentIds(['entry-a', { documentId: 'entry-b' }]), ['entry-a', 'entry-b']);
   assert.deepEqual(relationDocumentIds({ set: ['entry-a'] }), ['entry-a']);
   assert.equal(nextSeminarId({ seminar: { connect: [{ documentId: 'sem-2' }] } }, 'sem-1'), 'sem-2');
   assert.equal(nextSeminarId({ seminar: ['sem-2'] }, 'sem-1'), 'sem-2');
   assert.equal(nextSeminarId({}, 'sem-1'), 'sem-1');
   assert.equal(nextSeminarId({ seminar: { disconnect: [{ documentId: 'sem-1' }] } }, 'sem-1'), null);
+  assert.equal(nextSeminarId({ seminar: { set: [] } }, 'sem-1'), null);
+  assert.equal(nextSeminarId({ seminar: [] }, 'sem-1'), null);
+  assert.equal(nextSeminarId({ seminar: { disconnect: ['sem-1'], connect: [] } }, 'sem-1'), null);
+  assert.equal(relationClears({ connect: [] }), false);
+  assert.equal(nextSeminarId({ seminar: { connect: [] } }, 'sem-1'), 'sem-1');
 });
