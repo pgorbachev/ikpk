@@ -5,7 +5,7 @@ export const MESSAGES = {
   failed: 'Сборка не удалась. Действующий сайт не менялся.',
   interrupted: 'Сборка прервана. Действующий сайт не менялся.',
   notPrepared:
-    'Обновление сайта на этом стенде ещё не подготовлено: нет уже установленной сборки. Зависимости заново не ставятся.',
+    'Обновление сайта на этом стенде ещё не подготовлено: нет постоянного дерева сборки или адреса проверки. Зависимости заново не ставятся.',
   verificationFailed:
     'Новый релиз не прошёл проверку после переключения. Это не успех и не автоматический откат.',
   switchIncomplete:
@@ -146,7 +146,16 @@ export function unlock(lockPath) {
 
 export function workspaceReady(workspace) {
   if (!workspace) return false;
-  return existsSync(join(workspace, 'web', 'node_modules', 'astro', 'package.json'));
+  const web = join(workspace, 'web');
+  return (
+    existsSync(join(web, 'node_modules', 'astro', 'package.json')) &&
+    existsSync(join(web, 'node_modules', 'tsx', 'package.json'))
+  );
+}
+
+/** Путь system unit: и дерево, и адрес проверки. Иначе сборка не стартует. */
+export function refreshReady(env) {
+  return workspaceReady(env && env.IKPK_BUILD_WORKSPACE) && Boolean(env && env.IKPK_VERIFY_URL);
 }
 
 export function reuseDerivatives(workspace, cacheDir) {
@@ -470,22 +479,91 @@ export async function runRestore(deps) {
   const releaseId = previous.slice('releases/'.length);
   const expected = deps.identityOf(releaseId);
   if (!expected) return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false });
-  deps.switchRelease(releaseId);
-  const verified = await deps.verify(expected);
-  if (!verified.ok) {
+  let switched = false;
+  try {
+    deps.switchRelease(releaseId);
+    switched = true;
+    const verified = await deps.verify(expected);
+    if (!verified.ok) {
+      return finish(deps, {
+        status: 'verification-failed',
+        phase: 'verifying',
+        message: MESSAGES.restoreVerifyFailed,
+        detail: redact(verified.detail),
+        releaseId,
+        switched: true,
+      });
+    }
+    return finish(deps, {
+      status: 'succeeded',
+      message: MESSAGES.restored,
+      releaseId,
+      siteUrl: verified.siteUrl || null,
+      switched: true,
+    });
+  } catch (error) {
+    if (!switched) throw error;
     return finish(deps, {
       status: 'verification-failed',
+      phase: 'verifying',
       message: MESSAGES.restoreVerifyFailed,
-      detail: redact(verified.detail),
+      detail: redact(error && error.message),
       releaseId,
       switched: true,
     });
   }
-  return finish(deps, {
-    status: 'succeeded',
-    message: MESSAGES.restored,
-    releaseId,
-    siteUrl: verified.siteUrl || null,
-    switched: true,
-  });
+}
+
+/**
+ * Lock и запись running живут в одном try/finally. Отказ записи снимает lock.
+ * Исключение проверки после смены ссылки — ошибка проверки, не «сайт не менялся».
+ */
+export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify }) {
+  if (!tryLock(lock, pid)) return { status: 'running', message: MESSAGES.busy };
+  let switched = false;
+  try {
+    write({
+      status: 'running',
+      phase: 'switching',
+      pid,
+      message: 'Возвращается предыдущий релиз.',
+      startedAt: new Date().toISOString(),
+      switched: false,
+      previousReleaseId: current?.previousReleaseId || null,
+    });
+    return await runRestore({
+      read: () => current,
+      write,
+      switchRelease: (releaseId) => {
+        const result = switchRelease(releaseId);
+        switched = true;
+        return result;
+      },
+      identityOf,
+      verify,
+    });
+  } catch (error) {
+    const failed = switched
+      ? {
+          status: 'verification-failed',
+          phase: 'verifying',
+          message: MESSAGES.restoreVerifyFailed,
+          detail: redact(error && error.message),
+          switched: true,
+        }
+      : {
+          status: 'failed',
+          message: MESSAGES.failed,
+          detail: redact(error && error.message),
+          switched: false,
+        };
+    try {
+      write(failed);
+    } catch {
+      // Запись недоступна. Lock снимается ниже, иначе живой pid службы останется навсегда.
+    }
+    return failed;
+  } finally {
+    unlock(lock);
+  }
 }

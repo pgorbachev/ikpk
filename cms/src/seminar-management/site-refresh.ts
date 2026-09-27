@@ -10,16 +10,16 @@ import {
   identityFromReleaseDir,
   launchPlan,
   mayRefresh,
+  refreshReady,
+  runLockedRestore,
   redact,
   publicView,
   readStateFile,
   refreshStatePath,
-  runRestore,
   switchCurrent,
   tryLock,
   unlock,
   verifyRelease,
-  workspaceReady,
   writeJsonAtomic,
 } from './site-refresh-operation.js';
 
@@ -122,7 +122,7 @@ function launch() {
     record: current,
     pidAlive,
     lockAcquired: current?.status === 'running' ? false : locked,
-    ready: workspaceReady(process.env.IKPK_BUILD_WORKSPACE),
+    ready: refreshReady(process.env),
     now: () => new Date().toISOString(),
     spawn: () => {
       const env = childEnvironment(process.env);
@@ -163,41 +163,20 @@ async function restorePrevious() {
   const { state, lock } = locations();
   const current = applyDecision(state, lock);
   if (current?.status === 'running') return publicView({ ...current, message: MESSAGES.busy });
-  if (!tryLock(lock, process.pid)) return { status: 'running', message: MESSAGES.busy };
-  writeRecord(state, {
-    status: 'running',
-    phase: 'switching',
-    pid: process.pid,
-    message: 'Возвращается предыдущий релиз.',
-    startedAt: new Date().toISOString(),
-    switched: false,
-    previousReleaseId: current?.previousReleaseId || null,
-  });
   const webRoot = process.env.IKPK_WEB_ROOT;
-  try {
-    return await runRestore({
-      read: () => current,
-      write: (record) => writeRecord(state, record),
-      switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
-      identityOf: (releaseId) => identityFromReleaseDir(join(webRoot, 'releases', releaseId)),
-      verify: (expected) =>
-        verifyRelease({
-          url: process.env.IKPK_VERIFY_URL,
-          expected,
-          host: process.env.IKPK_VERIFY_HOST,
-          fetchImpl: globalThis.fetch,
-        }),
-    });
-  } catch (error) {
-    const failed = {
-      status: 'failed',
-      message: MESSAGES.failed,
-      detail: redact(error instanceof Error ? error.message : String(error)),
-      switched: false,
-    };
-    writeRecord(state, failed);
-    return publicView(failed);
-  } finally {
-    unlock(lock);
-  }
+  return runLockedRestore({
+    lock,
+    pid: process.pid,
+    current,
+    write: (record) => writeRecord(state, record),
+    switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
+    identityOf: (releaseId) => identityFromReleaseDir(join(webRoot, 'releases', releaseId)),
+    verify: (expected) =>
+      verifyRelease({
+        url: process.env.IKPK_VERIFY_URL,
+        expected,
+        host: process.env.IKPK_VERIFY_HOST,
+        fetchImpl: globalThis.fetch,
+      }),
+  });
 }

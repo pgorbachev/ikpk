@@ -123,6 +123,26 @@ if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]
   rsync -az "${link_dest_args[@]}" --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" "${CMS_ARTIFACT_SOURCE_DECLARED}/" "${SSH_USER}@${HOST}:${release_dir}/"
 fi
 
+# Постоянное дерево сборки сайта. На стенде нет git, временный каталог замера удалён.
+# Исходники едут с машины оператора. node_modules на кнопке не ставится: npm ci ниже,
+# на сервере, только когда нет astro/tsx или сменился lock.
+SITE_BUILD_WORKSPACE_DECLARED="$(declared_get SITE_BUILD_WORKSPACE)"
+if [[ -n "$SITE_BUILD_WORKSPACE_DECLARED" ]]; then
+  if [[ ! -f "$ROOT/web/package-lock.json" || ! -d "$ROOT/media-originals" ]]; then
+    echo "[bootstrap] SITE_BUILD_WORKSPACE задан, а локально нет web/package-lock.json или media-originals" >&2
+    exit 1
+  fi
+  /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+    "mkdir -p '${SITE_BUILD_WORKSPACE_DECLARED}/web' '${SITE_BUILD_WORKSPACE_DECLARED}/media-originals'"
+  rsync -az \
+    --exclude node_modules --exclude dist --exclude .snapshot --exclude .astro \
+    --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" \
+    "${ROOT}/web/" "${SSH_USER}@${HOST}:${SITE_BUILD_WORKSPACE_DECLARED}/web/"
+  rsync -az \
+    --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" \
+    "${ROOT}/media-originals/" "${SSH_USER}@${HOST}:${SITE_BUILD_WORKSPACE_DECLARED}/media-originals/"
+fi
+
 # Транспорт секретов — СТАНДАРТНЫЙ ВВОД, а не `SendEnv`.
 #
 # `SendEnv` требует, чтобы sshd принимал эти имена: на стенде стоит
@@ -369,6 +389,48 @@ if [[ -n "${CMS_DATA_DIR:-}" ]]; then
   fi
 fi
 
+# Постоянное дерево кнопки «Обновить сайт». npm ci — не нажатие: только пустой
+# набор или новый lock. Повторный прогон с тем же lock зависимости не трогает.
+if [[ -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
+  if [[ -z "${SITE_VERIFY_URL:-}" || -z "${SITE_VERIFY_HOST:-}" || -z "${SITE_MEDIA_CACHE:-}" ]]; then
+    echo "[bootstrap] SITE_BUILD_WORKSPACE задан без SITE_VERIFY_URL, SITE_VERIFY_HOST или SITE_MEDIA_CACHE" >&2
+    exit 1
+  fi
+  site_web="${SITE_BUILD_WORKSPACE}/web"
+  if [[ ! -f "${site_web}/package-lock.json" ]]; then
+    echo "[bootstrap] дерево сборки сайта не доставлено в ${site_web}" >&2
+    exit 1
+  fi
+  lock_sha="$(sha256sum "${site_web}/package-lock.json" | cut -c1-16)"
+  stamp="${SITE_BUILD_WORKSPACE}/.deps-stamp"
+  if [[ -f "${site_web}/node_modules/astro/package.json" && -f "${site_web}/node_modules/tsx/package.json" && "$(cat "$stamp" 2>/dev/null || true)" == "$lock_sha" ]]; then
+    report unchanged "зависимости дерева сборки сайта"
+  else
+    echo "[bootstrap] npm ci дерева сборки сайта. Это не кнопка. На стенде установка зависимостей уже останавливала CMS на короткое время." >&2
+    if (cd "$site_web" && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci); then
+      printf '%s\n' "$lock_sha" >"$stamp"
+      report changed "зависимости дерева сборки сайта установлены"
+    else
+      echo "[bootstrap] npm ci дерева сборки сайта не удался" >&2
+      exit 1
+    fi
+  fi
+  account="${SERVICE_ACCOUNT:-root}"
+  # Каталог web остаётся у root со sticky: служба пишет в свои подкаталоги и не удаляет node_modules.
+  chown "root:${account}" "$site_web"
+  chmod 3775 "$site_web"
+  if [[ -d "${site_web}/public" ]]; then
+    chown "root:${account}" "${site_web}/public"
+    chmod 3775 "${site_web}/public"
+  fi
+  install -d -o "$account" -g "$account" -m 0755 \
+    "${site_web}/.snapshot" "${site_web}/dist" "${site_web}/public/media" "${site_web}/.astro"
+  if [[ -d "${site_web}/node_modules" ]]; then
+    install -d -o "$account" -g "$account" -m 0755 \
+      "${site_web}/node_modules/.astro" "${site_web}/node_modules/.vite" "${site_web}/node_modules/.cache"
+  fi
+fi
+
 # --- Unit-файл службы: годится любая программа на объявленном локальном адресе. ---
 #
 # `ExecStart` берётся из объявленного состояния и ОБЯЗАТЕЛЕН: юнит без него systemd не
@@ -382,6 +444,15 @@ fi
 if [[ -n "${SERVICE_UNIT:-}" ]]; then
   SERVICE_HOST="${SERVICE_ADDR%%:*}"
   SERVICE_PORT="${SERVICE_ADDR##*:}"
+  site_build_env=""
+  site_build_write=""
+  if [[ -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
+    site_build_env="Environment=IKPK_BUILD_WORKSPACE=${SITE_BUILD_WORKSPACE}
+Environment=IKPK_VERIFY_URL=${SITE_VERIFY_URL}
+Environment=IKPK_VERIFY_HOST=${SITE_VERIFY_HOST}
+Environment=IKPK_MEDIA_CACHE=${SITE_MEDIA_CACHE}"
+    site_build_write=" ${SITE_BUILD_WORKSPACE}"
+  fi
   if [[ -z "${SERVICE_EXEC_START:-}" ]]; then
     echo "[bootstrap] SERVICE_EXEC_START не объявлен: юнит без ExecStart systemd отвергнет" >&2
     exit 1
@@ -414,6 +485,7 @@ Environment=DATABASE_FILENAME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}/data.db
 Environment=NODE_ENV=production
 Environment=IKPK_WEB_ROOT=${WEB_ROOT}
 Environment=IKPK_REFRESH_STATE=${WEB_ROOT}/shared/site-refresh/state.json
+${site_build_env}
 # Ограничения среды. Владение файлами защищает только от переписывания службой своего
 # кода; всё остальное — чтение доступных всем файлов машины, произвольный /tmp — оставалось
 # открытым. ReadWritePaths называет ровно те места, куда служба обязана писать.
@@ -423,7 +495,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads ${WEB_ROOT} ${WEB_ROOT}/releases ${WEB_ROOT}/shared/site-refresh
+ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads ${WEB_ROOT} ${WEB_ROOT}/releases ${WEB_ROOT}/shared/site-refresh${site_build_write}
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3

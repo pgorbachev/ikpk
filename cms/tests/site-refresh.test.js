@@ -13,8 +13,11 @@ import {
   mayRefresh,
   publishTree,
   identityFromReleaseDir,
+  refreshReady,
   releaseIdentity,
+  runLockedRestore,
   tryLock,
+  unlock,
   writeJsonAtomic,
   publicView,
   reconcile,
@@ -81,6 +84,7 @@ test('команда сборки ограничивает память и не 
   const plain = launchPlan({ env: {}, systemdRun: true, nodePath: process.execPath, script: 'process.exit(0)' });
   assert.equal(plain.command, 'nice');
   assert.equal(plain.args.includes('--user'), false);
+  assert.equal(plain.args.includes('MemoryMax=550M'), false);
   assert.equal(plain.args.includes('ci'), false);
 });
 
@@ -349,6 +353,117 @@ test('новый релиз и штатный релиз без releaseId чит
     assert.equal(result.status, 'succeeded');
     assert.equal(readlinkSync(join(root, 'current')), 'releases/official');
     assert.deepEqual(identityFromReleaseDir(join(root, 'releases', 'official')), official);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('первый клик content-admin без дерева не стартует сборку и снимает lock', () => {
+  assert.equal(mayRefresh(['content-admin']), true);
+  assert.equal(refreshReady({}), false);
+  assert.equal(refreshReady({ IKPK_BUILD_WORKSPACE: '/missing', IKPK_VERIFY_URL: 'http://127.0.0.1/release.json' }), false);
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-first-'));
+  try {
+    const lock = join(root, 'state.json.lock');
+    let spawned = 0;
+    const begun = beginRefresh({
+      record: null,
+      pidAlive: () => true,
+      lockAcquired: tryLock(lock, 77),
+      ready: refreshReady({}),
+      now: () => '2026-09-27T00:00:00.000Z',
+      spawn: () => {
+        spawned += 1;
+        return { pid: 9 };
+      },
+    });
+    assert.equal(spawned, 0);
+    assert.equal(begun.releaseLock, true);
+    assert.equal(begun.body.message, MESSAGES.notPrepared);
+    assert.equal(begun.body.switched, false);
+    unlock(lock);
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('первый клик content-admin по дереву с astro, tsx и адресом проверки стартует одну сборку', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-ready-'));
+  try {
+    mkdirSync(join(root, 'web', 'node_modules', 'astro'), { recursive: true });
+    writeFileSync(join(root, 'web', 'node_modules', 'astro', 'package.json'), '{}');
+    assert.equal(refreshReady({ IKPK_BUILD_WORKSPACE: root, IKPK_VERIFY_URL: 'http://127.0.0.1/release.json' }), false);
+    mkdirSync(join(root, 'web', 'node_modules', 'tsx'), { recursive: true });
+    writeFileSync(join(root, 'web', 'node_modules', 'tsx', 'package.json'), '{}');
+    const env = { IKPK_BUILD_WORKSPACE: root, IKPK_VERIFY_URL: 'http://127.0.0.1/release.json' };
+    assert.equal(refreshReady(env), true);
+    const lock = join(root, 'state.json.lock');
+    let spawned = 0;
+    const begun = beginRefresh({
+      record: null,
+      pidAlive: () => true,
+      lockAcquired: tryLock(lock, 77),
+      ready: refreshReady(env),
+      now: () => '2026-09-27T00:00:00.000Z',
+      spawn: () => {
+        spawned += 1;
+        return { pid: 9 };
+      },
+    });
+    assert.equal(spawned, 1);
+    assert.equal(begun.body.status, 'running');
+    assert.equal(begun.releaseLock, false);
+    assert.equal(existsSync(lock), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('исключение проверки после возврата не называется «сайт не менялся»', async () => {
+  let switched = false;
+  const result = await runRestore({
+    read: () => ({ status: 'succeeded', previousReleaseId: 'releases/old' }),
+    write: () => {},
+    identityOf: () => ({ commit: 'a'.repeat(40), snapshotId: 'snap:old' }),
+    switchRelease: () => {
+      switched = true;
+      return { previous: 'releases/content-1' };
+    },
+    verify: async () => {
+      throw new Error('fetch failed');
+    },
+  });
+  assert.equal(switched, true);
+  assert.equal(result.status, 'verification-failed');
+  assert.equal(result.switched, true);
+  assert.equal(result.message, MESSAGES.restoreVerifyFailed);
+  assert.notEqual(result.message, MESSAGES.failed);
+});
+
+test('отказ записи running снимает lock возврата', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-lock-write-'));
+  try {
+    const lock = join(root, 'state.json.lock');
+    let writes = 0;
+    const result = await runLockedRestore({
+      lock,
+      pid: 77,
+      current: { status: 'succeeded', previousReleaseId: 'releases/old' },
+      write: () => {
+        writes += 1;
+        throw new Error('ENOSPC');
+      },
+      identityOf: () => ({ commit: 'a'.repeat(40), snapshotId: 'snap:old' }),
+      switchRelease: () => {
+        throw new Error('не должны переключать');
+      },
+      verify: async () => ({ ok: true }),
+    });
+    assert.equal(writes >= 1, true);
+    assert.equal(result.switched, false);
+    assert.equal(result.status, 'failed');
+    assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
