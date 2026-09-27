@@ -4,7 +4,7 @@
  *
  * Публикующий прогон подменяет источник живым артефактом до этого шага.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { materializeInto } from './lib/content-media-store.ts';
@@ -46,14 +46,29 @@ if (!existsSync(join(source, 'snapshot.json'))) {
   throw new Error(`prepare-snapshot: нет snapshot.json в ${source}`);
 }
 
+// Кнопка обновления снимает прямо в web/.snapshot и тем же каталогом задаёт
+// CONTENT_SNAPSHOT_DIR. cpSync файла самого в себя — ERR_FS_CP_EINVAL, сборка падает
+// до переключения релиза. Пропуск совпавшего пути оставляет живой снимок на месте;
+// подменять его закреплённой фикстурой нельзя.
+function samePath(left: string, right: string): boolean {
+  try {
+    return realpathSync(left) === realpathSync(right);
+  } catch {
+    return resolve(left) === resolve(right);
+  }
+}
+
+function copySnapshotFile(from: string, to: string): void {
+  if (!existsSync(from) || samePath(from, to)) return;
+  cpSync(from, to);
+}
+
 for (const dest of [join(webRoot, '.snapshot'), join(webRoot, 'dist-snapshot')]) {
   mkdirSync(dest, { recursive: true });
-  cpSync(join(source, 'snapshot.json'), join(dest, 'snapshot.json'));
-  const panels = join(source, 'collapsible_panels.json');
-  if (existsSync(panels)) cpSync(panels, join(dest, 'collapsible_panels.json'));
+  copySnapshotFile(join(source, 'snapshot.json'), join(dest, 'snapshot.json'));
+  copySnapshotFile(join(source, 'collapsible_panels.json'), join(dest, 'collapsible_panels.json'));
   // Карта адресов — часть артефакта снимка (задача 6.3): генератор редиректов читает её отсюда.
-  const urlMap = join(source, 'url_map.csv');
-  if (existsSync(urlMap)) cpSync(urlMap, join(dest, 'url_map.csv'));
+  copySnapshotFile(join(source, 'url_map.csv'), join(dest, 'url_map.csv'));
   // Хранилище содержимого переносится вместе со снимком, а не остаётся в каталоге съёма.
   // Иначе снимок, доехавший до сборки артефактом (джоб `content-snapshot` копирует
   // `.snapshot/.`), несёт ссылки на медиа и не несёт байтов: следующий запуск этого же
@@ -61,7 +76,7 @@ for (const dest of [join(webRoot, '.snapshot'), join(webRoot, 'dist-snapshot')])
   // фикстуре нет ни одной записи `/media/uploads/**`, отказ не наступает — то есть зелёный
   // цвет здесь означал бы «медиа CMS ещё не появились», а не «перенос работает».
   const store = join(source, 'media');
-  if (existsSync(store) && resolve(store) !== resolve(join(dest, 'media'))) {
+  if (existsSync(store) && !samePath(store, join(dest, 'media'))) {
     cpSync(store, join(dest, 'media'), { recursive: true });
   }
 }

@@ -6,6 +6,7 @@ import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotRef
 import { isCurrentOrFuture } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
+import { publicScheduleTitle } from '../lib/schedule-public-title';
 
 const page = getPage('raspisanie-i-tseny');
 const institutes = getInstitutes();
@@ -111,8 +112,9 @@ const items = entries.map((entry) => {
   const seminarHref = institute
     ? `/${institute.slug}/${entry.program.slug}/${entry.seminar.slug}`
     : '/raspisanie-i-tseny';
+  const eventTitle = publicScheduleTitle(entry);
   const searchIndex = [
-    entry.name,
+    eventTitle,
     teacherName,
     entry.institute.name,
     entry.program.name,
@@ -126,7 +128,7 @@ const items = entries.map((entry) => {
     citySlug: slugify(entry.city?.name || 'unknown'),
     dateLabel: formatDurationLabel(entry.startAt, entry.endAt, entry.duration),
     id: entry.id,
-    imageAlt: `Изображение для события «${entry.name}»`,
+    imageAlt: `Изображение для события «${eventTitle}»`,
     imageUrl: entry.image?.url || '',
     instituteName: entry.institute.name,
     instituteSlug,
@@ -140,7 +142,7 @@ const items = entries.map((entry) => {
     teacherHref,
     teacherLabel: entry.institute.shortname === 'ИКПК' ? 'Преподаватель:' : 'Автор:',
     teacherName,
-    title: entry.name,
+    title: eventTitle,
     titleHref: seminarHref,
   };
 });

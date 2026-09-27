@@ -12,6 +12,7 @@ import {
   type Teacher,
 } from './data.js';
 import { isCurrentOrFuture, isUpcomingStart } from './schedule-window';
+import { publicScheduleTitle } from './schedule-public-title';
 
 export interface UpcomingSeminar {
   id: number;
@@ -157,7 +158,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
       const start = new Date(e.startAt);
       return {
         id: e.id,
-        title: e.name,
+        title: publicScheduleTitle(e),
         href,
         instituteName: e.institute.name,
         instituteShort: e.institute.shortname || instituteShortBySlug(instituteSlug || ''),

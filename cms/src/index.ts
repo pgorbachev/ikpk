@@ -1,20 +1,23 @@
-// import type { Core } from '@strapi/strapi';
+import { registerUnlinkedEntryList } from './seminar-management/available-entries';
+import { ensureCaptureToken } from './seminar-management/capture-token';
+import { ensureContentAdminRole } from './seminar-management/content-admin-role';
+import { backfillAdminLabels, registerSeminarDocuments, registerSeminarUid } from './seminar-management/documents';
+import { applyEditorForms } from './seminar-management/forms';
+import { registerSiteRefresh } from './seminar-management/site-refresh';
 
 export default {
-  /**
-   * An asynchronous register function that runs before
-   * your application is initialized.
-   *
-   * This gives you an opportunity to extend code.
-   */
-  register(/* { strapi }: { strapi: Core.Strapi } */) {},
+  register({ strapi }) {
+    strapi.customFields.register({ name: 'wall-clock-datetime', type: 'datetime' });
+    registerSeminarUid(strapi);
+    registerSeminarDocuments(strapi);
+    registerUnlinkedEntryList(strapi);
+    registerSiteRefresh(strapi);
+  },
 
-  /**
-   * An asynchronous bootstrap function that runs before
-   * your application gets started.
-   *
-   * This gives you an opportunity to set up your data model,
-   * run jobs, or perform some special logic.
-   */
-  bootstrap(/* { strapi }: { strapi: Core.Strapi } */) {},
+  async bootstrap({ strapi }) {
+    await applyEditorForms(strapi);
+    await backfillAdminLabels(strapi);
+    await ensureContentAdminRole(strapi);
+    await ensureCaptureToken(strapi);
+  },
 };

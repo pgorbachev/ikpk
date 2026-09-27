@@ -82,6 +82,29 @@ function publish(t: ProvisionTarget, body: string): void {
   t.write('/var/www/ikpk/current/index.html', body);
 }
 
+describe('server-provisioning: дерево сборки сайта', () => {
+  it('SHA доставленного дерева не берётся из текущего релиза', async () => {
+    const t = target();
+    const served = '380bee2627e9c197d72e97dd00365671075689f8';
+    t.execOrThrow('mkdir -p /var/www/ikpk/releases/served');
+    t.write(
+      '/var/www/ikpk/releases/served/release.json',
+      `${JSON.stringify({ commit: served, snapshotId: 'snap:served' })}\n`,
+    );
+    t.execOrThrow('ln -sfn releases/served /var/www/ikpk/current');
+    const run = t.provision(ENV);
+    expect(run.status, `провижининг упал:\n${run.output}`).toBe(0);
+    const head = t.execOrThrow('git -C /repo rev-parse HEAD').trim();
+    expect(head, 'у фикстуры нет SHA источника').toMatch(/^[0-9a-f]{40}$/);
+    expect(head).not.toBe(served);
+    const recorded = t.execOrThrow('tr -d "[:space:]" < /var/lib/ikpk-site-build/.source-commit').trim();
+    expect(recorded).toBe(head);
+    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
+    expect(unit).toContain(`Environment=IKPK_INSTALLED_COMMIT=${head}`);
+    expect(unit).not.toContain(served);
+  }, T);
+});
+
 describe('server-provisioning: провижининг идемпотентен и повторно применим', () => {
   it('Сценарий: повторный запуск на приведённом сервере', async () => {
     const t = target();
