@@ -27,6 +27,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   let app;
   let base;
   let token;
+  let publishedInstitute;
   let publishedProgram;
 
   before(async () => {
@@ -93,9 +94,18 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     token = loginBody.data.accessToken;
     assert.equal(typeof token, 'string');
 
+    publishedInstitute = await app.documents('api::institute.institute').create({
+      status: 'published',
+      data: { name: 'Институт для теста', slug: 'institut-dlya-testa', legacy_id: 'institut-dlya-testa' },
+    });
     publishedProgram = await app.documents('api::course-group.course-group').create({
       status: 'published',
-      data: { name: 'Программа для теста', slug: 'programma-dlya-testa', legacy_id: 'programma-dlya-testa' },
+      data: {
+        name: 'Программа для теста',
+        slug: 'programma-dlya-testa',
+        legacy_id: 'programma-dlya-testa',
+        institute: publishedInstitute.documentId,
+      },
     });
   });
 
@@ -107,6 +117,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   });
 
   test('форма создания семинара видит поля, а не только код роли', async () => {
+    const contentTypes = app.plugin('content-manager').service('content-types');
+    const configuration = await contentTypes.findConfiguration(app.contentType('api::seminar.seminar'));
+    assert.match(configuration.metadatas.course_group.edit.description, /Для публикации выберите опубликованную программу/);
     const response = await fetch(`${base}/admin/users/me/permissions`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -195,6 +208,16 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       () => seminars.create({ status: 'published', data: { name: 'Без программы сразу' } }),
       /Выберите опубликованную программу перед публикацией семинара/,
     );
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: {
+          name: 'Подмена пустой связью',
+          course_group: { set: [], connect: [publishedProgram.documentId] },
+        },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
     const stillDraft = await seminars.findOne({ documentId: draft.documentId, status: 'published' });
     assert.equal(stillDraft, null);
   });
@@ -203,7 +226,12 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const seminars = app.documents('api::seminar.seminar');
     const programs = app.documents('api::course-group.course-group');
     const program = await programs.create({
-      data: { name: 'Программа-черновик', slug: 'programma-chernovik', legacy_id: 'programma-chernovik' },
+      data: {
+        name: 'Программа-черновик',
+        slug: 'programma-chernovik',
+        legacy_id: 'programma-chernovik',
+        institute: publishedInstitute.documentId,
+      },
     });
     const seminar = await seminars.create({
       data: { name: 'Ждёт программу', course_group: program.documentId },
@@ -220,6 +248,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       populate: ['course_group'],
     });
     assert.equal(published.course_group.documentId, program.documentId);
+    await seminars.update({
+      documentId: seminar.documentId,
+      status: 'published',
+      data: { duration: '3 дня', course_group: { connect: [], disconnect: [] } },
+    });
     await assert.rejects(
       () => seminars.update({
         documentId: seminar.documentId,
@@ -239,6 +272,26 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         data: { name: 'Не попадёт на сайт', course_group: noSiteId.documentId },
       }),
       /нет идентификатора для сайта/,
+    );
+
+    const noInstitute = await programs.create({
+      status: 'published',
+      data: { name: 'Без института', slug: 'bez-instituta', legacy_id: 'bez-instituta' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: { name: 'Неизвестный институт', course_group: noInstitute.documentId },
+      }),
+      /нет опубликованного института для сайта/,
+    );
+    await assert.rejects(
+      () => programs.unpublish({ documentId: program.documentId }),
+      /связана с опубликованными семинарами/,
+    );
+    await assert.rejects(
+      () => programs.delete({ documentId: program.documentId }),
+      /связана с опубликованными семинарами/,
     );
   });
 

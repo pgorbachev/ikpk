@@ -23,6 +23,7 @@ import {
 
 const { ValidationError } = errors;
 const COURSE_GROUP_UID = 'api::course-group.course-group';
+const INSTITUTE_UID = 'api::institute.institute';
 const PUBLISHED_PROGRAM_MESSAGE = 'Выберите опубликованную программу перед публикацией семинара.';
 
 function text(value) {
@@ -48,22 +49,61 @@ async function seminarName(strapi, documentId) {
   return text(row?.name);
 }
 
-async function assertSeminarProgram(strapi, relation) {
-  let documentId = relationDocumentIds(relation).at(-1);
-  if (!documentId) {
-    const id = relationNumericIds(relation).at(-1);
-    if (id != null) {
-      const row = await strapi.db.query(COURSE_GROUP_UID).findOne({ where: { id } });
-      documentId = row?.documentId;
-    }
+function requestedProgram(data, existing) {
+  if (!Object.prototype.hasOwnProperty.call(data, 'course_group')) return existing;
+  const relation = data.course_group;
+  if (!relation || Array.isArray(relation) || typeof relation !== 'object') return relation;
+  if ('id' in relation || 'documentId' in relation) return relation;
+  // Strapi applies `set` in preference to `connect`; an empty `set` clears the relation.
+  if (relation.set) return relation.set;
+  if (relationDocumentIds(relation.connect).length || relationNumericIds(relation.connect).length) {
+    return relation.connect;
   }
+  if (relationDocumentIds(relation.disconnect).length || relationNumericIds(relation.disconnect).length) {
+    return null;
+  }
+  // The edit form also sends { connect: [], disconnect: [] } when the relation is unchanged.
+  return existing;
+}
+
+async function assertSeminarProgram(strapi, relation) {
+  const selected = Array.isArray(relation) ? relation : [relation];
+  if (selected.length !== 1 || selected[0] == null) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
+  const target = selected[0];
+  const numericId = typeof target === 'object' ? target.id : target;
+  const id = typeof numericId === 'number' || /^\d+$/.test(String(numericId ?? ''))
+    ? Number(numericId)
+    : null;
+  const row = id == null ? null : await strapi.db.query(COURSE_GROUP_UID).findOne({ where: { id } });
+  const documentId = row?.documentId ?? (typeof target === 'string' ? target : target?.documentId);
   if (!documentId) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
   const published = await strapi.db.query(COURSE_GROUP_UID).findOne({
     where: { documentId, publishedAt: { $notNull: true } },
+    populate: ['institute'],
   });
   if (!published) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
   if (!text(published.legacy_id)) {
     throw new ValidationError('У выбранной программы нет идентификатора для сайта. Сообщите администратору.');
+  }
+  const instituteId = published.institute?.documentId;
+  const institute = instituteId && await strapi.db.query(INSTITUTE_UID).findOne({
+    where: { documentId: instituteId, publishedAt: { $notNull: true } },
+  });
+  if (!institute || !text(institute.legacy_id)) {
+    throw new ValidationError('У выбранной программы нет опубликованного института для сайта. Сообщите администратору.');
+  }
+}
+
+async function assertProgramNotInUse(strapi, documentId) {
+  if (!documentId) return;
+  const linked = await strapi.db.query(SEMINAR_UID).findOne({
+    where: {
+      publishedAt: { $notNull: true },
+      course_group: { documentId },
+    },
+  });
+  if (linked) {
+    throw new ValidationError('Программа связана с опубликованными семинарами. Сначала снимите их с публикации.');
   }
 }
 
@@ -277,6 +317,10 @@ async function assertSeminarPublishable(strapi, context) {
 
 export function registerSeminarDocuments(strapi) {
   strapi.documents.use(async (context, next) => {
+    if (context.uid === COURSE_GROUP_UID && (context.action === 'unpublish' || context.action === 'delete')) {
+      await assertProgramNotInUse(strapi, context.params?.documentId);
+      return next();
+    }
     if (context.uid === SEMINAR_UID && (context.action === 'create' || context.action === 'update')) {
       if (context.params?.status === 'published') {
         const incoming = context.params.data ?? {};
@@ -287,9 +331,7 @@ export function registerSeminarDocuments(strapi) {
         const name = Object.prototype.hasOwnProperty.call(incoming, 'name') ? incoming.name : existing?.name;
         const message = seminarPublicationError(name);
         if (message) throw new ValidationError(message);
-        const program = Object.prototype.hasOwnProperty.call(incoming, 'course_group')
-          ? incoming.course_group
-          : existing?.course_group;
+        const program = requestedProgram(incoming, existing?.course_group);
         await assertSeminarProgram(strapi, program);
       }
       const hostId = context.params.documentId || documentIdOf(context.params.data);
