@@ -56,7 +56,8 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::course-group.course-group",
-      "inversedBy": "seminars"
+      "inversedBy": "seminars",
+      "description": "Выберите опубликованную программу перед публикацией семинара. Черновик можно сохранить без неё."
     },
     "teachers": {
       "type": "relation",
