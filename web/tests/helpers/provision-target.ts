@@ -22,6 +22,7 @@
  *    по ssh; внутри контейнера `/usr/bin/ssh` подменён на исполнение полезной нагрузки
  *    локально. Проверяется тело провижининга, а не транспорт.
  */
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // Тег меняется вместе с составом образа: закэшированный образ прежнего состава иначе
 // молча используется дальше, и новая проверка не выполняется вовсе.
-export const IMAGE = 'ikpk-provision-target:test-systemd2';
+export const IMAGE = 'ikpk-provision-target:test-systemd3';
 
 /**
  * Архитектура образа приравнивается к архитектуре ХОЗЯИНА. Без этого docker тянет образ
@@ -141,7 +142,7 @@ export function ensureImage(): void {
         // systemd ставится ради НАСТОЯЩЕГО systemd-analyze: он разбирает юнит теми же
         // правилами, что и systemd на сервере, и ловит директиву в неверной секции —
         // ровно то, чего заглушка systemctl не видит по устройству.
-        'apt-get install -y -qq --no-install-recommends nginx rsync curl iproute2 procps ca-certificates systemd >/dev/null',
+        'apt-get install -y -qq --no-install-recommends nginx rsync curl iproute2 procps ca-certificates systemd git >/dev/null',
     ]);
     dockerOrThrow(['exec', '-i', id, 'bash', '-c', 'cat > /usr/bin/ssh && chmod +x /usr/bin/ssh'], { input: SSH_SHIM });
     dockerOrThrow(['exec', '-i', id, 'bash', '-c', 'cat > /usr/bin/systemctl && chmod +x /usr/bin/systemctl'], {
@@ -162,6 +163,7 @@ export class ProvisionTarget {
     const target = new ProvisionTarget(id);
     target.copyRepoDir('scripts');
     target.copyRepoDirIfExists('deploy');
+    target.seedSiteBuildFixture();
     return target;
   }
 
@@ -223,6 +225,29 @@ export class ProvisionTarget {
   copyRepoDirIfExists(rel: string): boolean {
     this.exec('mkdir -p /repo');
     return docker(['cp', join(REPO_ROOT, rel), `${this.id}:/repo/${rel}`]).status === 0;
+  }
+
+  /**
+   * stand.env требует дерево сборки и SHA его источника. В контейнер копируются только
+   * scripts и deploy, поэтому здесь минимальные web/package-lock.json, media-originals
+   * и чистый git-коммит. node_modules astro/tsx и штамп lock уже на месте: npm ci в
+   * каждом сценарии не запускается.
+   */
+  private seedSiteBuildFixture(): void {
+    const lock = '{"name":"web","lockfileVersion":3}\n';
+    const stamp = createHash('sha256').update(lock).digest('hex').slice(0, 16);
+    this.exec(
+      'mkdir -p /repo/web /repo/media-originals /var/lib/ikpk-site-build/web/node_modules/astro /var/lib/ikpk-site-build/web/node_modules/tsx',
+    );
+    this.write('/repo/web/package-lock.json', lock);
+    this.write('/repo/web/package.json', '{"name":"web","private":true}\n');
+    this.write('/repo/media-originals/.gitkeep', '');
+    this.write('/var/lib/ikpk-site-build/web/node_modules/astro/package.json', '{}\n');
+    this.write('/var/lib/ikpk-site-build/web/node_modules/tsx/package.json', '{}\n');
+    this.write('/var/lib/ikpk-site-build/.deps-stamp', `${stamp}\n`);
+    this.execOrThrow(
+      'git init -b main /repo >/dev/null && git -C /repo config user.email fixture@example.com && git -C /repo config user.name fixture && git -C /repo add web media-originals && git -C /repo commit -m fixture >/dev/null',
+    );
   }
 
   /** Прогон провижининга внутри цели. Возвращает код и весь вывод. */

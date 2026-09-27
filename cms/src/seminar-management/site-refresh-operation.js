@@ -1,5 +1,5 @@
 import { cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 export const MESSAGES = {
   failed: 'Сборка не удалась. Действующий сайт не менялся.',
@@ -270,15 +270,13 @@ export function identityFromReleaseDir(dir) {
   }
 }
 
-export function installedCommit(webRoot, envCommit) {
-  if (typeof envCommit === 'string' && envCommit.length > 0) return envCommit;
-  try {
-    const link = readlinkSync(join(webRoot, 'current'));
-    const dir = isAbsolute(link) ? link : join(webRoot, link);
-    return identityFromReleaseDir(dir)?.commit || null;
-  } catch {
-    return null;
-  }
+/**
+ * Commit нового релиза — SHA доставленного дерева сборки.
+ * Commit действующего сайта сюда не подставляется: дерево и раздача расходятся.
+ */
+export function installedCommit(_webRoot, envCommit) {
+  if (typeof envCommit === 'string' && /^[0-9a-f]{40}$/.test(envCommit)) return envCommit;
+  return null;
 }
 
 export function publishTree(distDir, webRoot, releaseId, identity) {

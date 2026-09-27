@@ -124,23 +124,38 @@ if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]
 fi
 
 # Постоянное дерево сборки сайта. На стенде нет git, временный каталог замера удалён.
-# Исходники едут с машины оператора. node_modules на кнопке не ставится: npm ci ниже,
-# на сервере, только когда нет astro/tsx или сменился lock.
+# Исходники едут архивом с машины оператора: диалог rsync не проходит через ssh-заглушку
+# проверок, а настоящий ssh этот же поток принимает. node_modules на кнопке не ставится.
+# SHA — HEAD этого дерева. Грязный web/media-originals не записывается как чужой commit.
 SITE_BUILD_WORKSPACE_DECLARED="$(declared_get SITE_BUILD_WORKSPACE)"
 if [[ -n "$SITE_BUILD_WORKSPACE_DECLARED" ]]; then
   if [[ ! -f "$ROOT/web/package-lock.json" || ! -d "$ROOT/media-originals" ]]; then
     echo "[bootstrap] SITE_BUILD_WORKSPACE задан, а локально нет web/package-lock.json или media-originals" >&2
     exit 1
   fi
+  if ! source_commit="$(git -C "$ROOT" rev-parse HEAD)" || [[ ! "$source_commit" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[bootstrap] не удалось прочитать SHA исходного дерева" >&2
+    exit 1
+  fi
+  if [[ -n "$(git -C "$ROOT" status --porcelain -- web media-originals)" ]]; then
+    echo "[bootstrap] web или media-originals отличаются от ${source_commit}: этот SHA нельзя записывать в релиз" >&2
+    exit 1
+  fi
   /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
-    "mkdir -p '${SITE_BUILD_WORKSPACE_DECLARED}/web' '${SITE_BUILD_WORKSPACE_DECLARED}/media-originals'"
-  rsync -az \
-    --exclude node_modules --exclude dist --exclude .snapshot --exclude .astro \
-    --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" \
-    "${ROOT}/web/" "${SSH_USER}@${HOST}:${SITE_BUILD_WORKSPACE_DECLARED}/web/"
-  rsync -az \
-    --rsh="/usr/bin/ssh ${SSH_ARGS[*]}" \
-    "${ROOT}/media-originals/" "${SSH_USER}@${HOST}:${SITE_BUILD_WORKSPACE_DECLARED}/media-originals/"
+    "mkdir -p '${SITE_BUILD_WORKSPACE_DECLARED}'"
+  tar -C "$ROOT" -czf - \
+    --exclude=node_modules --exclude=dist --exclude=.snapshot --exclude=.astro \
+    web media-originals \
+    | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+      "tar -C '${SITE_BUILD_WORKSPACE_DECLARED}' -xzf -"
+  printf '%s\n' "$source_commit" | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+    "cat > '${SITE_BUILD_WORKSPACE_DECLARED}/.source-commit'"
+  remote_commit="$(/usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
+    "tr -d '[:space:]' < '${SITE_BUILD_WORKSPACE_DECLARED}/.source-commit'")"
+  if [[ "$remote_commit" != "$source_commit" ]]; then
+    echo "[bootstrap] SHA на сервере ${remote_commit:-пусто}, источник ${source_commit}" >&2
+    exit 1
+  fi
 fi
 
 # Транспорт секретов — СТАНДАРТНЫЙ ВВОД, а не `SendEnv`.
@@ -447,10 +462,20 @@ if [[ -n "${SERVICE_UNIT:-}" ]]; then
   site_build_env=""
   site_build_write=""
   if [[ -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
+    if [[ ! -f "${SITE_BUILD_WORKSPACE}/.source-commit" ]]; then
+      echo "[bootstrap] нет SHA доставленного дерева ${SITE_BUILD_WORKSPACE}/.source-commit" >&2
+      exit 1
+    fi
+    installed_commit="$(tr -d '[:space:]' < "${SITE_BUILD_WORKSPACE}/.source-commit")"
+    if [[ ! "$installed_commit" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "[bootstrap] SHA доставленного дерева не является commit: ${installed_commit}" >&2
+      exit 1
+    fi
     site_build_env="Environment=IKPK_BUILD_WORKSPACE=${SITE_BUILD_WORKSPACE}
 Environment=IKPK_VERIFY_URL=${SITE_VERIFY_URL}
 Environment=IKPK_VERIFY_HOST=${SITE_VERIFY_HOST}
-Environment=IKPK_MEDIA_CACHE=${SITE_MEDIA_CACHE}"
+Environment=IKPK_MEDIA_CACHE=${SITE_MEDIA_CACHE}
+Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi
   if [[ -z "${SERVICE_EXEC_START:-}" ]]; then

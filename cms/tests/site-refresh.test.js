@@ -14,6 +14,7 @@ import {
   publishTree,
   identityFromReleaseDir,
   refreshReady,
+  installedCommit,
   releaseIdentity,
   runLockedRestore,
   tryLock,
@@ -439,6 +440,35 @@ test('исключение проверки после возврата не н�
   assert.equal(result.switched, true);
   assert.equal(result.message, MESSAGES.restoreVerifyFailed);
   assert.notEqual(result.message, MESSAGES.failed);
+});
+
+test('commit нового релиза — SHA дерева сборки, не commit текущего сайта', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-commit-'));
+  try {
+    const served = '380bee2627e9c197d72e97dd00365671075689f8';
+    const delivered = 'c'.repeat(40);
+    mkdirSync(join(root, 'releases', 'old'), { recursive: true });
+    mkdirSync(join(root, 'dist'), { recursive: true });
+    writeFileSync(join(root, 'dist', 'index.html'), 'new');
+    writeFileSync(
+      join(root, 'releases', 'old', 'release.json'),
+      `${JSON.stringify({ commit: served, snapshotId: 'snap:served' })}\n`,
+    );
+    symlinkSync('releases/old', join(root, 'current'));
+    assert.equal(installedCommit(root, ''), null);
+    assert.equal(installedCommit(root, undefined), null);
+    assert.equal(installedCommit(root, delivered), delivered);
+    assert.notEqual(installedCommit(root, delivered), served);
+    publishTree(join(root, 'dist'), root, 'content-1', {
+      commit: installedCommit(root, delivered),
+      snapshotId: 'snap:new',
+    });
+    const declared = releaseIdentity(JSON.parse(readFileSync(join(root, 'releases', 'content-1', 'release.json'), 'utf8')));
+    assert.equal(declared.commit, delivered);
+    assert.notEqual(declared.commit, served);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('отказ записи running снимает lock возврата', async () => {
