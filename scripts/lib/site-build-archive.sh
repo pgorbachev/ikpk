@@ -3,5 +3,7 @@
 # Иначе web/.env уехал бы на стенд, а объявленный SHA описывал бы другое дерево.
 site_build_archive() {
   local root="$1"
-  git -C "$root" archive --format=tar.gz HEAD -- web media-originals
+  # cms/src нужен съёму: скрипт сверяет ответ CMS со схемами коммита, а не с установленным
+  # артефактом. Без них кнопка проходит REST и падает на отсутствующем schema.json.
+  git -C "$root" archive --format=tar.gz HEAD -- web media-originals cms/src
 }

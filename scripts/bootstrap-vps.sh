@@ -131,16 +131,16 @@ fi
 source "$ROOT/scripts/lib/site-build-archive.sh"
 SITE_BUILD_WORKSPACE_DECLARED="$(declared_get SITE_BUILD_WORKSPACE)"
 if [[ -n "$SITE_BUILD_WORKSPACE_DECLARED" ]]; then
-  if [[ ! -f "$ROOT/web/package-lock.json" || ! -d "$ROOT/media-originals" ]]; then
-    echo "[bootstrap] SITE_BUILD_WORKSPACE задан, а локально нет web/package-lock.json или media-originals" >&2
+  if [[ ! -f "$ROOT/web/package-lock.json" || ! -d "$ROOT/media-originals" || ! -d "$ROOT/cms/src" ]]; then
+    echo "[bootstrap] SITE_BUILD_WORKSPACE задан, а локально нет web/package-lock.json, media-originals или cms/src" >&2
     exit 1
   fi
   if ! source_commit="$(git -C "$ROOT" rev-parse HEAD)" || [[ ! "$source_commit" =~ ^[0-9a-f]{40}$ ]]; then
     echo "[bootstrap] не удалось прочитать SHA исходного дерева" >&2
     exit 1
   fi
-  if [[ -n "$(git -C "$ROOT" status --porcelain -- web media-originals)" ]]; then
-    echo "[bootstrap] web или media-originals отличаются от ${source_commit}: этот SHA нельзя записывать в релиз" >&2
+  if [[ -n "$(git -C "$ROOT" status --porcelain -- web media-originals cms/src)" ]]; then
+    echo "[bootstrap] web, media-originals или cms/src отличаются от ${source_commit}: этот SHA нельзя записывать в релиз" >&2
     exit 1
   fi
   /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \

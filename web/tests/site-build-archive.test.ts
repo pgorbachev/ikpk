@@ -25,13 +25,18 @@ describe('архив дерева сборки', () => {
     try {
       mkdirSync(join(repo, 'web'), { recursive: true });
       mkdirSync(join(repo, 'media-originals'), { recursive: true });
+      mkdirSync(join(repo, 'cms', 'src', 'api', 'institute', 'content-types', 'institute'), { recursive: true });
       writeFileSync(join(repo, 'web', '.gitignore'), '.env\n.env.production\n');
       writeFileSync(join(repo, 'web', 'package-lock.json'), '{"name":"web"}\n');
       writeFileSync(join(repo, 'media-originals', '.gitkeep'), '');
+      writeFileSync(
+        join(repo, 'cms', 'src', 'api', 'institute', 'content-types', 'institute', 'schema.json'),
+        '{"kind":"collectionType"}\n',
+      );
       execFileSync('git', ['init', '-b', 'main', repo], { stdio: 'pipe' });
       git(repo, ['config', 'user.email', 'fixture@example.com']);
       git(repo, ['config', 'user.name', 'fixture']);
-      git(repo, ['add', 'web', 'media-originals']);
+      git(repo, ['add', 'web', 'media-originals', 'cms']);
       git(repo, ['commit', '-m', 'fixture']);
       writeFileSync(join(repo, 'web', '.env'), 'SECRET=operator\n');
       writeFileSync(join(repo, 'web', '.env.production'), 'SECRET=production\n');
@@ -51,6 +56,9 @@ describe('архив дерева сборки', () => {
       execFileSync('tar', ['-C', dest, '-xzf', '-'], { input: archive });
 
       expect(existsSync(join(dest, 'web', 'package-lock.json'))).toBe(true);
+      expect(
+        existsSync(join(dest, 'cms', 'src', 'api', 'institute', 'content-types', 'institute', 'schema.json')),
+      ).toBe(true);
       expect(existsSync(join(dest, 'web', '.env'))).toBe(false);
       expect(existsSync(join(dest, 'web', '.env.production'))).toBe(false);
       expect(readFileSync(join(dest, 'web', 'package-lock.json'), 'utf8')).toContain('"name":"web"');
