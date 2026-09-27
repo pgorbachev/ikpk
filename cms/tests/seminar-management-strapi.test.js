@@ -27,6 +27,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   let app;
   let base;
   let token;
+  let publishedProgram;
 
   before(async () => {
     const [major] = process.versions.node.split('.').map(Number);
@@ -89,6 +90,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(login.status, 200, JSON.stringify(loginBody));
     token = loginBody.data.accessToken;
     assert.equal(typeof token, 'string');
+
+    publishedProgram = await app.documents('api::course-group.course-group').create({
+      status: 'published',
+      data: { name: 'Программа для теста', slug: 'programma-dlya-testa', legacy_id: 'programma-dlya-testa' },
+    });
   });
 
   after(async () => {
@@ -150,6 +156,66 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     );
     assert.ok(
       fieldsOf('plugin::content-manager.explorer.read', 'api::teacher.teacher').includes('name'),
+    );
+  });
+
+  test('черновик без программы сохраняется, публикация сообщает о недостающей связи', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const draft = await seminars.create({ data: { name: 'Пока без программы' } });
+    assert.equal(draft.publishedAt ?? null, null);
+
+    await assert.rejects(
+      () => seminars.publish({ documentId: draft.documentId }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    await assert.rejects(
+      () => seminars.create({ status: 'published', data: { name: 'Без программы сразу' } }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    const stillDraft = await seminars.findOne({ documentId: draft.documentId, status: 'published' });
+    assert.equal(stillDraft, null);
+  });
+
+  test('семинар публикуется только со связанной опубликованной программой сайта', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const programs = app.documents('api::course-group.course-group');
+    const program = await programs.create({
+      data: { name: 'Программа-черновик', slug: 'programma-chernovik', legacy_id: 'programma-chernovik' },
+    });
+    const seminar = await seminars.create({
+      data: { name: 'Ждёт программу', course_group: program.documentId },
+    });
+    await assert.rejects(
+      () => seminars.publish({ documentId: seminar.documentId }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    await programs.publish({ documentId: program.documentId });
+    await seminars.publish({ documentId: seminar.documentId });
+    const published = await seminars.findOne({
+      documentId: seminar.documentId,
+      status: 'published',
+      populate: ['course_group'],
+    });
+    assert.equal(published.course_group.documentId, program.documentId);
+    await assert.rejects(
+      () => seminars.update({
+        documentId: seminar.documentId,
+        status: 'published',
+        data: { course_group: { set: [] } },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+
+    const noSiteId = await programs.create({
+      status: 'published',
+      data: { name: 'Без идентификатора сайта', slug: 'bez-identifikatora-sayta' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: { name: 'Не попадёт на сайт', course_group: noSiteId.documentId },
+      }),
+      /нет идентификатора для сайта/,
     );
   });
 
@@ -271,7 +337,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const publishedSeminar = await seminars.create({
       status: 'published',
-      data: { name: 'Опубликованный' },
+      data: { name: 'Опубликованный', course_group: publishedProgram.documentId },
     });
     const published = await entries.create({
       status: 'published',
@@ -310,8 +376,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(stillPublished.seminar.documentId, publishedSeminar.documentId);
     assert.ok(stillPublished.publishedAt);
 
-    const source = await seminars.create({ status: 'published', data: { name: 'Семинар А' } });
-    const target = await seminars.create({ status: 'published', data: { name: 'Семинар Б' } });
+    const source = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар А', course_group: publishedProgram.documentId },
+    });
+    const target = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар Б', course_group: publishedProgram.documentId },
+    });
     const reassignment = [
       ['numericString', () => String(target.id)],
       ['numericObject', () => ({ connect: [{ id: target.id }] })],

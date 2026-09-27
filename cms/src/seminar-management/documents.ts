@@ -21,6 +21,8 @@ import {
 } from './rules.js';
 
 const { ValidationError } = errors;
+const COURSE_GROUP_UID = 'api::course-group.course-group';
+const PUBLISHED_PROGRAM_MESSAGE = 'Выберите опубликованную программу перед публикацией семинара.';
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -43,6 +45,25 @@ async function seminarName(strapi, documentId) {
   if (!documentId) return '';
   const row = await findDraft(strapi, SEMINAR_UID, documentId);
   return text(row?.name);
+}
+
+async function assertSeminarProgram(strapi, relation) {
+  let documentId = relationDocumentIds(relation).at(-1);
+  if (!documentId) {
+    const id = relationNumericIds(relation).at(-1);
+    if (id != null) {
+      const row = await strapi.db.query(COURSE_GROUP_UID).findOne({ where: { id } });
+      documentId = row?.documentId;
+    }
+  }
+  if (!documentId) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
+  const published = await strapi.db.query(COURSE_GROUP_UID).findOne({
+    where: { documentId, publishedAt: { $notNull: true } },
+  });
+  if (!published) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
+  if (!text(published.legacy_id)) {
+    throw new ValidationError('У выбранной программы нет идентификатора для сайта. Сообщите администратору.');
+  }
 }
 
 async function resolvedSeminarId(strapi, data, previousSeminarId) {
@@ -223,10 +244,11 @@ async function applySeminarSlug(strapi, context, next) {
 }
 
 async function assertSeminarPublishable(strapi, context) {
-  const draft = await findDraft(strapi, SEMINAR_UID, context.params.documentId);
+  const draft = await findDraft(strapi, SEMINAR_UID, context.params.documentId, ['course_group']);
   if (!draft) throw new ValidationError('Семинар не найден.');
   const message = seminarPublicationError(draft.name);
   if (message) throw new ValidationError(message);
+  await assertSeminarProgram(strapi, draft.course_group);
   if (!text(draft.slug)) {
     const uid = strapi.plugin('content-manager').service('uid');
     const slug = await uid.generateUIDField({
@@ -245,11 +267,15 @@ export function registerSeminarDocuments(strapi) {
         const incoming = context.params.data ?? {};
         const existing =
           context.action === 'update' && context.params.documentId
-            ? await findDraft(strapi, SEMINAR_UID, context.params.documentId)
+            ? await findDraft(strapi, SEMINAR_UID, context.params.documentId, ['course_group'])
             : null;
         const name = Object.prototype.hasOwnProperty.call(incoming, 'name') ? incoming.name : existing?.name;
         const message = seminarPublicationError(name);
         if (message) throw new ValidationError(message);
+        const program = Object.prototype.hasOwnProperty.call(incoming, 'course_group')
+          ? incoming.course_group
+          : existing?.course_group;
+        await assertSeminarProgram(strapi, program);
       }
       const hostId = context.params.documentId || documentIdOf(context.params.data);
       await guardSeminarLinks(strapi, hostId, context.params.data);
