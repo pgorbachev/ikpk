@@ -229,24 +229,25 @@ export class ProvisionTarget {
 
   /**
    * stand.env требует дерево сборки и SHA его источника. В контейнер копируются только
-   * scripts и deploy, поэтому здесь минимальные web/package-lock.json, media-originals
-   * и чистый git-коммит. node_modules astro/tsx и штамп lock уже на месте: npm ci в
+   * scripts и deploy, поэтому здесь минимальные web/package-lock.json, media-originals,
+   * cms/src и чистый git-коммит. node_modules astro/tsx и штамп lock уже на месте: npm ci в
    * каждом сценарии не запускается.
    */
   private seedSiteBuildFixture(): void {
     const lock = '{"name":"web","lockfileVersion":3}\n';
     const stamp = createHash('sha256').update(lock).digest('hex').slice(0, 16);
     this.exec(
-      'mkdir -p /repo/web /repo/media-originals /var/lib/ikpk-site-build/web/node_modules/astro /var/lib/ikpk-site-build/web/node_modules/tsx',
+      'mkdir -p /repo/web /repo/media-originals /repo/cms/src /var/lib/ikpk-site-build/web/node_modules/astro /var/lib/ikpk-site-build/web/node_modules/tsx',
     );
     this.write('/repo/web/package-lock.json', lock);
     this.write('/repo/web/package.json', '{"name":"web","private":true}\n');
     this.write('/repo/media-originals/.gitkeep', '');
+    this.write('/repo/cms/src/.gitkeep', '');
     this.write('/var/lib/ikpk-site-build/web/node_modules/astro/package.json', '{}\n');
     this.write('/var/lib/ikpk-site-build/web/node_modules/tsx/package.json', '{}\n');
     this.write('/var/lib/ikpk-site-build/.deps-stamp', `${stamp}\n`);
     this.execOrThrow(
-      'git init -b main /repo >/dev/null && git -C /repo config user.email fixture@example.com && git -C /repo config user.name fixture && git -C /repo add web media-originals && git -C /repo commit -m fixture >/dev/null',
+      'git init -b main /repo >/dev/null && git -C /repo config user.email fixture@example.com && git -C /repo config user.name fixture && git -C /repo add web media-originals cms && git -C /repo commit -m fixture >/dev/null',
     );
   }
 

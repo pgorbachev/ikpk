@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
-import WallClockDateTime from './components/WallClockDateTime';
 
 function RefreshIcon() {
   return (
@@ -18,7 +17,18 @@ export default {
     locales: ['ru'],
   },
   register(app: StrapiApp) {
-    app.addFields({ type: 'datetime', Component: WallClockDateTime as ComponentType });
+    app.customFields.register({
+      name: 'wall-clock-datetime',
+      type: 'datetime',
+      intlLabel: { id: 'wall-clock-datetime.label', defaultMessage: 'Дата и время' },
+      intlDescription: {
+        id: 'wall-clock-datetime.description',
+        defaultMessage: 'Календарный день сохраняется в зоне браузера',
+      },
+      components: {
+        Input: () => import('./components/WallClockDateTime') as Promise<{ default: ComponentType }>,
+      },
+    });
   },
   bootstrap(app: StrapiApp) {
     app.addMenuLink({

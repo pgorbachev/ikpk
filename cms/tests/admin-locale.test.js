@@ -35,4 +35,22 @@ test('панель Content Manager включает русские действ�
   const managerRu = manager.default ?? manager;
   assert.equal(typeof managerRu, 'object');
   assert.ok(Object.keys(managerRu).length > 0);
+  assert.equal(source.includes('addFields'), false);
+
+  const schedule = JSON.parse(
+    fs.readFileSync(
+      path.join(import.meta.dirname, '../src/api/schedule-entry/content-types/schedule-entry/schema.json'),
+      'utf8',
+    ),
+  );
+  assert.equal(schedule.attributes.startAt.customField, 'global::wall-clock-datetime');
+  assert.equal(schedule.attributes.endAt.customField, 'global::wall-clock-datetime');
+  const article = JSON.parse(
+    fs.readFileSync(
+      path.join(import.meta.dirname, '../src/api/article/content-types/article/schema.json'),
+      'utf8',
+    ),
+  );
+  assert.equal(article.attributes.published_date.type, 'datetime');
+  assert.equal(Object.hasOwn(article.attributes.published_date, 'customField'), false);
 });

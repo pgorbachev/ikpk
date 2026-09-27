@@ -19,10 +19,12 @@
       "type": "string"
     },
     "startAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "customField": "global::wall-clock-datetime"
     },
     "endAt": {
-      "type": "datetime"
+      "type": "datetime",
+      "customField": "global::wall-clock-datetime"
     },
     "city": {
       "type": "string"
