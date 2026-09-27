@@ -85,13 +85,18 @@ test.describe('каталог статей: поиск и сортировка',
       nodes.map((n) => (n as HTMLAnchorElement).getAttribute('href') ?? ''),
     );
 
-    const dates = articles.map((a) => a.published_at ?? '').filter(Boolean).sort();
-    const earliest = dates[0];
-    expect(earliest, 'в каталоге нет ни одной даты публикации').toBeTruthy();
+    // Наблюдаемое сменилось вместе с D22: подписи даты в карточке больше нет, поэтому
+    // порядок проверяется по адресу самой ранней статьи, а не по её <time datetime>.
+    // Дата остаётся в данных — по ней и вычисляется ожидание.
+    const dated = articles.filter((a) => a.published_at);
+    expect(dated.length, 'в каталоге нет ни одной даты публикации').toBeGreaterThan(0);
+    const earliestArticle = [...dated].sort((a, b) =>
+      (a.published_at ?? '').localeCompare(b.published_at ?? ''),
+    )[0];
 
     await page.locator('[data-articles-sort]').selectOption('date_asc');
     const first = grid.locator('a.article-card').first();
-    await expect(first.locator('time')).toHaveAttribute('datetime', earliest);
+    await expect(first).toHaveAttribute('href', `/statyi/${earliestArticle.slug}`);
 
     // Настоящее доказательство охвата: самая ранняя статья каталога на первой
     // странице не показывалась, то есть порядок вычислен не по странице.
@@ -102,25 +107,18 @@ test.describe('каталог статей: поиск и сортировка',
     ).toBe(false);
   });
 
-  test('сортировка по заголовку А–Я охватывает весь каталог', async ({ page }) => {
+  test('алфавитного порядка в контроле сортировки нет', async ({ page }) => {
+    // Прежний тест выбирал title_asc/title_desc и охватом проверял алфавитный порядок.
+    // Порядок снят по запросу заказчика D25 (дельта change article-list-pagination),
+    // поэтому предмет теста стал обратным: таких пунктов не должно быть вовсе.
     await page.goto('/statyi');
-    const grid = page.locator('[data-articles-grid]');
-    await expect(grid.locator('.article-card').first()).toBeVisible();
+    const sort = page.locator('[data-articles-sort]');
+    await expect(sort).toBeVisible();
 
-    const alphabetical = [...articles].sort((a, b) =>
-      a.title.toLowerCase().localeCompare(b.title.toLowerCase(), 'ru'),
+    const values = await sort.locator('option').evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLOptionElement).value),
     );
-    await page.locator('[data-articles-sort]').selectOption('title_asc');
-    await expect(grid.locator('a.article-card').first()).toHaveAttribute(
-      'href',
-      `/statyi/${alphabetical[0].slug}`,
-    );
-
-    await page.locator('[data-articles-sort]').selectOption('title_desc');
-    await expect(grid.locator('a.article-card').first()).toHaveAttribute(
-      'href',
-      `/statyi/${alphabetical.at(-1)!.slug}`,
-    );
+    expect(values).toEqual(['date_desc', 'date_asc']);
   });
 
   test('очистка запроса возвращает первую страницу полного списка', async ({ page }) => {

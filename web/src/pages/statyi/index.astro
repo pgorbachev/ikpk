@@ -254,12 +254,10 @@ const description = page?.seo_description || 'Статьи и публикаци
       filtered.sort((left, right) => {
         const leftDate = getPublishedAtValue(left);
         const rightDate = getPublishedAtValue(right);
-        const leftTitle = left.dataset.title || '';
-        const rightTitle = right.dataset.title || '';
 
+        // Порядков два, оба по дате (D25). Неизвестное значение даёт порядок по
+        // умолчанию, а не пустой список: контрол — не единственный возможный источник.
         if (activeSort === 'date_asc') return leftDate - rightDate;
-        if (activeSort === 'title_asc') return leftTitle.localeCompare(rightTitle, 'ru');
-        if (activeSort === 'title_desc') return rightTitle.localeCompare(leftTitle, 'ru');
         return rightDate - leftDate;
       });
 

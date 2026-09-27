@@ -125,11 +125,6 @@ const articleSchema = {
                 <li>
                   <a href={`/statyi/${rel.slug}`} class="sidebar-article-link">
                     <span class="sidebar-article-title">{rel.title}</span>
-                    {rel.published_at && (
-                      <time class="sidebar-article-date text-muted" datetime={rel.published_at}>
-                        {formatDate(rel.published_at)}
-                      </time>
-                    )}
                   </a>
                 </li>
               ))}

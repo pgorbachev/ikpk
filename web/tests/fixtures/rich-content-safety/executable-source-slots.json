@@ -8,12 +8,12 @@
     "identity": "script|is:inline=empty:|body:ef4dc156dc861627"
   },
   {
-    "slotId": "src:components/ArticleCard.astro:L44:C1:style",
+    "slotId": "src:components/ArticleCard.astro:L39:C1:style",
     "file": "components/ArticleCard.astro",
     "nodeKind": "element",
-    "locator": "components/ArticleCard.astro:L44:C1:style",
-    "fingerprint": "b1682ffe4a3108b9c21c05b25fae50496242e59a95a35f5a6f76db711201ee07",
-    "identity": "style|body:41e2f79c74dae82c"
+    "locator": "components/ArticleCard.astro:L39:C1:style",
+    "fingerprint": "9808d0f41c7997f22545a14f5ac26dbaafb8a6dcf97ce1b985b253ed2d8cf688",
+    "identity": "style|body:f2c42ceadb7351cd"
   },
   {
     "slotId": "src:components/articles/ArticleFilterBar.astro:L22:C7:svg",
@@ -24,11 +24,11 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 12 12"
   },
   {
-    "slotId": "src:components/articles/ArticleFilterBar.astro:L36:C1:style",
+    "slotId": "src:components/articles/ArticleFilterBar.astro:L34:C1:style",
     "file": "components/articles/ArticleFilterBar.astro",
     "nodeKind": "element",
-    "locator": "components/articles/ArticleFilterBar.astro:L36:C1:style",
-    "fingerprint": "4c042f75bf94bcf9c2dd7542ea0335bc3ca057d45b2ca923f51103ff94d6c568",
+    "locator": "components/articles/ArticleFilterBar.astro:L34:C1:style",
+    "fingerprint": "5b347140e6d8e3cfa55c082f5c24bb2b9a661d63fe29a48c3d35f25a9b1a5af5",
     "identity": "style|body:e2f8a584a1640ec2"
   },
   {
@@ -136,12 +136,12 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
+    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
-    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L41:C1:style",
-    "fingerprint": "57711bd8cfa56fbbe82f98408c913e7dfd9afd3f46ebea30a5b3b65338252757",
-    "identity": "style|body:81fa0a5c4b7caea0"
+    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
+    "fingerprint": "ed05965f6226d403b79641b877c0635c87e1e1656949374e0d70ec2f8ada6cf8",
+    "identity": "style|body:a46d6650aafc400b"
   },
   {
     "slotId": "src:components/Footer.astro:L104:C1:style",
@@ -624,11 +624,11 @@
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
-    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
+    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L157:C1:style",
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarSchedulePanel.astro:L154:C1:style",
-    "fingerprint": "771a6a27cc678d051334edcc8b02aac3b6efd51788257357b9f060fd48e8c6ea",
+    "locator": "components/seminars/SeminarSchedulePanel.astro:L157:C1:style",
+    "fingerprint": "fe531c77b3f23cf65a039561de3b3e3e0db104ec2087036ae853877cbf66842f",
     "identity": "style|body:6d08ab9809844292"
   },
   {
@@ -840,11 +840,11 @@
     "identity": "style|body:15f715eb525f64ac"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup].astro:L194:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup].astro:L219:C1:style",
     "file": "pages/[institute]/[courseGroup].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup].astro:L194:C1:style",
-    "fingerprint": "18d5fa75fb6b0cbd17cfb519b34227225334686e79860fc6387420deffc60321",
+    "locator": "pages/[institute]/[courseGroup].astro:L219:C1:style",
+    "fingerprint": "cd03818c73823fdffa1995d99ef5148abe5aa4c25716a3924508c231ab51e1dd",
     "identity": "style|body:8370d74f6937862f"
   },
   {
@@ -1024,11 +1024,11 @@
     "identity": "style|body:751713f467cb168e"
   },
   {
-    "slotId": "src:pages/statyi/[slug].astro:L156:C1:style",
+    "slotId": "src:pages/statyi/[slug].astro:L151:C1:style",
     "file": "pages/statyi/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/statyi/[slug].astro:L156:C1:style",
-    "fingerprint": "c0346d748d54c7b0c5244ce4ff2d0b0291b718e2fe543eb38ba49732253febfb",
+    "locator": "pages/statyi/[slug].astro:L151:C1:style",
+    "fingerprint": "642d088a6928ba77e7fa621066bf275127c4b0a07454bd9260a121d97de0e750",
     "identity": "style|body:ca3b9642dc9938fe"
   },
   {
@@ -1052,8 +1052,8 @@
     "file": "pages/statyi/index.astro",
     "nodeKind": "element",
     "locator": "pages/statyi/index.astro:L227:C1:script",
-    "fingerprint": "1c328d3f8b12b2e3512facde06e15e81d508be5d0d79b8d41a3421c358eabe5b",
-    "identity": "script|body:333c50ff875581dc"
+    "fingerprint": "db07fee5c6c48ca1e3bb4beb5024002fd8024398089bfc9cca8e9c53d76b3256",
+    "identity": "script|body:e505eb9dc6250fbe"
   },
   {
     "slotId": "src:pages/svedeniya-ob-obrazovatelnoy-organizatsii.astro:L35:C1:style",
