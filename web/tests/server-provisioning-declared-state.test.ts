@@ -228,3 +228,21 @@ describe('долгое ожидание не превращает канал в 
     ).toBe(true);
   });
 });
+
+describe('служба может создать dist-snapshot в дереве сборки', () => {
+  const script = readFileSync(join(REPO_ROOT, 'scripts', 'bootstrap-vps.sh'), 'utf-8');
+
+  it('каталоги, которые prepare-snapshot создаёт в web, заранее отданы учётной записи', () => {
+    const from = script.indexOf('install -d -o "$account" -g "$account" -m 0755');
+    const to = script.indexOf('if [[ -d "${site_web}/node_modules" ]]', from);
+    expect(from, 'блок install -d дерева сборки не найден').toBeGreaterThan(-1);
+    expect(to, 'конец блока install -d не найден').toBeGreaterThan(from);
+    const granted = script.slice(from, to);
+    for (const dir of ['.snapshot', 'dist-snapshot']) {
+      expect(
+        granted.includes(`\${site_web}/${dir}`),
+        `${dir} не отдан службе: prepare-snapshot создаёт его в web, а web остаётся у root`,
+      ).toBe(true);
+    }
+  });
+});

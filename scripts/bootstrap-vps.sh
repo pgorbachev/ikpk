@@ -439,7 +439,7 @@ if [[ -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
     chmod 3775 "${site_web}/public"
   fi
   install -d -o "$account" -g "$account" -m 0755 \
-    "${site_web}/.snapshot" "${site_web}/dist" "${site_web}/public/media" "${site_web}/.astro"
+    "${site_web}/.snapshot" "${site_web}/dist-snapshot" "${site_web}/dist" "${site_web}/public/media" "${site_web}/.astro"
   if [[ -d "${site_web}/node_modules" ]]; then
     install -d -o "$account" -g "$account" -m 0755 \
       "${site_web}/node_modules/.astro" "${site_web}/node_modules/.vite" "${site_web}/node_modules/.cache"
