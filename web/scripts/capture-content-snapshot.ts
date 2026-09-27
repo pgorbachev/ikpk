@@ -491,7 +491,12 @@ async function liveCapture(): Promise<void> {
   const pinnedDir = join(repoRoot, 'fixtures', 'content-snapshot');
   for (const name of ['collapsible_panels.json', 'url_map.csv']) {
     const from = join(pinnedDir, name);
-    if (existsSync(from)) cpSync(from, join(outDir, name));
+    if (!existsSync(from)) {
+      throw new Error(
+        `snapshot:capture: нет ${from}. Живой снимок без этого файла не собирается: страница оплаты читает панели безусловно.`,
+      );
+    }
+    cpSync(from, join(outDir, name));
   }
 
   console.log(`snapshot:capture → живой снимок с ${cmsUrl} в ${outDir}`);

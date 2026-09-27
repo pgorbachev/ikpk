@@ -245,4 +245,14 @@ describe('служба может создать dist-snapshot в дереве �
       ).toBe(true);
     }
   });
+
+  it('манифест медиа можно перезаписать группе службы, каталог исходников — нет', () => {
+    expect(
+      script.includes('"${site_web}/src/lib/media-manifest.json"'),
+      'make-derivatives пишет media-manifest.json в исходники, а файл остаётся 0644 root',
+    ).toBe(true);
+    const manifest = script.indexOf('media-manifest.json');
+    const tail = script.slice(manifest, manifest + 400);
+    expect(tail, 'группа службы не получает запись в манифест').toMatch(/chmod 0664/);
+  });
 });

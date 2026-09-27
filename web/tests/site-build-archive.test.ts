@@ -26,9 +26,12 @@ describe('архив дерева сборки', () => {
       mkdirSync(join(repo, 'web'), { recursive: true });
       mkdirSync(join(repo, 'media-originals'), { recursive: true });
       mkdirSync(join(repo, 'cms', 'src', 'api', 'institute', 'content-types', 'institute'), { recursive: true });
+      mkdirSync(join(repo, 'fixtures', 'content-snapshot'), { recursive: true });
       writeFileSync(join(repo, 'web', '.gitignore'), '.env\n.env.production\n');
       writeFileSync(join(repo, 'web', 'package-lock.json'), '{"name":"web"}\n');
       writeFileSync(join(repo, 'media-originals', '.gitkeep'), '');
+      writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'collapsible_panels.json'), '{}\n');
+      writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'url_map.csv'), 'from,to\n');
       writeFileSync(
         join(repo, 'cms', 'src', 'api', 'institute', 'content-types', 'institute', 'schema.json'),
         '{"kind":"collectionType"}\n',
@@ -36,7 +39,7 @@ describe('архив дерева сборки', () => {
       execFileSync('git', ['init', '-b', 'main', repo], { stdio: 'pipe' });
       git(repo, ['config', 'user.email', 'fixture@example.com']);
       git(repo, ['config', 'user.name', 'fixture']);
-      git(repo, ['add', 'web', 'media-originals', 'cms']);
+      git(repo, ['add', 'web', 'media-originals', 'cms', 'fixtures']);
       git(repo, ['commit', '-m', 'fixture']);
       writeFileSync(join(repo, 'web', '.env'), 'SECRET=operator\n');
       writeFileSync(join(repo, 'web', '.env.production'), 'SECRET=production\n');
@@ -59,6 +62,8 @@ describe('архив дерева сборки', () => {
       expect(
         existsSync(join(dest, 'cms', 'src', 'api', 'institute', 'content-types', 'institute', 'schema.json')),
       ).toBe(true);
+      expect(existsSync(join(dest, 'fixtures', 'content-snapshot', 'collapsible_panels.json'))).toBe(true);
+      expect(existsSync(join(dest, 'fixtures', 'content-snapshot', 'url_map.csv'))).toBe(true);
       expect(existsSync(join(dest, 'web', '.env'))).toBe(false);
       expect(existsSync(join(dest, 'web', '.env.production'))).toBe(false);
       expect(readFileSync(join(dest, 'web', 'package-lock.json'), 'utf8')).toContain('"name":"web"');

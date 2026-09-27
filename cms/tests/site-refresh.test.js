@@ -8,6 +8,7 @@ import {
   MESSAGES,
   beginRefresh,
   childEnvironment,
+  siteBuildEnv,
   decideLock,
   launchPlan,
   mayRefresh,
@@ -69,6 +70,13 @@ test('чужая роль и пароль не попадают в окруже�
   assert.equal(env.CONTENT_ADMIN_PASSWORD, undefined);
   assert.equal(env.AWS_SECRET_ACCESS_KEY, undefined);
   assert.equal(publicView({ detail: 'Bearer secret-token', status: 'failed' }).detail, 'Bearer [скрыто]');
+});
+
+test('сборка сайта не пишет телеметрию Astro в домашний каталог службы', () => {
+  const env = siteBuildEnv('/var/lib/ikpk-site-build');
+  assert.equal(env.ASTRO_TELEMETRY_DISABLED, '1');
+  assert.equal(env.CONTENT_SNAPSHOT_DIR, '/var/lib/ikpk-site-build/web/.snapshot');
+  assert.equal(env.NODE_OPTIONS, '--max-old-space-size=480');
 });
 
 test('команда сборки ограничивает память и не ставит зависимости', () => {

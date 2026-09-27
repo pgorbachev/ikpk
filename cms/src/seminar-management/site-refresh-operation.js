@@ -235,6 +235,15 @@ export function childEnvironment(source) {
   return env;
 }
 
+/** Окружение `npm run build`. Телеметрия Astro пишет в домашний каталог до проверки отключения. */
+export function siteBuildEnv(workspace) {
+  return {
+    CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
+    NODE_OPTIONS: '--max-old-space-size=480',
+    ASTRO_TELEMETRY_DISABLED: '1',
+  };
+}
+
 export function switchCurrent(webRoot, releaseId) {
   if (!releaseId || releaseId.includes('/') || releaseId.includes('..')) {
     throw new Error('release-id');

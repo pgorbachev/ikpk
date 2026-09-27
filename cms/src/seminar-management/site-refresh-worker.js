@@ -9,6 +9,7 @@ import {
   releaseIdentity,
   reuseDerivatives,
   runRefresh,
+  siteBuildEnv,
   switchCurrent,
   unlock,
   verifyRelease,
@@ -63,10 +64,7 @@ export async function executeRefresh() {
       },
       reuseDerivatives: () => reuseDerivatives(workspace, process.env.IKPK_MEDIA_CACHE),
       build: () => {
-        const built = runStep('npm', ['run', 'build'], join(workspace, 'web'), {
-          CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
-          NODE_OPTIONS: '--max-old-space-size=480',
-        });
+        const built = runStep('npm', ['run', 'build'], join(workspace, 'web'), siteBuildEnv(workspace));
         if (!built.ok) return built;
         const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
         let snapshotId = null;

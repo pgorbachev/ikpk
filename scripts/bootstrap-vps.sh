@@ -444,6 +444,13 @@ if [[ -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
     install -d -o "$account" -g "$account" -m 0755 \
       "${site_web}/node_modules/.astro" "${site_web}/node_modules/.vite" "${site_web}/node_modules/.cache"
   fi
+  # Генератор производных переписывает этот файл на каждой сборке. Каталог исходников
+  # остаётся у root: группе службы дана запись только в сам манифест.
+  manifest="${site_web}/src/lib/media-manifest.json"
+  if [[ -f "$manifest" ]]; then
+    chown "root:${account}" "$manifest"
+    chmod 0664 "$manifest"
+  fi
 fi
 
 # --- Unit-файл службы: годится любая программа на объявленном локальном адресе. ---
