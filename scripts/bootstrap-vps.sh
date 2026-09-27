@@ -483,6 +483,13 @@ Environment=IKPK_VERIFY_URL=${SITE_VERIFY_URL}
 Environment=IKPK_VERIFY_HOST=${SITE_VERIFY_HOST}
 Environment=IKPK_MEDIA_CACHE=${SITE_MEDIA_CACHE}
 Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
+    if [[ "$ENVIRONMENT" == "stand" ]]; then
+      if [[ "${SITE_DEMO_FORMS:-}" != "stub" ]]; then
+        echo '[bootstrap] стендовая сборка требует SITE_DEMO_FORMS=stub, иначе заявки уйдут в рабочую CRM' >&2
+        exit 1
+      fi
+      site_build_env+=$'\nEnvironment=DEMO_FORMS=stub'
+    fi
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi
   if [[ -z "${SERVICE_EXEC_START:-}" ]]; then

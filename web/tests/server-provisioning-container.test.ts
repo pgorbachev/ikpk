@@ -83,6 +83,24 @@ function publish(t: ProvisionTarget, body: string): void {
 }
 
 describe('server-provisioning: дерево сборки сайта', () => {
+  it('стендовая сборка из CMS отправляет заявки на локальную заглушку', async () => {
+    const t = target();
+    const run = t.provision(ENV);
+    expect(run.status, `провижининг упал:\n${run.output}`).toBe(0);
+    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
+    expect(unit, 'кнопка обновления сайта соберёт ссылки на рабочую CRM').toContain(
+      'Environment=DEMO_FORMS=stub',
+    );
+  }, T);
+
+  it('стенд без режима заглушки отказывается создавать опасный юнит', async () => {
+    const t = target();
+    setDeclared(t, 'SITE_DEMO_FORMS', '');
+    const run = t.provision(ENV);
+    expect(run.status, 'провижининг разрешил сборку с формами рабочей CRM').not.toBe(0);
+    expect(run.output).toContain('SITE_DEMO_FORMS=stub');
+  }, T);
+
   it('SHA доставленного дерева не берётся из текущего релиза', async () => {
     const t = target();
     const served = '380bee2627e9c197d72e97dd00365671075689f8';
