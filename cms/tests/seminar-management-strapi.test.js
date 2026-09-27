@@ -195,6 +195,19 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       }),
       /Выберите опубликованную программу перед публикацией семинара/,
     );
+    const unpublished = await app.documents('api::course-group.course-group').create({
+      data: { name: 'Неопубликованная программа', slug: 'neopublikovannaya-programma' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: {
+          name: 'Противоречивые идентификаторы',
+          course_group: { id: publishedProgram.id, documentId: unpublished.documentId },
+        },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
     const stillDraft = await seminars.findOne({ documentId: draft.documentId, status: 'published' });
     assert.equal(stillDraft, null);
   });
@@ -262,6 +275,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       }),
       /нет опубликованного института для сайта/,
     );
+    const matchingIds = await seminars.create({
+      status: 'published',
+      data: {
+        name: 'Совпадающие идентификаторы',
+        course_group: { id: publishedProgram.id, documentId: publishedProgram.documentId },
+      },
+    });
+    assert.ok(matchingIds.publishedAt);
   });
 
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {

@@ -74,6 +74,10 @@ async function assertSeminarProgram(strapi, relation) {
     ? Number(numericId)
     : null;
   const row = id == null ? null : await strapi.db.query(COURSE_GROUP_UID).findOne({ where: { id } });
+  if (typeof target === 'object' && target.id != null && target.documentId != null &&
+      row?.documentId !== target.documentId) {
+    throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
+  }
   const documentId = row?.documentId ?? (typeof target === 'string' ? target : target?.documentId);
   if (!documentId) throw new ValidationError(PUBLISHED_PROGRAM_MESSAGE);
   const published = await strapi.db.query(COURSE_GROUP_UID).findOne({
