@@ -9,6 +9,7 @@ type Status = {
   siteUrl?: string | null;
   releaseId?: string | null;
   previousReleaseId?: string | null;
+  detail?: string | null;
 };
 
 const PHASE: Record<string, string> = {
@@ -68,6 +69,7 @@ export function SiteRefreshPage() {
       <Box paddingBottom={4}>
         <Typography>{status?.message || 'Состояние ещё не загружено.'}</Typography>
         {phase ? <Typography tag="p">{phase}</Typography> : null}
+        {status?.detail ? <Typography tag="p">{status.detail}</Typography> : null}
         {status?.siteUrl ? (
           <Typography tag="p">
             <a href={status.siteUrl}>Открыть проверенный адрес</a>

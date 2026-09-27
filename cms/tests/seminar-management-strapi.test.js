@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import net from 'node:net';
@@ -402,5 +403,28 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const stored = await app.db.query('api::schedule-entry.schedule-entry').findOne({ where: { id: created.id } });
     assert.equal(stored.name, 'Н-ПК-1');
     assert.equal(stored.admin_label, '12 марта 2026 · Москва');
+  });
+
+  test('съём читает тип, закрытый для публичной роли', async () => {
+    const action = 'api::institute.institute.find';
+    const permissions = app.db.query('plugin::users-permissions.permission');
+    const rows = await permissions.findMany({ where: { action } });
+    for (const row of rows) {
+      await permissions.delete({ where: { id: row.id } });
+    }
+    const anon = await fetch(`${base}/api/institutes?status=published&pagination[pageSize]=1`);
+    assert.equal(anon.status, 403);
+    assert.equal(typeof process.env.CMS_TOKEN, 'string');
+    assert.ok(process.env.CMS_TOKEN.length > 20);
+    const authed = await fetch(`${base}/api/institutes?status=published&pagination[pageSize]=1`, {
+      headers: { Authorization: `Bearer ${process.env.CMS_TOKEN}` },
+    });
+    assert.equal(authed.status, 200);
+    const body = await authed.json();
+    assert.ok(Array.isArray(body.data));
+    const kept = createHash('sha256').update(process.env.CMS_TOKEN).digest('hex');
+    const { ensureCaptureToken } = loadCommonjs(path.join(cmsRoot, 'dist/src/seminar-management/capture-token.js'));
+    await ensureCaptureToken(app);
+    assert.equal(createHash('sha256').update(process.env.CMS_TOKEN).digest('hex'), kept);
   });
 });

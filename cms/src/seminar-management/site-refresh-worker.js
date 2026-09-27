@@ -54,7 +54,11 @@ export async function executeRefresh() {
           process.execPath,
           [join(workspace, 'web', 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'scripts/capture-content-snapshot.ts'],
           join(workspace, 'web'),
-          { CONTENT_SNAPSHOT_DIR: snapshotDir, CMS_URL: process.env.CMS_URL || 'http://127.0.0.1:1337' },
+          {
+            CONTENT_SNAPSHOT_DIR: snapshotDir,
+            CMS_URL: process.env.CMS_URL || 'http://127.0.0.1:1337',
+            CMS_TOKEN: process.env.CMS_TOKEN || '',
+          },
         );
       },
       reuseDerivatives: () => reuseDerivatives(workspace, process.env.IKPK_MEDIA_CACHE),

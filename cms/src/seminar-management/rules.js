@@ -143,11 +143,25 @@ export function adminLabel(startAt, city) {
   return `${adminDate(startAt)} · ${place}`;
 }
 
+/** Календарь редактора — московский: полночь 1 октября хранится как 30 сентября 21:00 UTC. */
+const EDITOR_TIME_ZONE = 'Europe/Moscow';
+
 function adminDate(value) {
   if (!value) return 'дата не указана';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'дата не указана';
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: EDITOR_TIME_ZONE,
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  }).formatToParts(date);
+  const pick = (type) => Number(parts.find((part) => part.type === type)?.value);
+  const day = pick('day');
+  const month = pick('month');
+  const year = pick('year');
+  if (!day || !month || !year || !MONTHS[month - 1]) return 'дата не указана';
+  return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
 function relationItems(value) {
