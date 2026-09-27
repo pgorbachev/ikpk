@@ -154,16 +154,7 @@ describe('каталог статей: подпись даты на карточ
   }
 
   it('охват совпадает с тем, что следует из снимка контента', () => {
-    // Ожидание ВЫЧИСЛЯЕТСЯ из числа статей в снимке, а не зашито под нынешний каталог.
-    // Прежняя редакция держала нижние границы под 68 статей, и штатное уменьшение каталога
-    // до 67 роняло проверку: страниц с карточками становилось 68 при требуемых 69, то есть
-    // изменение контента выглядело дефектом кода.
-    const expected = expectedCoverage(getArticles().length);
-    expect({ catalogCards, relatedCards, sidebarLinks, pagesWithCards }).toEqual(expected);
-    // Отдельно — что проверять вообще было что: равенство нулю удовлетворило бы равенство
-    // выше при пустом каталоге.
-    expect(catalogCards, 'карточек каталога ноль — предмет проверки пуст').toBeGreaterThan(0);
-    expect(relatedCards + sidebarLinks, 'связанных списков нет — класс выпал из проверки').toBeGreaterThan(0);
+    expectCoverage({ catalogCards, relatedCards, sidebarLinks, pagesWithCards }, getArticles().length);
   });
 
   it('ни одна карточка списка нигде в выводе не несёт подписи даты', () => {
@@ -211,6 +202,24 @@ function expectedCoverage(articles: number): {
   };
 }
 
+/**
+ * Утверждение об охвате вынесено из тела `it`, чтобы сценарий целиком проверялся и на
+ * каталоге, которого в снимке нет, — например из одной статьи.
+ *
+ * Вакуумность ловится РАЗМЕРОМ СНИМКА, а не ненулевым числом карточек. Прежняя редакция
+ * требовала непустых связанных списков — законное требование при 68 статьях и ложный отказ
+ * при одной: у единственной статьи связывать не с чем, и пустой список там исправен.
+ * Равенство ожиданиям выше уже ловит и потерю класса, и неожиданный рост: сравнивается
+ * каждое число, а не сумма.
+ */
+function expectCoverage(
+  counts: { catalogCards: number; relatedCards: number; sidebarLinks: number; pagesWithCards: number },
+  articles: number,
+): void {
+  expect(articles, 'в снимке контента нет статей — предмет проверки пуст').toBeGreaterThan(0);
+  expect(counts).toEqual(expectedCoverage(articles));
+}
+
 describe('ожидаемый охват вычисляется из снимка, а не зашит под нынешний каталог', () => {
   it('каталог из 68 статей', () => {
     expect(expectedCoverage(68)).toEqual({
@@ -234,5 +243,22 @@ describe('ожидаемый охват вычисляется из снимка
     expect(expectedCoverage(1)).toEqual({
       catalogCards: 2, relatedCards: 0, sidebarLinks: 0, pagesWithCards: 1,
     });
+  });
+});
+
+describe('сценарий охвата целиком на каталоге, которого нет в снимке', () => {
+  // Расчёт ожиданий проверен выше; здесь предмет другой — УТВЕРЖДЕНИЕ. Оно исполняется в
+  // сборочном тесте на 68 статьях, поэтому отказ на малом каталоге иначе не виден ничем.
+  it('единственная статья: исправный вывод принимается, хотя связанные списки пусты', () => {
+    expect(() => expectCoverage(expectedCoverage(1), 1)).not.toThrow();
+  });
+
+  it('единственная статья: потеря карточки каталога отвергается', () => {
+    const broken = { ...expectedCoverage(1), catalogCards: 1 };
+    expect(() => expectCoverage(broken, 1)).toThrow();
+  });
+
+  it('пустой снимок отвергается как вакуумный прогон', () => {
+    expect(() => expectCoverage(expectedCoverage(0), 0)).toThrow();
   });
 });
