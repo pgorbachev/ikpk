@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { calendarDateParts, hasExplicitOffset } from './wall-clock.js';
 
 /**
  * Редакторские правила семинара и проведения.
@@ -143,25 +144,32 @@ export function adminLabel(startAt, city) {
   return `${adminDate(startAt)} · ${place}`;
 }
 
-/** Календарь редактора — московский: полночь 1 октября хранится как 30 сентября 21:00 UTC. */
-const EDITOR_TIME_ZONE = 'Europe/Moscow';
+/**
+ * Повторное сохранение присылает уже нормализованное мгновение (`Z`).
+ * Если момент не менялся, день подписи не пересчитывается: в `Z` нет зоны редактора.
+ * Новый выбор в форме приходит со сдвигом браузера, и день берётся из этой строки.
+ */
+export function entryAdminLabel({ startAt, city, existingLabel, existingStartAt }) {
+  const place = text(city) || 'город не указан';
+  if (hasExplicitOffset(startAt)) return `${adminDate(startAt)} · ${place}`;
+  if (text(existingLabel) && sameInstant(startAt, existingStartAt)) {
+    const datePart = text(existingLabel).split(' · ')[0];
+    return `${datePart} · ${place}`;
+  }
+  return `${adminDate(startAt)} · ${place}`;
+}
+
+function sameInstant(left, right) {
+  if (left == null || right == null || left === '' || right === '') return false;
+  const a = new Date(left).getTime();
+  const b = new Date(right).getTime();
+  return !Number.isNaN(a) && a === b;
+}
 
 function adminDate(value) {
-  if (!value) return 'дата не указана';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'дата не указана';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: EDITOR_TIME_ZONE,
-    day: 'numeric',
-    month: 'numeric',
-    year: 'numeric',
-  }).formatToParts(date);
-  const pick = (type) => Number(parts.find((part) => part.type === type)?.value);
-  const day = pick('day');
-  const month = pick('month');
-  const year = pick('year');
-  if (!day || !month || !year || !MONTHS[month - 1]) return 'дата не указана';
-  return `${day} ${MONTHS[month - 1]} ${year}`;
+  const parts = calendarDateParts(value);
+  if (!parts || !MONTHS[parts.month - 1]) return 'дата не указана';
+  return `${parts.day} ${MONTHS[parts.month - 1]} ${parts.year}`;
 }
 
 function relationItems(value) {

@@ -5,6 +5,7 @@ import {
   SEMINAR_MODEL_NAME,
   SEMINAR_UID,
   adminLabel,
+  entryAdminLabel,
   classifyScheduleLink,
   isForeignAssignment,
   decideEntryName,
@@ -151,7 +152,12 @@ async function applyEntryWrite(strapi, context) {
   const startAt = Object.prototype.hasOwnProperty.call(data, 'startAt') ? data.startAt : existing?.startAt;
   const city = Object.prototype.hasOwnProperty.call(data, 'city') ? data.city : existing?.city;
   data.name = name;
-  data.admin_label = adminLabel(startAt, city);
+  data.admin_label = entryAdminLabel({
+    startAt,
+    city,
+    existingLabel: existing?.admin_label,
+    existingStartAt: existing?.startAt,
+  });
 }
 
 async function assertEntryPublishable(strapi, context) {

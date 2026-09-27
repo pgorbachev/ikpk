@@ -1,4 +1,6 @@
+import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
+import WallClockDateTime from './components/WallClockDateTime';
 
 function RefreshIcon() {
   return (
@@ -14,6 +16,9 @@ function RefreshIcon() {
 export default {
   config: {
     locales: ['ru'],
+  },
+  register(app: StrapiApp) {
+    app.addFields({ type: 'datetime', Component: WallClockDateTime as ComponentType });
   },
   bootstrap(app: StrapiApp) {
     app.addMenuLink({

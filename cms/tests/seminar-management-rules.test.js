@@ -1,8 +1,10 @@
 import { test } from 'node:test';
+import { toWallClockISO } from '../src/seminar-management/wall-clock.js';
 import assert from 'node:assert/strict';
 import {
   SEMINAR_MODEL_NAME,
   adminLabel,
+  entryAdminLabel,
   classifyScheduleLink,
   isForeignAssignment,
   decideEntryName,
@@ -210,11 +212,59 @@ test('служебная заглушка seminar при пустом назва
 test('подпись в списке показывает дату и город и не подменяет отсутствующие значения', () => {
   assert.equal(adminLabel('2026-03-12T00:00:00.000Z', 'Москва'), '12 марта 2026 · Москва');
   assert.equal(adminLabel(null, ''), 'дата не указана · город не указан');
-  // Полночь 1 октября в Москве — это 30 сентября 21:00 UTC. Подпись берёт день,
-  // который редактор видит в форме, а не календарный день UTC.
-  assert.equal(adminLabel('2026-09-30T21:00:00.000Z', 'Москва'), '1 октября 2026 · Москва');
-  assert.equal(adminLabel('2026-10-01T07:00:00.000Z', 'Москва'), '1 октября 2026 · Москва');
+  // Редактор ввёл полночь 1 октября. Строка несёт этот день и сдвиг браузера, не имя зоны.
+  assert.equal(adminLabel('2026-10-01T00:00:00+03:00', 'Москва'), '1 октября 2026 · Москва');
+  // Asia/Nicosia после перевода часов 2026-10-25 — UTC+2. 1 ноября 23:30 хранится как
+  // 2026-11-01T21:30Z; в Москве это уже 2 ноября 00:30. Подпись остаётся 1 ноября.
+  assert.equal(adminLabel('2026-11-01T23:30:00+02:00', 'Никосия'), '1 ноября 2026 · Никосия');
+  assert.equal(adminLabel('2026-11-01T21:30:00.000Z', 'Никосия'), '1 ноября 2026 · Никосия');
+  const instant = new Date('2026-11-01T21:30:00.000Z');
+  assert.equal(zoned('Asia/Nicosia', instant), '2026-11-01 23:30');
+  assert.equal(zoned('Europe/Moscow', instant), '2026-11-02 00:30');
 });
+
+test('повторное сохранение мгновения не переписывает день подписи чужой зоной', () => {
+  assert.equal(
+    entryAdminLabel({
+      startAt: '2026-09-30T21:00:00.000Z',
+      city: 'Тула',
+      existingLabel: '1 октября 2026 · Москва',
+      existingStartAt: '2026-10-01T00:00:00+03:00',
+    }),
+    '1 октября 2026 · Тула',
+  );
+  assert.equal(
+    entryAdminLabel({
+      startAt: '2026-11-01T23:30:00+02:00',
+      city: 'Никосия',
+      existingLabel: '2 ноября 2026 · Никосия',
+      existingStartAt: '2026-11-01T21:30:00.000Z',
+    }),
+    '1 ноября 2026 · Никосия',
+  );
+});
+
+test('календарь формы сохраняет выбранный день, а не день UTC', () => {
+  const picked = new Date(2026, 9, 1, 0, 0, 0);
+  const submitted = toWallClockISO(picked);
+  assert.match(submitted, /^2026-10-01T00:00:00[+-]\d{2}:\d{2}$/);
+  assert.equal(adminLabel(submitted, 'Москва'), '1 октября 2026 · Москва');
+  assert.equal(new Date(submitted).getTime(), picked.getTime());
+});
+
+function zoned(timeZone, instant) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const pick = (type) => parts.find((part) => part.type === type).value;
+  return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}`;
+}
 
 test('идентификаторы связи читаются из всех форм, которые принимает Strapi', () => {
   assert.deepEqual(

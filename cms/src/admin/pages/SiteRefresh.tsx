@@ -26,7 +26,7 @@ export function SiteRefreshPage() {
 
   async function load() {
     const response = await client.get('/admin/site-refresh');
-    setStatus(response.data);
+    setStatus(response.data as Status);
     setError('');
   }
 
@@ -46,7 +46,7 @@ export function SiteRefreshPage() {
     setError('');
     try {
       const response = await client.post('/admin/site-refresh', action ? { action } : {});
-      setStatus(response.data);
+      setStatus(response.data as Status);
     } catch {
       setError('Запрос не выполнен. Если прав недостаточно, обновить сайт нельзя.');
     }

@@ -405,6 +405,35 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(stored.admin_label, '12 марта 2026 · Москва');
   });
 
+  test('подпись проведения берёт день редактора и не сдвигает его в Москву', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const seminar = await seminars.create({ data: { name: `Зоны ${Date.now()}` } });
+    const created = await entries.create({
+      data: {
+        seminar: seminar.documentId,
+        startAt: '2026-11-01T23:30:00+02:00',
+        endAt: '2026-11-02T01:00:00+02:00',
+        city: 'Никосия',
+      },
+    });
+    assert.equal(created.admin_label, '1 ноября 2026 · Никосия');
+    const kept = await entries.update({
+      documentId: created.documentId,
+      data: { city: 'Ларнака', startAt: '2026-11-01T21:30:00.000Z' },
+    });
+    assert.equal(kept.admin_label, '1 ноября 2026 · Ларнака');
+    const midnight = await entries.create({
+      data: {
+        seminar: seminar.documentId,
+        startAt: '2026-10-01T00:00:00+03:00',
+        endAt: '2026-10-01T10:00:00+03:00',
+        city: 'Москва',
+      },
+    });
+    assert.equal(midnight.admin_label, '1 октября 2026 · Москва');
+  });
+
   test('съём читает тип, закрытый для публичной роли', async () => {
     const action = 'api::institute.institute.find';
     const permissions = app.db.query('plugin::users-permissions.permission');
