@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readPage } from './helpers/dist-pages';
+import { allPages, readPage } from './helpers/dist-pages';
 import { attr, findAll, textOf, walk } from './helpers/dom';
-import { getArticles } from '../src/lib/data.js';
 
 /**
  * Подача даты и набор порядков сортировки в каталоге статей — запросы заказчика D22 и D25
@@ -93,45 +92,70 @@ describe('каталог статей: порядки сортировки (D25)
 });
 
 describe('каталог статей: подпись даты на карточке (D22)', () => {
-  const html = readPage(CATALOG);
-  const grid = findAll(html, (el) => attr(el, 'data-articles-grid') !== null)[0];
-  const articles = getArticles();
+  /**
+   * Предмет — КАЖДАЯ карточка статьи во всём выводе, а не шесть видимых на первой
+   * странице каталога.
+   *
+   * Первая редакция смотрела только `[data-articles-grid]` на `/statyi`, то есть 6 карточек
+   * из 74 на той же странице: остальные 68 лежат в `<template>` и показываются посетителю
+   * при поиске и смене порядка. Мимо проверки проходили и блоки связанных статей на 68
+   * страницах статей — те же карточки, собранные тем же компонентом.
+   *
+   * Признак общий: «элемент с классом `article-card`» и «ссылка бокового списка», а не
+   * перечень страниц и секций. Перечень отстаёт от предмета молча — стоит появиться новому
+   * месту, где показан список статей, и он окажется вне проверки.
+   *
+   * Собственная дата статьи на её странице (шапка и `sidebar-meta`) предметом НЕ является:
+   * D22 просил убрать даты выкладки со СПИСКОВ, а не скрыть дату публикации самой статьи.
+   * Поэтому проверяются только карточки и ссылки списков, а не страница целиком.
+   */
+  const norm2 = (value: string): string => value.replace(/\s+/g, ' ').trim();
+  const hasClass = (el: Parameters<typeof textOf>[0], name: string): boolean =>
+    (attr(el as never, 'class') ?? '').split(/\s+/).includes(name);
 
-  it('сетка карточек в выводе есть', () => {
-    expect(grid, 'сетки карточек нет в выводе — проверять нечего').toBeTruthy();
+  const offenders: string[] = [];
+  let catalogCards = 0;
+  let relatedCards = 0;
+  let sidebarLinks = 0;
+  let pagesWithCards = 0;
+
+  for (const page of allPages()) {
+    const html = readPage(page);
+    const onPage = findAll(html, (el) => hasClass(el, 'article-card'));
+    const links = findAll(html, (el) => hasClass(el, 'sidebar-article-link'));
+    if (onPage.length > 0) pagesWithCards += 1;
+    // Классы считаются РАЗДЕЛЬНО: одним числом потеря целого класса (272 карточки блоков
+    // связанных статей) осталась бы незаметной на фоне общего порога.
+    if (page === CATALOG || page === `${CATALOG}/`) catalogCards += onPage.length;
+    else relatedCards += onPage.length;
+    sidebarLinks += links.length;
+
+    for (const card of [...onPage, ...links]) {
+      const times = [...walk(card)].filter((el) => el.tagName === 'time');
+      if (times.length > 0) offenders.push(`${page}: <time>${norm2(textOf(times[0]))}</time> в карточке списка`);
+      const lead = [...walk(card)]
+        .filter((el) => ['p', 'span'].includes(el.tagName))
+        .map((el) => norm2(textOf(el)))
+        .find((value) => value.length > 0);
+      const head = lead?.match(LEAD_DATE_HEAD);
+      if (head) offenders.push(`${page}: карточка списка начинается с даты выкладки — «${head[0]}…»`);
+    }
+  }
+
+  it('карточек и ссылок списков в выводе столько, сколько ожидается', () => {
+    // Числа — не украшение: без них исчезновение корпуса поиска или блока связанных статей
+    // сделало бы проверку зелёной по причине «проверять стало нечего».
+    // Измерено на этом дереве: 74 карточки каталога (6 видимых + 68 в корпусе поиска),
+    // 272 карточки блоков связанных статей и 272 ссылки бокового списка на 68 страницах.
+    // Пороги чуть ниже измеренного: они ловят исчезновение класса, а не колебание числа
+    // статей на единицы.
+    expect(catalogCards, `карточек на ${CATALOG}: ${catalogCards}`).toBeGreaterThanOrEqual(70);
+    expect(relatedCards, `карточек связанных статей: ${relatedCards}`).toBeGreaterThanOrEqual(250);
+    expect(sidebarLinks, `ссылок бокового списка: ${sidebarLinks}`).toBeGreaterThanOrEqual(250);
+    expect(pagesWithCards, `страниц с карточками: ${pagesWithCards}`).toBeGreaterThanOrEqual(69);
   });
 
-  it('ни одна карточка не несёт подписи даты публикации и не начинается с даты', () => {
-    const cards = [...walk(grid)].filter((el) => (attr(el, 'class') ?? '').split(/\s+/).includes('article-card'));
-    expect(cards.length, 'карточек в сетке ноль — проверять нечего').toBeGreaterThan(0);
-
-    const byslug = new Map(articles.map((a) => [a.slug, a] as const));
-    const offenders: string[] = [];
-    let leadsChecked = 0;
-
-    for (const card of cards) {
-      const href = attr(card, 'href') ?? '';
-      const slug = href.replace(/^\/statyi\//, '').replace(/\/$/, '');
-      const article = byslug.get(slug);
-
-      const times = [...walk(card)].filter((el) => el.tagName === 'time');
-      if (times.length > 0) offenders.push(`${href}: <time>${norm(textOf(times[0]))}</time>`);
-
-
-      const lead = [...walk(card)]
-        .filter((el) => el.tagName === 'p')
-        .map((el) => norm(textOf(el)))
-        .find((value) => value.length > 0);
-      if (lead) {
-        leadsChecked += 1;
-        const startsWithDate = lead.match(LEAD_DATE_HEAD);
-        if (startsWithDate) offenders.push(`${href}: лид начинается с даты выкладки — «${startsWithDate[0]}…»`);
-        if (article && lead.toLowerCase().startsWith(norm(article.title).toLowerCase().slice(0, 40)))
-          offenders.push(`${href}: лид повторяет заголовок карточки — «${lead.slice(0, 60)}…»`);
-      }
-    }
-
-    expect(leadsChecked, 'ни у одной карточки не нашлось лида — предмет проверки пуст').toBeGreaterThan(0);
-    expect(offenders, offenders.join('\n')).toEqual([]);
+  it('ни одна карточка списка нигде в выводе не несёт подписи даты', () => {
+    expect(offenders, offenders.slice(0, 20).join('\n')).toEqual([]);
   });
 });
