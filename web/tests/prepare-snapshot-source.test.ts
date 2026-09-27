@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 // Отказ живого съёма обязан ОСТАНАВЛИВАТЬ сборку, а не подменяться фикстурой. После
 // `capture-content-snapshot` отказ выглядит как заданный `CONTENT_SNAPSHOT_DIR` БЕЗ
@@ -45,7 +45,14 @@ function dirWithSnapshot(): string {
   return dir;
 }
 
+const LIVE_MARK = 'live-capture-not-pinned-fixture';
+
 describe('prepare-snapshot: источник снимка', () => {
+  afterAll(() => {
+    const restored = prepare({ CONTENT_SNAPSHOT_DIR: pinnedFixture, SNAPSHOT_SOURCE: undefined });
+    if (restored.status !== 0) throw new Error(restored.output);
+  });
+
   it('заданный каталог без snapshot.json — отказ, а не тихая подмена фикстурой', () => {
     const run = prepare({ CONTENT_SNAPSHOT_DIR: emptyDir(), SNAPSHOT_SOURCE: undefined });
 
@@ -72,5 +79,27 @@ describe('prepare-snapshot: источник снимка', () => {
     const run = prepare({ CONTENT_SNAPSHOT_DIR: undefined, SNAPSHOT_SOURCE: undefined });
 
     expect(run.status, `локальная сборка без каталога съёма отказала:\n${run.output}`).toBe(0);
+  });
+
+  it('источник web/.snapshot не копирует снимок сам в себя и не подменяет его фикстурой', () => {
+    const liveDir = join(webRoot, '.snapshot');
+    mkdirSync(liveDir, { recursive: true });
+    const snap = JSON.parse(readFileSync(join(pinnedFixture, 'snapshot.json'), 'utf8')) as { liveCaptureMark?: string };
+    snap.liveCaptureMark = LIVE_MARK;
+    writeFileSync(join(liveDir, 'snapshot.json'), JSON.stringify(snap));
+    writeFileSync(join(liveDir, 'collapsible_panels.json'), JSON.stringify({ liveCaptureMark: LIVE_MARK }));
+    writeFileSync(join(liveDir, 'url_map.csv'), `liveCaptureMark,${LIVE_MARK}\n`);
+
+    const run = prepare({ CONTENT_SNAPSHOT_DIR: liveDir, SNAPSHOT_SOURCE: undefined });
+
+    expect(run.status, `живой снимок в web/.snapshot не подготовился:\n${run.output}`).toBe(0);
+    const kept = JSON.parse(readFileSync(join(liveDir, 'snapshot.json'), 'utf8')) as { liveCaptureMark?: string };
+    expect(kept.liveCaptureMark, 'web/.snapshot подменён фикстурой').toBe(LIVE_MARK);
+    const published = JSON.parse(readFileSync(join(webRoot, 'dist-snapshot', 'snapshot.json'), 'utf8')) as {
+      liveCaptureMark?: string;
+    };
+    expect(published.liveCaptureMark, 'dist-snapshot взят не из живого снимка').toBe(LIVE_MARK);
+    expect(readFileSync(join(liveDir, 'collapsible_panels.json'), 'utf8')).toContain(LIVE_MARK);
+    expect(readFileSync(join(liveDir, 'url_map.csv'), 'utf8')).toContain(LIVE_MARK);
   });
 });

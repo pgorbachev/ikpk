@@ -231,7 +231,7 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   let page = 1;
   for (;;) {
     assertWithinBudget(`${endpoint}, страница ${page}`);
-    const url = `${cmsUrl}/api/${endpoint}?pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
+    const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
       // Недоступная CMS (закрытый порт, зависший сокет) обязана быть быстрым отказом, а не
@@ -491,7 +491,12 @@ async function liveCapture(): Promise<void> {
   const pinnedDir = join(repoRoot, 'fixtures', 'content-snapshot');
   for (const name of ['collapsible_panels.json', 'url_map.csv']) {
     const from = join(pinnedDir, name);
-    if (existsSync(from)) cpSync(from, join(outDir, name));
+    if (!existsSync(from)) {
+      throw new Error(
+        `snapshot:capture: нет ${from}. Живой снимок без этого файла не собирается: страница оплаты читает панели безусловно.`,
+      );
+    }
+    cpSync(from, join(outDir, name));
   }
 
   console.log(`snapshot:capture → живой снимок с ${cmsUrl} в ${outDir}`);

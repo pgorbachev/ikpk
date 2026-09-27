@@ -4,8 +4,8 @@
   "info": {
     "singularName": "seminar",
     "pluralName": "seminars",
-    "displayName": "Seminar",
-    "description": "Educational seminar or course"
+    "displayName": "Семинар",
+    "description": "Учебный семинар. Публикация записи не обновляет публичный сайт."
   },
   "options": {
     "draftAndPublish": true
