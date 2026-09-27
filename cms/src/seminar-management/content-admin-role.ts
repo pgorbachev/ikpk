@@ -1,3 +1,5 @@
+import { contentTypes as contentTypeUtils } from '@strapi/utils';
+
 const ROLE_CODE = 'content-admin';
 const ROLE_NAME = 'Администратор контента';
 
@@ -10,13 +12,33 @@ const CONTENT_TYPES = [
 
 const WRITE_TYPES = new Set(['api::seminar.seminar', 'api::schedule-entry.schedule-entry']);
 
-function permissions() {
+function authorizableFields(model, components, prefix = '') {
+  const hidden = new Set(contentTypeUtils.getNonVisibleAttributes(model));
+  const fields = [];
+  const attributes = model.attributes ?? {};
+  for (const name of Object.keys(attributes)) {
+    const attribute = attributes[name];
+    if (hidden.has(name)) continue;
+    const path = prefix ? `${prefix}.${name}` : name;
+    if (attribute.type === 'component') {
+      const children = authorizableFields(components[attribute.component], components, path);
+      fields.push(...(children.length ? children : [path]));
+      continue;
+    }
+    fields.push(path);
+  }
+  return fields;
+}
+
+function permissions(strapi) {
   const rows = [];
   for (const subject of CONTENT_TYPES) {
-    rows.push({ action: 'plugin::content-manager.explorer.read', subject });
+    const fields = authorizableFields(strapi.contentType(subject), strapi.components);
+    const withFields = () => ({ fields: [...fields] });
+    rows.push({ action: 'plugin::content-manager.explorer.read', subject, properties: withFields() });
     if (!WRITE_TYPES.has(subject)) continue;
-    rows.push({ action: 'plugin::content-manager.explorer.create', subject });
-    rows.push({ action: 'plugin::content-manager.explorer.update', subject });
+    rows.push({ action: 'plugin::content-manager.explorer.create', subject, properties: withFields() });
+    rows.push({ action: 'plugin::content-manager.explorer.update', subject, properties: withFields() });
     rows.push({ action: 'plugin::content-manager.explorer.publish', subject });
   }
   rows.push({ action: 'plugin::upload.read' });
@@ -37,7 +59,7 @@ export async function ensureContentAdminRole(strapi) {
       description: 'Создаёт и публикует семинары и проведения. Не является супер-администратором.',
     });
   }
-  await roleService.assignPermissions(role.id, permissions());
+  await roleService.assignPermissions(role.id, permissions(strapi));
   await ensureContentAdminUser(strapi, role.id);
 }
 

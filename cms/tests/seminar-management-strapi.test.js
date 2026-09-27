@@ -97,6 +97,61 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     }
   });
 
+  test('форма создания семинара видит поля, а не только код роли', async () => {
+    const response = await fetch(`${base}/admin/users/me/permissions`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    const rows = body.data;
+    const fieldsOf = (action, subject) => {
+      const matches = rows.filter((row) => row.action === action && row.subject === subject);
+      assert.equal(matches.length, 1, `${action} ${subject}`);
+      return matches[0].properties?.fields ?? [];
+    };
+    const createFields = fieldsOf(
+      'plugin::content-manager.explorer.create',
+      'api::seminar.seminar',
+    );
+    for (const field of ['name', 'slug', 'description', 'course_group', 'teachers', 'seo.seo_title']) {
+      assert.ok(createFields.includes(field), `create seminar missing ${field}`);
+    }
+    assert.deepEqual(
+      fieldsOf('plugin::content-manager.explorer.read', 'api::seminar.seminar'),
+      createFields,
+    );
+    assert.deepEqual(
+      fieldsOf('plugin::content-manager.explorer.update', 'api::seminar.seminar'),
+      createFields,
+    );
+    assert.equal(
+      rows.some(
+        (row) =>
+          row.action === 'plugin::content-manager.explorer.publish' &&
+          row.subject === 'api::seminar.seminar',
+      ),
+      true,
+    );
+    const entryFields = fieldsOf(
+      'plugin::content-manager.explorer.create',
+      'api::schedule-entry.schedule-entry',
+    );
+    for (const field of ['seminar', 'startAt', 'endAt', 'city']) {
+      assert.ok(entryFields.includes(field), `create entry missing ${field}`);
+    }
+    assert.equal(
+      rows.some(
+        (row) =>
+          row.action === 'plugin::content-manager.explorer.create' &&
+          row.subject === 'api::course-group.course-group',
+      ),
+      false,
+    );
+    assert.ok(
+      fieldsOf('plugin::content-manager.explorer.read', 'api::teacher.teacher').includes('name'),
+    );
+  });
+
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');
