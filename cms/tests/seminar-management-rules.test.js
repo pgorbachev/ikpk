@@ -230,4 +230,22 @@ test('идентификаторы связи читаются из всех ф�
   assert.equal(nextSeminarId({ seminar: { disconnect: ['sem-1'], connect: [] } }, 'sem-1'), null);
   assert.equal(relationClears({ connect: [] }), false);
   assert.equal(nextSeminarId({ seminar: { connect: [] } }, 'sem-1'), 'sem-1');
+  assert.equal(nextSeminarId({ seminar: '9' }, 'sem-1'), null);
+  assert.equal(nextSeminarId({ seminar: '9' }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: { connect: [{ id: 9 }] } }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: [9] }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: { set: [{ id: 9 }] } }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: { id: 9 } }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(nextSeminarId({ seminar: { connect: ['9'] } }, 'sem-1', 'sem-2'), 'sem-2');
+  assert.equal(
+    decideEntryName({
+      trustedImport: false,
+      incomingName: null,
+      existingName: 'Семинар А',
+      previousSeminarId: 'sem-1',
+      nextSeminarId: 'sem-2',
+      nextSeminarName: 'Семинар Б',
+    }),
+    'Семинар Б',
+  );
 });

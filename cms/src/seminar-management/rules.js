@@ -215,16 +215,26 @@ export function relationClears(value) {
   return false;
 }
 
-export function nextSeminarId(data, previousSeminarId) {
-  if (!data || !Object.prototype.hasOwnProperty.call(data, 'seminar')) return previousSeminarId || null;
+/**
+ * Фактическая связь в запросе. Числовой id — отдельный вид: его documentId
+ * известен только после чтения строки, и подставлять прежний семинар нельзя.
+ */
+export function specifiedSeminar(data) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, 'seminar')) return { kind: 'absent' };
   const seminar = data.seminar;
-  if (relationClears(seminar)) return null;
-  if (typeof seminar === 'string') {
-    const trimmed = text(seminar);
-    if (numericId(trimmed) != null) return previousSeminarId || null;
-    return trimmed || null;
-  }
-  const connected = relationDocumentIds(seminar);
-  if (connected.length > 0) return connected[0];
-  return previousSeminarId || null;
+  if (relationClears(seminar)) return { kind: 'clear' };
+  const documents = relationDocumentIds(seminar);
+  if (documents.length > 0) return { kind: 'document', documentId: documents[0] };
+  const numbers = relationNumericIds(seminar);
+  if (numbers.length > 0) return { kind: 'numeric', id: numbers[0] };
+  return { kind: 'unchanged' };
+}
+
+export function nextSeminarId(data, previousSeminarId, resolvedNumericDocumentId) {
+  const specified = specifiedSeminar(data);
+  if (specified.kind === 'absent' || specified.kind === 'unchanged') return previousSeminarId || null;
+  if (specified.kind === 'clear') return null;
+  if (specified.kind === 'document') return specified.documentId;
+  if (resolvedNumericDocumentId == null || resolvedNumericDocumentId === '') return null;
+  return text(resolvedNumericDocumentId) || null;
 }

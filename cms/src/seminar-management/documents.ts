@@ -13,6 +13,7 @@ import {
   entryPublicationErrors,
   isTrustedImport,
   nextSeminarId,
+  specifiedSeminar,
   relationDocumentIds,
   relationNumericIds,
   seminarPublicationError,
@@ -41,6 +42,13 @@ async function seminarName(strapi, documentId) {
   if (!documentId) return '';
   const row = await findDraft(strapi, SEMINAR_UID, documentId);
   return text(row?.name);
+}
+
+async function resolvedSeminarId(strapi, data, previousSeminarId) {
+  const specified = specifiedSeminar(data);
+  if (specified.kind !== 'numeric') return nextSeminarId(data, previousSeminarId);
+  const row = await strapi.db.query(SEMINAR_UID).findOne({ where: { id: specified.id } });
+  return nextSeminarId(data, previousSeminarId, row?.documentId ?? null);
 }
 
 function entryShape(row, documentId) {
@@ -112,7 +120,7 @@ async function assertPublishedWrite(strapi, context) {
   const existing = context.params?.documentId
     ? await findDraft(strapi, SCHEDULE_ENTRY_UID, context.params.documentId, ['seminar'])
     : null;
-  const seminarId = nextSeminarId(data, seminarIdOf(existing));
+  const seminarId = await resolvedSeminarId(strapi, data, seminarIdOf(existing));
   const messages = entryPublicationErrors({
     seminarId,
     seminarName: await seminarName(strapi, seminarId),
@@ -131,7 +139,7 @@ async function applyEntryWrite(strapi, context) {
       ? await findDraft(strapi, SCHEDULE_ENTRY_UID, context.params.documentId, ['seminar'])
       : null;
   const previousSeminarId = seminarIdOf(existing);
-  const seminarId = nextSeminarId(data, previousSeminarId);
+  const seminarId = await resolvedSeminarId(strapi, data, previousSeminarId);
   const name = decideEntryName({
     trustedImport: isTrustedImport(),
     incomingName: data.name,

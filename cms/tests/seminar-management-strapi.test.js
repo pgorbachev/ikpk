@@ -254,6 +254,65 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(stillPublished.seminar.documentId, publishedSeminar.documentId);
     assert.ok(stillPublished.publishedAt);
 
+    const source = await seminars.create({ status: 'published', data: { name: 'Семинар А' } });
+    const target = await seminars.create({ status: 'published', data: { name: 'Семинар Б' } });
+    const reassignment = [
+      ['numericString', () => String(target.id)],
+      ['numericObject', () => ({ connect: [{ id: target.id }] })],
+      ['numericArray', () => [target.id]],
+      ['numericSet', () => ({ set: [{ id: target.id }] })],
+      ['numericConnectString', () => ({ connect: [String(target.id)] })],
+      ['numericPositional', () => ({ id: target.id })],
+    ];
+    for (const [, payload] of reassignment) {
+      const row = await entries.create({
+        status: 'published',
+        data: {
+          seminar: source.documentId,
+          startAt: '2026-08-01T00:00:00.000Z',
+          endAt: '2026-08-02T00:00:00.000Z',
+        },
+      });
+      assert.equal(row.name, 'Семинар А');
+      await entries.update({
+        documentId: row.documentId,
+        status: 'published',
+        data: { seminar: payload() },
+      });
+      const moved = await entries.findOne({
+        documentId: row.documentId,
+        status: 'published',
+        populate: ['seminar'],
+      });
+      assert.equal(moved.seminar.documentId, target.documentId);
+      assert.equal(moved.name, 'Семинар Б');
+    }
+    const unnamed = await seminars.create({ data: { name: '' } });
+    const stays = await entries.create({
+      status: 'published',
+      data: {
+        seminar: source.documentId,
+        startAt: '2026-08-03T00:00:00.000Z',
+        endAt: '2026-08-04T00:00:00.000Z',
+      },
+    });
+    await assert.rejects(
+      () =>
+        entries.update({
+          documentId: stays.documentId,
+          status: 'published',
+          data: { seminar: String(unnamed.id) },
+        }),
+      /название семинара/,
+    );
+    const kept = await entries.findOne({
+      documentId: stays.documentId,
+      status: 'published',
+      populate: ['seminar'],
+    });
+    assert.equal(kept.seminar.documentId, source.documentId);
+    assert.equal(kept.name, 'Семинар А');
+
     const other = await seminars.create({ data: { name: 'Чужой' } });
     const foreign = await entries.create({ data: { seminar: other.documentId } });
     await assert.rejects(
