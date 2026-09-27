@@ -124,9 +124,11 @@ if [[ -n "$CMS_ARTIFACT_SOURCE_DECLARED" && -d "$CMS_ARTIFACT_SOURCE_DECLARED" ]
 fi
 
 # Постоянное дерево сборки сайта. На стенде нет git, временный каталог замера удалён.
-# Исходники едут архивом с машины оператора: диалог rsync не проходит через ssh-заглушку
-# проверок, а настоящий ssh этот же поток принимает. node_modules на кнопке не ставится.
+# Исходники едут архивом коммита: git status не показывает игнорируемые файлы, а tar
+# рабочего каталога отправил бы web/.env. node_modules на кнопке не ставится.
 # SHA — HEAD этого дерева. Грязный web/media-originals не записывается как чужой commit.
+# shellcheck source=scripts/lib/site-build-archive.sh
+source "$ROOT/scripts/lib/site-build-archive.sh"
 SITE_BUILD_WORKSPACE_DECLARED="$(declared_get SITE_BUILD_WORKSPACE)"
 if [[ -n "$SITE_BUILD_WORKSPACE_DECLARED" ]]; then
   if [[ ! -f "$ROOT/web/package-lock.json" || ! -d "$ROOT/media-originals" ]]; then
@@ -143,9 +145,7 @@ if [[ -n "$SITE_BUILD_WORKSPACE_DECLARED" ]]; then
   fi
   /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
     "mkdir -p '${SITE_BUILD_WORKSPACE_DECLARED}'"
-  tar -C "$ROOT" -czf - \
-    --exclude=node_modules --exclude=dist --exclude=.snapshot --exclude=.astro \
-    web media-originals \
+  site_build_archive "$ROOT" \
     | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
       "tar -C '${SITE_BUILD_WORKSPACE_DECLARED}' -xzf -"
   printf '%s\n' "$source_commit" | /usr/bin/ssh "${SSH_ARGS[@]}" "${SSH_USER}@${HOST}" \
