@@ -289,11 +289,13 @@ for d in "${WEB_ROOT}/releases" "${WEB_ROOT}/shared"; do
     report changed "каталог ${d}"
   fi
 done
-if [[ "$(stat -c '%U:%G' "$WEB_ROOT" 2>/dev/null)" != "root:root" ]]; then
-  chown -R root:root "$WEB_ROOT"
-  report changed "владелец ${WEB_ROOT} -> root:root"
-else
-  report unchanged "владелец ${WEB_ROOT}"
+if [[ -z "${SERVICE_ACCOUNT:-}" ]]; then
+  if [[ "$(stat -c '%U:%G' "$WEB_ROOT" 2>/dev/null)" != "root:root" ]]; then
+    chown -R root:root "$WEB_ROOT"
+    report changed "владелец ${WEB_ROOT} -> root:root"
+  else
+    report unchanged "владелец ${WEB_ROOT}"
+  fi
 fi
 
 # --- Учётная запись службы системы управления (Requirement «Служба системы управления
@@ -304,6 +306,45 @@ if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
   else
     useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_ACCOUNT"
     report changed "учётная запись ${SERVICE_ACCOUNT} создана"
+  fi
+  # Корень сайта остаётся у root, группа — служба, режим 3775. Sticky не даёт
+  # службе удалять чужие файлы; свою ссылку current она меняет, потому что
+  # ссылка принадлежит ей. Каталог releases — root:служба и тоже sticky: новый
+  # релиз создать можно, штатный каталог root удалить нельзя. Состояние кнопки
+  # лежит в своём каталоге службы. chown -R всего дерева нет.
+  desired_owner="root:${SERVICE_ACCOUNT}"
+  if [[ "$(stat -c '%U:%G' "$WEB_ROOT" 2>/dev/null)" != "$desired_owner" ]]; then
+    chown "$desired_owner" "$WEB_ROOT"
+    report changed "владелец ${WEB_ROOT} -> ${desired_owner}"
+  else
+    report unchanged "владелец ${WEB_ROOT}"
+  fi
+  if [[ "$(stat -c '%a' "$WEB_ROOT" 2>/dev/null)" != "3775" ]]; then
+    chmod 3775 "$WEB_ROOT"
+    report changed "права ${WEB_ROOT} -> 3775"
+  else
+    report unchanged "права ${WEB_ROOT}"
+  fi
+  current_link="${WEB_ROOT}/current"
+  if [[ -L "$current_link" ]]; then
+    link_owner="$(stat -c '%U:%G' "$current_link" 2>/dev/null || echo '?')"
+    if [[ "$link_owner" != "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" ]]; then
+      chown -h "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" "$current_link"
+      report changed "владелец ссылки current -> ${SERVICE_ACCOUNT}"
+    else
+      report unchanged "владелец ссылки current"
+    fi
+  fi
+  refresh_state="${WEB_ROOT}/shared/site-refresh"
+  releases_mode="$(stat -c '%a' "${WEB_ROOT}/releases" 2>/dev/null || echo '?')"
+  releases_owner="$(stat -c '%U:%G' "${WEB_ROOT}/releases" 2>/dev/null || echo '?')"
+  refresh_owner="$(stat -c '%U:%G' "$refresh_state" 2>/dev/null || echo '?')"
+  install -d -o root -g "$SERVICE_ACCOUNT" -m 3775 "${WEB_ROOT}/releases"
+  install -d -o "$SERVICE_ACCOUNT" -g "$SERVICE_ACCOUNT" -m 0755 "$refresh_state"
+  if [[ "$releases_owner" == "root:${SERVICE_ACCOUNT}" && "$releases_mode" == "3775" && "$refresh_owner" == "${SERVICE_ACCOUNT}:${SERVICE_ACCOUNT}" ]]; then
+    report unchanged "каталоги обновления сайта для ${SERVICE_ACCOUNT}"
+  else
+    report changed "каталоги обновления сайта для ${SERVICE_ACCOUNT}"
   fi
 fi
 
@@ -371,14 +412,18 @@ Environment=PORT=${SERVICE_PORT}
 Environment=DATABASE_CLIENT=${CMS_DB_CLIENT:-sqlite}
 Environment=DATABASE_FILENAME=${CMS_DATA_DIR:-/var/lib/ikpk-cms}/data.db
 Environment=NODE_ENV=production
+Environment=IKPK_WEB_ROOT=${WEB_ROOT}
+Environment=IKPK_REFRESH_STATE=${WEB_ROOT}/shared/site-refresh/state.json
 # Ограничения среды. Владение файлами защищает только от переписывания службой своего
 # кода; всё остальное — чтение доступных всем файлов машины, произвольный /tmp — оставалось
 # открытым. ReadWritePaths называет ровно те места, куда служба обязана писать.
+# Корень сайта нужен только чтобы сменить ссылку current; исполняемый код CMS по-прежнему
+# не входит в этот список.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads
+ReadWritePaths=${CMS_DATA_DIR:-/var/lib/ikpk-cms} ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/current/.strapi ${CMS_ARTIFACT_DIR:-/opt/ikpk-cms}/shared/uploads ${WEB_ROOT} ${WEB_ROOT}/releases ${WEB_ROOT}/shared/site-refresh
 ExecStart=${SERVICE_EXEC_START}
 Restart=on-failure
 RestartSec=3

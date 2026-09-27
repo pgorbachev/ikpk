@@ -1,43 +1,38 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   MESSAGES,
   beginRefresh,
   childEnvironment,
-  commandFor,
+  decideLock,
+  identityFromReleaseDir,
+  launchPlan,
   mayRefresh,
   redact,
   publicView,
-  reconcile,
+  readStateFile,
+  refreshStatePath,
   runRestore,
   switchCurrent,
   tryLock,
   unlock,
   verifyRelease,
   workspaceReady,
+  writeJsonAtomic,
 } from './site-refresh-operation.js';
 
 function locations() {
-  const state =
-    process.env.IKPK_REFRESH_STATE || join(process.env.IKPK_WEB_ROOT || '/var/www/ikpk', 'shared', 'site-refresh.json');
+  const state = refreshStatePath(process.env);
   return { state, lock: `${state}.lock` };
 }
 
-function readRecord(state) {
-  try {
-    return JSON.parse(readFileSync(state, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
 function writeRecord(state, record) {
-  mkdirSync(dirname(state), { recursive: true });
   const stored = { ...record };
   if (stored.detail) stored.detail = redact(stored.detail);
   delete stored.env;
-  writeFileSync(state, `${JSON.stringify(stored)}\n`);
+  writeJsonAtomic(state, stored);
 }
 
 function pidAlive(pid) {
@@ -72,11 +67,17 @@ export function registerSiteRefresh(strapi) {
       path: '/site-refresh',
       handler: async (ctx) => {
         if (!(await actorMayRefresh(strapi, ctx.state.user))) return deny(ctx);
-        const { state } = locations();
-        const record = reconcile(readRecord(state), pidAlive);
-        if (record && record.status !== 'running') unlock(locations().lock);
-        if (record) writeRecord(state, record);
-        ctx.body = publicView(record);
+        const { state, lock } = locations();
+        const loaded = readStateFile(state);
+        const decision = decideLock({
+          readable: loaded.readable,
+          record: loaded.record,
+          lockPath: lock,
+          pidAlive,
+        });
+        if (decision.releaseLock) unlock(lock);
+        if (decision.persist) writeRecord(state, decision.persist);
+        ctx.body = publicView(decision.record);
       },
       config: { policies: ['admin::isAuthenticatedAdmin'] },
     },
@@ -96,15 +97,27 @@ export function registerSiteRefresh(strapi) {
   );
 }
 
+function applyDecision(state, lock) {
+  const loaded = readStateFile(state);
+  const decision = decideLock({
+    readable: loaded.readable,
+    record: loaded.record,
+    lockPath: lock,
+    pidAlive,
+  });
+  if (decision.releaseLock) unlock(lock);
+  if (decision.persist) writeRecord(state, decision.persist);
+  return decision.record;
+}
+
 function launch() {
   const { state, lock } = locations();
-  const current = reconcile(readRecord(state), pidAlive);
-  if (current && current.status !== 'running') unlock(lock);
-  const locked = current?.status === 'running' ? false : tryLock(lock);
+  const current = applyDecision(state, lock);
+  const locked = current?.status === 'running' ? false : tryLock(lock, process.pid);
   const worker = join(__dirname, 'site-refresh-worker.js');
-  const hasSystemd = existsSync('/bin/systemd-run') || existsSync('/usr/bin/systemd-run');
-  const plan = commandFor(hasSystemd, process.execPath, '-e');
+  const systemdRun = existsSync('/bin/systemd-run') || existsSync('/usr/bin/systemd-run');
   const entry = `require(${JSON.stringify(worker)}).executeRefresh().then(() => process.exit(0), () => process.exit(1))`;
+  const plan = launchPlan({ env: process.env, systemdRun, nodePath: process.execPath, script: entry });
   const begun = beginRefresh({
     record: current,
     pidAlive,
@@ -112,10 +125,15 @@ function launch() {
     ready: workspaceReady(process.env.IKPK_BUILD_WORKSPACE),
     now: () => new Date().toISOString(),
     spawn: () => {
-      const child = spawn(plan.command, [...plan.args, entry], {
+      const env = childEnvironment(process.env);
+      if (plan.session) {
+        env.XDG_RUNTIME_DIR = process.env.XDG_RUNTIME_DIR;
+        env.DBUS_SESSION_BUS_ADDRESS = process.env.DBUS_SESSION_BUS_ADDRESS;
+      }
+      const child = spawn(plan.command, plan.args, {
         detached: true,
         stdio: 'ignore',
-        env: childEnvironment(process.env),
+        env,
       });
       child.on('error', () => {
         writeRecord(state, { status: 'failed', message: MESSAGES.failed, switched: false });
@@ -125,29 +143,60 @@ function launch() {
       return child;
     },
   });
-  if (begun.persist) writeRecord(state, begun.persist);
+  if (begun.persist) {
+    writeRecord(state, begun.persist);
+    if (begun.persist.pid) tryLockOverwrite(lock, begun.persist.pid);
+  }
   if (begun.releaseLock) unlock(lock);
   return begun.body;
 }
 
+function tryLockOverwrite(lock, pid) {
+  try {
+    writeFileSync(lock, `${pid}\n`);
+  } catch {
+    // lock остаётся с pid родителя, который жив, пока жива служба
+  }
+}
+
 async function restorePrevious() {
   const { state, lock } = locations();
-  const current = reconcile(readRecord(state), pidAlive);
+  const current = applyDecision(state, lock);
   if (current?.status === 'running') return publicView({ ...current, message: MESSAGES.busy });
-  if (!tryLock(lock)) return { status: 'running', message: MESSAGES.busy };
+  if (!tryLock(lock, process.pid)) return { status: 'running', message: MESSAGES.busy };
+  writeRecord(state, {
+    status: 'running',
+    phase: 'switching',
+    pid: process.pid,
+    message: 'Возвращается предыдущий релиз.',
+    startedAt: new Date().toISOString(),
+    switched: false,
+    previousReleaseId: current?.previousReleaseId || null,
+  });
+  const webRoot = process.env.IKPK_WEB_ROOT;
   try {
     return await runRestore({
       read: () => current,
       write: (record) => writeRecord(state, record),
-      switchRelease: (releaseId) => switchCurrent(process.env.IKPK_WEB_ROOT, releaseId),
-      verify: (releaseId) =>
+      switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
+      identityOf: (releaseId) => identityFromReleaseDir(join(webRoot, 'releases', releaseId)),
+      verify: (expected) =>
         verifyRelease({
           url: process.env.IKPK_VERIFY_URL,
-          releaseId,
+          expected,
           host: process.env.IKPK_VERIFY_HOST,
           fetchImpl: globalThis.fetch,
         }),
     });
+  } catch (error) {
+    const failed = {
+      status: 'failed',
+      message: MESSAGES.failed,
+      detail: redact(error instanceof Error ? error.message : String(error)),
+      switched: false,
+    };
+    writeRecord(state, failed);
+    return publicView(failed);
   } finally {
     unlock(lock);
   }

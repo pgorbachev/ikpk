@@ -15,6 +15,7 @@ test('панель Content Manager включает русские действ�
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
+      jsx: ts.JsxEmit.React,
     },
   }).outputText;
   const module = { exports: {} };

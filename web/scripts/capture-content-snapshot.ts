@@ -231,7 +231,7 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   let page = 1;
   for (;;) {
     assertWithinBudget(`${endpoint}, страница ${page}`);
-    const url = `${cmsUrl}/api/${endpoint}?pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
+    const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
       // Недоступная CMS (закрытый порт, зависший сокет) обязана быть быстрым отказом, а не

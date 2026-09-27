@@ -1,25 +1,27 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  installedCommit,
   publishTree,
   redact,
+  refreshStatePath,
+  releaseIdentity,
   reuseDerivatives,
   runRefresh,
   switchCurrent,
   unlock,
   verifyRelease,
   workspaceReady,
+  writeJsonAtomic,
 } from './site-refresh-operation.js';
 
 function statePath() {
-  return process.env.IKPK_REFRESH_STATE || join(process.env.IKPK_WEB_ROOT || '/var/www/ikpk', 'shared', 'site-refresh.json');
+  return refreshStatePath(process.env);
 }
 
 function writeState(record) {
-  const path = statePath();
-  mkdirSync(join(path, '..'), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(record)}\n`);
+  writeJsonAtomic(statePath(), record);
 }
 
 function runStep(command, args, cwd, extraEnv) {
@@ -62,16 +64,25 @@ export async function executeRefresh() {
           NODE_OPTIONS: '--max-old-space-size=480',
         });
         if (!built.ok) return built;
+        const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
+        let snapshotId = null;
+        try {
+          snapshotId = JSON.parse(readFileSync(join(workspace, 'web', '.snapshot', 'snapshot.json'), 'utf8')).snapshotId;
+        } catch {
+          snapshotId = null;
+        }
+        const identity = releaseIdentity({ commit, snapshotId });
+        if (!identity) return { ok: false, detail: 'снимок без snapshotId или нет commit установленного кода' };
         const releaseId = `content-${Date.now()}`;
-        publishTree(join(workspace, 'web', 'dist'), webRoot, releaseId);
-        return { ok: true, releaseId };
+        publishTree(join(workspace, 'web', 'dist'), webRoot, releaseId, identity);
+        return { ok: true, releaseId, identity };
       },
       canVerify: () => Boolean(process.env.IKPK_VERIFY_URL),
       switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
-      verify: (releaseId) =>
+      verify: (expected) =>
         verifyRelease({
           url: process.env.IKPK_VERIFY_URL,
-          releaseId,
+          expected,
           host: process.env.IKPK_VERIFY_HOST,
           fetchImpl: globalThis.fetch,
         }),

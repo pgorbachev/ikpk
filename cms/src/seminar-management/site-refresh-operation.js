@@ -1,5 +1,5 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, openSync, closeSync, readlinkSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 export const MESSAGES = {
   failed: 'Сборка не удалась. Действующий сайт не менялся.',
@@ -13,6 +13,9 @@ export const MESSAGES = {
   succeeded: 'Сайт обновлён. Опубликован весь снимок CMS, не только открытый семинар.',
   restored: 'Возвращён предыдущий релиз. Автоматического отката при ошибке сборки нет: это отдельное действие.',
   restoreMissing: 'Предыдущий релиз не записан, возвращать нечего.',
+  restoreUnreadable: 'У предыдущего релиза нет объявления commit и snapshotId, возвращать его нельзя.',
+  corrupt:
+    'Запись состояния повреждена и не считается успехом. Проверьте, какой релиз раздаётся, прежде чем запускать обновление снова.',
   restoreVerifyFailed:
     'Возврат переключил релиз, проверка после этого не прошла. Это не автоматический откат.',
   busy: 'Обновление уже выполняется.',
@@ -57,14 +60,80 @@ export function reconcile(record, pidAlive) {
   };
 }
 
-export function tryLock(lockPath) {
+export function refreshStatePath(env = {}) {
+  if (env.IKPK_REFRESH_STATE) return env.IKPK_REFRESH_STATE;
+  const root = env.IKPK_WEB_ROOT || '/var/www/ikpk';
+  return join(root, 'shared', 'site-refresh', 'state.json');
+}
+
+export function writeJsonAtomic(path, record) {
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, `.${basename(path)}.${process.pid}.tmp`);
+  const fd = openSync(tmp, 'w');
   try {
-    closeSync(openSync(lockPath, 'wx'));
+    writeFileSync(fd, `${JSON.stringify(record)}\n`);
+    fsyncSync(fd);
+  } catch (error) {
+    closeSync(fd);
+    unlinkSync(tmp);
+    throw error;
+  }
+  closeSync(fd);
+  renameSync(tmp, path);
+}
+
+export function readStateFile(path) {
+  if (!existsSync(path)) return { readable: true, missing: true, record: null };
+  try {
+    return { readable: true, missing: false, record: JSON.parse(readFileSync(path, 'utf8')) };
+  } catch {
+    return { readable: false, missing: false, record: null };
+  }
+}
+
+export function tryLock(lockPath, pid) {
+  try {
+    const fd = openSync(lockPath, 'wx');
+    try {
+      writeFileSync(fd, `${pid}\n`);
+    } finally {
+      closeSync(fd);
+    }
     return true;
   } catch (error) {
     if (error && error.code === 'EEXIST') return false;
     throw error;
   }
+}
+
+export function lockPid(lockPath) {
+  try {
+    const pid = Number(String(readFileSync(lockPath, 'utf8')).trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Живой pid операции не снимается. Мёртвый pid в записи снимает lock, даже если в файле lock ещё pid службы. Битый файл тоже снимается. */
+export function decideLock({ readable, record, lockPath, pidAlive }) {
+  const holder = lockPid(lockPath);
+  const holderAlive = holder != null && pidAlive(holder);
+  if (record?.status === 'running' && record.pid && pidAlive(record.pid)) {
+    return { releaseLock: false, record };
+  }
+  if (record?.status === 'running' && record.pid && !pidAlive(record.pid)) {
+    const reconciled = reconcile(record, () => false);
+    return { releaseLock: existsSync(lockPath), record: reconciled, persist: reconciled };
+  }
+  if (holderAlive) return { releaseLock: false, record: record || { status: 'running', message: MESSAGES.busy } };
+  if (!readable) {
+    const persist = { status: 'failed', message: MESSAGES.corrupt, switched: false };
+    return { releaseLock: true, record: persist, persist };
+  }
+  const reconciled = record?.status === 'running' ? reconcile(record, () => false) : record;
+  return { releaseLock: existsSync(lockPath), record: reconciled, persist: reconciled !== record ? reconciled : null };
 }
 
 export function unlock(lockPath) {
@@ -115,8 +184,18 @@ export function plainCommand(nodePath, workerPath) {
   return { command: 'nice', args: ['-n', '15', nodePath, workerPath] };
 }
 
-export function commandFor(hasSystemd, nodePath, workerPath) {
-  return hasSystemd ? containedCommand(nodePath, workerPath) : plainCommand(nodePath, workerPath);
+export function userSessionAvailable(env) {
+  return Boolean(env && env.XDG_RUNTIME_DIR && env.DBUS_SESSION_BUS_ADDRESS);
+}
+
+/**
+ * systemd-run --user живёт только в пользовательской сессии. Служба CMS — system unit
+ * и этих переменных не имеет: выбор по одному наличию бинарника такой worker не запускает.
+ */
+export function launchPlan({ env, systemdRun, nodePath, script }) {
+  const session = Boolean(systemdRun) && userSessionAvailable(env);
+  const base = session ? containedCommand(nodePath, '-e') : plainCommand(nodePath, '-e');
+  return { command: base.command, args: [...base.args, script], session };
 }
 
 const CHILD_KEYS = [
@@ -133,6 +212,7 @@ const CHILD_KEYS = [
   'IKPK_VERIFY_URL',
   'IKPK_VERIFY_HOST',
   'IKPK_REFRESH_STATE',
+  'IKPK_INSTALLED_COMMIT',
   'PAYMENT_ROLE',
   'DEMO_FORMS',
   'CHAT_LOADER_SRC',
@@ -166,21 +246,53 @@ export function switchCurrent(webRoot, releaseId) {
   return { previous };
 }
 
-export function publishTree(distDir, webRoot, releaseId) {
+export function releaseIdentity(body) {
+  if (!body || typeof body !== 'object') return null;
+  if (typeof body.commit !== 'string' || body.commit.length === 0) return null;
+  if (typeof body.snapshotId !== 'string' || body.snapshotId.length === 0) return null;
+  return { commit: body.commit, snapshotId: body.snapshotId };
+}
+
+export function identityFromReleaseDir(dir) {
+  try {
+    return releaseIdentity(JSON.parse(readFileSync(join(dir, 'release.json'), 'utf8')));
+  } catch {
+    return null;
+  }
+}
+
+export function installedCommit(webRoot, envCommit) {
+  if (typeof envCommit === 'string' && envCommit.length > 0) return envCommit;
+  try {
+    const link = readlinkSync(join(webRoot, 'current'));
+    const dir = isAbsolute(link) ? link : join(webRoot, link);
+    return identityFromReleaseDir(dir)?.commit || null;
+  } catch {
+    return null;
+  }
+}
+
+export function publishTree(distDir, webRoot, releaseId, identity) {
   if (!releaseId || releaseId.includes('/') || releaseId.includes('..')) throw new Error('release-id');
+  const declared = releaseIdentity(identity);
+  if (!declared) throw new Error('release-identity');
   const releaseDir = join(webRoot, 'releases', releaseId);
   mkdirSync(join(webRoot, 'releases'), { recursive: true });
   cpSync(distDir, releaseDir, { recursive: true });
-  writeFileSync(join(releaseDir, 'release.json'), `${JSON.stringify({ releaseId })}\n`);
+  writeFileSync(join(releaseDir, 'release.json'), `${JSON.stringify(declared, null, 2)}\n`);
   return releaseDir;
 }
 
-export async function verifyRelease({ url, releaseId, fetchImpl, host }) {
+export async function verifyRelease({ url, expected, fetchImpl, host }) {
   const headers = host ? { Host: host } : {};
   const response = await fetchImpl(url, { headers, redirect: 'manual' });
   if (response.status !== 200) return { ok: false, detail: `HTTP ${response.status}` };
   const body = await response.json();
-  if (!body || body.releaseId !== releaseId) return { ok: false, detail: 'идентификатор релиза не совпал' };
+  const observed = releaseIdentity(body);
+  if (!observed) return { ok: false, detail: 'объявление релиза не читается' };
+  if (observed.commit !== expected?.commit || observed.snapshotId !== expected?.snapshotId) {
+    return { ok: false, detail: 'идентичность релиза не совпала' };
+  }
   return { ok: true, siteUrl: url };
 }
 
@@ -263,6 +375,17 @@ export async function runRefresh(deps) {
       switched: false,
     });
   }
+  if (!releaseIdentity(built.identity)) {
+    return finish(deps, {
+      status: 'failed',
+      phase: 'build',
+      message: MESSAGES.failed,
+      detail: 'нет commit и snapshotId',
+      startedAt,
+      finishedAt: deps.now(),
+      switched: false,
+    });
+  }
   if (!deps.canVerify()) {
     return finish(deps, {
       status: 'failed',
@@ -307,7 +430,7 @@ export async function runRefresh(deps) {
     switched: true,
     message: 'Проверяется выложенный релиз.',
   });
-  const verified = await deps.verify(built.releaseId);
+  const verified = await deps.verify(built.identity);
   if (!verified.ok) {
     return finish(deps, {
       status: 'verification-failed',
@@ -345,8 +468,10 @@ export async function runRestore(deps) {
     return finish(deps, { status: 'failed', message: MESSAGES.restoreMissing, switched: false });
   }
   const releaseId = previous.slice('releases/'.length);
+  const expected = deps.identityOf(releaseId);
+  if (!expected) return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false });
   deps.switchRelease(releaseId);
-  const verified = await deps.verify(releaseId);
+  const verified = await deps.verify(expected);
   if (!verified.ok) {
     return finish(deps, {
       status: 'verification-failed',
