@@ -72,7 +72,7 @@ export function SiteRefreshPage() {
         {status?.detail ? <Typography tag="p">{status.detail}</Typography> : null}
         {status?.siteUrl ? (
           <Typography tag="p">
-            <a href={status.siteUrl}>Открыть проверенный адрес</a>
+            <a href="/">Открыть сайт</a>
           </Typography>
         ) : null}
       </Box>

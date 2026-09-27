@@ -108,7 +108,11 @@ check_auto() {
   SERVICE_UNIT)
     [[ -n "${SERVICE_UNIT:-}" && -f "${SERVICE_UNIT}" ]] &&
       grep -qF "Environment=HOST=${SERVICE_ADDR%%:*}" "$SERVICE_UNIT" &&
-      grep -qF "Environment=PORT=${SERVICE_ADDR##*:}" "$SERVICE_UNIT"
+      grep -qF "Environment=PORT=${SERVICE_ADDR##*:}" "$SERVICE_UNIT" || return 1
+    if [[ "$ENVIRONMENT" == "stand" && -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
+      [[ "${SITE_DEMO_FORMS:-}" == "stub" ]] &&
+        grep -qF 'Environment=DEMO_FORMS=stub' "$SERVICE_UNIT"
+    fi
     ;;
   SERVICE_ADDR_LOOPBACK)
     local host_part="${SERVICE_ADDR%%:*}"
