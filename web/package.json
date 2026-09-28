@@ -69,7 +69,7 @@
     "globals": "^17.12.0",
     "pagefind": "^1.5.2",
     "sharp": "^0.35.4",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11",
