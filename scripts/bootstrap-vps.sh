@@ -489,6 +489,14 @@ Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
         exit 1
       fi
       site_build_env+=$'\nEnvironment=DEMO_FORMS=stub'
+      # Роль платёжного контура — тем же способом и по той же причине, что DEMO_FORMS выше:
+      # без неё `npm run build` кнопки «Обновить сайт» собирает умолчание `ci`, а роль `ci`
+      # формы оплаты не несёт вовсе. Отказа здесь нет намеренно: пропущенная роль даёт сайт
+      # БЕЗ формы (дефект, видимый на странице), а не заявки в чужую CRM (вред, который не
+      # отменить). Измерено на стенде 29.09.2026: два релиза подряд из CMS вышли с
+      # ролью CI вместо стендовой, тогда как все выкладки через scripts/deploy-web.sh —
+      # со `stand`; тот скрипт экспортирует PAYMENT_ROLE сам.
+      site_build_env+=$'\nEnvironment=PAYMENT_ROLE=stand'
     fi
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi

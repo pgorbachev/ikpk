@@ -111,7 +111,8 @@ check_auto() {
       grep -qF "Environment=PORT=${SERVICE_ADDR##*:}" "$SERVICE_UNIT" || return 1
     if [[ "$ENVIRONMENT" == "stand" && -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
       [[ "${SITE_DEMO_FORMS:-}" == "stub" ]] &&
-        grep -qF 'Environment=DEMO_FORMS=stub' "$SERVICE_UNIT"
+        grep -qF 'Environment=DEMO_FORMS=stub' "$SERVICE_UNIT" &&
+        grep -qF 'Environment=PAYMENT_ROLE=stand' "$SERVICE_UNIT"
     fi
     ;;
   SERVICE_ADDR_LOOPBACK)

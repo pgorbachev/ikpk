@@ -27,7 +27,7 @@
  * (`payments/deploy/`, `deploy/`, `docs/`), а не по заранее названным именам файлов —
  * реализация вольна назвать `stand.conf`, `nginx-stand-api.conf` или расширить
  * существующий `nginx-api.conf`. Жёстко закреплены только значения из спеки:
- * `127.0.0.1:8787`, внешний путь `/api/payments`, `PAYMENT_RETURN_BASE=http://193.124.115.99`.
+ * `127.0.0.1:8787`, внешний путь `/api/payments`, `PAYMENT_RETURN_BASE=https://193.124.115.99`.
  *
  * ПОЧЕМУ КРАСНЫЕ СЕЙЧАС: на `12f2135` (продуктовый код с `ac4089b` не менялся: обе поставки — спека и тесты) `payments/deploy/nginx-api.conf` написан под отдельный
  * host `api.ikpk.su` с `location /`, инстанция ровно одна (`ikpk-payments.service`, один
