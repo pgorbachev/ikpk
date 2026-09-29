@@ -93,6 +93,19 @@ describe('server-provisioning: дерево сборки сайта', () => {
     );
   }, T);
 
+  it('стендовая сборка из CMS несёт роль платёжного контура', async () => {
+    const t = target();
+    const run = t.provision(ENV);
+    expect(run.status, `провижининг упал:\n${run.output}`).toBe(0);
+    const unit = t.read('/etc/systemd/system/ikpk-cms.service') ?? '';
+    // Без этой переменной `npm run build` кнопки «Обновить сайт» собирает роль `ci`
+    // (умолчание `paymentRole()`), а роль `ci` формы оплаты не несёт вовсе — стенд
+    // молча теряет платёжный контур при первом же обновлении контента из CMS.
+    expect(unit, 'кнопка обновления сайта соберёт сайт без формы оплаты').toContain(
+      'Environment=PAYMENT_ROLE=stand',
+    );
+  }, T);
+
   it('стенд без режима заглушки отказывается создавать опасный юнит', async () => {
     const t = target();
     setDeclared(t, 'SITE_DEMO_FORMS', '');

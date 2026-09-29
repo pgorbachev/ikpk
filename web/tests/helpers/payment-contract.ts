@@ -180,7 +180,7 @@ export const RETIRED_DEMO_ATTR = 'data-payment-demo';
 // значение является умолчанием кода: умолчания у роли `prod` больше нет.
 export const PAYMENT_ENDPOINT_BASE: Record<'preview' | 'stand' | 'prod', string> = {
   preview: 'https://demo-api.ikpk.invalid',
-  stand: 'http://193.124.115.99/api',
+  stand: 'https://193.124.115.99/api',
   prod: 'https://payments-prod.ikpk.invalid',
 };
 
@@ -194,7 +194,7 @@ export const PREVIEW_MOCK_ENDPOINT = PAYMENT_ENDPOINT_BASE.preview;
 export const RETIRED_STAND_ENDPOINT = PREVIEW_MOCK_ENDPOINT;
 
 /** База возврата контура: `confirmation.return_url` строится от неё (задача 5.10e). */
-export const PAYMENT_RETURN_BASE_STAND = 'http://193.124.115.99';
+export const PAYMENT_RETURN_BASE_STAND = 'https://193.124.115.99';
 export const PAYMENT_RETURN_BASE_PROD = 'https://ikpk.su';
 
 /** Режим УСТАНОВЛЕННОГО сервиса и закреплённый за ним магазин. */
