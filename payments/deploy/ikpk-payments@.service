@@ -10,7 +10,7 @@ After=network.target
 # У каждой инстанции — свой env-файл (root:root, права 0600 — Решение 1, задача 4.5),
 # устанавливаемый вне Git/CI/shell history, не обычным деплоем:
 #   /etc/ikpk-payments/stand.env   — PAYMENT_MODE=test, YOOKASSA_SHOP_ID=1440249,
-#                                     PAYMENT_RETURN_BASE=http://193.124.115.99
+#                                     PAYMENT_RETURN_BASE=https://193.124.115.99
 #   /etc/ikpk-payments/prod.env    — PAYMENT_MODE=prod, YOOKASSA_SHOP_ID=409285,
 #                                     PAYMENT_RETURN_BASE=<origin боевого сайта>
 #
