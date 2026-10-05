@@ -9,6 +9,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getInstitutes, getTeachers } from '../../lib/data';
 import type { Teacher } from '../../lib/data';
+import { getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -35,7 +36,7 @@ const description = excerpt(teacher.bio_text || '', 160) || `${teacher.name} —
     <section class="section person-flat">
       <h1 class="page-title">{teacher.name}</h1>
 
-      {teacher.photo && <img src={teacher.photo} alt={teacher.name} class="person-flat-photo" loading="lazy" />}
+      {teacher.photo && <img src={teacher.photo} alt={teacher.name} class="person-flat-photo" loading="lazy" {...getAssetDimensions(teacher.photo)} />}
 
       {summary && <p class="person-flat-summary">{summary}</p>}
 
