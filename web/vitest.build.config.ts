@@ -50,6 +50,7 @@ export default defineConfig({
       'tests/external-widgets-privacy-doc.test.ts',
       'tests/seminar-dates.build.test.ts',
       'tests/article-list-controls.build.test.ts',
+      'tests/cms-catalog-pages.build.test.ts',
     ],
   },
 });

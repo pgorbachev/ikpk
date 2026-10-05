@@ -1,0 +1,92 @@
+---
+/**
+ * Плоский адрес программы (`/programmy/<slug>`). См. пояснение в
+ * `web/src/pages/instituty/[slug].astro`: временно легче иерархической
+ * `/[institute]/[courseGroup].astro`, которая остаётся канонической до
+ * переключения источника сборки.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
+import type { CourseGroup } from '../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  return getCourseGroups().map((courseGroup) => ({
+    params: { slug: courseGroup.slug },
+    props: { courseGroup },
+  }));
+};
+
+const { courseGroup } = Astro.props as { courseGroup: CourseGroup };
+const institute = getInstitutes().find((i) => i.legacy_id === courseGroup.institute_legacy_id);
+const seminars = getSeminars(courseGroup.legacy_id);
+const image = courseGroup.images?.[0];
+// Текст, а не полный HTML: см. пояснение в instituty/[slug].astro — легаси-CTA
+// без известного адреса нельзя разрешать безопасно.
+const summary = excerpt(courseGroup.description_text, 500);
+// См. пояснение про суффикс и непустое описание в instituty/[slug].astro.
+const title = `${courseGroup.seo_title || courseGroup.name} — Программы — ИКПК`;
+const description = courseGroup.seo_description?.trim() || excerpt(courseGroup.description_text, 160);
+---
+
+<BaseLayout title={title} description={description} noindex>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Программы', href: '/programmy' }, { label: courseGroup.name }]} />
+
+    <section class="section program-flat">
+      <h1 class="page-title">{courseGroup.name}</h1>
+
+      {image && <img src={image} alt={courseGroup.name} class="program-flat-image" loading="lazy" />}
+
+      {summary && <p class="program-flat-summary">{summary}</p>}
+
+      {seminars.length > 0 && (
+        <div class="program-flat-seminars">
+          <h2 class="section-title">Семинары программы</h2>
+          <ul>
+            {seminars.map((seminar) => (
+              <li><a href={`/seminary/${seminar.slug}`}>{seminar.name}</a></li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {institute && (
+        <p class="program-flat-full-link">
+          Институт программы —{' '}
+          <a href={`/instituty/${institute.slug}`}>{institute.name}</a>.
+        </p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .program-flat-image {
+    max-width: 320px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-m);
+    margin-bottom: 1.25rem;
+  }
+
+  .program-flat-summary {
+    max-width: 70ch;
+    line-height: 1.65;
+    color: var(--color-gray-700);
+  }
+
+  .program-flat-seminars {
+    margin-top: 1.5rem;
+  }
+
+  .program-flat-full-link {
+    margin-top: 1.5rem;
+    color: var(--color-gray-600);
+  }
+</style>

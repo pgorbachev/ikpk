@@ -1,0 +1,54 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getSeminars } from '../../lib/data';
+
+const seminars = getSeminars();
+
+const title = 'Семинары — ИКПК';
+const description = 'Все семинары ИКПК по всем программам.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Семинары' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Семинары</h1>
+
+      {seminars.length > 0 ? (
+        <div class="grid grid-3">
+          {seminars.map((seminar) => (
+            <a href={`/seminary/${seminar.slug}`} class="card">
+              <div class="card-body">
+                <h2 class="catalog-card-title">{seminar.name}</h2>
+                <p class="text-muted">{excerpt(seminar.description_text, 160)}</p>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Семинары пока не добавлены.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .catalog-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin: 0 0 0.4rem;
+  }
+
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+</style>

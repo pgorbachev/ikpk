@@ -71,6 +71,9 @@ export default defineConfig({
       'tests/external-widgets-privacy-doc.test.ts',
       'tests/seminar-dates.build.test.ts',
       'tests/article-list-controls.build.test.ts',
+      // Предмет — собранный вывод: каталожные страницы и плоские адреса записей
+      // (change cms-content-authoring-and-migration).
+      'tests/cms-catalog-pages.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',

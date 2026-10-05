@@ -1,0 +1,77 @@
+---
+/**
+ * Каталог специалистов (`/specialisty`) объединяет преподавателей и авторов
+ * методик одним типом с признаком одного значения (D10 в design.md change
+ * `cms-content-authoring-and-migration`). Признак — поле системы управления;
+ * в файловом снимке, из которого сегодня собирается сайт, его нет вовсе, и
+ * первичная разметка 29 персон на группы — разовая задача переноса (design.md,
+ * D10), а не то, что можно достоверно вывести здесь из HTML-биографии.
+ *
+ * Поэтому до переноса контента в систему управления все специалисты снимка
+ * показаны под «Преподаватели» — это единственная группа, которую персона уже
+ * имеет сегодня без домысливания; секция «Авторы методик» показана явно
+ * пустой с пояснением, а не спрятана и не заполнена угадыванием.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getTeachers } from '../../lib/data';
+
+const teachers = getTeachers();
+
+const title = 'Специалисты — ИКПК';
+const description = 'Преподаватели и авторы методик ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Специалисты' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Специалисты</h1>
+
+      <h2 class="section-title">Преподаватели</h2>
+      {teachers.length > 0 ? (
+        <div class="grid grid-3">
+          {teachers.map((teacher) => (
+            <a href={`/specialisty/${teacher.slug}`} class="card">
+              <div class="card-body">
+                <h3 class="catalog-card-title">{teacher.name}</h3>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="text-muted">Преподаватели пока не добавлены.</p>
+      )}
+
+      <h2 class="section-title specialisty-authors-title">Авторы методик</h2>
+      <p class="text-muted">
+        Признак «автор методики» появится у персон после переноса контента в
+        систему управления.
+      </p>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .specialisty-authors-title {
+    margin-top: 2rem;
+  }
+
+  .catalog-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin: 0;
+  }
+
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+</style>

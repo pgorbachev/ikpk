@@ -1,0 +1,76 @@
+---
+/**
+ * Плоский адрес персоны (`/specialisty/<slug>`) — не зависит от института
+ * (D9/D10 в design.md). См. пояснение в `web/src/pages/instituty/[slug].astro`:
+ * временно легче иерархической `/[institute]/prepodavatel/[id].astro`,
+ * которая остаётся канонической до переключения источника сборки.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getInstitutes, getTeachers } from '../../lib/data';
+import type { Teacher } from '../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  return getTeachers().map((teacher) => ({
+    params: { slug: teacher.slug },
+    props: { teacher },
+  }));
+};
+
+const { teacher } = Astro.props as { teacher: Teacher };
+const institute = getInstitutes().find((i) => i.legacy_id === teacher.institute_legacy_id);
+// Текст, а не полный HTML: см. пояснение в instituty/[slug].astro — легаси-CTA
+// без известного адреса нельзя разрешать безопасно.
+const summary = excerpt(teacher.bio_text || '', 500);
+// См. пояснение про суффикс и непустое описание в instituty/[slug].astro.
+const title = `${teacher.name} — Специалисты — ИКПК`;
+const description = excerpt(teacher.bio_text || '', 160) || `${teacher.name} — специалист ИКПК.`;
+---
+
+<BaseLayout title={title} description={description} noindex>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Специалисты', href: '/specialisty' }, { label: teacher.name }]} />
+
+    <section class="section person-flat">
+      <h1 class="page-title">{teacher.name}</h1>
+
+      {teacher.photo && <img src={teacher.photo} alt={teacher.name} class="person-flat-photo" loading="lazy" />}
+
+      {summary && <p class="person-flat-summary">{summary}</p>}
+
+      {institute && (
+        <p class="person-flat-full-link">
+          Полная страница —{' '}
+          <a href={`/${institute.slug}/prepodavatel/${teacher.slug}`}>{teacher.name}</a>{' '}
+          в институте <a href={`/instituty/${institute.slug}`}>{institute.name}</a>.
+        </p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .person-flat-photo {
+    max-width: 220px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-m);
+    margin-bottom: 1.25rem;
+  }
+
+  .person-flat-summary {
+    max-width: 70ch;
+    line-height: 1.65;
+    color: var(--color-gray-700);
+  }
+
+  .person-flat-full-link {
+    margin-top: 1.5rem;
+    color: var(--color-gray-600);
+  }
+</style>
