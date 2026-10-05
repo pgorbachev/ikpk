@@ -896,11 +896,11 @@
     "identity": "style|body:47ced6b9b1982cfe"
   },
   {
-    "slotId": "src:pages/instituty/[slug].astro:L65:C1:style",
+    "slotId": "src:pages/instituty/[slug].astro:L66:C1:style",
     "file": "pages/instituty/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/instituty/[slug].astro:L65:C1:style",
-    "fingerprint": "d4017445752dc4217964ced8ce7628b1b51b196ccc8e629fcd54904fba53911d",
+    "locator": "pages/instituty/[slug].astro:L66:C1:style",
+    "fingerprint": "543ca81a42654b4f21c8c128bb26c28568326e845bab11e5f7aa624eaee44880",
     "identity": "style|body:9f457ee4b81f5d7e"
   },
   {
@@ -1008,11 +1008,11 @@
     "identity": "style|body:3b3ce879a31a90fd"
   },
   {
-    "slotId": "src:pages/programmy/[slug].astro:L65:C1:style",
+    "slotId": "src:pages/programmy/[slug].astro:L66:C1:style",
     "file": "pages/programmy/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/programmy/[slug].astro:L65:C1:style",
-    "fingerprint": "6a367c2ecd4ee8302f83a393942a73499717bdaa3aad6b3c3d807e662293b5fc",
+    "locator": "pages/programmy/[slug].astro:L66:C1:style",
+    "fingerprint": "2be68df22eebb98e3776f1392488edd6f78f677f1d6632c834655cac3abc2f1a",
     "identity": "style|body:5d7e283003130818"
   },
   {
@@ -1024,11 +1024,11 @@
     "identity": "style|body:aa2b0302ae81eb06"
   },
   {
-    "slotId": "src:pages/seminary/[slug].astro:L68:C1:style",
+    "slotId": "src:pages/seminary/[slug].astro:L69:C1:style",
     "file": "pages/seminary/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/seminary/[slug].astro:L68:C1:style",
-    "fingerprint": "62b0b7ae9e990a4359f10af5f70672c2c3cfcb7f602f030e5a635456c723e758",
+    "locator": "pages/seminary/[slug].astro:L69:C1:style",
+    "fingerprint": "b91ebb5e096cc5d505f5c560ca067bd4c76a6daf0acd1931349ac297c2399186",
     "identity": "style|body:2fe0e8f5af8ff4f5"
   },
   {
@@ -1080,11 +1080,11 @@
     "identity": "style|body:751713f467cb168e"
   },
   {
-    "slotId": "src:pages/specialisty/[slug].astro:L53:C1:style",
+    "slotId": "src:pages/specialisty/[slug].astro:L54:C1:style",
     "file": "pages/specialisty/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/specialisty/[slug].astro:L53:C1:style",
-    "fingerprint": "aeaf4511a46b7e740a957039897fcd0a2b66a8c0586c5d5c2191555d2cf45c0c",
+    "locator": "pages/specialisty/[slug].astro:L54:C1:style",
+    "fingerprint": "53788b85d06852e015566ebfa50543c897ce68d2a246b4854f652497dec1283a",
     "identity": "style|body:ce2470f2e8152493"
   },
   {

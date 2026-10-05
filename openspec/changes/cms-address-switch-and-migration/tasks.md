@@ -90,10 +90,10 @@
       упоминание `noindex` в этом change (задача 1.6, адрес фильтра категорий статей) о другом
       адресе и решено отдельно (Q31). Сейчас все четыре плоских детальных шаблона размечены
       `noindex` явно:
-      `web/src/pages/instituty/[slug].astro:46`, `noindex`; тот же атрибут там же —
-      `web/src/pages/programmy/[slug].astro:33`, `noindex`;
-      `web/src/pages/seminary/[slug].astro:43`, `noindex`;
-      `web/src/pages/specialisty/[slug].astro:31`, `noindex`.
+      `web/src/pages/instituty/[slug].astro:47`, `noindex`; тот же атрибут там же —
+      `web/src/pages/programmy/[slug].astro:34`, `noindex`;
+      `web/src/pages/seminary/[slug].astro:44`, `noindex`;
+      `web/src/pages/specialisty/[slug].astro:32`, `noindex`.
       Условие снятия: источник данных сборки
       переключён (соседний change) — до этого страница по плоскому адресу отдаёт то же
       содержимое, что и старая, и индексация обеих параллельно дала бы дубли
