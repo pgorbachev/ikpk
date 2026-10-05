@@ -46,7 +46,7 @@
     "src:components/home/sections/HeroCentered.astro:L32:C1:style",
     "src:components/home/sections/HeroEditorial.astro:L53:C1:style",
     "src:components/home/sections/HeroFaculty.astro:L53:C1:style",
-    "src:components/home/sections/HeroHybrid.astro:L70:C1:style",
+    "src:components/home/sections/HeroHybrid.astro:L69:C1:style",
     "src:components/home/sections/HeroModular.astro:L62:C1:style",
     "src:components/home/sections/HeroOffer.astro:L34:C1:style",
     "src:components/home/sections/InstitutesStrips.astro:L62:C1:style",
@@ -413,7 +413,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/",
       "placement": "doc-order:6:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -47290,7 +47290,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/b",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47520,7 +47520,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/c",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -47780,7 +47780,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/d",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48050,7 +48050,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -48970,7 +48970,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -50090,7 +50090,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.u9-n4chL.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.v1p7r86m.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
