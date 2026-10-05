@@ -697,7 +697,6 @@ async function importSeminars(): Promise<void> {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
-      seminar_status: (e.status as string) ?? "planned",
       order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных

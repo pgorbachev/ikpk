@@ -35,20 +35,6 @@
         "images"
       ]
     },
-    "price": {
-      "type": "decimal"
-    },
-    "duration": {
-      "type": "string"
-    },
-    "seminar_status": {
-      "type": "enumeration",
-      "enum": [
-        "planned",
-        "not_planned"
-      ],
-      "default": "planned"
-    },
     "legacy_id": {
       "type": "string",
       "unique": true
