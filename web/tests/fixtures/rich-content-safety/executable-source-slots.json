@@ -304,12 +304,12 @@
     "identity": "style|body:1a345e867bb189d0"
   },
   {
-    "slotId": "src:components/home/sections/HeroHybrid.astro:L70:C1:style",
+    "slotId": "src:components/home/sections/HeroHybrid.astro:L69:C1:style",
     "file": "components/home/sections/HeroHybrid.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/HeroHybrid.astro:L70:C1:style",
-    "fingerprint": "35d45493b0581e009ba39888a611a7877102bc1d98d55134bfc58cad7d4788cb",
-    "identity": "style|body:b3b9d716d04a6a3f"
+    "locator": "components/home/sections/HeroHybrid.astro:L69:C1:style",
+    "fingerprint": "148f25b9470c494dd51b3c799ad84620f31999d56f58cc2dff12f92ca0d3f53f",
+    "identity": "style|body:299406ffececa94a"
   },
   {
     "slotId": "src:components/home/sections/HeroModular.astro:L62:C1:style",
