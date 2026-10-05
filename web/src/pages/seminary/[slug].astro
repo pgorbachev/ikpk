@@ -12,6 +12,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
 import { seminarDescriptionFallback } from '../../lib/seo-fallback';
 import type { Seminar } from '../../lib/data';
+import { getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -47,7 +48,7 @@ const description =
     <section class="section seminar-flat">
       <h1 class="page-title">{seminar.name}</h1>
 
-      {image && <img src={image} alt={seminar.name} class="seminar-flat-image" loading="lazy" />}
+      {image && <img src={image} alt={seminar.name} class="seminar-flat-image" loading="lazy" {...getAssetDimensions(image)} />}
 
       {summary && <p class="seminar-flat-summary">{summary}</p>}
 

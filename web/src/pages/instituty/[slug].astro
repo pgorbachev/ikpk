@@ -15,6 +15,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getInstitutes } from '../../lib/data';
 import type { Institute } from '../../lib/data';
+import { getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -50,7 +51,7 @@ const description = institute.seo_description?.trim() || excerpt(institute.descr
     <section class="section institute-flat">
       <h1 class="page-title">{institute.name}</h1>
 
-      {image && <img src={image} alt={institute.name} class="institute-flat-image" loading="lazy" />}
+      {image && <img src={image} alt={institute.name} class="institute-flat-image" loading="lazy" {...getAssetDimensions(image)} />}
 
       {summary && <p class="institute-flat-summary">{summary}</p>}
 

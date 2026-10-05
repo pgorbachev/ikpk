@@ -9,6 +9,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
 import type { CourseGroup } from '../../lib/data';
+import { getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -37,7 +38,7 @@ const description = courseGroup.seo_description?.trim() || excerpt(courseGroup.d
     <section class="section program-flat">
       <h1 class="page-title">{courseGroup.name}</h1>
 
-      {image && <img src={image} alt={courseGroup.name} class="program-flat-image" loading="lazy" />}
+      {image && <img src={image} alt={courseGroup.name} class="program-flat-image" loading="lazy" {...getAssetDimensions(image)} />}
 
       {summary && <p class="program-flat-summary">{summary}</p>}
 
