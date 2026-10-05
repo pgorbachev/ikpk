@@ -58,6 +58,15 @@ test.describe('Homepage', () => {
     await page.goto('/');
     await expect(page.locator('.institute-card').first()).toBeVisible();
   });
+
+  // Преподавательница с прежнего снимка (1-1763647472405) в институте больше
+  // не работает — её фото не должно стоять на главной.
+  test('hero photo is not the former teacher', async ({ page }) => {
+    await page.goto('/');
+    const img = page.locator('.hero-d-visual img');
+    await expect(img).toBeVisible();
+    expect(await img.getAttribute('src')).toBe('/media/users/1/images/1-1735034546967.webp');
+  });
 });
 
 // ─── SEO & Meta ──────────────────────────────────────────
