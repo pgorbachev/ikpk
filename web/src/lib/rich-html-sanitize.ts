@@ -926,3 +926,46 @@ export function sanitizeUntrustedTree(html: string, ctx: SanitizeContext): strin
   preScrub(tree);
   return serialize(tree);
 }
+
+function collectMarkup(html: string): { tags: Set<string>; attributes: Set<string> } {
+  const tags = new Set<string>();
+  const attributes = new Set<string>();
+  const tree = parseFragment(html);
+  const walk = (parent: ParentNode): void => {
+    for (const child of T.getChildNodes(parent)) {
+      if (!T.isElementNode(child)) continue;
+      tags.add(tagName(child));
+      for (const attr of T.getAttrList(child)) attributes.add(attr.name.toLowerCase());
+      walk(child);
+    }
+  };
+  walk(tree);
+  return { tags, attributes };
+}
+
+/**
+ * Отчёт о разметке, не прошедшей единую границу (`terminalSanitize`). НЕ вторая
+ * политика: считает ровно то, что граница уже вырезала, сравнивая вход с её
+ * терминальным выводом — вместо того чтобы заново решать, что допустимо.
+ *
+ * Режим 'untrusted': черновик редактора — внешний ввод, как и любой другой
+ * untrusted-источник границы.
+ */
+export function describeRejectedMarkup(html: string): { elements: string[]; attributes: string[] } {
+  const ctx: SanitizeContext = { sourceType: 'fragment', sourceId: 'describe-rejected-markup' };
+  const input = collectMarkup(html);
+
+  let sanitized: string;
+  try {
+    sanitized = terminalSanitize(html, 'untrusted', ctx);
+  } catch {
+    // Вход не прошёл предварительные лимиты (байты/узлы/глубина) — граница
+    // отклоняет содержимое целиком, а не отдельные элементы или атрибуты.
+    return { elements: [...input.tags].sort(), attributes: [...input.attributes].sort() };
+  }
+
+  const output = collectMarkup(sanitized);
+  const elements = [...input.tags].filter((tag) => !output.tags.has(tag)).sort();
+  const attributes = [...input.attributes].filter((attr) => !output.attributes.has(attr)).sort();
+  return { elements, attributes };
+}

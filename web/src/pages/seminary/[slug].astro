@@ -1,0 +1,95 @@
+---
+/**
+ * Плоский адрес семинара (`/seminary/<slug>`) — не содержит ни института, ни
+ * программы (D9: семинар может быть привязан к нескольким программам, поэтому
+ * иерархический адрес невозможен). См. пояснение в
+ * `web/src/pages/instituty/[slug].astro`: временно легче иерархической
+ * `/[institute]/[courseGroup]/[seminar].astro` (расписание, преподаватели),
+ * которая остаётся канонической до переключения источника сборки.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
+import { seminarDescriptionFallback } from '../../lib/seo-fallback';
+import type { Seminar } from '../../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  return getSeminars().map((seminar) => ({
+    params: { slug: seminar.slug },
+    props: { seminar },
+  }));
+};
+
+const { seminar } = Astro.props as { seminar: Seminar };
+const courseGroup = getCourseGroups().find((cg) => cg.legacy_id === seminar.course_group_legacy_id);
+const institute = courseGroup
+  ? getInstitutes().find((i) => i.legacy_id === courseGroup.institute_legacy_id)
+  : undefined;
+const image = seminar.images?.[0];
+// Текст, а не полный HTML: см. пояснение в instituty/[slug].astro — легаси-CTA
+// без известного адреса нельзя разрешать безопасно.
+const summary = excerpt(seminar.description_text, 500);
+// См. пояснение про суффикс и непустое описание в instituty/[slug].astro.
+const title = `${seminar.seo_title || seminar.name} — Семинары — ИКПК`;
+const description =
+  seminar.seo_description?.trim() ||
+  excerpt(seminar.description_text, 160) ||
+  (courseGroup && institute
+    ? seminarDescriptionFallback(seminar.name, courseGroup.name, institute.slug, institute.name)
+    : `${seminar.name} — семинар ИКПК. Расписание, стоимость и запись.`);
+---
+
+<BaseLayout title={title} description={description} noindex>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Семинары', href: '/seminary' }, { label: seminar.name }]} />
+
+    <section class="section seminar-flat">
+      <h1 class="page-title">{seminar.name}</h1>
+
+      {image && <img src={image} alt={seminar.name} class="seminar-flat-image" loading="lazy" />}
+
+      {summary && <p class="seminar-flat-summary">{summary}</p>}
+
+      <p class="seminar-flat-cta">
+        <a class="btn btn-primary" href="/raspisanie-i-tseny">Расписание и запись</a>
+      </p>
+
+      {courseGroup && institute && (
+        <p class="seminar-flat-full-link">
+          Полная страница семинара — с расписанием и преподавателями —{' '}
+          <a href={`/${institute.slug}/${courseGroup.slug}/${seminar.slug}`}>{seminar.name}</a>.
+        </p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .seminar-flat-image {
+    max-width: 320px;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-m);
+    margin-bottom: 1.25rem;
+  }
+
+  .seminar-flat-summary {
+    max-width: 70ch;
+    line-height: 1.65;
+    color: var(--color-gray-700);
+  }
+
+  .seminar-flat-cta {
+    margin-top: 1.5rem;
+  }
+
+  .seminar-flat-full-link {
+    margin-top: 1rem;
+    color: var(--color-gray-600);
+  }
+</style>

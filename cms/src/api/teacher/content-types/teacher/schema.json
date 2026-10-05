@@ -5,21 +5,32 @@
     "singularName": "teacher",
     "pluralName": "teachers",
     "displayName": "Teacher",
-    "description": "Instructor/teacher"
+    "description": "Person: teacher or method author"
   },
   "options": {
     "draftAndPublish": true
   },
-  "pluginOptions": {},
+  "pluginOptions": [],
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "name",
-      "required": true
+      "required": false
+    },
+    "trait": {
+      "type": "enumeration",
+      "enum": [
+        "teacher",
+        "method-author"
+      ],
+      "required": false
+    },
+    "order": {
+      "type": "integer"
     },
     "institute": {
       "type": "relation",
@@ -28,7 +39,7 @@
     },
     "photo": {
       "type": "media",
-      "multiple": false,
+      "multiple": true,
       "allowedTypes": [
         "images"
       ]
@@ -45,9 +56,6 @@
       "relation": "manyToMany",
       "target": "api::seminar.seminar",
       "mappedBy": "teachers"
-    },
-    "order": {
-      "type": "integer"
     }
   }
 }

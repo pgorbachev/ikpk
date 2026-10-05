@@ -53,6 +53,9 @@ Thumbs.db
 
 # Strapi uploads (local dev)
 cms/public/uploads/
+!cms/public/uploads/
+cms/public/uploads/*
+!cms/public/uploads/.gitkeep
 
 # Strapi SQLite DB (local dev)
 cms/*.db

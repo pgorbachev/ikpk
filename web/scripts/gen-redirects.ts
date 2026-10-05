@@ -28,21 +28,22 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveSnapshotDir } from './lib/snapshot-paths.ts';
+import { readSnapshotFile, resolveSnapshotDir } from './lib/snapshot-paths.ts';
+import { redirectsFromAddressHistory } from './lib/history-redirects.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WEB_ROOT = join(ROOT, 'web');
 
 const mapArg = process.argv.find((a) => a.startsWith('--map='));
+const SNAPSHOT_DIR = mapArg ? undefined : resolveSnapshotDir(WEB_ROOT, ROOT);
 
 function resolveUrlMapPath(): string {
   if (mapArg) return join(ROOT, mapArg.slice('--map='.length));
 
-  const snapDir = resolveSnapshotDir(WEB_ROOT, ROOT);
-  const fromSnap = join(snapDir, 'url_map.csv');
+  const fromSnap = join(SNAPSHOT_DIR!, 'url_map.csv');
   if (!existsSync(fromSnap)) {
     throw new Error(
-      `нет url_map.csv в снимке (${snapDir}): положите карту в артефакт/фикстуру снимка ` +
+      `нет url_map.csv в снимке (${SNAPSHOT_DIR}): положите карту в артефакт/фикстуру снимка ` +
         `(prepare-snapshot копирует её вместе со snapshot.json)`,
     );
   }
@@ -97,9 +98,10 @@ function parseCsv(text: string): Array<Record<string, string>> {
 }
 
 const rows = parseCsv(readFileSync(MAP_CSV, 'utf-8'));
+const historyRows = SNAPSHOT_DIR ? redirectsFromAddressHistory(readSnapshotFile(SNAPSHOT_DIR)) : [];
 
 /** Только настоящие перенаправления и только если адрес реально меняется. */
-const all301 = rows.filter(
+const all301 = [...rows, ...historyRows].filter(
   (r) => r.redirect_type === '301' && r.old_path && r.new_path && r.old_path !== r.new_path,
 );
 

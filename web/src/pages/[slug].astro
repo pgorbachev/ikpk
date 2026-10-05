@@ -1,0 +1,78 @@
+---
+/**
+ * Маршрут, ПОРОЖДАЕМЫЙ данными для новых статических страниц системы
+ * управления (спека `cms-content-authoring-and-migration`: «Новая статическая
+ * страница получает адрес без правки исходников»). Раньше запись без
+ * маршрута давала «сохранилось, а страницы нет» — отдельного файла шаблона на
+ * каждую статическую страницу больше не заводим.
+ *
+ * Источник — `discovery/entities/static_pages.json` (тип `StaticPage`,
+ * `getPages()` в `web/src/lib/data.ts`).
+ *
+ * Существующие перенесённые страницы (кontakty, oplata и остальные из
+ * ALREADY_DEDICATED) сюда НЕ переводятся — своя вёрстка и логика (панели,
+ * легаси-CTA), обобщать не готово. Список исключений — то же множество,
+ * что уже занимает адрес: без него getStaticPaths дал бы второй файл на
+ * тот же URL, сборка отказала бы на конфликте — проверяется сверкой с
+ * `discovery/entities/static_pages.json`. Решение — design.md change
+ * `cms-content-authoring-and-migration` (M1, ревью PR #186): на момент
+ * коммита только на неслитой ветке PR #132, здесь непроверяемо.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import RichContent from '../components/RichContent.astro';
+import { cleanBodyHtml, getPages } from '../lib/data';
+import type { StaticPage } from '../lib/data';
+import type { GetStaticPaths } from 'astro';
+
+export const getStaticPaths: GetStaticPaths = () => {
+  // Локальная константа: `getStaticPaths` Astro извлекает и исполняет отдельным
+  // модулем ДО остального фронтматтера, и внешний `const` рядом с ним в этот
+  // модуль не попадает — сборка падает `ALREADY_DEDICATED is not defined`.
+  const ALREADY_DEDICATED = new Set([
+    'homepage',
+    'kontakty',
+    'oplata',
+    'raspisanie-i-tseny',
+    'sotrudnichestvo-s-nami',
+    'statyi',
+    'svedeniya-ob-obrazovatelnoy-organizatsii',
+    'video',
+    'aktsii-i-skidki',
+  ]);
+
+  return getPages()
+    .filter((page) => !ALREADY_DEDICATED.has(page.slug))
+    .map((page) => ({
+      params: { slug: page.slug },
+      props: { page },
+    }));
+};
+
+const { page } = Astro.props as { page: StaticPage };
+const cleanedHtml = cleanBodyHtml(page.body_html || '', Astro.url.pathname);
+---
+
+<BaseLayout title={page.seo_title || page.title} description={page.seo_description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: page.title }]} />
+
+    <section class="section">
+      <h1 class="page-title">{page.title}</h1>
+
+      {page.body_html ? (
+        <div class="rich-content">
+          <RichContent html={cleanedHtml} sinkId={`static-page-${page.slug}`} />
+        </div>
+      ) : (
+        <p class="text-muted">Содержимое страницы пока не заполнено.</p>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+</style>
