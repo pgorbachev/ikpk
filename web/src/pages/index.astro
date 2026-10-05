@@ -14,7 +14,7 @@ import Reviews from '../components/home/sections/Reviews.astro';
 import News from '../components/home/sections/News.astro';
 import CtaBand from '../components/home/sections/CtaBand.astro';
 import { getPage } from '../lib/data';
-import { PHONE_HREF, MOBILE_PHONE_HREF } from '../lib/navigation';
+import { PHONE_HREF, MANAGER_PHONE_HREF } from '../lib/navigation';
 
 const homepage = getPage('homepage');
 const title = homepage?.seo_title || 'Обучение прикладной кинезиологии — ИКПК';
@@ -29,7 +29,7 @@ const schema = {
   url: 'https://ikpk.su',
   // Оба номера: страница показывает два, и машинное описание не должно
   // расходиться с разметкой (D12). schema.org допускает список.
-  telephone: [PHONE_HREF.replace('tel:', ''), MOBILE_PHONE_HREF.replace('tel:', '')],
+  telephone: [PHONE_HREF.replace('tel:', ''), MANAGER_PHONE_HREF.replace('tel:', '')],
   email: 'info@ikpk.su',
   address: {
     '@type': 'PostalAddress',
