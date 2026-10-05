@@ -399,7 +399,7 @@ function cfg(): Parsed {
     // блок выбирается по имени, а не по счёту: с change
     // `cms-content-authoring-and-migration` в heredoc появились ещё два блока
     // (админка системы управления, `$ADMIN_DOMAIN`, на отдельном имени и
-    // сертификате — см. `tests/cms-serving-and-tls.test.ts`), и предположение
+    // сертификате — см. `openspec/changes/server-hardening/tests/cms-serving-and-tls.test.ts`), и предположение
     // «server ровно один» перестало быть верным для дерева в целом. `$DOMAIN`
     // здесь — буквальный текст переменной bash: heredoc не закавычен, и
     // `extractVhostText` намеренно возвращает `${ИМЯ}` как `$ИМЯ`, а не
