@@ -9,7 +9,7 @@
  *
  * Почему это проверяется УЖЕ СЕЙЧАС, а не после change `cms-content-publication`:
  * плоская схема адресов и каталожные страницы строятся из того же снимка, из которого
- * сайт собирается сегодня (`discovery/entities/`), — переключение источника им не
+ * сайт собирается сегодня (`resolveSnapshotDir`), — переключение источника им не
  * требуется. Ограничение соседнего change касается ВЫКЛАДКИ новых адресов и содержимого
  * из системы управления, а не сборки. Сценарии, которым действительно нужен CMS-контент,
  * перечислены в конце файла.
@@ -19,13 +19,18 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { dist } from './helpers/dist-pages';
+import { readSnapshotFile, resolveSnapshotDir } from '../scripts/lib/snapshot-paths';
 
-const ROOT = join(import.meta.dirname, '..', '..');
+const WEB = join(import.meta.dirname, '..');
+const ROOT = join(WEB, '..');
 
+// Тот же снимок, из которого собрана проверяемая сборка (спека `cms-content-source`:
+// контент читается только через снимок, а не из материала переноса).
 const entity = <T>(file: string): T => {
-  const path = join(ROOT, 'discovery', 'entities', file);
-  expect(existsSync(path), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${path}`).toBe(true);
-  return JSON.parse(readFileSync(path, 'utf-8')) as T;
+  const type = file.replace(/\.json$/, '');
+  const records = readSnapshotFile(resolveSnapshotDir(WEB, ROOT)).content.types[type];
+  expect(records, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в снимке нет типа ${type}`).toBeDefined();
+  return records as T;
 };
 
 const page = (path: string): string | undefined => {
@@ -162,7 +167,10 @@ describe('собранный сайт: существующие статичес
     const dynamic = readdirSync(pagesDir).filter((f) => /^\[.*\]\.(astro|ts)$/.test(f));
     const fromStaticPages = dynamic.filter((f) => {
       const source = readFileSync(join(pagesDir, f), 'utf-8');
-      return /static_?pages|staticPages/i.test(source);
+      // Признак — вызов `getPages()`, которая отдаёт записи статических страниц из снимка
+      // (`web/src/lib/data.ts`). Прежний признак — слова `static_pages` в тексте файла —
+      // совпадал с КОММЕНТАРИЕМ маршрута и пропадал вместе с ним.
+      return /\bgetPages\s*\(/.test(source);
     });
     expect(
       fromStaticPages,
