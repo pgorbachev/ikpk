@@ -198,6 +198,8 @@ describe('семинар из админки доходит до опублик�
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
     await app.load();
+    // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
+    app.config.set('admin.autoOpen', false);
     await app.listen();
     base = process.env.CMS_URL;
     assert.ok(process.env.CMS_TOKEN, 'bootstrap CMS не выдал токен съёма');

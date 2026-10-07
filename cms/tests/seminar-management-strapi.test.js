@@ -63,6 +63,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
     await app.load();
+    // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
+    app.config.set('admin.autoOpen', false);
     await app.listen();
     base = `http://127.0.0.1:${process.env.PORT}`;
 
