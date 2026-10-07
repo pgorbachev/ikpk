@@ -138,14 +138,23 @@ describe('семинар из админки доходит до опублик�
     description: '<p>Описание, набранное редактором в админке.</p>',
   };
   const seminarPath = `/${institute.slug}/${group.slug}/${seminar.slug}`;
+  const uiSeminar = { name: 'Семинар из браузера' };
+  // Своя группа: обложка группы — первая картинка её семинаров, и чужой семинар её бы занял.
+  const uiGroup = { name: 'Курсы из браузера', slug: 'kursy-iz-brauzera' };
   let seminarDocumentId;
+  const editor = { email: `e2e-${Date.now()}@example.invalid`, password: 'E2e-only-test-password-2026' };
   let uploadedName;
 
   before(async () => {
-    execFileSync(path.join(cmsRoot, 'node_modules/.bin/tsc'), ['--pretty', 'false'], {
-      cwd: cmsRoot,
-      stdio: 'inherit',
-    });
+    // `strapi build` = компиляция сервера и сборка админки: браузерный сценарий не должен
+    // кликать по устаревшему интерфейсу. E2E_REUSE_ADMIN_BUILD — только для отладки теста.
+    if (!process.env.E2E_REUSE_ADMIN_BUILD) {
+      execFileSync(path.join(cmsRoot, 'node_modules/.bin/strapi'), ['build'], {
+        cwd: cmsRoot,
+        stdio: 'inherit',
+        env: { ...process.env, NODE_ENV: 'production', STRAPI_TELEMETRY_DISABLED: 'true' },
+      });
+    }
     prepareWorkspace();
     const sitePort = await freePort();
     site = `http://127.0.0.1:${sitePort}`;
@@ -194,8 +203,7 @@ describe('семинар из админки доходит до опублик�
     assert.ok(process.env.CMS_TOKEN, 'bootstrap CMS не выдал токен съёма');
 
     const role = await app.service('admin::role').findOne({ code: 'content-admin' });
-    const email = `e2e-${Date.now()}@example.invalid`;
-    const password = 'E2e-only-test-password-2026';
+    const { email, password } = editor;
     await app.service('admin::user').create({
       email,
       firstname: 'E2E',
@@ -221,6 +229,11 @@ describe('семинар из админки доходит до опублик�
     await publish('api::course-group.course-group', {
       ...group,
       legacy_id: `${institute.slug}/${group.slug}`,
+      institute: inst.documentId,
+    });
+    await publish('api::course-group.course-group', {
+      ...uiGroup,
+      legacy_id: `${institute.slug}/${uiGroup.slug}`,
       institute: inst.documentId,
     });
     await publish('api::teacher.teacher', {
@@ -318,5 +331,122 @@ describe('семинар из админки доходит до опублик�
     assert.ok(seminarPage.includes(renamed), 'новое название не дошло');
     assert.ok(seminarPage.includes('Исправленное описание.'), 'новое описание не дошло');
     assert.ok(!seminarPage.includes('Описание, набранное редактором в админке.'), 'старое описание осталось');
+  });
+
+  // То же самое — руками в браузере: формы админки, выбор картинки из медиатеки флажком,
+  // кнопка «Обновить сайт» на её странице, и результат глазами посетителя.
+  test('в браузере: редактор заполняет формы, жмёт кнопку, посетитель видит семинар', async () => {
+    const { chromium } = createRequire(path.join(repoRoot, 'web', 'package.json'))('playwright');
+    const browser = await chromium.launch();
+    const context = await browser.newContext({ locale: 'ru-RU', viewport: { width: 1440, height: 1000 } });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    const pageUi = await context.newPage();
+    const shot = async (name) => {
+      fs.writeFileSync(path.join(work, `${name}.aria.txt`), await pageUi.locator('body').ariaSnapshot());
+      await pageUi.screenshot({ path: path.join(work, `${name}.png`), fullPage: true });
+    };
+    const uiCoverStem = path.parse((await uploadImage('e2e-ui-cover.jpg', '#b5523b')).url).name;
+    const day = 24 * 60 * 60 * 1000;
+    const uiStart = new Date(Date.now() + 40 * day);
+    try {
+      await pageUi.goto(`${base}/admin/auth/login`);
+      await pageUi.locator('input[name="email"]').fill(editor.email);
+      await pageUi.locator('input[name="password"]').fill(editor.password);
+      await pageUi.locator('button[type="submit"]').click();
+      await pageUi.waitForURL(/\/admin(?!\/auth)/);
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/create`);
+      await pageUi.locator('input[name="name"]').waitFor();
+      const pick = async (label, query, option) => {
+        await pageUi.getByRole('combobox', { name: label }).click();
+        await pageUi.keyboard.type(query);
+        await pageUi.getByRole('option', { name: option }).click();
+      };
+      await pageUi.getByRole('textbox', { name: 'Название' }).fill(uiSeminar.name);
+      await pick('Программа', 'браузера', uiGroup.name);
+      await pageUi.getByRole('textbox', { name: 'Продолжительность' }).fill('2 дня');
+      await pageUi.getByRole('textbox', { name: 'Цена' }).fill('39000');
+      await pick('Преподаватели', 'Проверкина', teacherName);
+      await pageUi.getByRole('button', { name: /Нажмите, чтобы добавить ресурс/ }).click();
+      await pageUi.getByRole('dialog').waitFor();
+      // Клик по карточке открывает её редактирование, выбор — только флажок в углу.
+      // Именно на этом месте застряла приёмка 07.10.
+      const dialog = pageUi.getByRole('dialog', { name: 'Добавить ресурсы' });
+      await dialog.getByRole('checkbox', { name: 'e2e-ui-cover.jpg' }).check();
+      await dialog.getByRole('button', { name: 'Готово' }).click();
+      await dialog.waitFor({ state: 'detached' });
+      // Набор кириллицы автоматом CodeMirror 5 не видит: keyboard.type шлёт её как insertText
+      // (сохранялась одна точка), fill по contenteditable не доходит до состояния формы. Вставка
+      // из буфера — обычное действие редактора, и её редактор обрабатывает как ввод.
+      await pageUi.evaluate((text) => navigator.clipboard.writeText(text), 'Описание из браузера.');
+      await pageUi.locator('.CodeMirror').first().click();
+      await pageUi.keyboard.press('ControlOrMeta+V');
+      await shot('ui-03-filled');
+      await pageUi.getByRole('button', { name: 'Сохранить' }).click();
+      await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
+      await pageUi.getByRole('status', { name: 'published' }).or(pageUi.getByText('Опубликовано')).first().waitFor();
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/create`);
+      await pageUi.getByRole('textbox', { name: 'Город' }).or(pageUi.locator('input[name="city"]')).first().waitFor();
+      await pick('Семинар', 'браузера', new RegExp(uiSeminar.name));
+      const ruDate = (date) => date.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+      const setMoment = async (label, date, time) => {
+        const group = pageUi.getByRole('group', { name: label });
+        const dateBox = group.getByRole('combobox', { name: 'Choose date' });
+        await dateBox.fill(ruDate(date));
+        await dateBox.press('Tab');
+        await group.getByRole('combobox', { name: 'Choose time' }).click();
+        await pageUi.getByRole('option', { name: time, exact: true }).click();
+      };
+      await setMoment('Начало', uiStart, '10:00');
+      await setMoment('Окончание', new Date(uiStart.getTime() + day), '18:00');
+      await pageUi.getByRole('textbox', { name: 'Город' }).fill('Казань');
+      await pageUi.getByRole('textbox', { name: 'Цена', exact: true }).fill('36600');
+      await pageUi.getByRole('button', { name: 'Сохранить' }).click();
+      await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
+      await pageUi.getByRole('status', { name: 'published' }).first().waitFor();
+
+      // Кнопка «Обновить сайт» — на её собственной странице админки.
+      await pageUi.getByRole('link', { name: 'Обновить сайт' }).click();
+      // На странице может висеть итог прошлого нажатия, поэтому ждём сначала «идёт» (кнопка
+      // заблокирована), и только потом — её разблокировки.
+      const refreshButton = pageUi.getByRole('button', { name: 'Обновить сайт' });
+      await refreshButton.click();
+      await pageUi.locator('button:disabled', { hasText: 'Обновить сайт' }).waitFor();
+      await pageUi.locator('button:enabled', { hasText: 'Обновить сайт' }).waitFor({ timeout: 15 * 60_000 });
+      await shot('ui-07-refreshed');
+      assert.ok(await pageUi.getByText('Сайт обновлён.', { exact: false }).isVisible(), 'кнопка не обновила сайт');
+
+      // Посетитель: опубликованный сайт в том же браузере, видимость — а не только наличие в HTML.
+      const [created] = await app.documents('api::seminar.seminar').findMany({
+        filters: { name: uiSeminar.name },
+        status: 'published',
+      });
+      const visitor = await context.newPage();
+      const open = async (url) => {
+        const response = await visitor.goto(`${site}${url}`);
+        assert.equal(response.status(), 200, `опубликованный сайт: ${url}`);
+      };
+      await open(`/${institute.slug}/${uiGroup.slug}/${created.slug}`);
+      for (const text of [uiSeminar.name, 'Описание из браузера.', teacherName, 'Казань']) {
+        await visitor.getByText(text, { exact: false }).first().waitFor({ state: 'visible', timeout: 5000 })
+          .catch(() => assert.fail(`на странице семинара не видно «${text}»`));
+      }
+      assert.match((await visitor.locator('main').innerText()).replace(/\s+/g, ' '), /36 600 ₽/, 'не видно цены');
+      await visitor.screenshot({ path: path.join(work, 'site-seminar.png'), fullPage: true });
+
+      await open(`/${institute.slug}`);
+      const cover = visitor.locator(`img[src*="${uiCoverStem}"], img[srcset*="${uiCoverStem}"]`).first();
+      await cover.scrollIntoViewIfNeeded().catch(() => assert.fail('картинки семинара нет на странице института'));
+      assert.ok(await cover.isVisible(), 'картинка семинара не видна');
+      assert.ok(
+        await cover.evaluate((img) => img.complete && img.naturalWidth > 0),
+        'картинка семинара не загрузилась',
+      );
+      await visitor.screenshot({ path: path.join(work, 'site-institute.png'), fullPage: true });
+    } catch (error) {
+      await shot('ui-failure').catch(() => {});
+      throw error;
+    } finally {
+      await browser.close();
+    }
   });
 });
