@@ -77,7 +77,7 @@ export function isExternalFormHref(href: string): boolean {
 /** Демонстрационный (mock) адрес — не боевой и не ЮKassa; закреплён за ролью `preview`. */
 export const PAYMENT_ENDPOINT_DEMO = 'https://demo-api.ikpk.invalid';
 /** База стенда: `<origin стенда>/api` (design.md, Решение 13). */
-export const PAYMENT_ENDPOINT_STAND = 'http://193.124.115.99/api';
+export const PAYMENT_ENDPOINT_STAND = 'https://193.124.115.99/api';
 
 // ── Роль клиентской сборки (задачи 5.10, 5.10a) ──────────────────────────────
 //
