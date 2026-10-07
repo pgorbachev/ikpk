@@ -427,8 +427,8 @@ export function formatDate(dateStr: string): string {
 export function stripH1(html: string): string {
   return html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
 }
-export function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+export function stripHtml(html: string | null | undefined): string {
+  return (html ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // Helper: excerpt
@@ -467,7 +467,7 @@ export function articleLead(title: string, text: string): string {
   return rest.slice(header[0].length).trim();
 }
 
-export function excerpt(text: string, maxLen = 200): string {
+export function excerpt(text: string | null | undefined, maxLen = 200): string {
   const clean = stripHtml(text);
   if (clean.length <= maxLen) return clean;
   return clean.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
