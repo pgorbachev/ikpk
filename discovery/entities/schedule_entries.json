@@ -805,8 +805,8 @@
    "name": "Институт клинической прикладной кинезиологии",
    "shortname": "ИКПК"
   },
-  "startAt": "2026-10-02T00:00:00.000Z",
-  "endAt": "2026-10-04T00:00:00.000Z",
+  "startAt": "2026-12-04T00:00:00.000Z",
+  "endAt": "2026-12-06T00:00:00.000Z",
   "teachers": [
    {
     "id": 58,
@@ -968,50 +968,6 @@
   "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_mpy8w/"
  },
  {
-  "id": 437,
-  "status": "active",
-  "name": "UMAC-1: Использование меридианов в кранио-сакральной терапии. Уровень 1",
-  "seminar": {
-   "id": 250,
-   "name": "UMAC-1: Использование меридианов в кранио-сакральной терапии. Уровень 1",
-   "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1"
-  },
-  "institute": {
-   "id": 2,
-   "name": "Институт Апледжера",
-   "shortname": "Апледжера"
-  },
-  "startAt": "2026-10-08T00:00:00.000Z",
-  "endAt": "2026-10-11T00:00:00.000Z",
-  "teachers": [
-   {
-    "id": 68,
-    "fullName": "Kenneth Koles Richard"
-   }
-  ],
-  "image": {
-   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1776771365590.webp",
-   "id": "f7e2039b-bec2-49e6-ad57-8a2b7cdd2d8d"
-  },
-  "isFree": false,
-  "isEventCollection": false,
-  "description": null,
-  "oldPrice": 0,
-  "newPrice": 60000,
-  "city": {
-   "id": 2,
-   "name": "Санкт-Петербург"
-  },
-  "program": {
-   "id": 159,
-   "slug": "primenenie-principov-akupunktury",
-   "name": "Применение принципов акупунктуры"
-  },
-  "additionalText": "",
-  "duration": "36",
-  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/umac1/"
- },
- {
   "id": 390,
   "status": "active",
   "name": "ПК-5. Краниосакральная система. Диагностика и терапия кранио-сакральных нарушений с использованием прикладной кинезиологии. Представление о стоматогностической системе. Уровень 5",
@@ -1100,50 +1056,6 @@
   "registrationFormLink": "https://b24-kbo5ls.bitrix24site.ru/crm_form_s32ve/"
  },
  {
-  "id": 445,
-  "status": "active",
-  "name": "Функциональный подход — от нейтральности к здоровью",
-  "seminar": {
-   "id": 351,
-   "name": "Функциональный подход — от нейтральности к здоровью",
-   "slug": "funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu"
-  },
-  "institute": {
-   "id": 1,
-   "name": "Институт клинической прикладной кинезиологии",
-   "shortname": "ИКПК"
-  },
-  "startAt": "2026-10-16T00:00:00.000Z",
-  "endAt": "2026-10-18T00:00:00.000Z",
-  "teachers": [
-   {
-    "id": 85,
-    "fullName": "Чернов Тимофей Васильевич"
-   }
-  ],
-  "image": {
-   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1778850291875.webp",
-   "id": "9cda05bc-f3e0-4dc6-8317-c39efef67015"
-  },
-  "isFree": false,
-  "isEventCollection": false,
-  "description": null,
-  "oldPrice": 0,
-  "newPrice": 30000,
-  "city": {
-   "id": 2,
-   "name": "Санкт-Петербург"
-  },
-  "program": {
-   "id": 157,
-   "slug": "specializirovannye",
-   "name": "Специализированные"
-  },
-  "additionalText": "",
-  "duration": "24",
-  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/fpnz/"
- },
- {
   "id": 451,
   "status": "active",
   "name": "Кинезиология здоровья. Уровень 1",
@@ -1173,7 +1085,7 @@
   "isEventCollection": false,
   "description": null,
   "oldPrice": 0,
-  "newPrice": 35000,
+  "newPrice": 30000,
   "city": {
    "id": 2,
    "name": "Санкт-Петербург"
@@ -1393,7 +1305,7 @@
   "isEventCollection": false,
   "description": null,
   "oldPrice": 0,
-  "newPrice": 30000,
+  "newPrice": 24000,
   "city": {
    "id": 2,
    "name": "Санкт-Петербург"
@@ -1630,11 +1542,11 @@
  {
   "id": 408,
   "status": "active",
-  "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
+  "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2",
   "seminar": {
-   "id": 238,
-   "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
-   "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3"
+   "id": 237,
+   "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 2",
+   "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2"
   },
   "institute": {
    "id": 1,
@@ -1669,7 +1581,7 @@
   },
   "additionalText": "",
   "duration": "24",
-  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_osbru/"
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_sy2hg/"
  },
  {
   "id": 443,
@@ -1773,8 +1685,8 @@
    "name": "Институт клинической прикладной кинезиологии",
    "shortname": "ИКПК"
   },
-  "startAt": "2026-12-04T00:00:00.000Z",
-  "endAt": "2026-12-06T00:00:00.000Z",
+  "startAt": "2027-02-26T00:00:00.000Z",
+  "endAt": "2027-02-28T00:00:00.000Z",
   "teachers": [
    {
     "id": 58,
@@ -1921,7 +1833,7 @@
   "isEventCollection": false,
   "description": null,
   "oldPrice": 0,
-  "newPrice": 35000,
+  "newPrice": 30000,
   "city": {
    "id": 2,
    "name": "Санкт-Петербург"
@@ -3122,5 +3034,357 @@
   "additionalText": "",
   "duration": "40",
   "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gd95q/"
+ },
+ {
+  "id": 491,
+  "status": "active",
+  "name": "Межсеминарская встреча вебинар \"Возвращение\"",
+  "seminar": {
+   "id": 360,
+   "name": "Межсеминарская встреча вебинар \"Возвращение\"",
+   "slug": "vebinar-vozvrashenie"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-10-22T00:00:00.000Z",
+  "endAt": "2026-10-22T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 58,
+    "fullName": "Колесник Марк Алексеевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1791220471126.webp",
+   "id": "48c05b4c-7447-4057-b077-857c53a97226"
+  },
+  "isFree": true,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 0,
+  "city": {
+   "id": 1,
+   "name": "Онлайн"
+  },
+  "program": {
+   "id": 176,
+   "slug": "vebinary-i-mezhseminarskie-vstrechi-ikpk",
+   "name": "Вебинары и межсеминарские встречи"
+  },
+  "additionalText": "Начало в 19:00 (московское время)",
+  "duration": "2",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_ylxsz/"
+ },
+ {
+  "id": 483,
+  "status": "active",
+  "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+  "seminar": {
+   "id": 303,
+   "name": "Семинар-практикум «Знакомство с прикладной кинезиологией»",
+   "slug": "seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-11-21T00:00:00.000Z",
+  "endAt": "2026-11-22T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 54,
+    "fullName": "Пилявский Сергей Орестович"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790356465676.webp",
+   "id": "e5f611ac-0fcd-46fe-8dd7-6d44ac2f9559"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 10000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "16",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_odo5i/"
+ },
+ {
+  "id": 488,
+  "status": "active",
+  "name": "Авторский семинар-практикум «Осознание и управление своей жизнью»",
+  "seminar": {
+   "id": 359,
+   "name": "Авторский семинар-практикум «Осознание и управление своей жизнью»",
+   "slug": "osoznanie-i-upravlenie-svoej-zhiznyu"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-12-14T00:00:00.000Z",
+  "endAt": "2026-12-15T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 87,
+    "fullName": "Ермоленко Анатолий Сергеевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790784457207.webp",
+   "id": "898a3e01-b4ca-4381-aa04-34d3e364afdb"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 25000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "16",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_ndbvn/"
+ },
+ {
+  "id": 485,
+  "status": "active",
+  "name": "Индивидуальные особенности человека. Уровень 1",
+  "seminar": {
+   "id": 215,
+   "name": "Индивидуальные особенности человека. Уровень 1",
+   "slug": "individualnye-osobennosti-cheloveka-1"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-12-18T00:00:00.000Z",
+  "endAt": "2026-12-20T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 53,
+    "fullName": "Жарова Людмила Семеновна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790589302113.webp",
+   "id": "e0829507-82a3-4324-828b-e65e0943cd18"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 152,
+   "slug": "psihokineziologiya",
+   "name": "Психокинезиология"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_jugn6/"
+ },
+ {
+  "id": 490,
+  "status": "active",
+  "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 1",
+  "seminar": {
+   "id": 236,
+   "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 1",
+   "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2026-12-18T00:00:00.000Z",
+  "endAt": "2026-12-20T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 58,
+    "fullName": "Колесник Марк Алексеевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790947569226.webp",
+   "id": "2a031d6f-3430-40c3-8237-be33a95d60f7"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 156,
+   "slug": "kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+   "name": "Курс по китайской медицине с позиций прикладной кинезиологии"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_zlnw4/"
+ },
+ {
+  "id": 487,
+  "status": "active",
+  "name": "Функциональная биохимия заболеваний желудочно-кишечного тракта",
+  "seminar": {
+   "id": 358,
+   "name": "Функциональная биохимия заболеваний желудочно-кишечного тракта",
+   "slug": "funkcionalnaya-biohimiya-zabolevanij-zheludochno-kishechnogo-trakta"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-01-15T00:00:00.000Z",
+  "endAt": "2027-01-16T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 73,
+    "fullName": "Бондаренко Игорь Георгиевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790593295341.webp",
+   "id": "db77e8bf-6f01-4e10-b12b-488b22e46d18"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 157,
+   "slug": "specializirovannye",
+   "name": "Специализированные"
+  },
+  "additionalText": "",
+  "duration": "16",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_gwan1/"
+ },
+ {
+  "id": 486,
+  "status": "active",
+  "name": "Индивидуальные особенности человека. Уровень 2",
+  "seminar": {
+   "id": 216,
+   "name": "Индивидуальные особенности человека. Уровень 2",
+   "slug": "individualnye-osobennosti-cheloveka-2"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-02-05T00:00:00.000Z",
+  "endAt": "2027-02-07T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 53,
+    "fullName": "Жарова Людмила Семеновна"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790589365001.webp",
+   "id": "0cc0708e-9baa-4c29-9c6c-88ae7afc664b"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 152,
+   "slug": "psihokineziologiya",
+   "name": "Психокинезиология"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_4cbyj/"
+ },
+ {
+  "id": 489,
+  "status": "active",
+  "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
+  "seminar": {
+   "id": 238,
+   "name": "Меридианы, китайская классическая медицина с позиции Прикладной кинезиологии и неврологии (Нейро-ТКМ). Уровень 3",
+   "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3"
+  },
+  "institute": {
+   "id": 1,
+   "name": "Институт клинической прикладной кинезиологии",
+   "shortname": "ИКПК"
+  },
+  "startAt": "2027-03-12T00:00:00.000Z",
+  "endAt": "2027-03-14T00:00:00.000Z",
+  "teachers": [
+   {
+    "id": 58,
+    "fullName": "Колесник Марк Алексеевич"
+   }
+  ],
+  "image": {
+   "url": "https://storage.yandexcloud.net/ikpk-image/media/users/1/images/1-1790940437621.webp",
+   "id": "360c4384-e98f-43f8-989a-63169708006c"
+  },
+  "isFree": false,
+  "isEventCollection": false,
+  "description": null,
+  "oldPrice": 0,
+  "newPrice": 30000,
+  "city": {
+   "id": 2,
+   "name": "Санкт-Петербург"
+  },
+  "program": {
+   "id": 156,
+   "slug": "kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+   "name": "Курс по китайской медицине с позиций прикладной кинезиологии"
+  },
+  "additionalText": "",
+  "duration": "24",
+  "registrationFormLink": "https://b24-cbqwqo.bitrix24site.ru/crm_form_osbru/"
  }
 ]
