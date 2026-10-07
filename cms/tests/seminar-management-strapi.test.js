@@ -153,6 +153,26 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     );
   });
 
+  // Найдено при приёмке 07.10.2026: «мой семинар» не находил «Мой семинар Новый». Strapi ищет
+  // `LOWER(поле) LIKE LOWER(?)`, а встроенный LOWER у SQLite меняет регистр только латиницы.
+  test('поиск в админке не зависит от регистра кириллицы', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const cyrillic = await seminars.create({ data: { name: 'Мой семинар Поиска' } });
+    const latin = await seminars.create({ data: { name: 'Latin Search Probe' } });
+    const found = async (query) => {
+      const response = await fetch(
+        `${base}/content-manager/collection-types/api::seminar.seminar?_q=${encodeURIComponent(query)}&page=1&pageSize=100`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      return body.results.map((row) => row.documentId);
+    };
+    assert.ok((await found('мой семинар поиска')).includes(cyrillic.documentId), 'строчные');
+    assert.ok((await found('МОЙ СЕМИНАР ПОИСКА')).includes(cyrillic.documentId), 'прописные');
+    assert.ok((await found('latin search')).includes(latin.documentId), 'латиница');
+  });
+
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');

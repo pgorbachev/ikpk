@@ -52,6 +52,15 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
         filename: path.resolve(__dirname, '..', '..', env('DATABASE_FILENAME', '.tmp/data.db')),
       },
       useNullAsDefault: true,
+      // Поиск админки на SQLite — `поле LIKE ?`, а встроенный LIKE не различает регистр только
+      // у латиницы: «мой семинар» не находил «Мой семинар». На Postgres (прод) поиск идёт через
+      // ILIKE и этой проблемы нет. Подменяем LIKE на версию, понимающую регистр Юникода.
+      pool: {
+        afterCreate(db: SqliteHandle, done: () => void) {
+          db.function('like', { varargs: true, deterministic: true }, unicodeLike);
+          done();
+        },
+      },
     },
   };
 
@@ -63,5 +72,33 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
     },
   };
 };
+
+type SqliteHandle = {
+  function: (name: string, options: object, fn: (...args: unknown[]) => unknown) => void;
+};
+
+const likePatterns = new Map<string, RegExp>();
+
+// SQLite вызывает `X LIKE Y ESCAPE Z` как like(Y, X, Z): шаблон первым.
+function unicodeLike(pattern: unknown, value: unknown, escape?: unknown): number | null {
+  if (pattern == null || value == null) return null;
+  const key = `${escape ?? ''}\u0000${pattern}`;
+  let regex = likePatterns.get(key);
+  if (!regex) {
+    let source = '';
+    const chars = [...String(pattern)];
+    for (let i = 0; i < chars.length; i += 1) {
+      const char = chars[i];
+      if (escape != null && char === String(escape) && i + 1 < chars.length) {
+        source += chars[(i += 1)].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      } else if (char === '%') source += '.*';
+      else if (char === '_') source += '.';
+      else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    regex = new RegExp(`^${source}$`, 'isu');
+    likePatterns.set(key, regex);
+  }
+  return regex.test(String(value)) ? 1 : 0;
+}
 
 export default config;
