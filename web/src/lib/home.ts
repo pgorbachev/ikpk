@@ -67,7 +67,7 @@ export function formatScheduleDateRange(startAt: string, endAt: string): string 
 }
 
 export function findTeacherForScheduleLead(
-  lead: { id: number; fullName: string } | undefined,
+  lead: { id: number | string; fullName: string } | undefined,
   teachers: Teacher[] = getTeachers()
 ): Teacher | undefined {
   if (!lead) return undefined;

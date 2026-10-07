@@ -152,7 +152,7 @@ export interface CourseGroup {
 }
 
 export interface SeminarTeacherRef {
-  legacy_id: number;
+  legacy_id: number | string;
   name: string;
   order?: number;
 }
@@ -219,7 +219,7 @@ export interface ScheduleEntry {
   institute: { id: number; name: string; shortname: string };
   startAt: string;
   endAt: string;
-  teachers: { id: number; fullName: string }[];
+  teachers: { id: number | string; fullName: string }[];
   image: { url: string; id: string } | null;
   isFree: boolean;
   isEventCollection: boolean;
@@ -357,7 +357,7 @@ export function getArticle(slug: string): Article | undefined {
 
 let _schedule: ScheduleEntry[] | null = null;
 export function getScheduleEntries(): ScheduleEntry[] {
-  if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry);
+  if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarTeachers);
   return _schedule;
 }
 
@@ -501,5 +501,17 @@ export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unkno
     ...(raw as ScheduleEntry),
     city: normalizeCity(record.city),
     newPrice: finiteNumber(record.newPrice ?? record.price),
+  };
+}
+
+// Преподавателей проведения админка не даёт заполнить (поле скрыто), а у семинара — даёт.
+// Пустое поле проведения поэтому значит «как у семинара», а не «преподаватель неизвестен».
+function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
+  if (entry.teachers?.length || !entry.seminar?.slug) return entry;
+  const seminar = getSeminars().find((candidate) => candidate.slug === entry.seminar.slug);
+  if (!seminar?.teachers?.length) return entry;
+  return {
+    ...entry,
+    teachers: seminar.teachers.map((teacher) => ({ id: teacher.legacy_id, fullName: teacher.name })),
   };
 }
