@@ -85,6 +85,95 @@ describe('загрузка снимка сводит CMS-форму', () => {
     expect(entry.newPrice).toBe(37_500);
     expect(visible(price(entry.newPrice))).toBe('37 500 ₽');
   });
+
+  // Админка не даёт заполнить преподавателей у проведения (поле скрыто), а у семинара даёт.
+  // Найдено при приёмке 07.10.2026: новый семинар с преподавателем показывал
+  // «Преподаватель уточняется» и в расписании, и на своей странице.
+  it('проведение без преподавателей показывает преподавателей своего семинара', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cms-sched-'));
+    dirs.push(dir);
+    writeFileSync(
+      join(dir, 'snapshot.json'),
+      JSON.stringify({
+        referenceDate: '2026-10-07',
+        content: {
+          types: {
+            seminars: [
+              {
+                id: 646,
+                name: 'Мой семинар Новый',
+                slug: 'moj-seminar-novyj',
+                teachers: [{ legacy_id: '55', name: 'Пилявская Екатерина Сергеевна', order: 6 }],
+              },
+            ],
+            schedule_entries: [
+              {
+                id: 355,
+                status: 'active',
+                name: 'Мой семинар Новый',
+                city: 'Санкт-Петербург',
+                price: 77_777,
+                isFree: false,
+                startAt: '2026-10-09T06:00:00.000Z',
+                endAt: '2026-10-11T12:15:00.000Z',
+                seminar: { id: 646, name: 'Мой семинар Новый', slug: 'moj-seminar-novyj' },
+                teachers: null,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    process.env.CONTENT_SNAPSHOT_DIR = dir;
+    vi.resetModules();
+    const { getScheduleEntries: load } = await import('../src/lib/data.js');
+    const [entry] = load();
+    expect(entry.teachers?.map((teacher) => teacher.fullName)).toEqual(['Пилявская Екатерина Сергеевна']);
+  });
+
+  it('свои преподаватели проведения не заменяются и не смешиваются с преподавателями семинара', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cms-sched-'));
+    dirs.push(dir);
+    writeFileSync(
+      join(dir, 'snapshot.json'),
+      JSON.stringify({
+        referenceDate: '2026-10-07',
+        content: {
+          types: {
+            seminars: [
+              {
+                id: 646,
+                name: 'Мой семинар Новый',
+                slug: 'moj-seminar-novyj',
+                teachers: [{ legacy_id: '55', name: 'Пилявская Екатерина Сергеевна', order: 6 }],
+              },
+            ],
+            schedule_entries: [
+              {
+                id: 356,
+                status: 'active',
+                name: 'Мой семинар Новый',
+                city: 'Москва',
+                price: 50_000,
+                isFree: false,
+                startAt: '2026-11-09T06:00:00.000Z',
+                endAt: '2026-11-11T12:15:00.000Z',
+                seminar: { id: 646, name: 'Мой семинар Новый', slug: 'moj-seminar-novyj' },
+                teachers: [{ id: 12, fullName: 'Другой Преподаватель' }],
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    process.env.CONTENT_SNAPSHOT_DIR = dir;
+    vi.resetModules();
+    const { getScheduleEntries: load } = await import('../src/lib/data.js');
+    const [entry] = load();
+    expect(entry.teachers.map((teacher) => teacher.fullName)).toEqual(['Другой Преподаватель']);
+  });
 });
 
 describe('ближайшие семинары — ещё не начавшиеся', () => {
