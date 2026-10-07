@@ -64,7 +64,9 @@ Strapi 5.51.2 при пустом названии генерирует uid из
 |---|---|
 | `osoznanie-i-upravlenie-svoej-zhiznyu` | `avtorskij-seminar-praktikum-osoznanie-i-upravlenie-svoej-zhiznyu` |
 | `funkcionalnaya-biohimiya-zabolevanij-zheludochno-kishechnogo-trakta` | `funkczionalnaya-biohimiya-zabolevanij-zheludochno-kishechnogo-trakta` |
-| `vebinar-vozvrashenie` | `mezhseminarskaya-vstrecha-vebinar-vozvrashhenie` | Причина двойная. Правило slug (D4) не различало редактора
+| `vebinar-vozvrashenie` | `mezhseminarskaya-vstrecha-vebinar-vozvrashhenie` |
+
+Причина двойная. Правило slug (D4) не различало редактора
 и перенос. А серверный контекст доверенного импорта (`runTrustedImport`) включали только
 тесты: настоящий перенос `scripts/import.ts` идёт в Content API с токеном, и сервер
 считал его обычным редактором. Обещание D2 «доверенный импорт сохраняет исходное имя» к
@@ -111,6 +113,10 @@ Strapi 5.51.2 при пустом названии генерирует uid из
   запрещает переносу публиковать запись без опубликованной версии. Поиск в
   `scripts/import.ts` общий для всех типов, поэтому правило распространяется на все
   переносимые типы, а не только на семинары.
+- Открытый вопрос владельцу: опубликованное проведение, чей семинар редактор снял с
+  публикации. Снять ли его с публикации при повторном переносе или оставить
+  опубликованную версию нетронутой и обновить только черновик — продуктовое решение, в
+  этом change оно не принято.
 
 - Публичный заголовок импортированных проведений с особым `name` изменится на название
   семинара. Исходные строки в CMS остаются.
