@@ -79,7 +79,10 @@ type SqliteHandle = {
 
 const likePatterns = new Map<string, RegExp>();
 
-// SQLite вызывает `X LIKE Y ESCAPE Z` как like(Y, X, Z): шаблон первым.
+// SQLite вызывает `X LIKE Y ESCAPE Z` как like(Y, X, Z): шаблон первым. Отличия от встроенного
+// LIKE, до которых поиск Strapi не доходит (он всегда передаёт ESCAPE '\\' и экранирует запрос):
+// многосимвольный ESCAPE не отвергается, хвостовой escape-символ трактуется буквально, REAL
+// сравнивается как String(5.0) = '5', а не '5.0'.
 function unicodeLike(pattern: unknown, value: unknown, escape?: unknown): number | null {
   if (pattern == null || value == null) return null;
   const key = `${escape ?? ''}\u0000${pattern}`;
@@ -96,6 +99,7 @@ function unicodeLike(pattern: unknown, value: unknown, escape?: unknown): number
       else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
     regex = new RegExp(`^${source}$`, 'isu');
+    if (likePatterns.size >= 500) likePatterns.clear(); // каждый новый поисковый запрос — новая запись
     likePatterns.set(key, regex);
   }
   return regex.test(String(value)) ? 1 : 0;

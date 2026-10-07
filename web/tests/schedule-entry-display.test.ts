@@ -132,6 +132,48 @@ describe('загрузка снимка сводит CMS-форму', () => {
     expect(entry.teachers?.map((teacher) => teacher.fullName)).toEqual(['Пилявская Екатерина Сергеевна']);
   });
 
+  // Ревью #295: у части преподавателей legacy_id — путь, а не число
+  // (`institut-…/prepodavatel/83`). Number() давал NaN, и главная не находила карточку.
+  it('подставленный преподаватель с legacy_id-путём находит свою карточку', async () => {
+    const legacyId = 'institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83';
+    const dir = mkdtempSync(join(tmpdir(), 'cms-sched-'));
+    dirs.push(dir);
+    writeFileSync(
+      join(dir, 'snapshot.json'),
+      JSON.stringify({
+        referenceDate: '2026-10-07',
+        content: {
+          types: {
+            seminars: [
+              { id: 700, name: 'Семинар Кривинковой', slug: 'seminar-krivinkovoj', teachers: [{ legacy_id: legacyId, name: 'Кривинкова Анна Анатольевна' }] },
+            ],
+            schedule_entries: [
+              {
+                id: 701,
+                status: 'active',
+                name: 'Семинар Кривинковой',
+                city: 'Москва',
+                price: 10_000,
+                isFree: false,
+                startAt: '2026-11-01T06:00:00.000Z',
+                endAt: '2026-11-02T12:00:00.000Z',
+                seminar: { id: 700, name: 'Семинар Кривинковой', slug: 'seminar-krivinkovoj' },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    process.env.CONTENT_SNAPSHOT_DIR = dir;
+    vi.resetModules();
+    const { getScheduleEntries: load } = await import('../src/lib/data.js');
+    const { findTeacherForScheduleLead } = await import('../src/lib/home.js');
+    const [entry] = load();
+    const card = { legacy_id: legacyId, slug: '83', name: 'Кривинкова Анна Анатольевна' };
+    expect(findTeacherForScheduleLead(entry.teachers[0], [card as never])).toBe(card);
+  });
+
   it('свои преподаватели проведения не заменяются и не смешиваются с преподавателями семинара', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cms-sched-'));
     dirs.push(dir);

@@ -153,8 +153,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     );
   });
 
-  // Найдено при приёмке 07.10.2026: «мой семинар» не находил «Мой семинар Новый». Strapi ищет
-  // `LOWER(поле) LIKE LOWER(?)`, а встроенный LOWER у SQLite меняет регистр только латиницы.
+  // Найдено при приёмке 07.10.2026: «мой семинар» не находил «Мой семинар Новый». Поиск админки
+  // на SQLite — `поле LIKE ? ESCAPE '\\'`, а встроенный LIKE не различает регистр только у латиницы.
   test('поиск в админке не зависит от регистра кириллицы', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const cyrillic = await seminars.create({ data: { name: 'Мой семинар Поиска' } });
@@ -171,6 +171,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.ok((await found('мой семинар поиска')).includes(cyrillic.documentId), 'строчные');
     assert.ok((await found('МОЙ СЕМИНАР ПОИСКА')).includes(cyrillic.documentId), 'прописные');
     assert.ok((await found('latin search')).includes(latin.documentId), 'латиница');
+    assert.equal((await found('latin search')).includes(cyrillic.documentId), false, 'LIKE совпал со всем подряд');
   });
 
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {

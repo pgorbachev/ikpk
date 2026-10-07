@@ -152,7 +152,7 @@ export interface CourseGroup {
 }
 
 export interface SeminarTeacherRef {
-  legacy_id: number;
+  legacy_id: number | string;
   name: string;
   order?: number;
 }
@@ -219,7 +219,7 @@ export interface ScheduleEntry {
   institute: { id: number; name: string; shortname: string };
   startAt: string;
   endAt: string;
-  teachers: { id: number; fullName: string }[];
+  teachers: { id: number | string; fullName: string }[];
   image: { url: string; id: string } | null;
   isFree: boolean;
   isEventCollection: boolean;
@@ -512,6 +512,6 @@ function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
   if (!seminar?.teachers?.length) return entry;
   return {
     ...entry,
-    teachers: seminar.teachers.map((teacher) => ({ id: Number(teacher.legacy_id), fullName: teacher.name })),
+    teachers: seminar.teachers.map((teacher) => ({ id: teacher.legacy_id, fullName: teacher.name })),
   };
 }
