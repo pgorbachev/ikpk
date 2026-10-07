@@ -5,6 +5,6 @@ import { excerpt } from '../src/lib/data.js';
 // отдаёт пустую как null, и `excerpt(teacher.bio_text)` ронял сборку ВСЕГО сайта по кнопке.
 describe('пустое поле CMS не роняет сборку', () => {
   it('описание страницы преподавателя без биографии — пустая строка', () => {
-    expect(excerpt(null as never, 160)).toBe('');
+    expect(excerpt(null, 160)).toBe('');
   });
 });

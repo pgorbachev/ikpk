@@ -66,8 +66,9 @@ function serveCurrent(port) {
     const root = path.join(webRoot, 'current');
     for (const candidate of [urlPath, `${urlPath}.html`, path.join(urlPath, 'index.html')]) {
       const file = path.join(root, candidate);
-      if (file.startsWith(root) && fs.existsSync(file) && fs.statSync(file).isFile()) {
-        res.writeHead(200);
+      if (file.startsWith(root + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+        // Без типа Chromium не исполняет модульные скрипты Astro — страница была бы не та, что на стенде.
+        res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' });
         res.end(fs.readFileSync(file));
         return;
       }
@@ -78,7 +79,19 @@ function serveCurrent(port) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }
 
-const visible = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ');
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.json': 'application/json', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.woff2': 'font/woff2', '.wasm': 'application/wasm',
+};
+
+// Только содержимое <main>: название и описание есть ещё в <title> и JSON-LD, и проверка по всей
+// странице прошла бы, даже если тело их больше не показывает.
+const visible = (html) => {
+  const main = html.match(/<main[\s>][\s\S]*<\/main>/);
+  assert.ok(main, 'на странице нет <main>');
+  return main[0].replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ');
+};
 
 describe('семинар из админки доходит до опубликованного сайта', { timeout: 40 * 60_000 }, () => {
   /** @type {import('@strapi/strapi').Core.Strapi} */
@@ -187,7 +200,10 @@ describe('семинар из админки доходит до опублик�
     // прогон пересчитывает все оригиналы. На результат не влияет — сборка досчитает недостающее.
     const derivatives = path.join(repoRoot, 'web', 'public', 'media');
     if (fs.existsSync(derivatives)) process.env.IKPK_MEDIA_CACHE = derivatives;
-    for (const key of ['CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN', 'CMS_URL']) {
+    // XDG_RUNTIME_DIR и DBUS_SESSION_BUS_ADDRESS переводят кнопку на systemd-run с пределом памяти
+    // (launchPlan), а он есть на раннере GitHub. Здесь — всегда простой запуск, как задумано.
+    for (const key of ['CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN', 'CMS_URL',
+      'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS']) {
       delete process.env[key];
     }
     process.env.CMS_URL = `http://127.0.0.1:${process.env.PORT}`;
@@ -358,6 +374,14 @@ describe('семинар из админки доходит до опублик�
       await pageUi.waitForURL(/\/admin(?!\/auth)/);
       await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/create`);
       await pageUi.locator('input[name="name"]').waitFor();
+      // Метка «Опубликован» есть и у выбранных связей, поэтому ждём ответ самой публикации.
+      const publishForm = async () => {
+        const published = pageUi.waitForResponse(
+          (response) => response.url().includes('/actions/publish') && response.request().method() === 'POST',
+        );
+        await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
+        assert.ok((await published).ok(), 'публикация из формы не прошла');
+      };
       const pick = async (label, query, option) => {
         await pageUi.getByRole('combobox', { name: label }).click();
         await pageUi.keyboard.type(query);
@@ -384,8 +408,7 @@ describe('семинар из админки доходит до опублик�
       await pageUi.keyboard.press('ControlOrMeta+V');
       await shot('ui-03-filled');
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
-      await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
-      await pageUi.getByRole('status', { name: 'published' }).or(pageUi.getByText('Опубликовано')).first().waitFor();
+      await publishForm();
       await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/create`);
       await pageUi.getByRole('textbox', { name: 'Город' }).or(pageUi.locator('input[name="city"]')).first().waitFor();
       await pick('Семинар', 'браузера', new RegExp(uiSeminar.name));
@@ -403,8 +426,7 @@ describe('семинар из админки доходит до опублик�
       await pageUi.getByRole('textbox', { name: 'Город' }).fill('Казань');
       await pageUi.getByRole('textbox', { name: 'Цена', exact: true }).fill('36600');
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
-      await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
-      await pageUi.getByRole('status', { name: 'published' }).first().waitFor();
+      await publishForm();
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.
       await pageUi.getByRole('link', { name: 'Обновить сайт' }).click();
@@ -440,7 +462,8 @@ describe('семинар из админки доходит до опублик�
       await cover.scrollIntoViewIfNeeded().catch(() => assert.fail('картинки семинара нет на странице института'));
       assert.ok(await cover.isVisible(), 'картинка семинара не видна');
       assert.ok(
-        await cover.evaluate((img) => img.complete && img.naturalWidth > 0),
+        // loading="lazy": ждём декодирования, а не читаем complete сразу после прокрутки.
+        await cover.evaluate((img) => img.decode().then(() => img.naturalWidth > 0, () => false)),
         'картинка семинара не загрузилась',
       );
       await visitor.screenshot({ path: path.join(work, 'site-institute.png'), fullPage: true });

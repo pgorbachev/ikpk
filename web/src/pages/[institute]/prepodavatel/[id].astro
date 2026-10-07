@@ -30,7 +30,7 @@ const { teacher, institute } = Astro.props as {
 
 <BaseLayout
   title={`${teacher.name} — преподаватель ${institute.name}`}
-  description={excerpt(teacher.bio_text, 160)}
+  description={excerpt(teacher.bio_text, 160) || undefined}
 >
   <div class="container">
     <Breadcrumbs
