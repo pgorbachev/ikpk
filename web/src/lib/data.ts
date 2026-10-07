@@ -427,8 +427,8 @@ export function formatDate(dateStr: string): string {
 export function stripH1(html: string): string {
   return html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
 }
-export function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+export function stripHtml(html: string | null | undefined): string {
+  return (html ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // Helper: excerpt
