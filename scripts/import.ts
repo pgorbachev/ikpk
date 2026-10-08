@@ -271,6 +271,20 @@ function buildSeo(
 // Core CRUD – find / resolve / upsert
 // ────────────────────────────────────────────────────────────────
 
+async function findByStatus(
+  apiName: string,
+  legacyId: string,
+  status?: "draft",
+): Promise<StrapiEntry | null> {
+  const statusQuery = status ? `&status=${status}` : "";
+  const res = await api<{ data: StrapiEntry[] }>(
+    "GET",
+    `/api/${apiName}?filters[legacy_id][$eq]=${encodeURIComponent(legacyId)}&pagination[pageSize]=1${statusQuery}`,
+  );
+  const list = res?.data;
+  return Array.isArray(list) && list.length > 0 ? list[0] : null;
+}
+
 async function findByLegacyId(
   apiName: string,
   legacyId: string,
@@ -278,13 +292,11 @@ async function findByLegacyId(
   if (strapiOffline) return null; // fast path when Strapi is unreachable
 
   try {
-    const res = await api<{ data: StrapiEntry[] }>(
-      "GET",
-      `/api/${apiName}?filters[legacy_id][$eq]=${encodeURIComponent(legacyId)}&pagination[pageSize]=1`,
-    );
-    const list = res?.data;
-    if (Array.isArray(list) && list.length > 0) {
-      const entry = list[0];
+    // Без status REST отдаёт только опубликованное (задача 1.8): снятую с публикации
+    // или ни разу не опубликованную запись так не найти — повторный перенос ушёл бы в
+    // создание и упёрся в занятый slug. Второй запрос ищет и среди черновиков.
+    const entry = (await findByStatus(apiName, legacyId)) ?? (await findByStatus(apiName, legacyId, "draft"));
+    if (entry) {
       getCache(apiName).set(legacyId, {
         id: entry.id,
         documentId: entry.documentId,
@@ -350,9 +362,13 @@ async function upsert(
         report.updated++;
         return existing;
       }
+      // Перенос не меняет статус публикации уже существующих записей (задача 1.8): без
+      // явного status=draft REST по умолчанию пишет в опубликованную версию, и это и
+      // публикует ни разу не опубликованную запись, и затирает опубликованный контент той,
+      // что уже опубликована. `status=draft` всегда пишет только в черновик.
       const res = await api<{ data: StrapiEntry }>(
         "PUT",
-        `/api/${apiName}/${existing.documentId}`,
+        `/api/${apiName}/${existing.documentId}?status=draft`,
         { data },
       );
       const entry = res.data;
@@ -733,23 +749,30 @@ async function importScheduleEntries(): Promise<void> {
     const seminarObj = e.seminar as { slug?: string } | undefined;
     if (seminarObj?.slug) {
       let docId: string | null = null;
+      const slug = seminarObj.slug;
 
       // 1. Try cache via slug → legacy_id → cache
-      const semLid = seminarSlugToLid.get(seminarObj.slug);
+      const semLid = seminarSlugToLid.get(slug);
       if (semLid) {
         const cached = getCache("seminars").get(semLid);
         if (cached) docId = cached.documentId;
       }
 
-      // 2. Fallback: direct API lookup by slug
+      // 2. Fallback: direct API lookup by slug, с черновиками (задача 1.8) — семинар
+      // проведения мог быть снят с публикации редактором.
       if (!docId && !strapiOffline) {
         try {
-          const res = await api<{ data: StrapiEntry[] }>(
-            "GET",
-            `/api/seminars?filters[slug][$eq]=${encodeURIComponent(seminarObj.slug)}&pagination[pageSize]=1`,
-          );
-          if (res?.data?.[0]) {
-            docId = res.data[0].documentId;
+          const bySlug = async (status?: "draft") => {
+            const statusQuery = status ? `&status=${status}` : "";
+            const res = await api<{ data: StrapiEntry[] }>(
+              "GET",
+              `/api/seminars?filters[slug][$eq]=${encodeURIComponent(slug)}&pagination[pageSize]=1${statusQuery}`,
+            );
+            return res?.data?.[0] ?? null;
+          };
+          const found = (await bySlug()) ?? (await bySlug("draft"));
+          if (found) {
+            docId = found.documentId;
           }
         } catch {
           if (!DRY_RUN) {
