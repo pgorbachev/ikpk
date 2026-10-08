@@ -73,6 +73,15 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run remote parity tests
+        # Тот же объявленный статус чата, что и в обязательном `Tests` (test.yml, шаг «Run build
+        # tests (dist checks)»): адреса портала Bitrix24 пока нет, `none` — честное объявление
+        # текущего состояния, а не догадка об адресе. Без него сборка даёт состояние 3
+        # (unspecified), и dist-проверка «объявленная конфигурация боевой сборки согласна с её
+        # выводом» краснеет по конструкции. Когда заказчик передаст адрес, он переедет сюда же, как и в
+        # test.yml; наличие объявления у каждого такого шага держит
+        # web/tests/workflow-chat-loader-declaration.test.ts.
+        env:
+          CHAT_LOADER_SRC: 'none'
         run: npm run test:build:remote
 
   cms-to-site:
