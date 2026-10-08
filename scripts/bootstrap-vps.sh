@@ -14,7 +14,7 @@ set -euo pipefail
 usage() {
   echo "Usage: $0 <host-or-ip>"
   echo "Example: $0 146.103.124.113"
-  echo "Env: ENVIRONMENT=stand|prod (default stand), DOMAIN, FORCE_VHOST=1, BACKUP_ONLY=1"
+  echo "Env: ENVIRONMENT=stand|prod|trial (default stand), DOMAIN, FORCE_VHOST=1, BACKUP_ONLY=1"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -497,6 +497,14 @@ Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
       # ролью CI вместо стендовой, тогда как все выкладки через scripts/deploy-web.sh —
       # со `stand`; тот скрипт экспортирует PAYMENT_ROLE сам.
       site_build_env+=$'\nEnvironment=PAYMENT_ROLE=stand'
+    elif [[ "${SITE_DEMO_FORMS:-}" == "stub" ]]; then
+      # Временные окружения (trial): заявки не уходят в CRM, роль оплаты объявлена явно.
+      if [[ -z "${SITE_PAYMENT_ROLE:-}" ]]; then
+        echo '[bootstrap] SITE_DEMO_FORMS=stub требует объявленной SITE_PAYMENT_ROLE' >&2
+        exit 1
+      fi
+      site_build_env+=$'\nEnvironment=DEMO_FORMS=stub'
+      site_build_env+=$'\n'"Environment=PAYMENT_ROLE=${SITE_PAYMENT_ROLE}"
     fi
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi
