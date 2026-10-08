@@ -27,6 +27,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   let app;
   let base;
   let token;
+  let publishedInstitute;
+  let publishedProgram;
 
   before(async () => {
     const [major] = process.versions.node.split('.').map(Number);
@@ -91,6 +93,20 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(login.status, 200, JSON.stringify(loginBody));
     token = loginBody.data.accessToken;
     assert.equal(typeof token, 'string');
+
+    publishedInstitute = await app.documents('api::institute.institute').create({
+      status: 'published',
+      data: { name: 'Институт для теста', slug: 'institut-dlya-testa', legacy_id: 'institut-dlya-testa' },
+    });
+    publishedProgram = await app.documents('api::course-group.course-group').create({
+      status: 'published',
+      data: {
+        name: 'Программа для теста',
+        slug: 'programma-dlya-testa',
+        legacy_id: 'programma-dlya-testa',
+        institute: publishedInstitute.documentId,
+      },
+    });
   });
 
   after(async () => {
@@ -101,6 +117,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   });
 
   test('форма создания семинара видит поля, а не только код роли', async () => {
+    const contentTypes = app.plugin('content-manager').service('content-types');
+    const configuration = await contentTypes.findConfiguration(app.contentType('api::seminar.seminar'));
+    assert.match(configuration.metadatas.course_group.edit.description, /Для публикации выберите опубликованную программу/);
     const response = await fetch(`${base}/admin/users/me/permissions`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -174,6 +193,119 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.ok((await found('МОЙ СЕМИНАР ПОИСКА')).includes(cyrillic.documentId), 'прописные');
     assert.ok((await found('latin search')).includes(latin.documentId), 'латиница');
     assert.equal((await found('latin search')).includes(cyrillic.documentId), false, 'LIKE совпал со всем подряд');
+  });
+
+  test('черновик без программы сохраняется, публикация сообщает о недостающей связи', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const draft = await seminars.create({ data: { name: 'Пока без программы' } });
+    assert.equal(draft.publishedAt ?? null, null);
+
+    await assert.rejects(
+      () => seminars.publish({ documentId: draft.documentId }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    await assert.rejects(
+      () => seminars.create({ status: 'published', data: { name: 'Без программы сразу' } }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: {
+          name: 'Подмена пустой связью',
+          course_group: { set: [], connect: [publishedProgram.documentId] },
+        },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    const unpublished = await app.documents('api::course-group.course-group').create({
+      data: { name: 'Неопубликованная программа', slug: 'neopublikovannaya-programma' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: {
+          name: 'Противоречивые идентификаторы',
+          course_group: { id: publishedProgram.id, documentId: unpublished.documentId },
+        },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    const stillDraft = await seminars.findOne({ documentId: draft.documentId, status: 'published' });
+    assert.equal(stillDraft, null);
+  });
+
+  test('семинар публикуется только со связанной опубликованной программой сайта', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const programs = app.documents('api::course-group.course-group');
+    const program = await programs.create({
+      data: {
+        name: 'Программа-черновик',
+        slug: 'programma-chernovik',
+        legacy_id: 'programma-chernovik',
+        institute: publishedInstitute.documentId,
+      },
+    });
+    const seminar = await seminars.create({
+      data: { name: 'Ждёт программу', course_group: program.documentId },
+    });
+    await assert.rejects(
+      () => seminars.publish({ documentId: seminar.documentId }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+    await programs.publish({ documentId: program.documentId });
+    await seminars.publish({ documentId: seminar.documentId });
+    const published = await seminars.findOne({
+      documentId: seminar.documentId,
+      status: 'published',
+      populate: ['course_group'],
+    });
+    assert.equal(published.course_group.documentId, program.documentId);
+    await seminars.update({
+      documentId: seminar.documentId,
+      status: 'published',
+      data: { duration: '3 дня', course_group: { connect: [], disconnect: [] } },
+    });
+    await assert.rejects(
+      () => seminars.update({
+        documentId: seminar.documentId,
+        status: 'published',
+        data: { course_group: { set: [] } },
+      }),
+      /Выберите опубликованную программу перед публикацией семинара/,
+    );
+
+    const noSiteId = await programs.create({
+      status: 'published',
+      data: { name: 'Без идентификатора сайта', slug: 'bez-identifikatora-sayta' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: { name: 'Не попадёт на сайт', course_group: noSiteId.documentId },
+      }),
+      /нет идентификатора для сайта/,
+    );
+
+    const noInstitute = await programs.create({
+      status: 'published',
+      data: { name: 'Без института', slug: 'bez-instituta', legacy_id: 'bez-instituta' },
+    });
+    await assert.rejects(
+      () => seminars.create({
+        status: 'published',
+        data: { name: 'Неизвестный институт', course_group: noInstitute.documentId },
+      }),
+      /нет опубликованного института для сайта/,
+    );
+    const matchingIds = await seminars.create({
+      status: 'published',
+      data: {
+        name: 'Совпадающие идентификаторы',
+        course_group: { id: publishedProgram.id, documentId: publishedProgram.documentId },
+      },
+    });
+    assert.ok(matchingIds.publishedAt);
   });
 
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
@@ -294,7 +426,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const publishedSeminar = await seminars.create({
       status: 'published',
-      data: { name: 'Опубликованный' },
+      data: { name: 'Опубликованный', course_group: publishedProgram.documentId },
     });
     const published = await entries.create({
       status: 'published',
@@ -333,8 +465,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(stillPublished.seminar.documentId, publishedSeminar.documentId);
     assert.ok(stillPublished.publishedAt);
 
-    const source = await seminars.create({ status: 'published', data: { name: 'Семинар А' } });
-    const target = await seminars.create({ status: 'published', data: { name: 'Семинар Б' } });
+    const source = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар А', course_group: publishedProgram.documentId },
+    });
+    const target = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар Б', course_group: publishedProgram.documentId },
+    });
     const reassignment = [
       ['numericString', () => String(target.id)],
       ['numericObject', () => ({ connect: [{ id: target.id }] })],
