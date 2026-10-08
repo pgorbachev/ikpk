@@ -1,13 +1,10 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { calendarDateParts, hasExplicitOffset } from './wall-clock.js';
 
 /**
  * Редакторские правила семинара и проведения.
  * Чистые функции: сервер вызывает их из document middleware, тесты — напрямую.
- * Исключение доверенного импорта живёт в AsyncLocalStorage и не читается из тела запроса.
+ * Исключение доверенного импорта не читается из тела запроса.
  */
-
-const trustedImport = new AsyncLocalStorage();
 
 export const SEMINAR_UID = 'api::seminar.seminar';
 export const SCHEDULE_ENTRY_UID = 'api::schedule-entry.schedule-entry';
@@ -28,21 +25,22 @@ const MONTHS = [
   'декабря',
 ];
 
-export function isTrustedImport() {
-  return trustedImport.getStore() === true;
+/**
+ * Доверенным переносом считается запрос Content API с токеном полного доступа (D5):
+ * признак — учётные данные запроса, проверенные самим Strapi, а не тело запроса.
+ * `strapi.requestContext.get()` в middleware document service отдаёт сам koa-контекст,
+ * поэтому поле — `ctx.state.auth` (@strapi/core, services/auth: `ctx.state.auth =
+ * { strategy, credentials, ability }`); у токена Content API имя стратегии —
+ * `content-api-token` (@strapi/admin, strategies/content-api-token.js), тип токена —
+ * `credentials.type`, доверие даёт только `full-access`.
+ */
+function isTrustedRequest(strapi) {
+  const auth = strapi?.requestContext?.get()?.state?.auth;
+  return auth?.strategy?.name === 'content-api-token' && auth?.credentials?.type === 'full-access';
 }
 
-export function runTrustedImport(fn) {
-  return trustedImport.run(true, fn);
-}
-
-/** Тело запроса не включает исключение, даже если в нём лежит одноимённый флаг. */
-export function trustedImportFromEditorPayload(payload) {
-  const requested =
-    Boolean(payload) &&
-    typeof payload === 'object' &&
-    payload.trustedImport === true;
-  return requested ? isTrustedImport() : isTrustedImport();
+export function isTrustedImport(strapi) {
+  return isTrustedRequest(strapi);
 }
 
 function text(value) {
@@ -121,18 +119,28 @@ export function seminarPublicationError(name) {
   return text(name) ? null : 'Заполните название семинара.';
 }
 
+export const SEMINAR_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 /**
  * Пустое название не получает служебный slug модели.
  * Уже заданный адрес сохраняется, в том числе если название потом очистили в черновике.
  * Заглушка `seminar` при пустом прежнем названии заменяется, когда название появляется.
+ *
+ * Доверенный перенос (D5) при создании сохраняет переданный адрес прежнего сайта — его
+ * не пересчитывать из названия. Форматную проверку и проверку занятости делает вызывающий
+ * код: им нужен доступ к БД, а эта функция — чистая.
  */
-export function decideSeminarSlug({ name, existingSlug, existingName, modelName }) {
+export function decideSeminarSlug({ name, existingSlug, existingName, modelName, trustedImport, isCreate, incomingSlug }) {
   const trimmed = text(name);
   const slug = text(existingSlug);
   const previousName = text(existingName);
   if (!trimmed) {
     if (!slug) return { action: 'clear' };
     return { action: 'keep', slug };
+  }
+  if (trustedImport && isCreate) {
+    const incoming = text(incomingSlug);
+    if (incoming) return { action: 'incoming', slug: incoming };
   }
   if (!slug) return { action: 'generate' };
   if (!previousName && slug === modelName) return { action: 'generate' };

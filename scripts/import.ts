@@ -62,6 +62,14 @@ interface EntityReport {
 interface CacheEntry {
   id: number;
   documentId: string;
+  /** Есть ли у записи опубликованная версия (задача 1.8: перенос статус не меняет). */
+  published: boolean;
+}
+
+interface LegacyLookupResult {
+  entry: StrapiEntry;
+  /** true — запись найдена опубликованной; false — только черновиком. */
+  viaPublished: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -271,25 +279,51 @@ function buildSeo(
 // Core CRUD – find / resolve / upsert
 // ────────────────────────────────────────────────────────────────
 
+/** Общий поиск по полю: сначала опубликованное (REST default), затем явный статус. */
+async function findByField(
+  apiName: string,
+  field: string,
+  value: string,
+  status?: "draft" | "published",
+): Promise<StrapiEntry | null> {
+  const statusQuery = status ? `&status=${status}` : "";
+  const res = await api<{ data: StrapiEntry[] }>(
+    "GET",
+    `/api/${apiName}?filters[${field}][$eq]=${encodeURIComponent(value)}&pagination[pageSize]=1${statusQuery}`,
+  );
+  const list = res?.data;
+  return Array.isArray(list) && list.length > 0 ? list[0] : null;
+}
+
 async function findByLegacyId(
   apiName: string,
   legacyId: string,
-): Promise<StrapiEntry | null> {
+): Promise<LegacyLookupResult | null> {
   if (strapiOffline) return null; // fast path when Strapi is unreachable
 
   try {
-    const res = await api<{ data: StrapiEntry[] }>(
-      "GET",
-      `/api/${apiName}?filters[legacy_id][$eq]=${encodeURIComponent(legacyId)}&pagination[pageSize]=1`,
-    );
-    const list = res?.data;
-    if (Array.isArray(list) && list.length > 0) {
-      const entry = list[0];
+    // Без status REST отдаёт только опубликованное (задача 1.8): снятую с публикации
+    // или ни разу не опубликованную запись так не найти — повторный перенос ушёл бы в
+    // создание и упёрся в занятый slug. Второй запрос ищет и среди черновиков.
+    // Какой из двух сработал, решает и статус публикации при обновлении (1.8): перенос
+    // никогда не меняет статус существующей записи.
+    const published = await findByField(apiName, "legacy_id", legacyId);
+    if (published) {
       getCache(apiName).set(legacyId, {
-        id: entry.id,
-        documentId: entry.documentId,
+        id: published.id,
+        documentId: published.documentId,
+        published: true,
       });
-      return entry;
+      return { entry: published, viaPublished: true };
+    }
+    const draft = await findByField(apiName, "legacy_id", legacyId, "draft");
+    if (draft) {
+      getCache(apiName).set(legacyId, {
+        id: draft.id,
+        documentId: draft.documentId,
+        published: false,
+      });
+      return { entry: draft, viaPublished: false };
     }
   } catch (err: unknown) {
     // In dry-run without connectivity, treat as "not found"
@@ -315,7 +349,7 @@ async function resolveRelation(
   if (cached) return cached.documentId;
 
   const found = await findByLegacyId(apiName, legacyId);
-  if (found) return found.documentId;
+  if (found) return found.entry.documentId;
 
   report.missingRelations.push({
     legacy_id: sourceLegacyId,
@@ -334,6 +368,7 @@ async function upsert(
   rawLegacyId: unknown,
   rawData: Record<string, unknown>,
   report: EntityReport,
+  opts?: { forceDraft?: boolean },
 ): Promise<StrapiEntry | null> {
   // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
   // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
@@ -348,17 +383,26 @@ async function upsert(
       if (DRY_RUN) {
         log(`  [DRY] Would update ${apiName} [${legacyId}]`);
         report.updated++;
-        return existing;
+        return existing.entry;
       }
+      // Перенос не меняет статус публикации уже существующих записей (задача 1.8): запись
+      // с опубликованной версией обновляется PUT без status (пишет в опубликованную), запись
+      // без неё — только `?status=draft`. Исключение владельца (08.10.2026): опубликованное
+      // проведение семинара без опубликованной версии своей опубликованной версии не
+      // трогает — данные идут в черновик (opts.forceDraft).
+      const useDraft = Boolean(opts?.forceDraft) || !existing.viaPublished;
+      const statusQuery = useDraft ? "?status=draft" : "";
       const res = await api<{ data: StrapiEntry }>(
         "PUT",
-        `/api/${apiName}/${existing.documentId}`,
+        `/api/${apiName}/${existing.entry.documentId}${statusQuery}`,
         { data },
       );
       const entry = res.data;
       getCache(apiName).set(legacyId, {
         id: entry.id,
         documentId: entry.documentId,
+        // Публикация этим обновлением не меняется: статус после равен статусу до.
+        published: existing.viaPublished,
       });
       log(`  ✏️  Updated ${apiName} [${legacyId}]`);
       report.updated++;
@@ -375,9 +419,17 @@ async function upsert(
       data: { ...data, legacy_id: legacyId },
     });
     const entry = res.data;
+    // POST без query публикует по умолчанию (REST default, см. findByField выше) — только
+    // что созданная запись уже имеет опубликованную версию. Кешировать здесь `published:
+    // false` было ошибкой: запись, повторно перенесённая в ТОМ ЖЕ прогоне и ссылающаяся на
+    // этот же семинар, форсировалась в черновик (opts.forceDraft), и её опубликованная
+    // версия оставалась устаревшей. Берём признак из самого ответа API (`publishedAt`), а
+    // не жёсткое значение — на случай, если ответ его не содержит, по умолчанию true.
+    const createdPublished = "publishedAt" in entry ? entry.publishedAt != null : true;
     getCache(apiName).set(legacyId, {
       id: entry.id,
       documentId: entry.documentId,
+      published: createdPublished,
     });
     log(`  ✅ Created ${apiName} [${legacyId}]`);
     report.created++;
@@ -667,7 +719,7 @@ async function importSeminars(): Promise<void> {
         } else {
           const found = await findByLegacyId("teachers", tLid);
           if (found) {
-            docIds.push(found.documentId);
+            docIds.push(found.entry.documentId);
           } else {
             report.missingRelations.push({
               legacy_id: e.legacy_id as string,
@@ -729,27 +781,35 @@ async function importScheduleEntries(): Promise<void> {
       legacy_id: lid,
     };
 
-    // Resolve seminar relation via slug
+    // Resolve seminar relation via slug. seminarPublished остаётся true, когда у проведения
+    // нет своего семинара: тогда форсировать черновик (задача 1.8, исключение владельца) не
+    // от чего — обычное правило решает по статусу самого проведения.
     const seminarObj = e.seminar as { slug?: string } | undefined;
+    let seminarPublished = true;
     if (seminarObj?.slug) {
       let docId: string | null = null;
+      const slug = seminarObj.slug;
 
-      // 1. Try cache via slug → legacy_id → cache
-      const semLid = seminarSlugToLid.get(seminarObj.slug);
+      // 1. Try cache via slug → legacy_id → cache. Кеш пишется в findByLegacyId/upsert и несёт
+      // актуальный статус публикации семинара на момент его обработки в фазе 3.
+      const semLid = seminarSlugToLid.get(slug);
       if (semLid) {
         const cached = getCache("seminars").get(semLid);
-        if (cached) docId = cached.documentId;
+        if (cached) {
+          docId = cached.documentId;
+          seminarPublished = cached.published;
+        }
       }
 
-      // 2. Fallback: direct API lookup by slug
+      // 2. Fallback: direct API lookup by slug, с черновиками (задача 1.8) — семинар
+      // проведения мог быть снят с публикации редактором.
       if (!docId && !strapiOffline) {
         try {
-          const res = await api<{ data: StrapiEntry[] }>(
-            "GET",
-            `/api/seminars?filters[slug][$eq]=${encodeURIComponent(seminarObj.slug)}&pagination[pageSize]=1`,
-          );
-          if (res?.data?.[0]) {
-            docId = res.data[0].documentId;
+          const published = await findByField("seminars", "slug", slug);
+          const found = published ?? (await findByField("seminars", "slug", slug, "draft"));
+          if (found) {
+            docId = found.documentId;
+            seminarPublished = Boolean(published);
           }
         } catch {
           if (!DRY_RUN) {
@@ -771,7 +831,9 @@ async function importScheduleEntries(): Promise<void> {
       }
     }
 
-    await upsert("schedule-entries", lid, data, report);
+    await upsert("schedule-entries", lid, data, report, {
+      forceDraft: Boolean(seminarObj?.slug) && !seminarPublished,
+    });
   }
 }
 

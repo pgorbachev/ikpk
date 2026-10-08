@@ -18,6 +18,7 @@ import {
   relationDocumentIds,
   relationNumericIds,
   seminarPublicationError,
+  SEMINAR_SLUG_PATTERN,
 } from './rules.js';
 
 const { ValidationError } = errors;
@@ -142,7 +143,7 @@ async function applyEntryWrite(strapi, context) {
   const previousSeminarId = seminarIdOf(existing);
   const seminarId = await resolvedSeminarId(strapi, data, previousSeminarId);
   const name = decideEntryName({
-    trustedImport: isTrustedImport(),
+    trustedImport: isTrustedImport(strapi),
     incomingName: data.name,
     existingName: existing?.name ?? null,
     previousSeminarId,
@@ -199,9 +200,23 @@ async function applySeminarSlug(strapi, context, next) {
     existingSlug: existing?.slug ?? null,
     existingName: existing?.name ?? null,
     modelName: SEMINAR_MODEL_NAME,
+    trustedImport: isTrustedImport(strapi),
+    isCreate: context.action === 'create',
+    incomingSlug: data.slug,
   });
   if (decision.action === 'clear') {
     data.slug = null;
+  } else if (decision.action === 'incoming') {
+    if (!SEMINAR_SLUG_PATTERN.test(decision.slug)) {
+      throw new ValidationError(
+        `Адрес «${decision.slug}» не подходит для ссылки: только латинские строчные буквы, цифры и дефис между словами.`,
+      );
+    }
+    const taken = await strapi.db.query(SEMINAR_UID).findOne({ where: { slug: decision.slug } });
+    if (taken) {
+      throw new ValidationError(`Адрес «${decision.slug}» уже используется другим семинаром.`);
+    }
+    data.slug = decision.slug;
   } else if (decision.action === 'keep') {
     data.slug = decision.slug;
   } else if (text(existing?.slug) === SEMINAR_MODEL_NAME && existing?.id) {
