@@ -419,10 +419,17 @@ async function upsert(
       data: { ...data, legacy_id: legacyId },
     });
     const entry = res.data;
+    // POST без query публикует по умолчанию (REST default, см. findByField выше) — только
+    // что созданная запись уже имеет опубликованную версию. Кешировать здесь `published:
+    // false` было ошибкой: запись, повторно перенесённая в ТОМ ЖЕ прогоне и ссылающаяся на
+    // этот же семинар, форсировалась в черновик (opts.forceDraft), и её опубликованная
+    // версия оставалась устаревшей. Берём признак из самого ответа API (`publishedAt`), а
+    // не жёсткое значение — на случай, если ответ его не содержит, по умолчанию true.
+    const createdPublished = "publishedAt" in entry ? entry.publishedAt != null : true;
     getCache(apiName).set(legacyId, {
       id: entry.id,
       documentId: entry.documentId,
-      published: false,
+      published: createdPublished,
     });
     log(`  ✅ Created ${apiName} [${legacyId}]`);
     report.created++;

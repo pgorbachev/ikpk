@@ -121,6 +121,11 @@ test('настраиваемый токен, панель и запрос без
   assert.equal(isTrustedImport({ requestContext: { get: () => undefined } }), false);
 });
 
+test('токен только для чтения (content-api-token, read-only) доверия не даёт', () => {
+  const readOnly = fakeStrapi({ strategy: { name: 'content-api-token' }, credentials: { type: 'read-only' } });
+  assert.equal(isTrustedImport(readOnly), false);
+});
+
 test('чужое проведение нельзя присоединить, своё и свободное можно', () => {
   assert.equal(classifyScheduleLink('sem-1', 'sem-2'), 'foreign');
   assert.equal(classifyScheduleLink('sem-1', 'sem-1'), 'keep');
