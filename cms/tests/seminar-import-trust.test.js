@@ -47,6 +47,7 @@ describe('доверенный перенос в собранном Strapi', { t
   let adminJwt;
   let fullToken;
   let customToken;
+  let readOnlyToken;
   let siteUserJwt;
   let seminar;
 
@@ -155,6 +156,15 @@ describe('доверенный перенос в собранном Strapi', { t
     });
     customToken = custom.accessKey;
     assert.equal(custom.type, 'custom');
+    const readOnly = await tokens.create({
+      name: 'trust-read-only',
+      description: 'только чтение',
+      type: 'read-only',
+      kind: 'content-api',
+      lifespan: null,
+    });
+    readOnlyToken = readOnly.accessKey;
+    assert.equal(readOnly.type, 'read-only');
 
     // Запрос без токена и пользователь сайта получают право создания проведения, иначе их отказ
     // 403 был бы «не доверенным» по совпадению, а не по правилу имени. Чтение семинаров нужно,
@@ -228,6 +238,19 @@ describe('доверенный перенос в собранном Strapi', { t
       assert.equal(stored.name, 'НПК-1');
     });
   }
+
+  test('токен только для чтения не может создать проведение и не доверенный', async () => {
+    const result = await call('POST', '/api/schedule-entries', readOnlyToken, entryBody('Н-ПК-1 read-only'));
+    assert.ok(result.status >= 400 && result.status < 500, `создание read-only токеном принято: ${result.status} ${result.text}`);
+  });
+
+  test('токен только для чтения не может обновить семинар', async () => {
+    const result = await call('PUT', `/api/seminars/${seminar.documentId}`, readOnlyToken, {
+      data: { name: 'Подмена read-only' },
+    });
+    assert.ok(result.status >= 400 && result.status < 500, `обновление read-only токеном принято: ${result.status} ${result.text}`);
+    assert.notEqual((await draftOf(SEMINAR, seminar.documentId)).name, 'Подмена read-only');
+  });
 
   // ── Адрес семинара ─────────────────────────────────────────────────────────
 
@@ -340,6 +363,8 @@ describe('доверенный перенос в собранном Strapi', { t
     unpublished: 'trust-reimport-unpublished',
     unpublishedEntry: 'trust-reimport-entry-unpublished',
     entryOfUnpublished: 'trust-reimport-entry-of-unpublished',
+    published: 'trust-reimport-published',
+    publishedEntry: 'trust-reimport-entry-published',
   };
   let importRun;
   let fixtures;
@@ -375,7 +400,18 @@ describe('доверенный перенос в собранном Strapi', { t
     });
     await seminars.unpublish({ documentId: hidden.documentId });
 
-    fixtures = { host, hidden, entryOfUnpublished };
+    // Семинар, остающийся опубликованным (основное правило 1.8, не исключение).
+    const published = await seminars.create({
+      status: 'published',
+      data: { name: 'Остаётся опубликованным', legacy_id: ids.published, description: 'прежнее' },
+    });
+    // Опубликованное проведение опубликованного семинара.
+    const publishedEntry = await entries.create({
+      status: 'published',
+      data: { seminar: published.documentId, city: 'Прежний город', legacy_id: ids.publishedEntry, ...dates },
+    });
+
+    fixtures = { host, hidden, entryOfUnpublished, published, publishedEntry };
 
     // Материал переноса: только эти записи; прочие типы пусты.
     const transfer = path.join(work, 'transfer');
@@ -391,6 +427,7 @@ describe('доверенный перенос в собранном Strapi', { t
       JSON.stringify([
         { legacy_id: ids.neverPublished, name: 'Ни разу не опубликован', slug: 'ni-razu-ne-opublikovan', description_html: 'из повторного переноса' },
         { legacy_id: ids.unpublished, name: 'Снят с публикации', slug: unpublished.slug, description_html: 'из повторного переноса' },
+        { legacy_id: ids.published, name: 'Остаётся опубликованным', slug: published.slug, description_html: 'из повторного переноса' },
       ]),
     );
     // Семинаров проведений нет в seminars.json: связь ищется запросом по slug (поиск с черновиками).
@@ -399,6 +436,7 @@ describe('доверенный перенос в собранном Strapi', { t
       JSON.stringify([
         { id: ids.unpublishedEntry, name: host.name, city: { name: 'Новый город' }, seminar: { slug: host.slug }, ...dates },
         { id: ids.entryOfUnpublished, name: hidden.name, city: { name: 'Новый город' }, seminar: { slug: hidden.slug }, ...dates },
+        { id: ids.publishedEntry, name: published.name, city: { name: 'Новый город' }, seminar: { slug: published.slug }, ...dates },
       ]),
     );
 
@@ -448,6 +486,23 @@ describe('доверенный перенос в собранном Strapi', { t
     assert.equal(drafts.length, 1, 'проведение с этим legacy_id не одно');
     assert.equal(drafts[0].city, 'Новый город');
     assert.equal(published.length, 0, 'перенос опубликовал проведение');
+  });
+
+  test('повторный перенос опубликованного семинара обновляет опубликованную версию', async () => {
+    const output = await reimport();
+    assert.equal(output.includes(`❌ seminars [${ids.published}]`), false, `ошибка переноса:\n${output}`);
+    const { drafts, published } = await versions(SEMINAR, ids.published);
+    assert.equal(published.length, 1, `опубликованная версия пропала:\n${output}`);
+    assert.equal(published[0].description, 'из повторного переноса');
+    assert.equal(drafts.length, 1);
+  });
+
+  test('повторный перенос опубликованного проведения опубликованного семинара обновляет опубликованную версию', async () => {
+    const output = await reimport();
+    assert.equal(output.includes(`❌ schedule-entries [${ids.publishedEntry}]`), false, `ошибка переноса:\n${output}`);
+    const { published } = await versions(ENTRY, ids.publishedEntry);
+    assert.equal(published.length, 1, `опубликованная версия пропала:\n${output}`);
+    assert.equal(published[0].city, 'Новый город');
   });
 
   test('опубликованное проведение неопубликованного семинара: опубликованная версия нетронута', async () => {

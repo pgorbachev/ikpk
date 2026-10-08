@@ -1,13 +1,10 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { calendarDateParts, hasExplicitOffset } from './wall-clock.js';
 
 /**
  * Редакторские правила семинара и проведения.
  * Чистые функции: сервер вызывает их из document middleware, тесты — напрямую.
- * Исключение доверенного импорта живёт в AsyncLocalStorage и не читается из тела запроса.
+ * Исключение доверенного импорта не читается из тела запроса.
  */
-
-const trustedImport = new AsyncLocalStorage();
 
 export const SEMINAR_UID = 'api::seminar.seminar';
 export const SCHEDULE_ENTRY_UID = 'api::schedule-entry.schedule-entry';
@@ -43,21 +40,7 @@ function isTrustedRequest(strapi) {
 }
 
 export function isTrustedImport(strapi) {
-  if (trustedImport.getStore() === true) return true;
   return isTrustedRequest(strapi);
-}
-
-export function runTrustedImport(fn) {
-  return trustedImport.run(true, fn);
-}
-
-/** Тело запроса не включает исключение, даже если в нём лежит одноимённый флаг. */
-export function trustedImportFromEditorPayload(payload) {
-  const requested =
-    Boolean(payload) &&
-    typeof payload === 'object' &&
-    payload.trustedImport === true;
-  return requested ? isTrustedImport() : isTrustedImport();
 }
 
 function text(value) {

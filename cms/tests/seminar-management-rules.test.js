@@ -11,14 +11,17 @@ import {
   decideSeminarSlug,
   entryPublicationErrors,
   foreignLinkIds,
+  isTrustedImport,
   nextSeminarId,
   relationDocumentIds,
   relationClears,
   relationNumericIds,
-  runTrustedImport,
   seminarPublicationError,
-  trustedImportFromEditorPayload,
 } from '../src/seminar-management/rules.js';
+
+function fakeStrapi(auth) {
+  return { requestContext: { get: () => ({ state: { auth } }) } };
+}
 
 test('редактор не задаёт имя проведения, сервер берёт название семинара', () => {
   const name = decideEntryName({
@@ -95,19 +98,27 @@ test('черновик без семинара сохраняется с пус�
   );
 });
 
-test('доверенный импорт сохраняет исходное имя, а флаг в теле запроса его не включает', () => {
-  const imported = runTrustedImport(() =>
-    decideEntryName({
-      trustedImport: trustedImportFromEditorPayload({ trustedImport: true }),
-      incomingName: 'Н-ПК-1',
-      existingName: null,
-      previousSeminarId: null,
-      nextSeminarId: 'sem-1',
-      nextSeminarName: 'НПК-1',
-    }),
-  );
+test('доверенный импорт (токен полного доступа) сохраняет исходное имя', () => {
+  const trusted = fakeStrapi({ strategy: { name: 'content-api-token' }, credentials: { type: 'full-access' } });
+  const imported = decideEntryName({
+    trustedImport: isTrustedImport(trusted),
+    incomingName: 'Н-ПК-1',
+    existingName: null,
+    previousSeminarId: null,
+    nextSeminarId: 'sem-1',
+    nextSeminarName: 'НПК-1',
+  });
   assert.equal(imported, 'Н-ПК-1');
-  assert.equal(trustedImportFromEditorPayload({ trustedImport: true, name: 'Н-ПК-1' }), false);
+});
+
+test('настраиваемый токен, панель и запрос без auth доверия не дают', () => {
+  const custom = fakeStrapi({ strategy: { name: 'content-api-token' }, credentials: { type: 'custom' } });
+  const panel = fakeStrapi({ strategy: { name: 'admin' } });
+  const noAuth = fakeStrapi(undefined);
+  assert.equal(isTrustedImport(custom), false);
+  assert.equal(isTrustedImport(panel), false);
+  assert.equal(isTrustedImport(noAuth), false);
+  assert.equal(isTrustedImport({ requestContext: { get: () => undefined } }), false);
 });
 
 test('чужое проведение нельзя присоединить, своё и свободное можно', () => {
