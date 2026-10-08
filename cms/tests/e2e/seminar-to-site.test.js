@@ -351,6 +351,39 @@ describe('семинар из админки доходит до опублик�
     assert.ok(!seminarPage.includes('Описание, набранное редактором в админке.'), 'старое описание осталось');
   });
 
+  // Change seminar-management-ux, D5: перенос со старого сайта — запрос Content API с токеном
+  // полного доступа, как его делает scripts/import.ts, — сохраняет адрес прежнего сайта.
+  test('семинар из переноса открывается по адресу прежнего сайта', async () => {
+    const { accessKey } = await app.service('admin::api-token').create({
+      name: 'e2e-transfer-full-access',
+      description: 'перенос',
+      type: 'full-access',
+      kind: 'content-api',
+      lifespan: null,
+    });
+    const legacySlug = 'osoznanie-i-upravlenie-svoej-zhiznyu';
+    const groupRow = await app.documents('api::course-group.course-group').findFirst({ filters: { slug: group.slug } });
+    const response = await fetch(`${base}/api/seminars`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        data: {
+          name: 'Авторский семинар-практикум «Осознание и управление своей жизнью»',
+          slug: legacySlug,
+          legacy_id: 'e2e-transfer-legacy-slug',
+          description: '<p>Описание с прежнего сайта.</p>',
+          course_group: groupRow.documentId,
+        },
+      }),
+    });
+    assert.ok(response.ok, `перенос: ${response.status} ${await response.text()}`);
+
+    await refreshSite();
+
+    // Последний сегмент пути страницы семинара — адрес прежнего сайта, а не созданный из названия.
+    await page(`/${institute.slug}/${group.slug}/${legacySlug}`);
+  });
+
   // То же самое — руками в браузере: формы админки, выбор картинки из медиатеки флажком,
   // кнопка «Обновить сайт» на её странице, и результат глазами посетителя.
   test('в браузере: редактор заполняет формы, жмёт кнопку, посетитель видит семинар', async () => {
