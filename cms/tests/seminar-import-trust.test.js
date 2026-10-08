@@ -50,6 +50,12 @@ describe('доверенный перенос в собранном Strapi', { t
   let readOnlyToken;
   let siteUserJwt;
   let seminar;
+  let publishedProgram;
+
+  const createPublishedSeminar = (data) => app.documents(SEMINAR).create({
+    status: 'published',
+    data: { ...data, course_group: publishedProgram.documentId },
+  });
 
   // Заголовок авторизации по виду запрашивающего; null — без заголовка.
   const call = async (method, url, auth, body) => {
@@ -184,7 +190,18 @@ describe('доверенный перенос в собранном Strapi', { t
     });
     siteUserJwt = app.plugin('users-permissions').service('jwt').issue({ id: siteUser.id });
 
-    seminar = await app.documents(SEMINAR).create({ status: 'published', data: { name: 'НПК-1' } });
+    const institute = await app.documents('api::institute.institute').create({
+      status: 'published',
+      data: { name: 'Институт переноса', slug: 'institut-perenosa', legacy_id: 'trust-institute' },
+    });
+    publishedProgram = await app.documents('api::course-group.course-group').create({
+      status: 'published',
+      data: {
+        name: 'Программа переноса', slug: 'programma-perenosa', legacy_id: 'trust-program',
+        institute: institute.documentId,
+      },
+    });
+    seminar = await createPublishedSeminar({ name: 'НПК-1' });
   });
 
   after(async () => {
@@ -258,14 +275,18 @@ describe('доверенный перенос в собранном Strapi', { t
     const name = 'Авторский семинар-практикум «Осознание и управление своей жизнью»';
     const slug = 'osoznanie-i-upravlenie-svoej-zhiznyu';
     assert.notEqual(await slugFromName(name), slug, 'пример не различает адрес и название');
-    const created = ok(await call('POST', '/api/seminars', fullToken, { data: { name, slug } }), 'создание');
+    const created = ok(await call('POST', '/api/seminars', fullToken, {
+      data: { name, slug, course_group: publishedProgram.documentId },
+    }), 'создание');
     assert.equal((await draftOf(SEMINAR, created.data.documentId)).slug, slug);
   });
 
   test('перенос без адреса: slug создан из названия', async () => {
     const name = 'Перенос без адреса';
     const expected = await slugFromName(name);
-    const created = ok(await call('POST', '/api/seminars', fullToken, { data: { name, slug: '' } }), 'создание');
+    const created = ok(await call('POST', '/api/seminars', fullToken, {
+      data: { name, slug: '', course_group: publishedProgram.documentId },
+    }), 'создание');
     assert.equal((await draftOf(SEMINAR, created.data.documentId)).slug, expected);
   });
 
@@ -280,15 +301,14 @@ describe('доверенный перенос в собранном Strapi', { t
 
   test('занятый адрес из переноса — отказ с адресом, ни один slug не изменился', async () => {
     const draftTaken = await app.documents(SEMINAR).create({ data: { name: 'Занятый черновиком' } });
-    const publishedTaken = await app.documents(SEMINAR).create({
-      status: 'published',
-      data: { name: 'Занятый опубликованным' },
-    });
+    const publishedTaken = await createPublishedSeminar({ name: 'Занятый опубликованным' });
     for (const taken of [draftTaken.slug, publishedTaken.slug]) {
       assert.ok(taken);
       const name = `Другой семинар на ${taken}`;
       const before = await allSlugs();
-      const result = await call('POST', '/api/seminars', fullToken, { data: { name, slug: taken } });
+      const result = await call('POST', '/api/seminars', fullToken, {
+        data: { name, slug: taken, course_group: publishedProgram.documentId },
+      });
       assert.ok(result.status >= 400 && result.status < 500, `занятый ${taken} принят: ${result.status} ${result.text}`);
       assert.ok(result.body?.error?.message?.includes(taken), `в ошибке не назван адрес ${taken}: ${result.text}`);
       assert.deepEqual(await allSlugs(), before);
@@ -299,7 +319,7 @@ describe('доверенный перенос в собранном Strapi', { t
     test(`негодный адрес из переноса «${bad}» — отказ с адресом`, async () => {
       const before = await allSlugs();
       const result = await call('POST', '/api/seminars', fullToken, {
-        data: { name: `Негодный адрес ${bad}`, slug: bad },
+        data: { name: `Негодный адрес ${bad}`, slug: bad, course_group: publishedProgram.documentId },
       });
       assert.ok(result.status >= 400 && result.status < 500, `негодный «${bad}» принят: ${result.status} ${result.text}`);
       assert.ok(result.body?.error?.message?.includes(bad), `в ошибке не назван адрес «${bad}»: ${result.text}`);
@@ -308,10 +328,7 @@ describe('доверенный перенос в собранном Strapi', { t
   }
 
   test('повторный перенос не меняет адрес', async () => {
-    const existing = await app.documents(SEMINAR).create({
-      status: 'published',
-      data: { name: 'Повторный перенос адреса', legacy_id: 'trust-repeat-slug' },
-    });
+    const existing = await createPublishedSeminar({ name: 'Повторный перенос адреса', legacy_id: 'trust-repeat-slug' });
     ok(
       await call('PUT', `/api/seminars/${existing.documentId}`, fullToken, {
         data: { name: 'Повторный перенос адреса', slug: 'drugoj-adres-perenosa' },
@@ -350,7 +367,9 @@ describe('доверенный перенос в собранном Strapi', { t
     const name = 'Семинар настраиваемого токена';
     const expected = await slugFromName(name);
     const created = ok(
-      await call('POST', '/api/seminars', customToken, { data: { name, slug: 'adres-nastraivaemogo-tokena' } }),
+      await call('POST', '/api/seminars?status=draft', customToken, {
+        data: { name, slug: 'adres-nastraivaemogo-tokena' },
+      }),
       'создание',
     );
     assert.equal((await draftOf(SEMINAR, created.data.documentId)).slug, expected);
@@ -380,14 +399,13 @@ describe('доверенный перенос в собранном Strapi', { t
     await seminars.create({
       data: { name: 'Ни разу не опубликован', legacy_id: ids.neverPublished, description: 'прежнее' },
     });
-    const unpublished = await seminars.create({
-      status: 'published',
-      data: { name: 'Снят с публикации', legacy_id: ids.unpublished, description: 'прежнее' },
+    const unpublished = await createPublishedSeminar({
+      name: 'Снят с публикации', legacy_id: ids.unpublished, description: 'прежнее',
     });
     await seminars.unpublish({ documentId: unpublished.documentId });
 
     // Снятое с публикации проведение опубликованного семинара.
-    const host = await seminars.create({ status: 'published', data: { name: 'Семинар снятого проведения' } });
+    const host = await createPublishedSeminar({ name: 'Семинар снятого проведения' });
     const unpublishedEntry = await entries.create({
       status: 'published',
       data: { seminar: host.documentId, city: 'Прежний город', legacy_id: ids.unpublishedEntry, ...dates },
@@ -395,7 +413,7 @@ describe('доверенный перенос в собранном Strapi', { t
     await entries.unpublish({ documentId: unpublishedEntry.documentId });
 
     // Опубликованное проведение семинара, который редактор снял с публикации.
-    const hidden = await seminars.create({ status: 'published', data: { name: 'Снятый семинар проведения' } });
+    const hidden = await createPublishedSeminar({ name: 'Снятый семинар проведения' });
     const entryOfUnpublished = await entries.create({
       status: 'published',
       data: { seminar: hidden.documentId, city: 'Прежний город', legacy_id: ids.entryOfUnpublished, ...dates },
@@ -403,9 +421,8 @@ describe('доверенный перенос в собранном Strapi', { t
     await seminars.unpublish({ documentId: hidden.documentId });
 
     // Семинар, остающийся опубликованным (основное правило 1.8, не исключение).
-    const published = await seminars.create({
-      status: 'published',
-      data: { name: 'Остаётся опубликованным', legacy_id: ids.published, description: 'прежнее' },
+    const published = await createPublishedSeminar({
+      name: 'Остаётся опубликованным', legacy_id: ids.published, description: 'прежнее',
     });
     // Опубликованное проведение опубликованного семинара.
     const publishedEntry = await entries.create({
@@ -416,7 +433,7 @@ describe('доверенный перенос в собранном Strapi', { t
     // Опубликованное проведение семинара, которого в CMS ещё нет: этот прогон его СОЗДАСТ
     // (POST без query публикует по умолчанию). Placeholder-семинар даёт проведению связь
     // до переноса — перенос переставит её на созданный.
-    const placeholderHost = await seminars.create({ status: 'published', data: { name: 'Заглушка до переноса' } });
+    const placeholderHost = await createPublishedSeminar({ name: 'Заглушка до переноса' });
     const entryOfCreatedSeminar = await entries.create({
       status: 'published',
       data: { seminar: placeholderHost.documentId, city: 'Прежний город', legacy_id: ids.entryOfCreatedSeminar, ...dates },
@@ -442,7 +459,7 @@ describe('доверенный перенос в собранном Strapi', { t
         { legacy_id: ids.unpublished, name: 'Снят с публикации', slug: unpublished.slug, description_html: 'из повторного переноса' },
         { legacy_id: ids.published, name: 'Остаётся опубликованным', slug: published.slug, description_html: 'из повторного переноса' },
         { legacy_id: ids.createdSeminar, name: 'Создан в этом прогоне переноса', slug: createdSeminarSlug, description_html: 'из повторного переноса' },
-      ]),
+      ].map((row) => ({ ...row, course_group_legacy_id: 'trust-program' }))),
     );
     // Семинаров проведений нет в seminars.json: связь ищется запросом по slug (поиск с черновиками).
     fs.writeFileSync(
