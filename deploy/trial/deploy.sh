@@ -11,7 +11,8 @@
 #   deploy/trial/deploy.sh secrets|hostkey [--trust]|tunnel|forget
 #
 # Конфигурация — переменными окружения (значения секретов здесь не принимаются):
-#   VPS_IP (89.111.143.219)   SSH_KEY (~/.ssh/id_ed25519_vdsina_root)   STATE_DIR (~/ikpk-trial)
+#   SSH_KEY — ОБЯЗАТЕЛЕН, умолчания нет (чтобы не пробовать неожиданный ключ на новой машине)
+#   VPS_IP (89.111.143.219)   STATE_DIR (~/ikpk-trial)
 #   SECRETS_FILE ($STATE_DIR/secrets.env)   EXPECTED_HOST_FINGERPRINT (SHA256:… из консоли провайдера)
 #   STRAPI_API_TOKEN_FILE ($STATE_DIR/api-token, права 0600)  либо STRAPI_API_TOKEN  либо ввод без эха
 #   LOCAL_PORT (13370)  MIN_FREE_MB (6000)
@@ -21,8 +22,10 @@
 #
 # Повторный запуск идёт от НАБЛЮДАЕМОГО состояния сервера (SHA дерева сборки, служба, super-admin,
 # release.json, сертификат, копии), а не от памяти клиента: пересозданная машина распознаётся сама.
-# Клиентская память (STATE_DIR/deploy.state) хранит только то, чего с сервера не увидеть: отпечаток
-# файла секретов на момент первого развёртывания и отметку «импорт выполнен».
+# Клиентская память (STATE_DIR/deploy.state) хранит одно: отпечаток файла секретов на момент
+# первого развёртывания. Отметки «импорт выполнен» нет намеренно: она переживала пересоздание машины
+# с тем же IP, и первый выпуск падал на пустой CMS. Пока на сервере нет release.json, импорт
+# повторяется (он идемпотентен по legacy_id).
 #
 # Секреты: значения не печатаются и не попадают в argv. Файл секретов читается подоболочкой только для
 # bootstrap-vps.sh; токен API идёт в окружение дочернего процесса и в `curl -K -` через stdin.
@@ -32,7 +35,7 @@ set -euo pipefail
 
 ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 VPS_IP="${VPS_IP:-89.111.143.219}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_vdsina_root}"
+SSH_KEY="${SSH_KEY:-}"
 STATE_DIR="${STATE_DIR:-$HOME/ikpk-trial}"
 SECRETS_FILE="${SECRETS_FILE:-$STATE_DIR/secrets.env}"
 STATE_FILE="${STATE_DIR}/deploy.state"
@@ -64,7 +67,7 @@ sha256_of() { if command -v shasum >/dev/null; then shasum -a 256 "$1"; else sha
 resume_cmd() {
   local env=""
   [[ "$VPS_IP" != "89.111.143.219" ]] && env+="VPS_IP=${VPS_IP} "
-  [[ "$SSH_KEY" != "$HOME/.ssh/id_ed25519_vdsina_root" ]] && env+="SSH_KEY=${SSH_KEY} "
+  env+="SSH_KEY=${SSH_KEY} "
   printf '%s%s %s' "$env" "$SELF" "$1"
 }
 
@@ -97,7 +100,11 @@ preflight_local() {
     fail "не удалось прочитать SHA из ${ROOT}"
   fi
 
-  [[ -r "$SSH_KEY" ]] || fail "нет читаемого ключа SSH: ${SSH_KEY} (задайте SSH_KEY)"
+  if [[ -z "$SSH_KEY" ]]; then
+    fail "SSH_KEY не задан: умолчания нет намеренно, укажите ключ, авторизованный у root на этой машине"
+  elif [[ ! -r "$SSH_KEY" ]]; then
+    fail "нет читаемого ключа SSH: ${SSH_KEY}"
+  fi
   if [[ -f "$SECRETS_FILE" ]]; then
     [[ "$(perm_of "$SECRETS_FILE")" == "600" ]] || fail "права ${SECRETS_FILE} должны быть 600"
     local names n
@@ -109,7 +116,7 @@ preflight_local() {
   else
     fail "нет файла секретов ${SECRETS_FILE}: выполните  ${SELF} secrets"
   fi
-  [[ -d "$ROOT/cms/node_modules" ]] || fail "нет cms/node_modules для сборки артефакта: (cd cms && npm ci)"
+  [[ -f "$ROOT/cms/package-lock.json" ]] || fail "нет cms/package-lock.json: артефакт CMS собирается по lockfile"
 
   if ssh-keygen -F "$VPS_IP" -f "$KNOWN_HOSTS" >/dev/null 2>&1; then
     local fps
@@ -164,7 +171,7 @@ preflight() {
 
 # --- решения по наблюдаемому состоянию ---
 need_bootstrap() { [[ "$(fact source_commit)" != "$SHA" || "$(fact cms)" != "active" || "$(fact secrets)" != "yes" ]]; }
-need_import() { [[ -z "$(fact release_commit)" && "$(state_get import_done)" != "yes" ]]; }
+need_import() { [[ -z "$(fact release_commit)" ]]; }
 need_publish() { [[ "$(fact release_commit)" != "$SHA" ]]; }
 
 show_plan() {
@@ -172,7 +179,7 @@ show_plan() {
   say "  1 prepare    — доставит скрипты в ${REMOTE_BIN}, swap (идемпотентно): всегда"
   if need_bootstrap; then say "  2 bootstrap  — сделает (дерево на сервере: '$(fact source_commit)', служба: '$(fact cms)')"; else say "  2 bootstrap  — пропуск (SHA и служба уже на месте)"; fi
   if [[ "$(fact admin)" == "true" ]]; then say "  3 register   — super-admin уже есть"; else say "  3 register   — ОСТАНОВКА: нужна ручная регистрация super-admin и токен (код 10)"; fi
-  if need_import; then say "  4 import     — сделает (первого релиза нет, импорт не отмечен)"; else say "  4 import     — пропуск"; fi
+  if need_import; then say "  4 import     — сделает (на сервере нет release.json; импорт идемпотентен)"; else say "  4 import     — пропуск"; fi
   if need_publish; then say "  5 publish    — сделает (релиз: '$(fact release_commit)')"; else say "  5 publish    — пропуск (релиз на этом SHA)"; fi
   if [[ "$(fact cert)" == "yes" ]]; then say "  6 https      — пропуск (сертификат есть)"; else say "  6 https      — сделает"; fi
   say "  7 verify     — всегда (только чтение)"
@@ -192,6 +199,10 @@ stage_bootstrap() {
   now="$(sha256_of "$SECRETS_FILE")"; prev="$(state_get secrets_sha256)"
   if [[ -n "$prev" && "$prev" != "$now" && "$(fact secrets)" == "yes" ]]; then
     die 2 "файл секретов изменился после первого развёртывания: смена секретов ломает вход и шифрованные поля CMS. Верните прежний файл или пересоздайте машину и выполните  ${SELF} forget"
+  fi
+  if [[ ! -d "$ROOT/cms/node_modules" ]]; then
+    say "bootstrap: cms/node_modules нет — npm ci по lockfile (несколько минут)"
+    (cd "$ROOT/cms" && npm ci)
   fi
   art="${TMPDIR:-/tmp}/ikpk-cms-artifact-trial-${SHA:0:8}"
   say "bootstrap: артефакт CMS → ${art}"
@@ -268,7 +279,6 @@ stage_import() {
     npm run import:dry
     npm run import
   )
-  state_set import_done yes
   say "import: готово. Удалите временный токен в панели CMS и локальный файл ${STATE_DIR}/api-token"
   cleanup; TUNNEL_PID=""
 }
@@ -349,6 +359,7 @@ case "$cmd" in
   prepare|bootstrap|import|publish|https|verify|backup) cmd_stage "$cmd" ;;
   secrets) exec bash "$ROOT/deploy/trial/gen-secrets.sh" "$SECRETS_FILE" ;;
   tunnel)
+    [[ -n "$SSH_KEY" ]] || die 2 "SSH_KEY не задан"
     say "туннель http://127.0.0.1:${LOCAL_PORT} → ${VPS_IP}:1337 (админка: /admin). Остановить: Ctrl-C"
     exec ssh "${SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -N -L "127.0.0.1:${LOCAL_PORT}:127.0.0.1:1337" "root@${VPS_IP}" ;;
   hostkey)

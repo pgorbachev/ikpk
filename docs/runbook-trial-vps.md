@@ -23,7 +23,7 @@
 
 ```bash
 # [Mac] в чистом worktree этой ветки; один раз:
-export SSH_KEY=~/.ssh/<ключ root>
+export SSH_KEY=~/.ssh/<ключ, авторизованный у root на VPS>   # обязателен, умолчания нет
 export EXPECTED_HOST_FINGERPRINT='SHA256:…'     # из консоли провайдера (ожидается ZB2U2ocI…)
 deploy/trial/deploy.sh secrets                  # ~/ikpk-trial/secrets.env, 0600, не перезаписывается
 deploy/trial/deploy.sh hostkey --trust          # добавляет ключ хоста, только если отпечаток совпал
@@ -46,7 +46,9 @@ deploy/trial/deploy.sh run                      # ИЗМЕНЯЕТ сервер;
 сборки, служба, super-admin, `release.json`, сертификат, копия), поэтому пересозданная машина
 распознаётся сама. Секреты не пересоздаются; если `secrets.env` изменился после первого развёртывания,
 bootstrap отказывается (смена ломает вход и шифрованные поля). Новый SHA — тот же `run`: переустановит
-код и выпустит сайт заново, без повторного импорта. Отдельный этап — `deploy.sh <prepare|bootstrap|
+код и выпустит сайт заново; импорт идёт всякий раз, когда на сервере нет `release.json` (в том числе
+на пересозданной машине с тем же IP) — он идемпотентен. Зависимости CMS на Mac (`cms/node_modules`)
+этап bootstrap ставит сам по lockfile. Отдельный этап — `deploy.sh <prepare|bootstrap|
 import|publish|https|verify|backup>`; сброс клиентской памяти для пересозданной машины —
 `deploy.sh forget`.
 

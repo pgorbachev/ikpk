@@ -49,7 +49,7 @@ beforeEach(() => {
   copyFileSync(join(REPO_ROOT, 'deploy/environments/trial.env'), join(repo, 'deploy/environments/trial.env'));
   for (const n of ['prepare-host.sh', 'setup-https-ip.sh', 'refresh-site.sh', 'backup-exercise.sh', 'gen-secrets.sh']) w(join(repo, 'deploy/trial', n), '#!/bin/sh\n', 0o755);
   for (const p of ['web/a', 'media-originals/a', 'cms/src/a', 'scripts/package.json']) w(join(repo, p), 'x');
-  mkdirSync(join(repo, 'cms/node_modules'), { recursive: true });
+  w(join(repo, 'cms/package-lock.json'), '{}');
   mkdirSync(join(repo, 'scripts/node_modules'), { recursive: true });
   w(join(repo, '.gitignore'), 'node_modules\n');
   sh('git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm init', repo);
@@ -83,7 +83,7 @@ case "$url" in
 esac
 exit 0
 `, 0o755);
-  w(join(bin, 'npm'), `#!/bin/bash\necho "npm $*" >> "${dir}/mock/npm.log"\n`, 0o755);
+  w(join(bin, 'npm'), `#!/bin/bash\necho "$(basename "$PWD"): npm $*" >> "${dir}/mock/npm.log"\n[[ "$1" == ci && "$(basename "$PWD")" == cms ]] && mkdir -p node_modules\nexit 0\n`, 0o755);
   w(join(dir, 'mock/bootstrap.sh'), `#!/bin/bash
 echo "bootstrap args=$* env=$ENVIRONMENT domain=$DOMAIN app_keys_set=\${APP_KEYS:+yes} art=$CMS_ARTIFACT_SOURCE" >> "${dir}/mock/bootstrap.log"
 `, 0o755);
@@ -143,8 +143,12 @@ describe('deploy.sh: режим по умолчанию и отказы пред
     expect(read('mock/bootstrap.log')).toBe('');
   });
 
-  it('грязное дерево — отказ 2 до единого вызова ssh', () => {
-    writeFileSync(join(repo, 'web/a'), 'changed');
+  it.each([
+    ['изменён отслеживаемый файл вне web', () => writeFileSync(join(repo, 'deploy/trial/prepare-host.sh'), '#!/bin/sh\n# changed\n')],
+    ['изменён отслеживаемый файл в web', () => writeFileSync(join(repo, 'web/a'), 'changed')],
+    ['лишний неотслеживаемый файл в web', () => writeFileSync(join(repo, 'web/untracked'), 'x')],
+  ])('грязное дерево (%s) — отказ 2 до единого вызова ssh', (_name, dirty) => {
+    dirty();
     const r = run(['run']);
     expect(r.code).toBe(2);
     expect(r.out).toContain('дерево не чистое');
@@ -189,6 +193,19 @@ describe('deploy.sh: режим по умолчанию и отказы пред
     noSecrets(r.out);
   });
 
+  it('SSH_KEY обязателен: без него отказ 2, ни одного вызова ssh и умолчания нет', () => {
+    const r = run(['run'], { SSH_KEY: '' });
+    expect(r.code).toBe(2);
+    expect(r.out).toContain('SSH_KEY не задан');
+    expect(read('mock/ssh.log')).toBe('');
+    expect(readFileSync(DEPLOY, 'utf8')).not.toMatch(/id_ed25519_vdsina_root/);
+  });
+
+  it('команда продолжения печатает явный SSH_KEY', () => {
+    const r = run(['run']);
+    expect(r.out).toContain(`SSH_KEY=${join(dir, 'home/.ssh/id')} deploy/trial/deploy.sh run`);
+  });
+
   it('неизвестная команда — отказ 2', () => {
     expect(run(['wipe']).code).toBe(2);
   });
@@ -208,7 +225,8 @@ describe('deploy.sh run: этапы и остановка', () => {
     expect(r.out).toContain('deploy/trial/deploy.sh tunnel');
     expect(r.out).toContain('deploy/trial/deploy.sh run');
     expect(r.out).toContain('Full access');
-    expect(read('mock/npm.log')).toBe(''); // импорт до регистрации не стартует
+    expect(read('mock/npm.log')).toContain('cms: npm ci'); // зависимости CMS ставятся по lockfile самим этапом
+    expect(read('mock/npm.log')).not.toContain('import'); // импорт до регистрации не стартует
     expect(sshCalls().some((l) => l.includes('refresh-site'))).toBe(false);
     expect(readFileSync(join(dir, 'state/deploy.state'), 'utf8')).toContain(`secrets_sha256@${IP}=`);
     noSecrets(r.out + allArgvLogs());
@@ -230,12 +248,12 @@ describe('deploy.sh run: этапы и остановка', () => {
     // Токен дошёл до curl через stdin (доказательство, что проверка не слепа), но не через argv.
     expect(read('mock/curl-stdin.log')).toContain(TOKEN);
     noSecrets(r.out + allArgvLogs());
-    expect(readFileSync(join(dir, 'state/deploy.state'), 'utf8')).toContain(`import_done@${IP}=yes`);
+    // Отметки «импорт выполнен» в клиентской памяти нет: решение берётся только с сервера.
+    expect(existsSync(join(dir, 'state/deploy.state')) ? read('state/deploy.state') : '').not.toContain('import');
   });
 
   it('повторный запуск на готовой машине ничего не меняет', () => {
     writeToken();
-    sh(`printf 'import_done@${IP}=yes\\n' > ${dir}/state/deploy.state`);
     facts({ swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true', release_commit: sha, cert: 'yes', backup: 'yes' });
     // prepare идемпотентен и выполняется всегда; остальное — пропуск
     const r = run(['run']);
@@ -249,12 +267,11 @@ describe('deploy.sh run: этапы и остановка', () => {
 
   it('новый SHA на готовой машине: переустановка кода и новый выпуск, без повторного импорта', () => {
     writeToken();
-    sh(`printf 'import_done@${IP}=yes\\n' > ${dir}/state/deploy.state`);
     facts({ swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: 'a'.repeat(40), cms: 'active', admin: 'true', release_commit: 'a'.repeat(40), cert: 'yes', backup: 'yes' });
     const r = run(['run']);
     expect(r.code, r.out).toBe(0);
     expect(read('mock/bootstrap.log')).toContain('bootstrap');
-    expect(read('mock/npm.log')).toBe('');
+    expect(read('mock/npm.log')).not.toContain('import');
     expect(sshCalls().some((l) => l.includes('refresh-site.sh'))).toBe(true);
   });
 
@@ -267,6 +284,33 @@ describe('deploy.sh run: этапы и остановка', () => {
     expect(r.code).toBe(2);
     expect(r.out).toContain('файл секретов изменился');
     expect(existsSync(join(dir, 'mock/bootstrap.log'))).toBe(false);
+  });
+
+  it('пересоздание VPS с тем же IP: импорт повторяется, первый выпуск не идёт на пустую CMS', () => {
+    writeToken();
+    const done = { swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true' };
+    // 1) первая машина: bootstrap (клиент запоминает отпечаток секретов), регистрация, импорт, выпуск
+    expect(run(['run']).code).toBe(10);
+    facts({ ...done, release_commit: '' });
+    expect(run(['run']).code).toBe(0);
+    expect(read('mock/npm.log')).toContain('scripts: npm run import');
+    expect(read('state/deploy.state')).toContain('secrets_sha256');
+    // 2) машину пересоздали: тот же IP, всё пусто; клиентская память от прошлой машины осталась
+    for (const n of ['npm.log', 'bootstrap.log', 'ssh.log']) rmSync(join(dir, 'mock', n), { force: true });
+    facts();
+    const r2 = run(['run']);
+    expect(r2.code, r2.out).toBe(10); // bootstrap выполнен заново, затем ручная регистрация
+    expect(read('mock/bootstrap.log')).toContain('bootstrap');
+    expect(r2.out).not.toContain('файл секретов изменился');
+    // 3) регистрация сделана, релиза на новой машине нет → импорт ОБЯЗАН повториться до выпуска
+    facts({ ...done, release_commit: '' });
+    const r3 = run(['run']);
+    expect(r3.code, r3.out).toBe(0);
+    const npm = read('mock/npm.log');
+    expect(npm).toContain('scripts: npm run import:dry');
+    expect(npm).toContain('scripts: npm run import\n');
+    const order = sshCalls().findIndex((l) => l.includes('refresh-site'));
+    expect(order).toBeGreaterThan(-1);
   });
 
   it('токен не принят — отказ 1, импорт не стартует', () => {
@@ -297,7 +341,6 @@ describe('deploy.sh run: этапы и остановка', () => {
 
   it('verify падает, если release.json на другом SHA', () => {
     writeToken();
-    sh(`printf 'import_done@${IP}=yes\\n' > ${dir}/state/deploy.state`);
     facts({ swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true', release_commit: sha, cert: 'yes', backup: 'yes' });
     const r = run(['verify'], { MOCK_RELEASE_SHA: 'c'.repeat(40) });
     expect(r.code).toBe(1);
