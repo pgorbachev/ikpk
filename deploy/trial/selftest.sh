@@ -48,6 +48,7 @@ import json, os, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 MODE = os.environ.get("MOCK_MODE", "ok")
 state = {"status": "idle", "message": "idle"}
+logins = 0  # ограничитель частоты входа Strapi (429 на первом реальном выпуске): здесь допускается ОДИН вход за запуск
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, code, body):
@@ -56,6 +57,9 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0)); raw = self.rfile.read(n) or b"{}"
         if self.path == "/admin/login":
+            global logins
+            logins += 1
+            if logins > 1 and MODE != "badlogin": return self.send(429, {"error": {"message": "Too many requests"}})
             d = json.loads(raw)
             if d.get("password") == "PASS-SENTINEL-7f3a" and MODE != "badlogin": return self.send(200, {"data": {"accessToken": "TOKEN-SENTINEL-9c1e"}})
             return self.send(400, {"error": {"message": "Invalid credentials"}})

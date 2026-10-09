@@ -23,10 +23,17 @@ LIMIT_S="${LIMIT_S:-3600}"
 # Учётные данные и токен НЕ попадают в argv и окружение дочерних процессов: HTTP делает один
 # python3, который сам читает файл секретов (в argv — только его путь) и держит токен в памяти.
 # curl с -d/-H здесь запрещён: аргументы видны в списке процессов.
-api() { # метод [json-тело]
-  SECRET_FILE="$SECRET_FILE" CMS_BASE="$BASE" python3 -c '
-import json, os, sys, urllib.request
-method, body = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
+#
+# Вход выполняется ОДИН раз на весь запуск, опрос идёт тем же токеном. Прежняя редакция входила
+# заново на каждый опрос (раз в 5 с) и на первом реальном выпуске упёрлась в ограничитель частоты
+# входа Strapi (429): сборка на сервере продолжалась, а клиент считал вход несостоявшимся.
+# Здесь же снимается память (MemAvailable) — отдельного опроса из bash нет.
+# Выход: в stdout одна строка JSON итогового состояния + "min_avail_mb"; коды 4 (вход/запуск), 5 (запрос).
+drive() { # json-тело
+  SECRET_FILE="$SECRET_FILE" CMS_BASE="$BASE" LIMIT_S="$LIMIT_S" python3 -c '
+import json, os, sys, time, urllib.error, urllib.request
+body = sys.argv[1]
+limit = int(os.environ["LIMIT_S"])
 secrets = {}
 for line in open(os.environ["SECRET_FILE"]):
     k, _, v = line.rstrip("\n").partition("=")
@@ -39,22 +46,52 @@ def call(path, data, token=None, m="POST"):
     req = urllib.request.Request(base + path, data=data, headers=h, method=m)
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
-try:
-    login = call("/admin/login", json.dumps({"email": secrets["CONTENT_ADMIN_EMAIL"], "password": secrets["CONTENT_ADMIN_PASSWORD"]}).encode())
-    d = login.get("data", {})
-    token = d.get("accessToken") or d.get("token")
-    if not token:
+def login():
+    d = call("/admin/login", json.dumps({"email": secrets["CONTENT_ADMIN_EMAIL"], "password": secrets["CONTENT_ADMIN_PASSWORD"]}).encode()).get("data", {})
+    t = d.get("accessToken") or d.get("token")
+    if not t:
         raise RuntimeError("no token")
+    return t
+def avail():
+    for line in open("/proc/meminfo"):
+        if line.startswith("MemAvailable"):
+            return int(line.split()[1]) // 1024
+    return 999999
+low = avail()
+try:
+    token = login()
 except Exception:
     sys.stderr.write("вход администратора контента не удался\n")
     sys.exit(4)
 try:
-    out = call("/admin/site-refresh", body.encode() if method == "POST" else None, token, method)
+    first = call("/admin/site-refresh", body.encode(), token, "POST")
 except Exception as e:
     sys.stderr.write("запрос site-refresh не удался: %s\n" % type(e).__name__)
     sys.exit(5)
-print(json.dumps(out))
-' "$@"
+sys.stderr.write("[refresh] запуск: %s %s\n" % (first.get("status", ""), first.get("message", "")))
+start = time.time()
+cur = first
+while True:
+    time.sleep(5)
+    low = min(low, avail())
+    try:
+        cur = call("/admin/site-refresh", None, token, "GET")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:  # токен истёк: один новый вход, а не вход на каждый опрос
+            try:
+                token = login()
+            except Exception:
+                pass
+    except Exception:
+        pass  # служба могла перезапускаться: следующий опрос
+    if cur.get("status") != "running":
+        break
+    if time.time() - start > limit:
+        sys.stderr.write("[refresh] за %d с операция не завершилась — не жду дольше\n" % limit)
+        break
+cur["min_avail_mb"] = low
+print(json.dumps(cur))
+' "$1"
 }
 
 json_get() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
@@ -64,34 +101,12 @@ json_get() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.arg
 body='{}'
 [[ "$ACTION" == restore ]] && body='{"action":"restore"}'
 
-min_avail=999999
-sample() {
-  local a
-  a="$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)"
-  ((a < min_avail)) && min_avail="$a"
-  return 0
-}
-
 start="$(date +%s)"
-sample
-first="$(api POST "$body")" || { echo "[refresh] запуск не удался" >&2; exit 4; }
-echo "[refresh] запуск: $(printf '%s' "$first" | json_get status) $(printf '%s' "$first" | json_get message)"
-
-status="running"
-while :; do
-  sleep 5
-  sample
-  cur="$(api GET || true)"
-  status="$(printf '%s' "$cur" | json_get status 2>/dev/null || true)"
-  [[ "$status" == running ]] || break
-  if (($(date +%s) - start > LIMIT_S)); then
-    echo "[refresh] за ${LIMIT_S} с операция не завершилась — не жду дольше" >&2
-    break
-  fi
-done
-
+cur="$(drive "$body")" || { rc=$?; echo "[refresh] запуск не удался (код ${rc})" >&2; exit 4; }
+status="$(printf '%s' "$cur" | json_get status)"
+min_avail="$(printf '%s' "$cur" | json_get min_avail_mb)"
 end="$(date +%s)"
-echo "[refresh] итог: status=${status} phase=$(printf '%s' "${cur:-}" | json_get phase 2>/dev/null) message=$(printf '%s' "${cur:-}" | json_get message 2>/dev/null)"
+echo "[refresh] итог: status=${status} phase=$(printf '%s' "$cur" | json_get phase) message=$(printf '%s' "$cur" | json_get message)"
 echo "[refresh] длительность: $((end - start)) с; минимум MemAvailable за время операции: ${min_avail} МБ"
 free -m | sed -n '1,3p'
 echo "[refresh] release.json на раздаче: $(curl -sS -m 10 http://127.0.0.1/release.json || echo недоступен)"
