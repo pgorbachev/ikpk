@@ -139,7 +139,7 @@ echo "free_mb=$(df -Pm / | awk 'NR==2{print $4}')"
 if swapon --show=NAME --noheadings 2>/dev/null | grep -qx /swapfile; then echo swap=on; else echo swap=off; fi
 if [ -x /opt/ikpk-trial/bin/refresh-site.sh ]; then echo scripts=yes; else echo scripts=no; fi
 if [ -s /etc/ikpk-cms/trial.env ]; then echo secrets=yes; else echo secrets=no; fi
-echo "source_commit=$(tr -d '[:space:]' </var/lib/ikpk-site-build/.source-commit 2>/dev/null || true)"
+echo "source_commit=$({ tr -d '[:space:]' </var/lib/ikpk-site-build/.source-commit; } 2>/dev/null || true)"
 echo "cms=$(systemctl is-active ikpk-cms 2>/dev/null || true)"
 echo "admin=$(curl -fsS --max-time 5 http://127.0.0.1:1337/admin/init 2>/dev/null | grep -o '"hasAdmin":[a-z]*' | cut -d: -f2 || true)"
 echo "release_commit=$(curl -fsS --max-time 5 http://127.0.0.1/release.json 2>/dev/null | grep -o '[0-9a-f]\{40\}' | head -1 || true)"
