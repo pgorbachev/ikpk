@@ -7,7 +7,8 @@ useDefault = true
 # gitleaks 8.24 (CI): singular [allowlist], paths only — mixing regexes+paths is AND.
 # Maintainer proof script: dispatch branch names, not credentials.
 [allowlist]
-description = "Payment POST state-matrix branch labels, not credentials"
+description = "Named fixtures, not credentials: payment state-matrix labels; trial selftest sentinel PASS-SENTINEL-7f3a"
 paths = [
   '''openspec/changes/online-payment-flow/state-matrix4\.py$''',
+  '''deploy/trial/selftest\.sh$''',
 ]

@@ -113,6 +113,11 @@ check_auto() {
       [[ "${SITE_DEMO_FORMS:-}" == "stub" ]] &&
         grep -qF 'Environment=DEMO_FORMS=stub' "$SERVICE_UNIT" &&
         grep -qF 'Environment=PAYMENT_ROLE=stand' "$SERVICE_UNIT"
+    elif [[ "${SITE_DEMO_FORMS:-}" == "stub" && -n "${SITE_BUILD_WORKSPACE:-}" ]]; then
+      # Временные окружения (trial): режим форм и роль оплаты объявлены явно.
+      [[ -n "${SITE_PAYMENT_ROLE:-}" ]] &&
+        grep -qF 'Environment=DEMO_FORMS=stub' "$SERVICE_UNIT" &&
+        grep -qF "Environment=PAYMENT_ROLE=${SITE_PAYMENT_ROLE}" "$SERVICE_UNIT"
     fi
     ;;
   SERVICE_ADDR_LOOPBACK)

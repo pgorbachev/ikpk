@@ -14,7 +14,7 @@ set -euo pipefail
 usage() {
   echo "Usage: $0 <host-or-ip>"
   echo "Example: $0 146.103.124.113"
-  echo "Env: ENVIRONMENT=stand|prod (default stand), DOMAIN, FORCE_VHOST=1, BACKUP_ONLY=1"
+  echo "Env: ENVIRONMENT=stand|prod|trial (default stand), DOMAIN, FORCE_VHOST=1, BACKUP_ONLY=1"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -497,6 +497,17 @@ Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
       # ролью CI вместо стендовой, тогда как все выкладки через scripts/deploy-web.sh —
       # со `stand`; тот скрипт экспортирует PAYMENT_ROLE сам.
       site_build_env+=$'\nEnvironment=PAYMENT_ROLE=stand'
+    elif [[ "${SITE_DEMO_FORMS:-}" == "stub" ]]; then
+      # Временные окружения (trial): заявки не уходят в CRM, роль оплаты объявлена явно.
+      if [[ -z "${SITE_PAYMENT_ROLE:-}" ]]; then
+        echo '[bootstrap] SITE_DEMO_FORMS=stub требует объявленной SITE_PAYMENT_ROLE' >&2
+        exit 1
+      fi
+      site_build_env+=$'\nEnvironment=DEMO_FORMS=stub'
+      site_build_env+=$'\n'"Environment=PAYMENT_ROLE=${SITE_PAYMENT_ROLE}"
+    elif [[ "$ENVIRONMENT" == "trial" ]]; then
+      echo '[bootstrap] пробная сборка требует SITE_DEMO_FORMS=stub, иначе заявки уйдут в рабочую CRM' >&2
+      exit 1
     fi
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi
@@ -1092,15 +1103,32 @@ manage_vhost() {
 # Снипет проксирования — целиком наш файл (не сам vhost), поэтому просто идемпотентно
 # приводится к объявленному содержимому, без вопроса про постороннее.
 if [[ -n "${SERVICE_PROXY_SNIPPET:-}" && -n "${SERVICE_ADDR:-}" ]]; then
-  snippet_desired="$(
-    cat <<SNIPEOF
-location ^~ ${SERVICE_PROXY_PATH:-/admin} {
+  # Без SERVICE_PROXY_PREFIXES — один префикс, как раньше (prod). С перечнем — каждый
+  # префикс своим location: иначе повторный прогон стирает /content-manager, /upload, /i18n.
+  _proxy_prefixes="${SERVICE_PROXY_PREFIXES:-${SERVICE_PROXY_PATH:-/admin}}"
+  snippet_desired=""
+  IFS=',' read -ra _proxy_list <<< "$_proxy_prefixes"
+  for _raw in "${_proxy_list[@]}"; do
+    _p="${_raw#"${_raw%%[![:space:]]*}"}"
+    _p="${_p%"${_p##*[![:space:]]}"}"
+    [[ -n "$_p" ]] || continue
+    [[ "$_p" == /* ]] || _p="/${_p}"
+    snippet_desired+="$(
+      cat <<SNIPEOF
+location ^~ ${_p} {
   proxy_pass http://${SERVICE_ADDR};
   proxy_set_header Host \$host;
   proxy_set_header X-Real-IP \$remote_addr;
+  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_read_timeout 300s;
+  client_max_body_size 64m;
 }
+
 SNIPEOF
-  )"
+    )"
+  done
+  unset _proxy_prefixes _proxy_list _raw _p
   if [[ -f "$SERVICE_PROXY_SNIPPET" && "$(cat "$SERVICE_PROXY_SNIPPET")" == "$snippet_desired" ]]; then
     report unchanged "снипет проксирования ${SERVICE_PROXY_SNIPPET}"
   else
