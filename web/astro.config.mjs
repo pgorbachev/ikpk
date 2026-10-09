@@ -30,15 +30,18 @@ const snapshotDate = [...articleDates.values()].sort().at(-1) ?? new Date(0).toI
 // рисует, и ссылки на экземпляр с печатью в ней нет. Файл при этом копируется
 // из public/ в вывод и остаётся недостижимым — гейт «PDF без ссылки» это
 // краснит. На стенде и в preview форма есть, файл остаётся.
+/** @param {{ dir: URL }} options */
+function dropStampedOffer(options) {
+  const role = String(process.env.PAYMENT_ROLE ?? '').trim();
+  if (role !== '' && role !== 'ci') return;
+  rmSync(join(fileURLToPath(options.dir), 'documents', 'publichnaya-oferta-s-pechatyu.pdf'), { force: true });
+}
+
 function omitStampedOfferWithoutPaymentForm() {
   return {
     name: 'omit-stamped-offer-without-payment-form',
     hooks: {
-      'astro:build:done': ({ dir }) => {
-        const role = String(process.env.PAYMENT_ROLE ?? '').trim();
-        if (role !== '' && role !== 'ci') return;
-        rmSync(join(fileURLToPath(dir), 'documents', 'publichnaya-oferta-s-pechatyu.pdf'), { force: true });
-      },
+      'astro:build:done': dropStampedOffer,
     },
   };
 }
