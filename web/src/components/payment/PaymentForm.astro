@@ -1,5 +1,6 @@
 ---
 import { paymentEndpoint, paymentRole } from '../../lib/forms';
+import { PUBLIC_OFFER_STAMPED_HREF } from '../../lib/public-offer';
 
 const role = paymentRole();
 const endpoint = paymentEndpoint();
@@ -102,6 +103,15 @@ const hasForm = role !== 'ci';
           </div>
 
           <div class="payment-footer">
+            <div class="payment-consent">
+              <label for="payment-offer">
+                <input id="payment-offer" name="offer" type="checkbox" checked disabled />
+                <span>
+                  Принимаю условия публичной оферты на оказание платных образовательных услуг.
+                  <a href={PUBLIC_OFFER_STAMPED_HREF} target="_blank" rel="noopener noreferrer">Публичная оферта</a>
+                </span>
+              </label>
+            </div>
             <div class="payment-consent">
               <label for="payment-consent">
                 <input id="payment-consent" name="consent" type="checkbox" required />
@@ -352,9 +362,10 @@ const hasForm = role !== 'ci';
   }
   /* Места нет физически: футер выше, чем остаток панели за вычетом самого высокого
      блока поля. Прилипание в этом случае снимается — иначе поле с сообщением показать
-     нельзя никакой прокруткой. Замерено при окне 390x360: футер 237 из 328 доступных
-     при блоке поля 102. Признак ставит скрипт, потому что в CSS ни высота футера, ни
-     высота блока поля не выразимы: обе зависят от переноса текста. */
+     нельзя никакой прокруткой. Замерено при окне 390x360 после галочки оферты: футер
+     с ошибкой согласия 310 из 328 доступных при блоке поля 103. Признак ставит скрипт,
+     потому что в CSS ни высота футера, ни высота блока поля не выразимы: обе зависят
+     от переноса текста. */
   .payment-dialog-panel.payment-panel-cramped .payment-footer {
     position: static;
   }

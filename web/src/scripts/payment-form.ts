@@ -431,8 +431,9 @@ function boot(formEl: HTMLFormElement) {
   //       НИЖЕ него и снова попадало под футер;
   //   явная прокрутка БЛОКА поля (`.payment-field` целиком — подпись, поле, сообщение) —
   //       путь валидации;
-  //   снятие прилипания, когда места нет физически — при высоте окна 360 футер занимает
-  //       237 из 328 доступных, и никакая прокрутка не покажет блок поля высотой 102.
+  //   снятие прилипания, когда места нет физически — при высоте окна 360 футер с двумя
+  //       галочками и ошибкой согласия занимает 310 из 328 доступных, и никакая
+  //       прокрутка не покажет блок поля высотой 103.
   //       Без этой ветви гарантия «поле и сообщение видимы» была бы невыполнима, а тест
   //       на неё — заведомо красным на низких окнах.
   function tallestFieldHeight(): number {
@@ -453,7 +454,11 @@ function boot(formEl: HTMLFormElement) {
     // иначе состояние начнёт колебаться между двумя решениями на одной геометрии.
     const cramped = panel.clientHeight - footer.offsetHeight < tallestFieldHeight();
     panel.classList.toggle('payment-panel-cramped', cramped);
-    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${footer.offsetHeight}px`);
+    // Полоса прокрутки — потолок дробной рамки плюс пиксель. `offsetHeight` целый и
+    // короче нарисованного футера: на 390×480 низ сообщения об ошибке оказывался на
+    // 0.2 px под футером (154.1 против 153.9), хотя ветвь «места хватает» уже выбрана.
+    const band = Math.ceil(footer.getBoundingClientRect().height) + 1;
+    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${band}px`);
     return footer;
   }
 
