@@ -505,6 +505,9 @@ Environment=IKPK_INSTALLED_COMMIT=${installed_commit}"
       fi
       site_build_env+=$'\nEnvironment=DEMO_FORMS=stub'
       site_build_env+=$'\n'"Environment=PAYMENT_ROLE=${SITE_PAYMENT_ROLE}"
+    elif [[ "$ENVIRONMENT" == "trial" ]]; then
+      echo '[bootstrap] пробная сборка требует SITE_DEMO_FORMS=stub, иначе заявки уйдут в рабочую CRM' >&2
+      exit 1
     fi
     site_build_write=" ${SITE_BUILD_WORKSPACE}"
   fi

@@ -34,7 +34,9 @@ export WEB_ROOT=/var/www/ikpk CMS_DB=/var/lib/ikpk-cms/data.db CMS_UPLOADS=/opt/
 export RESTIC_REPOSITORY=/var/backups/r RESTIC_PASSWORD_FILE=/etc/ikpk-backup/restic.pass STAGE=/var/backups/stage
 mkdir -p "$WEB_ROOT/releases/r1" /var/lib/ikpk-cms "$CMS_UPLOADS"
 echo '{"commit":"a","snapshotId":"s"}' >"$WEB_ROOT/releases/r1/release.json"; echo hi >"$WEB_ROOT/releases/r1/index.html"
-ln -sfn releases/r1 "$WEB_ROOT/current"; echo img >"$CMS_UPLOADS/a.jpg"
+live="${WEB_ROOT}/current"
+ln -sfn releases/r1 "$live"
+echo img >"$CMS_UPLOADS/a.jpg"
 sqlite3 "$CMS_DB" "create table seminars(id integer primary key, title text); insert into seminars(title) values ('Тест');"
 expect_ok "копия снимается" bash /trial/backup-exercise.sh backup
 expect_ok "восстановление сверяется" bash /trial/backup-exercise.sh verify

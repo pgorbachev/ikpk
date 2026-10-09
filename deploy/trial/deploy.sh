@@ -63,7 +63,8 @@ cleanup() { [[ -n "$TUNNEL_PID" ]] && kill "$TUNNEL_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
 rssh() { ssh "${SSH_OPTS[@]}" "root@${VPS_IP}" "$@"; }
-perm_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+# GNU stat -f — это файловая система и код 0, поэтому сначала -c; на macOS -c нет, остаётся -f.
+perm_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 sha256_of() { if command -v shasum >/dev/null; then shasum -a 256 "$1"; else sha256sum "$1"; fi | cut -d' ' -f1; }
 resume_cmd() {
   local env=""

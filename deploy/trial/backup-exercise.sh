@@ -39,7 +39,8 @@ if [[ "$MODE" == backup ]]; then
   [[ "$(sqlite3 "${STAGE}/data.db" 'PRAGMA integrity_check;')" == ok ]] || { echo "[backup] integrity_check копии не ok" >&2; exit 4; }
   sqlite3 "${STAGE}/data.db" "SELECT count(*) FROM sqlite_master WHERE type='table';" >"${STAGE}/tables.count"
   readlink -f "${WEB_ROOT}/current" >"${STAGE}/current.path"
-  [[ -f "${WEB_ROOT}/current/release.json" ]] && cp "${WEB_ROOT}/current/release.json" "${STAGE}/release.json" || true
+  release_live="${WEB_ROOT}/current/release.json"
+  [[ -f "$release_live" ]] && cp "$release_live" "${STAGE}/release.json" || true
   paths=("$STAGE")
   [[ -d "$UPLOADS" ]] && paths+=("$UPLOADS")
   [[ -d "${WEB_ROOT}/current" ]] && paths+=("$(readlink -f "${WEB_ROOT}/current")")

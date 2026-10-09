@@ -96,7 +96,6 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 function run(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync('bash', [DEPLOY, ...args], {
     encoding: 'utf8',
-    detached: true, // без управляющего терминала: запрос токена с /dev/tty не должен зависнуть
     timeout: 60_000,
     env: {
       PATH: `${dir}/bin:${process.env.PATH}`,
