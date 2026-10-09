@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
+import { withPublicOfferDocument } from './public-offer.js';
 export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
 export type { SafeRichHtml } from './html-cleaner.js';
 import { cleanBodyHtml as cleanHtml, type SafeRichHtml } from './html-cleaner.js';
@@ -18,7 +19,7 @@ function panelsFor(path?: string): Record<string, string> | undefined {
   if (!path) return undefined;
   if (!_panels) _panels = loadJson<Record<string, Record<string, string>>>('collapsible_panels.json');
   const key = path.replace(/\/+$/, '') || '/';
-  return _panels[key];
+  return withPublicOfferDocument(key, _panels[key]);
 }
 
 /**

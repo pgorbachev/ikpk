@@ -1,5 +1,6 @@
 ---
 import { paymentEndpoint, paymentRole } from '../../lib/forms';
+import { PUBLIC_OFFER_STAMPED_HREF } from '../../lib/public-offer';
 
 const role = paymentRole();
 const endpoint = paymentEndpoint();
@@ -102,6 +103,15 @@ const hasForm = role !== 'ci';
           </div>
 
           <div class="payment-footer">
+            <div class="payment-consent">
+              <label for="payment-offer">
+                <input id="payment-offer" name="offer" type="checkbox" checked disabled />
+                <span>
+                  Принимаю условия публичной оферты на оказание платных образовательных услуг.
+                  <a href={PUBLIC_OFFER_STAMPED_HREF} target="_blank" rel="noopener noreferrer">Публичная оферта</a>
+                </span>
+              </label>
+            </div>
             <div class="payment-consent">
               <label for="payment-consent">
                 <input id="payment-consent" name="consent" type="checkbox" required />

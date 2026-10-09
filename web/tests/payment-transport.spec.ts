@@ -697,7 +697,7 @@ test.describe('3a.3c axe над окном оплаты', () => {
         // нарушений — «нечего проверять» прочиталось бы как «нарушений нет». Ровно так
         // гейт axe в проекте уже проверял страницу 404 вместо шаблонов.
         const fields = await page.locator(`${FORM} input:not([tabindex="-1"])`).count();
-        expect(fields, 'в окне нет полей формы — axe проверил бы пустой диалог').toBe(9);
+        expect(fields, 'в окне нет полей формы — axe проверил бы пустой диалог').toBe(10);
 
         const results = await analyze(page);
         // Прибор действительно работал: если ни одно правило не применилось, ноль
@@ -767,6 +767,20 @@ test.describe('3a.4 согласие на ПДн', () => {
     expect(href).not.toMatch(/^https?:\/\/(?!([^/]*\.)?ikpk\.su)/);
     const res = await page.request.get(new URL(href!, page.url()).href);
     expect(res.ok()).toBe(true);
+  });
+
+  test('оферта отмечена заранее и снять отметку нельзя', async ({ page }) => {
+    await openForm(page);
+    const offer = page.locator(`${FORM} [name="offer"]`);
+    await expect(offer).toBeChecked();
+    await expect(offer).toBeDisabled();
+    await offer.click({ force: true });
+    await expect(offer).toBeChecked();
+    const link = page.locator(`${FORM} a[href="/documents/publichnaya-oferta-s-pechatyu.pdf"]`);
+    await expect(link).toHaveCount(1);
+    const res = await page.request.get(new URL('/documents/publichnaya-oferta-s-pechatyu.pdf', page.url()).href);
+    expect(res.ok(), 'файл оферты с печатью не отдаётся').toBe(true);
+    expect(res.headers()['content-type'] ?? '').toMatch(/pdf/i);
   });
 });
 
