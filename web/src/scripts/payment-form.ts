@@ -454,7 +454,11 @@ function boot(formEl: HTMLFormElement) {
     // иначе состояние начнёт колебаться между двумя решениями на одной геометрии.
     const cramped = panel.clientHeight - footer.offsetHeight < tallestFieldHeight();
     panel.classList.toggle('payment-panel-cramped', cramped);
-    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${footer.offsetHeight}px`);
+    // Полоса прокрутки — потолок дробной рамки плюс пиксель. `offsetHeight` целый и
+    // короче нарисованного футера: на 390×480 низ сообщения об ошибке оказывался на
+    // 0.2 px под футером (154.1 против 153.9), хотя ветвь «места хватает» уже выбрана.
+    const band = Math.ceil(footer.getBoundingClientRect().height) + 1;
+    panel.style.setProperty('--payment-footer-height', cramped ? '0px' : `${band}px`);
     return footer;
   }
 
