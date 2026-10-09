@@ -51,8 +51,9 @@ describe('trial: объявленное состояние пробной маш
     expect(d.get('SITE_VERIFY_URL')).toMatch(/^http:\/\/127\.0\.0\.1\//);
   });
 
-  it('держит админку закрытой по HTTP и службу на loopback', () => {
-    expect(d.get('SERVICE_PROXY_SNIPPET')).toBe('');
+  it('публикует панель по HTTP на службу loopback, всеми префиксами Strapi', () => {
+    expect(d.get('SERVICE_PROXY_SNIPPET')).toBe('/etc/nginx/snippets/ikpk-cms-trial.conf');
+    expect(d.get('SERVICE_PROXY_PREFIXES')).toBe('/admin,/content-manager,/upload,/i18n');
     expect(d.get('SERVICE_ADDR')).toMatch(/^127\.0\.0\.1:/);
   });
 
@@ -84,12 +85,17 @@ describe('trial: провижининг в одноразовом контейн
     expect(unit).toContain('Environment=DATABASE_FILENAME=/var/lib/ikpk-cms/trial/data/data.db');
   }, T);
 
-  it('не публикует панель CMS по HTTP', () => {
+  it('публикует панель CMS по HTTP всеми префиксами Strapi', () => {
     const t = target();
     const run = t.provision(ENV);
     expect(run.status, `провижининг упал:\n${run.output}`).toBe(0);
     const vhost = t.read('/etc/nginx/sites-available/ikpk.conf') ?? '';
-    expect(vhost).not.toMatch(/proxy_pass\s+http:\/\/127\.0\.0\.1:1337/);
+    expect(vhost).toContain('include /etc/nginx/snippets/ikpk-cms-trial.conf;');
+    const snippet = t.read('/etc/nginx/snippets/ikpk-cms-trial.conf') ?? '';
+    for (const prefix of ['/admin', '/content-manager', '/upload', '/i18n']) {
+      expect(snippet, prefix).toContain(`location ^~ ${prefix} {`);
+    }
+    expect(snippet).toContain('proxy_pass http://127.0.0.1:1337;');
   }, T);
 
   it('кладёт учётную запись администратора контента в файл секретов, а не в юнит', () => {
