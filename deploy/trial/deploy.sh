@@ -8,7 +8,7 @@
 #   deploy/trial/deploy.sh run             # ИЗМЕНЯЕТ сервер: ведёт по этапам до ручной остановки
 #   deploy/trial/deploy.sh <этап>          # один этап (с предварительным preflight):
 #                                          #   prepare | bootstrap | import | publish | https | verify | backup
-#   deploy/trial/deploy.sh secrets|hostkey [--trust]|tunnel|forget
+#   deploy/trial/deploy.sh secrets|hostkey [--trust]|superadmin|tunnel|forget
 #
 # Конфигурация — переменными окружения (значения секретов здесь не принимаются):
 #   SSH_KEY — ОБЯЗАТЕЛЕН, умолчания нет (чтобы не пробовать неожиданный ключ на новой машине)
@@ -30,7 +30,8 @@
 # Секреты: значения не печатаются и не попадают в argv. Файл секретов читается подоболочкой только для
 # bootstrap-vps.sh; токен API идёт в окружение дочернего процесса и в `curl -K -` через stdin.
 # Не делает: DNS, реальную оплату и CRM (режим пробы задан в deploy/environments/trial.env),
-# регистрацию super-admin (её делает человек в панели Strapi).
+# создание super-admin и токена (это делает человек: `superadmin` — штатная интерактивная
+# команда Strapi, токен выпускается в панели).
 set -euo pipefail
 
 ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -178,7 +179,7 @@ show_plan() {
   say "план для ${VPS_IP}, SHA ${SHA}:"
   say "  1 prepare    — доставит скрипты в ${REMOTE_BIN}, swap (идемпотентно): всегда"
   if need_bootstrap; then say "  2 bootstrap  — сделает (дерево на сервере: '$(fact source_commit)', служба: '$(fact cms)')"; else say "  2 bootstrap  — пропуск (SHA и служба уже на месте)"; fi
-  if [[ "$(fact admin)" == "true" ]]; then say "  3 register   — super-admin уже есть"; else say "  3 register   — ОСТАНОВКА: нужна ручная регистрация super-admin и токен (код 10)"; fi
+  if token_available || ! need_import; then say "  3 token      — не требуется или токен уже есть"; else say "  3 token      — ОСТАНОВКА: нужны super-admin и токен Full access (ручной шаг, код 10)"; fi
   if need_import; then say "  4 import     — сделает (на сервере нет release.json; импорт идемпотентен)"; else say "  4 import     — пропуск"; fi
   if need_publish; then say "  5 publish    — сделает (релиз: '$(fact release_commit)')"; else say "  5 publish    — пропуск (релиз на этом SHA)"; fi
   if [[ "$(fact cert)" == "yes" ]]; then say "  6 https      — пропуск (сертификат есть)"; else say "  6 https      — сделает"; fi
@@ -221,10 +222,14 @@ stage_bootstrap() {
 
 stop_register() {
   cat >&2 <<MSG
-[deploy] СТОП (код 10): нужны ваши ручные действия — автоматизировать регистрацию в обход Strapi нельзя.
-  1. Отдельное окно терминала, держать открытым:   $(resume_cmd tunnel)
-  2. Браузер: http://127.0.0.1:${LOCAL_PORT}/admin → зарегистрировать super-admin (пароль не в чат).
-  3. В панели: Settings → API Tokens → Create new API Token, Token type = Full access → скопировать значение.
+[deploy] СТОП (код 10): нет токена API Full access — его создаёт человек в панели Strapi.
+  Важно: учётная запись редактора контента (из secrets.env) создаётся CMS при старте, поэтому форма
+  регистрации первого администратора на /admin НЕ появится, а редактор не может выпускать токены.
+  1. Создать super-admin штатной командой Strapi (интерактивно: пароль вводится в терминале, не в аргументах):
+       $(resume_cmd superadmin)
+  2. Отдельное окно терминала, держать открытым:   $(resume_cmd tunnel)
+  3. Браузер: http://127.0.0.1:${LOCAL_PORT}/admin → войти этим super-admin →
+     Settings → API Tokens → Create new API Token, Token type = Full access → скопировать значение.
   4. Сохранить токен без показа на экране:
        ( umask 077; mkdir -p "${STATE_DIR}"; read -rs -p 'токен: ' t; printf '%s' "\$t" > "${STATE_DIR}/api-token" )
      (или export STRAPI_API_TOKEN в этом терминале, или ввести при запросе).
@@ -232,6 +237,8 @@ stop_register() {
 MSG
   exit 10
 }
+
+token_available() { [[ -n "${STRAPI_API_TOKEN:-}" || -f "${STRAPI_API_TOKEN_FILE:-${STATE_DIR}/api-token}" ]]; }
 
 get_token() {
   local f="${STRAPI_API_TOKEN_FILE:-${STATE_DIR}/api-token}" t=""
@@ -244,10 +251,7 @@ get_token() {
     read -rs t </dev/tty || true; echo >&2
   fi
   t="$(printf '%s' "$t" | tr -d '[:space:]')"
-  if [[ -z "$t" ]]; then
-    warn "нет токена API: положите его в ${f} (0600), задайте STRAPI_API_TOKEN или запустите в терминале"
-    exit 10
-  fi
+  [[ -n "$t" ]] || stop_register
   printf '%s' "$t"
 }
 
@@ -326,7 +330,6 @@ cmd_run() {
   preflight; show_plan
   stage_prepare
   if need_bootstrap; then stage_bootstrap; probe; fi
-  [[ "$(fact admin)" == "true" ]] || stop_register
   if need_import; then stage_import; fi
   if need_publish; then stage_publish; probe; fi
   if [[ "$(fact cert)" != "yes" ]]; then stage_https; fi
@@ -340,7 +343,7 @@ cmd_stage() { # имя
   case "$1" in
     prepare) stage_prepare ;;
     bootstrap) stage_bootstrap ;;
-    import) [[ "$(fact admin)" == "true" ]] || stop_register; stage_import ;;
+    import) stage_import ;;
     publish) stage_publish ;;
     https) stage_https ;;
     verify) stage_verify ;;
@@ -357,6 +360,13 @@ case "$cmd" in
   plan) preflight; show_plan; say "это только план: изменений не было" ;;
   run) cmd_run ;;
   prepare|bootstrap|import|publish|https|verify|backup) cmd_stage "$cmd" ;;
+  superadmin)
+    [[ -n "$SSH_KEY" ]] || die 2 "SSH_KEY не задан"
+    say "создание super-admin штатной командой Strapi (admin:create-user); данные вводятся в терминале"
+    # Значения окружения должны совпадать с юнитом ikpk-cms.service; секреты приходят из его EnvironmentFile,
+    # а не через argv. Работающая служба не останавливается (второй процесс на :1338 не слушает порт).
+    exec ssh -t "${SSH_OPTS[@]}" "root@${VPS_IP}" \
+      "systemd-run --pty --wait --collect --quiet -p User=ikpk-cms -p Group=ikpk-cms -p WorkingDirectory=/opt/ikpk-cms/current -p EnvironmentFile=/etc/ikpk-cms/trial.env -E HOME=/var/lib/ikpk-cms/trial/data -E CMS_DATA_DIR=/var/lib/ikpk-cms/trial/data -E HOST=127.0.0.1 -E PORT=1338 -E NODE_ENV=production -E DATABASE_CLIENT=sqlite -E DATABASE_FILENAME=/var/lib/ikpk-cms/trial/data/data.db /usr/bin/node node_modules/@strapi/strapi/bin/strapi.js admin:create-user" ;;
   secrets) exec bash "$ROOT/deploy/trial/gen-secrets.sh" "$SECRETS_FILE" ;;
   tunnel)
     [[ -n "$SSH_KEY" ]] || die 2 "SSH_KEY не задан"

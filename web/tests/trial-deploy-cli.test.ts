@@ -222,6 +222,8 @@ describe('deploy.sh run: этапы и остановка', () => {
     const boot = read('mock/bootstrap.log');
     expect(boot).toContain(`env=trial domain=${IP} app_keys_set=yes`);
     expect(read('mock/artifact.log')).toContain('artifact');
+    expect(r.out).toContain('deploy/trial/deploy.sh superadmin');
+    expect(r.out).toContain('форма\n  регистрации первого администратора на /admin НЕ появится');
     expect(r.out).toContain('deploy/trial/deploy.sh tunnel');
     expect(r.out).toContain('deploy/trial/deploy.sh run');
     expect(r.out).toContain('Full access');
@@ -286,31 +288,49 @@ describe('deploy.sh run: этапы и остановка', () => {
     expect(existsSync(join(dir, 'mock/bootstrap.log'))).toBe(false);
   });
 
-  it('пересоздание VPS с тем же IP: импорт повторяется, первый выпуск не идёт на пустую CMS', () => {
-    writeToken();
+  it('пересоздание VPS с тем же IP: импорт повторяется, старый токен отвергается, выпуск не идёт на пустую CMS', () => {
     const done = { swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true' };
-    // 1) первая машина: bootstrap (клиент запоминает отпечаток секретов), регистрация, импорт, выпуск
+    // 1) первая машина: токена нет → СТОП; токен положен → импорт, выпуск (клиент запомнил отпечаток секретов)
     expect(run(['run']).code).toBe(10);
+    writeToken();
     facts({ ...done, release_commit: '' });
     expect(run(['run']).code).toBe(0);
     expect(read('mock/npm.log')).toContain('scripts: npm run import');
     expect(read('state/deploy.state')).toContain('secrets_sha256');
-    // 2) машину пересоздали: тот же IP, всё пусто; клиентская память от прошлой машины осталась
+    // 2) машину пересоздали: тот же IP, всё пусто; на клиенте остались и память, и токен ПРОШЛОЙ базы
     for (const n of ['npm.log', 'bootstrap.log', 'ssh.log']) rmSync(join(dir, 'mock', n), { force: true });
     facts();
-    const r2 = run(['run']);
-    expect(r2.code, r2.out).toBe(10); // bootstrap выполнен заново, затем ручная регистрация
-    expect(read('mock/bootstrap.log')).toContain('bootstrap');
+    const r2 = run(['run'], { MOCK_TOKEN_CODE: '401' });
+    expect(r2.code, r2.out).toBe(1);
+    expect(r2.out).toContain('токен не принят');
+    expect(read('mock/bootstrap.log')).toContain('bootstrap'); // машина поставлена заново
     expect(r2.out).not.toContain('файл секретов изменился');
-    // 3) регистрация сделана, релиза на новой машине нет → импорт ОБЯЗАН повториться до выпуска
+    expect(read('mock/npm.log')).not.toContain('import');
+    expect(sshCalls().some((l) => l.includes('refresh-site'))).toBe(false); // выпуск на пустую CMS не стартовал
+    // 3) выпущен новый токен; релиза на новой машине нет → импорт ОБЯЗАН повториться до выпуска
     facts({ ...done, release_commit: '' });
     const r3 = run(['run']);
     expect(r3.code, r3.out).toBe(0);
     const npm = read('mock/npm.log');
     expect(npm).toContain('scripts: npm run import:dry');
     expect(npm).toContain('scripts: npm run import\n');
-    const order = sshCalls().findIndex((l) => l.includes('refresh-site'));
-    expect(order).toBeGreaterThan(-1);
+    expect(sshCalls().some((l) => l.includes('refresh-site'))).toBe(true);
+  });
+
+  it('super-admin с содержимым admin=true (редактор уже создан CMS): токена нет → СТОП, а не «регистрация не нужна»', () => {
+    facts({ swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true' });
+    const r = run(['plan']);
+    expect(r.out).toContain('ОСТАНОВКА: нужны super-admin и токен Full access');
+  });
+
+  it('superadmin: интерактивная штатная команда Strapi через ssh -t, секреты не в argv', () => {
+    const r = run(['superadmin']);
+    expect(r.code, r.out).toBe(0);
+    const call = sshCalls().find((l) => l.includes('admin:create-user')) ?? '';
+    expect(call).toContain(' -t ');
+    expect(call).toContain('EnvironmentFile=/etc/ikpk-cms/trial.env');
+    expect(call).not.toMatch(/--password|--email/);
+    noSecrets(allArgvLogs());
   });
 
   it('токен не принят — отказ 1, импорт не стартует', () => {
@@ -327,7 +347,7 @@ describe('deploy.sh run: этапы и остановка', () => {
     facts({ swap: 'on', scripts: 'yes', secrets: 'yes', source_commit: sha, cms: 'active', admin: 'true' });
     const r = run(['run']);
     expect(r.code).toBe(10);
-    expect(r.out).toContain('нет токена API');
+    expect(r.out).toContain('нет токена API Full access');
     expect(read('mock/npm.log')).toBe('');
   });
 
