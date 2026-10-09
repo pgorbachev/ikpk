@@ -30,8 +30,8 @@
 # Секреты: значения не печатаются и не попадают в argv. Файл секретов читается подоболочкой только для
 # bootstrap-vps.sh; токен API идёт в окружение дочернего процесса и в `curl -K -` через stdin.
 # Не делает: DNS, реальную оплату и CRM (режим пробы задан в deploy/environments/trial.env),
-# создание super-admin и токена (это делает человек: `superadmin` — штатная интерактивная
-# команда Strapi, токен выпускается в панели).
+# создание super-admin и токена (это делает человек: `superadmin` — интерактивный
+# ввод через службы Strapi, токен выпускается в панели).
 set -euo pipefail
 
 ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -47,7 +47,7 @@ REMOTE_BIN="/opt/ikpk-trial/bin"
 BOOTSTRAP_SCRIPT="${BOOTSTRAP_SCRIPT:-$ROOT/scripts/bootstrap-vps.sh}"
 ARTIFACT_SCRIPT="${ARTIFACT_SCRIPT:-$ROOT/scripts/build-cms-artifact.sh}"
 TRIAL_ENV="$ROOT/deploy/environments/trial.env"
-SERVER_SCRIPTS=(prepare-host.sh setup-https-ip.sh refresh-site.sh backup-exercise.sh)
+SERVER_SCRIPTS=(prepare-host.sh setup-https-ip.sh refresh-site.sh backup-exercise.sh create-super-admin.cjs)
 
 SELF="deploy/trial/deploy.sh"
 SSH_OPTS=(-i "$SSH_KEY" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
@@ -188,10 +188,14 @@ show_plan() {
 }
 
 # --- этапы ---
-stage_prepare() {
-  say "prepare: доставка скриптов в ${REMOTE_BIN} и подготовка хоста"
+deliver_scripts() {
   COPYFILE_DISABLE=1 tar -C "$ROOT/deploy/trial" -cf - "${SERVER_SCRIPTS[@]}" \
     | rssh "install -d -o root -g root -m 0755 ${REMOTE_BIN} && tar -C ${REMOTE_BIN} --no-same-owner -xf - && chown -R root:root ${REMOTE_BIN} && chmod 0755 ${REMOTE_BIN}/*.sh"
+}
+
+stage_prepare() {
+  say "prepare: доставка скриптов в ${REMOTE_BIN} и подготовка хоста"
+  deliver_scripts
   rssh "${REMOTE_BIN}/prepare-host.sh"
 }
 
@@ -362,11 +366,13 @@ case "$cmd" in
   prepare|bootstrap|import|publish|https|verify|backup) cmd_stage "$cmd" ;;
   superadmin)
     [[ -n "$SSH_KEY" ]] || die 2 "SSH_KEY не задан"
-    say "создание super-admin штатной командой Strapi (admin:create-user); данные вводятся в терминале"
-    # Значения окружения должны совпадать с юнитом ikpk-cms.service; секреты приходят из его EnvironmentFile,
-    # а не через argv. Работающая служба не останавливается (второй процесс на :1338 не слушает порт).
+    say "создание super-admin: те же службы Strapi, что у admin:create-user, но из собранного артефакта"
+    say "(штатная admin:create-user вызывает tsc и на артефакте без TS-исходников падает с TS18003)"
+    deliver_scripts
+    # Окружение должно совпадать с юнитом ikpk-cms.service; секреты приходят из его EnvironmentFile,
+    # а не через argv. Работающая служба не останавливается; второй процесс порт не слушает.
     exec ssh -t "${SSH_OPTS[@]}" "root@${VPS_IP}" \
-      "systemd-run --pty --wait --collect --quiet -p User=ikpk-cms -p Group=ikpk-cms -p WorkingDirectory=/opt/ikpk-cms/current -p EnvironmentFile=/etc/ikpk-cms/trial.env -E HOME=/var/lib/ikpk-cms/trial/data -E CMS_DATA_DIR=/var/lib/ikpk-cms/trial/data -E HOST=127.0.0.1 -E PORT=1338 -E NODE_ENV=production -E DATABASE_CLIENT=sqlite -E DATABASE_FILENAME=/var/lib/ikpk-cms/trial/data/data.db /usr/bin/node node_modules/@strapi/strapi/bin/strapi.js admin:create-user" ;;
+      "systemd-run --pty --wait --collect --quiet -p User=ikpk-cms -p Group=ikpk-cms -p WorkingDirectory=/opt/ikpk-cms/current -p EnvironmentFile=/etc/ikpk-cms/trial.env -E HOME=/var/lib/ikpk-cms/trial/data -E CMS_DATA_DIR=/var/lib/ikpk-cms/trial/data -E HOST=127.0.0.1 -E PORT=1338 -E NODE_ENV=production -E DATABASE_CLIENT=sqlite -E DATABASE_FILENAME=/var/lib/ikpk-cms/trial/data/data.db /usr/bin/node ${REMOTE_BIN}/create-super-admin.cjs" ;;
   secrets) exec bash "$ROOT/deploy/trial/gen-secrets.sh" "$SECRETS_FILE" ;;
   tunnel)
     [[ -n "$SSH_KEY" ]] || die 2 "SSH_KEY не задан"

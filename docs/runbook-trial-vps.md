@@ -40,8 +40,9 @@ super-admin и токен Full access → после повторного `run`:
 Остановка — единственное место, где нужен человек. **Формы регистрации первого администратора не
 будет:** редактор контента из `secrets.env` создаётся самой CMS при старте, и `/admin/init` сразу
 отвечает `hasAdmin: true` (проверено на машине). Редактор не может выпускать токены, поэтому
-super-admin создаёт `deploy/trial/deploy.sh superadmin` — штатная интерактивная команда Strapi
-`admin:create-user` по `ssh -t` (пароль вводится в терминале, в argv и чат не попадает). Дальше
+super-admin создаёт `deploy/trial/deploy.sh superadmin` — интерактивный `deploy/trial/create-super-admin.cjs` по `ssh -t`: те же службы Strapi, что у
+`admin:create-user`, но без `tsc` (штатная команда на собранном артефакте падает с TS18003). Пароль вводится в
+терминале без эха, в argv и чат не попадает. Дальше
 `deploy.sh tunnel`, вход в `/admin` этим super-admin, Settings → API Tokens → Full access, токен
 в `~/ikpk-trial/api-token` (0600) без показа на экране, затем `deploy/trial/deploy.sh run`.
 Токен прошлой базы после пересоздания машины сервер отвергнет — `run` скажет это явно.

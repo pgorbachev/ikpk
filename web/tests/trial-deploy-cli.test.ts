@@ -9,7 +9,7 @@
  * Не проверяется: настоящие ssh/bootstrap/Strapi (это — на самой машине).
  */
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, appendFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, appendFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -47,7 +47,7 @@ beforeEach(() => {
   // Минимальный git-репозиторий: настоящие серверные скрипты не нужны, достаточно файлов для tar.
   mkdirSync(join(repo, 'deploy/environments'), { recursive: true });
   copyFileSync(join(REPO_ROOT, 'deploy/environments/trial.env'), join(repo, 'deploy/environments/trial.env'));
-  for (const n of ['prepare-host.sh', 'setup-https-ip.sh', 'refresh-site.sh', 'backup-exercise.sh', 'gen-secrets.sh']) w(join(repo, 'deploy/trial', n), '#!/bin/sh\n', 0o755);
+  for (const n of ['prepare-host.sh', 'setup-https-ip.sh', 'refresh-site.sh', 'backup-exercise.sh', 'gen-secrets.sh', 'create-super-admin.cjs']) w(join(repo, 'deploy/trial', n), '#!/bin/sh\n', 0o755);
   for (const p of ['web/a', 'media-originals/a', 'cms/src/a', 'scripts/package.json']) w(join(repo, p), 'x');
   w(join(repo, 'cms/package-lock.json'), '{}');
   mkdirSync(join(repo, 'scripts/node_modules'), { recursive: true });
@@ -326,7 +326,9 @@ describe('deploy.sh run: этапы и остановка', () => {
   it('superadmin: интерактивная штатная команда Strapi через ssh -t, секреты не в argv', () => {
     const r = run(['superadmin']);
     expect(r.code, r.out).toBe(0);
-    const call = sshCalls().find((l) => l.includes('admin:create-user')) ?? '';
+    expect(sshCalls().some((l) => l.includes('tar -C /opt/ikpk-trial/bin'))).toBe(true); // скрипт доставлен до запуска
+    const call = sshCalls().find((l) => l.includes('create-super-admin.cjs') && l.includes('systemd-run')) ?? '';
+    expect(call).not.toContain('admin:create-user'); // штатная команда вызывает tsc и на артефакте падает (TS18003)
     expect(call).toContain(' -t ');
     expect(call).toContain('EnvironmentFile=/etc/ikpk-cms/trial.env');
     expect(call).not.toMatch(/--password|--email/);
@@ -382,5 +384,65 @@ describe('deploy.sh: контроль самой проверки', () => {
   it('журнал argv ловит значение, если оно туда попало', () => {
     appendFileSync(join(dir, 'mock/ssh.log'), `ssh x ${TOKEN}\n`);
     expect(allArgvLogs()).toContain(TOKEN);
+  });
+});
+
+describe('create-super-admin.cjs: создание из собранного артефакта без tsc', () => {
+  const SCRIPT = join(REPO_ROOT, 'deploy/trial/create-super-admin.cjs');
+  const SECRET_PW = 'Sup3rSecretPw';
+
+  function fakeApp(opts: { exists?: boolean; dist?: boolean } = {}) {
+    const app = join(realpathSync(dir), 'cmsapp'); // cwd процесса — реальный путь (macOS: /private/var)
+    if (opts.dist !== false) w(join(app, 'dist/src/index.js'), '');
+    w(join(app, 'node_modules/@strapi/core/package.json'), '{"name":"@strapi/core","main":"index.js"}');
+    w(join(app, 'node_modules/@strapi/core/index.js'), `
+const fs = require('node:fs');
+const log = (x) => fs.appendFileSync(${JSON.stringify(join(dir, 'strapi-calls.log'))}, JSON.stringify(x) + '\\n');
+exports.createStrapi = (ctx) => { log({ createStrapi: ctx }); return { load: async () => ({ admin: { services: {
+  user: { exists: async (q) => { log({ exists: q }); return ${opts.exists ? 'true' : 'false'}; }, create: async (d) => { log({ create: { ...d, password: d.password ? '<set>' : null } }); } },
+  role: { getSuperAdmin: async () => ({ id: 7 }) } } } }) }; };
+exports.compileStrapi = () => { throw new Error('compileStrapi (tsc) не должен вызываться'); };
+`);
+    return app;
+  }
+  const runCjs = (input: string, app: string) =>
+    spawnSync('node', [SCRIPT], { cwd: app, input, encoding: 'utf8', timeout: 30_000 });
+  const calls = () => read('strapi-calls.log');
+
+  it('создаёт super-admin службами Strapi из dist: appDir+distDir, роль 7, пароль не печатается', () => {
+    const app = fakeApp();
+    const r = runCjs(`Admin@Trial.Local\n${SECRET_PW}\nPhil\nPhil\ny\n`, app);
+    expect(r.status, r.stderr).toBe(0);
+    expect(calls()).toContain(`"createStrapi":{"appDir":${JSON.stringify(app)},"distDir":${JSON.stringify(join(app, 'dist'))}}`);
+    expect(calls()).toContain('"roles":[7]');
+    expect(calls()).toContain('"email":"admin@trial.local"');
+    expect(calls()).not.toContain('compileStrapi');
+    expect(`${r.stdout}${r.stderr}${calls()}`).not.toContain(SECRET_PW);
+  });
+
+  it('слабый пароль отклоняется до запуска Strapi', () => {
+    const r = runCjs('a@b.c\nshort\nPhil\nP\ny\n', fakeApp());
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('пароль не принят');
+    expect(calls()).toBe('');
+  });
+
+  it('без подтверждения ничего не создаётся', () => {
+    const r = runCjs(`a@b.c\n${SECRET_PW}\nPhil\nP\nn\n`, fakeApp());
+    expect(r.status).toBe(0);
+    expect(calls()).toBe('');
+  });
+
+  it('существующий email — отказ без create', () => {
+    const r = runCjs(`a@b.c\n${SECRET_PW}\nPhil\nP\ny\n`, fakeApp({ exists: true }));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('уже существует');
+    expect(calls()).not.toContain('"create"');
+  });
+
+  it('нет собранного dist — отказ 2', () => {
+    const r = runCjs('a@b.c\n', fakeApp({ dist: false }));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('нет собранного приложения');
   });
 });
