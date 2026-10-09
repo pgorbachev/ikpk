@@ -1,5 +1,5 @@
 // @ts-check
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
@@ -26,9 +26,27 @@ const articleDates = new Map(
 );
 const snapshotDate = [...articleDates.values()].sort().at(-1) ?? new Date(0).toISOString();
 
+// Сборка без оплаты (роль `ci`, в том числе обычный `npm run build`) форму не
+// рисует, и ссылки на экземпляр с печатью в ней нет. Файл при этом копируется
+// из public/ в вывод и остаётся недостижимым — гейт «PDF без ссылки» это
+// краснит. На стенде и в preview форма есть, файл остаётся.
+function omitStampedOfferWithoutPaymentForm() {
+  return {
+    name: 'omit-stamped-offer-without-payment-form',
+    hooks: {
+      'astro:build:done': ({ dir }) => {
+        const role = String(process.env.PAYMENT_ROLE ?? '').trim();
+        if (role !== '' && role !== 'ci') return;
+        rmSync(join(fileURLToPath(dir), 'documents', 'publichnaya-oferta-s-pechatyu.pdf'), { force: true });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: 'https://ikpk.su',
   integrations: [
+    omitStampedOfferWithoutPaymentForm(),
     sitemap({
       // Вне карты сайта:
       // - /preview/* — noindex-черновики вариантов;
