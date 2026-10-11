@@ -27,7 +27,7 @@ import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
-import { mediaKey } from "./lib/cms-migration.js";
+import { createImageUploader } from "./lib/import-media.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
 
 // ────────────────────────────────────────────────────────────────
@@ -256,77 +256,39 @@ function extractImageUrl(field: unknown): string | null {
   return null;
 }
 
-/**
- * Download an image from `url`, upload it to Strapi /api/upload, and
- * return the Strapi media file ID (or null on failure / skip).
- */
+const uploadImportedImage = createImageUploader({
+  root: path.resolve(__dirname, ".."),
+  mediaCacheByUrl,
+  mediaCacheByHash,
+  saveCache: saveMediaCache,
+  upload: async (bytes, filename, mime) => {
+    // Заголовки собирает form-data: имя файла приходит из данных переноса.
+    const { body, contentType } = buildUploadBody(bytes, filename, mime);
+    const uploaded = await api<unknown[]>("POST", "/api/upload", undefined, {
+      body,
+      contentType,
+    });
+    const fileId: number | undefined = Array.isArray(uploaded)
+      ? (uploaded[0] as { id?: number })?.id
+      : undefined;
+    if (fileId) log(`  📷 Uploaded ${filename} → media #${fileId}`);
+    return fileId;
+  },
+  onFailure: (url, error) => {
+    mediaUploadFailures++;
+    log(`  ⚠ Upload error: ${error} (${url.slice(0, 60)})`);
+  },
+});
+
+/** Upload an image to Strapi /api/upload and return its media file ID. */
 async function uploadImage(url: string | null): Promise<number | null> {
   if (!url || SKIP_MEDIA) return null;
-
-  const cached = mediaCacheByUrl.get(url);
-  if (cached) return cached.fileId;
-
+  if (mediaCacheByUrl.has(url)) return uploadImportedImage(url);
   if (DRY_RUN) {
     log(`  📷 [DRY] Would upload: ${url.slice(0, 80)}`);
     return null;
   }
-
-  try {
-    // Download
-    const res = await fetch(url);
-    if (!res.ok) {
-      mediaUploadFailures++;
-      log(`  ⚠ Download failed (${res.status}): ${url.slice(0, 80)}`);
-      return null;
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-
-    // Идемпотентность по содержимому (TD-8): один и тот же файл под разными url —
-    // например, при повторной публикации того же снимка — не должен плодить копии в
-    // медиатеке. Ключ — sha256 байтов (cms-migration.ts `mediaKey`), не url и не память
-    // процесса: он переживает и разные прогоны, и разные исходные адреса.
-    const hash = mediaKey({ bytes: new Uint8Array(buf), sourceUrl: url });
-    const reusedFileId = mediaCacheByHash.get(hash);
-    if (reusedFileId) {
-      mediaCacheByUrl.set(url, { fileId: reusedFileId, hash });
-      await saveMediaCache();
-      log(`  📷 Переиспользован по содержимому (${hash.slice(0, 12)}…): ${url.slice(0, 60)} → media #${reusedFileId}`);
-      return reusedFileId;
-    }
-
-    const fname =
-      decodeURIComponent(path.basename(new URL(url).pathname)) || "image.jpg";
-    const mime = res.headers.get("content-type") || "application/octet-stream";
-
-    // Заголовки собирает form-data (см. lib/upload-body.ts): fname берётся из URL
-    // данных скрейпа, и при ручной конкатенации кавычка или CRLF в имени ломали
-    // Content-Disposition запроса, уходящего с полноправным токеном.
-    const { body: formBuf, contentType } = buildUploadBody(buf, fname, mime);
-
-    const uploaded = await api<unknown[]>("POST", "/api/upload", undefined, {
-      body: formBuf,
-      contentType,
-    });
-
-    const fileId: number | undefined = Array.isArray(uploaded)
-      ? (uploaded[0] as { id?: number })?.id
-      : undefined;
-    if (fileId) {
-      mediaCacheByUrl.set(url, { fileId, hash });
-      mediaCacheByHash.set(hash, fileId);
-      await saveMediaCache();
-      log(`  📷 Uploaded ${fname} → media #${fileId}`);
-      return fileId;
-    }
-    mediaUploadFailures++;
-    log(`  ⚠ Upload returned no id for ${fname}`);
-    return null;
-  } catch (err: unknown) {
-    mediaUploadFailures++;
-    const msg = err instanceof Error ? err.message : String(err);
-    log(`  ⚠ Upload error: ${msg} (${url.slice(0, 60)})`);
-    return null;
-  }
+  return uploadImportedImage(url);
 }
 
 // ────────────────────────────────────────────────────────────────
