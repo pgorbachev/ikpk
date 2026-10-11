@@ -208,13 +208,6 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const sys of ['id', 'createdAt', 'updatedAt', 'publishedAt'] as const) {
     if (record[sys] !== undefined) out[sys] = record[sys];
   }
-  // Специфический для teachers случай: в схеме `teacher` нет отношения `institute` (только
-  // `seminars`), но данные (в т.ч. в тестовой заглушке) могут его нести. Раз источника в схеме
-  // нет, соответствие им не управляет — прямой passthrough, вне FIELD_MAP.
-  if (type === 'teachers' && record.institute && typeof record.institute === 'object') {
-    const inst = record.institute as Record<string, unknown>;
-    if (inst.legacy_id !== undefined) out.institute_legacy_id = inst.legacy_id;
-  }
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }

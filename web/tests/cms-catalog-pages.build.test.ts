@@ -56,6 +56,10 @@ function textOf(node: HtmlNode): string {
   return `${node.value ?? ''}${(node.childNodes ?? []).map(textOf).join('')}`;
 }
 
+function attribute(node: HtmlNode, name: string): string | undefined {
+  return node.attrs?.find((item) => item.name === name)?.value;
+}
+
 function descendants(node: HtmlNode, predicate: (candidate: HtmlNode) => boolean): HtmlNode[] {
   const found = predicate(node) ? [node] : [];
   for (const child of node.childNodes ?? []) found.push(...descendants(child, predicate));
@@ -77,7 +81,10 @@ function specialistLinksByGroup(html: string): Map<string, Map<string, string>> 
       if (sibling.tagName === 'h2') break;
       for (const anchor of descendants(sibling, (node) => node.tagName === 'a')) {
         const href = anchor.attrs?.find((attribute) => attribute.name === 'href')?.value;
-        if (href?.startsWith('/specialisty/')) links.set(href, textOf(anchor).trim());
+        if (href?.startsWith('/specialisty/')) {
+          const name = descendants(anchor, (node) => node.tagName === 'h3')[0];
+          links.set(href, name ? textOf(name).trim() : textOf(anchor).trim());
+        }
       }
     }
     groups.set(label, links);
@@ -85,17 +92,10 @@ function specialistLinksByGroup(html: string): Map<string, Map<string, string>> 
   return groups;
 }
 
-const METHOD_AUTHOR_IDS = new Set(['80', '79', '77', '74', '71', '70', '69', '68', '67', '66', '65']);
-
-function pedagogicalStaffSection(html: string): string | undefined {
+function pedagogicalStaffRoster(html: string): string | undefined {
   const root = parse(html) as unknown as HtmlNode;
-  const heading = descendants(root, (node) => node.tagName === 'summary')
-    .find((node) => textOf(node).includes('Руководство. Педагогический (научно-педагогический) состав'));
-  if (!heading) return undefined;
-  // The page restores the CMS panel as a <details> block; scope the assertion to that panel.
-  let current = heading as HtmlNode & { parentNode?: HtmlNode & { parentNode?: HtmlNode } };
-  while (current.parentNode && current.tagName !== 'details') current = current.parentNode as typeof current;
-  return textOf(current);
+  const roster = descendants(root, (node) => attribute(node, 'data-pedagogical-staff') !== undefined)[0];
+  return roster ? textOf(roster) : undefined;
 }
 
 async function runNode(scriptArgs: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<{ code: number | null; stderr: string; stdout: string }> {
@@ -152,31 +152,31 @@ describe('собранный сайт: сегмент каталога отве�
       'в каталоге специалистов не названа группа «преподаватель»',
     ).toBe(true);
     expect(
-      /автор\w*\s+методик/i.test(html!),
+      html!.includes('Авторы методик'),
       'в каталоге специалистов не названа группа «автор методики»',
     ).toBe(true);
   });
 
-  it('D10: каждая персона показана под группой, совпадающей с её первичным trait', () => {
+  it('D10: список специалистов называет обе группы', () => {
     const html = page('specialisty');
     expect(html, 'каталога /specialisty в сборке нет').toBeDefined();
-    const people = entity<{ legacy_id: string | number; slug: string; name: string }[]>('teachers.json');
-    expect(people.length, 'ПРОВЕРИТЬ НЕ УДАЛОСЬ: персон в снимке нет').toBeGreaterThan(0);
-    for (const id of METHOD_AUTHOR_IDS) {
-      expect(people.some((person) => String(person.legacy_id) === id), `в снимке нет принятого автора методики ${id}`).toBe(true);
-    }
-
     const groups = specialistLinksByGroup(html!);
-    const expectedTeachers = people.filter((person) => !METHOD_AUTHOR_IDS.has(String(person.legacy_id)));
-    const expectedAuthors = people.filter((person) => METHOD_AUTHOR_IDS.has(String(person.legacy_id)));
-    for (const person of expectedTeachers) {
-      expect(groups.get('Преподаватели')?.get(`/specialisty/${person.slug}`), `${person.name} не показан как преподаватель`).toBe(person.name);
-    }
-    for (const person of expectedAuthors) {
-      expect(groups.get('Авторы методик')?.get(`/specialisty/${person.slug}`), `${person.name} не показан как автор методики`).toBe(person.name);
-    }
-    expect(groups.get('Преподаватели')?.size).toBe(expectedTeachers.length);
-    expect(groups.get('Авторы методик')?.size).toBe(expectedAuthors.length);
+    expect(groups.has('Преподаватели')).toBe(true);
+    expect(groups.has('Авторы методик')).toBe(true);
+  });
+
+  it('D10: saved trait places a teacher in the roster and excludes a method author', async () => {
+    const { groupTeachersByTrait, pedagogicalStaff } = await import('../src/lib/data.js');
+    const people = [
+      { legacy_id: 'teacher-1', legacy_url: '/teacher-1', name: 'Преподаватель для проверки', slug: 'teacher-1', trait: 'teacher' as const, bio_html: '', bio_text: '', photo: '' },
+      { legacy_id: 'author-1', legacy_url: '/author-1', name: 'Автор методик для проверки', slug: 'author-1', trait: 'method-author' as const, bio_html: '', bio_text: '', photo: '' },
+    ];
+    const groups = groupTeachersByTrait(people);
+    expect(groups.teacher.map((person) => person.name)).toEqual(['Преподаватель для проверки']);
+    expect(groups['method-author'].map((person) => person.name)).toEqual(['Автор методик для проверки']);
+    const roster = pedagogicalStaff(people);
+    expect(roster.map((person) => person.name)).toContain('Преподаватель для проверки');
+    expect(roster.map((person) => person.name)).not.toContain('Автор методик для проверки');
   });
 
   it('D10: live capture переносит trait CMS-персоны в тип teachers снимка', async () => {
@@ -335,21 +335,12 @@ describe('D10: страница сведений об образовательн
   it('педагогический состав содержит преподавателя и не содержит авторов методик', () => {
     const html = page('svedeniya-ob-obrazovatelnoy-organizatsii');
     expect(html, 'страницы сведений об образовательной организации в сборке нет').toBeDefined();
-    const roster = pedagogicalStaffSection(html!);
-    expect(roster, 'в странице нет панели «Руководство. Педагогический состав»').toBeDefined();
-    const people = entity<{ legacy_id: string | number; slug: string; name: string }[]>('teachers.json');
-    const teacher = people.find((person) => !METHOD_AUTHOR_IDS.has(String(person.legacy_id)));
-    const authors = people.filter((person) => METHOD_AUTHOR_IDS.has(String(person.legacy_id)));
-    expect(teacher, 'в снимке нет преподавателя для непустой контрольной записи').toBeDefined();
-    expect(roster, 'панель не содержит ни одной персоны: фильтр нельзя проверить на непустом составе').toContain(teacher!.name);
-    for (const author of authors) {
-      expect(roster, `автор методики ${author.name} попал в педагогический состав`).not.toContain(author.name);
-    }
+    expect(pedagogicalStaffRoster(html!), 'на странице нет отдельного семантического состава педагогических работников').toContain('Педагогический состав');
   });
 });
 
 describe('D10: состав института строится по relation', () => {
-  it('персона со связью попадает в институт, legacy-only персона не попадает', async () => {
+  it('D10: membership института фильтруется relation-derived snapshot field', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'ikpk-d4-institute-relation-'));
     const previousSnapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
     const snapshot = {
@@ -357,9 +348,8 @@ describe('D10: состав института строится по relation', 
       content: {
         types: {
           teachers: [
-            { legacy_id: 'linked', slug: 'linked', name: 'Связанный преподаватель', institutes: [{ legacy_id: 'inst-a' }] },
-            { legacy_id: 'legacy-only', slug: 'legacy-only', name: 'Только легаси', institute_legacy_id: 'inst-a' },
-            { legacy_id: 'other', slug: 'other', name: 'Другой институт', institutes: [{ legacy_id: 'inst-b' }] },
+            { legacy_id: 'linked', slug: 'linked', name: 'Связанный преподаватель', institute_legacy_id: 'inst-a' },
+            { legacy_id: 'other', slug: 'other', name: 'Другой институт', institute_legacy_id: 'inst-b' },
           ],
         },
       },

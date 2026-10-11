@@ -192,12 +192,27 @@ export interface Teacher {
   legacy_url: string;
   name: string;
   slug: string;
-  institute_legacy_id: string;
+  trait?: PersonTrait;
+  /** Снимок получает это значение из CMS relation `institute`, а не из поля персоны. */
+  institute_legacy_id?: string;
   bio_html: string;
   bio_text: string;
   photo: string;
   /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
   order?: number;
+}
+
+export type PersonTrait = 'teacher' | 'method-author';
+
+export function groupTeachersByTrait(teachers: readonly Teacher[]): Record<PersonTrait, Teacher[]> {
+  return {
+    teacher: teachers.filter((teacher) => teacher.trait === 'teacher'),
+    'method-author': teachers.filter((teacher) => teacher.trait === 'method-author'),
+  };
+}
+
+export function pedagogicalStaff(teachers: readonly Teacher[]): Teacher[] {
+  return teachers.filter((teacher) => teacher.trait === 'teacher');
 }
 
 export interface Article {

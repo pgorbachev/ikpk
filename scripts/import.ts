@@ -44,6 +44,12 @@ const ALLOW_PARTIAL = process.argv.includes("--allow-partial");
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
 
+// Одноразовая первичная разметка переноса (cms-content-authoring-and-migration, D10).
+// После создания значение принадлежит администратору и повторный импорт его не меняет.
+const METHOD_AUTHOR_LEGACY_IDS = new Set([
+  "80", "79", "77", "74", "71", "70", "69", "68", "67", "66", "65",
+]);
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TRANSFER_DIR = legacyTransferDir(path.resolve(__dirname, ".."));
@@ -438,7 +444,7 @@ async function upsert(
   rawLegacyId: unknown,
   rawData: Record<string, unknown>,
   report: EntityReport,
-  opts?: { forceDraft?: boolean },
+  opts?: { forceDraft?: boolean; createOnlyFields?: readonly string[] },
 ): Promise<StrapiEntry | null> {
   // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
   // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
@@ -462,10 +468,13 @@ async function upsert(
       // трогает — данные идут в черновик (opts.forceDraft).
       const useDraft = Boolean(opts?.forceDraft) || !existing.viaPublished;
       const statusQuery = useDraft ? "?status=draft" : "";
+      const updateData = opts?.createOnlyFields?.length
+        ? Object.fromEntries(Object.entries(data).filter(([field]) => !opts.createOnlyFields!.includes(field)))
+        : data;
       const res = await api<{ data: StrapiEntry }>(
         "PUT",
         `/api/${apiName}/${existing.entry.documentId}${statusQuery}`,
-        { data },
+        { data: updateData },
       );
       const entry = res.data;
       getCache(apiName).set(legacyId, {
@@ -547,6 +556,7 @@ async function importTeachers(): Promise<void> {
       bio: (e.bio_html as string) ?? null,
       order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
+      trait: METHOD_AUTHOR_LEGACY_IDS.has(normalizeLegacyId(e.legacy_id)) ? "method-author" : "teacher",
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
       // переноса он есть у всех записей этих типов.
     };
@@ -566,7 +576,7 @@ async function importTeachers(): Promise<void> {
       if (docId) data.institute = docId;
     }
 
-    await upsert("teachers", e.legacy_id as string, data, report);
+    await upsert("teachers", e.legacy_id as string, data, report, { createOnlyFields: ["trait"] });
   }
 }
 

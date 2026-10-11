@@ -1,22 +1,14 @@
 ---
-/**
- * Каталог специалистов (`/specialisty`) объединяет преподавателей и авторов
- * методик одним типом с признаком одного значения (D10 в design.md change
- * `cms-content-authoring-and-migration`). Признак — поле системы управления;
- * в файловом снимке, из которого сегодня собирается сайт, его нет вовсе, и
- * первичная разметка 29 персон на группы — разовая задача переноса (design.md,
- * D10), а не то, что можно достоверно вывести здесь из HTML-биографии.
- *
- * Поэтому до переноса контента в систему управления все специалисты снимка
- * показаны под «Преподаватели» — это единственная группа, которую персона уже
- * имеет сегодня без домысливания; секция «Авторы методик» показана явно
- * пустой с пояснением, а не спрятана и не заполнена угадыванием.
- */
+/** Каталог специалистов разбивает единый тип CMS по сохранённому trait (D10). */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import { getTeachers } from '../../lib/data';
+import { getTeachers, groupTeachersByTrait } from '../../lib/data';
 
-const teachers = getTeachers();
+const grouped = groupTeachersByTrait(getTeachers());
+const traitGroups = [
+  { label: 'Преподаватели', members: grouped.teacher },
+  { label: 'Авторы методик', members: grouped['method-author'] },
+];
 
 const title = 'Специалисты — ИКПК';
 const description = 'Преподаватели и авторы методик ИКПК.';
@@ -29,26 +21,25 @@ const description = 'Преподаватели и авторы методик �
     <section class="section">
       <h1 class="page-title">Специалисты</h1>
 
-      <h2 class="section-title">Преподаватели</h2>
-      {teachers.length > 0 ? (
-        <div class="grid grid-3">
-          {teachers.map((teacher) => (
-            <a href={`/specialisty/${teacher.slug}`} class="card">
-              <div class="card-body">
-                <h3 class="catalog-card-title">{teacher.name}</h3>
-              </div>
-            </a>
-          ))}
-        </div>
-      ) : (
-        <p class="text-muted">Преподаватели пока не добавлены.</p>
-      )}
-
-      <h2 class="section-title specialisty-authors-title">Авторы методик</h2>
-      <p class="text-muted">
-        Признак «автор методики» появится у персон после переноса контента в
-        систему управления.
-      </p>
+      {traitGroups.map(({ label, members }) => (
+        <section class="specialist-group" aria-label={label}>
+          <h2 class="section-title">{label}</h2>
+          {members.length > 0 ? (
+            <div class="grid grid-3">
+              {members.map((person) => (
+                <a href={`/specialisty/${person.slug}`} class="card">
+                  <div class="card-body">
+                    <h3 class="catalog-card-title">{person.name}</h3>
+                    <span class="specialist-trait">{label}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p class="text-muted">В этой группе пока нет специалистов.</p>
+          )}
+        </section>
+      ))}
     </section>
   </div>
 </BaseLayout>
@@ -58,7 +49,7 @@ const description = 'Преподаватели и авторы методик �
     margin-bottom: 1rem;
   }
 
-  .specialisty-authors-title {
+  .specialist-group + .specialist-group {
     margin-top: 2rem;
   }
 
@@ -67,6 +58,13 @@ const description = 'Преподаватели и авторы методик �
     font-weight: 600;
     color: var(--color-dark-700);
     margin: 0;
+  }
+
+  .specialist-trait {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--color-gray-600);
+    font-size: var(--font-xs);
   }
 
   a.card {

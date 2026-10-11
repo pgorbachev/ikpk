@@ -96,7 +96,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const courseGroups = Array.from({ length: 3 }, (_, i) =>
     ({ ...base('cg', i + 1, `Программа ${i + 1}`), description: '<p>О программе</p>', image: media(i + 1), institute: ref('inst', 1, 'Институт 1'), seo: seo(`Программа ${i + 1}`) }));
   const teachers = Array.from({ length: 5 }, (_, i) =>
-    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', institute: ref('inst', 1, 'Институт 1') }));
+    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', trait: i === 0 ? 'method-author' : 'teacher', institute_legacy_id: 'raw-legacy-institute', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
     ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', status: 'active', course_group: ref('cg', 1, 'Программа 1'), institute: ref('inst', 1, 'Институт 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
@@ -272,6 +272,20 @@ describe('снимок читается из живой системы упра�
       expect(found, `в снимке нет типа ${label}`).toBeDefined();
       expect(found?.[1].length, `${label}: записей в снимке ${found?.[1].length}, в источнике ${count}`).toBe(count);
     }
+  });
+
+  it('сохраняет CMS trait человека в снимке', async () => {
+    const cms = await stub();
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+
+    const types = typesOf(readSnapshot(dir));
+    const teachers = Object.entries(types).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+    expect(teachers[0]?.trait).toBe('method-author');
+    expect(teachers[0]?.institute_legacy_id).toBe('inst-001');
+    expect(teachers.slice(1).every((teacher) => teacher.trait === 'teacher')).toBe(true);
   });
 
   // Сценарий: адрес задан, система управления недоступна
