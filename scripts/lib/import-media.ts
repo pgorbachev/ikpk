@@ -26,6 +26,54 @@ interface ImageSource {
   mime: string;
 }
 
+const GENERIC_IMAGE_MIME_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'application/binary',
+  'application/x-octet-stream',
+  'binary/octet-stream',
+]);
+const IMAGE_MIME_ALIASES = new Map([
+  ['image/jpg', 'image/jpeg'],
+  ['image/pjpeg', 'image/jpeg'],
+  ['image/x-png', 'image/png'],
+]);
+
+function sniffImageMime(bytes: Buffer): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 33 &&
+    bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) &&
+    bytes.readUInt32BE(8) === 13 &&
+    bytes.toString('ascii', 12, 16) === 'IHDR'
+  ) {
+    return 'image/png';
+  }
+  if (
+    bytes.length >= 16 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.readUInt32LE(4) >= 8 &&
+    bytes.readUInt32LE(4) <= bytes.length - 8 &&
+    bytes.toString('ascii', 8, 12) === 'WEBP' &&
+    ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('ascii', 12, 16))
+  ) {
+    return 'image/webp';
+  }
+  throw new Error('image bytes are not a supported JPEG, PNG, or WebP');
+}
+
+function imageMimeFromBytes(bytes: Buffer, declaredMime: string): string {
+  const detectedMime = sniffImageMime(bytes);
+  const declared = declaredMime.split(';')[0].trim().toLowerCase();
+  const normalizedDeclared = IMAGE_MIME_ALIASES.get(declared) ?? declared;
+  if (!GENERIC_IMAGE_MIME_TYPES.has(normalizedDeclared) && normalizedDeclared !== detectedMime) {
+    throw new Error(`image content type ${declared} conflicts with detected ${detectedMime}`);
+  }
+  return detectedMime;
+}
+
 interface ImageUploaderOptions {
   root: string;
   knownMediaByHash: Map<string, number>;
@@ -96,6 +144,7 @@ export function createImageUploader(
       const source = localFilename
         ? await localSource(options.root, localFilename)
         : await remoteSource(fetchImage, url);
+      source.mime = imageMimeFromBytes(source.bytes, source.mime);
       const hash = mediaKey({ bytes: new Uint8Array(source.bytes), sourceUrl: url });
       const persistedSourceId = liveFileId(options.knownMediaBySourceHash.get(hash));
       const storedByteId = liveFileId(options.knownMediaByHash.get(hash));

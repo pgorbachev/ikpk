@@ -11,6 +11,25 @@ const legacyImages = [
   '/media/legacy/logo-barral-inst.png',
 ];
 
+function pngBytes(seed = 1): Buffer {
+  const bytes = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write('IHDR', 12, 'ascii');
+  bytes.writeUInt32BE(seed, 16);
+  bytes.writeUInt32BE(1, 20);
+  return bytes;
+}
+
+function webpBytes(): Buffer {
+  const bytes = Buffer.alloc(16);
+  bytes.write('RIFF', 0, 'ascii');
+  bytes.writeUInt32LE(8, 4);
+  bytes.write('WEBP', 8, 'ascii');
+  bytes.write('VP8X', 12, 'ascii');
+  return bytes;
+}
+
 function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[0]> = {}) {
   const knownMediaByHash = overrides.knownMediaByHash ?? new Map<string, number>();
   const knownMediaBySourceHash = overrides.knownMediaBySourceHash ?? new Map<string, number>();
@@ -125,7 +144,7 @@ describe('import media upload boundary', () => {
   });
 
   it('adopts an existing related Strapi file when its stored optimized bytes differ from the source', async () => {
-    const sourceBytes = Buffer.from('original image bytes');
+    const sourceBytes = pngBytes();
     const storedBytes = Buffer.from('strapi re-encoded image bytes');
     expect(storedBytes).not.toEqual(sourceBytes);
     const sourceUrl = 'https://images.example.test/portrait.png';
@@ -155,11 +174,113 @@ describe('import media upload boundary', () => {
     expect(state.failures).toEqual([]);
   });
 
+  it('adopts a related JPEG when the source server labels its bytes as generic octet-stream', async () => {
+    const sourceBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const storedBytes = Buffer.from('strapi optimized jpeg bytes');
+    const sourceUrl = 'https://images.example.test/portrait.jpg';
+    const fileId = 219;
+    const storedSha256 = createHash('sha256').update(storedBytes).digest('hex');
+    const state = makeUploader({
+      knownMediaByHash: new Map([[storedSha256, fileId]]),
+      storedHashById: new Map([[fileId, storedSha256]]),
+      mediaById: new Map([[fileId, { id: fileId, name: 'portrait.jpg', mime: 'image/jpeg' }]]),
+      persistIdentity: vi.fn(async () => storedSha256),
+      fetchImage: vi.fn(async () => new Response(sourceBytes, {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
+      })),
+    });
+
+    await expect(state.imageUploader(sourceUrl, { entityKey: 'articles:legacy-42:image:0', fileId })).resolves.toBe(fileId);
+
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(state.persistIdentity).toHaveBeenCalledWith({
+      fileId,
+      sourceUrl,
+      sourceSha256: createHash('sha256').update(sourceBytes).digest('hex'),
+      expectedStoredSha256: storedSha256,
+      adoptedFrom: 'articles:legacy-42:image:0',
+    });
+    expect(state.failures).toEqual([]);
+  });
+
+  it.each([
+    ['PNG', pngBytes(), 'image/png'],
+    ['WebP', webpBytes(), 'image/webp'],
+  ])('detects %s from bytes even when the URL extension disagrees', async (_label, bytes, expectedMime) => {
+    const upload = vi.fn(async () => 91);
+    const state = makeUploader({
+      fetchImage: vi.fn(async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
+      })),
+      upload,
+    });
+
+    await expect(state.imageUploader('https://images.example.test/photo.jpg')).resolves.toBe(91);
+
+    expect(upload).toHaveBeenCalledWith(bytes, 'photo.jpg', expectedMime);
+    expect(state.failures).toEqual([]);
+  });
+
+  it('rejects generic non-image bytes before upload', async () => {
+    const state = makeUploader({
+      fetchImage: vi.fn(async () => new Response(Buffer.from('not an image'), {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
+      })),
+    });
+
+    await expect(state.imageUploader('https://images.example.test/photo.jpg')).resolves.toBeNull();
+
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(state.failures).toHaveLength(1);
+    expect(state.failures[0]).toContain('not a supported JPEG, PNG, or WebP');
+  });
+
+  it('rejects an explicit image MIME that conflicts with the detected bytes', async () => {
+    const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const state = makeUploader({
+      fetchImage: vi.fn(async () => new Response(jpegBytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })),
+    });
+
+    await expect(state.imageUploader('https://images.example.test/photo.jpg')).resolves.toBeNull();
+
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(state.failures).toHaveLength(1);
+    expect(state.failures[0]).toContain('conflicts with detected image/jpeg');
+  });
+
+  it('does not reuse media with the same filename and a different detected image type', async () => {
+    const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const otherBytes = pngBytes();
+    const otherHash = createHash('sha256').update(otherBytes).digest('hex');
+    const upload = vi.fn(async () => 91);
+    const state = makeUploader({
+      knownMediaByHash: new Map([[otherHash, 219]]),
+      mediaById: new Map([[219, { id: 219, name: 'portrait.png', mime: 'image/png' }]]),
+      fetchImage: vi.fn(async () => new Response(jpegBytes, {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
+      })),
+      upload,
+    });
+
+    await expect(state.imageUploader('https://images.example.test/portrait.png')).resolves.toBe(91);
+
+    expect(upload).toHaveBeenCalledWith(jpegBytes, 'portrait.png', 'image/jpeg');
+    expect(state.persistIdentity).toHaveBeenCalledWith(expect.objectContaining({ fileId: 91 }));
+    expect(state.failures).toEqual([]);
+  });
+
   it('uploads a new URL when its related file already has an identity for another source', async () => {
     const oldUrl = 'https://images.example.test/old/same.png';
     const newUrl = 'https://images.example.test/new/same.png';
     const oldHash = createHash('sha256').update('old raw bytes').digest('hex');
-    const newBytes = Buffer.from('new raw bytes with same file metadata');
+    const newBytes = pngBytes(2);
     const state = makeUploader({
       mediaById: new Map([[219, {
         id: 219,
@@ -186,8 +307,8 @@ describe('import media upload boundary', () => {
   it('treats an older unversioned source identity as a claim that blocks legacy adoption', async () => {
     const oldUrl = 'https://images.example.test/old/same.png';
     const newUrl = 'https://images.example.test/new/same.png';
-    const oldHash = createHash('sha256').update('old source bytes').digest('hex');
-    const newBytes = Buffer.from('new source bytes');
+    const oldHash = createHash('sha256').update(pngBytes(3)).digest('hex');
+    const newBytes = pngBytes(4);
     const state = makeUploader({
       mediaById: new Map([[219, {
         id: 219,
@@ -210,8 +331,8 @@ describe('import media upload boundary', () => {
   });
 
   it('does not deduplicate same filenames when their bytes differ', async () => {
-    const bytes = Buffer.from('different bytes');
-    const otherHash = createHash('sha256').update('other bytes').digest('hex');
+    const bytes = pngBytes(5);
+    const otherHash = createHash('sha256').update(pngBytes(6)).digest('hex');
     const state = makeUploader({
       knownMediaByHash: new Map([[otherHash, 219]]),
       fetchImage: vi.fn(async () => new Response(bytes, {
@@ -229,8 +350,8 @@ describe('import media upload boundary', () => {
 
   it('uploads changed source bytes instead of reusing a relation adopted on an earlier run', async () => {
     const sourceUrl = 'https://images.example.test/same-name.png';
-    const previousHash = createHash('sha256').update('previous source bytes').digest('hex');
-    const changedBytes = Buffer.from('changed source bytes');
+    const previousHash = createHash('sha256').update(pngBytes(7)).digest('hex');
+    const changedBytes = pngBytes(8);
     const state = makeUploader({
       knownMediaBySourceHash: new Map([[previousHash, 219]]),
       mediaById: new Map([[219, {
@@ -264,7 +385,7 @@ describe('import media upload boundary', () => {
 
   it('does not reuse an old source identity after its Strapi file was replaced in place', async () => {
     const sourceUrl = 'https://images.example.test/replaced.png';
-    const sourceBytes = Buffer.from('original source bytes');
+    const sourceBytes = pngBytes(9);
     const sourceHash = createHash('sha256').update(sourceBytes).digest('hex');
     const replacementBytes = Buffer.from('built-in replacement bytes');
     const replacementHash = createHash('sha256').update(replacementBytes).digest('hex');
@@ -298,7 +419,7 @@ describe('import media upload boundary', () => {
   });
 
   it('does not reuse a source identity whose media ID is no longer in the live CMS inventory', async () => {
-    const bytes = Buffer.from('source bytes for deleted CMS media');
+    const bytes = pngBytes(10);
     const sourceHash = createHash('sha256').update(bytes).digest('hex');
     const state = makeUploader({
       knownMediaBySourceHash: new Map([[sourceHash, 999]]),
@@ -362,7 +483,7 @@ describe('import media upload boundary', () => {
   });
 
   it('keeps remote HTTP(S) fetching and upload behavior', async () => {
-    const bytes = Buffer.from('remote-image');
+    const bytes = pngBytes(11);
     const fetchImage = vi.fn(async () => new Response(bytes, {
       status: 200,
       headers: { 'content-type': 'image/png' },
