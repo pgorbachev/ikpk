@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /** Serialize tests that mutate the checkout's shared web/.snapshot directories. */
-export async function acquireSharedSnapshotLock(webRoot: string): Promise<() => void> {
+export async function acquireSharedSnapshotLock(webRoot: string, timeoutMs = 60_000): Promise<() => void> {
   const key = createHash('sha256').update(webRoot).digest('hex').slice(0, 16);
   const lockDir = join(tmpdir(), `ikpk-web-snapshot-${key}.lock`);
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     try {

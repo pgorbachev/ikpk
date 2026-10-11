@@ -60,12 +60,16 @@ describe('снимок, переданный артефактом, несёт б
   }, 120_000);
 
   afterAll(() => {
+    if (!releaseSnapshotLock) return;
+    const release = releaseSnapshotLock;
+    releaseSnapshotLock = undefined;
+
     // Каталог снимка — общий рабочий предмет сборки. Возвращаем его к закреплённой
     // фикстуре, иначе следующая локальная сборка возьмёт остаток от теста.
     try {
       prepare(pinned);
     } finally {
-      releaseSnapshotLock?.();
+      release();
     }
   });
 

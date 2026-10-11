@@ -56,11 +56,15 @@ describe('prepare-snapshot: источник снимка', () => {
   }, 120_000);
 
   afterAll(() => {
+    if (!releaseSnapshotLock) return;
+    const release = releaseSnapshotLock;
+    releaseSnapshotLock = undefined;
+
     try {
       const restored = prepare({ CONTENT_SNAPSHOT_DIR: pinnedFixture, SNAPSHOT_SOURCE: undefined });
       if (restored.status !== 0) throw new Error(restored.output);
     } finally {
-      releaseSnapshotLock?.();
+      release();
     }
   });
 
