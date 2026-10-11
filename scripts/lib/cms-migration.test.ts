@@ -38,6 +38,12 @@ describe('перенос: wiring порядка и вычисляемого ст
   it('импорт семинара не возвращает удалённое хранимое поле status', () => {
     expect(importFunction('importSeminars', 'importScheduleEntries')).not.toMatch(/\bstatus\s*:/);
   });
+
+  it('импорт семинара передаёт состояние документов, но не придумывает его при отсутствии в источнике', () => {
+    const source = importFunction('importSeminars', 'importScheduleEntries');
+    expect(source).toMatch(/documents_state\s*:\s*\(e\.documents_state as string\)\s*\?\?\s*null/);
+    expect(source).not.toMatch(/documents_state[^\n]*not-issued/);
+  });
 });
 
 describe('перенос: связи расписания соответствуют схеме CMS', () => {

@@ -54,6 +54,80 @@ const POPULATE_BY_TYPE: Record<PublicationType, Record<string, unknown> | undefi
   promotion: undefined,
 };
 
+const RELATION_FIELDS_BY_TYPE: Partial<Record<PublicationType, string[]>> = {
+  'course-group': ['institute'],
+  seminar: ['course_group'],
+  person: ['institute'],
+  article: ['image', 'categories'],
+  'schedule-entry': ['seminar'],
+};
+
+function relationItems(value: unknown): unknown[] {
+  if (value === null || value === undefined || value === false) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function relationId(value: unknown): string | undefined {
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') {
+    const item = value as Record<string, unknown>;
+    const id = item.documentId ?? item.id;
+    if (typeof id === 'string' || typeof id === 'number') return String(id);
+  }
+  return undefined;
+}
+
+/** Resolve relation connect/disconnect/set input to the effective nonempty state for validation. */
+function relationHasValue(current: unknown, incoming: unknown): boolean {
+  if (incoming === null || incoming === undefined || incoming === false) return false;
+  if (typeof incoming === 'string' || typeof incoming === 'number') return String(incoming).trim() !== '';
+  if (Array.isArray(incoming)) return incoming.length > 0;
+  if (!incoming || typeof incoming !== 'object') return Boolean(incoming);
+
+  const operation = incoming as Record<string, unknown>;
+  const hasOperations = 'set' in operation || 'connect' in operation || 'disconnect' in operation;
+  if (!hasOperations) return Object.keys(operation).length > 0;
+
+  let items = relationItems(current);
+  if ('set' in operation) items = relationItems(operation.set);
+  const disconnect = operation.disconnect;
+  if (disconnect === true) items = [];
+  else if (disconnect !== undefined && disconnect !== false && disconnect !== null) {
+    const removed = new Set(relationItems(disconnect).map(relationId).filter((id): id is string => id !== undefined));
+    items = items.filter((item) => {
+      const id = relationId(item);
+      return id === undefined || !removed.has(id);
+    });
+  }
+  if ('connect' in operation) items.push(...relationItems(operation.connect));
+  return items.length > 0;
+}
+
+function prospectiveEntity(
+  type: PublicationType,
+  existing: Record<string, unknown> | null,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const entity = { ...(existing ?? {}), ...incoming };
+
+  // SEO is a non-repeatable component. Preserve omitted fields when the request sends a partial
+  // component update so validation sees the same component Strapi will publish.
+  const previousSeo = existing?.seo;
+  if (
+    previousSeo && typeof previousSeo === 'object' &&
+    incoming.seo && typeof incoming.seo === 'object' && !Array.isArray(incoming.seo)
+  ) {
+    entity.seo = { ...(previousSeo as Record<string, unknown>), ...(incoming.seo as Record<string, unknown>) };
+  }
+
+  for (const field of RELATION_FIELDS_BY_TYPE[type] ?? []) {
+    if (Object.prototype.hasOwnProperty.call(incoming, field)) {
+      entity[field] = relationHasValue(existing?.[field], incoming[field]) ? { documentId: 'present' } : null;
+    }
+  }
+  return entity;
+}
+
 function seoFields(entity: Record<string, unknown>): { seo_title?: unknown; seo_description?: unknown } {
   const seo = entity.seo as Record<string, unknown> | null | undefined;
   return { seo_title: seo?.seo_title, seo_description: seo?.seo_description };
@@ -206,25 +280,39 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
       }
     }
 
-    if (type && context.action === 'publish') {
-      const documentId = (context.params as { documentId?: string }).documentId;
-      if (documentId) {
-        const draft = (await strapi.documents(context.uid as never).findOne({
-          documentId,
+    const params = context.params as { documentId?: string; status?: string; data?: Record<string, unknown> };
+    const publishedWrite =
+      context.action === 'publish' ||
+      ((context.action === 'create' || context.action === 'update') && params.status === 'published');
+    if (type && publishedWrite) {
+      let existing: Record<string, unknown> | null = null;
+      if (params.documentId) {
+        existing = (await strapi.documents(context.uid as never).findOne({
+          documentId: params.documentId,
           status: 'draft',
           populate: POPULATE_BY_TYPE[type],
         })) as Record<string, unknown> | null;
+        if (!existing && context.action === 'update') {
+          existing = (await strapi.documents(context.uid as never).findOne({
+            documentId: params.documentId,
+            status: 'published',
+            populate: POPULATE_BY_TYPE[type],
+          })) as Record<string, unknown> | null;
+        }
+      }
 
-        if (draft) {
-          const record = buildPublicationRecord(type, draft);
-          const verdict = checkPublication({ type, record });
-          if (!verdict.ok) throw new ApplicationError(verdict.message);
+      if (context.action === 'publish' ? existing : true) {
+        const entity = context.action === 'publish'
+          ? existing as Record<string, unknown>
+          : prospectiveEntity(type, existing, params.data ?? {});
+        const record = buildPublicationRecord(type, entity);
+        const verdict = checkPublication({ type, record });
+        if (!verdict.ok) throw new ApplicationError(verdict.message);
 
-          if (type === 'seminar' && Array.isArray(draft.documents)) {
-            for (const raw of draft.documents as Record<string, unknown>[]) {
-              const docVerdict = checkDocumentRecord(mapDocumentRecord(raw));
-              if (!docVerdict.ok) throw new ApplicationError(docVerdict.message);
-            }
+        if (type === 'seminar' && Array.isArray(entity.documents)) {
+          for (const raw of entity.documents as Record<string, unknown>[]) {
+            const docVerdict = checkDocumentRecord(mapDocumentRecord(raw));
+            if (!docVerdict.ok) throw new ApplicationError(docVerdict.message);
           }
         }
       }

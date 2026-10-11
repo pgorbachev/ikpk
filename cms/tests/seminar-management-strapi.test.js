@@ -111,7 +111,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     publishedInstitute = await app.documents('api::institute.institute').create({
       status: 'published',
-      data: { name: 'Институт для теста', slug: 'institut-dlya-testa', legacy_id: 'institut-dlya-testa' },
+      data: {
+        name: 'Институт для теста',
+        slug: 'institut-dlya-testa',
+        legacy_id: 'institut-dlya-testa',
+        description: 'Описание института для теста',
+        order: 1,
+        seo: { seo_title: 'Институт для теста', seo_description: 'Описание для поиска' },
+      },
     });
     publishedProgram = await app.documents('api::course-group.course-group').create({
       status: 'published',
@@ -307,6 +314,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       data: {
         name: 'Без идентификатора сайта',
         slug: 'bez-identifikatora-sayta',
+        institute: publishedInstitute.documentId,
         ...validCourseGroupPublicationFields,
       },
     });
@@ -322,30 +330,23 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       /нет идентификатора для сайта/,
     );
 
-    const noInstitute = await programs.create({
-      status: 'published',
-      data: {
-        name: 'Без института',
-        slug: 'bez-instituta',
-        legacy_id: 'bez-instituta',
-        ...validCourseGroupPublicationFields,
-      },
-    });
     await assert.rejects(
-      () => seminars.create({
+      () => programs.create({
         status: 'published',
         data: {
-          name: 'Неизвестный институт',
-          ...validSeminarPublicationFields,
-          course_group: noInstitute.documentId,
+          name: 'Без института',
+          slug: 'bez-instituta',
+          legacy_id: 'bez-instituta',
+          ...validCourseGroupPublicationFields,
         },
       }),
-      /нет опубликованного института для сайта/,
+      /не заполнены обязательные поля: institute/,
     );
     const matchingIds = await seminars.create({
       status: 'published',
       data: {
         name: 'Совпадающие идентификаторы',
+        ...validSeminarPublicationFields,
         course_group: { id: publishedProgram.id, documentId: publishedProgram.documentId },
       },
     });
@@ -470,7 +471,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const publishedSeminar = await seminars.create({
       status: 'published',
-      data: { name: 'Опубликованный', course_group: publishedProgram.documentId },
+      data: { name: 'Опубликованный', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const published = await entries.create({
       status: 'published',
@@ -478,6 +479,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         seminar: publishedSeminar.documentId,
         startAt: '2026-07-01T00:00:00.000Z',
         endAt: '2026-07-02T00:00:00.000Z',
+        city: 'Москва',
+        entry_status: 'active',
       },
     });
     const beforeRemoval = await entries.findOne({
@@ -511,11 +514,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const source = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар А', course_group: publishedProgram.documentId },
+      data: { name: 'Семинар А', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const target = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар Б', course_group: publishedProgram.documentId },
+      data: { name: 'Семинар Б', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const reassignment = [
       ['numericString', () => String(target.id)],
@@ -532,6 +535,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           seminar: source.documentId,
           startAt: '2026-08-01T00:00:00.000Z',
           endAt: '2026-08-02T00:00:00.000Z',
+          city: 'Москва',
+          entry_status: 'active',
         },
       });
       assert.equal(row.name, 'Семинар А');
@@ -555,6 +560,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         seminar: source.documentId,
         startAt: '2026-08-03T00:00:00.000Z',
         endAt: '2026-08-04T00:00:00.000Z',
+        city: 'Москва',
+        entry_status: 'active',
       },
     });
     await assert.rejects(
@@ -620,6 +627,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         startAt: '2026-11-01T23:30:00+02:00',
         endAt: '2026-11-02T01:00:00+02:00',
         city: 'Никосия',
+        entry_status: 'active',
       },
     });
     assert.equal(created.admin_label, '1 ноября 2026 · Никосия');
@@ -634,6 +642,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         startAt: '2026-10-01T00:00:00+03:00',
         endAt: '2026-10-01T10:00:00+03:00',
         city: 'Москва',
+        entry_status: 'active',
       },
     });
     assert.equal(midnight.admin_label, '1 октября 2026 · Москва');
