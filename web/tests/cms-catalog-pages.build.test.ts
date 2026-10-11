@@ -17,11 +17,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { parse } from 'parse5';
+import { METHOD_AUTHOR_LEGACY_IDS } from '../../scripts/lib/person-trait.js';
 import { dist } from './helpers/dist-pages';
 import { readSnapshotFile, resolveSnapshotDir } from '../scripts/lib/snapshot-paths';
 
@@ -98,26 +97,6 @@ function pedagogicalStaffRoster(html: string): string | undefined {
   return roster ? textOf(roster) : undefined;
 }
 
-async function runNode(scriptArgs: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<{ code: number | null; stderr: string; stdout: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--import', 'tsx', ...scriptArgs], {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8').on('data', (chunk: string) => { stdout = `${stdout}${chunk}`.slice(-30_000); });
-    child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr = `${stderr}${chunk}`.slice(-30_000); });
-    const timeout = setTimeout(() => child.kill('SIGKILL'), 60_000);
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      clearTimeout(timeout);
-      resolve({ code, stdout, stderr });
-    });
-  });
-}
-
 describe('собранный сайт: предмет проверки существует', () => {
   it('дерево сборки на месте', () => {
     expect(existsSync(dist), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${dist} — сборка не выполнена`).toBe(true);
@@ -165,6 +144,56 @@ describe('собранный сайт: сегмент каталога отве�
     expect(groups.has('Авторы методик')).toBe(true);
   });
 
+  it('закреплённый каталог специалистов содержит обе непустые группы и полный roster', () => {
+    const html = page('specialisty');
+    expect(html, 'каталога /specialisty в сборке нет').toBeDefined();
+    const teachers = entity<{ legacy_id: string | number; name: string; slug: string; trait?: string }[]>('teachers.json');
+    expect(teachers, 'ПРОВЕРИТЬ НЕ УДАЛОСЬ: в снимке нет персон').toHaveLength(29);
+    const authors = teachers.filter((teacher) => teacher.trait === 'method-author');
+    const staff = teachers.filter((teacher) => teacher.trait === 'teacher');
+    expect(METHOD_AUTHOR_LEGACY_IDS.size).toBe(11);
+    expect(authors.map((teacher) => String(teacher.legacy_id)).sort()).toEqual(
+      [...METHOD_AUTHOR_LEGACY_IDS].sort(),
+    );
+    expect(staff, 'в снимке пустой roster преподавателей').toHaveLength(18);
+    expect(teachers.find((teacher) => String(teacher.legacy_id) === '63')?.trait,
+      'Шрайнер должен оставаться преподавателем').toBe('teacher');
+
+    const groups = specialistLinksByGroup(html!);
+    expect(groups.get('Преподаватели')?.size, 'реальный HTML не содержит ссылок преподавателей')
+      .toBeGreaterThan(0);
+    expect(groups.get('Авторы методик')?.size, 'реальный HTML не содержит ссылок авторов методик')
+      .toBeGreaterThan(0);
+    expect(groups.get('Преподаватели')?.size).toBe(staff.length);
+    expect(groups.get('Авторы методик')?.size).toBe(authors.length);
+    expect([...groups.get('Преподаватели')!.keys()].sort()).toEqual(
+      staff.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
+    );
+    expect([...groups.get('Авторы методик')!.keys()].sort()).toEqual(
+      authors.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
+    );
+    const staffHtml = page('svedeniya-ob-obrazovatelnoy-organizatsii');
+    expect(staffHtml, 'HTML страницы сведений об организации отсутствует').toBeDefined();
+    const roster = pedagogicalStaffRoster(staffHtml!);
+    expect(roster, 'HTML страницы сведений не содержит roster').toContain('Педагогический состав');
+    for (const teacher of staff) {
+      expect(roster, `в HTML roster нет преподавателя ${teacher.legacy_id}`).toContain(teacher.name);
+    }
+    for (const author of authors) {
+      expect(roster, `в HTML roster попал автор методик ${author.legacy_id}`).not.toContain(author.name);
+    }
+  });
+
+  it('optional institute relation не формирует адрес /undefined/prepodavatel', async () => {
+    const { teacherPageHref } = await import('../src/lib/data.js');
+    expect(teacherPageHref({ slug: 'person-without-institute', institute_legacy_id: undefined })).toBe('');
+    expect(teacherPageHref({ slug: 'cms-person', institute_legacy_id: 'new-inst' }))
+      .toBe('/new-inst/prepodavatel/cms-person');
+    const html = page('raspisanie-i-tseny');
+    expect(html, 'страницы расписания в сборке нет').toBeDefined();
+    expect(html).not.toMatch(/href="\/(?:undefined|null)\/prepodavatel\//);
+  });
+
   it('D10: saved trait places a teacher in the roster and excludes a method author', async () => {
     const { groupTeachersByTrait, pedagogicalStaff } = await import('../src/lib/data.js');
     const people = [
@@ -179,57 +208,7 @@ describe('собранный сайт: сегмент каталога отве�
     expect(roster.map((person) => person.name)).not.toContain('Автор методик для проверки');
   });
 
-  it('D10: live capture переносит trait CMS-персоны в тип teachers снимка', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'ikpk-d4-live-snapshot-'));
-    const cmsRecords: Record<string, Record<string, unknown>[]> = {
-      institutes: [{ id: 1, documentId: 'inst-1', legacy_id: 'inst-1', name: 'Институт', slug: 'inst-1', shortName: 'ИКПК' }],
-      'course-groups': [{ id: 2, documentId: 'group-1', legacy_id: 'group-1', name: 'Программа', slug: 'group-1', institute: { id: 1, documentId: 'inst-1', legacy_id: 'inst-1', name: 'Институт', slug: 'inst-1' } }],
-      seminars: [{ id: 3, documentId: 'seminar-1', legacy_id: 'seminar-1', name: 'Семинар', slug: 'seminar-1', course_group: { id: 2, documentId: 'group-1', legacy_id: 'group-1', slug: 'group-1' } }],
-      teachers: [{ id: 4, documentId: 'person-80', legacy_id: '80', name: 'Fabio Burigana', slug: '80', trait: 'method-author', institute: { id: 1, documentId: 'inst-1', legacy_id: 'inst-1', name: 'Институт', slug: 'inst-1' } }],
-      articles: [{ id: 5, documentId: 'article-1', legacy_id: 'article-1', title: 'Статья', slug: 'article-1', body: '<p>Текст</p>', seo: { seo_title: 'Статья', seo_description: 'Описание' }, image: { id: 9, documentId: 'image-1', url: '/uploads/d4-test.png' } }],
-      'schedule-entries': [],
-      'news-items': [],
-      promotions: [],
-      pages: [],
-      'video-playlists': [],
-    };
-    const server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-      if (url.pathname.startsWith('/api/')) {
-        const endpoint = url.pathname.slice('/api/'.length);
-        return jsonResponse(res, { data: cmsRecords[endpoint] ?? [], meta: { pagination: { page: 1, pageCount: 1 } } });
-      }
-      if (url.pathname === '/uploads/d4-test.png') {
-        res.writeHead(200, { 'content-type': 'image/png' });
-        return res.end(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-      }
-      res.writeHead(404).end();
-    });
-    try {
-      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-      const address = server.address();
-      if (!address || typeof address === 'string') throw new Error('mock CMS не получил TCP-порт');
-      const result = await runNode(['scripts/capture-content-snapshot.ts'], WEB, {
-        ...process.env,
-        CMS_URL: `http://127.0.0.1:${address.port}`,
-        CONTENT_SNAPSHOT_DIR: tempDir,
-      });
-      expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0);
-      const snapshot = JSON.parse(readFileSync(join(tempDir, 'snapshot.json'), 'utf8')) as { content: { types: Record<string, { trait?: string }[]> } };
-      expect(snapshot.content.types.teachers, 'в live-снимке нет типа teachers').toEqual([
-        expect.objectContaining({ legacy_id: '80', trait: 'method-author' }),
-      ]);
-    } finally {
-      if (server.listening) await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  }, 70_000);
 });
-
-function jsonResponse(res: ServerResponse, value: unknown): void {
-  res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(value));
-}
 
 describe('собранный сайт: адреса записей плоские', () => {
   // Scenario: новый семинар доступен по плоскому адресу (часть про сборку)

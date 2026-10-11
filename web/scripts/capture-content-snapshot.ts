@@ -378,6 +378,15 @@ async function liveCapture(): Promise<void> {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
   }
 
+  const unclassifiedPeople = (types.teachers ?? [])
+    .filter((person) => person.trait !== 'teacher' && person.trait !== 'method-author')
+    .map((person) => String(person.legacy_id ?? '(без legacy_id)'));
+  if (unclassifiedPeople.length > 0) {
+    throw new Error(
+      `живой захват: trait не задан у персон (${unclassifiedPeople.join(', ')}) — снимок не записан`,
+    );
+  }
+
   // Связи расписания достраиваются ПОСЛЕ отображения всех типов: они требуют перекрёстного
   // поиска, которого построчное отображение не умеет по построению.
   //

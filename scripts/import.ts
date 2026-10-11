@@ -28,6 +28,7 @@ import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
 import { mediaKey } from "./lib/cms-migration.js";
+import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -43,12 +44,6 @@ const SKIP_MEDIA = process.argv.includes("--skip-media");
 const ALLOW_PARTIAL = process.argv.includes("--allow-partial");
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
-
-// Одноразовая первичная разметка переноса (cms-content-authoring-and-migration, D10).
-// После создания значение принадлежит администратору и повторный импорт его не меняет.
-const METHOD_AUTHOR_LEGACY_IDS = new Set([
-  "80", "79", "77", "74", "71", "70", "69", "68", "67", "66", "65",
-]);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -444,7 +439,7 @@ async function upsert(
   rawLegacyId: unknown,
   rawData: Record<string, unknown>,
   report: EntityReport,
-  opts?: { forceDraft?: boolean; createOnlyFields?: readonly string[] },
+  opts?: { forceDraft?: boolean; updateIfEmptyFields?: readonly string[] },
 ): Promise<StrapiEntry | null> {
   // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
   // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
@@ -468,8 +463,10 @@ async function upsert(
       // трогает — данные идут в черновик (opts.forceDraft).
       const useDraft = Boolean(opts?.forceDraft) || !existing.viaPublished;
       const statusQuery = useDraft ? "?status=draft" : "";
-      const updateData = opts?.createOnlyFields?.length
-        ? Object.fromEntries(Object.entries(data).filter(([field]) => !opts.createOnlyFields!.includes(field)))
+      const updateData = opts?.updateIfEmptyFields?.length
+        ? Object.fromEntries(Object.entries(data).filter(([field]) =>
+          !opts.updateIfEmptyFields!.includes(field) || existing.entry[field] == null,
+        ))
         : data;
       const res = await api<{ data: StrapiEntry }>(
         "PUT",
@@ -576,7 +573,7 @@ async function importTeachers(): Promise<void> {
       if (docId) data.institute = docId;
     }
 
-    await upsert("teachers", e.legacy_id as string, data, report, { createOnlyFields: ["trait"] });
+    await upsert("teachers", e.legacy_id as string, data, report, { updateIfEmptyFields: ["trait"] });
   }
 }
 

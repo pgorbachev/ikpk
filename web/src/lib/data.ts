@@ -354,6 +354,12 @@ export function getTeacher(slug: string): Teacher | undefined {
   return getTeachers().find((t) => t.slug === slug);
 }
 
+export function teacherPageHref(teacher: Pick<Teacher, 'slug' | 'institute_legacy_id'> | undefined): string {
+  return teacher?.institute_legacy_id
+    ? `/${teacher.institute_legacy_id}/prepodavatel/${teacher.slug}`
+    : '';
+}
+
 let _articles: Article[] | null = null;
 export function getArticles(): Article[] {
   if (!_articles) _articles = loadJson<Article[]>('articles.json');

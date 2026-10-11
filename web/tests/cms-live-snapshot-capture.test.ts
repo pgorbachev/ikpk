@@ -10,7 +10,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SNAPSHOT_ORIGIN_FIELD,
   STUB_DEFAULT_PAGE_SIZE,
@@ -286,6 +286,59 @@ describe('снимок читается из живой системы упра�
     expect(teachers[0]?.trait).toBe('method-author');
     expect(teachers[0]?.institute_legacy_id).toBe('inst-001');
     expect(teachers.slice(1).every((teacher) => teacher.trait === 'teacher')).toBe(true);
+  });
+
+  it('отказывает, если живая CMS не классифицировала персону', async () => {
+    const records = dataset();
+    records.teachers!.records[0] = { ...records.teachers!.records[0]!, trait: null };
+    const cms = await stub(records);
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустая классификация принята:
+${run.output}`).not.toBe(0);
+    expect(run.output, 'отказ не называет персону и причину').toMatch(/trait.*teach-001/);
+    expect(existsSync(join(dir, 'snapshot.json')), 'неклассифицированный живой снимок записан').toBe(false);
+  });
+
+  it('сохраняет slug relation института без legacy_id и поддерживает lookup персоны', async () => {
+    const records = dataset();
+    const institute = records.institutes!.records[0]!;
+    const relation = { ...institute, slug: 'new-inst', legacy_id: null };
+    records.institutes!.records[0] = { ...institute, slug: 'new-inst' };
+    for (const group of records['course-groups']!.records) group.institute = relation;
+    for (const person of records.teachers!.records) person.institute = relation;
+    records.teachers!.records[0] = {
+      ...records.teachers!.records[0]!,
+      slug: 'cms-native-person',
+    };
+    const cms = await stub(records);
+    const dir = outDir();
+    const previousSnapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
+
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, run.output).toBe(0);
+      const snapshot = readSnapshot(dir);
+      const teachers = Object.entries(typesOf(snapshot)).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+      expect(teachers[0]).toEqual(expect.objectContaining({
+        slug: 'cms-native-person',
+        institute_legacy_id: 'new-inst',
+      }));
+
+      process.env.CONTENT_SNAPSHOT_DIR = dir;
+      vi.resetModules();
+      const { getTeacher, getTeachers } = await import('../src/lib/data.js');
+      expect(getTeachers('new-inst').map((teacher) => teacher.slug),
+        'list lookup по institute slug потерял CMS-native персону').toContain('cms-native-person');
+      expect(getTeacher('cms-native-person')?.institute_legacy_id,
+        'detail lookup потерял сохранённый relation slug').toBe('new-inst');
+    } finally {
+      if (previousSnapshotDir === undefined) delete process.env.CONTENT_SNAPSHOT_DIR;
+      else process.env.CONTENT_SNAPSHOT_DIR = previousSnapshotDir;
+      vi.resetModules();
+    }
   });
 
   // Сценарий: адрес задан, система управления недоступна

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { METHOD_AUTHOR_LEGACY_IDS } from './person-trait.js';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPTS = join(ROOT, 'scripts');
@@ -10,9 +11,11 @@ const TEACHERS = JSON.parse(readFileSync(join(ROOT, 'discovery/entities/teachers
   legacy_id: string | number;
   name: string;
 }[];
-const METHOD_AUTHOR_IDS = new Set(['80', '79', '77', '74', '71', '70', '69', '68', '67', '66', '65']);
+const METHOD_AUTHOR_IDS = METHOD_AUTHOR_LEGACY_IDS;
 const SCHREINER_ID = '63';
 const ADMIN_EDITED_ID = '85';
+const EXISTING_NULL_TRAIT_ID = '80';
+const EXISTING_MISSING_TRAIT_ID = '79';
 const ADMIN_TRAIT = 'method-author';
 const cachePath = join(SCRIPTS, '.media-cache.json');
 const hadMediaCache = existsSync(cachePath);
@@ -22,6 +25,7 @@ type CapturedRequest = { method: string; legacyId: string; data: Record<string, 
 const creates: CapturedRequest[] = [];
 const updates: CapturedRequest[] = [];
 let adminRecord: Record<string, unknown>;
+const existingRecords = new Map<string, Record<string, unknown>>();
 let nextId = 1;
 let server: ReturnType<typeof createServer>;
 let baseUrl = '';
@@ -55,6 +59,21 @@ beforeAll(async () => {
     trait: ADMIN_TRAIT,
     publishedAt: '2026-10-01T00:00:00.000Z',
   };
+  existingRecords.set(EXISTING_NULL_TRAIT_ID, {
+    id: 701,
+    documentId: 'existing-null-trait',
+    legacy_id: EXISTING_NULL_TRAIT_ID,
+    name: TEACHERS.find((teacher) => String(teacher.legacy_id) === EXISTING_NULL_TRAIT_ID)!.name,
+    trait: null,
+    publishedAt: '2026-10-01T00:00:00.000Z',
+  });
+  existingRecords.set(EXISTING_MISSING_TRAIT_ID, {
+    id: 702,
+    documentId: 'existing-missing-trait',
+    legacy_id: EXISTING_MISSING_TRAIT_ID,
+    name: TEACHERS.find((teacher) => String(teacher.legacy_id) === EXISTING_MISSING_TRAIT_ID)!.name,
+    publishedAt: '2026-10-01T00:00:00.000Z',
+  });
 
   server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -63,8 +82,11 @@ beforeAll(async () => {
 
     if (req.method === 'GET') {
       const legacyId = url.searchParams.get('filters[legacy_id][$eq]');
-      if (apiName === 'teachers' && legacyId === ADMIN_EDITED_ID && url.searchParams.get('status') !== 'draft') {
-        return respond(res, { data: [adminRecord] });
+      if (apiName === 'teachers' && url.searchParams.get('status') !== 'draft') {
+        const existing = legacyId === ADMIN_EDITED_ID
+          ? adminRecord
+          : existingRecords.get(String(legacyId));
+        if (existing) return respond(res, { data: [existing] });
       }
       return respond(res, { data: [] });
     }
@@ -79,10 +101,18 @@ beforeAll(async () => {
         data: { ...data, id: nextId++, documentId: `${apiName}-${nextId}`, publishedAt: '2026-10-01T00:00:00.000Z' },
       });
     }
-    if (req.method === 'PUT' && apiName === 'teachers' && documentId === adminRecord.documentId) {
+    if (req.method === 'PUT' && apiName === 'teachers') {
       updates.push({ method: req.method, legacyId: String(data.legacy_id), data });
-      adminRecord = { ...adminRecord, ...data };
-      return respond(res, { data: adminRecord });
+      if (documentId === adminRecord.documentId) {
+        adminRecord = { ...adminRecord, ...data };
+        return respond(res, { data: adminRecord });
+      }
+      const existing = [...existingRecords.values()].find((record) => record.documentId === documentId);
+      if (existing) {
+        const updated = { ...existing, ...data };
+        existingRecords.set(String(updated.legacy_id), updated);
+        return respond(res, { data: updated });
+      }
     }
     return respond(res, { data: { ...data, id: nextId++, documentId: `${apiName}-${nextId}` } });
   });
@@ -126,7 +156,7 @@ describe('D10: trait в живом пути импорта', () => {
     const createdById = new Map(creates.map((request) => [request.legacyId, request.data]));
     for (const teacher of TEACHERS) {
       const id = String(teacher.legacy_id);
-      if (id === ADMIN_EDITED_ID) continue; // Существующая персона содержит ручную правку администратора.
+      if ([ADMIN_EDITED_ID, EXISTING_NULL_TRAIT_ID, EXISTING_MISSING_TRAIT_ID].includes(id)) continue;
       const created = createdById.get(id);
       expect(created, `импортёр не создал персону ${id} (${teacher.name})`).toBeDefined();
       const expected = METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
@@ -135,8 +165,18 @@ describe('D10: trait в живом пути импорта', () => {
   });
 
   it('UPDATE существующей персоны оставляет trait администратора без изменения', () => {
-    expect(updates, 'импортёр не обновил seeded-персону с ручной правкой администратора').toHaveLength(1);
-    expect(updates[0]!.legacyId).toBe(ADMIN_EDITED_ID);
+    const adminUpdate = updates.find((update) => update.legacyId === ADMIN_EDITED_ID);
+    expect(adminUpdate, 'импортёр не обновил seeded-персону с ручной правкой администратора').toBeDefined();
+    expect(adminUpdate!.data).not.toHaveProperty('trait');
     expect(adminRecord.trait, 'повторный импорт перезаписал ручное значение trait администратора').toBe(ADMIN_TRAIT);
+  });
+
+  it('первый импорт классифицирует существующие записи с null или отсутствующим trait', () => {
+    for (const id of [EXISTING_NULL_TRAIT_ID, EXISTING_MISSING_TRAIT_ID]) {
+      const update = updates.find((request) => request.legacyId === id);
+      const expected = METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
+      expect(update?.data.trait, `UPDATE ${id} не восстановил первичную классификацию`).toBe(expected);
+      expect(existingRecords.get(id)?.trait).toBe(expected);
+    }
   });
 });
