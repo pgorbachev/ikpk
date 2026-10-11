@@ -70,6 +70,7 @@ export default defineConfig({
       // на «в сборке нет страницы» — то есть по причине, не имеющей к предмету отношения.
       'tests/external-widgets-privacy-doc.test.ts',
       'tests/seminar-dates.build.test.ts',
+      'tests/seminar-dates.fixture-build.test.ts',
       'tests/article-list-controls.build.test.ts',
       // Предмет — собранный вывод: каталожные страницы и плоские адреса записей
       // (change cms-content-authoring-and-migration).
