@@ -10,6 +10,21 @@ import { after, before, describe, test } from 'node:test';
 const loadCommonjs = createRequire(import.meta.url);
 const cmsRoot = path.join(import.meta.dirname, '..');
 const dbFile = path.join(os.tmpdir(), `ikpk-seminar-management-${process.pid}.db`);
+const validCourseGroupPublicationFields = {
+  description: 'Описание программы для теста',
+  seo: {
+    seo_title: 'Программа подготовки',
+    seo_description: 'Описание образовательной программы для сайта',
+  },
+};
+const validSeminarPublicationFields = {
+  description: 'Описание семинара для теста',
+  seo: {
+    seo_title: 'Семинар подготовки',
+    seo_description: 'Описание семинара для сайта',
+  },
+  documents_state: 'not-issued',
+};
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -104,6 +119,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         name: 'Программа для теста',
         slug: 'programma-dlya-testa',
         legacy_id: 'programma-dlya-testa',
+        ...validCourseGroupPublicationFields,
         institute: publishedInstitute.documentId,
       },
     });
@@ -243,23 +259,34 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         name: 'Программа-черновик',
         slug: 'programma-chernovik',
         legacy_id: 'programma-chernovik',
+        ...validCourseGroupPublicationFields,
         institute: publishedInstitute.documentId,
       },
     });
     const seminar = await seminars.create({
-      data: { name: 'Ждёт программу', course_group: program.documentId },
+      data: {
+        name: 'Ждёт программу',
+        ...validSeminarPublicationFields,
+        course_group: program.documentId,
+      },
     });
     await assert.rejects(
       () => seminars.publish({ documentId: seminar.documentId }),
       /Выберите опубликованную программу перед публикацией семинара/,
     );
     await programs.publish({ documentId: program.documentId });
+    const publishedProgramRecord = await programs.findOne({
+      documentId: program.documentId,
+      status: 'published',
+    });
+    assert.ok(publishedProgramRecord?.publishedAt, 'программа должна быть опубликована до семинара');
     await seminars.publish({ documentId: seminar.documentId });
     const published = await seminars.findOne({
       documentId: seminar.documentId,
       status: 'published',
       populate: ['course_group'],
     });
+    assert.ok(published?.publishedAt, 'семинар должен быть опубликован');
     assert.equal(published.course_group.documentId, program.documentId);
     await seminars.update({
       documentId: seminar.documentId,
@@ -277,24 +304,41 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const noSiteId = await programs.create({
       status: 'published',
-      data: { name: 'Без идентификатора сайта', slug: 'bez-identifikatora-sayta' },
+      data: {
+        name: 'Без идентификатора сайта',
+        slug: 'bez-identifikatora-sayta',
+        ...validCourseGroupPublicationFields,
+      },
     });
     await assert.rejects(
       () => seminars.create({
         status: 'published',
-        data: { name: 'Не попадёт на сайт', course_group: noSiteId.documentId },
+        data: {
+          name: 'Не попадёт на сайт',
+          ...validSeminarPublicationFields,
+          course_group: noSiteId.documentId,
+        },
       }),
       /нет идентификатора для сайта/,
     );
 
     const noInstitute = await programs.create({
       status: 'published',
-      data: { name: 'Без института', slug: 'bez-instituta', legacy_id: 'bez-instituta' },
+      data: {
+        name: 'Без института',
+        slug: 'bez-instituta',
+        legacy_id: 'bez-instituta',
+        ...validCourseGroupPublicationFields,
+      },
     });
     await assert.rejects(
       () => seminars.create({
         status: 'published',
-        data: { name: 'Неизвестный институт', course_group: noInstitute.documentId },
+        data: {
+          name: 'Неизвестный институт',
+          ...validSeminarPublicationFields,
+          course_group: noInstitute.documentId,
+        },
       }),
       /нет опубликованного института для сайта/,
     );
