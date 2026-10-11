@@ -28,6 +28,7 @@ import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
 import { createImageUploader } from "./lib/import-media.js";
+import { buildStrapiMediaHashIndex } from "./lib/strapi-media-inventory.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
 
 // ────────────────────────────────────────────────────────────────
@@ -102,7 +103,8 @@ const idCache: Record<string, Map<string, CacheEntry>> = {};
  * на диск, а не на память процесса.
  */
 const mediaCacheByUrl = new Map<string, MediaCacheEntry>();
-const mediaCacheByHash = new Map<string, number>();
+/** Hashes verified against the current CMS library plus uploads made in this process. */
+const knownMediaByHash = new Map<string, number>();
 /** Неудачные загрузки медиа: не увеличивали никакой счётчик (TD-8) — теперь у них есть свой. */
 let mediaUploadFailures = 0;
 /** Set to true when Strapi is confirmed unreachable (skip API calls in dry-run) */
@@ -220,7 +222,6 @@ async function loadMediaCache(): Promise<void> {
   const parsed = JSON.parse(raw) as Record<string, MediaCacheEntry>;
   for (const [url, entry] of Object.entries(parsed)) {
     mediaCacheByUrl.set(url, entry);
-    mediaCacheByHash.set(entry.hash, entry.fileId);
   }
   log(`ℹ️  Загружен кеш медиа: ${mediaCacheByUrl.size} записей из ${MEDIA_CACHE_PATH}`);
 }
@@ -259,7 +260,7 @@ function extractImageUrl(field: unknown): string | null {
 const uploadImportedImage = createImageUploader({
   root: path.resolve(__dirname, ".."),
   mediaCacheByUrl,
-  mediaCacheByHash,
+  knownMediaByHash,
   saveCache: saveMediaCache,
   upload: async (bytes, filename, mime) => {
     // Заголовки собирает form-data: имя файла приходит из данных переноса.
@@ -283,7 +284,6 @@ const uploadImportedImage = createImageUploader({
 /** Upload an image to Strapi /api/upload and return its media file ID. */
 async function uploadImage(url: string | null): Promise<number | null> {
   if (!url || SKIP_MEDIA) return null;
-  if (mediaCacheByUrl.has(url)) return uploadImportedImage(url);
   if (DRY_RUN) {
     log(`  📷 [DRY] Would upload: ${url.slice(0, 80)}`);
     return null;
@@ -1002,6 +1002,39 @@ async function main(): Promise<void> {
   } else if (DRY_RUN) {
     strapiOffline = true;
     log("ℹ️  No API token – running fully offline dry-run");
+  }
+
+  if (!DRY_RUN && !SKIP_MEDIA) {
+    try {
+      const inventory = await buildStrapiMediaHashIndex({
+        baseUrl: `${STRAPI_URL}/`,
+        getPage: (page, pageSize) => api(
+          "GET",
+          `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&sort=id:asc`,
+        ),
+        getBytes: async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return new Uint8Array(await response.arrayBuffer());
+          } catch (err: unknown) {
+            const reason = err instanceof Error && err.message.startsWith("HTTP ")
+              ? ` (${err.message})`
+              : "";
+            throw new Error(
+              `cannot read CMS media bytes at ${new URL(url).pathname}${reason}`,
+              { cause: err },
+            );
+          }
+        },
+      });
+      for (const [hash, fileId] of inventory) knownMediaByHash.set(hash, fileId);
+      log(`✓ Indexed ${inventory.size} distinct content hashes from the complete Strapi media library`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ Cannot verify Strapi media library before import: ${msg}`);
+      process.exit(1);
+    }
   }
 
   // ─── Phase 1: Base records ──────────────────────────────

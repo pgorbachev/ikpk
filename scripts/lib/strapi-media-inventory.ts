@@ -1,0 +1,111 @@
+import { createHash } from 'node:crypto';
+
+interface MediaFile {
+  id: number;
+  url: string;
+}
+
+interface MediaPage {
+  data: unknown;
+  meta: {
+    pagination: {
+      page: number;
+      pageCount: number;
+      total: number;
+    };
+  };
+}
+
+interface StrapiMediaInventoryOptions {
+  getPage: (page: number, pageSize: number) => Promise<unknown>;
+  getBytes: (url: string) => Promise<Uint8Array>;
+  baseUrl: string;
+  pageSize?: number;
+}
+
+function parsePage(value: unknown, requestedPage: number): MediaPage {
+  if (!value || typeof value !== 'object') throw new Error('Strapi media page is not an object');
+  const response = value as Partial<MediaPage>;
+  const pagination = response.meta?.pagination;
+  if (!Array.isArray(response.data) || !pagination) {
+    throw new Error('Strapi media page is missing data or pagination metadata');
+  }
+  if (
+    !Number.isInteger(pagination.page) || pagination.page !== requestedPage ||
+    !Number.isInteger(pagination.pageCount) || pagination.pageCount < 0 ||
+    !Number.isInteger(pagination.total) || pagination.total < 0
+  ) {
+    throw new Error(`Strapi media page has invalid pagination metadata for page ${requestedPage}`);
+  }
+  return response as MediaPage;
+}
+
+function parseFiles(data: unknown[], page: number): MediaFile[] {
+  return data.map((value, index) => {
+    if (!value || typeof value !== 'object') {
+      throw new Error(`Strapi media page ${page} item ${index + 1} is not an object`);
+    }
+    const file = value as Partial<MediaFile>;
+    if (!Number.isSafeInteger(file.id) || (file.id ?? 0) <= 0 || typeof file.url !== 'string' || !file.url) {
+      throw new Error(`Strapi media page ${page} item ${index + 1} has no valid id or url`);
+    }
+    return { id: file.id!, url: file.url };
+  });
+}
+
+/** Build a content-hash index from the actual bytes in Strapi's paginated media library. */
+export async function buildStrapiMediaHashIndex(
+  options: StrapiMediaInventoryOptions,
+): Promise<Map<string, number>> {
+  const pageSize = options.pageSize ?? 100;
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1) throw new Error('Strapi media page size must be positive');
+
+  const firstPage = parsePage(await options.getPage(1, pageSize), 1);
+  const { pageCount, total } = firstPage.meta.pagination;
+  if ((total === 0) !== (pageCount === 0)) {
+    throw new Error('Strapi media inventory has inconsistent empty pagination metadata');
+  }
+  const pages = [firstPage];
+  for (let page = 2; page <= pageCount; page++) {
+    const response = parsePage(await options.getPage(page, pageSize), page);
+    if (
+      response.meta.pagination.pageCount !== pageCount ||
+      response.meta.pagination.total !== total
+    ) {
+      throw new Error('Strapi media inventory changed while pagination was being read');
+    }
+    pages.push(response);
+  }
+
+  const files = pages.flatMap((page, index) => parseFiles(page.data as unknown[], index + 1));
+  if (files.length !== total) {
+    throw new Error(`Strapi media inventory is incomplete: expected ${total} files, received ${files.length}`);
+  }
+
+  const seenIds = new Set<number>();
+  for (const file of files) {
+    if (seenIds.has(file.id)) throw new Error(`Strapi media inventory contains duplicate file ID ${file.id}`);
+    seenIds.add(file.id);
+  }
+
+  const hashes = new Array<string>(files.length);
+  let nextFile = 0;
+  const workers = Array.from({ length: Math.min(8, files.length) }, async () => {
+    while (nextFile < files.length) {
+      const index = nextFile++;
+      const file = files[index];
+      const url = new URL(file.url, options.baseUrl).toString();
+      const bytes = await options.getBytes(url);
+      hashes[index] = createHash('sha256').update(bytes).digest('hex');
+    }
+  });
+  await Promise.all(workers);
+
+  const index = new Map<string, number>();
+  for (const [fileIndex, file] of files.entries()) {
+    const hash = hashes[fileIndex];
+    const currentId = index.get(hash);
+    if (currentId === undefined || file.id < currentId) index.set(hash, file.id);
+  }
+  return index;
+}

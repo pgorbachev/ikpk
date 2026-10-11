@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ const legacyImages = [
 
 function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[0]> = {}) {
   const mediaCacheByUrl = new Map<string, { fileId: number; hash: string }>();
-  const mediaCacheByHash = new Map<string, number>();
+  const knownMediaByHash = new Map<string, number>();
   const failures: string[] = [];
   const fetchImage = vi.fn(async () => { throw new Error('unexpected fetch'); });
   const configuredFetchImage = overrides.fetchImage ?? fetchImage;
@@ -20,18 +21,19 @@ function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[
     void args;
     return 73;
   });
+  const configuredUpload = overrides.upload ? vi.fn(overrides.upload) : upload;
   const saveCache = vi.fn(async () => undefined);
   const imageUploader = createImageUploader({
     root,
     mediaCacheByUrl,
-    mediaCacheByHash,
+    knownMediaByHash,
     fetchImage: configuredFetchImage,
-    upload,
     saveCache,
     onFailure: (url, error) => failures.push(`${url}: ${error}`),
     ...overrides,
+    upload: configuredUpload,
   });
-  return { imageUploader, mediaCacheByUrl, mediaCacheByHash, fetchImage: configuredFetchImage, upload, saveCache, failures };
+  return { imageUploader, mediaCacheByUrl, knownMediaByHash, fetchImage: configuredFetchImage, upload: configuredUpload, saveCache, failures };
 }
 
 describe('import media upload boundary', () => {
@@ -55,8 +57,10 @@ describe('import media upload boundary', () => {
     await expect(first.imageUploader(legacyImages[0])).resolves.toBe(73);
     const savedCache = JSON.parse(JSON.stringify(Object.fromEntries(first.mediaCacheByUrl)));
     const mediaCacheByUrl = new Map(Object.entries(savedCache) as [string, { fileId: number; hash: string }][]);
-    const mediaCacheByHash = new Map([...mediaCacheByUrl.values()].map(({ fileId, hash }) => [hash, fileId]));
-    const second = makeUploader({ mediaCacheByUrl, mediaCacheByHash });
+    const hash = mediaCacheByUrl.get(legacyImages[0])!.hash;
+    mediaCacheByUrl.set(legacyImages[0], { fileId: 999, hash });
+    const knownMediaByHash = new Map([[hash, 73]]);
+    const second = makeUploader({ mediaCacheByUrl, knownMediaByHash });
 
     await expect(second.imageUploader(legacyImages[0])).resolves.toBe(73);
 
@@ -71,7 +75,7 @@ describe('import media upload boundary', () => {
     const { hash } = first.mediaCacheByUrl.get(legacyImages[0])!;
     const bytes = await readFile(join(root, 'media-originals', 'legacy', 'logo-v2.png'));
     const second = makeUploader({
-      mediaCacheByHash: new Map([[hash, 73]]),
+      knownMediaByHash: new Map([[hash, 73]]),
       fetchImage: vi.fn(async () => new Response(bytes, { status: 200 })),
     });
 
@@ -81,6 +85,62 @@ describe('import media upload boundary', () => {
     expect(second.upload).not.toHaveBeenCalled();
     expect(second.mediaCacheByUrl.get('https://images.example.test/same-content.png')?.hash).toBe(hash);
     expect(second.failures).toEqual([]);
+  });
+
+  it('reuses byte-identical CMS media when the local cache is empty', async () => {
+    const bytes = await readFile(join(root, 'media-originals', 'legacy', 'logo-v2.png'));
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    const state = makeUploader({
+      knownMediaByHash: new Map([[hash, 219]]),
+    });
+
+    await expect(state.imageUploader(legacyImages[0])).resolves.toBe(219);
+
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(state.mediaCacheByUrl.get(legacyImages[0])).toEqual({ fileId: 219, hash });
+    expect(state.failures).toEqual([]);
+  });
+
+  it('does not deduplicate same filenames when their bytes differ', async () => {
+    const bytes = Buffer.from('different bytes');
+    const otherHash = createHash('sha256').update('other bytes').digest('hex');
+    const state = makeUploader({
+      knownMediaByHash: new Map([[otherHash, 219]]),
+      fetchImage: vi.fn(async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })),
+      upload: vi.fn(async () => 91),
+    });
+
+    await expect(state.imageUploader('https://images.example.test/same-name.png')).resolves.toBe(91);
+
+    expect(state.upload).toHaveBeenCalledOnce();
+    expect(state.mediaCacheByUrl.get('https://images.example.test/same-name.png')?.hash)
+      .toBe(createHash('sha256').update(bytes).digest('hex'));
+  });
+
+  it('uses the matching content ID for each of the three approved local logo relations', async () => {
+    const knownMediaByHash = new Map<string, number>();
+    const expectedIds = new Map<string, number>();
+    for (const [index, key] of legacyImages.entries()) {
+      const filename = key.split('/').at(-1)!;
+      const bytes = await readFile(join(root, 'media-originals', 'legacy', filename));
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      const id = 310 + index;
+      knownMediaByHash.set(hash, id);
+      expectedIds.set(key, id);
+    }
+
+    const state = makeUploader({ knownMediaByHash });
+    for (const [key, id] of expectedIds) {
+      await expect(state.imageUploader(key)).resolves.toBe(id);
+    }
+
+    expect(state.fetchImage).not.toHaveBeenCalled();
+    expect(state.upload).not.toHaveBeenCalled();
+    expect([...state.mediaCacheByUrl.values()].map(({ fileId }) => fileId)).toEqual([310, 311, 312]);
+    expect(state.failures).toEqual([]);
   });
 
   it.each([

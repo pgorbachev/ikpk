@@ -22,7 +22,7 @@ interface ImageSource {
 interface ImageUploaderOptions {
   root: string;
   mediaCacheByUrl: Map<string, ImportMediaCacheEntry>;
-  mediaCacheByHash: Map<string, number>;
+  knownMediaByHash: Map<string, number>;
   fetchImage?: (url: string) => Promise<Response>;
   upload: (bytes: Buffer, filename: string, mime: string) => Promise<number | null | undefined>;
   saveCache: () => Promise<void>;
@@ -65,8 +65,6 @@ export function createImageUploader(options: ImageUploaderOptions): (url: string
   const fetchImage = options.fetchImage ?? ((url: string) => fetch(url));
   return async (url) => {
     if (!url) return null;
-    const cached = options.mediaCacheByUrl.get(url);
-    if (cached) return cached.fileId;
 
     try {
       const localFilename = APPROVED_LOCAL_IMAGES.get(url);
@@ -74,7 +72,7 @@ export function createImageUploader(options: ImageUploaderOptions): (url: string
         ? await localSource(options.root, localFilename)
         : await remoteSource(fetchImage, url);
       const hash = mediaKey({ bytes: new Uint8Array(source.bytes), sourceUrl: url });
-      const reusedFileId = options.mediaCacheByHash.get(hash);
+      const reusedFileId = options.knownMediaByHash.get(hash);
       if (reusedFileId) {
         options.mediaCacheByUrl.set(url, { fileId: reusedFileId, hash });
         await options.saveCache();
@@ -84,7 +82,7 @@ export function createImageUploader(options: ImageUploaderOptions): (url: string
       const fileId = await options.upload(source.bytes, source.filename, source.mime);
       if (!fileId) throw new Error(`upload returned no media ID for ${source.filename}`);
       options.mediaCacheByUrl.set(url, { fileId, hash });
-      options.mediaCacheByHash.set(hash, fileId);
+      options.knownMediaByHash.set(hash, fileId);
       await options.saveCache();
       return fileId;
     } catch (error: unknown) {
