@@ -28,7 +28,7 @@ import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
 import { createImageUploader } from "./lib/import-media.js";
-import { buildStrapiMediaHashIndex } from "./lib/strapi-media-inventory.js";
+import { buildStrapiMediaInventory } from "./lib/strapi-media-inventory.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
 
 // ────────────────────────────────────────────────────────────────
@@ -49,7 +49,6 @@ const RETRY_BASE_MS = 1_000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TRANSFER_DIR = legacyTransferDir(path.resolve(__dirname, ".."));
-const MEDIA_CACHE_PATH = path.join(__dirname, ".media-cache.json");
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -82,12 +81,6 @@ interface LegacyLookupResult {
   viaPublished: boolean;
 }
 
-interface MediaCacheEntry {
-  fileId: number;
-  /** sha256 содержимого файла (mediaKey из cms-migration.ts) — ключ повторяемости, не url. */
-  hash: string;
-}
-
 // ────────────────────────────────────────────────────────────────
 // Global state
 // ────────────────────────────────────────────────────────────────
@@ -95,16 +88,10 @@ interface MediaCacheEntry {
 const reports: Record<string, EntityReport> = {};
 /** apiName → legacy_id → { id, documentId } */
 const idCache: Record<string, Map<string, CacheEntry>> = {};
-/**
- * Кеш медиа, переживающий отдельные прогоны (TD-8): url → { fileId, hash } на диске
- * (`.media-cache.json`), плюс производный индекс hash → fileId — одно и то же содержимое под
- * разными url не должно порождать вторую копию в медиатеке. Внутрипроцессная `Map` одна и та
- * же не восстанавливает идемпотентность между прогонами — только сам факт, что она указывает
- * на диск, а не на память процесса.
- */
-const mediaCacheByUrl = new Map<string, MediaCacheEntry>();
 /** Hashes verified against the current CMS library plus uploads made in this process. */
 const knownMediaByHash = new Map<string, number>();
+const knownMediaBySourceHash = new Map<string, number>();
+const mediaById = new Map<number, { id: number; name?: string; mime?: string; provider_metadata?: unknown }>();
 /** Неудачные загрузки медиа: не увеличивали никакой счётчик (TD-8) — теперь у них есть свой. */
 let mediaUploadFailures = 0;
 /** Set to true when Strapi is confirmed unreachable (skip API calls in dry-run) */
@@ -209,30 +196,6 @@ async function loadJSON<T = Record<string, unknown>>(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Persistent media cache (TD-8): переживает отдельные прогоны процесса
-// ────────────────────────────────────────────────────────────────
-
-async function loadMediaCache(): Promise<void> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(MEDIA_CACHE_PATH, "utf-8");
-  } catch {
-    return; // первый прогон — файла ещё нет, это не ошибка
-  }
-  const parsed = JSON.parse(raw) as Record<string, MediaCacheEntry>;
-  for (const [url, entry] of Object.entries(parsed)) {
-    mediaCacheByUrl.set(url, entry);
-  }
-  log(`ℹ️  Загружен кеш медиа: ${mediaCacheByUrl.size} записей из ${MEDIA_CACHE_PATH}`);
-}
-
-async function saveMediaCache(): Promise<void> {
-  if (DRY_RUN) return; // в dry-run ничего не загружено — нечего и сохранять
-  const obj = Object.fromEntries(mediaCacheByUrl);
-  await fs.writeFile(MEDIA_CACHE_PATH, JSON.stringify(obj, null, 2));
-}
-
-// ────────────────────────────────────────────────────────────────
 // Media helpers
 // ────────────────────────────────────────────────────────────────
 
@@ -259,9 +222,9 @@ function extractImageUrl(field: unknown): string | null {
 
 const uploadImportedImage = createImageUploader({
   root: path.resolve(__dirname, ".."),
-  mediaCacheByUrl,
   knownMediaByHash,
-  saveCache: saveMediaCache,
+  knownMediaBySourceHash,
+  mediaById,
   upload: async (bytes, filename, mime) => {
     // Заголовки собирает form-data: имя файла приходит из данных переноса.
     const { body, contentType } = buildUploadBody(bytes, filename, mime);
@@ -275,6 +238,13 @@ const uploadImportedImage = createImageUploader({
     if (fileId) log(`  📷 Uploaded ${filename} → media #${fileId}`);
     return fileId;
   },
+  persistIdentity: async ({ fileId, sourceUrl, sourceSha256, adoptedFrom }) => {
+    await api("PUT", `/api/media-import-identities/${fileId}`, {
+      sourceUrl,
+      sourceSha256,
+      ...(adoptedFrom ? { adoptedFrom } : {}),
+    });
+  },
   onFailure: (url, error) => {
     mediaUploadFailures++;
     log(`  ⚠ Upload error: ${error} (${url.slice(0, 60)})`);
@@ -282,13 +252,40 @@ const uploadImportedImage = createImageUploader({
 });
 
 /** Upload an image to Strapi /api/upload and return its media file ID. */
-async function uploadImage(url: string | null): Promise<number | null> {
+async function uploadImage(
+  url: string | null,
+  relation: { apiName: string; legacyId: string; field: string } | undefined,
+  report: EntityReport,
+): Promise<number | null | false> {
   if (!url || SKIP_MEDIA) return null;
   if (DRY_RUN) {
     log(`  📷 [DRY] Would upload: ${url.slice(0, 80)}`);
     return null;
   }
-  return uploadImportedImage(url);
+  let relatedFileId: number | undefined;
+  if (relation) {
+    const existing = await findByLegacyId(relation.apiName, normalizeLegacyId(relation.legacyId), relation.field);
+    if (existing) relatedFileId = relationFileId(existing.entry[relation.field]);
+  }
+  const fileId = await uploadImportedImage(url, relation ? {
+    entityKey: `${relation.apiName}:${relation.legacyId}:${relation.field}:0`,
+    fileId: relatedFileId,
+  } : undefined);
+  if (!fileId) {
+    report.errors.push({ legacy_id: relation?.legacyId ?? url, reason: `media import failed for ${url}` });
+    return false;
+  }
+  return fileId;
+}
+
+function relationFileId(value: unknown): number | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { id?: unknown; data?: unknown };
+  const data = candidate.data && typeof candidate.data === "object"
+    ? candidate.data as { id?: unknown }
+    : undefined;
+  const id = candidate.id ?? data?.id;
+  return Number.isSafeInteger(id) && (id as number) > 0 ? id as number : undefined;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -318,11 +315,13 @@ async function findByField(
   field: string,
   value: string,
   status?: "draft" | "published",
+  populateField?: string,
 ): Promise<StrapiEntry | null> {
   const statusQuery = status ? `&status=${status}` : "";
+  const populateQuery = populateField ? `&populate[${populateField}]=true` : "";
   const res = await api<{ data: StrapiEntry[] }>(
     "GET",
-    `/api/${apiName}?filters[${field}][$eq]=${encodeURIComponent(value)}&pagination[pageSize]=1${statusQuery}`,
+    `/api/${apiName}?filters[${field}][$eq]=${encodeURIComponent(value)}&pagination[pageSize]=1${statusQuery}${populateQuery}`,
   );
   const list = res?.data;
   return Array.isArray(list) && list.length > 0 ? list[0] : null;
@@ -331,6 +330,7 @@ async function findByField(
 async function findByLegacyId(
   apiName: string,
   legacyId: string,
+  populateField?: string,
 ): Promise<LegacyLookupResult | null> {
   if (strapiOffline) return null; // fast path when Strapi is unreachable
 
@@ -340,7 +340,7 @@ async function findByLegacyId(
     // создание и упёрся в занятый slug. Второй запрос ищет и среди черновиков.
     // Какой из двух сработал, решает и статус публикации при обновлении (1.8): перенос
     // никогда не меняет статус существующей записи.
-    const published = await findByField(apiName, "legacy_id", legacyId);
+    const published = await findByField(apiName, "legacy_id", legacyId, undefined, populateField);
     if (published) {
       getCache(apiName).set(legacyId, {
         id: published.id,
@@ -349,7 +349,7 @@ async function findByLegacyId(
       });
       return { entry: published, viaPublished: true };
     }
-    const draft = await findByField(apiName, "legacy_id", legacyId, "draft");
+    const draft = await findByField(apiName, "legacy_id", legacyId, "draft", populateField);
     if (draft) {
       getCache(apiName).set(legacyId, {
         id: draft.id,
@@ -488,7 +488,8 @@ async function importInstitutes(): Promise<void> {
   log("📦 Importing institutes …");
   const report = newReport("institutes");
   for (const e of await loadJSON("institutes.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "institutes", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
@@ -508,7 +509,8 @@ async function importTeachers(): Promise<void> {
   log("📦 Importing teachers …");
   const report = newReport("teachers");
   for (const e of await loadJSON("teachers.json")) {
-    const photoId = await uploadImage((e.photo as string) ?? null);
+    const photoId = await uploadImage((e.photo as string) ?? null, { apiName: "teachers", legacyId: String(e.legacy_id), field: "photo" }, report);
+    if (photoId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
@@ -543,7 +545,8 @@ async function importArticles(): Promise<void> {
   log("📦 Importing articles …");
   const report = newReport("articles");
   for (const e of await loadJSON("articles.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "articles", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       title: e.title,
       slug: e.slug,
@@ -599,7 +602,8 @@ async function importNewsItems(): Promise<void> {
   const report = newReport("news-items");
   for (const e of await loadJSON("news.json")) {
     const lid = String(e.id);
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "news-items", legacyId: lid, field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
@@ -618,7 +622,8 @@ async function importPromotions(): Promise<void> {
   const report = newReport("promotions");
   for (const e of await loadJSON("promotions.json")) {
     const lid = String(e.id);
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "promotions", legacyId: lid, field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
@@ -641,7 +646,8 @@ async function importCourseGroups(): Promise<void> {
   log("📦 Importing course groups …");
   const report = newReport("course-groups");
   for (const e of await loadJSON("course_groups.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "course-groups", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
@@ -713,7 +719,8 @@ async function importSeminars(): Promise<void> {
   const semTeachers = buildSeminarTeachersMap(schedules, teacherNumMap);
 
   for (const e of seminars) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "seminars", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
@@ -968,8 +975,6 @@ async function main(): Promise<void> {
   console.log(`   Skip media:  ${SKIP_MEDIA}`);
   console.log(`   Entities:    ${TRANSFER_DIR}\n`);
 
-  await loadMediaCache();
-
   if (!STRAPI_API_TOKEN && !DRY_RUN) {
     console.error(
       "❌ STRAPI_API_TOKEN environment variable is required (use --dry-run to preview without it)",
@@ -1006,7 +1011,7 @@ async function main(): Promise<void> {
 
   if (!DRY_RUN && !SKIP_MEDIA) {
     try {
-      const inventory = await buildStrapiMediaHashIndex({
+      const inventory = await buildStrapiMediaInventory({
         baseUrl: `${STRAPI_URL}/`,
         getPage: (page, pageSize) => api(
           "GET",
@@ -1028,8 +1033,10 @@ async function main(): Promise<void> {
           }
         },
       });
-      for (const [hash, fileId] of inventory) knownMediaByHash.set(hash, fileId);
-      log(`✓ Indexed ${inventory.size} distinct content hashes from the complete Strapi media library`);
+      for (const [hash, fileId] of inventory.byStoredHash) knownMediaByHash.set(hash, fileId);
+      for (const [hash, fileId] of inventory.bySourceHash) knownMediaBySourceHash.set(hash, fileId);
+      for (const [fileId, file] of inventory.mediaById) mediaById.set(fileId, file);
+      log(`✓ Indexed ${inventory.byStoredHash.size} stored hashes and ${inventory.bySourceHash.size} source identities from the complete Strapi media library`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`❌ Cannot verify Strapi media library before import: ${msg}`);
@@ -1061,8 +1068,6 @@ async function main(): Promise<void> {
 
   // ─── Report ──────────────────────────────────────────────
   const { totErrors, totMissingRelations } = printReport();
-  await saveMediaCache();
-
   // TD-8: успешный процесс не означает успешный импорт. Потерянные сущности, оборванные
   // связи и неудачные загрузки медиа должны провалить код выхода — иначе внешний оркестратор
   // (CI, cron, оператор) не узнаёт о проблеме, кроме как перечитав лог целиком.

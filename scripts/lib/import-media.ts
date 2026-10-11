@@ -8,9 +8,16 @@ const APPROVED_LOCAL_IMAGES = new Map<string, string>([
   ['/media/legacy/logo-barral-inst.png', 'logo-barral-inst.png'],
 ]);
 
-export interface ImportMediaCacheEntry {
-  fileId: number;
-  hash: string;
+export interface ImportableMediaFile {
+  id: number;
+  name?: string;
+  mime?: string;
+  provider_metadata?: unknown;
+}
+
+export interface MediaRelationContext {
+  entityKey: string;
+  fileId?: number;
 }
 
 interface ImageSource {
@@ -21,11 +28,17 @@ interface ImageSource {
 
 interface ImageUploaderOptions {
   root: string;
-  mediaCacheByUrl: Map<string, ImportMediaCacheEntry>;
   knownMediaByHash: Map<string, number>;
+  knownMediaBySourceHash: Map<string, number>;
+  mediaById: Map<number, ImportableMediaFile>;
   fetchImage?: (url: string) => Promise<Response>;
   upload: (bytes: Buffer, filename: string, mime: string) => Promise<number | null | undefined>;
-  saveCache: () => Promise<void>;
+  persistIdentity: (identity: {
+    fileId: number;
+    sourceUrl: string;
+    sourceSha256: string;
+    adoptedFrom?: string;
+  }) => Promise<void>;
   onFailure: (url: string, error: string) => void;
 }
 
@@ -60,10 +73,24 @@ async function remoteSource(fetchImage: (url: string) => Promise<Response>, url:
   };
 }
 
-/** Uploads imported images and keeps the transfer's persistent URL/content cache. */
-export function createImageUploader(options: ImageUploaderOptions): (url: string | null) => Promise<number | null> {
+function sourceHashForUrl(providerMetadata: unknown, sourceUrl: string): string | undefined {
+  if (!providerMetadata || typeof providerMetadata !== 'object' || Array.isArray(providerMetadata)) return undefined;
+  const imported = (providerMetadata as Record<string, unknown>).ikpk_media_import;
+  if (!imported || typeof imported !== 'object' || Array.isArray(imported)) return undefined;
+  const sources = (imported as Record<string, unknown>).sources;
+  if (!sources || typeof sources !== 'object' || Array.isArray(sources)) return undefined;
+  const identity = (sources as Record<string, unknown>)[sourceUrl];
+  if (!identity || typeof identity !== 'object' || Array.isArray(identity)) return undefined;
+  const hash = (identity as Record<string, unknown>).sha256;
+  return typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash) ? hash : undefined;
+}
+
+/** Uploads imported images using the current CMS inventory as authoritative identity state. */
+export function createImageUploader(
+  options: ImageUploaderOptions,
+): (url: string | null, relation?: MediaRelationContext) => Promise<number | null> {
   const fetchImage = options.fetchImage ?? ((url: string) => fetch(url));
-  return async (url) => {
+  return async (url, relation?: MediaRelationContext) => {
     if (!url) return null;
 
     try {
@@ -72,22 +99,86 @@ export function createImageUploader(options: ImageUploaderOptions): (url: string
         ? await localSource(options.root, localFilename)
         : await remoteSource(fetchImage, url);
       const hash = mediaKey({ bytes: new Uint8Array(source.bytes), sourceUrl: url });
-      const reusedFileId = options.knownMediaByHash.get(hash);
-      if (reusedFileId) {
-        options.mediaCacheByUrl.set(url, { fileId: reusedFileId, hash });
-        await options.saveCache();
+      const persistedSourceId = liveFileId(options.knownMediaBySourceHash.get(hash));
+      const storedByteId = liveFileId(options.knownMediaByHash.get(hash));
+      const reusedFileId = persistedSourceId ?? storedByteId;
+      if (reusedFileId !== undefined) {
+        await options.persistIdentity({ fileId: reusedFileId, sourceUrl: url, sourceSha256: hash });
+        options.knownMediaBySourceHash.set(hash, reusedFileId);
+        rememberIdentity(reusedFileId, url, hash);
         return reusedFileId;
+      }
+
+      const relatedFileId = liveFileId(relation?.fileId);
+      const relatedFile = relatedFileId === undefined ? undefined : options.mediaById.get(relatedFileId);
+      const priorSourceHash = relatedFile && sourceHashForUrl(relatedFile.provider_metadata, url);
+      const priorSourceChanged = priorSourceHash !== undefined && priorSourceHash !== hash;
+      if (
+        relatedFile && !priorSourceChanged && relatedFile.name === source.filename && relatedFile.mime === source.mime
+      ) {
+        // One-time baseline adoption: Strapi 5.51.2 re-encodes images before storing them,
+        // so the served bytes cannot prove the raw source hash. Trust only the current
+        // entity's exact relation slot plus URL, filename and MIME. That first observation
+        // records the current raw hash; future imports compare that hash and replace on change.
+        await options.persistIdentity({
+          fileId: relatedFile.id,
+          sourceUrl: url,
+          sourceSha256: hash,
+          adoptedFrom: relation!.entityKey,
+        });
+        options.knownMediaBySourceHash.set(hash, relatedFile.id);
+        rememberIdentity(relatedFile.id, url, hash, relation!.entityKey);
+        return relatedFile.id;
       }
 
       const fileId = await options.upload(source.bytes, source.filename, source.mime);
       if (!fileId) throw new Error(`upload returned no media ID for ${source.filename}`);
-      options.mediaCacheByUrl.set(url, { fileId, hash });
+      await options.persistIdentity({ fileId, sourceUrl: url, sourceSha256: hash });
       options.knownMediaByHash.set(hash, fileId);
-      await options.saveCache();
+      options.knownMediaBySourceHash.set(hash, fileId);
+      options.mediaById.set(fileId, {
+        id: fileId,
+        name: source.filename,
+        mime: source.mime,
+        provider_metadata: {
+          ikpk_media_import: { sources: { [url]: { sha256: hash } } },
+        },
+      });
       return fileId;
     } catch (error: unknown) {
       options.onFailure(url, error instanceof Error ? error.message : String(error));
       return null;
     }
   };
+
+  function liveFileId(fileId: number | undefined): number | undefined {
+    return fileId !== undefined && options.mediaById.has(fileId) ? fileId : undefined;
+  }
+
+  function rememberIdentity(fileId: number, sourceUrl: string, sourceSha256: string, adoptedFrom?: string): void {
+    const file = options.mediaById.get(fileId);
+    if (!file) return;
+    const metadata = file.provider_metadata && typeof file.provider_metadata === 'object'
+      ? file.provider_metadata as Record<string, unknown>
+      : {};
+    const imported = metadata.ikpk_media_import && typeof metadata.ikpk_media_import === 'object'
+      ? metadata.ikpk_media_import as Record<string, unknown>
+      : {};
+    const sources = imported.sources && typeof imported.sources === 'object'
+      ? imported.sources as Record<string, unknown>
+      : {};
+    options.mediaById.set(fileId, {
+      ...file,
+      provider_metadata: {
+        ...metadata,
+        ikpk_media_import: {
+          ...imported,
+          sources: {
+            ...sources,
+            [sourceUrl]: { sha256: sourceSha256, ...(adoptedFrom ? { adoptedFrom } : {}) },
+          },
+        },
+      },
+    });
+  }
 }

@@ -12,8 +12,9 @@ const legacyImages = [
 ];
 
 function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[0]> = {}) {
-  const mediaCacheByUrl = new Map<string, { fileId: number; hash: string }>();
-  const knownMediaByHash = new Map<string, number>();
+  const knownMediaByHash = overrides.knownMediaByHash ?? new Map<string, number>();
+  const knownMediaBySourceHash = overrides.knownMediaBySourceHash ?? new Map<string, number>();
+  const mediaById = overrides.mediaById ?? new Map<number, { id: number; name?: string; mime?: string; provider_metadata?: unknown }>();
   const failures: string[] = [];
   const fetchImage = vi.fn(async () => { throw new Error('unexpected fetch'); });
   const configuredFetchImage = overrides.fetchImage ?? fetchImage;
@@ -22,18 +23,19 @@ function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[
     return 73;
   });
   const configuredUpload = overrides.upload ? vi.fn(overrides.upload) : upload;
-  const saveCache = vi.fn(async () => undefined);
+  const persistIdentity = vi.fn(async () => undefined);
   const imageUploader = createImageUploader({
     root,
-    mediaCacheByUrl,
     knownMediaByHash,
+    knownMediaBySourceHash,
+    mediaById,
     fetchImage: configuredFetchImage,
-    saveCache,
+    persistIdentity,
     onFailure: (url, error) => failures.push(`${url}: ${error}`),
     ...overrides,
     upload: configuredUpload,
   });
-  return { imageUploader, mediaCacheByUrl, knownMediaByHash, fetchImage: configuredFetchImage, upload: configuredUpload, saveCache, failures };
+  return { imageUploader, knownMediaByHash, knownMediaBySourceHash, mediaById, fetchImage: configuredFetchImage, upload: configuredUpload, persistIdentity, failures };
 }
 
 describe('import media upload boundary', () => {
@@ -49,18 +51,22 @@ describe('import media upload boundary', () => {
     expect(state.upload.mock.calls[0][0]).toEqual(expectedBytes);
     expect(state.upload.mock.calls[0][1]).toBe(key.split('/').at(-1));
     expect(state.failures).toEqual([]);
-    expect(state.mediaCacheByUrl.get(key)?.fileId).toBe(73);
+    expect(state.persistIdentity).toHaveBeenCalledWith(expect.objectContaining({ fileId: 73, sourceUrl: key }));
   });
 
-  it('reuses saved URL/hash cache on a repeated run without another fetch or upload', async () => {
-    const first = makeUploader();
-    await expect(first.imageUploader(legacyImages[0])).resolves.toBe(73);
-    const savedCache = JSON.parse(JSON.stringify(Object.fromEntries(first.mediaCacheByUrl)));
-    const mediaCacheByUrl = new Map(Object.entries(savedCache) as [string, { fileId: number; hash: string }][]);
-    const hash = mediaCacheByUrl.get(legacyImages[0])!.hash;
-    mediaCacheByUrl.set(legacyImages[0], { fileId: 999, hash });
-    const knownMediaByHash = new Map([[hash, 73]]);
-    const second = makeUploader({ mediaCacheByUrl, knownMediaByHash });
+  it('reuses the CMS-backed source identity on a repeated run without another upload', async () => {
+    const bytes = await readFile(join(root, 'media-originals', 'legacy', 'logo-v2.png'));
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    const knownMediaBySourceHash = new Map([[hash, 73]]);
+    const second = makeUploader({
+      knownMediaBySourceHash,
+      mediaById: new Map([[73, {
+        id: 73,
+        name: 'logo-v2.png',
+        mime: 'image/png',
+        provider_metadata: { ikpk_media_import: { sources: { [legacyImages[0]]: { sha256: hash } } } },
+      }]]),
+    });
 
     await expect(second.imageUploader(legacyImages[0])).resolves.toBe(73);
 
@@ -72,10 +78,11 @@ describe('import media upload boundary', () => {
   it('reuses content hash across source URLs without creating a second media upload', async () => {
     const first = makeUploader();
     await expect(first.imageUploader(legacyImages[0])).resolves.toBe(73);
-    const { hash } = first.mediaCacheByUrl.get(legacyImages[0])!;
     const bytes = await readFile(join(root, 'media-originals', 'legacy', 'logo-v2.png'));
+    const hash = createHash('sha256').update(bytes).digest('hex');
     const second = makeUploader({
-      knownMediaByHash: new Map([[hash, 73]]),
+      knownMediaBySourceHash: new Map([[hash, 73]]),
+      mediaById: new Map([[73, { id: 73, name: 'logo-v2.png', mime: 'image/png' }]]),
       fetchImage: vi.fn(async () => new Response(bytes, { status: 200 })),
     });
 
@@ -83,21 +90,50 @@ describe('import media upload boundary', () => {
 
     expect(second.fetchImage).toHaveBeenCalledOnce();
     expect(second.upload).not.toHaveBeenCalled();
-    expect(second.mediaCacheByUrl.get('https://images.example.test/same-content.png')?.hash).toBe(hash);
+    expect(second.knownMediaBySourceHash.get(hash)).toBe(73);
     expect(second.failures).toEqual([]);
   });
 
-  it('reuses byte-identical CMS media when the local cache is empty', async () => {
+  it('reuses byte-identical CMS media from the live inventory without a local cache', async () => {
     const bytes = await readFile(join(root, 'media-originals', 'legacy', 'logo-v2.png'));
     const hash = createHash('sha256').update(bytes).digest('hex');
     const state = makeUploader({
       knownMediaByHash: new Map([[hash, 219]]),
+      mediaById: new Map([[219, { id: 219, name: 'logo-v2.png', mime: 'image/png' }]]),
     });
 
     await expect(state.imageUploader(legacyImages[0])).resolves.toBe(219);
 
     expect(state.upload).not.toHaveBeenCalled();
-    expect(state.mediaCacheByUrl.get(legacyImages[0])).toEqual({ fileId: 219, hash });
+    expect(state.persistIdentity).toHaveBeenCalledWith({ fileId: 219, sourceUrl: legacyImages[0], sourceSha256: hash });
+    expect(state.failures).toEqual([]);
+  });
+
+  it('adopts an existing related Strapi file when its stored optimized bytes differ from the source', async () => {
+    const sourceBytes = Buffer.from('original image bytes');
+    const storedBytes = Buffer.from('strapi re-encoded image bytes');
+    expect(storedBytes).not.toEqual(sourceBytes);
+    const sourceUrl = 'https://images.example.test/portrait.png';
+    const fileId = 219;
+    const state = makeUploader({
+      knownMediaByHash: new Map([[createHash('sha256').update(storedBytes).digest('hex'), fileId]]),
+      mediaById: new Map([[fileId, { id: fileId, name: 'portrait.png', mime: 'image/png' }]]),
+      fetchImage: vi.fn(async () => new Response(sourceBytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })),
+      // A fresh checkout has no ignored URL cache; adoption is tied to this relation.
+    });
+
+    await expect(state.imageUploader(sourceUrl, { entityKey: 'articles:legacy-42:image:0', fileId })).resolves.toBe(fileId);
+
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(state.persistIdentity).toHaveBeenCalledWith({
+      fileId,
+      sourceUrl,
+      sourceSha256: createHash('sha256').update(sourceBytes).digest('hex'),
+      adoptedFrom: 'articles:legacy-42:image:0',
+    });
     expect(state.failures).toEqual([]);
   });
 
@@ -116,8 +152,57 @@ describe('import media upload boundary', () => {
     await expect(state.imageUploader('https://images.example.test/same-name.png')).resolves.toBe(91);
 
     expect(state.upload).toHaveBeenCalledOnce();
-    expect(state.mediaCacheByUrl.get('https://images.example.test/same-name.png')?.hash)
-      .toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(state.knownMediaBySourceHash.get(createHash('sha256').update(bytes).digest('hex'))).toBe(91);
+  });
+
+  it('uploads changed source bytes instead of reusing a relation adopted on an earlier run', async () => {
+    const sourceUrl = 'https://images.example.test/same-name.png';
+    const previousHash = createHash('sha256').update('previous source bytes').digest('hex');
+    const changedBytes = Buffer.from('changed source bytes');
+    const state = makeUploader({
+      knownMediaBySourceHash: new Map([[previousHash, 219]]),
+      mediaById: new Map([[219, {
+        id: 219,
+        name: 'same-name.png',
+        mime: 'image/png',
+        provider_metadata: {
+          ikpk_media_import: { sources: { [sourceUrl]: { sha256: previousHash } } },
+        },
+      }]]),
+      fetchImage: vi.fn(async () => new Response(changedBytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })),
+      upload: vi.fn(async () => 310),
+    });
+
+    await expect(state.imageUploader(sourceUrl, { entityKey: 'articles:legacy-42:image:0', fileId: 219 })).resolves.toBe(310);
+
+    expect(state.upload).toHaveBeenCalledOnce();
+    expect(state.persistIdentity).toHaveBeenCalledWith({
+      fileId: 310,
+      sourceUrl,
+      sourceSha256: createHash('sha256').update(changedBytes).digest('hex'),
+    });
+  });
+
+  it('does not reuse a source identity whose media ID is no longer in the live CMS inventory', async () => {
+    const bytes = Buffer.from('source bytes for deleted CMS media');
+    const sourceHash = createHash('sha256').update(bytes).digest('hex');
+    const state = makeUploader({
+      knownMediaBySourceHash: new Map([[sourceHash, 999]]),
+      mediaById: new Map(),
+      fetchImage: vi.fn(async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })),
+      upload: vi.fn(async () => 311),
+    });
+
+    await expect(state.imageUploader('https://images.example.test/deleted.png')).resolves.toBe(311);
+
+    expect(state.upload).toHaveBeenCalledOnce();
+    expect(state.failures).toEqual([]);
   });
 
   it('uses the matching content ID for each of the three approved local logo relations', async () => {
@@ -132,14 +217,17 @@ describe('import media upload boundary', () => {
       expectedIds.set(key, id);
     }
 
-    const state = makeUploader({ knownMediaByHash });
+    const state = makeUploader({
+      knownMediaByHash,
+      mediaById: new Map([...knownMediaByHash.values()].map((id) => [id, { id }])),
+    });
     for (const [key, id] of expectedIds) {
       await expect(state.imageUploader(key)).resolves.toBe(id);
     }
 
     expect(state.fetchImage).not.toHaveBeenCalled();
     expect(state.upload).not.toHaveBeenCalled();
-    expect([...state.mediaCacheByUrl.values()].map(({ fileId }) => fileId)).toEqual([310, 311, 312]);
+    expect([...state.knownMediaBySourceHash.values()]).toEqual([310, 311, 312]);
     expect(state.failures).toEqual([]);
   });
 
@@ -183,6 +271,7 @@ describe('import media upload boundary', () => {
     expect(importer).toMatch(/const uploadImportedImage = createImageUploader\(/);
     expect(importer).toMatch(/api<unknown\[]>\("POST", "\/api\/upload"/);
     expect(importer).toMatch(/if \(imgId\) data\.image = imgId/);
-    expect(importer).toMatch(/const imgId = await uploadImage\(extractImageUrl\(e\.images\)\)/);
+    expect(importer).toMatch(/const imgId = await uploadImage\(extractImageUrl\(e\.images\), \{ apiName: "institutes", legacyId: String\(e\.legacy_id\), field: "image" \}, report\)/);
+    expect(importer).toMatch(/if \(imgId === false\) continue/);
   });
 });

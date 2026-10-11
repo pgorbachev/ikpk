@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 interface MediaFile {
   id: number;
   url: string;
+  name?: string;
+  mime?: string;
+  provider_metadata?: unknown;
 }
 
 interface MediaPage {
@@ -21,6 +24,12 @@ interface StrapiMediaInventoryOptions {
   getBytes: (url: string) => Promise<Uint8Array>;
   baseUrl: string;
   pageSize?: number;
+}
+
+export interface StrapiMediaInventory {
+  byStoredHash: Map<string, number>;
+  bySourceHash: Map<string, number>;
+  mediaById: Map<number, MediaFile>;
 }
 
 function parsePage(value: unknown, requestedPage: number): MediaPage {
@@ -49,14 +58,20 @@ function parseFiles(data: unknown[], page: number): MediaFile[] {
     if (!Number.isSafeInteger(file.id) || (file.id ?? 0) <= 0 || typeof file.url !== 'string' || !file.url) {
       throw new Error(`Strapi media page ${page} item ${index + 1} has no valid id or url`);
     }
-    return { id: file.id!, url: file.url };
+    return {
+      id: file.id!,
+      url: file.url,
+      ...(typeof file.name === 'string' ? { name: file.name } : {}),
+      ...(typeof file.mime === 'string' ? { mime: file.mime } : {}),
+      ...(file.provider_metadata !== undefined ? { provider_metadata: file.provider_metadata } : {}),
+    };
   });
 }
 
 /** Build a content-hash index from the actual bytes in Strapi's paginated media library. */
-export async function buildStrapiMediaHashIndex(
+export async function buildStrapiMediaInventory(
   options: StrapiMediaInventoryOptions,
-): Promise<Map<string, number>> {
+): Promise<StrapiMediaInventory> {
   const pageSize = options.pageSize ?? 100;
   if (!Number.isSafeInteger(pageSize) || pageSize < 1) throw new Error('Strapi media page size must be positive');
 
@@ -101,11 +116,34 @@ export async function buildStrapiMediaHashIndex(
   });
   await Promise.all(workers);
 
-  const index = new Map<string, number>();
+  const byStoredHash = new Map<string, number>();
+  const bySourceHash = new Map<string, number>();
+  const mediaById = new Map(files.map((file) => [file.id, file]));
   for (const [fileIndex, file] of files.entries()) {
-    const hash = hashes[fileIndex];
-    const currentId = index.get(hash);
-    if (currentId === undefined || file.id < currentId) index.set(hash, file.id);
+    const storedHash = hashes[fileIndex];
+    const currentStoredId = byStoredHash.get(storedHash);
+    if (currentStoredId === undefined || file.id < currentStoredId) byStoredHash.set(storedHash, file.id);
+
+    const providerMetadata = file.provider_metadata;
+    if (!providerMetadata || typeof providerMetadata !== 'object' || Array.isArray(providerMetadata)) continue;
+    const imported = (providerMetadata as Record<string, unknown>).ikpk_media_import;
+    if (!imported || typeof imported !== 'object' || Array.isArray(imported)) continue;
+    const sources = (imported as Record<string, unknown>).sources;
+    if (!sources || typeof sources !== 'object' || Array.isArray(sources)) continue;
+    for (const identity of Object.values(sources as Record<string, unknown>)) {
+      if (!identity || typeof identity !== 'object' || Array.isArray(identity)) continue;
+      const sourceHash = (identity as Record<string, unknown>).sha256;
+      if (typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash)) continue;
+      const currentSourceId = bySourceHash.get(sourceHash);
+      if (currentSourceId === undefined || file.id < currentSourceId) bySourceHash.set(sourceHash, file.id);
+    }
   }
-  return index;
+  return { byStoredHash, bySourceHash, mediaById };
+}
+
+/** Backwards-compatible stored-byte index for callers that only need byte equality. */
+export async function buildStrapiMediaHashIndex(
+  options: StrapiMediaInventoryOptions,
+): Promise<Map<string, number>> {
+  return (await buildStrapiMediaInventory(options)).byStoredHash;
 }
