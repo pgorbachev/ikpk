@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { acquireSharedSnapshotLock } from './helpers/shared-snapshot-lock.ts';
 
 // Отказ живого съёма обязан ОСТАНАВЛИВАТЬ сборку, а не подменяться фикстурой. После
 // `capture-content-snapshot` отказ выглядит как заданный `CONTENT_SNAPSHOT_DIR` БЕЗ
@@ -48,9 +49,19 @@ function dirWithSnapshot(): string {
 const LIVE_MARK = 'live-capture-not-pinned-fixture';
 
 describe('prepare-snapshot: источник снимка', () => {
+  let releaseSnapshotLock: (() => void) | undefined;
+
+  beforeAll(async () => {
+    releaseSnapshotLock = await acquireSharedSnapshotLock(webRoot);
+  }, 120_000);
+
   afterAll(() => {
-    const restored = prepare({ CONTENT_SNAPSHOT_DIR: pinnedFixture, SNAPSHOT_SOURCE: undefined });
-    if (restored.status !== 0) throw new Error(restored.output);
+    try {
+      const restored = prepare({ CONTENT_SNAPSHOT_DIR: pinnedFixture, SNAPSHOT_SOURCE: undefined });
+      if (restored.status !== 0) throw new Error(restored.output);
+    } finally {
+      releaseSnapshotLock?.();
+    }
   });
 
   it('заданный каталог без snapshot.json — отказ, а не тихая подмена фикстурой', () => {
