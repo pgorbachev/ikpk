@@ -306,7 +306,7 @@ ${run.output}`).not.toBe(0);
     const records = dataset();
     const institute = records.institutes!.records[0]!;
     const relation = { ...institute, slug: 'new-inst', legacy_id: null };
-    records.institutes!.records[0] = { ...institute, slug: 'new-inst' };
+    records.institutes!.records[0] = { ...institute, slug: 'new-inst', legacy_id: 'inst-old' };
     for (const group of records['course-groups']!.records) group.institute = relation;
     for (const person of records.teachers!.records) person.institute = relation;
     records.teachers!.records[0] = {
@@ -326,14 +326,27 @@ ${run.output}`).not.toBe(0);
         slug: 'cms-native-person',
         institute_legacy_id: 'new-inst',
       }));
+      const groups = typesOf(snapshot).course_groups ?? [];
+      expect(groups[0]).toEqual(expect.objectContaining({ institute_legacy_id: 'new-inst' }));
+      const schedule = typesOf(snapshot).schedule_entries ?? [];
+      expect(schedule[0], 'live capture потерял институт у события расписания').toEqual(
+        expect.objectContaining({
+          program: expect.objectContaining({ slug: 'cg-001' }),
+          institute: expect.objectContaining({ name: 'Институт 1' }),
+        }),
+      );
 
       process.env.CONTENT_SNAPSHOT_DIR = dir;
       vi.resetModules();
-      const { getTeacher, getTeachers } = await import('../src/lib/data.js');
+      const { getCourseGroups, getInstitute, getScheduleEntries, getTeacher, getTeachers } = await import('../src/lib/data.js');
       expect(getTeachers('new-inst').map((teacher) => teacher.slug),
         'list lookup по institute slug потерял CMS-native персону').toContain('cms-native-person');
       expect(getTeacher('cms-native-person')?.institute_legacy_id,
         'detail lookup потерял сохранённый relation slug').toBe('new-inst');
+      expect(getCourseGroups('new-inst').map((group) => group.slug)).toContain('cg-001');
+      expect(getInstitute('new-inst')?.name).toBe('Институт 1');
+      expect(getScheduleEntries()[0]?.institute.name,
+        'schedule consumer должен получить институт из slug relation').toBe('Институт 1');
     } finally {
       if (previousSnapshotDir === undefined) delete process.env.CONTENT_SNAPSHOT_DIR;
       else process.env.CONTENT_SNAPSHOT_DIR = previousSnapshotDir;

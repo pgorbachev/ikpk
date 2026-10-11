@@ -28,7 +28,7 @@ import type { ScheduleEntry } from '../../lib/data';
 
 interface Row {
   entry: ScheduleEntry;
-  teachers: { fullName: string; href: string }[];
+  teachers: { fullName: string; href: string | null }[];
 }
 
 const { rows = [] } = Astro.props as { rows?: Row[] };
@@ -114,7 +114,9 @@ function metaLine(entry: ScheduleEntry): string {
                   {teachers.map((teacher, index) => (
                     <>
                       {index > 0 && <span class="teacher-separator">, </span>}
-                      <a href={teacher.href} class="schedule-teacher-link">{teacher.fullName}</a>
+                      {teacher.href
+                        ? <a href={teacher.href} class="schedule-teacher-link">{teacher.fullName}</a>
+                        : <span class="schedule-teacher-name">{teacher.fullName}</span>}
                     </>
                   ))}
                 </div>

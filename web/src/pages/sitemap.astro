@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getInstitutes, getCourseGroups, getArticles, getVideoPlaylists, getTeachers } from '../lib/data';
+import { getInstitutes, getCourseGroups, getArticles, getVideoPlaylists, getTeachers, teacherPageHref } from '../lib/data';
 
 const institutes = getInstitutes();
 const courseGroups = getCourseGroups();
@@ -57,7 +57,9 @@ const title = 'Карта сайта — ИКПК';
                       .filter((t) => t.institute_legacy_id === inst.slug)
                       .map((t) => (
                         <li>
-                          <a href={`/${inst.slug}/prepodavatel/${t.slug}`}>{t.name}</a>
+                          {teacherPageHref(t)
+                            ? <a href={teacherPageHref(t)!}>{t.name}</a>
+                            : t.name}
                         </li>
                       ))}
                   </ul>

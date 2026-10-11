@@ -11,6 +11,7 @@ import {
   getTeachers,
   cleanBodyHtml,
   stripLegacySeminarTail, getSnapshotReferenceDate,
+  teacherPageHref,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
@@ -66,7 +67,7 @@ const scheduleRows = sortedSchedule.map((entry) => ({
 
     return {
       fullName: teacher.fullName,
-      href: `/${full?.institute_legacy_id || institute.slug}/prepodavatel/${full?.slug || teacher.id}`,
+      href: teacherPageHref(full),
     };
   }),
 }));

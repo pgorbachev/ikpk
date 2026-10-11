@@ -7,10 +7,14 @@ import { METHOD_AUTHOR_LEGACY_IDS } from './person-trait.js';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPTS = join(ROOT, 'scripts');
-const TEACHERS = JSON.parse(readFileSync(join(ROOT, 'discovery/entities/teachers.json'), 'utf8')) as {
-  legacy_id: string | number;
-  name: string;
-}[];
+// Pinned input roster for the one-time migration contract. Reading discovery's
+// mutable editorial source here would make a unit contract double as a second
+// content source; the live importer is still exercised against this roster.
+const TEACHERS = [
+  '85', '84', '82', '81', '80', '79', '78', '77', '76', '74', '73', '71', '70', '69',
+  '68', '67', '66', '65', '64', '63', '61', '60', '58', '57', '56', '55', '54', '53',
+  'institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83',
+].map((legacy_id) => ({ legacy_id, name: `Персона ${legacy_id}` }));
 const METHOD_AUTHOR_IDS = METHOD_AUTHOR_LEGACY_IDS;
 const SCHREINER_ID = '63';
 const ADMIN_EDITED_ID = '85';

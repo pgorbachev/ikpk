@@ -17,10 +17,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'parse5';
-import { METHOD_AUTHOR_LEGACY_IDS } from '../../scripts/lib/person-trait.js';
 import { dist } from './helpers/dist-pages';
 import { readSnapshotFile, resolveSnapshotDir } from '../scripts/lib/snapshot-paths';
 
@@ -97,6 +97,45 @@ function pedagogicalStaffRoster(html: string): string | undefined {
   return roster ? textOf(roster) : undefined;
 }
 
+function linksInside(html: string, marker: string): Map<string, string> {
+  const root = parse(html) as unknown as HtmlNode;
+  const section = descendants(root, (node) => attribute(node, marker) !== undefined)[0];
+  const links = new Map<string, string>();
+  if (!section) return links;
+  for (const anchor of descendants(section, (node) => node.tagName === 'a')) {
+    const href = attribute(anchor, 'href');
+    if (href?.startsWith('/specialisty/')) links.set(href, textOf(anchor).trim());
+  }
+  return links;
+}
+
+function expectSnapshotTraitsMatchRenderedPeople(
+  teachers: { legacy_id: string | number; name: string; slug: string; trait?: string }[],
+  catalogHtml: string,
+  rosterHtml: string,
+): void {
+  const valid = teachers.filter((teacher) => teacher.trait === 'teacher' || teacher.trait === 'method-author');
+  const staff = valid.filter((teacher) => teacher.trait === 'teacher');
+  const authors = valid.filter((teacher) => teacher.trait === 'method-author');
+  expect(valid, 'у персоны отсутствует допустимый trait').toHaveLength(teachers.length);
+
+  const cards = specialistLinksByGroup(catalogHtml);
+  for (const [label, people] of [['Преподаватели', staff], ['Авторы методик', authors]] as const) {
+    const actual = cards.get(label) ?? new Map<string, string>();
+    if (people.length > 0) {
+      expect(actual.size, `в HTML каталога нет карточек группы «${label}»`).toBeGreaterThan(0);
+    }
+    expect([...actual.keys()].sort(), `набор карточек «${label}» расходится с trait снимка`).toEqual(
+      people.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
+    );
+  }
+
+  const roster = linksInside(rosterHtml, 'data-pedagogical-staff');
+  expect([...roster.keys()].sort(), 'состав страницы сведений расходится с teacher trait').toEqual(
+    staff.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
+  );
+}
+
 describe('собранный сайт: предмет проверки существует', () => {
   it('дерево сборки на месте', () => {
     expect(existsSync(dist), `ПРОВЕРИТЬ НЕ УДАЛОСЬ: нет ${dist} — сборка не выполнена`).toBe(true);
@@ -144,54 +183,44 @@ describe('собранный сайт: сегмент каталога отве�
     expect(groups.has('Авторы методик')).toBe(true);
   });
 
-  it('закреплённый каталог специалистов содержит обе непустые группы и полный roster', () => {
+  it('каталог и roster совпадают с trait персон в выбранном снимке', () => {
     const html = page('specialisty');
     expect(html, 'каталога /specialisty в сборке нет').toBeDefined();
     const teachers = entity<{ legacy_id: string | number; name: string; slug: string; trait?: string }[]>('teachers.json');
-    expect(teachers, 'ПРОВЕРИТЬ НЕ УДАЛОСЬ: в снимке нет персон').toHaveLength(29);
-    const authors = teachers.filter((teacher) => teacher.trait === 'method-author');
-    const staff = teachers.filter((teacher) => teacher.trait === 'teacher');
-    expect(METHOD_AUTHOR_LEGACY_IDS.size).toBe(11);
-    expect(authors.map((teacher) => String(teacher.legacy_id)).sort()).toEqual(
-      [...METHOD_AUTHOR_LEGACY_IDS].sort(),
-    );
-    expect(staff, 'в снимке пустой roster преподавателей').toHaveLength(18);
-    expect(teachers.find((teacher) => String(teacher.legacy_id) === '63')?.trait,
-      'Шрайнер должен оставаться преподавателем').toBe('teacher');
-
-    const groups = specialistLinksByGroup(html!);
-    expect(groups.get('Преподаватели')?.size, 'реальный HTML не содержит ссылок преподавателей')
-      .toBeGreaterThan(0);
-    expect(groups.get('Авторы методик')?.size, 'реальный HTML не содержит ссылок авторов методик')
-      .toBeGreaterThan(0);
-    expect(groups.get('Преподаватели')?.size).toBe(staff.length);
-    expect(groups.get('Авторы методик')?.size).toBe(authors.length);
-    expect([...groups.get('Преподаватели')!.keys()].sort()).toEqual(
-      staff.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
-    );
-    expect([...groups.get('Авторы методик')!.keys()].sort()).toEqual(
-      authors.map((teacher) => `/specialisty/${teacher.slug}`).sort(),
-    );
+    expect(teachers.length, 'ПРОВЕРИТЬ НЕ УДАЛОСЬ: в снимке нет персон').toBeGreaterThan(0);
     const staffHtml = page('svedeniya-ob-obrazovatelnoy-organizatsii');
     expect(staffHtml, 'HTML страницы сведений об организации отсутствует').toBeDefined();
-    const roster = pedagogicalStaffRoster(staffHtml!);
-    expect(roster, 'HTML страницы сведений не содержит roster').toContain('Педагогический состав');
-    for (const teacher of staff) {
-      expect(roster, `в HTML roster нет преподавателя ${teacher.legacy_id}`).toContain(teacher.name);
-    }
-    for (const author of authors) {
-      expect(roster, `в HTML roster попал автор методик ${author.legacy_id}`).not.toContain(author.name);
-    }
+    expect(pedagogicalStaffRoster(staffHtml!), 'HTML страницы сведений не содержит roster')
+      .toContain('Педагогический состав');
+    expectSnapshotTraitsMatchRenderedPeople(teachers, html!, staffHtml!);
+  });
+
+  it('31 live entries и admin reclassification не возвращают классификацию импорта в build acceptance', () => {
+    const people = Array.from({ length: 31 }, (_, index) => ({
+      legacy_id: String(index + 1),
+      slug: `person-${index + 1}`,
+      name: `Специалист ${index + 1}`,
+      trait: index < 11 ? 'method-author' : 'teacher',
+    }));
+    people[10]!.trait = 'teacher';
+    people[11]!.trait = 'method-author';
+    const html = `<section><h2>Преподаватели</h2><div>${people.filter((person) => person.trait === 'teacher').map((person) => `<a href="/specialisty/${person.slug}"><h3>${person.name}</h3></a>`).join('')}</div><h2>Авторы методик</h2><div>${people.filter((person) => person.trait === 'method-author').map((person) => `<a href="/specialisty/${person.slug}"><h3>${person.name}</h3></a>`).join('')}</div></section>`;
+    const roster = `<section data-pedagogical-staff><h2>Педагогический состав</h2><ul>${people.filter((person) => person.trait === 'teacher').map((person) => `<li><a href="/specialisty/${person.slug}">${person.name}</a></li>`).join('')}</ul></section>`;
+
+    expectSnapshotTraitsMatchRenderedPeople(people, html, roster);
   });
 
   it('optional institute relation не формирует адрес /undefined/prepodavatel', async () => {
     const { teacherPageHref } = await import('../src/lib/data.js');
-    expect(teacherPageHref({ slug: 'person-without-institute', institute_legacy_id: undefined })).toBe('');
+    expect(teacherPageHref({ slug: 'person-without-institute', institute_legacy_id: undefined })).toBeNull();
     expect(teacherPageHref({ slug: 'cms-person', institute_legacy_id: 'new-inst' }))
       .toBe('/new-inst/prepodavatel/cms-person');
-    const html = page('raspisanie-i-tseny');
-    expect(html, 'страницы расписания в сборке нет').toBeDefined();
-    expect(html).not.toMatch(/href="\/(?:undefined|null)\/prepodavatel\//);
+    const invalid = spawnSync(
+      'rg',
+      ['-n', '-g', '*.html', '-e', 'href="/(?:undefined|null)/prepodavatel/'],
+      { cwd: dist, encoding: 'utf-8' },
+    );
+    expect(invalid.status, invalid.stderr || invalid.stdout).toBe(1);
   });
 
   it('D10: saved trait places a teacher in the roster and excludes a method author', async () => {
@@ -360,8 +389,8 @@ describe('D10: состав института строится по relation', 
  *     в списке семинаров этой программы»;
  *  - «снятый семинар исчезает из всех мест» и «в сборке нет перенаправления, цель
  *     которого отсутствует» для снятой записи;
- *  - «в сведениях об образовательной организации только преподаватели» — признака
- *     персоны в файловом снимке нет вовсе, поэтому проверка на нём была бы вакуумной;
+ *  - «в сведениях об образовательной организации только преподаватели» — проверяется
+ *     выше по trait в выбранном снимке, включая точное равенство состава roster;
  *  - «содержимое каждой секции соответствует своему полю» и «секция документов построена
  *     из структурных полей» — полей нет в снимке;
  *  - «на странице программы показано ближайшее событие», «на странице семинара

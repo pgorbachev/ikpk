@@ -7,7 +7,7 @@
  */
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import { excerpt, getInstitutes, getTeachers } from '../../lib/data';
+import { excerpt, getInstitutes, getTeachers, teacherPageHref } from '../../lib/data';
 import type { Teacher } from '../../lib/data';
 import { getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
@@ -20,7 +20,7 @@ export const getStaticPaths: GetStaticPaths = () => {
 };
 
 const { teacher } = Astro.props as { teacher: Teacher };
-const institute = getInstitutes().find((i) => i.legacy_id === teacher.institute_legacy_id);
+const institute = getInstitutes().find((i) => i.slug === teacher.institute_legacy_id);
 // Текст, а не полный HTML: см. пояснение в instituty/[slug].astro — легаси-CTA
 // без известного адреса нельзя разрешать безопасно.
 const summary = excerpt(teacher.bio_text || '', 500);
@@ -43,7 +43,7 @@ const description = excerpt(teacher.bio_text || '', 160) || `${teacher.name} —
       {institute && (
         <p class="person-flat-full-link">
           Полная страница —{' '}
-          <a href={`/${institute.slug}/prepodavatel/${teacher.slug}`}>{teacher.name}</a>{' '}
+          <a href={teacherPageHref(teacher)!}>{teacher.name}</a>{' '}
           в институте <a href={`/instituty/${institute.slug}`}>{institute.name}</a>.
         </p>
       )}

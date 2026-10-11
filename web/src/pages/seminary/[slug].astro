@@ -25,7 +25,7 @@ export const getStaticPaths: GetStaticPaths = () => {
 const { seminar } = Astro.props as { seminar: Seminar };
 const courseGroup = getCourseGroups().find((cg) => cg.legacy_id === seminar.course_group_legacy_id);
 const institute = courseGroup
-  ? getInstitutes().find((i) => i.legacy_id === courseGroup.institute_legacy_id)
+  ? getInstitutes().find((i) => i.slug === courseGroup.institute_legacy_id)
   : undefined;
 const image = seminar.images?.[0];
 // Текст, а не полный HTML: см. пояснение в instituty/[slug].astro — легаси-CTA
