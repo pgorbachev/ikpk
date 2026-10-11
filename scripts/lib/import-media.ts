@@ -30,6 +30,7 @@ interface ImageUploaderOptions {
   root: string;
   knownMediaByHash: Map<string, number>;
   knownMediaBySourceHash: Map<string, number>;
+  storedHashById: Map<number, string>;
   mediaById: Map<number, ImportableMediaFile>;
   fetchImage?: (url: string) => Promise<Response>;
   upload: (bytes: Buffer, filename: string, mime: string) => Promise<number | null | undefined>;
@@ -37,8 +38,9 @@ interface ImageUploaderOptions {
     fileId: number;
     sourceUrl: string;
     sourceSha256: string;
+    expectedStoredSha256?: string;
     adoptedFrom?: string;
-  }) => Promise<void>;
+  }) => Promise<string>;
   onFailure: (url: string, error: string) => void;
 }
 
@@ -73,16 +75,12 @@ async function remoteSource(fetchImage: (url: string) => Promise<Response>, url:
   };
 }
 
-function sourceHashForUrl(providerMetadata: unknown, sourceUrl: string): string | undefined {
-  if (!providerMetadata || typeof providerMetadata !== 'object' || Array.isArray(providerMetadata)) return undefined;
+function hasSourceClaims(providerMetadata: unknown): boolean {
+  if (!providerMetadata || typeof providerMetadata !== 'object' || Array.isArray(providerMetadata)) return false;
   const imported = (providerMetadata as Record<string, unknown>).ikpk_media_import;
-  if (!imported || typeof imported !== 'object' || Array.isArray(imported)) return undefined;
+  if (!imported || typeof imported !== 'object' || Array.isArray(imported)) return false;
   const sources = (imported as Record<string, unknown>).sources;
-  if (!sources || typeof sources !== 'object' || Array.isArray(sources)) return undefined;
-  const identity = (sources as Record<string, unknown>)[sourceUrl];
-  if (!identity || typeof identity !== 'object' || Array.isArray(identity)) return undefined;
-  const hash = (identity as Record<string, unknown>).sha256;
-  return typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash) ? hash : undefined;
+  return Boolean(sources && typeof sources === 'object' && !Array.isArray(sources) && Object.keys(sources).length);
 }
 
 /** Uploads imported images using the current CMS inventory as authoritative identity state. */
@@ -103,45 +101,62 @@ export function createImageUploader(
       const storedByteId = liveFileId(options.knownMediaByHash.get(hash));
       const reusedFileId = persistedSourceId ?? storedByteId;
       if (reusedFileId !== undefined) {
-        await options.persistIdentity({ fileId: reusedFileId, sourceUrl: url, sourceSha256: hash });
+        const expectedStoredSha256 = options.storedHashById.get(reusedFileId) ??
+          (storedByteId === reusedFileId ? hash : undefined);
+        if (!expectedStoredSha256 || !/^[a-f0-9]{64}$/.test(expectedStoredSha256)) {
+          throw new Error('verified CMS inventory has no stored-byte fingerprint for reused media');
+        }
+        const storedSha256 = await options.persistIdentity({
+          fileId: reusedFileId,
+          sourceUrl: url,
+          sourceSha256: hash,
+          expectedStoredSha256,
+        });
+        if (storedSha256 !== expectedStoredSha256) {
+          throw new Error('identity endpoint fingerprint differs from the verified CMS inventory');
+        }
         options.knownMediaBySourceHash.set(hash, reusedFileId);
-        rememberIdentity(reusedFileId, url, hash);
+        rememberIdentity(reusedFileId, url, hash, storedSha256);
         return reusedFileId;
       }
 
       const relatedFileId = liveFileId(relation?.fileId);
       const relatedFile = relatedFileId === undefined ? undefined : options.mediaById.get(relatedFileId);
-      const priorSourceHash = relatedFile && sourceHashForUrl(relatedFile.provider_metadata, url);
-      const priorSourceChanged = priorSourceHash !== undefined && priorSourceHash !== hash;
+      const storedSha256 = relatedFileId === undefined ? undefined : options.storedHashById.get(relatedFileId);
       if (
-        relatedFile && !priorSourceChanged && relatedFile.name === source.filename && relatedFile.mime === source.mime
+        relatedFile && !hasSourceClaims(relatedFile.provider_metadata) && storedSha256 &&
+        relatedFile.name === source.filename && relatedFile.mime === source.mime
       ) {
-        // One-time baseline adoption: Strapi 5.51.2 re-encodes images before storing them,
-        // so the served bytes cannot prove the raw source hash. Trust only the current
-        // entity's exact relation slot plus URL, filename and MIME. That first observation
-        // records the current raw hash; future imports compare that hash and replace on change.
-        await options.persistIdentity({
+        // Adopt only genuinely unclaimed legacy files. The server checks that the stored bytes
+        // still match the inventory fingerprint before recording the raw source identity.
+        const adoptedStoredSha256 = await options.persistIdentity({
           fileId: relatedFile.id,
           sourceUrl: url,
           sourceSha256: hash,
+          expectedStoredSha256: storedSha256,
           adoptedFrom: relation!.entityKey,
         });
+        if (adoptedStoredSha256 !== storedSha256) {
+          throw new Error('identity endpoint fingerprint differs from the verified CMS inventory');
+        }
         options.knownMediaBySourceHash.set(hash, relatedFile.id);
-        rememberIdentity(relatedFile.id, url, hash, relation!.entityKey);
+        rememberIdentity(relatedFile.id, url, hash, adoptedStoredSha256, relation!.entityKey);
         return relatedFile.id;
       }
 
       const fileId = await options.upload(source.bytes, source.filename, source.mime);
       if (!fileId) throw new Error(`upload returned no media ID for ${source.filename}`);
-      await options.persistIdentity({ fileId, sourceUrl: url, sourceSha256: hash });
+      const storedHash = await options.persistIdentity({ fileId, sourceUrl: url, sourceSha256: hash });
+      if (!/^[a-f0-9]{64}$/.test(storedHash)) throw new Error('identity endpoint returned no valid stored SHA-256');
       options.knownMediaByHash.set(hash, fileId);
       options.knownMediaBySourceHash.set(hash, fileId);
+      options.storedHashById.set(fileId, storedHash);
       options.mediaById.set(fileId, {
         id: fileId,
         name: source.filename,
         mime: source.mime,
         provider_metadata: {
-          ikpk_media_import: { sources: { [url]: { sha256: hash } } },
+          ikpk_media_import: { sources: { [url]: { version: 1, sha256: hash, storedSha256: storedHash } } },
         },
       });
       return fileId;
@@ -155,7 +170,13 @@ export function createImageUploader(
     return fileId !== undefined && options.mediaById.has(fileId) ? fileId : undefined;
   }
 
-  function rememberIdentity(fileId: number, sourceUrl: string, sourceSha256: string, adoptedFrom?: string): void {
+  function rememberIdentity(
+    fileId: number,
+    sourceUrl: string,
+    sourceSha256: string,
+    storedSha256: string,
+    adoptedFrom?: string,
+  ): void {
     const file = options.mediaById.get(fileId);
     if (!file) return;
     const metadata = file.provider_metadata && typeof file.provider_metadata === 'object'
@@ -175,7 +196,12 @@ export function createImageUploader(
           ...imported,
           sources: {
             ...sources,
-            [sourceUrl]: { sha256: sourceSha256, ...(adoptedFrom ? { adoptedFrom } : {}) },
+            [sourceUrl]: {
+              version: 1,
+              sha256: sourceSha256,
+              storedSha256,
+              ...(adoptedFrom ? { adoptedFrom } : {}),
+            },
           },
         },
       },

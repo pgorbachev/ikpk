@@ -27,6 +27,7 @@ import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
+import { relationFileId } from "./lib/strapi-relation-file.js";
 import { createImageUploader } from "./lib/import-media.js";
 import { buildStrapiMediaInventory } from "./lib/strapi-media-inventory.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
@@ -91,6 +92,7 @@ const idCache: Record<string, Map<string, CacheEntry>> = {};
 /** Hashes verified against the current CMS library plus uploads made in this process. */
 const knownMediaByHash = new Map<string, number>();
 const knownMediaBySourceHash = new Map<string, number>();
+const storedHashById = new Map<number, string>();
 const mediaById = new Map<number, { id: number; name?: string; mime?: string; provider_metadata?: unknown }>();
 /** Неудачные загрузки медиа: не увеличивали никакой счётчик (TD-8) — теперь у них есть свой. */
 let mediaUploadFailures = 0;
@@ -224,6 +226,7 @@ const uploadImportedImage = createImageUploader({
   root: path.resolve(__dirname, ".."),
   knownMediaByHash,
   knownMediaBySourceHash,
+  storedHashById,
   mediaById,
   upload: async (bytes, filename, mime) => {
     // Заголовки собирает form-data: имя файла приходит из данных переноса.
@@ -238,12 +241,16 @@ const uploadImportedImage = createImageUploader({
     if (fileId) log(`  📷 Uploaded ${filename} → media #${fileId}`);
     return fileId;
   },
-  persistIdentity: async ({ fileId, sourceUrl, sourceSha256, adoptedFrom }) => {
-    await api("PUT", `/api/media-import-identities/${fileId}`, {
+  persistIdentity: async ({ fileId, sourceUrl, sourceSha256, expectedStoredSha256, adoptedFrom }) => {
+    const result = await api<{ data?: { storedSha256?: string } }>("PUT", `/api/media-import-identities/${fileId}`, {
       sourceUrl,
       sourceSha256,
+      ...(expectedStoredSha256 ? { expectedStoredSha256 } : {}),
       ...(adoptedFrom ? { adoptedFrom } : {}),
     });
+    const storedSha256 = result.data?.storedSha256;
+    if (!storedSha256) throw new Error(`identity endpoint returned no stored fingerprint for media #${fileId}`);
+    return storedSha256;
   },
   onFailure: (url, error) => {
     mediaUploadFailures++;
@@ -276,16 +283,6 @@ async function uploadImage(
     return false;
   }
   return fileId;
-}
-
-function relationFileId(value: unknown): number | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const candidate = value as { id?: unknown; data?: unknown };
-  const data = candidate.data && typeof candidate.data === "object"
-    ? candidate.data as { id?: unknown }
-    : undefined;
-  const id = candidate.id ?? data?.id;
-  return Number.isSafeInteger(id) && (id as number) > 0 ? id as number : undefined;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -1035,6 +1032,7 @@ async function main(): Promise<void> {
       });
       for (const [hash, fileId] of inventory.byStoredHash) knownMediaByHash.set(hash, fileId);
       for (const [hash, fileId] of inventory.bySourceHash) knownMediaBySourceHash.set(hash, fileId);
+      for (const [fileId, hash] of inventory.storedHashById) storedHashById.set(fileId, hash);
       for (const [fileId, file] of inventory.mediaById) mediaById.set(fileId, file);
       log(`✓ Indexed ${inventory.byStoredHash.size} stored hashes and ${inventory.bySourceHash.size} source identities from the complete Strapi media library`);
     } catch (err: unknown) {

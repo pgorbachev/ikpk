@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildStrapiMediaHashIndex } from './strapi-media-inventory.js';
+import { buildStrapiMediaHashIndex, buildStrapiMediaInventory } from './strapi-media-inventory.js';
 
 function page(data: unknown[], pageNumber: number, pageCount: number, total: number) {
   return { data, meta: { pagination: { page: pageNumber, pageCount, total } } };
@@ -60,5 +60,31 @@ describe('Strapi media content inventory', () => {
       getBytes: async () => { throw new Error('media unavailable'); },
       baseUrl: 'https://cms.example.test',
     })).rejects.toThrow('media unavailable');
+  });
+
+  it('does not trust source identity when Strapi stored bytes no longer match its fingerprint', async () => {
+    const sourceSha256 = 'a'.repeat(64);
+    const getPage = vi.fn(async () => page([{
+      id: 17,
+      url: '/uploads/replaced.png',
+      provider_metadata: {
+        ikpk_media_import: {
+          sources: {
+            'https://images.example.test/original.png': {
+              version: 1,
+              sha256: sourceSha256,
+              storedSha256: 'b'.repeat(64),
+            },
+          },
+        },
+      },
+    }], 1, 1, 1));
+    const inventory = await buildStrapiMediaInventory({
+      getPage,
+      getBytes: async () => Buffer.from('replacement bytes'),
+      baseUrl: 'https://cms.example.test',
+    });
+
+    expect(inventory.bySourceHash.has(sourceSha256)).toBe(false);
   });
 });

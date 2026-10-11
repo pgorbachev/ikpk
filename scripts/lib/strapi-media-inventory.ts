@@ -29,6 +29,7 @@ interface StrapiMediaInventoryOptions {
 export interface StrapiMediaInventory {
   byStoredHash: Map<string, number>;
   bySourceHash: Map<string, number>;
+  storedHashById: Map<number, string>;
   mediaById: Map<number, MediaFile>;
 }
 
@@ -66,6 +67,18 @@ function parseFiles(data: unknown[], page: number): MediaFile[] {
       ...(file.provider_metadata !== undefined ? { provider_metadata: file.provider_metadata } : {}),
     };
   });
+}
+
+function allowedSourceUrl(value: string): boolean {
+  if (value.length > 2048) return false;
+  if (/^\/media\/legacy\/(?:logo-v2|logo-upledger-inst|logo-barral-inst)\.png$/.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname) &&
+      !url.username && !url.password;
+  } catch {
+    return false;
+  }
 }
 
 /** Build a content-hash index from the actual bytes in Strapi's paginated media library. */
@@ -118,6 +131,7 @@ export async function buildStrapiMediaInventory(
 
   const byStoredHash = new Map<string, number>();
   const bySourceHash = new Map<string, number>();
+  const storedHashById = new Map(files.map((file, index) => [file.id, hashes[index]]));
   const mediaById = new Map(files.map((file) => [file.id, file]));
   for (const [fileIndex, file] of files.entries()) {
     const storedHash = hashes[fileIndex];
@@ -130,15 +144,21 @@ export async function buildStrapiMediaInventory(
     if (!imported || typeof imported !== 'object' || Array.isArray(imported)) continue;
     const sources = (imported as Record<string, unknown>).sources;
     if (!sources || typeof sources !== 'object' || Array.isArray(sources)) continue;
-    for (const identity of Object.values(sources as Record<string, unknown>)) {
+    for (const [sourceUrl, identity] of Object.entries(sources as Record<string, unknown>)) {
+      if (!allowedSourceUrl(sourceUrl)) continue;
       if (!identity || typeof identity !== 'object' || Array.isArray(identity)) continue;
-      const sourceHash = (identity as Record<string, unknown>).sha256;
-      if (typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash)) continue;
+      const identityRecord = identity as Record<string, unknown>;
+      const sourceHash = identityRecord.sha256;
+      const storedSha256 = identityRecord.storedSha256;
+      if (
+        identityRecord.version !== 1 || typeof sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceHash) ||
+        typeof storedSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(storedSha256) || storedSha256 !== storedHash
+      ) continue;
       const currentSourceId = bySourceHash.get(sourceHash);
       if (currentSourceId === undefined || file.id < currentSourceId) bySourceHash.set(sourceHash, file.id);
     }
   }
-  return { byStoredHash, bySourceHash, mediaById };
+  return { byStoredHash, bySourceHash, storedHashById, mediaById };
 }
 
 /** Backwards-compatible stored-byte index for callers that only need byte equality. */
