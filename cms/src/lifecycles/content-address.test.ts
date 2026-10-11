@@ -5,6 +5,8 @@ import { registerContentAddressLifecycle } from './content-address';
 interface FakeRow {
   documentId: string;
   slug: string | null;
+  legacy_id?: string | null;
+  publishedAt?: string | null;
 }
 
 interface FakeHistoryRow {
@@ -31,10 +33,12 @@ function makeStrapi(opts: {
   history?: FakeHistoryRow[];
   /** G2: имитирует отказ записи БД при создании строки истории. */
   failHistoryCreate?: boolean;
+  failDocumentLookup?: boolean;
 }) {
   const history = opts.history ? [...opts.history] : [];
   const created: { address: string; owner_id: string; owner_type: string }[] = [];
   const loggedErrors: string[] = [];
+  const lookups: { uid: string; where?: Record<string, unknown> }[] = [];
   let subscriber!: Subscriber;
 
   const strapi = {
@@ -58,6 +62,10 @@ function makeStrapi(opts: {
             return opts.rowsByUid[uid] ?? [];
           },
           async findOne({ where }: { where?: Record<string, unknown> }) {
+            lookups.push({ uid, where });
+            if (opts.failDocumentLookup && uid !== 'api::address-history.address-history') {
+              throw new Error('БД недоступна (ошибка чтения документа)');
+            }
             if (uid === 'api::address-history.address-history') {
               const address = where?.address as string | undefined;
               return history.find((h) => h.address === address) ?? null;
@@ -82,7 +90,7 @@ function makeStrapi(opts: {
   } as unknown as Parameters<typeof registerContentAddressLifecycle>[0];
 
   registerContentAddressLifecycle(strapi);
-  return { subscriber, created, history, loggedErrors };
+  return { subscriber, created, history, loggedErrors, lookups };
 }
 
 function makeEvent(uid: string, params: LifecycleEvent['params']): LifecycleEvent {
@@ -116,6 +124,78 @@ test('beforeCreate: публикация черновика (тот же documen
   });
   const event = makeEvent('api::institute.institute', { data: { slug: 'apledzher', documentId: 'doc-1' } });
   await assert.doesNotReject(() => subscriber.beforeCreate(event));
+});
+
+test('beforeCreate: повторная публикация существующей перенесённой страницы сохраняет собственный маршрут каталога', async () => {
+  const documentId = 'page-statyi';
+  const { subscriber, lookups } = makeStrapi({
+    rowsByUid: {
+      'api::page.page': [
+        { documentId, slug: 'statyi', legacy_id: 'statyi', publishedAt: null },
+        { documentId, slug: 'statyi', legacy_id: 'statyi', publishedAt: '2026-10-01T00:00:00.000Z' },
+      ],
+    },
+  });
+  const event = makeEvent('api::page.page', {
+    data: { slug: 'statyi', documentId, legacy_id: 'statyi', publishedAt: '2026-10-11T00:00:00.000Z' },
+  });
+
+  await assert.doesNotReject(() => subscriber.beforeCreate(event));
+  assert.ok(lookups.some((lookup) => lookup.uid === 'api::page.page' && lookup.where?.documentId === documentId));
+});
+
+test('beforeCreate: повторная публикация существующей обычной перенесённой страницы сверяет identity по documentId', async () => {
+  const documentId = 'page-kontakty';
+  const { subscriber, lookups } = makeStrapi({
+    rowsByUid: {
+      'api::page.page': [{ documentId, slug: 'kontakty', legacy_id: 'kontakty', publishedAt: null }],
+    },
+  });
+  const event = makeEvent('api::page.page', {
+    data: { slug: 'kontakty', documentId, legacy_id: 'kontakty', publishedAt: '2026-10-11T00:00:00.000Z' },
+  });
+
+  await assert.doesNotReject(() => subscriber.beforeCreate(event));
+  assert.ok(lookups.some((lookup) => lookup.uid === 'api::page.page' && lookup.where?.documentId === documentId));
+});
+
+test('beforeCreate: documentId без найденной прежней записи не разрешает занять маршрут каталога', async () => {
+  const { subscriber } = makeStrapi({ rowsByUid: {} });
+  const event = makeEvent('api::page.page', { data: { slug: 'statyi', documentId: 'spoofed-document' } });
+  await assert.rejects(() => subscriber.beforeCreate(event), /маршрута сборки/);
+});
+
+test('beforeCreate: чужой documentId с другим сохранённым slug не разрешает присвоить маршрут каталога', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::page.page': [{ documentId: 'page-oplata', slug: 'oplata', legacy_id: 'oplata' }],
+    },
+  });
+  const event = makeEvent('api::page.page', {
+    data: { slug: 'statyi', documentId: 'page-oplata', legacy_id: 'statyi' },
+  });
+  await assert.rejects(() => subscriber.beforeCreate(event), /маршрута сборки/);
+});
+
+test('beforeCreate: новая страница не может занять statyi, video или kontakty', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::page.page': [{ documentId: 'page-kontakty', slug: 'kontakty', legacy_id: 'kontakty' }],
+    },
+  });
+  for (const slug of ['statyi', 'video', 'kontakty']) {
+    await assert.rejects(
+      () => subscriber.beforeCreate(makeEvent('api::page.page', { data: { slug } })),
+      /маршрута сборки|адрес уже занят записью/,
+      slug,
+    );
+  }
+});
+
+test('beforeCreate: ошибка чтения прежней записи не разрешает опираться на documentId payload', async () => {
+  const { subscriber } = makeStrapi({ rowsByUid: {}, failDocumentLookup: true });
+  const event = makeEvent('api::page.page', { data: { slug: 'statyi', documentId: 'unverified' } });
+  await assert.rejects(() => subscriber.beforeCreate(event), /ошибка чтения документа/);
 });
 
 // Негативный парный тест к предыдущему: настоящая коллизия (чужой documentId, тот же slug)
@@ -282,6 +362,22 @@ test('beforeUpdate: переименование института в иден�
     data: { slug: 'garantii' },
   });
   await assert.rejects(() => subscriber.beforeUpdate(event), /корневой сегмент уже занят/);
+});
+
+test('beforeUpdate: статическая страница не переименовывается в маршрут другого владельца', async () => {
+  const { subscriber } = makeStrapi({
+    rowsByUid: {
+      'api::page.page': [
+        { documentId: 'page-own', slug: 'my-page' },
+        { documentId: 'page-kontakty', slug: 'kontakty', legacy_id: 'kontakty' },
+      ],
+    },
+  });
+  const event = makeEvent('api::page.page', {
+    where: { documentId: 'page-own' },
+    data: { slug: 'kontakty' },
+  });
+  await assert.rejects(() => subscriber.beforeUpdate(event), /адрес уже занят записью/);
 });
 
 test('beforeCreate: институт может использовать идентификатор программы или семинара', async () => {

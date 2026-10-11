@@ -61,6 +61,51 @@ async function loadAddressState(strapi: Core.Strapi): Promise<AddressState> {
   return { records, addressHistory, buildRouteSegments };
 }
 
+interface ExistingAddressRecord {
+  documentId: string;
+  slug: string | null;
+  legacy_id?: string | null;
+}
+
+async function resolveCreateIdentity(
+  strapi: Core.Strapi,
+  uid: string,
+  submittedDocumentId: unknown,
+  identifier: string,
+  type: RecordType,
+  state: AddressState,
+): Promise<{ id: string; previousAddresses: string[] }> {
+  if (typeof submittedDocumentId !== 'string' || submittedDocumentId === '') {
+    return { id: '__new__', previousAddresses: [] };
+  }
+
+  // A documentId in lifecycle data is supplied by the caller, so it is only a lookup
+  // key, not proof of ownership. Resolve it against this content type before using it.
+  // Strapi may have draft/published twins with the same documentId; either row identifies
+  // the document, while the persisted slug/provenance must match the route being checked.
+  const existing = (await strapi.db.query(uid).findOne({
+    where: { documentId: submittedDocumentId },
+    select: ['documentId', IDENTIFIER_FIELD, 'legacy_id'],
+  })) as ExistingAddressRecord | null;
+  if (!existing || existing.documentId !== submittedDocumentId) {
+    return { id: '__new__', previousAddresses: [] };
+  }
+
+  const previousAddresses = state.addressHistory
+    .filter((entry) => entry.ownerId === existing.documentId)
+    .map((entry) => entry.address);
+
+  // Imported static pages retain their canonical legacy route in the persisted legacy_id.
+  // The route exception is granted only when the looked-up record still has that exact
+  // imported identity; a requested slug or documentId alone cannot establish ownership.
+  if (type === 'static-page' && existing.slug === identifier && existing.legacy_id === identifier) {
+    const address = addressOf({ type, identifier });
+    if (!previousAddresses.includes(address)) previousAddresses.push(address);
+  }
+
+  return { id: existing.documentId, previousAddresses };
+}
+
 async function recordAddressHistoryIfMissing(strapi: Core.Strapi, address: string, ownerId: string, ownerType: string) {
   const existing = await strapi.db.query(ADDRESS_HISTORY_UID).findOne({ where: { address } });
   if (existing) return;
@@ -117,17 +162,8 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       if (typeof identifier !== 'string' || identifier === '') return;
 
       const state = await loadAddressState(strapi);
-      // Ревью PR #186, дельта, находка #1 (блокер): плейсхолдер `id: '__new__'` был верен
-      // только для настоящего создания — там новой записи ещё нет ни в state.records, ни в
-      // истории, и placeholder ни с чем не совпадает. Но у типов с `draftAndPublish: true`
-      // (все семь каталожных) публикация ТОЖЕ идёт через `db.query(uid).create()` — Strapi
-      // берёт черновик, выставляет `publishedAt` и создаёт вторую строку с ТЕМ ЖЕ
-      // `documentId`, который остаётся в `data.documentId` (сам `id` вырезан, `documentId`
-      // нет). На момент проверки черновик уже лежит в `state.records` под этим documentId и
-      // с тем же слагом — с плейсхолдером `beforeCreate` не узнавал в нём себя и отклонял
-      // публикацию как «адрес уже занят записью <тот же документ>». `data.documentId`,
-      // когда он есть, — как раз тот различитель: настоящее создание его не передаёт.
-      const record: RecordRef = { id: (data.documentId as string | undefined) ?? '__new__', type, identifier };
+      const identity = await resolveCreateIdentity(strapi, event.model.uid, data.documentId, identifier, type, state);
+      const record: RecordRef = { ...identity, type, identifier };
       const verdict = checkIdentifier({ record, state });
       if (!verdict.ok) throw new ApplicationError(verdict.message);
     },
