@@ -100,15 +100,15 @@ export async function generateBaselineArtifacts(): Promise<void> {
   writeJson('rendered-registry.json', rendered);
   writeJson('executable-source-slots.json', executableSlots);
   writeJson('known-deviations.json', knownDeviation);
-  const oraclePackages = ['playwright'];
+  const lockfile = loadLockfile();
   writeJson('security-dependency-registry.json', {
-    status: 'pending-implementation',
-    runtime: { packages: [], lockfileNodes: [] },
+    status: 'implemented',
+    runtime: { packages: RUNTIME_SANITIZER_PACKAGES, lockfileNodes: subtreeLockfileNodes(lockfile, RUNTIME_SANITIZER_PACKAGES) },
     oracle: {
-      packages: oraclePackages,
-      lockfileNodes: subtreeLockfileNodes(loadLockfile(), oraclePackages),
+      packages: ORACLE_PACKAGES,
+      lockfileNodes: subtreeLockfileNodes(lockfile, ORACLE_PACKAGES),
     },
-    note: 'Реестр заполняется при выборе sanitizer/parser. Пустой runtime — текущий baseline: санитайзера нет. Oracle lockfileNodes — fail-closed снимок текущего playwright subtree.',
+    note: 'Runtime sanitizer: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine.',
   });
   writeJson('output-occurrence-registry.json', {
     status: 'source-inventory-only',
@@ -259,6 +259,10 @@ function buildRenderedRegistry(data: {
     ],
   };
 }
+
+// Runtime choice is reviewed; regeneration refreshes its lockfile subtree without reverting it.
+const RUNTIME_SANITIZER_PACKAGES = ['parse5'];
+const ORACLE_PACKAGES = ['playwright'];
 
 if (process.argv[1]?.includes('generate-baseline')) {
   await generateBaselineArtifacts();

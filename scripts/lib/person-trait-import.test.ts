@@ -15,7 +15,9 @@ const TEACHERS = [
   '68', '67', '66', '65', '64', '63', '61', '60', '58', '57', '56', '55', '54', '53',
   'institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83',
 ].map((legacy_id) => ({ legacy_id, name: `Персона ${legacy_id}` }));
-const METHOD_AUTHOR_IDS = METHOD_AUTHOR_LEGACY_IDS;
+const EXPECTED_METHOD_AUTHOR_IDS = new Set([
+  '80', '79', '77', '74', '71', '70', '69', '68', '67', '66', '65',
+]);
 const SCHREINER_ID = '63';
 const ADMIN_EDITED_ID = '85';
 const EXISTING_NULL_TRAIT_ID = '80';
@@ -51,7 +53,7 @@ beforeAll(async () => {
   const sourceAdminEdited = TEACHERS.find((teacher) => String(teacher.legacy_id) === ADMIN_EDITED_ID);
   expect(sourceSchreiner, 'в discovery нет принятого исключения — Шрайнера').toBeDefined();
   expect(sourceAdminEdited, 'в discovery нет seeded-персоны для проверки сохранения правки администратора').toBeDefined();
-  for (const id of METHOD_AUTHOR_IDS) {
+  for (const id of EXPECTED_METHOD_AUTHOR_IDS) {
     expect(TEACHERS.some((teacher) => String(teacher.legacy_id) === id), `в discovery нет специалиста ${id}`).toBe(true);
   }
 
@@ -156,16 +158,19 @@ afterAll(async () => {
 
 describe('D10: trait в живом пути импорта', () => {
   it('CREATE сохраняет разовое первичное деление 11 авторов методик и Шрайнера как преподавателя', () => {
-    expect(METHOD_AUTHOR_IDS.size, 'принятое первичное деление должно содержать 11 методистов').toBe(11);
+    expect(METHOD_AUTHOR_LEGACY_IDS.size, 'production-набор методистов должен содержать 11 ID').toBe(11);
+    expect([...METHOD_AUTHOR_LEGACY_IDS].sort(), 'production-набор должен точно совпадать с принятым списком')
+      .toEqual([...EXPECTED_METHOD_AUTHOR_IDS].sort());
     const createdById = new Map(creates.map((request) => [request.legacyId, request.data]));
     for (const teacher of TEACHERS) {
       const id = String(teacher.legacy_id);
       if ([ADMIN_EDITED_ID, EXISTING_NULL_TRAIT_ID, EXISTING_MISSING_TRAIT_ID].includes(id)) continue;
       const created = createdById.get(id);
       expect(created, `импортёр не создал персону ${id} (${teacher.name})`).toBeDefined();
-      const expected = METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
+      const expected = EXPECTED_METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
       expect(created!.trait, `CREATE ${id} (${teacher.name}) не передал trait=${expected} в Strapi`).toBe(expected);
     }
+    expect(createdById.get(SCHREINER_ID)?.trait, 'legacy 63 — Шрайнер, он остаётся преподавателем').toBe('teacher');
   });
 
   it('UPDATE существующей персоны оставляет trait администратора без изменения', () => {
@@ -178,7 +183,7 @@ describe('D10: trait в живом пути импорта', () => {
   it('первый импорт классифицирует существующие записи с null или отсутствующим trait', () => {
     for (const id of [EXISTING_NULL_TRAIT_ID, EXISTING_MISSING_TRAIT_ID]) {
       const update = updates.find((request) => request.legacyId === id);
-      const expected = METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
+      const expected = EXPECTED_METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
       expect(update?.data.trait, `UPDATE ${id} не восстановил первичную классификацию`).toBe(expected);
       expect(existingRecords.get(id)?.trait).toBe(expected);
     }
