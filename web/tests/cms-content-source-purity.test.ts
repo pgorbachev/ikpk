@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, normalize, relative, sep } from 'node:path';
 import { REPO_ROOT, WEB_ROOT } from './helpers/cms-content-publication-contract';
 
 // Спека `cms-content-source`: требования «Контент читается только через снимок, без обходных
@@ -41,26 +41,54 @@ function namesLegacyContent(text: string): boolean {
   return text.includes(SEGMENT_A) && text.includes(SEGMENT_B);
 }
 
-function referencesMigrationEntry(text: string): boolean {
+function referencesMigrationEntry(source: string, text: string): boolean {
   const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  let publicationCode = code;
+  let publishStage = '';
+  if (source === join('deploy', 'trial', 'deploy.sh')) {
+    publishStage = code.match(/^stage_publish\s*\(\)\s*\{([\s\S]*?)^\}/m)?.[1] ?? '';
+    // The orchestrator's explicit CMS import stage is a migration, not a web source. Keep
+    // scanning every other deploy command and reject an import call from the publish stage.
+    publicationCode = code
+      .replace(/^stage_import\s*\(\)\s*\{[\s\S]*?^\}\s*$/m, '')
+      .replace(/^\s*import\)\s*stage_import\s*;;\s*$/gm, '');
+  }
+  const targetsMigration = (specifier: string): boolean =>
+    normalize(join(dirname(source), specifier)).replace(/\.(?:[cm]?[jt]sx?)$/, '') ===
+    MIGRATION_ENTRY.replace(/\.ts$/, '');
+  const imports = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"](\.[^'"\n]+)['"]/g;
+  if (/\bstage_import\b/.test(publishStage)) return true;
+  for (const match of publicationCode.matchAll(imports)) if (targetsMigration(match[1])) return true;
+
+  const packageScript = source === join('scripts', 'package.json');
+  let commandText = publicationCode;
+  if (packageScript) {
+    try {
+      const scripts = JSON.parse(code).scripts as Record<string, string>;
+      commandText = Object.entries(scripts)
+        .filter(([name]) => !['import', 'import:dry'].includes(name))
+        .map(([, value]) => value).join('\n');
+    } catch { /* malformed package data is not an import edge */ }
+  }
+  const scriptCwd = packageScript || /(?:\bcd\s+[^;\n]*\bscripts\b|--prefix\s+scripts\b)/.test(commandText);
   return (
-    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"][^'"\n]*scripts\/import(?:\.ts)?['"]/.test(
-      code,
-    ) ||
-    /\b(?:tsx|node)\b[^\n]*\bscripts\/import\.ts\b/.test(code)
+    /\b(?:npx\s+)?(?:tsx|node)\s+\.?\/?scripts\/import\.ts\b/.test(commandText) ||
+    /\b(?:npm|pnpm)\s+--prefix\s+scripts\s+run\s+import(?::dry)?\b/.test(commandText) ||
+    (scriptCwd && /\b(?:npm|pnpm)\s+run\s+import(?::dry)?\b/.test(commandText)) ||
+    (scriptCwd && /\btsx\s+\.?\/?import\.ts\b/.test(commandText))
   );
 }
 
 function isStandaloneMigrationReader(
   rel: string,
   text: string,
-  publicationSources: string[],
+  publicationSources: Array<{ path: string; text: string }>,
 ): boolean {
   // Legacy data is allowed only in the explicit CMS importer, while disconnected from site output.
   return rel === MIGRATION_ENTRY && /legacyTransferDir\s*\(/.test(text) &&
     /async function loadJSON/.test(text) && /STRAPI_API_TOKEN/.test(text) &&
     /api(?:<[^>]+>)?\(\s*["'](?:POST|PUT)["']/.test(text) &&
-    !publicationSources.some(referencesMigrationEntry);
+    !publicationSources.some(({ path, text: source }) => referencesMigrationEntry(path, source));
 }
 
 function isBypassReader(
@@ -86,14 +114,30 @@ function scanned(): string[] {
   return files;
 }
 
-function publicationSources(): string[] {
+function publicationSources(overrides = new Map<string, string>()): Array<{ path: string; text: string }> {
   const webSource = [
     ...walk(join(WEB_ROOT, 'src')),
     ...walk(join(WEB_ROOT, 'scripts')),
     ...[join(WEB_ROOT, 'astro.config.mjs'), join(WEB_ROOT, 'package.json')].filter(existsSync),
     ...[join(REPO_ROOT, '.github', 'workflows', 'test.yml')].filter(existsSync),
   ];
-  return webSource.map((file) => readFileSync(file, 'utf-8'));
+  const scriptRuntime = [
+    join(REPO_ROOT, 'scripts', 'publication-launcher.mjs'),
+    join(REPO_ROOT, 'scripts', 'publication-transport.mjs'),
+    join(REPO_ROOT, 'scripts', 'deploy-web.sh'),
+    join(REPO_ROOT, 'scripts', 'package.json'),
+    ...walk(join(REPO_ROOT, 'scripts', 'lib')).filter((file) => !/\.test\./.test(file)),
+    join(REPO_ROOT, 'deploy', 'trial', 'deploy.sh'),
+    join(REPO_ROOT, 'deploy', 'trial', 'refresh-site.sh'),
+  ].filter((file) => existsSync(file));
+  const paths = [...new Set([...webSource, ...scriptRuntime])].map((file) =>
+    relative(REPO_ROOT, file).split(sep).join('/'),
+  );
+  for (const path of overrides.keys()) if (!paths.includes(path)) paths.push(path);
+  return paths.map((path) => ({
+    path,
+    text: overrides.get(path) ?? readFileSync(join(REPO_ROOT, path), 'utf-8'),
+  }));
 }
 
 function bypassReaders(): string[] {
@@ -128,22 +172,31 @@ describe('контент читается только через снимок',
 
   it('standalone CMS migration reader is permitted only while outside the publication path', () => {
     const migrationSource = readFileSync(join(REPO_ROOT, MIGRATION_ENTRY), 'utf-8');
-    const livePublicationSources = publicationSources();
+    const sources = publicationSources();
+    const paths = new Set(sources.map(({ path }) => path));
+    expect([...paths]).toEqual(expect.arrayContaining([
+      'scripts/publication-launcher.mjs', 'scripts/publication-transport.mjs',
+      'scripts/deploy-web.sh', 'scripts/package.json', 'deploy/trial/deploy.sh',
+      'deploy/trial/refresh-site.sh',
+    ]));
+    expect(isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, sources)).toBe(true);
 
-    expect(isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, livePublicationSources)).toBe(true);
-    // A production module import or executable publication command turns the same reader into a bypass.
-    expect(
-      isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, [
-        ...livePublicationSources,
-        `import '../scripts/import.ts';`,
-      ]),
-    ).toBe(false);
-    expect(
-      isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, [
-        ...livePublicationSources,
-        `run: npx tsx scripts/import.ts`,
-      ]),
-    ).toBe(false);
+    // Mutate actual production-entry inventory locations, not an out-of-band source list.
+    const incomingEdges = [
+      ['scripts/publication-launcher.mjs', `import './import.js';`],
+      ['scripts/deploy-web.sh', `cd "$ROOT/scripts"\nexec tsx import.ts\nnpm run import`],
+      ['scripts/package.json', JSON.stringify({ scripts: { import: 'tsx import.ts', publish: 'npm --prefix scripts run import' } })],
+      ['deploy/trial/deploy.sh', `stage_publish() {\n  npm --prefix scripts run import\n}`],
+      ['deploy/trial/deploy.sh', `stage_publish() {\n  stage_import\n}`],
+      ['deploy/trial/refresh-site.sh', `import '../../scripts/import.js';`],
+    ] as const;
+    for (const [path, source] of incomingEdges) {
+      const withIncomingEdge = publicationSources(new Map([[path, source]]));
+      expect(
+        isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, withIncomingEdge),
+        `${path} can reach the migration importer`,
+      ).toBe(false);
+    }
   });
 
   it('a discovery/entities fallback in site code remains a bypass', () => {
