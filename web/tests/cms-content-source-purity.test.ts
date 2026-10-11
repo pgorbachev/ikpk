@@ -70,6 +70,17 @@ function referencesMigrationEntry(source: string, text: string): boolean {
         .map(([, value]) => value).join('\n');
     } catch { /* malformed package data is not an import edge */ }
   }
+  const commandPathTargetsMigration = (path: string): boolean =>
+    normalize(join(dirname(source), path)).replace(/\.(?:[cm]?[jt]sx?)$/, '') ===
+    MIGRATION_ENTRY.replace(/\.ts$/, '');
+  const relativeCommands = /\b(?:npx\s+)?(?:tsx|node)\s+((?:\.\.\/|\.\/)[^\s"'`]+import\.ts)\b/g;
+  for (const match of commandText.matchAll(relativeCommands)) {
+    if (commandPathTargetsMigration(match[1])) return true;
+  }
+  const relativePrefixes = /\b(?:npm|pnpm)\s+--prefix\s+([^\s]+)\s+run\s+import(?::dry)?\b/g;
+  for (const match of commandText.matchAll(relativePrefixes)) {
+    if (normalize(join(dirname(source), match[1])) === dirname(MIGRATION_ENTRY)) return true;
+  }
   const scriptCwd = packageScript || /(?:\bcd\s+[^;\n]*\bscripts\b|--prefix\s+scripts\b)/.test(commandText);
   return (
     /\b(?:npx\s+)?(?:tsx|node)\s+\.?\/?scripts\/import\.ts\b/.test(commandText) ||
@@ -186,6 +197,8 @@ describe('контент читается только через снимок',
       ['scripts/publication-launcher.mjs', `import './import.js';`],
       ['scripts/deploy-web.sh', `cd "$ROOT/scripts"\nexec tsx import.ts\nnpm run import`],
       ['scripts/package.json', JSON.stringify({ scripts: { import: 'tsx import.ts', publish: 'npm --prefix scripts run import' } })],
+      ['web/package.json', JSON.stringify({ scripts: { publish: 'tsx ../scripts/import.ts' } })],
+      ['web/package.json', JSON.stringify({ scripts: { publish: 'npm --prefix ../scripts run import' } })],
       ['deploy/trial/deploy.sh', `stage_publish() {\n  npm --prefix scripts run import\n}`],
       ['deploy/trial/deploy.sh', `stage_publish() {\n  stage_import\n}`],
       ['deploy/trial/refresh-site.sh', `import '../../scripts/import.js';`],
