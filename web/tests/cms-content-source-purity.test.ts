@@ -22,10 +22,11 @@ const SEGMENT_A = 'discovery';
 const SEGMENT_B = 'entities';
 
 /**
- * Единственное поимённое исключение — сам этот файл: он обязан содержать оба сегмента, чтобы
- * их искать. Исключение названо здесь, а не спрятано в предикате.
+ * Сам файл проверки обязан содержать оба сегмента, чтобы их искать. Отдельно ниже
+ * классифицируется standalone reader переноса, если он недостижим из пути публикации.
  */
 const SELF = join('web', 'tests', 'cms-content-source-purity.test.ts');
+const MIGRATION_ENTRY = join('scripts', 'import.ts');
 
 const SCAN_ROOTS = [
   join(WEB_ROOT, 'src'),
@@ -35,6 +36,40 @@ const SCAN_ROOTS = [
 ];
 const SCAN_FILES = [join(WEB_ROOT, 'astro.config.mjs')];
 const CODE_EXT = /\.(ts|tsx|mts|cts|js|mjs|cjs|astro|json)$/;
+
+function namesLegacyContent(text: string): boolean {
+  return text.includes(SEGMENT_A) && text.includes(SEGMENT_B);
+}
+
+function referencesMigrationEntry(text: string): boolean {
+  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return (
+    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"][^'"\n]*scripts\/import(?:\.ts)?['"]/.test(
+      code,
+    ) ||
+    /\b(?:tsx|node)\b[^\n]*\bscripts\/import\.ts\b/.test(code)
+  );
+}
+
+function isStandaloneMigrationReader(
+  rel: string,
+  text: string,
+  publicationSources: string[],
+): boolean {
+  // Legacy data is allowed only in the explicit CMS importer, while disconnected from site output.
+  return rel === MIGRATION_ENTRY && /legacyTransferDir\s*\(/.test(text) &&
+    /async function loadJSON/.test(text) && /STRAPI_API_TOKEN/.test(text) &&
+    /api(?:<[^>]+>)?\(\s*["'](?:POST|PUT)["']/.test(text) &&
+    !publicationSources.some(referencesMigrationEntry);
+}
+
+function isBypassReader(
+  rel: string,
+  text: string,
+  migrationReaderIsStandalone: boolean,
+): boolean {
+  return namesLegacyContent(text) && !(rel === MIGRATION_ENTRY && migrationReaderIsStandalone);
+}
 
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
@@ -51,11 +86,28 @@ function scanned(): string[] {
   return files;
 }
 
+function publicationSources(): string[] {
+  const webSource = [
+    ...walk(join(WEB_ROOT, 'src')),
+    ...walk(join(WEB_ROOT, 'scripts')),
+    ...[join(WEB_ROOT, 'astro.config.mjs'), join(WEB_ROOT, 'package.json')].filter(existsSync),
+    ...[join(REPO_ROOT, '.github', 'workflows', 'test.yml')].filter(existsSync),
+  ];
+  return webSource.map((file) => readFileSync(file, 'utf-8'));
+}
+
 function bypassReaders(): string[] {
+  const publicationCode = publicationSources();
+  const migrationReaderIsStandalone = isStandaloneMigrationReader(
+    MIGRATION_ENTRY,
+    readFileSync(join(REPO_ROOT, MIGRATION_ENTRY), 'utf-8'),
+    publicationCode,
+  );
   return scanned()
     .filter((file) => {
       const text = readFileSync(file, 'utf-8');
-      return text.includes(SEGMENT_A) && text.includes(SEGMENT_B);
+      const rel = relative(REPO_ROOT, file).split(sep).join('/');
+      return isBypassReader(rel, text, migrationReaderIsStandalone);
     })
     .map((file) => relative(REPO_ROOT, file).split(sep).join('/'))
     .filter((rel) => rel !== SELF.split(sep).join('/'))
@@ -72,6 +124,36 @@ describe('контент читается только через снимок',
   it('ни один файл сборки, скриптов и проверок не читает материал переноса напрямую', () => {
     const found = bypassReaders();
     expect(found, `обходные чтения материала переноса (${found.length}):\n${found.join('\n')}`).toEqual([]);
+  });
+
+  it('standalone CMS migration reader is permitted only while outside the publication path', () => {
+    const migrationSource = readFileSync(join(REPO_ROOT, MIGRATION_ENTRY), 'utf-8');
+    const livePublicationSources = publicationSources();
+
+    expect(isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, livePublicationSources)).toBe(true);
+    // A production module import or executable publication command turns the same reader into a bypass.
+    expect(
+      isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, [
+        ...livePublicationSources,
+        `import '../scripts/import.ts';`,
+      ]),
+    ).toBe(false);
+    expect(
+      isStandaloneMigrationReader(MIGRATION_ENTRY, migrationSource, [
+        ...livePublicationSources,
+        `run: npx tsx scripts/import.ts`,
+      ]),
+    ).toBe(false);
+  });
+
+  it('a discovery/entities fallback in site code remains a bypass', () => {
+    expect(
+      isBypassReader(
+        'web/src/lib/data.ts',
+        `readFileSync(join('discovery', 'entities', 'articles.json'), 'utf-8')`,
+        false,
+      ),
+    ).toBe(true);
   });
 
   // Сценарий: записи-заплатки расписания перестают участвовать в сборке вместе с переключением
