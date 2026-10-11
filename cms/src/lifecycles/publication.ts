@@ -57,7 +57,6 @@ const POPULATE_BY_TYPE: Record<PublicationType, Record<string, unknown> | undefi
 const RELATION_FIELDS_BY_TYPE: Partial<Record<PublicationType, string[]>> = {
   'course-group': ['institute'],
   seminar: ['course_group'],
-  person: ['institute'],
   article: ['image', 'categories'],
   'schedule-entry': ['seminar'],
 };
@@ -67,14 +66,15 @@ function relationItems(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function relationId(value: unknown): string | undefined {
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
+function relationIds(value: unknown): string[] {
+  if (typeof value === 'string' || typeof value === 'number') return [String(value)];
   if (value && typeof value === 'object') {
     const item = value as Record<string, unknown>;
-    const id = item.documentId ?? item.id;
-    if (typeof id === 'string' || typeof id === 'number') return String(id);
+    return [item.documentId, item.id]
+      .filter((id): id is string | number => typeof id === 'string' || typeof id === 'number')
+      .map(String);
   }
-  return undefined;
+  return [];
 }
 
 /** Resolve relation connect/disconnect/set input to the effective nonempty state for validation. */
@@ -89,14 +89,15 @@ function relationHasValue(current: unknown, incoming: unknown): boolean {
   if (!hasOperations) return Object.keys(operation).length > 0;
 
   let items = relationItems(current);
-  if ('set' in operation) items = relationItems(operation.set);
+  // Strapi's `set` declares the complete resulting relation, unlike connect/disconnect deltas.
+  if ('set' in operation) return relationItems(operation.set).length > 0;
   const disconnect = operation.disconnect;
   if (disconnect === true) items = [];
   else if (disconnect !== undefined && disconnect !== false && disconnect !== null) {
-    const removed = new Set(relationItems(disconnect).map(relationId).filter((id): id is string => id !== undefined));
+    const removed = new Set(relationItems(disconnect).flatMap(relationIds));
     items = items.filter((item) => {
-      const id = relationId(item);
-      return id === undefined || !removed.has(id);
+      const ids = relationIds(item);
+      return ids.length === 0 || !ids.some((id) => removed.has(id));
     });
   }
   if ('connect' in operation) items.push(...relationItems(operation.connect));
@@ -115,7 +116,9 @@ function prospectiveEntity(
   const previousSeo = existing?.seo;
   if (
     previousSeo && typeof previousSeo === 'object' &&
-    incoming.seo && typeof incoming.seo === 'object' && !Array.isArray(incoming.seo)
+    incoming.seo && typeof incoming.seo === 'object' && !Array.isArray(incoming.seo) &&
+    String((incoming.seo as Record<string, unknown>).id ?? '') === String((previousSeo as Record<string, unknown>).id ?? '') &&
+    (incoming.seo as Record<string, unknown>).id !== undefined
   ) {
     entity.seo = { ...(previousSeo as Record<string, unknown>), ...(incoming.seo as Record<string, unknown>) };
   }

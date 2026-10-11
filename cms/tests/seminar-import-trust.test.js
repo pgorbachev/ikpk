@@ -29,6 +29,7 @@ const dbFile = path.join(work, 'data.db');
 const SEMINAR = 'api::seminar.seminar';
 const ENTRY = 'api::schedule-entry.schedule-entry';
 const TEACHER = 'api::teacher.teacher';
+const ARTICLE = 'api::article.article';
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -127,6 +128,8 @@ describe('доверенный перенос в собранном Strapi', { t
     fs.mkdirSync(path.join(cmsRoot, 'public/uploads'), { recursive: true });
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
+    app.dirs.static.public = path.join(work, 'public');
+    fs.mkdirSync(path.join(app.dirs.static.public, 'uploads'), { recursive: true });
     await app.load();
     // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
     app.config.set('admin.autoOpen', false);
@@ -233,6 +236,30 @@ describe('доверенный перенос в собранном Strapi', { t
   const validTeacher = (slug) => ({ name: `Преподаватель ${slug}`, slug, trait: 'teacher' });
   const publishedTeacher = (documentId) => app.documents(TEACHER).findOne({ documentId, status: 'published' });
   const publishedTeachersBySlug = (slug) => app.documents(TEACHER).findMany({ filters: { slug }, status: 'published' });
+  const createPublishedArticle = async (slug) => {
+    const form = new FormData();
+    form.append('files', new Blob([fs.readFileSync(path.join(cmsRoot, 'favicon.png'))], { type: 'image/png' }), 'publication-test.png');
+    const uploadResponse = await fetch(`${base}/api/upload`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${fullToken}` },
+      body: form,
+    });
+    const uploadText = await uploadResponse.text();
+    assert.equal(uploadResponse.status, 201, `загрузка изображения статьи: ${uploadResponse.status} ${uploadText}`);
+    const [image] = JSON.parse(uploadText);
+    return app.documents(ARTICLE).create({
+      status: 'published',
+      data: {
+        title: `Статья ${slug}`,
+        slug,
+        body: '<p>Текст статьи</p>',
+        image: image.id,
+        published_date: '2026-10-11T00:00:00.000Z',
+        seo: { seo_title: `Статья ${slug}`, seo_description: 'Описание статьи' },
+        categories: [publishedProgram.documentId],
+      },
+    });
+  };
 
   test('Document Service отклоняет create published без признака персоны', async () => {
     await assert.rejects(
@@ -340,6 +367,38 @@ describe('доверенный перенос в собранном Strapi', { t
     assert.equal(published.course_group.documentId, publishedProgram.documentId);
   });
 
+  test('замена SEO-компонента без id проверяет заменённые поля и сохраняет старую публикацию при отказе', async () => {
+    const seminarDoc = await createPublishedSeminar({ name: 'Семинар для замены SEO', slug: 'publication-seo-replace' });
+    await assert.rejects(
+      () => app.documents(SEMINAR).update({
+        documentId: seminarDoc.documentId,
+        status: 'published',
+        data: { seo: { seo_title: 'Новый заголовок без описания' } },
+      }),
+      /seo_description|обязательные поля/i,
+    );
+    let published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(published.seo.seo_title, 'Семинар для проверки');
+    assert.equal(published.seo.seo_description, 'Описание для проверки');
+
+    await app.documents(SEMINAR).update({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      data: { seo: { seo_title: 'Полная замена SEO', seo_description: 'Новое описание SEO' } },
+    });
+    published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(published.seo.seo_title, 'Полная замена SEO');
+    assert.equal(published.seo.seo_description, 'Новое описание SEO');
+  });
+
   test('published update не позволяет отключить обязательную программу семинара', async () => {
     const seminarDoc = await createPublishedSeminar({ name: 'Семинар без программы', slug: 'publication-relation-remove' });
     await assert.rejects(
@@ -356,6 +415,30 @@ describe('доверенный перенос в собранном Strapi', { t
       populate: { course_group: true },
     });
     assert.equal(published.course_group.documentId, publishedProgram.documentId);
+  });
+
+  test('published article update отклоняет disconnect категории по числовому id', async () => {
+    const article = await createPublishedArticle('publication-category-numeric-disconnect');
+    const draft = await app.documents(ARTICLE).findOne({
+      documentId: article.documentId,
+      status: 'draft',
+      populate: { categories: true },
+    });
+    const categoryId = draft.categories[0].id;
+    await assert.rejects(
+      () => app.documents(ARTICLE).update({
+        documentId: article.documentId,
+        status: 'published',
+        data: { categories: { disconnect: [{ id: categoryId }] } },
+      }),
+      /categories|категори|обязательные поля/i,
+    );
+    const published = await app.documents(ARTICLE).findOne({
+      documentId: article.documentId,
+      status: 'published',
+      populate: { categories: true },
+    });
+    assert.deepEqual(published.categories.map(({ documentId }) => documentId), [publishedProgram.documentId]);
   });
 
   // ── Имя проведения ─────────────────────────────────────────────────────────
