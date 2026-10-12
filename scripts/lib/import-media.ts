@@ -26,6 +26,16 @@ interface ImageSource {
   mime: string;
 }
 
+interface OfflineMediaAllowlistEntry {
+  sourceUrl: string;
+  sourceIdentity: string;
+  sourcePath: string;
+  sourceSha256: string;
+  sourceFilename: string;
+  declaredMime: string;
+  ownerApproved: boolean;
+}
+
 const GENERIC_IMAGE_MIME_TYPES = new Set([
   '',
   'application/octet-stream',
@@ -81,6 +91,10 @@ interface ImageUploaderOptions {
   storedHashById: Map<number, string>;
   mediaById: Map<number, ImportableMediaFile>;
   fetchImage?: (url: string) => Promise<Response>;
+  offlineMedia?: {
+    root: string;
+    allowlist: readonly OfflineMediaAllowlistEntry[];
+  };
   upload: (bytes: Buffer, filename: string, mime: string) => Promise<number | null | undefined>;
   persistIdentity: (identity: {
     fileId: number;
