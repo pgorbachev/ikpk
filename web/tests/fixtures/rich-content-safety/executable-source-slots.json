@@ -432,11 +432,11 @@
     "identity": "script|body:4d4baebf4698c7db"
   },
   {
-    "slotId": "src:components/home/sections/Segments.astro:L45:C1:style",
+    "slotId": "src:components/home/sections/Segments.astro:L52:C1:style",
     "file": "components/home/sections/Segments.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Segments.astro:L45:C1:style",
-    "fingerprint": "a1036272842cc0685caca605f8c03e0dba6eb48714a8449f4f3d01e3992c3a95",
+    "locator": "components/home/sections/Segments.astro:L52:C1:style",
+    "fingerprint": "88c1c41d4b3b0fa9b55113b9f4f8ccf53b8dbd444669f523c8f8b5808dec9af0",
     "identity": "style|body:6534d16698b4dc15"
   },
   {

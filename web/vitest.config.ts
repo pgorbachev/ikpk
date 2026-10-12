@@ -70,7 +70,9 @@ export default defineConfig({
       // на «в сборке нет страницы» — то есть по причине, не имеющей к предмету отношения.
       'tests/external-widgets-privacy-doc.test.ts',
       'tests/seminar-dates.build.test.ts',
+      'tests/seminar-dates.fixture-build.test.ts',
       'tests/article-list-controls.build.test.ts',
+      'tests/cms-catalog-pages.build.test.ts',
       'tests/article-page-date.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
@@ -79,6 +81,10 @@ export default defineConfig({
       'tests/teacher-links.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/maintenance-notice.render.test.ts',
+      // Контейнерные проверки провижининга выполняются отдельным workflow.
+      'tests/trial-environment.test.ts',
+      'tests/server-provisioning-container.test.ts',
+      'tests/server-provisioning-verify.test.ts',
     ],
   },
 });
