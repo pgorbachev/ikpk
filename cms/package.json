@@ -44,7 +44,39 @@
   },
   "overrides": {
     "sharp": "0.35.5",
-    "handlebars": "4.7.10"
+    "handlebars": "4.7.10",
+    "@strapi/admin": {
+      "axios": "1.20.0",
+      "qs": "6.16.0"
+    },
+    "@strapi/cloud-cli": {
+      "axios": "1.20.0"
+    },
+    "@strapi/content-manager": {
+      "qs": "6.16.0"
+    },
+    "@strapi/content-releases": {
+      "qs": "6.16.0"
+    },
+    "@strapi/content-type-builder": {
+      "qs": "6.16.0"
+    },
+    "@strapi/core": {
+      "qs": "6.16.0",
+      "undici": "6.28.1"
+    },
+    "@strapi/i18n": {
+      "qs": "6.16.0"
+    },
+    "@strapi/permissions": {
+      "qs": "6.16.0"
+    },
+    "@strapi/provider-email-sendmail": {
+      "nodemailer": "10.1.0"
+    },
+    "@strapi/upload": {
+      "qs": "6.16.0"
+    }
   },
   "strapi": {
     "uuid": "4fcbf31d-66ea-4201-a839-6bfdcd75bcdc",

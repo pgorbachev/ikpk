@@ -7,6 +7,11 @@ const requiredVersions = {
   handlebars: '4.7.10',
   'proxy-addr': '2.0.8',
   'shell-quote': '1.11.0',
+  'fast-uri': '3.1.8',
+  undici: '6.28.1',
+  axios: '1.20.0',
+  nodemailer: '10.0.13',
+  qs: '6.16.0',
 };
 
 const compareVersions = (left, right) => {
