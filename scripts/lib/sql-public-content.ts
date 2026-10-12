@@ -200,12 +200,15 @@ export interface SqlPublicContentResult {
       value?: string;
       approval: 'pending';
     }[];
-    sourceMetadata: {
-      table: string;
-      sourceId: number;
-      field: 'certificates' | 'author' | 'priority' | 'teacherId';
-      value: string | number | null;
-    }[];
+    sourceMetadata: (
+      | {
+          table: MappedTable;
+          sourceId: number;
+          field: 'certificates' | 'author' | 'priority' | 'teacherId';
+          value: string | number | null;
+        }
+      | { table: 'News' | 'Promotions'; sourceId: number; field: 'createdAt'; value: string }
+    )[];
   };
 }
 
