@@ -376,7 +376,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
 
   const provenance: SqlPublicContentResult['provenance'] = {
     sourceHash: source.sourceHash,
-    sourceIdentity: [], exclusions: [], rejectedRelations: [], classificationCandidates: [], sourceMetadata: [],
+    sourceIdentity: [], exclusions: [], rejectedRelations: [], classificationCandidates: [], sourceMetadata: [], videoMetadata: [],
   };
   const addIdentity = (table: MappedTable, id: number, targetLegacyId: string, targetSlug?: string): void => {
     provenance.sourceIdentity.push({ table, sourceId: id, ...(targetSlug === undefined ? {} : { targetSlug }), targetLegacyId });
@@ -462,11 +462,29 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   });
 
   const approvedVideoIds = new Set([31, 32, 33, 34, 36, 37]);
+  if (source.Videos !== undefined) {
+    const unexpected = activeVideos.find((row) => !approvedVideoIds.has(row.id));
+    if (unexpected) invalid('Videos', unexpected.id, 'id', 'is not an approved playlist');
+    const activeVideoIds = new Set(activeVideos.map((row) => row.id));
+    for (const id of [...approvedVideoIds].sort((left, right) => left - right)) {
+      if (!activeVideoIds.has(id)) invalid('Videos', id, 'id', 'is missing an active playlist');
+    }
+  }
   const videos = activeVideos.map((row) => {
     const id = recordId(row, 'Videos');
-    if (!approvedVideoIds.has(id)) invalid('Videos', id, 'id', 'is not an approved playlist');
+    if (!Number.isFinite(row.priority)) invalid('Videos', id, 'priority', 'must be numeric');
     return { sourceId: id, legacy_id: `video/pleylist/${id}`, slug: String(id), title: requiredString(row as unknown as Record<string, unknown>, 'Videos', id, 'name') };
   });
+  provenance.videoMetadata = activeVideos.map((row) => {
+    const id = recordId(row, 'Videos');
+    if (!Number.isFinite(row.priority)) invalid('Videos', id, 'priority', 'must be numeric');
+    return {
+      sourceId: id,
+      link: nullableString(row as unknown as Record<string, unknown>, 'Videos', id, 'link'),
+      priority: row.priority,
+      imageId: nullableString(row as unknown as Record<string, unknown>, 'Videos', id, 'imageId'),
+    };
+  }).sort((left, right) => left.sourceId - right.sourceId);
 
   const organizationInfo = activeOrganizationInfo.map((row) => {
     const id = recordId(row, 'OrganizationInfo');
