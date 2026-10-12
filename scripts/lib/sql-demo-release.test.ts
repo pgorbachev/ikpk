@@ -402,6 +402,25 @@ describe('composeSqlDemoRelease', () => {
       .toThrow(/Seminars#9350.*(decision|iframe)/i);
   });
 
+  it.each([
+    ['Rutube query embed', 'https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef/?p=synthetic'],
+    ['VK oid/id embed', 'https://vk.com/video_ext.php?oid=-123&id=456&hd=2&autoplay=1'],
+  ])('transforms the exact %s decision on Seminars.description', (_shape, originalURL) => {
+    const input = mapped({
+      seminars: [{
+        sourceId: 9351, legacy_id: 'seminar-9351', slug: 'synthetic-9351', name: 'Synthetic seminar',
+        description: `<iframe src="${originalURL}"></iframe>`,
+      }],
+    });
+    const decision = {
+      sourceTable: 'Seminars' as const, sourceId: 9351, field: 'description' as const,
+      originalURL, action: 'external-link' as const,
+      expectedOutput: `<a href="${originalURL}" rel="noopener noreferrer">Открыть видео</a>`,
+    };
+    const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions([decision]));
+    expect(release.entities.seminars[0].description).toBe(decision.expectedOutput);
+  });
+
   it('preserves already-accepted iframe sources without decisions and requires exact decisions for the seven SQL seminar embed shapes', () => {
     const rutubeIds = [
       '11111111111111111111111111111111', '22222222222222222222222222222222',
