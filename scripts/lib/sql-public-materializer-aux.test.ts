@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapSqlPublicContent, type SqlPublicContentResult, type SqlPublicEntity, type SqlPublicSource } from './sql-public-content.js';
+import { mapSqlPublicContent, type SqlPublicContentResult, type SqlPublicSource } from './sql-public-content.js';
 import { materializeSqlPublicContent, type SqlMaterializerOptions, type SqlStrapiRestClient } from './sql-public-materializer.js';
 
 type PublicationValidator = (input: { type: string; record: Record<string, unknown> }) => { ok: boolean; missing: string[]; message: string };
@@ -41,8 +41,11 @@ const BASE_MAPPED = mapSqlPublicContent(source, {
   },
 });
 
-type PageDto = SqlPublicEntity & { title: string; slug: string; body: string; seo: { seo_title: string; seo_description: string } };
-type AuxMapped = SqlPublicContentResult & { entities: SqlPublicContentResult['entities'] & { pages?: PageDto[] } };
+type PageDto = { title: string; slug: string; body: string; legacy_id: string; seo: { seo_title: string; seo_description: string } };
+type VideoCmsDto = { name: string; slug: string; legacy_id: string; videos: unknown[] | null; seo: { seo_title: string; seo_description: string } };
+type AuxMapped = Omit<SqlPublicContentResult, 'entities'> & {
+  entities: Omit<SqlPublicContentResult['entities'], 'videos'> & { videos?: VideoCmsDto[]; pages?: PageDto[] };
+};
 
 function mappedContent(): AuxMapped {
   const mapped = structuredClone(BASE_MAPPED) as AuxMapped;
@@ -54,13 +57,20 @@ function mappedContent(): AuxMapped {
   event.name = 'Synthetic event';
   event.city = 'Synthetic City';
   event.entry_status = 'active';
-  mapped.entities.videos = (mapped.entities.videos ?? []).map((video) => ({
-    ...video,
-    name: video.title,
-    seo: { seo_title: `${video.title} SEO`, seo_description: `${video.title} summary` },
-  }));
+  const sourceVideos = BASE_MAPPED.entities.videos ?? [];
+  mapped.entities.videos = playlistIds.map((sourceId) => {
+    const sourceVideo = sourceVideos.find((video) => video.sourceId === sourceId)!;
+    const { slug, legacy_id } = sourceVideo;
+    const title = String(sourceVideo.title);
+    return {
+      name: title,
+      slug,
+      legacy_id,
+      videos: null,
+      seo: { seo_title: `${title} SEO`, seo_description: `${title} summary` },
+    };
+  });
   mapped.entities.pages = [{
-    sourceId: 1001,
     legacy_id: 'pages/about',
     title: 'About exact title',
     slug: 'about-sql',
@@ -68,6 +78,10 @@ function mappedContent(): AuxMapped {
     seo: { seo_title: 'About SEO exact', seo_description: 'About SEO summary exact' },
   }];
   return mapped;
+}
+
+function materializeComposed(mapped: AuxMapped, target: NativeStrapiTarget) {
+  return materializeSqlPublicContent(mapped as unknown as SqlPublicContentResult, optionsFor(target));
 }
 
 type Collection = 'institutes' | 'course-groups' | 'teachers' | 'seminars' | 'schedule-entries' | 'articles' | 'news-items' | 'promotions' | 'video-playlists' | 'pages';
@@ -195,7 +209,7 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
     const mapped = mappedContent();
     const target = new NativeStrapiTarget();
 
-    await materializeSqlPublicContent(mapped, optionsFor(target));
+    await materializeComposed(mapped, target);
 
     const news = target.published('news-items');
     expect(news).toHaveLength(1);
@@ -223,13 +237,15 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
   it('passes the mapped playlist name, supplemented identity and SEO without SQL provenance fields', async () => {
     const mapped = mappedContent();
     const target = new NativeStrapiTarget();
+    expect(mapped.entities.videos?.[0]).toMatchObject({ name: 'Playlist 31', slug: '31', legacy_id: 'video/pleylist/31', videos: null });
+    expect(mapped.provenance.videoMetadata[0]).toMatchObject({ sourceId: 31, link: 'https://private.synthetic.invalid/watch/31', priority: 31, imageId: 'private-image-31' });
 
-    await materializeSqlPublicContent(mapped, optionsFor(target));
+    await materializeComposed(mapped, target);
 
     const videos = target.published('video-playlists');
     expect(videos).toHaveLength(6);
     expect(videos[0]).toMatchObject({ name: 'Playlist 31', slug: '31', legacy_id: 'video/pleylist/31', seo: { seo_title: 'Playlist 31 SEO', seo_description: 'Playlist 31 summary' }, publishedAt: expect.any(String) });
-    for (const field of ['link', 'priority', 'imageId', 'sourceHash', 'sourceIdentity']) expect(videos[0]).not.toHaveProperty(field);
+    for (const field of ['sourceId', 'title', 'link', 'priority', 'imageId', 'sourceHash', 'sourceIdentity']) expect(videos[0]).not.toHaveProperty(field);
     const videoRequests = target.requests.filter((request) => request.path.includes('/api/video-playlists'));
     expect(JSON.stringify(videoRequests)).not.toContain('private.synthetic.invalid');
     expect(checkPublication(publicationRecord('video-playlists', videos[0]!))).toMatchObject({ ok: true });
@@ -240,7 +256,7 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
     const mapped = mappedContent();
     const target = new NativeStrapiTarget();
 
-    await materializeSqlPublicContent(mapped, optionsFor(target));
+    await materializeComposed(mapped, target);
 
     const pages = target.published('pages');
     expect(pages).toHaveLength(1);
@@ -250,6 +266,7 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
       seo: { seo_title: 'About SEO exact', seo_description: 'About SEO summary exact' },
       publishedAt: expect.any(String),
     });
+    expect(pages[0]).not.toHaveProperty('sourceId');
     expect(checkPublication(publicationRecord('pages', pages[0]!))).toMatchObject({ ok: true });
     expect(target.requests.some(({ method, path }) => method === 'POST' && path === '/api/pages?status=draft')).toBe(true);
     expect(target.requests.some(({ method, path }) => method === 'PUT' && path.startsWith('/api/pages/') && path.endsWith('?status=published'))).toBe(true);
@@ -258,13 +275,13 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
   it('reuses exact auxiliary identities on the same target and clears stale optional news media', async () => {
     const target = new NativeStrapiTarget();
     const first = mappedContent();
-    await materializeSqlPublicContent(first, optionsFor(target));
+    await materializeComposed(first, target);
     const identities = Object.fromEntries((['news-items', 'promotions', 'video-playlists', 'pages'] as const)
       .map((collection) => [collection, target.published(collection).map(({ documentId }) => documentId)]));
 
     const repeated = mappedContent();
     repeated.entities.news![0]!.imageId = null;
-    await materializeSqlPublicContent(repeated, optionsFor(target));
+    await materializeComposed(repeated, target);
 
     expect(target.published('news-items')).toHaveLength(1);
     expect(target.published('news-items')[0]).toMatchObject({ legacy_id: '801', image: null, date: '2026-10-10T23:30:00.123Z' });
@@ -279,19 +296,19 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
 
   it('fails closed before any write when auxiliary legacy IDs collide in their owning collection', async () => {
     const mapped = mappedContent();
-    mapped.entities.pages!.push({ ...mapped.entities.pages![0]!, sourceId: 1002, slug: 'about-copy' });
+    mapped.entities.pages!.push({ ...mapped.entities.pages![0]!, slug: 'about-copy' });
     const target = new NativeStrapiTarget();
 
-    await expect(materializeSqlPublicContent(mapped, optionsFor(target))).rejects.toThrow(/pages.*legacy_id.*pages\/about/i);
+    await expect(materializeComposed(mapped, target)).rejects.toThrow(/pages.*legacy_id.*pages\/about/i);
     expect(target.requests.some(({ method }) => method !== 'GET')).toBe(false);
   });
 
   it('fails closed before any write when auxiliary page slugs collide and names the owning legacy ID', async () => {
     const mapped = mappedContent();
-    mapped.entities.pages!.push({ ...mapped.entities.pages![0]!, sourceId: 1002, legacy_id: 'pages/other', title: 'Other page' });
+    mapped.entities.pages!.push({ ...mapped.entities.pages![0]!, legacy_id: 'pages/other', title: 'Other page' });
     const target = new NativeStrapiTarget();
 
-    await expect(materializeSqlPublicContent(mapped, optionsFor(target))).rejects.toThrow(/pages.*slug.*pages\/other/i);
+    await expect(materializeComposed(mapped, target)).rejects.toThrow(/pages.*slug.*pages\/other/i);
     expect(target.requests.some(({ method }) => method !== 'GET')).toBe(false);
   });
 });
