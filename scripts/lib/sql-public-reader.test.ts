@@ -36,6 +36,56 @@ const CONNECTION = {
   user: 'synthetic_readonly_user',
 } as const;
 
+const SCHEMA_NULLABLE_FIELDS = [
+  { table: 'Articles', column: 'imageId' },
+  { table: 'Articles', column: 'slug' },
+  { table: 'Events', column: 'imageId' },
+  { table: 'Events', column: 'teacherId' },
+  { table: 'Events', column: 'oldPrice' },
+  { table: 'Events', column: 'additionalText' },
+  { table: 'Events', column: 'duration' },
+  { table: 'Events', column: 'description' },
+  { table: 'Events', column: 'registrationFormLink' },
+  { table: 'Files', column: 'fileType' },
+  { table: 'Institutes', column: 'shortName' },
+  { table: 'News', column: 'imageId' },
+  { table: 'News', column: 'link' },
+  { table: 'Programs', column: 'content' },
+  { table: 'Programs', column: 'imageId' },
+  { table: 'Programs', column: 'slug' },
+  { table: 'Promotions', column: 'imageId' },
+  { table: 'Promotions', column: 'link' },
+  { table: 'Seminars', column: 'certificates' },
+  { table: 'Seminars', column: 'curriculum' },
+  { table: 'Seminars', column: 'description' },
+  { table: 'Seminars', column: 'learningProcess' },
+  { table: 'Seminars', column: 'recommendations' },
+  { table: 'Seminars', column: 'slug' },
+  { table: 'Seminars', column: 'targetAudience' },
+  { table: 'Teachers', column: 'imageId' },
+  { table: 'Videos', column: 'imageId' },
+] as const;
+
+const SCHEMA_NOT_NULL_FIELDS = [
+  { table: 'FileBindingOrganizationInfo', column: 'title' },
+  { table: 'Files', column: 'extension' },
+  { table: 'Files', column: 'originalName' },
+  { table: 'Files', column: 'url' },
+  { table: 'InstituteAdditionalInfo', column: 'description' },
+  { table: 'InstituteAdditionalInfo', column: 'instituteId' },
+  { table: 'InstituteAdditionalInfo', column: 'name' },
+  { table: 'Institutes', column: 'imageId' },
+  { table: 'News', column: 'description' },
+  { table: 'News', column: 'name' },
+  { table: 'OrganizationInfo', column: 'content' },
+  { table: 'OrganizationInfo', column: 'name' },
+  { table: 'Promotions', column: 'description' },
+  { table: 'Promotions', column: 'name' },
+  { table: 'Promotions', column: 'type' },
+  { table: 'Videos', column: 'link' },
+  { table: 'Videos', column: 'name' },
+] as const;
+
 let ownedTempDir: string;
 let dumpPath: string;
 
@@ -73,7 +123,7 @@ function syntheticCollections(): Record<string, Record<string, unknown>[]> {
 function errorFootprint(error: Error): string {
   const record = error as Error & { cause?: unknown; stderr?: unknown };
   const ownProperties = Object.getOwnPropertyNames(error).map((key) => [key, (error as unknown as Record<string, unknown>)[key]]);
-  return JSON.stringify({ ownProperties, cause: record.cause, stderr: record.stderr, stack: error.stack });
+  return JSON.stringify({ serialized: JSON.stringify(error), ownProperties, cause: record.cause, stderr: record.stderr, stack: error.stack });
 }
 
 function selectedTableQuery(sql: string, table: keyof typeof PUBLIC_COLUMNS): { columns: string[]; tail: string } {
@@ -171,6 +221,38 @@ describe('native SQL public source reader contract', () => {
 
   it.each([
     {
+      name: 'postgres URI',
+      database: 'postgres://reader:SYNTHETIC_SECRET_SENTINEL@other-host/other-db',
+    },
+    {
+      name: 'postgresql URI',
+      database: 'postgresql://reader:SYNTHETIC_SECRET_SENTINEL@other-host/other-db',
+    },
+    {
+      name: 'keyword conninfo',
+      database: 'host=other dbname=x user=y password=SYNTHETIC_SECRET_SENTINEL',
+    },
+  ])('rejects $name in database before invoking psql without leaking connection details', async ({ database }) => {
+    const runPsql = vi.fn<SqlPublicPsqlRunner>(async () => JSON.stringify(syntheticCollections()));
+    const options = {
+      ...testOptions(sha256Hex(await readFile(dumpPath)), runPsql),
+      connection: { ...CONNECTION, database },
+    };
+    const result = await readSqlPublicSource(options).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(result).toBeInstanceOf(Error);
+    expect(runPsql).not.toHaveBeenCalled();
+    if (result instanceof Error) {
+      expect(errorFootprint(result)).not.toContain(database);
+      expect(errorFootprint(result)).not.toContain('SYNTHETIC_SECRET_SENTINEL');
+    }
+  });
+
+  it.each([
+    {
       name: 'unexpected Users table',
       inject: (collections: Record<string, Record<string, unknown>[]>, marker: string) => {
         collections.Users = [{ email: marker }];
@@ -204,6 +286,39 @@ describe('native SQL public source reader contract', () => {
       expect(errorFootprint(result)).not.toContain(marker);
     }
   });
+
+  it.each(SCHEMA_NOT_NULL_FIELDS.map(({ table, column }) => [table, column] as const))(
+    'rejects NULL for source NOT NULL field %s.%s',
+    async (table, column) => {
+      const unexpected = syntheticCollections();
+      unexpected[table][0][column] = null;
+      const runPsql = vi.fn<SqlPublicPsqlRunner>(async () => JSON.stringify(unexpected));
+      const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(result).toBeInstanceOf(Error);
+      expect(runPsql).toHaveBeenCalledOnce();
+      if (result instanceof Error) {
+        expect(result.message).toBe('Unable to read SQL public source');
+      }
+    },
+  );
+
+  it.each(SCHEMA_NULLABLE_FIELDS.map(({ table, column }) => [table, column] as const))(
+    'accepts NULL for source nullable field %s.%s',
+    async (table, column) => {
+      const expected = syntheticCollections();
+      expected[table][0][column] = null;
+      const runPsql = vi.fn<SqlPublicPsqlRunner>(async () => JSON.stringify(expected));
+
+      const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql));
+
+      expect((result[table][0] as unknown as Record<string, unknown>)[column]).toBeNull();
+      expect(runPsql).toHaveBeenCalledOnce();
+    },
+  );
 
   it('rechecks the dump hash after psql finishes and rejects mutation during the read', async () => {
     const runPsql = vi.fn(async () => {
