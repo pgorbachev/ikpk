@@ -555,7 +555,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     if (!file) invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to a file (${fileId})`);
     if (file.status !== 'active') invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to an active file (${fileId})`);
     if (file.privacy !== 'public') invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to a public file (${fileId})`);
-    if (file.fileType !== 'application/pdf' || file.extension?.toLowerCase() !== 'pdf') {
+    if (file.fileType !== 'document' || file.extension?.toLowerCase() !== 'pdf') {
       invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to an approved PDF (${fileId})`);
     }
     return {
@@ -563,7 +563,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
       title, priority: binding.priority,
       originalName: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'originalName'),
       extension: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'extension'),
-      fileType: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'fileType'),
+      fileType: 'application/pdf',
       url: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'url'),
     };
   }).sort((left, right) => left.priority - right.priority || left.bindingSourceId - right.bindingSourceId);
