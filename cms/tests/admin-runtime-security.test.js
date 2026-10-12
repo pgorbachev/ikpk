@@ -9,7 +9,7 @@ import { test } from 'node:test';
 // GHSA-jjmj-jmhj-qwj2 only. GHSA-wrjc-x8rr-h8h6 still affects React Router 6;
 // this test does not claim that 6.30.6 fully mitigates React Router advisories.
 const routerFloor = '6.30.6';
-const markdownItFloor = '14.3.1';
+const markdownItFloor = '14.3.2';
 const cmsRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const lock = JSON.parse(readFileSync(resolve(cmsRoot, 'package-lock.json'), 'utf8'));
 const modulesRoot = resolve(
@@ -125,7 +125,7 @@ test(
 );
 
 test(
-  'Strapi WYSIWYG consumer resolves markdown-it at the compatible 14.3.1 floor',
+  'Strapi WYSIWYG consumer resolves markdown-it at the compatible 14.3.2 floor',
   { skip: !hasInstalledGraph && 'CMS node_modules is not installed; run with IKPK_CMS_NODE_MODULES for a matching physical graph' },
   () => {
     assert.ok(existsSync(consumers.markdownRenderer), `Missing Strapi WYSIWYG consumer ${consumers.markdownRenderer}`);
@@ -153,5 +153,18 @@ test(
     const md = new MarkdownIt({ linkify: true });
 
     assert.match(md.render('Visit https://example.test'), /<a href="https:\/\/example\.test">https:\/\/example\.test<\/a>/);
+  }
+);
+
+test(
+  'markdown-it typographer rendering remains compatible for WYSIWYG previews',
+  { skip: !hasInstalledGraph && 'CMS node_modules is not installed; run with IKPK_CMS_NODE_MODULES for a matching physical graph' },
+  () => {
+    const markdownItEntry = createRequire(consumers.markdownRenderer).resolve('markdown-it');
+    const markdownItRequire = createRequire(markdownItEntry);
+    const MarkdownIt = markdownItRequire('markdown-it');
+    const md = new MarkdownIt({ typographer: true });
+
+    assert.equal(md.render('"quoted"'), '<p>“quoted”</p>\n');
   }
 );
