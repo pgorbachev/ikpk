@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   computeSqlDemoSupplementManifestSha256,
   loadSqlDemoAssets,
+  type SqlDemoSelectedPublicHeaderReference,
   type SqlDemoAssetLoaderInput,
 } from './sql-demo-assets.js';
 
@@ -67,6 +68,7 @@ function baseInput(base: string): SqlDemoAssetLoaderInput {
       Articles: [],
       Videos: [],
     },
+    selectedPublicHeaders: { sourceHash: syntheticSqlSha256, references: [] },
     baseline: { sqlSha256: syntheticSqlSha256, archiveSha256: syntheticArchiveSha256 },
     assetRoot: join(base, 'archive'),
     assetManifest: {
@@ -107,6 +109,7 @@ async function imageInput(base: string, options: {
   status?: 'active' | 'disabled' | 'unlinked';
   privacy?: 'public' | 'private';
   reachability?: SqlDemoAssetLoaderInput['assetManifest']['entries'][number]['reachability'];
+  selectedHeader?: boolean;
 } = {}): Promise<SqlDemoAssetLoaderInput> {
   const bytes = options.bytes ?? pngBytes();
   const relativePath = `archive/${options.id ?? 'file-1'}/synthetic.webp`;
@@ -128,6 +131,17 @@ async function imageInput(base: string, options: {
     sourcePrivacy: privacy,
     reachability: options.reachability ?? { kind: 'sql-header' },
   }];
+  if (
+    (options.reachability === undefined || options.reachability.kind === 'sql-header') &&
+    status === 'active' && privacy === 'public' && options.selectedHeader !== false
+  ) {
+    const sourceId = 904;
+    const reference: SqlDemoSelectedPublicHeaderReference = {
+      sourceTable: 'Articles', sourceId, imageId: options.id ?? 'file-1',
+    };
+    input.source.Articles = [{ id: sourceId, status: 'active', imageId: reference.imageId, content: '' }];
+    input.selectedPublicHeaders.references = [reference];
+  }
   return input;
 }
 
@@ -305,6 +319,43 @@ describe('offline SQL asset loader contract', () => {
     expect(input.approvedBodyFileGrants).toHaveLength(1);
   });
 
+  it.each([
+    ['an HTML comment', '<!-- <img src="/files/file-1.webp" alt="synthetic" /> -->'],
+    ['a script string', '<script>const html = "<img src=\'/files/file-1.webp\'>";</script>'],
+    ['an alt-text string', '<p><img alt="<img src=\'/files/file-1.webp\' />" /></p>'],
+  ])('does not treat an image-like string in %s as an article body reference', async (_label, content) => {
+    const base = await root();
+    const input = await imageInput(base, {
+      status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] },
+    });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    input.source.Articles = [{ id: 903, status: 'active', imageId: null, content }];
+    input.approvedBodyFileGrants = [{
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
+    }];
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(reachability|body reference|source reference|grant)/i);
+  });
+
+  it('decodes a numeric entity in an unquoted img src inside picture', async () => {
+    const base = await root();
+    const input = await imageInput(base, {
+      status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] },
+    });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    input.source.Articles = [{
+      id: 903, status: 'active', imageId: null,
+      content: '<picture><source srcset="/files/other.webp"><img src=/files/file&#45;1.webp></picture>',
+    }];
+    input.approvedBodyFileGrants = [{
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
+    }];
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.offlineMedia[0]?.reachability).toEqual({ kind: 'article-body', articleSourceIds: [903] });
+  });
+
   it('rejects manifest article reachability that does not match active body URL references', async () => {
     const base = await root();
     const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [904] } });
@@ -323,14 +374,37 @@ describe('offline SQL asset loader contract', () => {
   it('accepts an active direct header image without any body grant', async () => {
     const base = await root();
     const input = await imageInput(base, { status: 'active', reachability: { kind: 'sql-header' } });
-    input.source.Articles = [{
-      id: 904, status: 'active', imageId: 'file-1', content: '',
-    }];
 
     const result = await loadSqlDemoAssets(input);
 
     expect(result.offlineMedia[0]?.sourceFileId).toBe('file-1');
     expect(result.provenance.assets).toHaveLength(1);
+    expect(result.provenance.assets[0]).toMatchObject({
+      selectedPublicHeaderReferences: [{ sourceTable: 'Articles', sourceId: 904, imageId: 'file-1' }],
+    });
+  });
+
+  it('rejects an active asset with a sql-header manifest entry but no selected mapper header reference', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'active', selectedHeader: false });
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(reachability|header|reference|source relation)/i);
+  });
+
+  it('requires selected header references to carry the pinned SQL source hash', async () => {
+    const base = await root();
+    const input = await imageInput(base);
+    input.selectedPublicHeaders.sourceHash = 'd'.repeat(64);
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(header|mapper|source).*(hash|SHA|digest|pinned)/i);
+  });
+
+  it('rejects a selected header source ID that does not identify the referenced SQL entity', async () => {
+    const base = await root();
+    const input = await imageInput(base);
+    input.selectedPublicHeaders.references[0]!.sourceId = 905;
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(header|source).*(identity|ID|reference|join)/i);
   });
 
   it('fails closed for a reached asset with an unknown SQL file ID or a missing manifest entry', async () => {

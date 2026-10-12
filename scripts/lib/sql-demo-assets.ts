@@ -11,6 +11,18 @@ export interface SqlDemoAssetSource {
   Videos?: { id: number; status: string; imageId: string | null; link: string | null }[];
 }
 
+export type SqlDemoSelectedPublicHeaderReference = {
+  sourceTable: 'Institutes' | 'Programs' | 'Teachers' | 'Events' | 'Articles' | 'News' | 'Promotions' | 'Videos';
+  sourceId: number;
+  imageId: string;
+};
+
+export interface SqlDemoSelectedPublicHeaders {
+  /** Hash of the same pinned SQL snapshot used by the public-content mapper. */
+  sourceHash: string;
+  references: SqlDemoSelectedPublicHeaderReference[];
+}
+
 export type SqlDemoAssetReachability =
   | { kind: 'sql-header' }
   | { kind: 'article-body'; articleSourceIds: number[] }
@@ -84,6 +96,8 @@ export function computeSqlDemoSupplementManifestSha256(
 export interface SqlDemoAssetLoaderInput {
   /** Native reader/mapping output with its already-verified source digest. */
   source: SqlDemoAssetSource;
+  /** Selected mapper output references; this is not an asset-manifest reachability claim. */
+  selectedPublicHeaders: SqlDemoSelectedPublicHeaders;
   baseline: { sqlSha256: string; archiveSha256: string };
   assetRoot: string;
   assetManifest: SqlDemoAssetManifest;
