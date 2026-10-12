@@ -54,6 +54,8 @@ type SourceTable = 'Institutes' | 'Programs' | 'Teachers' | 'Seminars' | 'Events
   | 'News' | 'Promotions' | 'Videos' | 'Pages';
 type RecordValue = Record<string, unknown>;
 
+class SafeMaterializerError extends Error {}
+
 interface RelationPlan {
   field: string;
   cardinality: 'single' | 'many';
@@ -92,7 +94,7 @@ function recordContext(table: SourceTable, entity: RecordValue): string {
 }
 
 function fail(context: string, message: string): never {
-  throw new Error(`${context}: ${message}`);
+  throw new SafeMaterializerError(`${context}: ${message}`);
 }
 
 function requiredString(entity: RecordValue, table: SourceTable, field: string, allowEmpty = false): string {
@@ -649,10 +651,6 @@ function populatedMediaId(value: unknown): number | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return Number.NaN;
   const record = value as RecordValue;
   if (Number.isSafeInteger(record.id)) return record.id as number;
-  if (record.data && typeof record.data === 'object' && !Array.isArray(record.data)) {
-    const data = record.data as RecordValue;
-    return Number.isSafeInteger(data.id) ? data.id as number : Number.NaN;
-  }
   return Number.NaN;
 }
 
@@ -682,7 +680,8 @@ async function publishAndVerify(plan: EntityPlan, document: StoredRef, expected:
       fail(context, 'published Content API verification failed');
     }
     if (plan.verifyAttributes) verifyMaterializedAttributes(plan, expected, published);
-  } catch {
+  } catch (error) {
+    if (error instanceof SafeMaterializerError) throw error;
     fail(context, 'publish or verification failed');
   }
 }
