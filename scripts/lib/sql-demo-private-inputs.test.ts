@@ -329,15 +329,27 @@ describe('SQL demo private input preparation and normalization', () => {
       'article-body-reached-public-unlinked-media.json': {
         schema_version: 1, scope: 'article-body-reached-public-unlinked-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'),
         entries: [
-          { source_file_id: 'f-body', archive_relative_path: 'media/body.webp', bytes: 12, crc_verified: true, declared_extension: 'webp', sha256: hash('9'), source_file_type: 'image', source_privacy: 'public', source_status: 'unlinked', target_extension_from_magic: 'webp', verified_mime: 'image/webp', allowlist_class: 'synthetic', reachability: 'article body image reference' },
           { source_file_id: 'body-granted', archive_relative_path: 'media/body-granted.png', bytes: 12, crc_verified: true, declared_extension: 'png', sha256: hash('4'), source_file_type: 'image', source_privacy: 'public', source_status: 'unlinked', target_extension_from_magic: 'png', verified_mime: 'image/png', allowlist_class: 'approved body-only article media', reachability: 'image reference discovered from active article HTML' },
         ],
       },
     }) });
-    const result = normalize({ config: input });
+    const sourceWithSelectedTeacherImage = {
+      ...source,
+      Teachers: source.Teachers.map((teacher) => ({ ...teacher, imageId: 'f-shared' })),
+    };
+    const mappedWithSelectedTeacherImage = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        teachers: mapped.entities.teachers.map((teacher) => ({ ...teacher, imageId: 'f-shared' })),
+      },
+    };
+    const result = normalize({ config: input, nativeSqlPublicSource: sourceWithSelectedTeacherImage, mapped: mappedWithSelectedTeacherImage });
     const entries = (result.loader.assetManifest as { entries: { sourceFileId: string }[] }).entries;
-    expect(entries.map((entry) => entry.sourceFileId).sort()).toEqual(['body-granted', 'f-body', 'f-shared', 'file-1', 'file-2', 'file-3', 'file-501', 'pdf-1', 'thumb-1']);
-    expect(entries).toHaveLength(9);
+    expect(entries.map((entry) => entry.sourceFileId).sort()).toEqual(['body-granted', 'f-shared', 'file-1', 'file-2', 'file-3', 'file-501', 'pdf-1', 'thumb-1']);
+    expect(entries).toHaveLength(8);
+    expect(entries.filter((entry) => entry.sourceFileId === 'f-shared')).toHaveLength(1);
+    expect(entries.map((entry) => entry.sourceFileId)).not.toContain('f-body');
   });
 
   it.each([
@@ -442,7 +454,7 @@ describe('SQL demo private input preparation and normalization', () => {
   it('derives selected header references only from mapper entities and the same provenance source hash', () => {
     const result = normalize();
     expect(result.loader.selectedPublicHeaders).toEqual({
-      sourceHash: `sha256:${hash('a')}`,
+      sourceHash: hash('a'),
       references: [
         { sourceTable: 'Institutes', sourceId: 1, imageId: 'file-1' },
         { sourceTable: 'Institutes', sourceId: 2, imageId: 'file-2' },
@@ -450,6 +462,9 @@ describe('SQL demo private input preparation and normalization', () => {
         { sourceTable: 'Programs', sourceId: 501, imageId: 'file-501' },
       ],
     });
+    expect(result.loader.source.sourceHash).toBe(hash('a'));
+    expect(source.sourceHash).toBe(`sha256:${hash('a')}`);
+    expect(mapped.provenance.sourceHash).toBe(`sha256:${hash('a')}`);
     expect(JSON.stringify(result.loader.selectedPublicHeaders)).not.toContain('file-unselected');
   });
 
