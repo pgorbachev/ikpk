@@ -30,6 +30,23 @@ test('редактор меняет состояние события через
   assert.equal(scheduleUpdate?.properties?.fields.includes('status'), false);
 });
 
+test('изображение расписания доступно редактору, а isEventCollection остаётся закрытым', () => {
+  const subject = 'api::schedule-entry.schedule-entry';
+  for (const actionName of ['create', 'read', 'update']) {
+    const permission = find(subject, actionName);
+    assert.ok(permission, `${subject}: нет ${actionName}`);
+    assert.ok(
+      permission.properties?.fields.includes('image'),
+      `${subject}: ${actionName} не разрешает image`,
+    );
+    assert.equal(
+      permission.properties?.fields.includes('isEventCollection'),
+      false,
+      `${subject}: ${actionName} разрешает isEventCollection`,
+    );
+  }
+});
+
 test('у программы редактор меняет только признак категории', () => {
   assert.deepEqual(find('api::course-group.course-group', 'update')?.properties, {
     fields: ['is_article_category'],
