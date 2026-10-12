@@ -76,6 +76,12 @@ export default defineConfig({
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
       'tests/rich-content-render.test.ts',
+      // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
+      // контейнера не укладывается в лимит хука и валит обязательный прогон.
+      // Локально: npx vitest run --config vitest.provision.config.ts
+      'tests/trial-environment.test.ts',
+      'tests/server-provisioning-container.test.ts',
+      'tests/server-provisioning-verify.test.ts',
     ],
   },
 });
