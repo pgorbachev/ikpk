@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   readSqlPublicSource,
-  type SqlPublicPsqlInvocation,
   type SqlPublicPsqlRunner,
 } from './sql-public-reader';
 import type { SqlPublicSource } from './sql-public-content';
@@ -143,7 +142,7 @@ describe('native SQL public source reader contract', () => {
   });
 
   it('uses one native, read-only psql invocation with explicit reviewed identifiers only', async () => {
-    const runPsql = vi.fn(async () => JSON.stringify(syntheticCollections()));
+    const runPsql = vi.fn<SqlPublicPsqlRunner>(async () => JSON.stringify(syntheticCollections()));
 
     await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql));
 
