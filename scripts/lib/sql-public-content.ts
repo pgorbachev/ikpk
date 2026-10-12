@@ -94,6 +94,8 @@ export interface SqlFileSourceRow extends SqlRowTimestamps {
 export interface SqlPublicDocumentEntity {
   sourceId: string;
   fileId: string;
+  bindingSourceId: number;
+  organizationInfoSourceId: number;
   title: string | null;
   priority: number;
   originalName: string | null;
@@ -186,7 +188,7 @@ export interface SqlPublicContentResult {
   provenance: {
     sourceHash: string;
     sourceIdentity: { table: string; sourceId: number; targetSlug?: string; targetLegacyId: string }[];
-    exclusions: { table: string; sourceId: number; reason: string }[];
+    exclusions: { table: string; sourceId: number | string; reason: string }[];
     rejectedRelations: { table: string; sourceId: number; relation: string; targetId: number; reason: string }[];
     classificationCandidates: {
       table: string;
@@ -206,35 +208,71 @@ export interface SqlPublicContentResult {
 }
 
 type MappedTable = 'Institutes' | 'Programs' | 'Seminars' | 'Teachers' | 'Events' | 'Articles';
+type SourceTable = MappedTable | 'Cities' | 'News' | 'Promotions' | 'Videos' | 'OrganizationInfo' | 'FileBindingOrganizationInfo' | 'Files' | 'InstituteAdditionalInfo';
 
-function invalid(table: MappedTable, id: number | undefined, field: string, reason: string): never {
-  throw new Error(`Invalid SQL source ${table}${Number.isInteger(id) ? `#${id}` : ''}: ${field} ${reason}`);
+function invalid(table: SourceTable, id: number | string | undefined, field: string, reason: string): never {
+  throw new Error(`Invalid SQL source ${table}${id === undefined ? '' : `#${id}`}: ${field} ${reason}`);
 }
 
-function requiredString(row: Record<string, unknown>, table: MappedTable, id: number, field: string, allowEmpty = false): string {
+function requiredString(row: Record<string, unknown>, table: SourceTable, id: number | string, field: string, allowEmpty = false): string {
   const value = row[field];
   if (typeof value !== 'string' || (!allowEmpty && value.trim() === '')) invalid(table, id, field, 'must be a non-empty string');
   return value;
 }
 
-function nullableString(row: Record<string, unknown>, table: MappedTable, id: number, field: string): string | null {
+function nullableString(row: Record<string, unknown>, table: SourceTable, id: number | string, field: string): string | null {
   const value = row[field];
   if (value === null) return null;
   if (typeof value !== 'string') invalid(table, id, field, 'must be a string or null');
   return value;
 }
 
-function recordId(row: { id: number }, table: MappedTable): number {
+function recordId(row: { id: number }, table: SourceTable): number {
   if (!Number.isSafeInteger(row.id) || row.id <= 0) invalid(table, row.id, 'id', 'must be a positive integer');
   return row.id;
 }
 
-function requireUniqueIds(rows: { id: number }[], table: MappedTable): void {
+function requireUniqueIds(rows: { id: number }[], table: SourceTable): void {
   const ids = new Set<number>();
   for (const row of rows) {
     const id = recordId(row, table);
     if (ids.has(id)) invalid(table, id, 'id', 'is duplicated');
     ids.add(id);
+  }
+}
+
+function optionalRows<T>(rows: T[] | undefined, table: SourceTable): T[] {
+  if (rows === undefined) return [];
+  if (!Array.isArray(rows)) throw new Error(`Invalid SQL source ${table}: rows must be an array`);
+  return rows;
+}
+
+function activeRows<T extends { id: number; status: string }>(
+  rows: T[],
+  table: SourceTable,
+  exclusions: SqlPublicContentResult['provenance']['exclusions'],
+): T[] {
+  const active: T[] = [];
+  for (const row of rows) {
+    const id = recordId(row, table);
+    const status = requiredString(row as unknown as Record<string, unknown>, table, id, 'status');
+    if (status === 'active') {
+      active.push(row);
+    } else if (status === 'deleted') {
+      exclusions.push({ table, sourceId: id, reason: 'status is not active' });
+    } else {
+      invalid(table, id, 'status', `has unsupported value ${JSON.stringify(status)}`);
+    }
+  }
+  return active;
+}
+
+function requireUniqueStringIds(rows: { id: string }[], table: SourceTable): void {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (typeof row.id !== 'string' || row.id.trim() === '') invalid(table, row.id, 'id', 'must be a non-empty string');
+    if (ids.has(row.id)) invalid(table, row.id, 'id', 'is duplicated');
+    ids.add(row.id);
   }
 }
 
@@ -269,14 +307,14 @@ function seoFields(title: string, description: string): Record<string, string> |
   return Object.keys(seo).length ? seo : undefined;
 }
 
-function publicationDate(value: unknown, id: number): string {
-  if (typeof value !== 'string') return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+function publicationDate(value: unknown, table: 'Articles' | 'News' | 'Promotions', id: number): string {
+  if (typeof value !== 'string') return invalid(table, id, 'createdAt', 'must contain a valid SQL date');
   const match = /^(\d{4}-\d{2}-\d{2})(?:[T ](?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)?)?$/.exec(value);
-  if (!match) return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+  if (!match) return invalid(table, id, 'createdAt', 'must contain a valid SQL date');
   const day = match[1];
   const parsed = new Date(`${day}T00:00:00.000Z`);
   if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== day) {
-    return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+    return invalid(table, id, 'createdAt', 'must contain a valid SQL date');
   }
   return `${day}T00:00:00.000Z`;
 }
@@ -290,8 +328,13 @@ function sortSourceRows<T extends { sourceId: number }>(rows: T[]): T[] {
   return rows.sort((left, right) => left.sourceId - right.sourceId);
 }
 
-function sortProvenanceRows<T extends { table: string; sourceId: number }>(rows: T[]): T[] {
-  return rows.sort((left, right) => left.table.localeCompare(right.table) || left.sourceId - right.sourceId);
+function sortProvenanceRows<T extends { table: string; sourceId: number | string }>(rows: T[]): T[] {
+  return rows.sort((left, right) => {
+    const byTable = left.table.localeCompare(right.table);
+    if (byTable) return byTable;
+    if (typeof left.sourceId === 'number' && typeof right.sourceId === 'number') return left.sourceId - right.sourceId;
+    return String(left.sourceId).localeCompare(String(right.sourceId), undefined, { numeric: true });
+  });
 }
 
 export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicContentOptions): SqlPublicContentResult {
@@ -359,6 +402,119 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const instituteLegacyIds = new Map(institutes.map((item) => [item.sourceId, item.legacy_id]));
 
   const exclusions = provenance.exclusions;
+  const cityRows = optionalRows(source.Cities, 'Cities');
+  requireUniqueIds(cityRows, 'Cities');
+  const activeCities = activeRows(cityRows, 'Cities', exclusions);
+  const cityNames = new Map(activeCities.map((row) => [row.id, requiredString(row as unknown as Record<string, unknown>, 'Cities', row.id, 'name')]));
+
+  const newsRows = optionalRows(source.News, 'News');
+  requireUniqueIds(newsRows, 'News');
+  const activeNews = activeRows(newsRows, 'News', exclusions);
+  const promotionRows = optionalRows(source.Promotions, 'Promotions');
+  requireUniqueIds(promotionRows, 'Promotions');
+  const activePromotions = activeRows(promotionRows, 'Promotions', exclusions);
+  const videoRows = optionalRows(source.Videos, 'Videos');
+  requireUniqueIds(videoRows, 'Videos');
+  const activeVideos = activeRows(videoRows, 'Videos', exclusions);
+  const organizationInfoRows = optionalRows(source.OrganizationInfo, 'OrganizationInfo');
+  requireUniqueIds(organizationInfoRows, 'OrganizationInfo');
+  const activeOrganizationInfo = activeRows(organizationInfoRows, 'OrganizationInfo', exclusions);
+  const instituteAdditionalInfoRows = optionalRows(source.InstituteAdditionalInfo, 'InstituteAdditionalInfo');
+  requireUniqueIds(instituteAdditionalInfoRows, 'InstituteAdditionalInfo');
+
+  const bindingRows = optionalRows(source.FileBindingOrganizationInfo, 'FileBindingOrganizationInfo');
+  requireUniqueIds(bindingRows, 'FileBindingOrganizationInfo');
+  const fileRows = optionalRows(source.Files, 'Files');
+  requireUniqueStringIds(fileRows, 'Files');
+  for (const file of fileRows) {
+    if (file.status !== 'active' && file.status !== 'deleted') invalid('Files', file.id, 'status', `has unsupported value ${JSON.stringify(file.status)}`);
+    if (file.privacy !== 'public' && file.privacy !== 'private') invalid('Files', file.id, 'privacy', `has unsupported value ${JSON.stringify(file.privacy)}`);
+    if (file.status === 'deleted') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'status is not active' });
+    else if (file.privacy === 'private') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'privacy is not public' });
+  }
+
+  const news = activeNews.map((row) => {
+    const id = recordId(row, 'News');
+    if (!Number.isFinite(row.priority)) invalid('News', id, 'priority', 'must be numeric');
+    return {
+      sourceId: id, legacy_id: String(id), name: requiredString(row as unknown as Record<string, unknown>, 'News', id, 'name'),
+      description: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'description'),
+      imageId: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'imageId'),
+      date: publicationDate(row.createdAt, 'News', id),
+      link: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'link'), priority: row.priority,
+    };
+  });
+
+  const promotions = activePromotions.map((row) => {
+    const id = recordId(row, 'Promotions');
+    if (!Number.isFinite(row.priority)) invalid('Promotions', id, 'priority', 'must be numeric');
+    if (row.type !== 'SHOP' && row.type !== 'INSTITUTE') invalid('Promotions', id, 'type', 'must be SHOP or INSTITUTE');
+    return {
+      sourceId: id, legacy_id: String(id), name: requiredString(row as unknown as Record<string, unknown>, 'Promotions', id, 'name'),
+      description: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'description'),
+      imageId: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'imageId'),
+      date: publicationDate(row.createdAt, 'Promotions', id),
+      link: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'link'),
+      priority: row.priority, type: row.type, active: true,
+    };
+  });
+
+  const approvedVideoIds = new Set([31, 32, 33, 34, 36, 37]);
+  const videos = activeVideos.map((row) => {
+    const id = recordId(row, 'Videos');
+    if (!approvedVideoIds.has(id)) invalid('Videos', id, 'id', 'is not an approved playlist');
+    return { sourceId: id, legacy_id: `video/pleylist/${id}`, slug: String(id), title: requiredString(row as unknown as Record<string, unknown>, 'Videos', id, 'name') };
+  });
+
+  const organizationInfo = activeOrganizationInfo.map((row) => {
+    const id = recordId(row, 'OrganizationInfo');
+    if (!Number.isFinite(row.priority)) invalid('OrganizationInfo', id, 'priority', 'must be numeric');
+    return {
+      sourceId: id, legacy_id: String(id), name: requiredString(row as unknown as Record<string, unknown>, 'OrganizationInfo', id, 'name'),
+      content: nullableString(row as unknown as Record<string, unknown>, 'OrganizationInfo', id, 'content'), priority: row.priority,
+    };
+  }).sort((left, right) => left.priority - right.priority || left.sourceId - right.sourceId);
+
+  const selectedInstituteIds = new Set(institutes.map((row) => row.sourceId));
+  const instituteAdditionalInfo = instituteAdditionalInfoRows.map((row) => {
+    const id = recordId(row, 'InstituteAdditionalInfo');
+    if (!Number.isSafeInteger(row.instituteId) || row.instituteId === null || row.instituteId <= 0 || !selectedInstituteIds.has(row.instituteId)) {
+      invalid('InstituteAdditionalInfo', id, 'instituteId', 'does not resolve to a selected institute');
+    }
+    return {
+      sourceId: id, legacy_id: String(id),
+      name: nullableString(row as unknown as Record<string, unknown>, 'InstituteAdditionalInfo', id, 'name'),
+      description: nullableString(row as unknown as Record<string, unknown>, 'InstituteAdditionalInfo', id, 'description'),
+      instituteId: row.instituteId,
+    };
+  });
+
+  const organizationInfoIds = new Set(activeOrganizationInfo.map((row) => row.id));
+  const filesById = new Map(fileRows.map((row) => [row.id, row]));
+  const documents = bindingRows.map((binding) => {
+    const bindingId = recordId(binding, 'FileBindingOrganizationInfo');
+    if (!Number.isFinite(binding.priority)) invalid('FileBindingOrganizationInfo', bindingId, 'priority', 'must be numeric');
+    const title = nullableString(binding as unknown as Record<string, unknown>, 'FileBindingOrganizationInfo', bindingId, 'title');
+    const fileId = requiredString(binding as unknown as Record<string, unknown>, 'FileBindingOrganizationInfo', bindingId, 'fileId');
+    if (!Number.isSafeInteger(binding.organizationInfoId) || binding.organizationInfoId <= 0 || !organizationInfoIds.has(binding.organizationInfoId)) {
+      invalid('FileBindingOrganizationInfo', bindingId, 'organizationInfoId', 'does not resolve to an active organization section');
+    }
+    const file = filesById.get(fileId);
+    if (!file) invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to a file (${fileId})`);
+    if (file.status !== 'active') invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to an active file (${fileId})`);
+    if (file.privacy !== 'public') invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to a public file (${fileId})`);
+    if (file.fileType !== 'application/pdf' || file.extension?.toLowerCase() !== 'pdf') {
+      invalid('FileBindingOrganizationInfo', bindingId, 'fileId', `does not resolve to an approved PDF (${fileId})`);
+    }
+    return {
+      sourceId: file.id, fileId: file.id, bindingSourceId: bindingId, organizationInfoSourceId: binding.organizationInfoId,
+      title, priority: binding.priority,
+      originalName: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'originalName'),
+      extension: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'extension'),
+      fileType: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'fileType'),
+      url: requiredString(file as unknown as Record<string, unknown>, 'Files', file.id, 'url'),
+    };
+  }).sort((left, right) => left.priority - right.priority || left.bindingSourceId - right.bindingSourceId);
   const activePrograms = source.Programs.filter((row) => {
     const id = recordId(row, 'Programs');
     const status = requiredString(row as unknown as Record<string, unknown>, 'Programs', id, 'status');
@@ -503,9 +659,12 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     }).map(String))].sort((a, b) => Number(a) - Number(b));
     const legacyId = String(id);
     addIdentity('Events', id, legacyId);
+    const city = cityNames.get(row.cityId);
+    if (source.Cities !== undefined && city === undefined) invalid('Events', id, 'cityId', `does not resolve to an active city (${row.cityId})`);
     return [{
       sourceId: id, legacy_id: legacyId, seminar_legacy_id: acceptedId(options.acceptedLegacyIds, 'Seminars', row.seminarId),
-      cityId: row.cityId, imageId: nullableString(raw, 'Events', id, 'imageId'), oldPrice: row.oldPrice, newPrice: row.newPrice,
+      ...(source.Cities === undefined ? { cityId: row.cityId } : { city }),
+      imageId: nullableString(raw, 'Events', id, 'imageId'), oldPrice: row.oldPrice, newPrice: row.newPrice,
       startAt: row.startAt, endAt: row.endAt,
       additionalText: nullableString(raw, 'Events', id, 'additionalText'), duration: nullableString(raw, 'Events', id, 'duration'),
       description: nullableString(raw, 'Events', id, 'description'),
@@ -528,7 +687,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     const legacyId = acceptedId(options.acceptedLegacyIds, 'Articles', id);
     const title = requiredString(raw, 'Articles', id, 'name');
     const body = requiredString(raw, 'Articles', id, 'content', true);
-    const publishedDate = publicationDate(row.createdAt, id);
+    const publishedDate = publicationDate(row.createdAt, 'Articles', id);
     const imageId = nullableString(raw, 'Articles', id, 'imageId');
     const seo = seoFields(requiredString(raw, 'Articles', id, 'seoTitle', true), requiredString(raw, 'Articles', id, 'seoDescription', true));
     if (typeof row.priority !== 'number' || !Number.isFinite(row.priority)) invalid('Articles', id, 'priority', 'must be numeric');
@@ -557,6 +716,10 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     entities: {
       institutes: sortSourceRows(institutes), programs: sortSourceRows(programs), seminars: sortSourceRows(seminars),
       teachers: sortSourceRows(teachers), events: sortSourceRows(events), articles: sortSourceRows(articles),
+      news: news.sort((left, right) => left.priority - right.priority || left.sourceId - right.sourceId),
+      promotions: promotions.sort((left, right) => left.priority - right.priority || left.sourceId - right.sourceId),
+      videos: sortSourceRows(videos), organizationInfo, documents,
+      instituteAdditionalInfo: sortSourceRows(instituteAdditionalInfo),
     },
     provenance: {
       ...provenance,
