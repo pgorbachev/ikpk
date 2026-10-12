@@ -7,6 +7,7 @@ import {
   getCourseGroups,
   getArticles,
   formatPrice,
+  teacherPageHref,
   type ScheduleEntry,
   type SeminarTeacherRef,
   type Teacher,
@@ -171,9 +172,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         durationLabel: e.duration ? `${e.duration} ч` : '',
         teacherName: lead?.fullName?.split(',')[0].trim() || '',
         teacherPhoto: full?.photo || null,
-        teacherHref: full
-          ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
-          : null,
+        teacherHref: teacherPageHref(full),
         registrationFormLink: e.registrationFormLink || '',
       };
     });

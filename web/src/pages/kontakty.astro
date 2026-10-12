@@ -4,7 +4,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 import ContactShell from '../components/contacts/ContactShell.astro';
 import PageHeader from '../components/ui/PageHeader.astro';
 import { getPage } from '../lib/data';
-import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF, MANAGER_HOURS_NOTE } from '../lib/navigation';
+import { PHONE, PHONE_HREF, MANAGER_PHONE, MANAGER_PHONE_HREF, MANAGER_HOURS_NOTE } from '../lib/navigation';
 
 const page = getPage('kontakty');
 const title = page?.seo_title || 'Контакты — ИКПК';
@@ -15,7 +15,7 @@ const schema = {
   '@type': 'Organization',
   name: 'Институт клинической прикладной кинезиологии',
   url: 'https://ikpk.su',
-  telephone: [PHONE_HREF.replace('tel:', ''), MOBILE_PHONE_HREF.replace('tel:', '')],
+  telephone: [PHONE_HREF.replace('tel:', ''), MANAGER_PHONE_HREF.replace('tel:', '')],
   email: 'info@ikpk.su',
   address: {
     '@type': 'PostalAddress',
@@ -26,7 +26,7 @@ const schema = {
   },
   contactPoint: {
     '@type': 'ContactPoint',
-    telephone: [PHONE_HREF.replace('tel:', ''), MOBILE_PHONE_HREF.replace('tel:', '')],
+    telephone: [PHONE_HREF.replace('tel:', ''), MANAGER_PHONE_HREF.replace('tel:', '')],
     email: 'info@ikpk.su',
     contactType: 'customer service',
     availableLanguage: 'Russian',
@@ -49,18 +49,18 @@ const mapSrc = `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent('Са
         hoursWeekdays="10:00 - 18:00"
         hoursWeekend="выходной"
         institutePhone={PHONE}
-        instituteMobilePhone={MOBILE_PHONE}
+        instituteMobilePhone={MANAGER_PHONE}
         hoursNote={MANAGER_HOURS_NOTE}
         email="info@ikpk.su"
         storeUrl="https://kinezio.shop"
         clinicPhone="+7 (812) 646-54-60"
-        clinicMobilePhone={MOBILE_PHONE}
+        clinicMobilePhone={MANAGER_PHONE}
         clinicUrl="https://mudriydoctor.ru"
         requisites={[
           'ООО «Институт клинической прикладной кинезиологии»',
           'ИНН/КПП 7811351115 / 780601001, ОГРН 5067847182651.',
           'Юридический адрес: 195112, Санкт-Петербург, Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н.',
-          `Телефон: ${PHONE}, ${MOBILE_PHONE}`,
+          `Телефон: ${PHONE}, ${MANAGER_PHONE}`,
         ]}
         mapSrc={mapSrc}
         mapOpenUrl="https://yandex.ru/maps/?text=Санкт-Петербург,+Новочеркасский+пр-т,+д.+22/15"

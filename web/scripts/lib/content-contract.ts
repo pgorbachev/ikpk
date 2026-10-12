@@ -144,7 +144,9 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
     }
     for (const teacher of teachers) {
       const institute = teacher.institute ?? teacher.institute_legacy_id;
-      if (isEmpty(institute) || !instituteSlugs.has(String(institute))) {
+      // Участие в институте — необязательная relation. Если она задана, snapshot обязан
+      // ссылаться на существующий институт; отсутствие связи публикации не мешает.
+      if (!isEmpty(institute) && !instituteSlugs.has(String(institute))) {
         violations.push({ type: 'teachers', recordId: recordId(teacher), rule: 'broken-relation' });
       }
     }

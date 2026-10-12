@@ -1,0 +1,42 @@
+{
+  "collectionName": "components_seminar_document_records",
+  "info": {
+    "displayName": "Document Record",
+    "icon": "file-certificate",
+    "description": "Выдаваемый документ: документ, выдающее лицо, структурное условие получения"
+  },
+  "attributes": {
+    "document": {
+      "type": "string",
+      "required": true
+    },
+    "issuer": {
+      "type": "string",
+      "required": true
+    },
+    "prior_education": {
+      "type": "enumeration",
+      "enum": [
+        "none",
+        "medical",
+        "physical-or-pedagogical",
+        "other"
+      ]
+    },
+    "prior_education_note": {
+      "type": "text"
+    },
+    "outcome": {
+      "type": "enumeration",
+      "enum": [
+        "completed",
+        "assessment-failed",
+        "partially-completed",
+        "expelled"
+      ]
+    },
+    "basis": {
+      "type": "string"
+    }
+  }
+}

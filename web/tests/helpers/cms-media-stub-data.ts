@@ -134,6 +134,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
       records: [
         {
           ...base('teach', 'Teacher'),
+          trait: 'teacher',
           photo: stubMedia(4),
           bio: '<p>biography</p>',
           order: 0,
