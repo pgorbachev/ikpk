@@ -169,6 +169,10 @@ export interface Seminar {
   seo_description: string;
   description_html: string;
   description_text: string;
+  full_text_html?: string | null;
+  learning_mode?: string | null;
+  learning_plan?: string | null;
+  recommendations?: string | null;
   images: string[];
   /** Преподаватели семинара из каталога (не «любой с фото у института»). */
   teachers?: SeminarTeacherRef[];

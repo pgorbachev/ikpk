@@ -71,8 +71,15 @@ const scheduleRows = sortedSchedule.map((entry) => ({
     };
   }),
 }));
-const seminarBodyHtml = seminar.description_html
-  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
+const seminarBodyParts = [
+  seminar.description_html ? stripLegacySeminarTail(seminar.description_html) : '',
+  seminar.full_text_html ?? '',
+  seminar.learning_mode ? `<h2>Как проходит обучение</h2>${seminar.learning_mode}` : '',
+  seminar.learning_plan ? `<h2>Учебный план</h2>${seminar.learning_plan}` : '',
+  seminar.recommendations ?? '',
+].filter((html) => html.trim().length > 0);
+const seminarBodyHtml = seminarBodyParts.length
+  ? cleanBodyHtml(seminarBodyParts.join('\n'), Astro.url.pathname)
   : '';
 
 // Описание для схемы: у части семинаров нет ни seo-описания, ни секций (живой
