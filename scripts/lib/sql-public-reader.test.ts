@@ -77,6 +77,17 @@ function errorFootprint(error: Error): string {
   return JSON.stringify({ ownProperties, cause: record.cause, stderr: record.stderr, stack: error.stack });
 }
 
+function selectedTableQuery(sql: string, table: keyof typeof PUBLIC_COLUMNS): { columns: string[]; tail: string } {
+  const escapedTable = table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const normalized = sql.replace(/\s+/g, ' ');
+  const match = normalized.match(new RegExp(
+    `'${escapedTable}', COALESCE\\(\\(SELECT json_agg\\(r\\) FROM \\(SELECT ([\\s\\S]{1,2048}?) FROM "public"\\."${escapedTable}"([\\s\\S]{0,512}?)\\) AS r\\), '\\[\\]'::json\\)`,
+    'i',
+  ));
+  if (!match) return { columns: [], tail: '' };
+  return { columns: match[1].split(',').map((column) => column.trim()), tail: match[2] };
+}
+
 function testOptions(expectedDumpHash: string, runPsql: SqlPublicPsqlRunner) {
   return { dumpPath, expectedDumpHash, connection: { ...CONNECTION }, runPsql };
 }
@@ -149,12 +160,32 @@ describe('native SQL public source reader contract', () => {
     expect(sql).not.toMatch(/\b(?:ownerId|storageId)\b/i);
     expect(sql).not.toMatch(/\bstatus\s*=\s*'active'/i);
     for (const [table, columns] of Object.entries(PUBLIC_COLUMNS)) {
-      expect(sql).toContain(`"${table}"`);
-      for (const column of columns) expect(sql).toContain(`"${column}"`);
+      const query = selectedTableQuery(sql, table as keyof typeof PUBLIC_COLUMNS);
+      expect(query.columns).toEqual(columns.map((column) => `"${column}"`));
+      expect(query.tail).toMatch(/ORDER BY "id"/i);
     }
-    expect(sql).toMatch(/"privacy"\s*=\s*'public'/i);
+    expect(selectedTableQuery(sql, 'Files').tail).toMatch(/WHERE "privacy" = 'public'/i);
     expect(invocation.args).not.toContain('--password');
     expect(JSON.stringify(invocation)).not.toMatch(/password|PGPASSWORD/i);
+  });
+
+  it('rejects unexpected source tables or columns without leaking their contents', async () => {
+    const marker = 'SYNTHETIC_PRIVATE_COLUMN_SENTINEL';
+    const unexpected = syntheticCollections();
+    unexpected.Users = [{ email: marker }];
+    unexpected.Files[0].ownerId = marker;
+    unexpected.Files[0].storageId = marker;
+    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(unexpected));
+    const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(result).toBeInstanceOf(Error);
+    if (result instanceof Error) {
+      expect(result.message).toBe('Unable to read SQL public source');
+      expect(errorFootprint(result)).not.toContain(marker);
+    }
   });
 
   it('rechecks the dump hash after psql finishes and rejects mutation during the read', async () => {
