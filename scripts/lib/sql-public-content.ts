@@ -324,6 +324,29 @@ function publicationDate(value: unknown, table: 'Articles' | 'News' | 'Promotion
   return `${day}T00:00:00.000Z`;
 }
 
+function publicationTimestamp(value: unknown, table: 'News' | 'Promotions', id: number): string {
+  if (typeof value !== 'string') return invalid(table, id, 'createdAt', 'must contain a valid timezone-less SQL timestamp');
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.(\d+))?)?)?$/.exec(value);
+  if (!match) return invalid(table, id, 'createdAt', 'must contain a valid timezone-less SQL timestamp');
+
+  const day = match[1];
+  const parsedDay = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(parsedDay.valueOf()) || parsedDay.toISOString().slice(0, 10) !== day) {
+    return invalid(table, id, 'createdAt', 'must contain a valid SQL calendar date');
+  }
+
+  const hour = match[2] ?? '00';
+  const minute = match[3] ?? '00';
+  const second = match[4] ?? '00';
+  const milliseconds = (match[5] ?? '').slice(0, 3).padEnd(3, '0');
+  const timestamp = `${day}T${hour}:${minute}:${second}.${milliseconds}Z`;
+  const parsedTimestamp = new Date(timestamp);
+  if (Number.isNaN(parsedTimestamp.valueOf()) || parsedTimestamp.toISOString() !== timestamp) {
+    return invalid(table, id, 'createdAt', 'must contain a valid SQL clock time');
+  }
+  return timestamp;
+}
+
 function mapAudience(audience: string | null): string | undefined {
   if (audience === null || !audience.trim()) return undefined;
   return `<h2>Целевая аудитория</h2>\n${audience}`;
@@ -441,11 +464,13 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const news = activeNews.map((row) => {
     const id = recordId(row, 'News');
     if (!Number.isFinite(row.priority)) invalid('News', id, 'priority', 'must be numeric');
+    const date = publicationTimestamp(row.createdAt, 'News', id);
+    provenance.sourceMetadata.push({ table: 'News', sourceId: id, field: 'createdAt', value: row.createdAt });
     return {
       sourceId: id, legacy_id: String(id), name: requiredString(row as unknown as Record<string, unknown>, 'News', id, 'name'),
       description: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'description'),
       imageId: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'imageId'),
-      date: publicationDate(row.createdAt, 'News', id),
+      date,
       link: nullableString(row as unknown as Record<string, unknown>, 'News', id, 'link'), priority: row.priority,
     };
   });
@@ -454,11 +479,13 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     const id = recordId(row, 'Promotions');
     if (!Number.isFinite(row.priority)) invalid('Promotions', id, 'priority', 'must be numeric');
     if (row.type !== 'SHOP' && row.type !== 'INSTITUTE') invalid('Promotions', id, 'type', 'must be SHOP or INSTITUTE');
+    const date = publicationTimestamp(row.createdAt, 'Promotions', id);
+    provenance.sourceMetadata.push({ table: 'Promotions', sourceId: id, field: 'createdAt', value: row.createdAt });
     return {
       sourceId: id, legacy_id: String(id), name: requiredString(row as unknown as Record<string, unknown>, 'Promotions', id, 'name'),
       description: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'description'),
       imageId: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'imageId'),
-      date: publicationDate(row.createdAt, 'Promotions', id),
+      date,
       link: nullableString(row as unknown as Record<string, unknown>, 'Promotions', id, 'link'),
       priority: row.priority, type: row.type, active: true,
     };
