@@ -19,7 +19,7 @@ function attributesOf(name: string): string[] {
 }
 
 interface Configuration {
-  metadatas: Record<string, { edit?: { visible?: boolean } }>;
+  metadatas: Record<string, { edit?: { visible?: boolean; editable?: boolean; label?: string } }>;
   layouts: { edit: { name: string }[][] };
 }
 
@@ -59,4 +59,20 @@ test('каждое поле схемы семинара и проведения 
     const lost = attributesOf(name).filter((field) => !inForm.has(field) && !hidden.has(field));
     assert.deepEqual(lost, [], `${uid}: поля схемы, которых редактор не увидит`);
   }
+});
+
+test('изображение проведения редактируется, а исходный флаг коллекции остаётся скрытой метаданной', async () => {
+  const config = await configurations().then((saved) => saved.get('api::schedule-entry.schedule-entry'));
+  assert.ok(config, 'форма проведения не настроена — проверять нечего');
+  const inForm = new Set(config.layouts.edit.flat().map((cell) => cell.name));
+  const image = config.metadatas.image?.edit;
+  assert.equal(image?.visible, true);
+  assert.equal(image?.editable, true);
+  assert.equal(image?.label, 'Изображение');
+  assert.ok(inForm.has('image'), 'изображение проведения должно быть в форме редактора');
+
+  const collectionFlag = config.metadatas.isEventCollection?.edit;
+  assert.equal(collectionFlag?.visible, false);
+  assert.equal(collectionFlag?.editable, false);
+  assert.ok(!inForm.has('isEventCollection'), 'исходный флаг коллекции не должен добавлять новый UI');
 });

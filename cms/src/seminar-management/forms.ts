@@ -28,6 +28,7 @@ const ENTRY_FIELDS = [
   ['seminar', 'Семинар', 6, true, ''],
   ['startAt', 'Начало', 6, true, ''],
   ['endAt', 'Окончание', 6, true, ''],
+  ['image', 'Изображение', 6, true, ''],
   ['city', 'Город', 6, true, ''],
   ['entry_status', 'Статус', 6, true, ''],
   ['isFree', 'Бесплатно', 4, true, ''],
@@ -39,7 +40,8 @@ const ENTRY_FIELDS = [
   ['additionalText', 'Примечание', 12, true, ''],
 ];
 
-const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers']);
+// The approved migration carries this source flag as data without adding editor UI.
+const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers', 'isEventCollection']);
 
 function labelOf(fields, name, fallback) {
   const found = fields.find((field) => field[0] === name);
@@ -51,6 +53,7 @@ const HIDDEN_LABELS = {
   admin_label: 'Когда и где',
   legacy_id: 'Старый идентификатор',
   teachers: 'Преподаватели проведения',
+  isEventCollection: 'Исходный флаг коллекции',
 };
 
 function overlay(configuration, fields, settings, list, hidden) {
