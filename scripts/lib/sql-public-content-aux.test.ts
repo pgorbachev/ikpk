@@ -128,8 +128,8 @@ describe('mapSqlPublicContent auxiliary public collections', () => {
         { ...timestamps, id: 701, title: 'Synthetic regulation', priority: 1, fileId: 'pdf-1', organizationInfoId: 601 },
       ],
       Files: [
-        { ...timestamps, id: 'pdf-1', fileType: 'application/pdf', originalName: 'regulation.pdf', extension: 'pdf', url: '/documents/regulation.pdf', status: 'active', privacy: 'public' },
-        { ...timestamps, id: 'private-pdf', fileType: 'application/pdf', originalName: 'private.pdf', extension: 'pdf', url: '/private.pdf', status: 'active', privacy: 'private' },
+        { ...timestamps, id: 'pdf-1', fileType: 'document', originalName: 'regulation.pdf', extension: 'pdf', url: '/documents/regulation.pdf', status: 'active', privacy: 'public' },
+        { ...timestamps, id: 'private-pdf', fileType: 'document', originalName: 'private.pdf', extension: 'pdf', url: '/private.pdf', status: 'active', privacy: 'private' },
       ],
       InstituteAdditionalInfo: [
         { ...timestamps, id: 801, name: 'Supplement', description: 'Synthetic institute information', instituteId: 1 },
@@ -142,6 +142,27 @@ describe('mapSqlPublicContent auxiliary public collections', () => {
       expect.objectContaining({ sourceId: 'pdf-1', title: 'Synthetic regulation', extension: 'pdf', fileType: 'application/pdf' }),
     ]);
     expect(result.entities.instituteAdditionalInfo?.[0]).toMatchObject({ sourceId: 801, instituteId: 1 });
+  });
+
+  it.each([
+    ['image source class', { fileType: 'image' }, /approved PDF/],
+    ['non-PDF extension', { extension: 'docx' }, /approved PDF/],
+    ['private file', { privacy: 'private' }, /public file/],
+    ['disabled file', { status: 'disabled' }, /active file/],
+    ['unlinked file', { status: 'unlinked' }, /active file/],
+  ])('rejects a bound file that is not an active public PDF (%s)', (_caseName, fileOverrides, expectedError) => {
+    expect(() => map({
+      OrganizationInfo: [
+        { ...timestamps, id: 601, name: 'Synthetic section', priority: 4, content: '<p>SQL section</p>', status: 'active' },
+      ],
+      FileBindingOrganizationInfo: [
+        { ...timestamps, id: 701, title: 'Synthetic regulation', priority: 1, fileId: 'pdf-1', organizationInfoId: 601 },
+      ],
+      Files: [{
+        ...timestamps, id: 'pdf-1', fileType: 'document', originalName: 'regulation.pdf', extension: 'pdf',
+        url: '/documents/regulation.pdf', status: 'active', privacy: 'public', ...fileOverrides,
+      }],
+    })).toThrow(expectedError);
   });
 
   it('fails with the named source identity for unresolved auxiliary relations', () => {
