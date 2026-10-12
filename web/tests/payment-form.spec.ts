@@ -1317,11 +1317,11 @@ test.describe('3.15 идентификатор попытки не показы�
     );
     expect(holds.length).toBe(2);
     for (const h of holds) {
-      expect(Object.keys(h).sort(), `в удержании лишние поля: ${JSON.stringify(h)}`).toEqual([
-        'createdAt',
-        'requestId',
-      ]);
+      const keys = Object.keys(h).filter((k) => k !== 'cardPage').sort();
+      expect(keys, `в удержании лишние поля: ${JSON.stringify(h)}`).toEqual(['createdAt', 'requestId']);
+      if ('cardPage' in h) expect(h.cardPage, JSON.stringify(h)).toBe(true);
     }
+    expect(holds.filter((h) => h.cardPage === true)).toHaveLength(1);
     const persisted = await page.evaluate(() =>
       Object.keys(localStorage)
         .map((k) => `${k}=${localStorage.getItem(k) ?? ''}`)
