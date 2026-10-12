@@ -1,0 +1,516 @@
+/** Maps approved SQL source rows into public content DTOs and typed provenance. */
+
+export interface SqlInstituteRow {
+  id: number;
+  name: string;
+  shortName: string | null;
+  description: string;
+  imageId: string | null;
+}
+
+export interface SqlProgramRow {
+  id: number;
+  status: string;
+  name: string;
+  slug: string | null;
+  instituteId: number;
+  priority: number;
+  seoTitle: string;
+  seoDescription: string;
+  content: string | null;
+  imageId: string | null;
+}
+
+export interface SqlSeminarRow {
+  id: number;
+  status: string;
+  name: string;
+  slug: string | null;
+  programId: number;
+  description: string | null;
+  curriculum: string | null;
+  targetAudience: string | null;
+  learningProcess: string | null;
+  certificates: string | null;
+  recommendations: string | null;
+  priority: number;
+  seoTitle: string;
+  seoDescription: string;
+}
+
+export interface SqlTeacherRow {
+  id: number;
+  status: string;
+  fullName: string;
+  description: string;
+  imageId: string | null;
+  priority: number;
+}
+
+export interface SqlEventRow {
+  id: number;
+  status: string;
+  seminarId: number;
+  cityId: number;
+  imageId: string | null;
+  teacherId: number | null;
+  oldPrice: number | null;
+  newPrice: number;
+  startAt: string;
+  endAt: string;
+  additionalText: string | null;
+  duration: string | null;
+  description: string | null;
+  registrationFormLink: string | null;
+  isFree: boolean;
+  isEventCollection: boolean;
+}
+
+export interface SqlArticleRow {
+  id: number;
+  status: string;
+  name: string;
+  imageId: string | null;
+  content: string;
+  author: string;
+  priority: number;
+  seoTitle: string;
+  seoDescription: string;
+  slug: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SqlPublicSource {
+  /** Hash of the pinned source artifact, supplied by its reader. */
+  sourceHash: string;
+  Institutes: SqlInstituteRow[];
+  Programs: SqlProgramRow[];
+  Seminars: SqlSeminarRow[];
+  Teachers: SqlTeacherRow[];
+  TeachersAndInstitutes: { teacherId: number; instituteId: number }[];
+  SeminarsTeacher: { seminarId: number; teacherId: number }[];
+  Events: SqlEventRow[];
+  EventsAndTeachers: { eventId: number; teacherId: number }[];
+  Articles: SqlArticleRow[];
+}
+
+export interface SqlPublicContentOptions {
+  /** Expected SHA-256 for the pinned baseline; mismatch must stop mapping. */
+  expectedSourceHash: string;
+  /** Existing accepted slug / legacy identity, keyed by source table and numeric SQL id. */
+  acceptedLegacyIds: Partial<Record<
+    'Institutes' | 'Programs' | 'Seminars' | 'Teachers' | 'Articles',
+    Readonly<Record<number, string>>
+  >>;
+  /** Provisional, source-ID anchored labels; these are not owner approvals. */
+  classificationCandidates?: {
+    teachers?: { sourceId: number; trait: 'teacher' | 'method-author' }[];
+    articles?: { sourceId: number; sourceProgramIds: number[] }[];
+  };
+}
+
+export interface SqlPublicEntity {
+  sourceId: number;
+  legacy_id: string;
+  [field: string]: unknown;
+}
+
+export interface SqlSluggedPublicEntity extends SqlPublicEntity {
+  slug: string;
+}
+
+export interface SqlPublicContentResult {
+  entities: {
+    institutes: SqlSluggedPublicEntity[];
+    programs: SqlSluggedPublicEntity[];
+    seminars: SqlSluggedPublicEntity[];
+    teachers: SqlSluggedPublicEntity[];
+    events: SqlPublicEntity[];
+    articles: SqlSluggedPublicEntity[];
+  };
+  provenance: {
+    sourceHash: string;
+    sourceIdentity: { table: string; sourceId: number; targetSlug?: string; targetLegacyId: string }[];
+    exclusions: { table: string; sourceId: number; reason: string }[];
+    rejectedRelations: { table: string; sourceId: number; relation: string; targetId: number; reason: string }[];
+    classificationCandidates: {
+      table: string;
+      sourceId: number;
+      sourceProgramId?: number;
+      targetLegacyId?: string;
+      value?: string;
+      approval: 'pending';
+    }[];
+    sourceMetadata: {
+      table: string;
+      sourceId: number;
+      field: 'certificates' | 'author' | 'priority' | 'teacherId';
+      value: string | number | null;
+    }[];
+  };
+}
+
+type MappedTable = 'Institutes' | 'Programs' | 'Seminars' | 'Teachers' | 'Events' | 'Articles';
+
+function invalid(table: MappedTable, id: number | undefined, field: string, reason: string): never {
+  throw new Error(`Invalid SQL source ${table}${Number.isInteger(id) ? `#${id}` : ''}: ${field} ${reason}`);
+}
+
+function requiredString(row: Record<string, unknown>, table: MappedTable, id: number, field: string, allowEmpty = false): string {
+  const value = row[field];
+  if (typeof value !== 'string' || (!allowEmpty && value.trim() === '')) invalid(table, id, field, 'must be a non-empty string');
+  return value;
+}
+
+function nullableString(row: Record<string, unknown>, table: MappedTable, id: number, field: string): string | null {
+  const value = row[field];
+  if (value === null) return null;
+  if (typeof value !== 'string') invalid(table, id, field, 'must be a string or null');
+  return value;
+}
+
+function recordId(row: { id: number }, table: MappedTable): number {
+  if (!Number.isSafeInteger(row.id) || row.id <= 0) invalid(table, row.id, 'id', 'must be a positive integer');
+  return row.id;
+}
+
+function requireUniqueIds(rows: { id: number }[], table: MappedTable): void {
+  const ids = new Set<number>();
+  for (const row of rows) {
+    const id = recordId(row, table);
+    if (ids.has(id)) invalid(table, id, 'id', 'is duplicated');
+    ids.add(id);
+  }
+}
+
+function acceptedId(
+  accepted: SqlPublicContentOptions['acceptedLegacyIds'],
+  table: 'Institutes' | 'Programs' | 'Seminars' | 'Articles',
+  id: number,
+): string {
+  const value = accepted[table]?.[id];
+  if (typeof value !== 'string' || !value.trim()) invalid(table, id, 'acceptedLegacyIds', 'has no accepted target identity');
+  return value;
+}
+
+function requireUniqueTargets(
+  accepted: SqlPublicContentOptions['acceptedLegacyIds'],
+  table: 'Institutes' | 'Programs' | 'Seminars' | 'Articles',
+): void {
+  const seen = new Map<string, number>();
+  for (const [idText, value] of Object.entries(accepted[table] ?? {})) {
+    const id = Number(idText);
+    if (typeof value !== 'string' || !value.trim()) invalid(table, id, 'acceptedLegacyIds', 'has no accepted target identity');
+    const previousId = seen.get(value);
+    if (previousId !== undefined) invalid(table, id, `acceptedLegacyIds`, `duplicates target identity for source record #${previousId}`);
+    seen.set(value, id);
+  }
+}
+
+function seoFields(title: string, description: string): Record<string, string> | undefined {
+  const seo: Record<string, string> = {};
+  if (title.trim()) seo.seo_title = title;
+  if (description.trim()) seo.seo_description = description;
+  return Object.keys(seo).length ? seo : undefined;
+}
+
+function publicationDate(value: unknown, id: number): string {
+  if (typeof value !== 'string') return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ](?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)?)?$/.exec(value);
+  if (!match) return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+  const day = match[1];
+  const parsed = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== day) {
+    return invalid('Articles', id, 'createdAt', 'must contain a valid SQL date');
+  }
+  return `${day}T00:00:00.000Z`;
+}
+
+function mapAudience(audience: string | null): string | undefined {
+  if (audience === null || !audience.trim()) return undefined;
+  return `<h2>Целевая аудитория</h2>\n${audience}`;
+}
+
+function sortSourceRows<T extends { sourceId: number }>(rows: T[]): T[] {
+  return rows.sort((left, right) => left.sourceId - right.sourceId);
+}
+
+function sortProvenanceRows<T extends { table: string; sourceId: number }>(rows: T[]): T[] {
+  return rows.sort((left, right) => left.table.localeCompare(right.table) || left.sourceId - right.sourceId);
+}
+
+export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicContentOptions): SqlPublicContentResult {
+  if (!/^sha256:[a-f\d]{64}$/i.test(options.expectedSourceHash)) {
+    throw new Error('Invalid expected SQL source hash: expected sha256 and 64 hexadecimal characters');
+  }
+  if (source.sourceHash !== options.expectedSourceHash) throw new Error('SQL source hash does not match the pinned baseline');
+
+  const instituteIds = Object.keys(options.acceptedLegacyIds.Institutes ?? {}).map(Number).sort((a, b) => a - b);
+  if (instituteIds.join(',') !== '1,2,3') {
+    throw new Error('Invalid SQL source Institutes: acceptedLegacyIds must select source IDs 1, 2, and 3');
+  }
+  for (const table of ['Institutes', 'Programs', 'Seminars', 'Articles'] as const) requireUniqueTargets(options.acceptedLegacyIds, table);
+
+  const tables: [MappedTable, { id: number }[]][] = [
+    ['Institutes', source.Institutes], ['Programs', source.Programs], ['Seminars', source.Seminars],
+    ['Teachers', source.Teachers], ['Events', source.Events], ['Articles', source.Articles],
+  ];
+  for (const [table, rows] of tables) {
+    if (!Array.isArray(rows)) throw new Error(`Invalid SQL source ${table}: rows must be an array`);
+    requireUniqueIds(rows, table);
+  }
+  for (const [name, rows] of [
+    ['TeachersAndInstitutes', source.TeachersAndInstitutes],
+    ['SeminarsTeacher', source.SeminarsTeacher],
+    ['EventsAndTeachers', source.EventsAndTeachers],
+  ] as const) {
+    if (!Array.isArray(rows)) throw new Error(`Invalid SQL source ${name}: rows must be an array`);
+    for (const relation of rows) {
+      if (!Number.isSafeInteger(relation.teacherId) || relation.teacherId <= 0) {
+        throw new Error(`Invalid SQL source ${name}: teacherId must be a positive integer`);
+      }
+      const parentId = 'instituteId' in relation ? relation.instituteId : 'seminarId' in relation ? relation.seminarId : relation.eventId;
+      if (!Number.isSafeInteger(parentId) || parentId <= 0) throw new Error(`Invalid SQL source ${name}: parent ID must be a positive integer`);
+    }
+  }
+
+  const provenance: SqlPublicContentResult['provenance'] = {
+    sourceHash: source.sourceHash,
+    sourceIdentity: [], exclusions: [], rejectedRelations: [], classificationCandidates: [], sourceMetadata: [],
+  };
+  const addIdentity = (table: MappedTable, id: number, targetLegacyId: string, targetSlug?: string): void => {
+    provenance.sourceIdentity.push({ table, sourceId: id, ...(targetSlug === undefined ? {} : { targetSlug }), targetLegacyId });
+  };
+  const addMetadata = (
+    table: MappedTable, id: number, field: 'certificates' | 'author' | 'priority' | 'teacherId', value: string | number | null,
+  ): void => { provenance.sourceMetadata.push({ table, sourceId: id, field, value }); };
+
+  const selectedInstitutes = source.Institutes.filter((row) => Object.hasOwn(options.acceptedLegacyIds.Institutes ?? {}, row.id));
+  for (const id of Object.keys(options.acceptedLegacyIds.Institutes ?? {})) {
+    if (!source.Institutes.some((row) => row.id === Number(id))) invalid('Institutes', Number(id), 'source row', 'is missing for an accepted target identity');
+  }
+  const institutes = selectedInstitutes.map((row) => {
+    const id = recordId(row, 'Institutes');
+    const raw = row as unknown as Record<string, unknown>;
+    const legacyId = acceptedId(options.acceptedLegacyIds, 'Institutes', id);
+    const slug = legacyId.split('/').at(-1)!;
+    const name = requiredString(raw, 'Institutes', id, 'name');
+    const shortName = nullableString(raw, 'Institutes', id, 'shortName');
+    const description = requiredString(raw, 'Institutes', id, 'description', true);
+    const imageId = nullableString(raw, 'Institutes', id, 'imageId');
+    addIdentity('Institutes', id, legacyId, slug);
+    return { sourceId: id, legacy_id: legacyId, slug, name, shortName, description, imageId };
+  });
+  const instituteLegacyIds = new Map(institutes.map((item) => [item.sourceId, item.legacy_id]));
+
+  const exclusions = provenance.exclusions;
+  const activePrograms = source.Programs.filter((row) => {
+    const id = recordId(row, 'Programs');
+    const status = requiredString(row as unknown as Record<string, unknown>, 'Programs', id, 'status');
+    if (status === 'active') return true;
+    exclusions.push({ table: 'Programs', sourceId: id, reason: 'status is not active' });
+    return false;
+  });
+  const programs = activePrograms.map((row) => {
+    const id = recordId(row, 'Programs');
+    const raw = row as unknown as Record<string, unknown>;
+    const slug = requiredString(raw, 'Programs', id, 'slug');
+    const instituteLegacyId = instituteLegacyIds.get(row.instituteId);
+    if (!instituteLegacyId) invalid('Programs', id, 'instituteId', 'does not resolve to a selected institute');
+    const legacyId = acceptedId(options.acceptedLegacyIds, 'Programs', id);
+    const name = requiredString(raw, 'Programs', id, 'name');
+    const description = nullableString(raw, 'Programs', id, 'content');
+    const imageId = nullableString(raw, 'Programs', id, 'imageId');
+    const seo = seoFields(requiredString(raw, 'Programs', id, 'seoTitle', true), requiredString(raw, 'Programs', id, 'seoDescription', true));
+    if (typeof row.priority !== 'number' || !Number.isFinite(row.priority)) invalid('Programs', id, 'priority', 'must be numeric');
+    addMetadata('Programs', id, 'priority', row.priority);
+    addIdentity('Programs', id, legacyId, slug);
+    return { sourceId: id, legacy_id: legacyId, slug, name, description, imageId, order: row.priority, institute_legacy_id: instituteLegacyId, is_article_category: true, ...(seo ? { seo } : {}) };
+  });
+  const programLegacyIds = new Map(programs.map((item) => [item.sourceId, item.legacy_id]));
+
+  const activeTeachers = source.Teachers.filter((row) => {
+    const id = recordId(row, 'Teachers');
+    const status = requiredString(row as unknown as Record<string, unknown>, 'Teachers', id, 'status');
+    if (status === 'active') return true;
+    exclusions.push({ table: 'Teachers', sourceId: id, reason: 'status is not active' });
+    return false;
+  });
+  const activeTeacherIds = new Set(activeTeachers.map((row) => row.id));
+  const teacherInstituteLinks = new Map<number, number[]>();
+  for (const relation of source.TeachersAndInstitutes) {
+    if (!activeTeacherIds.has(relation.teacherId)) continue;
+    const links = teacherInstituteLinks.get(relation.teacherId) ?? [];
+    links.push(relation.instituteId);
+    teacherInstituteLinks.set(relation.teacherId, links);
+  }
+  const teachers = activeTeachers.map((row) => {
+    const id = recordId(row, 'Teachers');
+    const raw = row as unknown as Record<string, unknown>;
+    const name = requiredString(raw, 'Teachers', id, 'fullName');
+    const bio = requiredString(raw, 'Teachers', id, 'description', true);
+    const imageId = nullableString(raw, 'Teachers', id, 'imageId');
+    const links = teacherInstituteLinks.get(id) ?? [];
+    if (links.length > 1) invalid('Teachers', id, 'TeachersAndInstitutes', 'must contain at most one institute relation');
+    let instituteLegacyId: string | undefined;
+    if (links.length === 1) {
+      instituteLegacyId = instituteLegacyIds.get(links[0]);
+      if (!instituteLegacyId) invalid('Teachers', id, 'TeachersAndInstitutes', 'does not resolve to a selected institute');
+    }
+    if (typeof row.priority !== 'number' || !Number.isFinite(row.priority)) invalid('Teachers', id, 'priority', 'must be numeric');
+    addMetadata('Teachers', id, 'priority', row.priority);
+    const targetId = String(id);
+    addIdentity('Teachers', id, targetId, targetId);
+    return { sourceId: id, legacy_id: targetId, slug: targetId, name, bio, imageId, order: row.priority, ...(instituteLegacyId ? { institute_legacy_id: instituteLegacyId } : {}) };
+  });
+  const activeTeacherSet = new Set(teachers.map((item) => item.sourceId));
+
+  const seminarTeacherLinks = new Map<number, number[]>();
+  for (const relation of source.SeminarsTeacher) {
+    const links = seminarTeacherLinks.get(relation.seminarId) ?? [];
+    links.push(relation.teacherId);
+    seminarTeacherLinks.set(relation.seminarId, links);
+  }
+  const activeSeminars = source.Seminars.filter((row) => {
+    const id = recordId(row, 'Seminars');
+    const status = requiredString(row as unknown as Record<string, unknown>, 'Seminars', id, 'status');
+    if (status === 'active') return true;
+    exclusions.push({ table: 'Seminars', sourceId: id, reason: 'status is not active' });
+    return false;
+  });
+  const seminars = activeSeminars.map((row) => {
+    const id = recordId(row, 'Seminars');
+    const raw = row as unknown as Record<string, unknown>;
+    const slug = requiredString(raw, 'Seminars', id, 'slug');
+    const programLegacyId = programLegacyIds.get(row.programId);
+    if (!programLegacyId) invalid('Seminars', id, 'programId', 'does not resolve to an active program');
+    const legacyId = acceptedId(options.acceptedLegacyIds, 'Seminars', id);
+    const directTeachers = [...new Set((seminarTeacherLinks.get(id) ?? []).filter((teacherId) => {
+      if (activeTeacherSet.has(teacherId)) return true;
+      provenance.rejectedRelations.push({ table: 'SeminarsTeacher', sourceId: id, relation: 'teacherId', targetId: teacherId, reason: 'teacher is not active' });
+      return false;
+    }).map(String))].sort((a, b) => Number(a) - Number(b));
+    const curriculum = nullableString(raw, 'Seminars', id, 'curriculum');
+    const audience = nullableString(raw, 'Seminars', id, 'targetAudience');
+    const learningProcess = nullableString(raw, 'Seminars', id, 'learningProcess');
+    const recommendations = nullableString(raw, 'Seminars', id, 'recommendations');
+    const certificates = nullableString(raw, 'Seminars', id, 'certificates');
+    const seo = seoFields(requiredString(raw, 'Seminars', id, 'seoTitle', true), requiredString(raw, 'Seminars', id, 'seoDescription', true));
+    const fullText = mapAudience(audience);
+    if (typeof row.priority !== 'number' || !Number.isFinite(row.priority)) invalid('Seminars', id, 'priority', 'must be numeric');
+    addMetadata('Seminars', id, 'priority', row.priority);
+    if (certificates !== null) addMetadata('Seminars', id, 'certificates', certificates);
+    addIdentity('Seminars', id, legacyId, slug);
+    return {
+      sourceId: id, legacy_id: legacyId, slug,
+      name: requiredString(raw, 'Seminars', id, 'name'),
+      description: nullableString(raw, 'Seminars', id, 'description'),
+      course_group_legacy_id: programLegacyId, directTeachers,
+      ...(fullText ? { full_text: fullText } : {}),
+      ...(curriculum === null ? {} : { learning_mode: curriculum }),
+      ...(learningProcess === null ? {} : { learning_plan: learningProcess }),
+      ...(recommendations === null ? {} : { recommendations }),
+      documents_state: 'unconfirmed', order: row.priority, ...(seo ? { seo } : {}),
+    };
+  });
+  const seminarById = new Map(source.Seminars.map((row) => [row.id, row]));
+  const activeSeminarSet = new Set(seminars.map((item) => item.sourceId));
+
+  const eventTeacherLinks = new Map<number, number[]>();
+  for (const relation of source.EventsAndTeachers) {
+    const links = eventTeacherLinks.get(relation.eventId) ?? [];
+    links.push(relation.teacherId);
+    eventTeacherLinks.set(relation.eventId, links);
+  }
+  const events = source.Events.flatMap((row) => {
+    const id = recordId(row, 'Events');
+    const status = requiredString(row as unknown as Record<string, unknown>, 'Events', id, 'status');
+    if (status !== 'active') {
+      exclusions.push({ table: 'Events', sourceId: id, reason: 'status is not active' });
+      return [];
+    }
+    if (!seminarById.has(row.seminarId)) invalid('Events', id, 'seminarId', 'does not resolve to a source seminar');
+    if (!activeSeminarSet.has(row.seminarId)) {
+      exclusions.push({ table: 'Events', sourceId: id, reason: `parent seminar ${row.seminarId} is not active` });
+      return [];
+    }
+    const raw = row as unknown as Record<string, unknown>;
+    if (typeof row.startAt !== 'string' || !row.startAt || typeof row.endAt !== 'string' || !row.endAt) invalid('Events', id, 'startAt/endAt', 'must be non-empty SQL values');
+    if (typeof row.cityId !== 'number' || !Number.isSafeInteger(row.cityId) || row.cityId <= 0) invalid('Events', id, 'cityId', 'must be a positive integer');
+    if (typeof row.newPrice !== 'number' || !Number.isFinite(row.newPrice)) invalid('Events', id, 'newPrice', 'must be numeric');
+    if (typeof row.isFree !== 'boolean' || typeof row.isEventCollection !== 'boolean') invalid('Events', id, 'flags', 'must be boolean');
+    if (row.teacherId !== null && (!Number.isSafeInteger(row.teacherId) || row.teacherId <= 0)) invalid('Events', id, 'teacherId', 'must be a positive integer or null');
+    if (row.teacherId !== null) addMetadata('Events', id, 'teacherId', row.teacherId);
+    const primaryTeachers = [...new Set((eventTeacherLinks.get(id) ?? []).filter((teacherId) => {
+      if (activeTeacherSet.has(teacherId)) return true;
+      provenance.rejectedRelations.push({ table: 'EventsAndTeachers', sourceId: id, relation: 'teacherId', targetId: teacherId, reason: 'teacher is not active' });
+      return false;
+    }).map(String))].sort((a, b) => Number(a) - Number(b));
+    const legacyId = String(id);
+    addIdentity('Events', id, legacyId);
+    return [{
+      sourceId: id, legacy_id: legacyId, seminar_legacy_id: acceptedId(options.acceptedLegacyIds, 'Seminars', row.seminarId),
+      cityId: row.cityId, imageId: nullableString(raw, 'Events', id, 'imageId'), oldPrice: row.oldPrice, newPrice: row.newPrice,
+      startAt: row.startAt, endAt: row.endAt,
+      additionalText: nullableString(raw, 'Events', id, 'additionalText'), duration: nullableString(raw, 'Events', id, 'duration'),
+      description: nullableString(raw, 'Events', id, 'description'),
+      registrationFormLink: nullableString(raw, 'Events', id, 'registrationFormLink'),
+      isFree: row.isFree, isEventCollection: row.isEventCollection, primaryTeachers,
+    }];
+  });
+
+  const activeArticles = source.Articles.filter((row) => {
+    const id = recordId(row, 'Articles');
+    const status = requiredString(row as unknown as Record<string, unknown>, 'Articles', id, 'status');
+    if (status === 'active') return true;
+    exclusions.push({ table: 'Articles', sourceId: id, reason: 'status is not active' });
+    return false;
+  });
+  const articles = activeArticles.map((row) => {
+    const id = recordId(row, 'Articles');
+    const raw = row as unknown as Record<string, unknown>;
+    const slug = requiredString(raw, 'Articles', id, 'slug');
+    const legacyId = acceptedId(options.acceptedLegacyIds, 'Articles', id);
+    const title = requiredString(raw, 'Articles', id, 'name');
+    const body = requiredString(raw, 'Articles', id, 'content', true);
+    const publishedDate = publicationDate(row.createdAt, id);
+    const imageId = nullableString(raw, 'Articles', id, 'imageId');
+    const seo = seoFields(requiredString(raw, 'Articles', id, 'seoTitle', true), requiredString(raw, 'Articles', id, 'seoDescription', true));
+    if (typeof row.priority !== 'number' || !Number.isFinite(row.priority)) invalid('Articles', id, 'priority', 'must be numeric');
+    addMetadata('Articles', id, 'priority', row.priority);
+    addMetadata('Articles', id, 'author', requiredString(raw, 'Articles', id, 'author', true));
+    addIdentity('Articles', id, legacyId, slug);
+    return { sourceId: id, legacy_id: legacyId, slug, title, body, imageId, published_date: publishedDate, ...(seo ? { seo } : {}) };
+  });
+
+  for (const candidate of options.classificationCandidates?.teachers ?? []) {
+    if (!activeTeacherSet.has(candidate.sourceId)) invalid('Teachers', candidate.sourceId, 'classification candidate', 'does not reference an active teacher');
+    provenance.classificationCandidates.push({ table: 'Teachers', sourceId: candidate.sourceId, value: candidate.trait, approval: 'pending' });
+  }
+  const activeArticleIds = new Set(articles.map((item) => item.sourceId));
+  for (const candidate of options.classificationCandidates?.articles ?? []) {
+    if (!activeArticleIds.has(candidate.sourceId)) invalid('Articles', candidate.sourceId, 'classification candidate', 'does not reference an active article');
+    if (!Array.isArray(candidate.sourceProgramIds) || candidate.sourceProgramIds.length === 0) invalid('Articles', candidate.sourceId, 'sourceProgramIds', 'must identify an active program');
+    for (const programId of [...new Set(candidate.sourceProgramIds)].sort((a, b) => a - b)) {
+      const legacyId = programLegacyIds.get(programId);
+      if (!legacyId) invalid('Articles', candidate.sourceId, 'sourceProgramIds', 'contains a program without an active target identity');
+      provenance.classificationCandidates.push({ table: 'Articles', sourceId: candidate.sourceId, sourceProgramId: programId, targetLegacyId: legacyId, approval: 'pending' });
+    }
+  }
+
+  return {
+    entities: {
+      institutes: sortSourceRows(institutes), programs: sortSourceRows(programs), seminars: sortSourceRows(seminars),
+      teachers: sortSourceRows(teachers), events: sortSourceRows(events), articles: sortSourceRows(articles),
+    },
+    provenance: {
+      ...provenance,
+      sourceIdentity: provenance.sourceIdentity.sort((a, b) => a.table.localeCompare(b.table) || a.sourceId - b.sourceId),
+      exclusions: sortProvenanceRows(provenance.exclusions),
+      rejectedRelations: provenance.rejectedRelations.sort((a, b) => a.table.localeCompare(b.table) || a.sourceId - b.sourceId || a.targetId - b.targetId),
+      classificationCandidates: provenance.classificationCandidates.sort((a, b) => a.table.localeCompare(b.table) || a.sourceId - b.sourceId || (a.sourceProgramId ?? 0) - (b.sourceProgramId ?? 0)),
+      sourceMetadata: provenance.sourceMetadata.sort((a, b) => a.table.localeCompare(b.table) || a.sourceId - b.sourceId || a.field.localeCompare(b.field)),
+    },
+  };
+}
