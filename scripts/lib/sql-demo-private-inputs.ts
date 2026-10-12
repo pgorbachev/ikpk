@@ -14,6 +14,7 @@ export const SQL_DEMO_PRIVATE_JSON_NAMES = [
   'public-schema-inventory.json',
   'content-media-manifest.json',
   'demo-owner-decisions.json',
+  'video-source-reference-decisions.json',
 ] as const;
 
 export type SqlDemoPrivateJsonName = typeof SQL_DEMO_PRIVATE_JSON_NAMES[number];
