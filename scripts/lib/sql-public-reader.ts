@@ -176,17 +176,14 @@ type ReaderTable = keyof typeof TABLE_COLUMNS;
 const NULLABLE_COLUMNS: Partial<Record<ReaderTable, readonly string[]>> = {
   Articles: ['imageId', 'slug'],
   Events: ['imageId', 'teacherId', 'oldPrice', 'additionalText', 'duration', 'description', 'registrationFormLink'],
-  FileBindingOrganizationInfo: ['title'],
-  Files: ['fileType', 'originalName', 'extension', 'url'],
-  InstituteAdditionalInfo: ['name', 'description', 'instituteId'],
-  Institutes: ['imageId', 'shortName'],
-  News: ['name', 'description', 'imageId', 'link'],
-  OrganizationInfo: ['name', 'content'],
+  Files: ['fileType'],
+  Institutes: ['shortName'],
+  News: ['imageId', 'link'],
   Programs: ['imageId', 'slug', 'content'],
-  Promotions: ['name', 'description', 'imageId', 'link', 'type'],
+  Promotions: ['imageId', 'link'],
   Seminars: ['description', 'curriculum', 'targetAudience', 'learningProcess', 'certificates', 'recommendations', 'slug'],
   Teachers: ['imageId'],
-  Videos: ['name', 'link', 'imageId'],
+  Videos: ['imageId'],
 };
 
 const execFileAsync = promisify(execFile);
@@ -211,6 +208,7 @@ async function runNativePsql(invocation: SqlPublicPsqlInvocation): Promise<strin
   const result = await execFileAsync(invocation.command, [...invocation.args], {
     encoding: 'utf8',
     maxBuffer: MAX_PSQL_OUTPUT_BYTES,
+    timeout: 30_000,
   });
   return result.stdout;
 }
@@ -269,8 +267,18 @@ function genericReadError(): Error {
   return new Error('Unable to read SQL public source');
 }
 
+function isConnectionString(database: string): boolean {
+  const candidate = database.trimStart();
+  return /^(?:postgres|postgresql):\/\//i.test(candidate)
+    || /^[a-z_][a-z0-9_]*\s*=/i.test(candidate);
+}
+
 /** Reads only the reviewed public source projection in one native read-only transaction. */
 export async function readSqlPublicSource(options: SqlPublicReaderOptions): Promise<SqlPublicReaderResult> {
+  if (typeof options.connection?.database !== 'string' || isConnectionString(options.connection.database)) {
+    throw genericReadError();
+  }
+
   if (typeof options.expectedDumpHash !== 'string' || !/^[a-f0-9]{64}$/.test(options.expectedDumpHash)) {
     throw new Error('Expected dump hash must be 64 hexadecimal characters');
   }
