@@ -218,9 +218,9 @@ describe('composeSqlDemoRelease', () => {
   it('replaces only mapped Radix panels in SQL priority order, retains empty-section document anchors and cleans through the established boundary', async () => {
     const organizationVideo = {
       sourceTable: 'OrganizationInfo' as const, sourceId: 601, field: 'content' as const,
-      originalURL: 'https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666',
+      originalURL: 'https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef',
       action: 'rutube-trailing-slash' as const,
-      expectedOutput: '<iframe src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/"></iframe>',
+      expectedOutput: '<iframe src="https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef/"></iframe>',
     };
     const input = sqlWithOrganizationAndDocuments();
     input.entities.organizationInfo![0].content = `<p>SQL education replacement</p><iframe src="${organizationVideo.originalURL}"></iframe>`;
@@ -241,7 +241,7 @@ describe('composeSqlDemoRelease', () => {
     expect(cleanBody).toContain('id="section-2"');
     expect(cleanBody).toContain('id="section-3"');
     expect(cleanBody).toContain('SQL education replacement');
-    expect(cleanBody).toContain('src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/"');
+    expect(cleanBody).toContain('src="https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef/"');
     expect(cleanBody).not.toContain('Accepted education body');
     expect(cleanBody).not.toContain('Accepted documents body');
     expect(cleanBody.indexOf('First synthetic document')).toBeGreaterThan(cleanBody.indexOf('id="section-1"'));
