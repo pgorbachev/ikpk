@@ -171,9 +171,13 @@ function seoComponent(entity: RecordValue, table: SourceTable): RecordValue {
   return { seo_title: seo.seo_title, seo_description: seo.seo_description };
 }
 
-function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, options: SqlMaterializerOptions): EntityPlan[] {
+function entityPlans(
+  mapped: SqlMaterializerInput | SqlPublicContentResult,
+  classification: SqlMaterializerOptions['classification'],
+  allowNullableProgramDescription = false,
+): EntityPlan[] {
   const teacherClassification = new Map<number, 'teacher' | 'method-author'>();
-  for (const candidate of options.classification.teachers) {
+  for (const candidate of classification.teachers) {
     if (!['teacher', 'method-author'].includes(candidate.trait)) throw new Error(`Teachers#${candidate.sourceId}: classification trait is unsupported`);
     if (teacherClassification.has(candidate.sourceId)) throw new Error(`Teachers#${candidate.sourceId}: classification is duplicated`);
     teacherClassification.set(candidate.sourceId, candidate.trait);
@@ -187,7 +191,7 @@ function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, opti
   }
 
   const articleClassification = new Map<number, readonly number[]>();
-  for (const candidate of options.classification.articles) {
+  for (const candidate of classification.articles) {
     if (articleClassification.has(candidate.sourceId)) throw new Error(`Articles#${candidate.sourceId}: classification is duplicated`);
     if (!candidate.sourceProgramIds.length) throw new Error(`Articles#${candidate.sourceId}: classification categories are missing`);
     articleClassification.set(candidate.sourceId, candidate.sourceProgramIds);
@@ -226,7 +230,9 @@ function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, opti
       data: {
         name: requiredString(entity, table, 'name'),
         slug: requiredString(entity, table, 'slug'),
-        description: requiredString(entity, table, 'description'),
+        description: allowNullableProgramDescription
+          ? nullableString(entity, table, 'description')
+          : requiredString(entity, table, 'description'),
         order: requiredInteger(entity, table, 'order'),
         legacy_id: legacyId,
         is_article_category: requiredBoolean(entity, table, 'is_article_category'),
@@ -411,6 +417,39 @@ function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, opti
     });
   }
   return plans;
+}
+
+/** The public projection used by both materialization and the read-only conservation check. */
+export interface SqlMaterializerProjectionRecord {
+  collection: Collection;
+  sourceTable: SourceTable;
+  sourceId?: number;
+  legacyId: string;
+  attributes: Record<string, unknown>;
+  image?: { field: 'image' | 'photo'; sourceId: string | null };
+  relations: { field: string; cardinality: 'single' | 'many'; optional?: boolean; legacyIds: readonly string[]; collection: Collection }[];
+}
+
+/** Derives the exact public fields and logical relations without resolving or writing media. */
+export function projectSqlPublicContentForConservation(
+  mapped: SqlMaterializerInput | SqlPublicContentResult,
+  classification: SqlMaterializerOptions['classification'],
+): SqlMaterializerProjectionRecord[] {
+  return entityPlans(mapped, classification, true).map((plan) => ({
+    collection: plan.collection,
+    sourceTable: plan.sourceTable,
+    ...(Number.isSafeInteger(plan.entity.sourceId) ? { sourceId: plan.entity.sourceId as number } : {}),
+    legacyId: plan.legacyId,
+    attributes: { ...plan.data },
+    ...(plan.imageField ? { image: { field: plan.imageField, sourceId: plan.imageSourceId ?? null } } : {}),
+    relations: plan.relations.map((relation) => ({
+      field: relation.field,
+      cardinality: relation.cardinality,
+      ...(relation.optional ? { optional: true } : {}),
+      legacyIds: relation.targets.map((target) => target.legacyId),
+      collection: relation.targets[0]?.collection ?? (relation.field === 'institute' ? 'institutes' : 'teachers'),
+    })),
+  }));
 }
 
 function requestData(response: unknown, context: string): unknown {
@@ -697,7 +736,7 @@ export async function materializeSqlPublicContent(
   if (options.classification.status !== 'pending-confirmation') throw new Error('SQL classification must remain pending-confirmation');
 
   // Validate source-ID coverage and every required public projection before the first target write.
-  const plans = entityPlans(mapped, options);
+  const plans = entityPlans(mapped, options.classification);
   const existing = await preflightPlans(plans, options.target);
   const payloads = new Map<EntityPlan, RecordValue>();
   for (const plan of plans) payloads.set(plan, await payloadFor(plan, options));

@@ -129,4 +129,36 @@ describe('native SQL release conservation', () => {
     expect(() => assertSqlDemoNativeConservation(expected, classification, targetA, repeated))
       .toThrow(/Articles#401|article-one.*duplicate|duplicate.*article-one/i);
   });
+
+  it('rejects a missing source row and a row that is no longer published', () => {
+    const validA = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const validB = target('target-b', 902, 'https://cms-b.synthetic.invalid/uploads/image-one.webp', 903, 'https://cms-b.synthetic.invalid/uploads/teacher-one.webp', ['program-two', 'program-one']);
+    const missing = structuredClone(validB);
+    missing.collections.teachers = [];
+    expect(() => assertSqlDemoNativeConservation(expected, classification, validA, missing)).toThrow(/Teachers#101.*missing/i);
+
+    const draft = structuredClone(validB);
+    (draft.collections.articles![0] as { publishedAt: string }).publishedAt = '';
+    expect(() => assertSqlDemoNativeConservation(expected, classification, validA, draft)).toThrow(/Articles#401.*published/i);
+  });
+
+  it('rejects relations whose source identity matches but target IDs are inconsistent', () => {
+    const validA = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const corruptB = target('target-b', 902, 'https://cms-b.synthetic.invalid/uploads/image-one.webp', 903, 'https://cms-b.synthetic.invalid/uploads/teacher-one.webp', ['program-two', 'program-one']);
+    const relation = (corruptB.collections.articles![0] as unknown as { categories: { id: number; documentId: string; legacy_id: string }[] }).categories[0]!;
+    relation.id = 999;
+    expect(() => assertSqlDemoNativeConservation(expected, classification, validA, corruptB)).toThrow(/Articles#401.*categories.*inconsistent IDs/i);
+  });
+
+  it('rejects unclaimed target media rows instead of silently ignoring them', () => {
+    const validA = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const cleanB = target('target-b', 902, 'https://cms-b.synthetic.invalid/uploads/image-one.webp', 903, 'https://cms-b.synthetic.invalid/uploads/teacher-one.webp', ['program-two', 'program-one']);
+    const corruptB: SqlDemoStrapi5Readback = { ...cleanB, media: [...cleanB.media, {
+      id: 904,
+      url: 'https://cms-b.synthetic.invalid/uploads/unexpected.webp',
+      provider_metadata: {},
+      verifiedStoredSha256: STORED_SHA,
+    }] };
+    expect(() => assertSqlDemoNativeConservation(expected, classification, validA, corruptB)).toThrow(/media#904.*sources|media#904.*extra/i);
+  });
 });
