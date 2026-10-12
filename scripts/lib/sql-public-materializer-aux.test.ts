@@ -80,7 +80,7 @@ function mappedContent(): AuxMapped {
   return mapped;
 }
 
-function materializeComposed(mapped: AuxMapped, target: NativeStrapiTarget) {
+function materializeComposed(mapped: AuxMapped, target: SqlStrapiRestClient) {
   return materializeSqlPublicContent(mapped, optionsFor(target));
 }
 
@@ -182,7 +182,7 @@ class NativeStrapiTarget implements SqlStrapiRestClient {
   }
 }
 
-function optionsFor(target: NativeStrapiTarget): SqlMaterializerOptions {
+function optionsFor(target: SqlStrapiRestClient): SqlMaterializerOptions {
   let nextMediaId = 2000;
   return {
     target,
@@ -202,6 +202,48 @@ function optionsFor(target: NativeStrapiTarget): SqlMaterializerOptions {
       articles: [{ sourceId: 401, sourceProgramIds: [11] }],
     },
   };
+}
+
+type ReadbackMutation = (collection: Collection, record: Record<string, unknown>) => void;
+
+/**
+ * Model Strapi 5 Content API relation projection for publication readback. Keep the stored
+ * synthetic document untouched so a failed verification proves a response-shape/data issue.
+ */
+class PopulatedReadbackTarget implements SqlStrapiRestClient {
+  readonly readbacks: { collection: Collection; record: Record<string, unknown> }[] = [];
+
+  constructor(
+    private readonly target: NativeStrapiTarget,
+    private readonly mutate?: ReadbackMutation,
+    private readonly readbackError?: Error,
+  ) {}
+
+  async request(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<unknown> {
+    const response = await this.target.request(method, path, body);
+    if (method !== 'GET' || !path.includes('?status=published&')) return response;
+
+    const url = new URL(path, 'http://strapi.synthetic.invalid');
+    const collection = url.pathname.split('/').filter(Boolean)[1] as Collection;
+    if (this.readbackError && collection === 'pages') throw this.readbackError;
+    const cloned = structuredClone(response) as { data?: Record<string, unknown> | null };
+    const record = cloned.data;
+    if (!record) return cloned;
+
+    for (const field of ['seo', 'image'] as const) {
+      if (url.searchParams.get(`populate[${field}]`) !== 'true') {
+        delete record[field];
+      } else if (field === 'image' && typeof record.image === 'number') {
+        // Strapi 5 returns a flat populated media object, not the Strapi 4 { data: ... } wrapper.
+        record.image = { id: record.image, name: 'synthetic-media.jpg', url: '/uploads/synthetic-media.jpg' };
+      } else if (field === 'seo' && record.seo && typeof record.seo === 'object') {
+        record.seo = { id: 3000, ...(record.seo as Record<string, unknown>) };
+      }
+    }
+    this.mutate?.(collection, record);
+    this.readbacks.push({ collection, record });
+    return cloned;
+  }
 }
 
 describe('materializeSqlPublicContent auxiliary CMS collections', () => {
@@ -310,5 +352,84 @@ describe('materializeSqlPublicContent auxiliary CMS collections', () => {
 
     await expect(materializeComposed(mapped, target)).rejects.toThrow(/pages.*slug.*pages\/other/i);
     expect(target.requests.some(({ method }) => method !== 'GET')).toBe(false);
+  });
+
+  it('verifies populated Strapi 5 flat media and SEO component readbacks', async () => {
+    const mapped = mappedContent();
+    const target = new NativeStrapiTarget();
+
+    const readback = new PopulatedReadbackTarget(target);
+    await materializeComposed(mapped, readback);
+
+    expect(target.requests.some(({ method, path }) => method === 'GET'
+      && path.startsWith('/api/pages/') && new URL(path, 'http://strapi.synthetic.invalid').searchParams.get('populate[seo]') === 'true')).toBe(true);
+    expect(target.requests.some(({ method, path }) => method === 'GET'
+      && path.startsWith('/api/news-items/') && new URL(path, 'http://strapi.synthetic.invalid').searchParams.get('populate[image]') === 'true')).toBe(true);
+    expect(readback.readbacks.find(({ collection }) => collection === 'news-items')?.record.image)
+      .toMatchObject({ id: expect.any(Number), name: 'synthetic-media.jpg', url: '/uploads/synthetic-media.jpg' });
+    expect(readback.readbacks.find(({ collection }) => collection === 'pages')?.record.seo)
+      .toMatchObject({ id: 3000, seo_title: 'About SEO exact', seo_description: 'About SEO summary exact' });
+  });
+
+  it.each([
+    {
+      name: 'page SEO omission',
+      matches: (collection: Collection) => collection === 'pages',
+      mutate: (_collection: Collection, record: Record<string, unknown>) => { delete record.seo; },
+      expected: /Pages\/pages\/about:.*seo/i,
+    },
+    {
+      name: 'playlist SEO field drift',
+      matches: (collection: Collection) => collection === 'video-playlists',
+      mutate: (_collection: Collection, record: Record<string, unknown>) => {
+        (record.seo as Record<string, unknown>).seo_description = 'changed summary';
+      },
+      expected: /Videos\/video\/pleylist\/31:.*seo/i,
+    },
+    {
+      name: 'news image omission',
+      matches: (collection: Collection) => collection === 'news-items',
+      mutate: (_collection: Collection, record: Record<string, unknown>) => { delete record.image; },
+      expected: /News#801:.*image/i,
+    },
+    {
+      name: 'promotion populated image identity drift',
+      matches: (collection: Collection) => collection === 'promotions',
+      mutate: (_collection: Collection, record: Record<string, unknown>) => {
+        (record.image as Record<string, unknown>).id = 999999;
+      },
+      expected: /Promotions#901:.*image/i,
+    },
+    {
+      name: 'news date drift',
+      matches: (collection: Collection) => collection === 'news-items',
+      mutate: (_collection: Collection, record: Record<string, unknown>) => { record.date = '2026-10-11T00:00:00.000Z'; },
+      expected: /News#801:.*date/i,
+    },
+  ])('reports the owning identity and field for $name', async ({ matches, mutate, expected }) => {
+    const mapped = mappedContent();
+    const target = new NativeStrapiTarget();
+    const readback = new PopulatedReadbackTarget(target, (collection, record) => {
+      if (matches(collection)) mutate(collection, record);
+    });
+
+    await expect(materializeComposed(mapped, readback)).rejects.toThrow(expected);
+  });
+
+  it('sanitizes unknown readback transport failures without exposing cause details', async () => {
+    const target = new NativeStrapiTarget();
+    const transport = new Error('private-sentinel rawbody=secret response URL=https://private.invalid/path');
+
+    let failure: unknown;
+    try {
+      await materializeComposed(mappedContent(), new PopulatedReadbackTarget(target, undefined, transport));
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/Pages\/pages\/about: publish or verification failed/);
+    expect((failure as Error).message).not.toMatch(/private-sentinel|rawbody|secret|private\.invalid|response URL/i);
+    expect((failure as Error).cause).toBeUndefined();
   });
 });
