@@ -85,7 +85,7 @@ function selectedTableQuery(sql: string, table: keyof typeof PUBLIC_COLUMNS): { 
     'i',
   ));
   if (!match) return { columns: [], tail: '' };
-  return { columns: match[1].split(',').map((column) => column.trim()), tail: match[2] };
+  return { columns: match[1].split(',').map((column) => column.trim()), tail: match[2].trim() };
 }
 
 function testOptions(expectedDumpHash: string, runPsql: SqlPublicPsqlRunner) {
@@ -162,19 +162,37 @@ describe('native SQL public source reader contract', () => {
     for (const [table, columns] of Object.entries(PUBLIC_COLUMNS)) {
       const query = selectedTableQuery(sql, table as keyof typeof PUBLIC_COLUMNS);
       expect(query.columns).toEqual(columns.map((column) => `"${column}"`));
-      expect(query.tail).toMatch(/ORDER BY "id"/i);
+      expect(query.tail).toBe(table === 'Files'
+        ? `WHERE "privacy" = 'public' ORDER BY "id"`
+        : `ORDER BY "id"`);
     }
-    expect(selectedTableQuery(sql, 'Files').tail).toMatch(/WHERE "privacy" = 'public'/i);
     expect(invocation.args).not.toContain('--password');
     expect(JSON.stringify(invocation)).not.toMatch(/password|PGPASSWORD/i);
   });
 
-  it('rejects unexpected source tables or columns without leaking their contents', async () => {
+  it.each([
+    {
+      name: 'unexpected Users table',
+      inject: (collections: Record<string, Record<string, unknown>[]>, marker: string) => {
+        collections.Users = [{ email: marker }];
+      },
+    },
+    {
+      name: 'Files.ownerId column',
+      inject: (collections: Record<string, Record<string, unknown>[]>, marker: string) => {
+        collections.Files[0].ownerId = marker;
+      },
+    },
+    {
+      name: 'Files.storageId column',
+      inject: (collections: Record<string, Record<string, unknown>[]>, marker: string) => {
+        collections.Files[0].storageId = marker;
+      },
+    },
+  ])('rejects $name without leaking its contents', async ({ inject }) => {
     const marker = 'SYNTHETIC_PRIVATE_COLUMN_SENTINEL';
     const unexpected = syntheticCollections();
-    unexpected.Users = [{ email: marker }];
-    unexpected.Files[0].ownerId = marker;
-    unexpected.Files[0].storageId = marker;
+    inject(unexpected, marker);
     const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(unexpected));
     const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
       () => undefined,
