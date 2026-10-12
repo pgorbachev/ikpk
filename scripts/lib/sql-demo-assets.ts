@@ -1,14 +1,17 @@
 import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
+import { parseFragment } from 'parse5';
 import { readVerifiedOfflineImageSource } from './import-media.js';
+
+type SqlHeaderImageRow = { id: number; status?: string; imageId: string | null };
 
 export interface SqlDemoAssetSource {
   sourceHash: string;
-  Institutes?: { id: number; status?: string; imageId: string | null }[];
-  Programs?: { id: number; status: string; imageId: string | null }[];
-  Teachers?: { id: number; status: string; imageId: string | null }[];
-  Events?: { id: number; status: string; imageId: string | null }[];
+  Institutes?: SqlHeaderImageRow[];
+  Programs?: SqlHeaderImageRow[];
+  Teachers?: SqlHeaderImageRow[];
+  Events?: SqlHeaderImageRow[];
   Files?: {
     id: string; fileType: string | null; originalName: string | null; extension: string | null;
     url: string | null; status: string; privacy: string;
@@ -17,8 +20,8 @@ export interface SqlDemoAssetSource {
   OrganizationInfo?: { id: number; status: string }[];
   Articles?: { id: number; status: string; imageId: string | null; content: string | null }[];
   Videos?: { id: number; status: string; imageId: string | null; link: string | null }[];
-  News?: { id: number; status: string; imageId: string | null }[];
-  Promotions?: { id: number; status: string; imageId: string | null }[];
+  News?: SqlHeaderImageRow[];
+  Promotions?: SqlHeaderImageRow[];
 }
 
 export type SqlDemoSelectedPublicHeaderReference = {
@@ -153,6 +156,11 @@ export interface SqlDemoOfflineDocumentProof extends SqlDemoOfflineSourceProof {
   detectedExtension: 'pdf';
 }
 
+type SqlDemoAssetProvenance = (
+  | Pick<SqlDemoOfflineAssetProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
+  | Pick<SqlDemoOfflineDocumentProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
+) & { selectedPublicHeaderReferences?: SqlDemoSelectedPublicHeaderReference[] };
+
 export interface SqlDemoAssetLoaderResult {
   /** Verified local raster sources; no upload or CMS public URL is implied by this result. */
   offlineMedia: SqlDemoOfflineAssetProof[];
@@ -167,8 +175,7 @@ export interface SqlDemoAssetLoaderResult {
   }[];
   provenance: {
     baseline: { sqlSha256: string; archiveSha256: string };
-    assets: (Pick<SqlDemoOfflineAssetProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
-      | Pick<SqlDemoOfflineDocumentProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>)[];
+    assets: SqlDemoAssetProvenance[];
     supplements: SqlDemoAssetLoaderResult['supplements'];
   };
 }
@@ -187,6 +194,12 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     input.assetManifest.baselineSqlSha256 !== input.baseline.sqlSha256
   ) {
     throw new Error('SQL baseline SHA-256 does not match the pinned manifest');
+  }
+  if (input.selectedPublicHeaders.sourceHash !== input.baseline.sqlSha256) {
+    throw new Error('selected public header mapper source hash does not match the pinned SQL baseline');
+  }
+  if (!Array.isArray(input.selectedPublicHeaders.references)) {
+    throw new Error('selected public header references must be an array');
   }
   if (input.assetManifest.archiveSha256 !== input.baseline.archiveSha256) {
     throw new Error('archive inventory SHA-256 does not match the pinned baseline');
@@ -213,6 +226,7 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
 
   const reachability = new Map<string, {
     headers: boolean;
+    headerReferences: SqlDemoSelectedPublicHeaderReference[];
     videoIds: number[];
     bindingIds: number[];
     articleIds: number[];
@@ -220,30 +234,51 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
   const usageFor = (fileId: string) => {
     let usage = reachability.get(fileId);
     if (!usage) {
-      usage = { headers: false, videoIds: [], bindingIds: [], articleIds: [] };
+      usage = { headers: false, headerReferences: [], videoIds: [], bindingIds: [], articleIds: [] };
       reachability.set(fileId, usage);
     }
     return usage;
   };
-  const addDirectImage = (table: string, rows: { id: number; status?: string; imageId: string | null }[] | undefined) => {
-    for (const row of rows ?? []) {
-      if ((row.status !== 'active' && !(table === 'Institutes' && row.status === undefined)) || row.imageId === null) continue;
-      if (typeof row.imageId !== 'string' || !row.imageId) {
-        throw new Error(`${table}#${row.id}.imageId is invalid`);
-      }
-      const file = filesById.get(row.imageId);
-      if (!file) throw new Error(`${table}#${row.id}.imageId does not join to Files`);
-      assertKnownFileStatus(file);
-      usageFor(row.imageId).headers = true;
+
+  const selectedHeaderKeys = new Set<string>();
+  for (const reference of input.selectedPublicHeaders.references) {
+    if (
+      !reference || !Number.isSafeInteger(reference.sourceId) || reference.sourceId <= 0 ||
+      typeof reference.imageId !== 'string' || !reference.imageId ||
+      !['Institutes', 'Programs', 'Teachers', 'Events', 'Articles', 'News', 'Promotions', 'Videos'].includes(reference.sourceTable)
+    ) {
+      throw new Error('selected public header reference has an invalid source identity');
     }
-  };
-  addDirectImage('Institutes', input.source.Institutes);
-  addDirectImage('Programs', input.source.Programs);
-  addDirectImage('Teachers', input.source.Teachers);
-  addDirectImage('Events', input.source.Events);
-  addDirectImage('Articles', input.source.Articles);
-  addDirectImage('News', input.source.News);
-  addDirectImage('Promotions', input.source.Promotions);
+    const referenceKey = `${reference.sourceTable}#${reference.sourceId}`;
+    if (selectedHeaderKeys.has(referenceKey)) {
+      throw new Error(`${reference.sourceTable}#${reference.sourceId} selected header reference is duplicated`);
+    }
+    selectedHeaderKeys.add(referenceKey);
+
+    const rows = input.source[reference.sourceTable] as SqlHeaderImageRow[] | undefined;
+    const matches = (rows ?? []).filter((row) => row.id === reference.sourceId);
+    if (matches.length !== 1) {
+      throw new Error(`${reference.sourceTable}#${reference.sourceId} selected header reference does not join to one SQL source row`);
+    }
+    const row = matches[0]!;
+    if (reference.sourceTable === 'Institutes'
+      ? row.status !== undefined && row.status !== 'active'
+      : row.status !== 'active') {
+      throw new Error(`${reference.sourceTable}#${reference.sourceId}.status is not active for a selected header reference`);
+    }
+    if (row.imageId !== reference.imageId) {
+      throw new Error(`${reference.sourceTable}#${reference.sourceId}.imageId differs from the selected header reference`);
+    }
+    const file = filesById.get(reference.imageId);
+    if (!file) throw new Error(`${reference.sourceTable}#${reference.sourceId}.imageId does not join to SQL Files`);
+    assertKnownFileStatus(file);
+    if (file.status !== 'active') {
+      throw new Error(`Files#${file.id}.status is not active for a selected public header`);
+    }
+    const usage = usageFor(file.id);
+    usage.headers = true;
+    usage.headerReferences.push({ ...reference });
+  }
 
   for (const video of input.source.Videos ?? []) {
     if (video.status !== 'active' || video.imageId === null) continue;
@@ -339,11 +374,7 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     if (file.status === 'disabled') throw new Error(`Files#${file.id}.status is disabled`);
     if (typeof file.url !== 'string' || !file.url) throw new Error(`Files#${file.id}.url is missing`);
 
-    const actualUsage = reachability.get(file.id) ?? (
-      entry.reachability.kind === 'sql-header' && file.status === 'active'
-        ? { headers: true, videoIds: [], bindingIds: [], articleIds: [] }
-        : undefined
-    );
+    const actualUsage = reachability.get(file.id);
     if (!actualUsage) throw new Error(`Files#${file.id} has no active SQL public reachability`);
     const actualArticleIds = uniqueSorted(actualUsage.articleIds);
     const actualVideoIds = uniqueSorted(actualUsage.videoIds);
@@ -393,13 +424,13 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
         verification: {
           status: 'verified',
           loader: 'sql-demo-asset-loader',
-          attestationId: attestationId(file.id, file.url, entry.archiveRelativePath, verified.sourceSha256, expectedReachability),
+          attestationId: attestationId(file.id, file.url, entry.archiveRelativePath, verified.sourceSha256, expectedReachability, actualUsage.headerReferences),
         },
         detectedMimeType: verified.mime as SqlDemoOfflineAssetProof['detectedMimeType'],
         detectedExtension: verified.mime === 'image/jpeg' ? 'jpg' : verified.mime === 'image/png' ? 'png' : 'webp',
       };
       offlineMedia.push(proof);
-      provenanceAssets.push(pickAssetProvenance(proof));
+      provenanceAssets.push(pickAssetProvenance(proof, actualUsage.headerReferences));
     } else if (entry.sourceFileType === 'document') {
       if (file.status !== 'active') throw new Error(`Files#${file.id}.status must be active for public documents`);
       if (actualBindingIds.length !== 1 || actualArticleIds.length || actualUsage.headers || actualVideoIds.length) {
@@ -440,7 +471,7 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
         detectedExtension: 'pdf',
       };
       offlineDocuments.push(proof);
-      provenanceAssets.push(pickAssetProvenance(proof));
+      provenanceAssets.push(pickAssetProvenance(proof, actualUsage.headerReferences));
     } else {
       throw new Error(`Files#${file.id}.fileType is unsupported`);
     }
@@ -492,14 +523,22 @@ function assertKnownFileStatus(file: NonNullable<SqlDemoAssetSource['Files']>[nu
   if (file.status === 'disabled') throw new Error(`Files#${file.id}.status is disabled`);
 }
 
+interface ParsedHtmlNode {
+  tagName?: string;
+  attrs?: { name: string; value: string }[];
+  childNodes?: ParsedHtmlNode[];
+}
+
 function imageSources(content: string): string[] {
   const sources: string[] = [];
-  for (const match of content.matchAll(/<img\b[^>]*>/gi)) {
-    const tag = match[0];
-    const source = /\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
-    const value = source?.[1] ?? source?.[2] ?? source?.[3];
-    if (value) sources.push(value.replace(/&amp;/gi, '&'));
-  }
+  const visit = (node: ParsedHtmlNode): void => {
+    if (node.tagName === 'img') {
+      const source = node.attrs?.find((attribute) => attribute.name === 'src')?.value;
+      if (source) sources.push(source);
+    }
+    for (const child of node.childNodes ?? []) visit(child);
+  };
+  visit(parseFragment(content) as unknown as ParsedHtmlNode);
   return sources;
 }
 
@@ -569,21 +608,27 @@ function attestationId(
   archiveRelativePath: string,
   sourceSha256: string,
   reachability: SqlDemoAssetReachability,
+  selectedPublicHeaderReferences: SqlDemoSelectedPublicHeaderReference[] = [],
 ): string {
   return createHash('sha256').update(JSON.stringify({
     loader: 'sql-demo-asset-loader', sourceFileId, sourceUrl, archiveRelativePath, sourceSha256, reachability,
+    ...(selectedPublicHeaderReferences.length ? { selectedPublicHeaderReferences } : {}),
   })).digest('hex');
 }
 
 function pickAssetProvenance(
   proof: SqlDemoOfflineAssetProof | SqlDemoOfflineDocumentProof,
-): SqlDemoAssetLoaderResult['provenance']['assets'][number] {
+  selectedPublicHeaderReferences: SqlDemoSelectedPublicHeaderReference[],
+): SqlDemoAssetProvenance {
   return {
     sourceFileType: proof.sourceFileType,
     sourceFileId: proof.sourceFileId,
     archiveRelativePath: proof.archiveRelativePath,
     sourceSha256: proof.sourceSha256,
     reachability: proof.reachability,
+    ...(selectedPublicHeaderReferences.length
+      ? { selectedPublicHeaderReferences: selectedPublicHeaderReferences.map((reference) => ({ ...reference })) }
+      : {}),
   };
 }
 
