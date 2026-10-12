@@ -73,7 +73,7 @@ export interface SqlDemoAllowlistedAssets {
 export interface SqlDemoVideoReferenceDecision {
   sourceTable: 'OrganizationInfo' | 'Seminars' | 'Articles';
   sourceId: number;
-  field: 'content' | 'full_text' | 'body';
+  field: 'content' | 'description' | 'full_text' | 'body';
   originalURL: string;
   action: 'rutube-trailing-slash' | 'external-link';
   expectedOutput: string;

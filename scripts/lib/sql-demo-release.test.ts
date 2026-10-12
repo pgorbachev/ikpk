@@ -67,7 +67,7 @@ function supplements(overrides: Partial<SqlDemoAcceptedSupplements> = {}): SqlDe
     ],
     instituteMetadata: [{ sourceId: 1, slug: 'institute-one', order: 7, seo: { seo_title: 'Accepted institute SEO', seo_description: 'Accepted institute description' } }],
     videoPlaylists: [],
-    targetLocations: baseTargetLocations(),
+    targetLocations: [],
     ...overrides,
   };
 }
@@ -85,18 +85,15 @@ function documentAttestation(sourceFileId: string, sourceUrl: string, targetPubl
 
 function assets(overrides: Partial<SqlDemoAllowlistedAssets> = {}): SqlDemoAllowlistedAssets {
   return {
-    images: [attestation('img-1', '/sql/synthetic-image-1', '/media/synthetic-image-1.png', 'image/png', 'attest-img-1')],
-    documents: [
-      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
-      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
-    ],
+    images: [],
+    documents: [],
     ...overrides,
   };
 }
 
 function ownerDecisions(videoReferences: SqlDemoVideoReferenceDecision[] = []): SqlDemoOwnerDecisions {
   return {
-    approvedUnlinkedArticleImages: [{ sourceFileId: 'img-1', sourceUrl: '/sql/synthetic-image-1', decisionId: 'synthetic-image-approval' }],
+    approvedUnlinkedArticleImages: [],
     videoReferences,
   };
 }
@@ -147,8 +144,13 @@ describe('composeSqlDemoRelease', () => {
   it('composes existing CMS DTOs from SQL and pinned pages, retaining SQL institute body and private source locations', () => {
     const input = sqlWithOrganizationAndDocuments();
     const before = structuredClone(input);
+    const targetLocations = baseTargetLocations();
+    const documentAssets = assets({ documents: [
+      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
+    ] });
 
-    const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions());
+    const release = composeSqlDemoRelease(input, supplements({ targetLocations }), documentAssets, ownerDecisions());
 
     expect(release.entities.pages).toEqual(expect.arrayContaining([
       page('synthetic-static', '<p>Accepted synthetic static body</p>'),
@@ -173,7 +175,7 @@ describe('composeSqlDemoRelease', () => {
     expect(release.entities).not.toHaveProperty('provenance');
     expect(input).toEqual(before);
 
-    const repeated = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions());
+    const repeated = composeSqlDemoRelease(input, supplements({ targetLocations }), documentAssets, ownerDecisions());
     expect(repeated.entities.institutes[0].description).toBe(release.entities.institutes[0].description);
     expect(String(repeated.entities.institutes[0].description).match(/Extra institute text/g)).toHaveLength(1);
   });
@@ -214,9 +216,23 @@ describe('composeSqlDemoRelease', () => {
   });
 
   it('replaces only mapped Radix panels in SQL priority order, retains empty-section document anchors and cleans through the established boundary', async () => {
-    const release = composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements(), assets(), ownerDecisions());
+    const organizationVideo = {
+      sourceTable: 'OrganizationInfo' as const, sourceId: 601, field: 'content' as const,
+      originalURL: 'https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666',
+      action: 'rutube-trailing-slash' as const,
+      expectedOutput: '<iframe src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/">',
+    };
+    const input = sqlWithOrganizationAndDocuments();
+    input.entities.organizationInfo![0].content = `<p>SQL education replacement</p><iframe src="${organizationVideo.originalURL}"></iframe>`;
+    const documentAssets = assets({ documents: [
+      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
+    ] });
+    const release = composeSqlDemoRelease(input, supplements({ targetLocations: baseTargetLocations() }), documentAssets, ownerDecisions([organizationVideo]));
     const rawPage = release.entities.pages.find(({ slug }) => slug === 'svedeni-synthetic');
     expect(rawPage).toBeDefined();
+    expect(rawPage!.body).toContain(organizationVideo.expectedOutput);
+    expect(rawPage!.body).not.toContain(`src="${organizationVideo.originalURL}"`);
     const cleanerModulePath = '../../web/src/lib/html-cleaner.js';
     const { cleanBodyHtml } = await import(cleanerModulePath);
     const cleanBody = cleanBodyHtml(rawPage!.body, { sourceType: 'sql-demo-test', sourceId: rawPage!.slug }).html;
@@ -225,6 +241,7 @@ describe('composeSqlDemoRelease', () => {
     expect(cleanBody).toContain('id="section-2"');
     expect(cleanBody).toContain('id="section-3"');
     expect(cleanBody).toContain('SQL education replacement');
+    expect(cleanBody).toContain('src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/"');
     expect(cleanBody).not.toContain('Accepted education body');
     expect(cleanBody).not.toContain('Accepted documents body');
     expect(cleanBody.indexOf('First synthetic document')).toBeGreaterThan(cleanBody.indexOf('id="section-1"'));
@@ -244,20 +261,53 @@ describe('composeSqlDemoRelease', () => {
     ['duplicate', [...baseTargetLocations(), baseTargetLocations()[0]]],
     ['unused', [...baseTargetLocations(), { ...baseTargetLocations()[0], sourceId: 699, sectionKey: 'unknown' }]],
   ])('fails preflight on a %s source-to-target location', (_kind, targetLocations) => {
-    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements({ targetLocations }), assets(), ownerDecisions()))
+    const documentAssets = assets({ documents: [
+      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
+    ] });
+    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements({ targetLocations }), documentAssets, ownerDecisions()))
       .toThrow(/(OrganizationInfo|InstituteAdditionalInfo|FileBindingOrganizationInfo)#(601|602|801|701|702|699)/);
+  });
+
+  it('accepts empty optional SQL source groups only with matching empty pinned locations and PDF mappings', () => {
+    const release = composeSqlDemoRelease(mapped(), supplements(), assets(), ownerDecisions());
+    expect(release.entities.pages.map(({ slug }) => slug)).toEqual(['synthetic-static', 'svedeni-synthetic']);
+    expect(release.provenance.targetLocations).toEqual([]);
+    expect(release.provenance.assetMappings).toEqual([]);
+  });
+
+  const missingSourceLocationCases: [string, SqlDemoTargetLocation[], SqlDemoAllowlistedAssets][] = [
+    ['OrganizationInfo', [baseTargetLocations()[0]], assets()],
+    ['InstituteAdditionalInfo', [baseTargetLocations()[2]], assets()],
+    ['FileBindingOrganizationInfo', [baseTargetLocations()[3]], assets({ documents: [
+      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
+    ] })],
+  ];
+  it.each(missingSourceLocationCases)('rejects pinned %s locations when their SQL source group is absent', (_table, targetLocations, allowlistedAssets) => {
+    expect(() => composeSqlDemoRelease(mapped(), supplements({ targetLocations }), allowlistedAssets, ownerDecisions()))
+      .toThrow(/(OrganizationInfo|InstituteAdditionalInfo|FileBindingOrganizationInfo)#\d+.*(unused|source|SQL|row)/i);
+  });
+
+  it('rejects a PDF allowlist mapping when no SQL document binds it', () => {
+    const orphanPdf = documentAttestation('pdf-orphan', '/sql/orphan.pdf', '/documents/orphan.pdf', 'attest-pdf-orphan');
+    expect(() => composeSqlDemoRelease(mapped(), supplements(), assets({ documents: [orphanPdf] }), ownerDecisions()))
+      .toThrow(/pdf-orphan.*(SQL document|binding|unused)/i);
   });
 
   it('rejects SQL institute supplements whose source foreign key or accepted target identity is unresolved', () => {
     const orphan = mapped({
       instituteAdditionalInfo: [{ sourceId: 801, legacy_id: '801', instituteId: 999, name: 'Synthetic orphan', description: 'must fail' }],
     });
-    expect(() => composeSqlDemoRelease(orphan, supplements(), assets(), ownerDecisions())).toThrow(/InstituteAdditionalInfo#801.*instituteId/);
+    expect(() => composeSqlDemoRelease(orphan, supplements({ targetLocations: [baseTargetLocations()[2]] }), assets(), ownerDecisions())).toThrow(/InstituteAdditionalInfo#801.*instituteId/);
 
     const wrongTarget = supplements({ targetLocations: baseTargetLocations().map((location) => location.sourceTable === 'InstituteAdditionalInfo'
       ? { ...location, targetLegacyId: 'missing-institute' }
       : location) });
-    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), wrongTarget, assets(), ownerDecisions())).toThrow(/InstituteAdditionalInfo#801.*target/);
+    const documentAssets = assets({ documents: [
+      documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'),
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
+    ] });
+    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), wrongTarget, documentAssets, ownerDecisions())).toThrow(/InstituteAdditionalInfo#801.*target/);
   });
 
   it('requires one pinned corpus entry per page slug and rejects duplicate CMS page identities', () => {
@@ -282,72 +332,132 @@ describe('composeSqlDemoRelease', () => {
       articles: [{ sourceId: 901, legacy_id: 'article-901', slug: 'synthetic-article', title: 'Synthetic article', body: 'Synthetic body', imageId: 'img-1' }],
     }), supplements(), pending, ownerDecisions())).toThrow(/img-1.*loader attestation/i);
 
+    const targetLocations = baseTargetLocations();
     const badDocumentUrl = assets({ documents: [
       attestation('pdf-1', '/sql/mismatched.pdf', '/documents/synthetic-one.pdf', 'application/pdf', 'attest-pdf-1') as SqlDemoAllowlistedAssets['documents'][number],
-      assets().documents[1],
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
     ] });
-    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements(), badDocumentUrl, ownerDecisions())).toThrow(/pdf-1.*sourceUrl/i);
+    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements({ targetLocations }), badDocumentUrl, ownerDecisions())).toThrow(/pdf-1.*sourceUrl/i);
 
     const wrongDocumentMime = assets({ documents: [
-      { ...assets().documents[0], detectedMimeType: 'image/png' as 'application/pdf' },
-      assets().documents[1],
+      { ...documentAttestation('pdf-1', '/sql/synthetic-document-1.pdf', '/documents/synthetic-one.pdf', 'attest-pdf-1'), detectedMimeType: 'image/png' as 'application/pdf' },
+      documentAttestation('pdf-2', '/sql/synthetic-document-2.pdf', '/documents/synthetic-two.pdf', 'attest-pdf-2'),
     ] });
-    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements(), wrongDocumentMime, ownerDecisions())).toThrow(/pdf-1.*application\/pdf/i);
+    expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), supplements({ targetLocations }), wrongDocumentMime, ownerDecisions())).toThrow(/pdf-1.*application\/pdf/i);
   });
 
-  it('requires an exact owner decision for each source-referenced unlinked article image', () => {
-    expect(() => composeSqlDemoRelease(mapped({
-      articles: [{ sourceId: 901, legacy_id: 'article-901', slug: 'synthetic-article', title: 'Synthetic article', body: '<p><img src="/sql/synthetic-image-1" /></p>', imageId: 'img-1' }],
-    }), supplements(), assets(), { ...ownerDecisions(), approvedUnlinkedArticleImages: [] })).toThrow(/img-1.*owner decision/i);
+  it('accepts a direct SQL article imageId without an unlinked-image owner grant', () => {
+    const directImage = attestation('direct-image', '/sql/direct-image', '/media/direct-image.png', 'image/png', 'attest-direct-image');
+    const input = mapped({
+      articles: [{ sourceId: 901, legacy_id: 'article-901', slug: 'synthetic-article', title: 'Synthetic article', body: '<p>Direct image pointer</p>', imageId: 'direct-image' }],
+    });
+    const release = composeSqlDemoRelease(input, supplements(), assets({ images: [directImage] }), ownerDecisions());
+    expect(release.entities.articles[0]).toMatchObject({ sourceId: 901, imageId: 'direct-image' });
   });
 
-  it('applies only seven exact video decisions, preserves surrounding text and queries, and rejects unmatched iframe transforms', () => {
+  it('rewrites an owner-approved body-only article image to its exact offline URL', () => {
+    const bodyImage = attestation('body-image', '/sql/body-only-image', '/media/offline-body-image.png', 'image/png', 'attest-body-image');
+    const input = mapped({
+      articles: [{ sourceId: 902, legacy_id: 'article-902', slug: 'synthetic-article-body-image', title: 'Synthetic article', body: '<p><img src="/sql/body-only-image" alt="Synthetic" /></p>', imageId: null }],
+    });
+    const approved = {
+      ...ownerDecisions(),
+      approvedUnlinkedArticleImages: [{ sourceFileId: bodyImage.sourceFileId, sourceUrl: bodyImage.sourceUrl, decisionId: 'approved-body-image' }],
+    };
+    const release = composeSqlDemoRelease(input, supplements(), assets({ images: [bodyImage] }), approved);
+    expect(release.entities.articles[0].body).toContain('src="/media/offline-body-image.png"');
+    expect(release.entities.articles[0].body).not.toContain(bodyImage.sourceUrl);
+  });
+
+  it('rejects a body-only image without an exact owner grant or allowlisted mapping', () => {
+    const bodyImage = attestation('body-image', '/sql/body-only-image', '/media/offline-body-image.png', 'image/png', 'attest-body-image');
+    const bodyOnlyArticle = (src: string) => mapped({
+      articles: [{ sourceId: 903, legacy_id: 'article-903', slug: 'synthetic-article-body-unapproved', title: 'Synthetic article', body: `<p><img src="${src}" /></p>`, imageId: null }],
+    });
+    expect(() => composeSqlDemoRelease(bodyOnlyArticle(bodyImage.sourceUrl), supplements(), assets({ images: [bodyImage] }), ownerDecisions()))
+      .toThrow(/body-image.*owner decision/i);
+    expect(() => composeSqlDemoRelease(bodyOnlyArticle('/sql/unmapped-image'), supplements(), assets(), ownerDecisions()))
+      .toThrow(/Articles#903.*(image|asset|URL|source)/i);
+  });
+
+  it('retains an already-accepted Rutube iframe in seminar and program descriptions without an owner decision', () => {
+    const acceptedIframe = '<iframe src="https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab/"></iframe>';
+    const input = mapped({
+      programs: [{ sourceId: 77, legacy_id: 'program-77', slug: 'program-77', name: 'Synthetic program', description: acceptedIframe }],
+      seminars: [{ sourceId: 9349, legacy_id: 'seminar-9349', slug: 'synthetic-9349', name: 'Synthetic seminar', description: acceptedIframe }],
+    });
+    const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions());
+    expect(release.entities.seminars[0].description).toBe(acceptedIframe);
+    expect(release.entities.programs[0].description).toBe(acceptedIframe);
+  });
+
+  it('requires an exact decision for a non-normalized SQL seminar embed', () => {
+    const input = mapped({
+      seminars: [{
+        sourceId: 9350, legacy_id: 'seminar-9350', slug: 'synthetic-9350', name: 'Synthetic seminar',
+        description: '<iframe src="https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef"></iframe>',
+      }],
+    });
+    expect(() => composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions()))
+      .toThrow(/Seminars#9350.*(decision|iframe)/i);
+  });
+
+  it('preserves already-accepted iframe sources without decisions and requires exact decisions for the seven SQL seminar embed shapes', () => {
     const rutubeIds = [
-      '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-      '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444',
-      '55555555-5555-4555-8555-555555555555',
+      '11111111111111111111111111111111', '22222222222222222222222222222222',
+      '33333333333333333333333333333333', '44444444444444444444444444444444',
+      '55555555555555555555555555555555',
     ];
     const rutube = rutubeIds.map((id) => ({
       originalURL: `https://rutube.ru/play/embed/${id}`,
       expectedOutput: `<iframe src="https://rutube.ru/play/embed/${id}/">`,
-      sourceTable: 'Articles' as const, sourceId: 901, field: 'body' as const, action: 'rutube-trailing-slash' as const,
+      sourceTable: 'Seminars' as const, sourceId: 9346, field: 'description' as const, action: 'rutube-trailing-slash' as const,
     }));
     const external = [
       {
-        sourceTable: 'Seminars' as const, sourceId: 9346, field: 'full_text' as const,
-        originalURL: 'https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/?p=synthetic',
+        sourceTable: 'Seminars' as const, sourceId: 9347, field: 'description' as const,
+        originalURL: 'https://rutube.ru/play/embed/66666666666666666666666666666666/?p=synthetic',
         action: 'external-link' as const,
-        expectedOutput: '<a href="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/?p=synthetic" rel="noopener noreferrer">Открыть видео</a>',
+        expectedOutput: '<a href="https://rutube.ru/play/embed/66666666666666666666666666666666/?p=synthetic" rel="noopener noreferrer">Открыть видео</a>',
       },
       {
-        sourceTable: 'Seminars' as const, sourceId: 9347, field: 'full_text' as const,
-        originalURL: 'https://vk.com/video_ext.php?oid=-100&vid=synthetic346&hash=synthetic',
+        sourceTable: 'Seminars' as const, sourceId: 9348, field: 'description' as const,
+        originalURL: 'https://vk.com/video_ext.php?oid=-123&id=456&hd=2&autoplay=1',
         action: 'external-link' as const,
-        expectedOutput: '<a href="https://vk.com/video_ext.php?oid=-100&vid=synthetic346&hash=synthetic" rel="noopener noreferrer">Открыть видео</a>',
+        expectedOutput: '<a href="https://vk.com/video_ext.php?oid=-123&id=456&hd=2&autoplay=1" rel="noopener noreferrer">Открыть видео</a>',
       },
     ];
     const decisions = [...rutube, ...external];
-    const articleBody = rutube.map(({ originalURL }, index) => `<p>Before ${index}</p><iframe src="${originalURL}"></iframe><p>After ${index}</p>`).join('');
+    const acceptedRutube = '<iframe src="https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab/"></iframe>';
     const input = mapped({
-      articles: [{ sourceId: 901, legacy_id: 'article-901', slug: 'synthetic-article', title: 'Synthetic article', body: articleBody }],
-      seminars: external.map(({ sourceId, originalURL }) => ({
-        sourceId, legacy_id: `seminar-${sourceId}`, slug: `synthetic-${sourceId}`, name: `Synthetic ${sourceId}`,
-        full_text: `<p>Before ${sourceId}</p><iframe src="${originalURL}"></iframe><p>After ${sourceId}</p>`,
-      })),
+      programs: [{ sourceId: 77, legacy_id: 'program-77', slug: 'program-77', name: 'Synthetic program', description: acceptedRutube }],
+      seminars: [
+        {
+          sourceId: 9346, legacy_id: 'seminar-9346', slug: 'synthetic-9346', name: 'Synthetic 9346',
+          description: `<p>Before</p>${acceptedRutube}${rutube.map(({ originalURL }) => `<iframe src="${originalURL}"></iframe>`).join('')}<p>After</p>`,
+        },
+        ...external.map(({ sourceId, originalURL }) => ({
+          sourceId, legacy_id: `seminar-${sourceId}`, slug: `synthetic-${sourceId}`, name: `Synthetic ${sourceId}`,
+          description: `<p>Before ${sourceId}</p><iframe src="${originalURL}"></iframe><p>After ${sourceId}</p>`,
+        })),
+      ],
     });
     const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(decisions));
-    const article = release.entities.articles[0].body;
-    expect(article).toContain('Before 0');
-    expect(article).toContain('After 4');
-    expect(article).toContain(rutube[0].expectedOutput);
-    expect(article).not.toContain('?p=synthetic');
-    expect(article).not.toContain(`src="${rutube[0].originalURL}"`);
-    expect(release.entities.seminars[0].full_text).toContain(external[0].expectedOutput);
-    expect(release.entities.seminars[1].full_text).toContain(external[1].expectedOutput);
+    const seminarDescription = release.entities.seminars[0].description;
+    expect(seminarDescription).toContain('Before');
+    expect(seminarDescription).toContain('After');
+    expect(seminarDescription).toContain(acceptedRutube);
+    expect(release.entities.programs[0].description).toBe(acceptedRutube);
+    for (const decision of rutube) {
+      expect(seminarDescription).toContain(decision.expectedOutput);
+      expect(seminarDescription).not.toContain(`src="${decision.originalURL}"`);
+    }
+    expect(release.entities.seminars[1].description).toContain(external[0].expectedOutput);
+    expect(release.entities.seminars[2].description).toContain(external[1].expectedOutput);
     expect(release.provenance.ownerDecisions.videoReferences).toEqual(decisions);
 
     const unmatched = [...decisions, { ...rutube[0], sourceId: 999 }];
-    expect(() => composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(unmatched))).toThrow(/Articles#999.*video decision/i);
+    expect(() => composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(unmatched))).toThrow(/Seminars#999.*video decision/i);
     const unsupportedHost = mapped({
       articles: [{ sourceId: 902, legacy_id: 'article-902', slug: 'synthetic-unsupported', title: 'Synthetic unsupported', body: '<iframe src="https://unapproved.example.test/embed/x"></iframe>' }],
     });
