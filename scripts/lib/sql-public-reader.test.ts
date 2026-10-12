@@ -106,7 +106,7 @@ describe('native SQL public source reader contract', () => {
   it('hashes the actual dump bytes and returns all 17 exact public collections in the mapper source DTO', async () => {
     const dumpBytes = await readFile(dumpPath);
     const expected = syntheticCollections();
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(expected));
+    const runPsql = vi.fn(async () => JSON.stringify(expected));
 
     const result = await readSqlPublicSource(testOptions(sha256Hex(dumpBytes), runPsql));
 
@@ -127,7 +127,7 @@ describe('native SQL public source reader contract', () => {
   });
 
   it('rejects a baseline hash mismatch before starting any native psql process', async () => {
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(syntheticCollections()));
+    const runPsql = vi.fn(async () => JSON.stringify(syntheticCollections()));
 
     await expect(readSqlPublicSource(testOptions('0'.repeat(64), runPsql)))
       .rejects.toThrow('SQL baseline hash does not match the expected SHA-256');
@@ -135,7 +135,7 @@ describe('native SQL public source reader contract', () => {
   });
 
   it('requires the caller hash to be raw 64-character SHA-256 hex', async () => {
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(syntheticCollections()));
+    const runPsql = vi.fn(async () => JSON.stringify(syntheticCollections()));
 
     await expect(readSqlPublicSource(testOptions(`sha256:${'0'.repeat(64)}`, runPsql)))
       .rejects.toThrow('Expected dump hash must be 64 hexadecimal characters');
@@ -143,7 +143,7 @@ describe('native SQL public source reader contract', () => {
   });
 
   it('uses one native, read-only psql invocation with explicit reviewed identifiers only', async () => {
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(syntheticCollections()));
+    const runPsql = vi.fn(async () => JSON.stringify(syntheticCollections()));
 
     await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql));
 
@@ -193,7 +193,7 @@ describe('native SQL public source reader contract', () => {
     const marker = 'SYNTHETIC_PRIVATE_COLUMN_SENTINEL';
     const unexpected = syntheticCollections();
     inject(unexpected, marker);
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => JSON.stringify(unexpected));
+    const runPsql = vi.fn(async () => JSON.stringify(unexpected));
     const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
       () => undefined,
       (error: unknown) => error,
@@ -207,7 +207,7 @@ describe('native SQL public source reader contract', () => {
   });
 
   it('rechecks the dump hash after psql finishes and rejects mutation during the read', async () => {
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => {
+    const runPsql = vi.fn(async () => {
       await writeFile(dumpPath, 'SYNTHETIC MUTATED DUMP SENTINEL');
       return JSON.stringify(syntheticCollections());
     });
@@ -220,7 +220,7 @@ describe('native SQL public source reader contract', () => {
   it('does not expose psql stderr, secret markers, or raw dump content in a bounded failure', async () => {
     const secretMarker = 'SYNTHETIC_SECRET_MARKER_MUST_NOT_ESCAPE';
     const failure = Object.assign(new Error(`psql failed ${secretMarker}`), { stderr: `stderr ${secretMarker}` });
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation): Promise<string> => { throw failure; });
+    const runPsql = vi.fn(async (): Promise<string> => { throw failure; });
     const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
       () => undefined,
       (error: unknown) => error,
@@ -235,7 +235,7 @@ describe('native SQL public source reader contract', () => {
 
   it('does not include raw malformed psql output in a parser failure', async () => {
     const rawMarker = 'SYNTHETIC_RAW_OUTPUT_SENTINEL';
-    const runPsql = vi.fn(async (_invocation: SqlPublicPsqlInvocation) => `not-json ${rawMarker}`);
+    const runPsql = vi.fn(async () => `not-json ${rawMarker}`);
     const result = await readSqlPublicSource(testOptions(sha256Hex(await readFile(dumpPath)), runPsql)).then(
       () => undefined,
       (error: unknown) => error,
