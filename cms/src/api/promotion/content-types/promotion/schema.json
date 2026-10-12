@@ -14,10 +14,13 @@
   "attributes": {
     "name": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "description": {
       "type": "richtext"
+    },
+    "date": {
+      "type": "datetime"
     },
     "image": {
       "type": "media",

@@ -208,13 +208,6 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const sys of ['id', 'createdAt', 'updatedAt', 'publishedAt'] as const) {
     if (record[sys] !== undefined) out[sys] = record[sys];
   }
-  // Специфический для teachers случай: в схеме `teacher` нет отношения `institute` (только
-  // `seminars`), но данные (в т.ч. в тестовой заглушке) могут его нести. Раз источника в схеме
-  // нет, соответствие им не управляет — прямой passthrough, вне FIELD_MAP.
-  if (type === 'teachers' && record.institute && typeof record.institute === 'object') {
-    const inst = record.institute as Record<string, unknown>;
-    if (inst.legacy_id !== undefined) out.institute_legacy_id = inst.legacy_id;
-  }
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
@@ -385,6 +378,15 @@ async function liveCapture(): Promise<void> {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
   }
 
+  const unclassifiedPeople = (types.teachers ?? [])
+    .filter((person) => person.trait !== 'teacher' && person.trait !== 'method-author')
+    .map((person) => String(person.legacy_id ?? '(без legacy_id)'));
+  if (unclassifiedPeople.length > 0) {
+    throw new Error(
+      `живой захват: trait не задан у персон (${unclassifiedPeople.join(', ')}) — снимок не записан`,
+    );
+  }
+
   // Связи расписания достраиваются ПОСЛЕ отображения всех типов: они требуют перекрёстного
   // поиска, которого построчное отображение не умеет по построению.
   //
@@ -401,8 +403,8 @@ async function liveCapture(): Promise<void> {
     const groupByLegacyId = new Map(
       (types.course_groups ?? []).map((r) => [String(r.legacy_id ?? ''), r] as const),
     );
-    const instituteByLegacyId = new Map(
-      (types.institutes ?? []).map((r) => [String(r.legacy_id ?? ''), r] as const),
+    const instituteBySlug = new Map(
+      (types.institutes ?? []).map((r) => [String(r.slug ?? ''), r] as const),
     );
 
     for (const entry of types.schedule_entries ?? []) {
@@ -413,7 +415,17 @@ async function liveCapture(): Promise<void> {
 
       const seminar = seminarBySlug.get(slug);
       const group = seminar ? groupByLegacyId.get(String(seminar.course_group_legacy_id ?? '')) : undefined;
-      const institute = group ? instituteByLegacyId.get(String(group.institute_legacy_id ?? '')) : undefined;
+      const institute = group ? instituteBySlug.get(String(group.institute_legacy_id ?? '')) : undefined;
+      // An empty institute collection is rejected by the existing required-type
+      // check below. Keep that more useful diagnostic for skeletal captures;
+      // when institutes are present, however, an unresolved relation is a
+      // broken join and must not silently produce a partial schedule entry.
+      if (group && instituteBySlug.size > 0 && !institute) {
+        throw new Error(
+          `живой захват: проведение ${String(entry.legacy_id ?? entry.id ?? '(без id)')} ` +
+            `не разрешает институт по slug ${String(group.institute_legacy_id ?? '(пусто)')}`,
+        );
+      }
       if (group) {
         // `program` сайт читает наравне с `institute`
         // (`raspisanie-i-tseny.astro`, `entry.program.name`), и в CMS его тоже нет полем.

@@ -2,7 +2,7 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers } from '../lib/data';
+import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers, teacherPageHref } from '../lib/data';
 import { isCurrentOrFuture } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
@@ -108,7 +108,7 @@ const items = entries.map((entry) => {
     : undefined;
   const teacherName = entry.teachers?.[0]?.fullName || 'Преподаватель уточняется';
   const instituteSlug = institute?.slug || slugify(entry.institute.shortname || entry.institute.name);
-  const teacherHref = teacher ? `/${teacher.institute_legacy_id}/prepodavatel/${teacher.slug}` : '';
+  const teacherHref = teacherPageHref(teacher);
   const seminarHref = institute
     ? `/${institute.slug}/${entry.program.slug}/${entry.seminar.slug}`
     : '/raspisanie-i-tseny';

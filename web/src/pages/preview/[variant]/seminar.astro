@@ -16,6 +16,7 @@ import {
   cleanBodyHtml,
   stripLegacySeminarTail,
   formatPrice, getSnapshotReferenceDate,
+  teacherPageHref,
 } from '../../../lib/data';
 import { isCurrentOrFuture } from '../../../lib/schedule-window';
 import { registrationHref, isDemoForms } from '../../../lib/forms';
@@ -73,9 +74,7 @@ const schedule = nearest
             ? {
                 name: lead.fullName.split(',')[0].trim(),
                 photo: full?.photo || null,
-                href: full
-                  ? `/${full.institute_legacy_id}/prepodavatel/${full.slug}`
-                  : null,
+                href: teacherPageHref(full),
               }
             : undefined,
         },

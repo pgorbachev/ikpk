@@ -14,15 +14,16 @@
   "attributes": {
     "title": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "slug": {
       "type": "uid",
       "targetField": "title",
-      "required": true
+      "required": false
     },
     "body": {
-      "type": "richtext"
+      "type": "richtext",
+      "required": false
     },
     "image": {
       "type": "media",
@@ -41,7 +42,14 @@
     "seo": {
       "type": "component",
       "component": "shared.seo",
-      "repeatable": false
+      "repeatable": false,
+      "required": false
+    },
+    "categories": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::course-group.course-group",
+      "required": false
     }
   }
 }

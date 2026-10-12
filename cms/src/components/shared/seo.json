@@ -8,11 +8,13 @@
   "attributes": {
     "seo_title": {
       "type": "string",
-      "maxLength": 255
+      "maxLength": 255,
+      "required": false
     },
     "seo_description": {
       "type": "text",
-      "maxLength": 320
+      "maxLength": 320,
+      "required": false
     },
     "og_image": {
       "type": "media",

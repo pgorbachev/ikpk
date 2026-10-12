@@ -1,6 +1,6 @@
 ---
 import { SOCIAL_LINKS } from '../lib/social';
-import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF } from '../lib/navigation';
+import { PHONE, PHONE_HREF, MANAGER_PHONE, MANAGER_PHONE_HREF } from '../lib/navigation';
 import { socialMarkPresentation } from '../lib/social-marks-registry';
 import { assertMarkFilesMatchRegistry } from '../lib/social-mark-files';
 import SocialMark from './social-marks/SocialMark.astro';
@@ -20,7 +20,7 @@ assertMarkFilesMatchRegistry();
         </p>
         <div class="footer-contacts">
           <a href={PHONE_HREF}>{PHONE}</a>
-          <a href={MOBILE_PHONE_HREF}>{MOBILE_PHONE}</a>
+          <a href={MANAGER_PHONE_HREF}>{MANAGER_PHONE}</a>
           <a href="mailto:info@ikpk.su">info@ikpk.su</a>
         </div>
       </div>
@@ -31,6 +31,10 @@ assertMarkFilesMatchRegistry();
           <li><a href="/institut-klinicheskoy-prikladnoy-kineziologii">Институт клинической прикладной кинезиологии</a></li>
           <li><a href="/institut-apledzhera">Институт Апледжера</a></li>
           <li><a href="/institut-barralya">Институт Барраля</a></li>
+          <li><a href="/instituty">Все институты</a></li>
+          <li><a href="/programmy">Все программы</a></li>
+          <li><a href="/seminary">Все семинары</a></li>
+          <li><a href="/specialisty">Специалисты</a></li>
           <li><a href="/raspisanie-i-tseny">Расписание и цены</a></li>
           <li><a href="/oplata">Оплата</a></li>
         </ul>

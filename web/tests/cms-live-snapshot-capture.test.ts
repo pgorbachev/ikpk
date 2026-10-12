@@ -10,7 +10,7 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SNAPSHOT_ORIGIN_FIELD,
   STUB_DEFAULT_PAGE_SIZE,
@@ -96,7 +96,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const courseGroups = Array.from({ length: 3 }, (_, i) =>
     ({ ...base('cg', i + 1, `Программа ${i + 1}`), description: '<p>О программе</p>', image: media(i + 1), institute: ref('inst', 1, 'Институт 1'), seo: seo(`Программа ${i + 1}`) }));
   const teachers = Array.from({ length: 5 }, (_, i) =>
-    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', institute: ref('inst', 1, 'Институт 1') }));
+    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', trait: i === 0 ? 'method-author' : 'teacher', institute_legacy_id: 'raw-legacy-institute', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
     ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', status: 'active', course_group: ref('cg', 1, 'Программа 1'), institute: ref('inst', 1, 'Институт 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
@@ -271,6 +271,86 @@ describe('снимок читается из живой системы упра�
       const found = Object.entries(types).find(([name]) => match.test(name));
       expect(found, `в снимке нет типа ${label}`).toBeDefined();
       expect(found?.[1].length, `${label}: записей в снимке ${found?.[1].length}, в источнике ${count}`).toBe(count);
+    }
+  });
+
+  it('сохраняет CMS trait человека в снимке', async () => {
+    const cms = await stub();
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+
+    const types = typesOf(readSnapshot(dir));
+    const teachers = Object.entries(types).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+    expect(teachers[0]?.trait).toBe('method-author');
+    expect(teachers[0]?.institute_legacy_id).toBe('inst-001');
+    expect(teachers.slice(1).every((teacher) => teacher.trait === 'teacher')).toBe(true);
+  });
+
+  it('отказывает, если живая CMS не классифицировала персону', async () => {
+    const records = dataset();
+    records.teachers!.records[0] = { ...records.teachers!.records[0]!, trait: null };
+    const cms = await stub(records);
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустая классификация принята:
+${run.output}`).not.toBe(0);
+    expect(run.output, 'отказ не называет персону и причину').toMatch(/trait.*teach-001/);
+    expect(existsSync(join(dir, 'snapshot.json')), 'неклассифицированный живой снимок записан').toBe(false);
+  });
+
+  it('сохраняет slug relation института без legacy_id и поддерживает lookup персоны', async () => {
+    const records = dataset();
+    const institute = records.institutes!.records[0]!;
+    const relation = { ...institute, slug: 'new-inst', legacy_id: null };
+    records.institutes!.records[0] = { ...institute, slug: 'new-inst', legacy_id: 'inst-old' };
+    for (const group of records['course-groups']!.records) group.institute = relation;
+    for (const person of records.teachers!.records) person.institute = relation;
+    records.teachers!.records[0] = {
+      ...records.teachers!.records[0]!,
+      slug: 'cms-native-person',
+    };
+    const cms = await stub(records);
+    const dir = outDir();
+    const previousSnapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
+
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, run.output).toBe(0);
+      const snapshot = readSnapshot(dir);
+      const teachers = Object.entries(typesOf(snapshot)).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+      expect(teachers[0]).toEqual(expect.objectContaining({
+        slug: 'cms-native-person',
+        institute_legacy_id: 'new-inst',
+      }));
+      const groups = typesOf(snapshot).course_groups ?? [];
+      expect(groups[0]).toEqual(expect.objectContaining({ institute_legacy_id: 'new-inst' }));
+      const schedule = typesOf(snapshot).schedule_entries ?? [];
+      expect(schedule[0], 'live capture потерял институт у события расписания').toEqual(
+        expect.objectContaining({
+          program: expect.objectContaining({ slug: 'cg-001' }),
+          institute: expect.objectContaining({ name: 'Институт 1' }),
+        }),
+      );
+
+      process.env.CONTENT_SNAPSHOT_DIR = dir;
+      vi.resetModules();
+      const { getCourseGroups, getInstitute, getScheduleEntries, getTeacher, getTeachers } = await import('../src/lib/data.js');
+      expect(getTeachers('new-inst').map((teacher) => teacher.slug),
+        'list lookup по institute slug потерял CMS-native персону').toContain('cms-native-person');
+      expect(getTeacher('cms-native-person')?.institute_legacy_id,
+        'detail lookup потерял сохранённый relation slug').toBe('new-inst');
+      expect(getCourseGroups('new-inst').map((group) => group.slug)).toContain('cg-001');
+      expect(getInstitute('new-inst')?.name).toBe('Институт 1');
+      expect(getScheduleEntries()[0]?.institute.name,
+        'schedule consumer должен получить институт из slug relation').toBe('Институт 1');
+    } finally {
+      if (previousSnapshotDir === undefined) delete process.env.CONTENT_SNAPSHOT_DIR;
+      else process.env.CONTENT_SNAPSHOT_DIR = previousSnapshotDir;
+      vi.resetModules();
     }
   });
 
