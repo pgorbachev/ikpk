@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -30,8 +31,8 @@ type FixturePage = {
   empty: { slug: string; name: string; course_group_legacy_id: string };
 };
 
-const tempDir = (prefix: string): string => {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
+const tempDir = (prefix: string, parent = tmpdir()): string => {
+  const dir = mkdtempSync(join(parent, prefix));
   tempDirs.push(dir);
   return dir;
 };
@@ -116,7 +117,11 @@ function renderedFixture(): { pages: FixturePage; outDir: string } {
   ];
 
   const fixtureRoot = tempDir('ikpk-seminar-date-snapshot-');
-  const outDir = join(tempDir('ikpk-seminar-date-build-'), 'dist');
+  // Astro uses cwd/.astro/.prerender for outDir outside cwd; widget probes
+  // already build there. Keep this fixture's prerender output in its own tree.
+  const buildParent = join(WEB_ROOT, '.astro');
+  mkdirSync(buildParent, { recursive: true });
+  const outDir = join(tempDir('ikpk-seminar-date-build-', buildParent), 'dist');
   writeFileSync(
     join(fixtureRoot, 'snapshot.json'),
     `${JSON.stringify({ ...source, referenceDate: REFERENCE_DATE, content: { types: fixtureTypes } })}\n`,
