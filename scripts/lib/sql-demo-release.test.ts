@@ -4,7 +4,7 @@ import type { SqlPublicContentResult } from './sql-public-content.js';
 
 const sourceHash = `sha256:${'a'.repeat(64)}`;
 const corpusHash = 'b'.repeat(64);
-const staticPagesPath = 'discovery/entities/static_pages.json';
+const staticPagesPath = 'synthetic-corpus/static_pages.json';
 
 function page(slug: string, body: string) {
   return {
@@ -122,7 +122,7 @@ function syntheticVideoInputs() {
     imageId: `sql-image-${sourceId}`,
   }));
   const videoSupplements = ids.map((sourceId) => ({
-    sourceId, sourcePath: 'discovery/entities/video_playlists.json', revision: 'accepted-video-r1', sha256: 'f'.repeat(64),
+    sourceId, sourcePath: 'synthetic-corpus/video_playlists.json', revision: 'accepted-video-r1', sha256: 'f'.repeat(64),
     slug: String(sourceId), legacy_id: `video/pleylist/${sourceId}`,
     seo: { seo_title: `Accepted SEO ${sourceId}`, seo_description: `Accepted description ${sourceId}` },
     videos: null,
@@ -197,7 +197,7 @@ describe('composeSqlDemoRelease', () => {
     expect(release.provenance.videoMetadata[0]).toMatchObject({ link: 'https://private-source.example.test/playlist/131', priority: 131, imageId: 'sql-image-131' });
     expect(release.provenance.videoSupplements).toHaveLength(3);
     expect(release.provenance.videoSupplements[0]).toMatchObject({
-      sourceId: 131, sourcePath: 'discovery/entities/video_playlists.json', revision: 'accepted-video-r1',
+      sourceId: 131, sourcePath: 'synthetic-corpus/video_playlists.json', revision: 'accepted-video-r1',
       thumbnailSourceFileId: 'thumb-131', thumbnailPublicUrl: '/media/video-thumbs/synthetic-131.jpg',
     });
   });
@@ -233,7 +233,7 @@ describe('composeSqlDemoRelease', () => {
     expect(rawPage).toBeDefined();
     expect(rawPage!.body).toContain(organizationVideo.expectedOutput);
     expect(rawPage!.body).not.toContain(`src="${organizationVideo.originalURL}"`);
-    const cleanerModulePath = '../../web/src/lib/html-cleaner.js';
+    const cleanerModulePath = new URL('../../web/src/lib/html-cleaner.ts', import.meta.url).href;
     const { cleanBodyHtml } = await import(cleanerModulePath);
     const cleanBody = cleanBodyHtml(rawPage!.body, { sourceType: 'sql-demo-test', sourceId: rawPage!.slug }).html;
 
@@ -462,7 +462,7 @@ describe('composeSqlDemoRelease', () => {
       ],
     });
     const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(decisions));
-    const cleanerModulePath = '../../web/src/lib/html-cleaner.js';
+    const cleanerModulePath = new URL('../../web/src/lib/html-cleaner.ts', import.meta.url).href;
     const { cleanBodyHtml } = await import(cleanerModulePath);
     const parse5Url = new URL('../../web/node_modules/parse5/dist/index.js', import.meta.url);
     const { parseFragment } = await import(parse5Url.href);

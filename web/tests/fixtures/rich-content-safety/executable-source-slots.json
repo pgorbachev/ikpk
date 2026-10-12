@@ -848,11 +848,11 @@
     "identity": "style|body:8370d74f6937862f"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L180:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L187:C1:style",
     "file": "pages/[institute]/[courseGroup]/[seminar].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L180:C1:style",
-    "fingerprint": "230bf1eb767a0b23412461bb7f90bf534131cb2d5e8349c1ccd79c509d678646",
+    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L187:C1:style",
+    "fingerprint": "4aaa384647cd3a1326093ebe0b5c958534167ad4086df49e0d6e80e24f4533ca",
     "identity": "style|body:a476247d401743c9"
   },
   {
