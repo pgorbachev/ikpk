@@ -341,4 +341,46 @@ describe('synthetic SQL public content mapper', () => {
     expect(() => mapSqlPublicContent(unlinkedBindingSource, options))
       .toThrow(/FileBindingOrganizationInfo#902: fileId does not resolve to an active file \(file-unlinked\)/);
   });
+
+  it('excludes a known public but disabled file without promoting it to a public document', () => {
+    const disabledSource: SqlPublicSource = {
+      ...source,
+      Files: [{
+        id: 'file-disabled', fileType: 'application/pdf', originalName: 'disabled-private-name.pdf',
+        extension: 'pdf', url: '/private/disabled-private-name.pdf', status: 'disabled', privacy: 'public',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+    };
+
+    const result = mapSqlPublicContent(disabledSource, options);
+
+    expect(result.entities.documents).toEqual([]);
+    expect(JSON.stringify(result.entities)).not.toContain('file-disabled');
+    expect(JSON.stringify(result.entities)).not.toContain('disabled-private-name.pdf');
+    expect(result.provenance.exclusions).toContainEqual({
+      table: 'Files', sourceId: 'file-disabled', reason: 'status is not active',
+    });
+  });
+
+  it('does not bind a disabled public PDF to an active organization section', () => {
+    const disabledBindingSource: SqlPublicSource = {
+      ...source,
+      OrganizationInfo: [{
+        id: 903, name: 'Сведения', priority: 1, content: 'Описание', status: 'active',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+      Files: [{
+        id: 'file-disabled', fileType: 'application/pdf', originalName: 'disabled.pdf',
+        extension: 'pdf', url: '/public/disabled.pdf', status: 'disabled', privacy: 'public',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+      FileBindingOrganizationInfo: [{
+        id: 904, title: 'Документ', priority: 1, fileId: 'file-disabled', organizationInfoId: 903,
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+    };
+
+    expect(() => mapSqlPublicContent(disabledBindingSource, options))
+      .toThrow(/FileBindingOrganizationInfo#904: fileId does not resolve to an active file \(file-disabled\)/);
+  });
 });
