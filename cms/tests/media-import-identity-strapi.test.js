@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -80,6 +81,10 @@ describe('media import identity in Strapi 5.51.2', { timeout: 360000 }, () => {
   before(async () => {
     const [major] = process.versions.node.split('.').map(Number);
     assert.ok(major >= 20 && major <= 24, `Node from cms engines required, got ${process.version}`);
+    execFileSync(path.join(cmsRoot, 'node_modules/.bin/tsc'), ['--pretty', 'false'], {
+      cwd: cmsRoot,
+      stdio: 'inherit',
+    });
     const env = {
       NODE_ENV: 'development', JWT_SECRET: 'media-identity-test-jwt', HOST: '127.0.0.1',
       PORT: String(await freePort()), APP_KEYS: 'media-identity-one,media-identity-two',
