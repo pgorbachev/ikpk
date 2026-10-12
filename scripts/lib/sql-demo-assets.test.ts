@@ -11,7 +11,7 @@ import {
 
 const syntheticSqlSha256 = 'a'.repeat(64);
 const syntheticArchiveSha256 = 'b'.repeat(64);
-const syntheticCodeRevision = 'synthetic-code-revision-42';
+const syntheticCodeRevision = 'c'.repeat(40);
 const tempRoots: string[] = [];
 
 function sha256(bytes: Buffer): string {
@@ -401,7 +401,7 @@ describe('offline SQL asset loader contract', () => {
     await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(manifest|supplement).*(hash|SHA|digest|pinned)/i);
   });
 
-  it('rejects a supplement pinned to a stale code revision', async () => {
+  it('rejects a supplement source revision that is not a full Git SHA', async () => {
     const base = await root();
     const input = baseInput(base);
     input.supplementManifest.entries = [{
@@ -411,6 +411,27 @@ describe('offline SQL asset loader contract', () => {
     pinSyntheticSupplements(input);
 
     await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(revision|pinned|supplement)/i);
+  });
+
+  it('preserves a historical supplement revision distinct from the release code revision', async () => {
+    const base = await root();
+    const bytes = Buffer.from('{"historical":"approved"}');
+    await putFile(base, 'supplements/historical-page.json', bytes);
+    const input = baseInput(base);
+    const historicalRevision = 'd'.repeat(40);
+    input.supplementManifest.entries = [{
+      name: 'historical-static-page',
+      scope: 'public-static-page',
+      sourcePath: 'historical-page.json',
+      revision: historicalRevision,
+      sha256: sha256(bytes),
+    }];
+    pinSyntheticSupplements(input);
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.supplements[0]?.revision).toBe(historicalRevision);
+    expect(result.supplements[0]?.revision).not.toBe(input.supplementManifest.codeRevision);
   });
 
   it('rejects a supplement manifest whose digest differs from the pinned release', async () => {
