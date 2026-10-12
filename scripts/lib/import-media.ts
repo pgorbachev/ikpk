@@ -27,6 +27,11 @@ interface ImageSource {
   mime: string;
 }
 
+export interface VerifiedOfflineImageSource extends ImageSource {
+  sourceSha256: string;
+  resolvedLocalPath: string;
+}
+
 interface OfflineMediaAllowlistEntry {
   sourceUrl: string;
   sourceIdentity: string;
@@ -138,6 +143,62 @@ async function remoteSource(fetchImage: (url: string) => Promise<Response>, url:
   };
 }
 
+/** Reads one pinned local raster source without network access or upload side effects. */
+export async function readVerifiedOfflineImageSource(input: {
+  root: string;
+  sourceIdentity: string;
+  sourcePath: string;
+  sourceSha256: string;
+  sourceFilename: string;
+}): Promise<VerifiedOfflineImageSource> {
+  if (
+    typeof input.sourceIdentity !== 'string' || !input.sourceIdentity ||
+    typeof input.sourcePath !== 'string' || !input.sourcePath ||
+    input.sourcePath.includes('\\') || posix.isAbsolute(input.sourcePath) || /^[A-Za-z]:/.test(input.sourcePath) ||
+    input.sourcePath.split('/').some((segment) => !segment || segment === '.' || segment === '..') ||
+    posix.normalize(input.sourcePath) !== input.sourcePath
+  ) {
+    throw new Error('offline media source path is not a canonical relative path');
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.sourceSha256)) {
+    throw new Error(`offline media source SHA-256 is invalid for ${input.sourceIdentity}`);
+  }
+  if (
+    typeof input.sourceFilename !== 'string' || !input.sourceFilename ||
+    input.sourceFilename.includes('/') || input.sourceFilename.includes('\\') ||
+    basename(input.sourceFilename) !== input.sourceFilename ||
+    input.sourceFilename === '.' || input.sourceFilename === '..'
+  ) {
+    throw new Error(`offline media source filename is invalid for ${input.sourceIdentity}`);
+  }
+
+  const realRoot = await realpath(input.root);
+  const expectedPath = resolve(realRoot, ...input.sourcePath.split('/'));
+  const actualPath = await realpath(expectedPath);
+  if (actualPath !== expectedPath) {
+    throw new Error(`offline media source path contains a symbolic link or resolves outside its exact path for ${input.sourceIdentity}`);
+  }
+
+  const bytes = await readFile(actualPath);
+  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
+  if (sourceSha256 !== input.sourceSha256) {
+    throw new Error(`offline media source SHA-256 differs from the pin for ${input.sourceIdentity}`);
+  }
+
+  const mime = sniffImageMime(bytes);
+  const extension = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : '.webp';
+  const originalExtension = extname(input.sourceFilename);
+  const stem = basename(input.sourceFilename, originalExtension);
+  if (!stem) throw new Error(`offline media source filename has no usable name for ${input.sourceIdentity}`);
+  return {
+    bytes,
+    filename: `${stem}${extension}`,
+    mime,
+    sourceSha256,
+    resolvedLocalPath: actualPath,
+  };
+}
+
 async function offlineSource(
   offlineMedia: NonNullable<ImageUploaderOptions['offlineMedia']>,
   sourceUrl: string,
@@ -180,43 +241,16 @@ async function offlineSource(
   }
   const entry = matches[0];
   if (entry.ownerApproved !== true) throw new Error('offline media source is not owner-approved');
-  if (
-    entry.sourcePath.includes('\\') || posix.isAbsolute(entry.sourcePath) ||
-    /^[A-Za-z]:/.test(entry.sourcePath) ||
-    entry.sourcePath.split('/').some((segment) => !segment || segment === '.' || segment === '..') ||
-    posix.normalize(entry.sourcePath) !== entry.sourcePath
-  ) {
-    throw new Error(`offline media source path is not a canonical relative path: ${entry.sourcePath}`);
-  }
-  if (
-    entry.sourceFilename.includes('/') || entry.sourceFilename.includes('\\') ||
-    basename(entry.sourceFilename) !== entry.sourceFilename ||
-    entry.sourceFilename === '.' || entry.sourceFilename === '..'
-  ) {
-    throw new Error('offline media source filename must be a file name');
-  }
-
-  const realRoot = await realpath(offlineMedia.root);
-  const expectedPath = resolve(realRoot, ...entry.sourcePath.split('/'));
-  const actualPath = await realpath(expectedPath);
-  if (actualPath !== expectedPath) {
-    throw new Error('offline media source path contains a symbolic link or resolves outside its exact path');
-  }
-
-  const bytes = await readFile(actualPath);
-  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
-  if (sourceSha256 !== entry.sourceSha256) {
-    throw new Error(`offline media source SHA-256 differs from allowlist for ${entry.sourceIdentity}`);
-  }
-
+  const verified = await readVerifiedOfflineImageSource({
+    root: offlineMedia.root,
+    sourceIdentity: entry.sourceIdentity,
+    sourcePath: entry.sourcePath,
+    sourceSha256: entry.sourceSha256,
+    sourceFilename: entry.sourceFilename,
+  });
   // The allowlist's filename and MIME are provenance. Upload metadata follows the
-  // verified bytes so a stale .webp declaration cannot mislabel a PNG or JPEG.
-  const mime = sniffImageMime(bytes);
-  const extension = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : '.webp';
-  const originalExtension = extname(entry.sourceFilename);
-  const stem = basename(entry.sourceFilename, originalExtension);
-  if (!stem) throw new Error('offline media source filename has no usable name');
-  return { bytes, filename: `${stem}${extension}`, mime };
+  // verified bytes so a stale extension cannot mislabel the raster data.
+  return { bytes: verified.bytes, filename: verified.filename, mime: verified.mime };
 }
 
 function hasSourceClaims(providerMetadata: unknown): boolean {
