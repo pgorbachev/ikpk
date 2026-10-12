@@ -116,7 +116,7 @@
 полей отпечатка при этом **не меняется**.
 
 **Сохранение полей попытки.** Обход сохраняемых значений сегодня берёт только элементы
-`input` (`web/src/scripts/payment-form.ts:266`, `querySelectorAll<HTMLInputElement>('input')`). Поле семинара, ставшее `select`,
+`input` (`web/src/scripts/payment-form.ts:295`, `querySelectorAll<HTMLInputElement>('input')`). Поле семинара, ставшее `select`,
 выпало бы из сохранённой попытки молча — отсюда нормативное требование о наличии всех трёх
 значений независимо от элемента управления.
 
