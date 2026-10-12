@@ -464,6 +464,21 @@ describe('composeSqlDemoRelease', () => {
     const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(decisions));
     const cleanerModulePath = '../../web/src/lib/html-cleaner.js';
     const { cleanBodyHtml } = await import(cleanerModulePath);
+    const parse5Url = new URL('../../web/node_modules/parse5/dist/index.js', import.meta.url);
+    const { parseFragment } = await import(parse5Url.href);
+    type CleanedNode = { tagName?: string; attrs?: { name: string; value: string }[]; childNodes?: CleanedNode[] };
+    const iframeNodes = (html: string): CleanedNode[] => {
+      const result: CleanedNode[] = [];
+      const walk = (node: CleanedNode): void => {
+        for (const child of node.childNodes ?? []) {
+          if (child.tagName === 'iframe') result.push(child);
+          walk(child);
+        }
+      };
+      walk(parseFragment(html) as CleanedNode);
+      return result;
+    };
+    const attrValue = (node: CleanedNode, name: string): string | undefined => node.attrs?.find((attr) => attr.name === name)?.value;
     const cleanDescriptions = release.entities.seminars.map((seminar) => cleanBodyHtml(
       String(seminar.description ?? ''),
       { sourceType: 'sql-demo-test', sourceId: String(seminar.sourceId) },
@@ -474,11 +489,17 @@ describe('composeSqlDemoRelease', () => {
     const seminarDescription = cleanDescriptions[0];
     expect(seminarDescription).toContain('Before');
     expect(seminarDescription).toContain('After');
-    expect(seminarDescription).toContain(acceptedRutube);
-    expect(cleanProgramDescription).toContain(acceptedRutube);
-    for (const decision of rutube) {
-      expect(seminarDescription).toContain(decision.expectedOutput);
-    }
+    const seminarIframes = iframeNodes(seminarDescription);
+    expect(seminarIframes).toHaveLength(6);
+    expect(seminarIframes.map((iframe) => attrValue(iframe, 'src'))).toEqual([
+      'https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab/',
+      ...rutubeIds.map((id) => `https://rutube.ru/play/embed/${id}/`),
+    ]);
+    expect(attrValue(seminarIframes[0], 'sandbox')).toBe('allow-scripts allow-same-origin allow-presentation');
+    expect(attrValue(seminarIframes[0], 'referrerpolicy')).toBe('no-referrer');
+    expect(iframeNodes(cleanProgramDescription).map((iframe) => attrValue(iframe, 'src'))).toEqual([
+      'https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab/',
+    ]);
     expect(cleanDescriptions[1]).toContain('Before 9347');
     expect(cleanDescriptions[1]).toContain('After 9347');
     expect(cleanDescriptions[1]).toContain('href="https://rutube.ru/play/embed/66666666666666666666666666666666/?p=synthetic"');
