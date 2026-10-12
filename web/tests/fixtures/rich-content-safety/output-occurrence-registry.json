@@ -61,7 +61,7 @@
     "src:components/home/sections/ProgramsCatalog.astro:L46:C1:style",
     "src:components/home/sections/Reviews.astro:L131:C1:style",
     "src:components/home/sections/Reviews.astro:L73:C3:script",
-    "src:components/home/sections/Segments.astro:L45:C1:style",
+    "src:components/home/sections/Segments.astro:L52:C1:style",
     "src:components/home/sections/Teachers.astro:L54:C1:style",
     "src:components/home/sections/TeachersFeatured.astro:L52:C1:style",
     "src:components/home/sections/TrackPath.astro:L58:C1:style",
