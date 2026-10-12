@@ -19,5 +19,5 @@
       "node_modules/playwright-core"
     ]
   },
-  "note": "Runtime parser: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine."
+  "note": "Runtime sanitizer: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine."
 }

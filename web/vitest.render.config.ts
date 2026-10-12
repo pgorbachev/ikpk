@@ -25,6 +25,7 @@ export default await getViteConfig({
   test: {
     include: [
       'tests/schedule-filters.render.test.ts',
+      'tests/teacher-links.render.test.ts',
       'tests/rich-content-render.test.ts',
     ],
   },

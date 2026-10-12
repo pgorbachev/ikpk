@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "validate-urls": "tsx validate-urls.ts",
+    "url-map:flatten": "tsx flatten-url-map.ts",
     "validate-urls:staging": "tsx validate-urls.ts --base-url https://staging.ikpk.su",
     "validate-urls:prod": "tsx validate-urls.ts --base-url https://ikpk.su"
   },

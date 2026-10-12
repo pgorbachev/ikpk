@@ -7,10 +7,12 @@
 import { CTA_HREF } from '../../../lib/navigation';
 import { getAssetDimensions, srcsetFor } from '../../../lib/media';
 import { getCatalogStats } from '../../../lib/home';
+import { getTeachers, teacherPageHref } from '../../../lib/data';
 
 const photo = '/media/users/1/images/1-1727024776370.webp';
 const dim = getAssetDimensions(photo);
-const teacherHref = '/institut-apledzhera/prepodavatel/63';
+const teacher = getTeachers().find((person) => String(person.legacy_id) === '63');
+const teacherHref = teacherPageHref(teacher);
 const stats = getCatalogStats();
 ---
 <section class="hero-fa" data-architecture="faculty" data-hero="faculty">
@@ -43,7 +45,7 @@ const stats = getCatalogStats();
         class="teacher-photo"
       />
       <figcaption>
-        <a href={teacherHref}>Шрайнер В. Э.</a>
+        {teacherHref ? <a href={teacherHref}>Шрайнер В. Э.</a> : 'Шрайнер В. Э.'}
         <span>MD, CST-D · ведёт программы краниосакральной терапии</span>
       </figcaption>
     </figure>

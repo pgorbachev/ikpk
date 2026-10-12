@@ -31,6 +31,11 @@ export default {
     });
   },
   bootstrap(app: StrapiApp) {
+    // Динамический импорт: модуль конфигурации выполняется и вне браузера
+    // (cms/tests/admin-locale.test.js читает `config.locales` без `require`).
+    void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
+      ensureDefaultAdminLocale(window.localStorage),
+    );
     app.addMenuLink({
       to: '/site-refresh',
       icon: RefreshIcon,

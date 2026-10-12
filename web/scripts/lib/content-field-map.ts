@@ -82,7 +82,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'slug', source: 'slug' },
   { type: 'course_groups', field: 'order', source: 'order' },
   { type: 'course_groups', field: 'images', source: 'image', transform: 'mediaUrlList' },
-  { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.legacy_id' },
+  { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.slug' },
   { type: 'course_groups', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'course_groups', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'course_groups', field: 'description_html', source: 'description' },
@@ -98,9 +98,6 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'order', source: 'order' },
   { type: 'seminars', field: 'images', source: 'image', transform: 'mediaUrlList' },
   { type: 'seminars', field: 'course_group_legacy_id', source: 'course_group.legacy_id' },
-  { type: 'seminars', field: 'status', source: 'seminar_status' },
-  { type: 'seminars', field: 'price', source: 'price' },
-  { type: 'seminars', field: 'duration', source: 'duration' },
   { type: 'seminars', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'seminars', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'seminars', field: 'description_html', source: 'description' },
@@ -109,14 +106,14 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'image', source: 'image', transform: 'mediaRef' },
   { type: 'seminars', field: 'teachers', source: 'teachers', transform: 'refList' },
 
-  // teachers: связь с институтом добавлена в схему CMS и в импортёр. Прежде её не было ни там,
-  // ни там, хотя в данных переноса она есть у всех 29, — и живой захват отказывал на первом же
-  // преподавателе, потому что контракт проверяет эту связь кодом.
+  // teachers: trait и институт снимаются из записи CMS. `institute_legacy_id` в snapshot
+  // выводится из relation `institute`, а не из одноимённого legacy-поля персоны.
   { type: 'teachers', field: 'legacy_id', source: 'legacy_id' },
   { type: 'teachers', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'teachers', field: 'name', source: 'name' },
   { type: 'teachers', field: 'slug', source: 'slug' },
-  { type: 'teachers', field: 'institute_legacy_id', source: 'institute.legacy_id' },
+  { type: 'teachers', field: 'trait', source: 'trait' },
+  { type: 'teachers', field: 'institute_legacy_id', source: 'institute.slug' },
   { type: 'teachers', field: 'bio_html', source: 'bio' },
   { type: 'teachers', field: 'bio_text', source: 'bio', transform: 'htmlToText' },
   { type: 'teachers', field: 'photo', source: 'photo', transform: 'mediaUrl' },

@@ -5,7 +5,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro';
 import InstituteProgramsSection from '../components/institutes/InstituteProgramsSection.astro';
 import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
-import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers } from '../lib/data';
+import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers, teacherPageHref } from '../lib/data';
 import RichContent from '../components/RichContent.astro';
 import { getCourseGroupPreviewImage } from '../lib/course-group-previews.js';
 import type { Institute } from '../lib/data';
@@ -121,12 +121,17 @@ const programCards = courseGroups.map((courseGroup) => {
   };
 });
 
-const teacherCards = teachers.map((teacher) => ({
-  href: `/${institute.slug}/prepodavatel/${teacher.slug}`,
-  name: teacher.name,
-  photo: teacher.photo,
-  excerpt: teacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
-}));
+const teacherCards = teachers.flatMap((teacher) => {
+  const href = teacherPageHref(teacher);
+  return href
+    ? [{
+        href,
+        name: teacher.name,
+        photo: teacher.photo,
+        excerpt: teacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
+      }]
+    : [];
+});
 
 const visibleTeachers = teacherCards.slice(0, 3);
 const hiddenTeachers = teacherCards.slice(3);
