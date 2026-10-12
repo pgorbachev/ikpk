@@ -16,7 +16,7 @@ const expected = {
       { sourceId: 12, legacy_id: 'program-two', slug: 'program-two', name: 'Synthetic Program Two', description: 'Program two description', imageId: null, order: 3, institute_legacy_id: 'institutes/one', is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' } },
     ],
     teachers: [{ sourceId: 101, legacy_id: '101', slug: '101', name: 'Synthetic Teacher', bio: 'Synthetic biography', imageId: 'file-avatar-1', order: 4, institute_legacy_id: 'institutes/one' }], seminars: [], events: [],
-    articles: [{ sourceId: 401, legacy_id: 'article-one', slug: 'article-one', title: 'Synthetic Article', body: '<p>Expected body</p>', imageId: 'file-image-1', published_date: '2021-03-04T00:00:00.000Z', seo: { seo_title: 'Article SEO', seo_description: 'Article summary' } }],
+    articles: [{ sourceId: 401, legacy_id: 'article-one', slug: 'article-one', title: 'Synthetic Article', body: '<p>Expected body</p>', imageId: 'file-image-1', published_date: '2021-03-04', seo: { seo_title: 'Article SEO', seo_description: 'Article summary' } }],
     news: [], promotions: [], organizationInfo: [], documents: [], instituteAdditionalInfo: [],
     videos: [], pages: [],
   },
@@ -30,7 +30,7 @@ const expected = {
       { table: 'Articles', sourceId: 401, targetSlug: 'article-one', targetLegacyId: 'article-one' },
     ],
     videoMetadata: [], exclusions: [], rejectedRelations: [], classificationCandidates: [], sourceMetadata: [],
-    acceptedCorpus: { revision: 'synthetic-r1', sha256: 'd'.repeat(64) },
+    acceptedCorpus: { revision: '1234567890abcdef1234567890abcdef12345678', sha256: 'd'.repeat(64) },
     supplements: [], targetLocations: [],
     assetMappings: [
       { sourceFileId: 'file-image-1', sourceUrl: IMAGE_URL, targetPublicUrl: 'https://cms-a.synthetic.invalid/uploads/image-one.webp', sha256: SOURCE_SHA, detectedMimeType: 'image/png', verification: { status: 'verified', loader: 'sql-demo-asset-loader', attestationId: 'synthetic-attestation' } },
@@ -68,7 +68,7 @@ function target(nonce: string, mediaId: number, mediaUrl: string, avatarId: numb
       ],
       teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: { id: avatarId, url: avatarUrl } })],
       articles: [row(4, 'articles', 'article-one', {
-        title: 'Synthetic Article', slug: 'article-one', body, published_date: '2021-03-04T00:00:00.000Z',
+        title: 'Synthetic Article', slug: 'article-one', body, published_date: '2021-03-04',
         seo: { seo_title: 'Article SEO', seo_description: 'Article summary' }, image: { id: mediaId, url: mediaUrl },
         categories: categoryOrder.map((legacyId) => relation('course-groups', legacyId)),
       })],

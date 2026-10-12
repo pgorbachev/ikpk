@@ -380,7 +380,7 @@ describe('materializeSqlPublicContent', () => {
       startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z',
       isFree: false, isEventCollection: true, duration: '7 hours',
     });
-    expect(article).toMatchObject({ title: 'Article One', slug: 'article-one', body: 'Article body', published_date: '2021-03-04T00:00:00.000Z' });
+    expect(article).toMatchObject({ title: 'Article One', slug: 'article-one', body: 'Article body', published_date: '2021-03-04' });
     expect(article).not.toHaveProperty('published_at');
 
     expect(connectedDocumentIds(teacher.institute)).toEqual([oneByLegacyId(target, 'institutes', 'institutes/one').documentId]);
