@@ -188,6 +188,8 @@ export interface SqlPublicContentResult {
   provenance: {
     sourceHash: string;
     sourceIdentity: { table: string; sourceId: number; targetSlug?: string; targetLegacyId: string }[];
+    /** SQL playlist origin details retained for private audit, never emitted as public video fields. */
+    videoMetadata: { sourceId: number; link: string | null; priority: number; imageId: string | null }[];
     exclusions: { table: string; sourceId: number | string; reason: string }[];
     rejectedRelations: { table: string; sourceId: number; relation: string; targetId: number; reason: string }[];
     classificationCandidates: {
