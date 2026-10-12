@@ -6,7 +6,7 @@ const POST_TIMEOUT_MS = 10_000;
 const STATUS_TIMEOUT_MS = 15_000;
 const MAX_HOLDS = 5;
 
-type Hold = { requestId: string; createdAt: number };
+type Hold = { requestId: string; createdAt: number; cardPage?: boolean };
 type FieldMap = Record<string, string | boolean>;
 type ApiBody = {
   status?: string;
@@ -241,6 +241,35 @@ function boot(formEl: HTMLFormElement) {
 
   function writeFields(all: Record<string, FieldMap>) {
     sessionStorage.setItem(FIELDS_KEY, JSON.stringify(all));
+  }
+
+  function markCardPage(requestId: string) {
+    const holds = readHolds().map((h) => (h.requestId === requestId ? { ...h, cardPage: true } : h));
+    writeHolds(holds);
+  }
+
+  function reachedCard(requestId: string): boolean {
+    return readHolds().some((h) => h.requestId === requestId && h.cardPage === true);
+  }
+
+  const NOT_STARTED = 'Оплата не началась. Карта не запрашивалась, деньги не списаны.';
+
+  function showPaid(name: 'succeeded' | 'already_paid', headline: string) {
+    setState(name, headline);
+    const note = document.createElement('p');
+    note.setAttribute('data-payment-receipt-note', '');
+    note.textContent = 'Чек придёт на почту, указанную при оплате.';
+    stateHost.append(note);
+    stripFieldsDom();
+    setChrome({});
+  }
+
+  function showNotStarted(name: 'error' | 'unknown') {
+    setState(name, NOT_STARTED);
+    restoreFieldsDom();
+    const stored = readFields()[activeRequestId];
+    if (stored) applyFields(stored);
+    setChrome({});
   }
 
   function upsertHold(requestId: string): boolean {
@@ -613,9 +642,7 @@ function boot(formEl: HTMLFormElement) {
       applyResponse(res.status, json);
       if (shouldUnlockAfter(res.status, json)) unlockSubmit();
     } catch {
-      setState('unknown', 'Исход отправки неизвестен. Свяжитесь с нами напрямую.');
-      stripFieldsDom();
-      setChrome({ warning: true, continue: true, other: true });
+      showNotStarted('unknown');
       unlockSubmit();
     }
   }
@@ -651,6 +678,7 @@ function boot(formEl: HTMLFormElement) {
       return;
     }
     if (status === 'created' && json.confirmationUrl) {
+      markCardPage(activeRequestId);
       const url = json.confirmationUrl;
       setState('created', 'Переходим к оплате… ');
       const go = document.createElement('a');
@@ -664,10 +692,7 @@ function boot(formEl: HTMLFormElement) {
     if (status === 'already_paid') {
       dropHold(activeRequestId);
       activeRequestId = '';
-      setState('already_paid', 'Оплата уже подтверждена.');
-      restoreFieldsDom();
-      formEl.reset();
-      setChrome({});
+      showPaid('already_paid', 'Оплата уже подтверждена.');
       return;
     }
     if (status === 'canceled') {
@@ -705,22 +730,23 @@ function boot(formEl: HTMLFormElement) {
     }
     if (status === 'verification_required') {
       const stored = readFields()[activeRequestId];
+      const card = reachedCard(activeRequestId);
       setState(
         'verification_required',
-        'Исход этой попытки нельзя подтвердить автоматически. Платёж мог быть создан, повторять оплату не нужно. Свяжитесь с нами.',
+        card
+          ? 'Исход этой попытки нельзя подтвердить автоматически. Платёж мог быть создан, повторять оплату не нужно. Свяжитесь с нами.'
+          : NOT_STARTED,
       );
       stripFieldsDom();
       setChrome({
-        warning: true,
+        warning: card,
         summary: stored ? `${stored.firstName ?? ''} ${stored.lastName ?? ''}, ${stored.seminar ?? ''}, ${stored.amount ?? ''} ₽` : undefined,
         continue: true,
         other: true,
       });
       return;
     }
-    setState('error', 'Ошибка адресата. Свяжитесь с нами напрямую.');
-    stripFieldsDom();
-    setChrome({ warning: true, continue: true, other: true });
+    showNotStarted('error');
   }
 
   function startOtherSeminar() {
@@ -795,9 +821,7 @@ function boot(formEl: HTMLFormElement) {
     if (status === 'succeeded') {
       dropHold(requestId);
       activeRequestId = '';
-      setState('succeeded', 'Оплата подтверждена.');
-      restoreFieldsDom();
-      setChrome({});
+      showPaid('succeeded', 'Оплата подтверждена.');
       openDialog();
       return;
     }
@@ -816,6 +840,11 @@ function boot(formEl: HTMLFormElement) {
       return;
     }
     if (status === 'unknown') {
+      if (!reachedCard(requestId)) {
+        showNotStarted('unknown');
+        openDialog();
+        return;
+      }
       setState('unknown', 'Статус не удалось проверить. Свяжитесь с нами напрямую.');
       stripFieldsDom();
       setChrome({ warning: true, continue: true, other: true });

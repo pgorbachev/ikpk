@@ -276,6 +276,10 @@ test.describe('3.10 возврат с параметром запускает о
     await gotoOplata(page, `/oplata?${RETURN_PARAM}=${id}`);
     await expect.poll(() => gets.length).toBeGreaterThan(0);
     await expect(page.locator(STATE('succeeded'))).toBeVisible();
+    await expect(page.locator('[data-payment-receipt-note]')).toHaveText(
+      'Чек придёт на почту, указанную при оплате.',
+    );
+    await expect(page.locator(`${FORM} [name="firstName"]`)).toHaveCount(0);
   });
 });
 
@@ -392,7 +396,8 @@ test.describe('3.10a-2 удержание переживает перезагр�
     });
     await page.reload();
     await expect(page.locator(STATE('verification_required'))).toBeVisible();
-    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toBeVisible();
+    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
+    await expect(page.getByText('Карта не запрашивалась')).toBeVisible();
     await expect(page.locator(`${FORM} [type="submit"]`)).toHaveCount(0);
   });
 
@@ -559,8 +564,9 @@ test.describe('3.10a-2a удержание с момента отправки', 
     await fillValid(page);
     await page.locator(`${FORM} [type="submit"]`).click({ timeout: 2000 }).catch(() => undefined);
     await gotoOplata(page);
-    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toBeVisible();
-    await expect(page.locator(`${FORM} [type="submit"]`)).toHaveCount(0);
+    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
+    await expect(page.getByText('Карта не запрашивалась')).toBeVisible();
+    await expect(page.locator(`${FORM} [type="submit"]`)).toBeVisible();
   });
 });
 
@@ -799,7 +805,8 @@ test.describe('3.10a-5 состояние «нужна сверка»', () => {
     await page.locator(`${FORM} [type="submit"]`).click();
     const panel = page.locator(STATE('verification_required'));
     await expect(panel).toBeVisible();
-    await expect(panel.getByText(/мог быть создан|повторять оплату не нужно/i)).toBeVisible();
+    await expect(panel.getByText('Карта не запрашивалась')).toBeVisible();
+    await expect(page.locator(`[${PAYMENT_HOLD_WARNING_ATTR}]`)).toHaveCount(0);
     await expect(page.locator(`[${PAYMENT_CONTINUE_ATTR}]`)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_OTHER_SEMINAR_ATTR}]`)).toBeVisible();
     await expect(page.locator(`[${PAYMENT_SUMMARY_ATTR}] input`)).toHaveCount(0);
@@ -1310,10 +1317,13 @@ test.describe('3.15 идентификатор попытки не показы�
     );
     expect(holds.length).toBe(2);
     for (const h of holds) {
-      expect(Object.keys(h).sort(), `в удержании лишние поля: ${JSON.stringify(h)}`).toEqual([
-        'createdAt',
-        'requestId',
-      ]);
+      const keys = Object.keys(h).sort();
+      expect(
+        keys.every((k) => k === 'createdAt' || k === 'requestId' || k === 'cardPage'),
+        `в удержании лишние поля: ${JSON.stringify(h)}`,
+      ).toBe(true);
+      expect(keys).toEqual(expect.arrayContaining(['createdAt', 'requestId']));
+      if ('cardPage' in h) expect(h.cardPage, JSON.stringify(h)).toBe(true);
     }
     const persisted = await page.evaluate(() =>
       Object.keys(localStorage)
