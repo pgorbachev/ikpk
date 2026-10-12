@@ -81,6 +81,45 @@ export interface SqlArticleRow {
   updatedAt: string;
 }
 
+interface SqlRowTimestamps { createdAt: string; updatedAt: string }
+
+export interface SqlCitySourceRow extends SqlRowTimestamps { id: number; name: string; status: string }
+export interface SqlFileBindingOrganizationInfoSourceRow extends SqlRowTimestamps {
+  id: number; title: string | null; priority: number; fileId: string; organizationInfoId: number;
+}
+export interface SqlFileSourceRow extends SqlRowTimestamps {
+  id: string; fileType: string | null; originalName: string | null; extension: string | null;
+  url: string | null; status: string; privacy: string;
+}
+export interface SqlPublicDocumentEntity {
+  sourceId: string;
+  fileId: string;
+  title: string | null;
+  priority: number;
+  originalName: string | null;
+  extension: string | null;
+  fileType: string | null;
+  url: string;
+}
+export interface SqlInstituteAdditionalInfoSourceRow extends SqlRowTimestamps {
+  id: number; name: string | null; description: string | null; instituteId: number | null;
+}
+export interface SqlNewsSourceRow extends SqlRowTimestamps {
+  id: number; name: string | null; description: string | null; imageId: string | null;
+  status: string; link: string | null; priority: number;
+}
+export interface SqlOrganizationInfoSourceRow extends SqlRowTimestamps {
+  id: number; name: string | null; priority: number; content: string | null; status: string;
+}
+export interface SqlPromotionSourceRow extends SqlRowTimestamps {
+  id: number; name: string | null; description: string | null; imageId: string | null;
+  link: string | null; status: string; priority: number; type: string | null;
+}
+export interface SqlVideoSourceRow extends SqlRowTimestamps {
+  id: number; name: string | null; link: string | null; status: string;
+  priority: number; imageId: string | null;
+}
+
 export interface SqlPublicSource {
   /** Hash of the pinned source artifact, supplied by its reader. */
   sourceHash: string;
@@ -93,6 +132,15 @@ export interface SqlPublicSource {
   Events: SqlEventRow[];
   EventsAndTeachers: { eventId: number; teacherId: number }[];
   Articles: SqlArticleRow[];
+  /** Added by the reviewed 17-table reader; optional for the approved six-collection mapper slice. */
+  Cities?: SqlCitySourceRow[];
+  FileBindingOrganizationInfo?: SqlFileBindingOrganizationInfoSourceRow[];
+  Files?: SqlFileSourceRow[];
+  InstituteAdditionalInfo?: SqlInstituteAdditionalInfoSourceRow[];
+  News?: SqlNewsSourceRow[];
+  OrganizationInfo?: SqlOrganizationInfoSourceRow[];
+  Promotions?: SqlPromotionSourceRow[];
+  Videos?: SqlVideoSourceRow[];
 }
 
 export interface SqlPublicContentOptions {
@@ -128,6 +176,12 @@ export interface SqlPublicContentResult {
     teachers: SqlSluggedPublicEntity[];
     events: SqlPublicEntity[];
     articles: SqlSluggedPublicEntity[];
+    news?: SqlPublicEntity[];
+    promotions?: SqlPublicEntity[];
+    videos?: SqlSluggedPublicEntity[];
+    organizationInfo?: SqlPublicEntity[];
+    documents?: SqlPublicDocumentEntity[];
+    instituteAdditionalInfo?: SqlPublicEntity[];
   };
   provenance: {
     sourceHash: string;
