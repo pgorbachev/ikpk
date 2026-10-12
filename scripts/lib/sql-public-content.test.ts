@@ -285,4 +285,60 @@ describe('synthetic SQL public content mapper', () => {
       error.mockRestore();
     }
   });
+
+  it('excludes a known public but unlinked file without promoting it to a public entity or document', () => {
+    const unlinkedSource: SqlPublicSource = {
+      ...source,
+      Files: [{
+        id: 'file-unlinked', fileType: 'application/pdf', originalName: 'unlinked-private-name.pdf',
+        extension: 'pdf', url: '/private/unlinked-private-name.pdf', status: 'unlinked', privacy: 'public',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+    };
+
+    const result = mapSqlPublicContent(unlinkedSource, options);
+
+    expect(result.entities.documents).toEqual([]);
+    expect(JSON.stringify(result.entities)).not.toContain('file-unlinked');
+    expect(JSON.stringify(result.entities)).not.toContain('unlinked-private-name.pdf');
+    expect(result.provenance.exclusions).toContainEqual({
+      table: 'Files', sourceId: 'file-unlinked', reason: 'status is not active',
+    });
+  });
+
+  it('fails closed for an unknown file status', () => {
+    const unknownStatusSource: SqlPublicSource = {
+      ...source,
+      Files: [{
+        id: 'file-unknown-status', fileType: 'application/pdf', originalName: 'unknown.pdf',
+        extension: 'pdf', url: '/private/unknown.pdf', status: 'unknown-status', privacy: 'public',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+    };
+
+    expect(() => mapSqlPublicContent(unknownStatusSource, options))
+      .toThrow(/Files#file-unknown-status: status has unsupported value "unknown-status"/);
+  });
+
+  it('does not bind an unlinked public PDF to an active organization section', () => {
+    const unlinkedBindingSource: SqlPublicSource = {
+      ...source,
+      OrganizationInfo: [{
+        id: 901, name: 'Сведения', priority: 1, content: 'Описание', status: 'active',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+      Files: [{
+        id: 'file-unlinked', fileType: 'application/pdf', originalName: 'unlinked.pdf',
+        extension: 'pdf', url: '/public/unlinked.pdf', status: 'unlinked', privacy: 'public',
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+      FileBindingOrganizationInfo: [{
+        id: 902, title: 'Документ', priority: 1, fileId: 'file-unlinked', organizationInfoId: 901,
+        createdAt: '2026-10-12T00:00:00', updatedAt: '2026-10-12T00:00:00',
+      }],
+    };
+
+    expect(() => mapSqlPublicContent(unlinkedBindingSource, options))
+      .toThrow(/FileBindingOrganizationInfo#902: fileId does not resolve to an active file \(file-unlinked\)/);
+  });
 });
