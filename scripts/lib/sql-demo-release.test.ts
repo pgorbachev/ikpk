@@ -298,7 +298,7 @@ describe('composeSqlDemoRelease', () => {
   it('requires an exact owner decision for each source-referenced unlinked article image', () => {
     expect(() => composeSqlDemoRelease(mapped({
       articles: [{ sourceId: 901, legacy_id: 'article-901', slug: 'synthetic-article', title: 'Synthetic article', body: '<p><img src="/sql/synthetic-image-1" /></p>', imageId: 'img-1' }],
-    }), supplements(), assets(), ownerDecisions([]))).toThrow(/img-1.*owner decision/i);
+    }), supplements(), assets(), { ...ownerDecisions(), approvedUnlinkedArticleImages: [] })).toThrow(/img-1.*owner decision/i);
   });
 
   it('applies only seven exact video decisions, preserves surrounding text and queries, and rejects unmatched iframe transforms', () => {
