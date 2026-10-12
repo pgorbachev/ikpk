@@ -7,7 +7,7 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -679,6 +679,110 @@ describe('снимок несёт происхождение', () => {
     expect(String(snap.snapshotId), 'нет идентификатора снимка').toMatch(/^snap:[0-9a-f]{64}$/);
     expect(snap.pinned, 'живой снимок помечен закреплённым').not.toBe(true);
   });
+});
+
+// ═══════════════════ DEMO193 projection into the existing renderers ═══════════════════════
+
+describe('синтетическая CMS проекция сохраняет принятые публичные поля', () => {
+  it('проводит семинар, расписание, новости и акции через фактический захват снимка', async () => {
+    const source = dataset();
+    const seminar = source.seminars.records[0]!;
+    seminar.description = '<p>DEMO193_SUMMARY_SENTINEL</p>';
+    seminar.full_text = '<h2>Целевая аудитория</h2><p>DEMO193_AUDIENCE_SENTINEL</p><p>DEMO193_DETAIL_SENTINEL</p>';
+    seminar.learning_mode = '<p>DEMO193_MODE_SENTINEL</p>';
+    seminar.learning_plan = '<p>DEMO193_PLAN_SENTINEL</p>';
+    seminar.recommendations = '<p>DEMO193_RECOMMENDATIONS_SENTINEL</p>';
+
+    const event = source['schedule-entries'].records[0]!;
+    event.startAt = '2099-01-01T00:00:00.000Z';
+    event.endAt = '2099-01-02T00:00:00.000Z';
+    event.entry_status = 'active';
+    event.image = media(1);
+    event.isEventCollection = true;
+
+    const news = source['news-items'].records[0]!;
+    news.date = '2031-03-04T00:00:00.000Z';
+    const promotion = source.promotions.records[0]!;
+    promotion.date = '2032-05-06T00:00:00.000Z';
+    promotion.type = 'SHOP';
+
+    const uploads = Object.fromEntries(
+      Array.from({ length: ARTICLE_COUNT }, (_, index) => [
+        `/uploads/img-${index + 1}.webp`,
+        { bytes: Buffer.from(`live-capture-image-${index + 1}`) },
+      ]),
+    );
+    const cms = await startCmsStub(source, uploads);
+    stubs.push(cms);
+    const dir = outDir();
+    const issues: string[] = [];
+
+    try {
+      const schema = readSchema('cms/src/api/schedule-entry/content-types/schedule-entry/schema.json');
+      const scheduleAttrs = schema.attributes as Record<string, Record<string, unknown>>;
+      const scheduleImage = scheduleAttrs.image;
+      if (scheduleImage?.type !== 'media' || scheduleImage.multiple !== false || JSON.stringify(scheduleImage.allowedTypes) !== '["images"]') {
+        issues.push('CMS schedule-entry schema must support one image with allowedTypes=[images]');
+      }
+      const collectionFlag = scheduleAttrs.isEventCollection;
+      if (collectionFlag?.type !== 'boolean' || collectionFlag.default !== false) {
+        issues.push('CMS schedule-entry schema must declare isEventCollection as boolean default false');
+      }
+
+      const promotionSchema = readSchema('cms/src/api/promotion/content-types/promotion/schema.json');
+      const promotionAttrs = promotionSchema.attributes as Record<string, Record<string, unknown>>;
+      const promotionType = promotionAttrs.type;
+      if (promotionType?.type !== 'enumeration' || !['SHOP', 'INSTITUTE'].every((value) =>
+        Array.isArray(promotionType.enum) && promotionType.enum.includes(value))) {
+        issues.push('CMS promotion schema must preserve the SHOP and INSTITUTE values used by the public badge');
+      }
+
+      const map = await fieldMapModule();
+      const hasMapping = (type: string, field: string, sourcePath: string, transform?: string): boolean =>
+        map.FIELD_MAP.some((entry) => entry.type === type && entry.field === field && entry.source === sourcePath && entry.transform === transform);
+      for (const [type, field, sourcePath, transform] of [
+        ['seminars', 'learning_mode', 'learning_mode', undefined],
+        ['seminars', 'learning_plan', 'learning_plan', undefined],
+        ['seminars', 'recommendations', 'recommendations', undefined],
+        ['schedule_entries', 'image', 'image', 'mediaRef'],
+        ['schedule_entries', 'isEventCollection', 'isEventCollection', undefined],
+        ['news', 'createdAt', 'date', undefined],
+        ['promotions', 'createdAt', 'date', undefined],
+        ['promotions', 'type', 'type', undefined],
+      ] as const) {
+        if (!hasMapping(type, field, sourcePath, transform)) issues.push(`missing CMS projection ${type}.${field} <- ${sourcePath}`);
+      }
+
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      if (capture.status !== 0) throw new Error(`synthetic live capture failed:\n${capture.output}`);
+
+      const types = typesOf(readSnapshot(dir));
+      const capturedSeminar = types.seminars?.find((record) => record.slug === 'sem-001');
+      const capturedEvent = types.schedule_entries?.find((record) => record.name === 'Событие 1');
+      const capturedNews = types.news?.[0];
+      const capturedPromotion = types.promotions?.[0];
+      for (const [field, value] of [
+        ['full_text_html', 'DEMO193_AUDIENCE_SENTINEL'],
+        ['learning_mode', 'DEMO193_MODE_SENTINEL'],
+        ['learning_plan', 'DEMO193_PLAN_SENTINEL'],
+        ['recommendations', 'DEMO193_RECOMMENDATIONS_SENTINEL'],
+      ] as const) {
+        if (!String(capturedSeminar?.[field] ?? '').includes(value)) issues.push(`captured seminar is missing ${field}=${value}`);
+      }
+      const eventImage = capturedEvent?.image as { url?: string; id?: string } | undefined;
+      if (eventImage?.url !== '/uploads/img-1.webp' || eventImage.id !== 'media-1') {
+        issues.push(`captured schedule image must be normalized with its id; got ${JSON.stringify(eventImage)}`);
+      }
+      if (capturedEvent?.isEventCollection !== true) issues.push('captured schedule entry lost isEventCollection=true');
+      if (capturedNews?.createdAt !== '2031-03-04T00:00:00.000Z') issues.push('news date was not projected to createdAt');
+      if (capturedPromotion?.createdAt !== '2032-05-06T00:00:00.000Z') issues.push('promotion date was not projected to createdAt');
+      if (capturedPromotion?.type !== 'SHOP') issues.push('promotion type SHOP was not projected for the existing badge');
+
+      expect(issues, 'CMS public fields must survive schema and the actual capture pipeline').toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });
 
 // ═════════════════════════ Общий срок съёма, отдельно от срока одного запроса ════════════
