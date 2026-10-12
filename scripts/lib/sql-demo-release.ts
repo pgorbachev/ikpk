@@ -140,6 +140,7 @@ export function composeSqlDemoRelease(
       endOffset: number;
       startTag?: { endOffset: number };
       endTag?: { startOffset: number };
+      attrs?: Record<string, { startOffset: number; endOffset: number }>;
     };
   };
   const attr = (node: HtmlNode, name: string): string | undefined =>
@@ -267,7 +268,6 @@ export function composeSqlDemoRelease(
   const pageBodyByLegacyId = new Map(acceptedSupplements.pages.map((entry) => [entry.page.legacy_id, entry.page.body]));
   const panelReplacementsByLegacyId = new Map<string, { location: SqlDemoTargetLocation; html: string }[]>();
   if (organizations.length > 0) {
-    const expected = new Set(organizations.map((row) => sourceIdOf(row, 'OrganizationInfo')));
     for (const row of organizations) {
       const id = sourceIdOf(row, 'OrganizationInfo');
       const location = requireLocation('OrganizationInfo', id, 'pages', 'body');
@@ -278,18 +278,18 @@ export function composeSqlDemoRelease(
       entries.push({ location, html: typeof row.content === 'string' ? row.content : '' });
       panelReplacementsByLegacyId.set(location.targetLegacyId, entries);
     }
-    for (const location of acceptedSupplements.targetLocations.filter((item) => item.sourceTable === 'OrganizationInfo')) {
-      if (!expected.has(location.sourceId)) fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
+  }
+  for (const location of acceptedSupplements.targetLocations.filter((item) => item.sourceTable === 'OrganizationInfo')) {
+    if (!organizations.some((row) => row.sourceId === location.sourceId)) {
+      fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
     }
   }
 
   const additionalByInstitute = new Map<string, string[]>();
   if (instituteAdditionalInfo.length > 0) {
-    const expected = new Set<number>();
     const anchorByInstitute = new Map<string, Set<string>>();
     for (const row of instituteAdditionalInfo) {
       const id = sourceIdOf(row, 'InstituteAdditionalInfo');
-      expected.add(id);
       const location = requireLocation('InstituteAdditionalInfo', id, 'institutes', 'description');
       const source = required(institutesBySourceId.get(String(row.instituteId)), `InstituteAdditionalInfo#${id}`, 'instituteId does not resolve to a mapped institute');
       if (source.legacy_id !== location.targetLegacyId) fail(`InstituteAdditionalInfo#${id}`, 'target does not match instituteId');
@@ -305,8 +305,10 @@ export function composeSqlDemoRelease(
       entries.push(section);
       additionalByInstitute.set(source.legacy_id, entries);
     }
-    for (const location of acceptedSupplements.targetLocations.filter((item) => item.sourceTable === 'InstituteAdditionalInfo')) {
-      if (!expected.has(location.sourceId)) fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
+  }
+  for (const location of acceptedSupplements.targetLocations.filter((item) => item.sourceTable === 'InstituteAdditionalInfo')) {
+    if (!instituteAdditionalInfo.some((row) => row.sourceId === location.sourceId)) {
+      fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
     }
   }
 
@@ -339,6 +341,18 @@ export function composeSqlDemoRelease(
     if (asset.detectedMimeType !== 'application/pdf') fail(`Files#${asset.sourceFileId}`, 'detected MIME type must be application/pdf');
   }
 
+  const ownerDecisionByImageId = uniqueBy(
+    ownerDecisions.approvedUnlinkedArticleImages,
+    (decision) => decision.sourceFileId,
+    (decision) => `Files#${decision.sourceFileId}`,
+  );
+  for (const decision of ownerDecisions.approvedUnlinkedArticleImages) {
+    const image = imageMappings.get(decision.sourceFileId);
+    if (!image || image.sourceUrl !== decision.sourceUrl || !isNonEmptyString(decision.decisionId)) {
+      fail(`Files#${decision.sourceFileId}`, 'owner decision does not match an exact image asset mapping');
+    }
+  }
+
   const videoRows = mapped.entities.videos ?? [];
   const sqlVideosById = uniqueBy(videoRows, (row) => String(sourceIdOf(row, 'Videos')), (row) => `Videos#${sourceIdOf(row, 'Videos')}`);
   const videoSupplementsBySourceId = uniqueBy(
@@ -353,7 +367,7 @@ export function composeSqlDemoRelease(
   }
 
   const usedImageIds = new Set<string>();
-  const articleImageIds = new Set<string>();
+  const bodyArticleImageIds = new Set<string>();
   const imageBearingCollections: [string, unknown[]][] = [
     ['Institutes', mapped.entities.institutes], ['Programs', mapped.entities.programs], ['Teachers', mapped.entities.teachers],
     ['Events', mapped.entities.events], ['Articles', mapped.entities.articles], ['News', mapped.entities.news ?? []],
@@ -365,14 +379,43 @@ export function composeSqlDemoRelease(
       if (!isNonEmptyString(record.imageId)) continue;
       const id = sourceIdOf(row, table);
       const image = required(imageMappings.get(record.imageId), `${table}#${id}`, `imageId ${record.imageId} has no exact asset mapping`);
-      if (table === 'Articles' && !ownerDecisions.approvedUnlinkedArticleImages.some((decision) =>
-        decision.sourceFileId === image.sourceFileId && decision.sourceUrl === image.sourceUrl && isNonEmptyString(decision.decisionId))) {
-        fail(`Files#${image.sourceFileId}`, 'source-referenced article image requires an exact owner decision');
-      }
       usedImageIds.add(image.sourceFileId);
-      if (table === 'Articles') articleImageIds.add(image.sourceFileId);
     }
   }
+
+  const transformArticleBodyImages = (html: string, sourceId: number): string => {
+    const fragment = parseFragment(html, { sourceCodeLocationInfo: true }) as HtmlNode;
+    const replacements: { start: number; end: number; value: string }[] = [];
+    for (const imageNode of all(fragment, (node) => node.tagName === 'img')) {
+      const sourceUrl = required(attr(imageNode, 'src'), `Articles#${sourceId}`, 'image src is required for an approved offline mapping');
+      const matches = [...imageMappings.values()].filter((asset) => asset.sourceUrl === sourceUrl);
+      if (matches.length !== 1) fail(`Articles#${sourceId}`, 'image src has no unique exact verified asset mapping');
+      const image = matches[0];
+      if (!image || !ownerDecisionByImageId.has(image.sourceFileId)) {
+        fail(`Files#${image?.sourceFileId ?? 'unknown'}`, 'body image requires an exact owner decision');
+      }
+      const decision = ownerDecisionByImageId.get(image.sourceFileId)!;
+      if (decision.sourceUrl !== image.sourceUrl || !isNonEmptyString(decision.decisionId)) {
+        fail(`Files#${image.sourceFileId}`, 'owner decision does not match the exact body image source URL');
+      }
+      const location = required(imageNode.sourceCodeLocation?.attrs?.src, `Articles#${sourceId}`, 'image src source boundary is unresolved');
+      bodyArticleImageIds.add(image.sourceFileId);
+      usedImageIds.add(image.sourceFileId);
+      replacements.push({
+        start: location.startOffset,
+        end: location.endOffset,
+        value: `src="${escapeHtml(image.targetPublicUrl)}"`,
+      });
+    }
+    return replacements.sort((left, right) => right.start - left.start).reduce(
+      (result, replacement) => `${result.slice(0, replacement.start)}${replacement.value}${result.slice(replacement.end)}`,
+      html,
+    );
+  };
+  const transformedArticleBodies = new Map(mapped.entities.articles.map((article) => [
+    article.sourceId,
+    transformArticleBodyImages(String(article.body ?? ''), article.sourceId),
+  ]));
   for (const supplement of acceptedSupplements.videoPlaylists) {
     if (!isNonEmptyString(supplement.sourcePath) || !isNonEmptyString(supplement.revision) || !isSha256(supplement.sha256)) {
       fail(`Videos#${supplement.sourceId}`, 'video supplement provenance is incomplete');
@@ -384,56 +427,40 @@ export function composeSqlDemoRelease(
     usedImageIds.add(thumb.sourceFileId);
   }
 
-  const ownerDecisionByImageId = uniqueBy(
-    ownerDecisions.approvedUnlinkedArticleImages,
-    (decision) => decision.sourceFileId,
-    (decision) => `Files#${decision.sourceFileId}`,
-  );
-  for (const decision of ownerDecisions.approvedUnlinkedArticleImages) {
-    const image = imageMappings.get(decision.sourceFileId);
-    if (!image || image.sourceUrl !== decision.sourceUrl || !isNonEmptyString(decision.decisionId)) {
-      fail(`Files#${decision.sourceFileId}`, 'owner decision does not match an exact image asset mapping');
-    }
-  }
   for (const image of allowlistedAssets.images) {
-    if (!usedImageIds.has(image.sourceFileId) && !ownerDecisionByImageId.has(image.sourceFileId)) {
-      fail(`Files#${image.sourceFileId}`, 'unlinked image requires an owner decision');
+    if (!usedImageIds.has(image.sourceFileId)) {
+      fail(`Files#${image.sourceFileId}`, 'image mapping is not referenced by active SQL content');
     }
   }
-  for (const sourceFileId of articleImageIds) {
-    if (!ownerDecisionByImageId.has(sourceFileId)) fail(`Files#${sourceFileId}`, 'source-referenced article image requires an owner decision');
-  }
   for (const decision of ownerDecisions.approvedUnlinkedArticleImages) {
-    if (usedImageIds.has(decision.sourceFileId) && !articleImageIds.has(decision.sourceFileId)) {
-      fail(`Files#${decision.sourceFileId}`, 'owner decision is not for an unlinked or article image');
+    if (!bodyArticleImageIds.has(decision.sourceFileId)) {
+      fail(`Files#${decision.sourceFileId}`, 'owner decision is not for a referenced article body image');
     }
   }
 
   const usedDocumentIds = new Set<string>();
   const fileLocationEntries = acceptedSupplements.targetLocations.filter((item) => item.sourceTable === 'FileBindingOrganizationInfo');
-  if (documents.length > 0) {
-    const expected = new Set<number>();
-    for (const document of documents) {
-      const id = document.bindingSourceId;
-      expected.add(id);
-      const location = requireLocation('FileBindingOrganizationInfo', id, 'pages', 'body');
-      const orgLocation = required(organizationLocations.get(document.organizationInfoSourceId), `FileBindingOrganizationInfo#${id}`, `OrganizationInfo#${document.organizationInfoSourceId} target is unresolved`);
-      if (location.targetLegacyId !== orgLocation.targetLegacyId || location.anchor !== orgLocation.anchor || location.sectionKey !== orgLocation.sectionKey) {
-        fail(`FileBindingOrganizationInfo#${id}`, 'document target does not match its OrganizationInfo section');
-      }
-      if (!isNonEmptyString(location.publicDocumentPath)) fail(`FileBindingOrganizationInfo#${id}`, 'publicDocumentPath is required');
-      const asset = required(documentMappings.get(document.fileId), `FileBindingOrganizationInfo#${id}`, `fileId ${document.fileId} has no exact PDF asset mapping`);
-      if (asset.sourceUrl !== document.url) fail(`Files#${document.fileId}`, 'sourceUrl does not match SQL document URL');
-      if (asset.detectedMimeType !== 'application/pdf') fail(`Files#${document.fileId}`, 'detected MIME type must be application/pdf');
-      if (asset.targetPublicUrl !== location.publicDocumentPath) fail(`FileBindingOrganizationInfo#${id}`, 'publicDocumentPath does not match the PDF asset mapping');
-      usedDocumentIds.add(document.fileId);
+  for (const document of documents) {
+    const id = document.bindingSourceId;
+    const location = requireLocation('FileBindingOrganizationInfo', id, 'pages', 'body');
+    const orgLocation = required(organizationLocations.get(document.organizationInfoSourceId), `FileBindingOrganizationInfo#${id}`, `OrganizationInfo#${document.organizationInfoSourceId} target is unresolved`);
+    if (location.targetLegacyId !== orgLocation.targetLegacyId || location.anchor !== orgLocation.anchor || location.sectionKey !== orgLocation.sectionKey) {
+      fail(`FileBindingOrganizationInfo#${id}`, 'document target does not match its OrganizationInfo section');
     }
-    for (const location of fileLocationEntries) {
-      if (!expected.has(location.sourceId)) fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
+    if (!isNonEmptyString(location.publicDocumentPath)) fail(`FileBindingOrganizationInfo#${id}`, 'publicDocumentPath is required');
+    const asset = required(documentMappings.get(document.fileId), `FileBindingOrganizationInfo#${id}`, `fileId ${document.fileId} has no exact PDF asset mapping`);
+    if (asset.sourceUrl !== document.url) fail(`Files#${document.fileId}`, 'sourceUrl does not match SQL document URL');
+    if (asset.detectedMimeType !== 'application/pdf') fail(`Files#${document.fileId}`, 'detected MIME type must be application/pdf');
+    if (asset.targetPublicUrl !== location.publicDocumentPath) fail(`FileBindingOrganizationInfo#${id}`, 'publicDocumentPath does not match the PDF asset mapping');
+    usedDocumentIds.add(document.fileId);
+  }
+  for (const location of fileLocationEntries) {
+    if (!documents.some((document) => document.bindingSourceId === location.sourceId)) {
+      fail(locationKey(location.sourceTable, location.sourceId), 'unused target location');
     }
-    for (const asset of allowlistedAssets.documents) {
-      if (!usedDocumentIds.has(asset.sourceFileId)) fail(`Files#${asset.sourceFileId}`, 'PDF asset mapping has no exact SQL document join');
-    }
+  }
+  for (const asset of allowlistedAssets.documents) {
+    if (!usedDocumentIds.has(asset.sourceFileId)) fail(`Files#${asset.sourceFileId}`, 'PDF asset mapping has no exact SQL document join');
   }
 
   const videos = videoRows.map((video) => {
@@ -460,17 +487,27 @@ export function composeSqlDemoRelease(
     if (!isNonEmptyString(decision.originalURL) || !isNonEmptyString(decision.expectedOutput)) fail(`${decision.sourceTable}#${decision.sourceId}`, 'video decision URL and output are required');
     let url: URL;
     try { url = new URL(decision.originalURL); } catch { return fail(`${decision.sourceTable}#${decision.sourceId}`, 'video decision URL is invalid'); }
-    const rutubePath = /^\/play\/embed\/[\da-f-]{36}\/?$/i.test(url.pathname);
+    const rutubePath = /^\/play\/embed\/[\da-f]{32}\/?$/i.test(url.pathname);
     if (decision.action === 'rutube-trailing-slash') {
       if (url.protocol !== 'https:' || url.hostname !== 'rutube.ru' || !rutubePath || url.search || url.hash || url.pathname.endsWith('/')) {
         fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube slash decision is outside the exact no-query embed shape');
       }
-      if (decision.expectedOutput !== `<iframe src="${decision.originalURL}/">`) fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube output does not match the approved trailing-slash transform');
+      if (!/^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}$/i.test(decision.originalURL)
+        || decision.expectedOutput !== `<iframe src="${decision.originalURL}/"></iframe>`) {
+        fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube output does not match the approved closed trailing-slash transform');
+      }
       return;
     }
     if (decision.action !== 'external-link' || url.protocol !== 'https:' || url.hash) fail(`${decision.sourceTable}#${decision.sourceId}`, 'unsupported video decision action or URL');
-    const rutubeQuery = url.hostname === 'rutube.ru' && /^\/play\/embed\/[\da-f-]{36}\/$/i.test(url.pathname) && url.searchParams.has('p');
-    const vkEmbed = url.hostname === 'vk.com' && url.pathname === '/video_ext.php' && url.searchParams.has('oid') && url.searchParams.has('vid') && url.searchParams.has('hash');
+    const queryNames = [...url.searchParams.keys()];
+    const rutubeQuery = url.hostname === 'rutube.ru'
+      && /^\/play\/embed\/[\da-f]{32}\/$/i.test(url.pathname)
+      && queryNames.length === 1 && queryNames[0] === 'p' && isNonEmptyString(url.searchParams.get('p'));
+    const vkEmbed = url.hostname === 'vk.com'
+      && url.pathname === '/video_ext.php'
+      && queryNames.length === 4
+      && new Set(queryNames).size === 4
+      && ['oid', 'id', 'hd', 'autoplay'].every((name) => isNonEmptyString(url.searchParams.get(name)));
     if (!rutubeQuery && !vkEmbed) fail(`${decision.sourceTable}#${decision.sourceId}`, 'external-link decision is outside the approved Rutube/VK embed shape');
     const expected = `<a href="${decision.originalURL}" rel="noopener noreferrer">Открыть видео</a>`;
     if (decision.expectedOutput !== expected) fail(`${decision.sourceTable}#${decision.sourceId}`, 'external-link output does not preserve the approved URL');
@@ -489,8 +526,10 @@ export function composeSqlDemoRelease(
         fail(`${sourceTable}#${sourceId}`, `unmatched iframe in ${field}`);
       }
       const iframeLocation = required(location, `${sourceTable}#${sourceId}`, `unmatched iframe in ${field}`);
-      const key = `${sourceTable}#${sourceId}.${field}\0${originalURL}`;
-      const decision = required(videoDecisionByKey.get(key), `${sourceTable}#${sourceId}`, `unmatched iframe in ${field}: ${originalURL}`);
+      const iframeUrl = required(originalURL, `${sourceTable}#${sourceId}`, `unmatched iframe in ${field}`);
+      if (/^https:\/\/rutube\.ru\/play\/embed\/[A-Za-z0-9_-]+\/$/.test(iframeUrl)) continue;
+      const key = `${sourceTable}#${sourceId}.${field}\0${iframeUrl}`;
+      const decision = required(videoDecisionByKey.get(key), `${sourceTable}#${sourceId}`, `unmatched iframe in ${field}`);
       if (usedVideoDecisionKeys.has(key)) fail(`${sourceTable}#${sourceId}`, `video decision matched more than one iframe in ${field}`);
       usedVideoDecisionKeys.add(key);
       replacements.push({ start: iframeLocation.startOffset, end: iframeLocation.endOffset, value: decision.expectedOutput });
@@ -502,14 +541,25 @@ export function composeSqlDemoRelease(
   };
 
   const articles = mapped.entities.articles.map((row) => ({
-    ...clone(row), body: transformVideoIframes(String(row.body ?? ''), 'Articles', row.sourceId, 'body'),
+    ...clone(row),
+    body: transformVideoIframes(required(transformedArticleBodies.get(row.sourceId), `Articles#${row.sourceId}`, 'transformed body is missing'), 'Articles', row.sourceId, 'body'),
   }));
   const seminars = mapped.entities.seminars.map((row) => ({
-    ...clone(row), full_text: transformVideoIframes(String(row.full_text ?? ''), 'Seminars', row.sourceId, 'full_text'),
+    ...clone(row), description: transformVideoIframes(String(row.description ?? ''), 'Seminars', row.sourceId, 'description'),
   }));
   const transformedOrganizations = organizations.map((row) => ({
     ...clone(row), content: transformVideoIframes(String(row.content ?? ''), 'OrganizationInfo', row.sourceId, 'content'),
   }));
+  const transformedOrganizationById = new Map(transformedOrganizations.map((row) => [row.sourceId, row]));
+  for (const replacements of panelReplacementsByLegacyId.values()) {
+    for (const replacement of replacements) {
+      replacement.html = required(
+        transformedOrganizationById.get(replacement.location.sourceId),
+        locationKey('OrganizationInfo', replacement.location.sourceId),
+        'transformed SQL section is missing',
+      ).content;
+    }
+  }
   for (const decision of ownerDecisions.videoReferences) {
     const key = videoDecisionKey(decision);
     if (!usedVideoDecisionKeys.has(key)) fail(`${decision.sourceTable}#${decision.sourceId}`, `video decision did not match a source iframe in ${decision.field}`);
