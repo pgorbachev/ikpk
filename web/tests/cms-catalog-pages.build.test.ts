@@ -17,11 +17,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { parse } from 'parse5';
-import { dist } from './helpers/dist-pages';
+import { dist, walkHtml } from './helpers/dist-pages';
 import { readSnapshotFile, resolveSnapshotDir } from '../scripts/lib/snapshot-paths';
 
 const WEB = join(import.meta.dirname, '..');
@@ -215,12 +214,17 @@ describe('собранный сайт: сегмент каталога отве�
     expect(teacherPageHref({ slug: 'person-without-institute', institute_legacy_id: undefined })).toBeNull();
     expect(teacherPageHref({ slug: 'cms-person', institute_legacy_id: 'new-inst' }))
       .toBe('/new-inst/prepodavatel/cms-person');
-    const invalid = spawnSync(
-      'rg',
-      ['-n', '-g', '*.html', '-e', 'href="/(?:undefined|null)/prepodavatel/'],
-      { cwd: dist, encoding: 'utf-8' },
-    );
-    expect(invalid.status, invalid.stderr || invalid.stdout).toBe(1);
+    const htmlFiles = [...walkHtml()];
+    expect(htmlFiles.length, `ПРОВЕРИТЬ НЕ УДАЛОСЬ: в ${dist} нет HTML-файлов`).toBeGreaterThan(0);
+    const invalid: string[] = [];
+    for (const file of htmlFiles) {
+      const html = readFileSync(file, 'utf-8');
+      for (const match of html.matchAll(/href="\/(?:undefined|null)\/prepodavatel\//g)) {
+        const line = html.slice(0, match.index).split('\n').length;
+        invalid.push(`${relative(dist, file)}:${line}: ${match[0]}`);
+      }
+    }
+    expect(invalid, 'в собранном HTML найден адрес преподавателя без института').toEqual([]);
   });
 
   it('D10: saved trait places a teacher in the roster and excludes a method author', async () => {
