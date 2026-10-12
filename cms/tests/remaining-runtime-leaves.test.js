@@ -1,10 +1,11 @@
-const assert = require('node:assert/strict');
-const { existsSync, readFileSync, realpathSync } = require('node:fs');
-const { createRequire } = require('node:module');
-const { dirname, relative, resolve } = require('node:path');
-const { test } = require('node:test');
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 
-const cmsPackagePath = require.resolve('../package.json');
+const cmsPackagePath = fileURLToPath(new URL('../package.json', import.meta.url));
 const cmsRoot = dirname(cmsPackagePath);
 const cmsRequire = createRequire(cmsPackagePath);
 const lock = JSON.parse(readFileSync(resolve(cmsRoot, 'package-lock.json'), 'utf8'));
