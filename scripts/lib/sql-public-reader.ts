@@ -62,7 +62,7 @@ export interface SqlFileSourceRow {
   createdAt: string;
   updatedAt: string;
   id: string;
-  fileType: string;
+  fileType: string | null;
   originalName: SqlNullableText;
   extension: SqlNullableText;
   url: SqlNullableText;

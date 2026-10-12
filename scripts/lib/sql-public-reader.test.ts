@@ -45,16 +45,36 @@ function sha256Hex(bytes: Buffer | string): string {
 }
 
 function syntheticRow(table: keyof typeof PUBLIC_COLUMNS): Record<string, unknown> {
-  const row = Object.fromEntries(PUBLIC_COLUMNS[table].map((column) => [column, `SYNTHETIC_${table}_${column}`]));
-  if ('status' in row) row.status = table === 'Files' ? 'active' : 'deleted';
-  if (table === 'Files') row.privacy = 'public';
+  const row = Object.fromEntries(PUBLIC_COLUMNS[table].map((column) => {
+    if (column === 'createdAt' || column === 'updatedAt') return [column, '2026-10-12 23:59:59.987654'];
+    if (column === 'startAt' || column === 'endAt') return [column, '2026-10-12'];
+    if (column === 'id') return [column, table === 'Files' ? '00000000-0000-4000-8000-000000000001' : 101];
+    if (column === 'imageId' || column === 'fileId') return [column, '00000000-0000-4000-8000-000000000002'];
+    if (column.endsWith('Id') || column === 'priority' || column === 'oldPrice' || column === 'newPrice') return [column, 202];
+    if (column === 'isFree' || column === 'isEventCollection') return [column, true];
+    if (column === 'status') return [column, table === 'Files' ? 'active' : 'deleted'];
+    if (column === 'privacy') return [column, 'public'];
+    if (column === 'fileType') return [column, null];
+    return [column, `SYNTHETIC_${table}_${column}`];
+  }));
   return row;
 }
 
 function syntheticCollections(): Record<string, Record<string, unknown>[]> {
   const collections = Object.fromEntries(Object.keys(PUBLIC_COLUMNS).map((table) => [table, [syntheticRow(table as keyof typeof PUBLIC_COLUMNS)]]));
-  collections.Files.push({ ...syntheticRow('Files'), id: 'SYNTHETIC_PUBLIC_UNLINKED_FILE' });
+  collections.Articles[0].createdAt = '2026-10-12 23:59:59.987654';
+  collections.Files.push({
+    ...syntheticRow('Files'),
+    id: '00000000-0000-4000-8000-000000000003',
+    status: 'unlinked',
+  });
   return collections;
+}
+
+function errorFootprint(error: Error): string {
+  const record = error as Error & { cause?: unknown; stderr?: unknown };
+  const ownProperties = Object.getOwnPropertyNames(error).map((key) => [key, (error as unknown as Record<string, unknown>)[key]]);
+  return JSON.stringify({ ownProperties, cause: record.cause, stderr: record.stderr, stack: error.stack });
 }
 
 function testOptions(expectedDumpHash: string, runPsql: SqlPublicPsqlRunner) {
@@ -86,9 +106,12 @@ describe('native SQL public source reader contract', () => {
     expect(Object.keys(result).sort()).toEqual(['sourceHash', ...Object.keys(PUBLIC_COLUMNS)].sort());
     for (const [table, columns] of Object.entries(PUBLIC_COLUMNS)) {
       expect(result[table as keyof typeof result]).toEqual(expected[table]);
-      expect(Object.keys((result[table as keyof typeof expected] as Record<string, unknown>[])[0]).sort()).toEqual([...columns].sort());
+      expect(Object.keys(expected[table][0]).sort()).toEqual([...columns].sort());
     }
     expect(mapperSource.Articles).toEqual(expected.Articles);
+    expect(result.Articles[0].createdAt).toBe('2026-10-12 23:59:59.987654');
+    expect(result.Files.map((file) => file.status)).toEqual(['active', 'unlinked']);
+    expect(result.Files.every((file) => file.privacy === 'public')).toBe(true);
     expect(runPsql).toHaveBeenCalledOnce();
   });
 
@@ -157,7 +180,7 @@ describe('native SQL public source reader contract', () => {
     expect(result).toBeInstanceOf(Error);
     if (result instanceof Error) {
       expect(result.message).toBe('Unable to read SQL public source');
-      expect(result.message).not.toContain(secretMarker);
+      expect(errorFootprint(result)).not.toContain(secretMarker);
     }
   });
 
@@ -172,7 +195,7 @@ describe('native SQL public source reader contract', () => {
     expect(result).toBeInstanceOf(Error);
     if (result instanceof Error) {
       expect(result.message).toBe('Unable to read SQL public source');
-      expect(result.message).not.toContain(rawMarker);
+      expect(errorFootprint(result)).not.toContain(rawMarker);
     }
   });
 });
