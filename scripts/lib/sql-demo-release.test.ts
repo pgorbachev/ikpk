@@ -20,7 +20,7 @@ function collapsible(id: number, title: string, content: string): string {
 const acceptedOrganizationBody = [
   '<ul>',
   collapsible(1, 'Synthetic education section', '<p>Accepted education body</p>'),
-  collapsible(2, 'Synthetic documents section', '<p>Accepted documents body</p>'),
+  collapsible(14, 'Synthetic documents section', '<p>Accepted documents body</p>'),
   collapsible(3, 'Unrelated accepted section', '<p>Keep this accepted body</p>'),
   '</ul>',
 ].join('');
@@ -126,7 +126,7 @@ function syntheticVideoInputs() {
   }));
   const videoSupplements = ids.map((sourceId) => ({
     sourceId, sourcePath: 'discovery/entities/video_playlists.json', revision: 'accepted-video-r1', sha256: 'f'.repeat(64),
-    slug: `accepted-mirror-${sourceId}`, legacy_id: `video/playlist/${sourceId}`,
+    slug: String(sourceId), legacy_id: `video/pleylist/${sourceId}`,
     seo: { seo_title: `Accepted SEO ${sourceId}`, seo_description: `Accepted description ${sourceId}` },
     videos: null,
     thumbnailSourceFileId: `thumb-${sourceId}`,
@@ -184,8 +184,8 @@ describe('composeSqlDemoRelease', () => {
 
     expect(release.entities.videos).toEqual([131, 132, 133].map((sourceId) => ({
       name: `SQL playlist ${sourceId}`,
-      slug: `accepted-mirror-${sourceId}`,
-      legacy_id: `video/playlist/${sourceId}`,
+      slug: String(sourceId),
+      legacy_id: `video/pleylist/${sourceId}`,
       videos: null,
       seo: { seo_title: `Accepted SEO ${sourceId}`, seo_description: `Accepted description ${sourceId}` },
     })));
@@ -204,6 +204,7 @@ describe('composeSqlDemoRelease', () => {
     ['missing', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => videoPlaylists.slice(0, 2)],
     ['duplicate', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => [...videoPlaylists, videoPlaylists[0]]],
     ['unused', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => [...videoPlaylists, { ...videoPlaylists[0], sourceId: 999 }]],
+    ['mismatched accepted slug/legacy identity', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => videoPlaylists.map((video, index) => index === 0 ? { ...video, slug: '999', legacy_id: 'video/pleylist/999' } : video)],
   ])('fails preflight on a %s SQL-to-accepted video supplement identity', (_kind, mutate) => {
     const fixture = syntheticVideoInputs();
     expect(() => composeSqlDemoRelease(fixture.input, {
@@ -226,7 +227,10 @@ describe('composeSqlDemoRelease', () => {
     expect(cleanBody).toContain('SQL education replacement');
     expect(cleanBody).not.toContain('Accepted education body');
     expect(cleanBody).not.toContain('Accepted documents body');
+    expect(cleanBody.indexOf('First synthetic document')).toBeGreaterThan(cleanBody.indexOf('id="section-1"'));
+    expect(cleanBody.indexOf('First synthetic document')).toBeLessThan(cleanBody.indexOf('id="section-2"'));
     expect(cleanBody.indexOf('SQL education replacement')).toBeGreaterThan(cleanBody.indexOf('id="section-2"'));
+    expect(cleanBody.indexOf('SQL education replacement')).toBeLessThan(cleanBody.indexOf('id="section-3"'));
     expect(cleanBody).toContain('id="section-1"');
     expect(cleanBody.indexOf('First synthetic document')).toBeLessThan(cleanBody.indexOf('Second synthetic document'));
     expect(cleanBody).toContain('href="/documents/synthetic-one.pdf"');
@@ -303,9 +307,9 @@ describe('composeSqlDemoRelease', () => {
       '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444',
       '55555555-5555-4555-8555-555555555555',
     ];
-    const rutube = rutubeIds.map((id, index) => ({
-      originalURL: `https://rutube.ru/play/embed/${id}${index === 0 ? '?p=synthetic' : ''}`,
-      expectedOutput: `<iframe src="https://rutube.ru/play/embed/${id}/${index === 0 ? '?p=synthetic' : ''}">`,
+    const rutube = rutubeIds.map((id) => ({
+      originalURL: `https://rutube.ru/play/embed/${id}`,
+      expectedOutput: `<iframe src="https://rutube.ru/play/embed/${id}/">`,
       sourceTable: 'Articles' as const, sourceId: 901, field: 'body' as const, action: 'rutube-trailing-slash' as const,
     }));
     const external = [
@@ -336,7 +340,7 @@ describe('composeSqlDemoRelease', () => {
     expect(article).toContain('Before 0');
     expect(article).toContain('After 4');
     expect(article).toContain(rutube[0].expectedOutput);
-    expect(article).toContain('?p=synthetic');
+    expect(article).not.toContain('?p=synthetic');
     expect(article).not.toContain(`src="${rutube[0].originalURL}"`);
     expect(release.entities.seminars[0].full_text).toContain(external[0].expectedOutput);
     expect(release.entities.seminars[1].full_text).toContain(external[1].expectedOutput);
