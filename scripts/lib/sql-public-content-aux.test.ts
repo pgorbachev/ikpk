@@ -74,14 +74,15 @@ describe('mapSqlPublicContent auxiliary public collections', () => {
     expect(() => map({ Cities: [] })).toThrow(/Events#301.*cityId.*71/);
   });
 
-  it('maps active news and promotion dates to the existing CMS date field without a published_date field', () => {
+  it('maps active news and promotion SQL publication days to CMS date, not changed updatedAt', () => {
     const result = map({
       News: [
         { ...timestamps, id: 401, name: 'News', description: 'News body', imageId: null, status: 'active', link: null, priority: 2, createdAt: '2026-10-10T12:45:00' },
         { ...timestamps, id: 402, name: 'Deleted news', description: null, imageId: null, status: 'deleted', link: null, priority: 3, createdAt: '2026-10-09T00:00:00' },
       ],
       Promotions: [
-        { ...timestamps, id: 501, name: 'Offer', description: 'Offer body', imageId: null, link: null, status: 'active', priority: 1, type: 'banner', createdAt: '2026-10-08T23:50:00' },
+        { ...timestamps, id: 501, name: 'Shop offer', description: 'Offer body', imageId: null, link: null, status: 'active', priority: 1, type: 'SHOP', createdAt: '2026-10-08T23:50:00' },
+        { ...timestamps, id: 503, name: 'Institute offer', description: null, imageId: null, link: null, status: 'active', priority: 2, type: 'INSTITUTE', createdAt: '2026-10-06T01:00:00' },
         { ...timestamps, id: 502, name: 'Deleted offer', description: null, imageId: null, link: null, status: 'deleted', priority: 2, type: null, createdAt: '2026-10-07T00:00:00' },
       ],
     });
@@ -89,8 +90,9 @@ describe('mapSqlPublicContent auxiliary public collections', () => {
     expect(result.entities.news).toHaveLength(1);
     expect(result.entities.news?.[0]).toMatchObject({ sourceId: 401, name: 'News', date: expect.stringMatching(/^2026-10-10(?:T|$)/) });
     expect(result.entities.news?.[0]).not.toHaveProperty('published_date');
-    expect(result.entities.promotions).toHaveLength(1);
-    expect(result.entities.promotions?.[0]).toMatchObject({ sourceId: 501, name: 'Offer', date: expect.stringMatching(/^2026-10-08(?:T|$)/) });
+    expect(result.entities.promotions).toHaveLength(2);
+    expect(result.entities.promotions?.[0]).toMatchObject({ sourceId: 501, name: 'Shop offer', type: 'SHOP', date: expect.stringMatching(/^2026-10-08(?:T|$)/) });
+    expect(result.entities.promotions?.[1]).toMatchObject({ sourceId: 503, name: 'Institute offer', type: 'INSTITUTE', date: expect.stringMatching(/^2026-10-06(?:T|$)/) });
     expect(result.provenance.exclusions).toContainEqual({ table: 'News', sourceId: 402, reason: 'status is not active' });
     expect(result.provenance.exclusions).toContainEqual({ table: 'Promotions', sourceId: 502, reason: 'status is not active' });
   });
@@ -146,6 +148,18 @@ describe('mapSqlPublicContent auxiliary public collections', () => {
     expect(() => map({
       InstituteAdditionalInfo: [{ ...timestamps, id: 811, name: 'Orphan', description: null, instituteId: null }],
     })).toThrow(/InstituteAdditionalInfo#811.*instituteId/);
+  });
+
+  it('requires InstituteAdditionalInfo.instituteId to reference a selected institute', () => {
+    expect(() => map({
+      InstituteAdditionalInfo: [{ ...timestamps, id: 812, name: 'Unknown institute', description: null, instituteId: 999 }],
+    })).toThrow(/InstituteAdditionalInfo#812.*instituteId/);
+  });
+
+  it('rejects an unapproved promotion type with its source identity', () => {
+    expect(() => map({
+      Promotions: [{ ...timestamps, id: 504, name: 'Unsupported', description: null, imageId: null, link: null, status: 'active', priority: 3, type: 'banner' }],
+    })).toThrow(/Promotions#504.*type/);
   });
 
   it('fails with the binding identity when its organization or file relation is unresolved', () => {
