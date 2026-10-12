@@ -455,7 +455,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const fileRows = optionalRows(source.Files, 'Files');
   requireUniqueStringIds(fileRows, 'Files');
   for (const file of fileRows) {
-    if (file.status !== 'active' && file.status !== 'deleted' && file.status !== 'unlinked') {
+    if (file.status !== 'active' && file.status !== 'disabled' && file.status !== 'unlinked') {
       invalid('Files', file.id, 'status', `has unsupported value ${JSON.stringify(file.status)}`);
     }
     if (file.privacy !== 'public' && file.privacy !== 'private') invalid('Files', file.id, 'privacy', `has unsupported value ${JSON.stringify(file.privacy)}`);
