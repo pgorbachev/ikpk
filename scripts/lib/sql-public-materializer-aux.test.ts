@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mapSqlPublicContent, type SqlPublicSource } from './sql-public-content.js';
-import { materializeSqlPublicContent, type SqlMaterializerOptions, type SqlStrapiRestClient } from './sql-public-materializer.js';
+import { materializeSqlPublicContent, type SqlMaterializerInput, type SqlMaterializerOptions, type SqlStrapiRestClient } from './sql-public-materializer.js';
 
 type PublicationValidator = (input: { type: string; record: Record<string, unknown> }) => { ok: boolean; missing: string[]; message: string };
 const { checkPublication } = await import(new URL('../../cms/src/lib/publication-validation.ts', import.meta.url).href) as { checkPublication: PublicationValidator };
@@ -43,8 +43,8 @@ const BASE_MAPPED = mapSqlPublicContent(source, {
 
 type PageDto = { title: string; slug: string; body: string; legacy_id: string; seo: { seo_title: string; seo_description: string } };
 type VideoCmsDto = { name: string; slug: string; legacy_id: string; videos: unknown[] | null; seo: { seo_title: string; seo_description: string } };
-type AuxMapped = Omit<SqlPublicContentResult, 'entities'> & {
-  entities: Omit<SqlPublicContentResult['entities'], 'videos'> & { videos?: VideoCmsDto[]; pages?: PageDto[] };
+type AuxMapped = Omit<SqlMaterializerInput, 'entities'> & {
+  entities: Omit<SqlMaterializerInput['entities'], 'videos' | 'pages'> & { videos?: VideoCmsDto[]; pages?: PageDto[] };
 };
 
 function mappedContent(): AuxMapped {

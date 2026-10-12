@@ -393,7 +393,7 @@ function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, opti
       relations: [], verifyAttributes: true, populate: ['seo'],
     });
   }
-  for (const entity of mapped.entities.pages ?? []) {
+  for (const entity of ('pages' in mapped.entities ? mapped.entities.pages : undefined) ?? []) {
     const table: SourceTable = 'Pages';
     const legacyId = requiredLegacyId(entity, table);
     plans.push({
@@ -485,7 +485,7 @@ function validatePlanIdentities(plans: readonly EntityPlan[]): void {
       const slug = requiredString(plan.data, plan.sourceTable, 'slug');
       const collectionSlugs = slugs.get(plan.collection) ?? new Map<string, EntityPlan>();
       if (collectionSlugs.has(slug)) {
-        fail(recordContext(plan.sourceTable, plan.entity), `slug ${slug} collides with another planned ${plan.collection} document`);
+        fail(plan.collection, `slug ${slug} for ${recordContext(plan.sourceTable, plan.entity)} collides with another planned document`);
       }
       collectionSlugs.set(slug, plan);
       slugs.set(plan.collection, collectionSlugs);
