@@ -4,9 +4,19 @@ export interface SqlDemoPageDto {
   title: string;
   slug: string;
   body: string;
-  seo_title?: string;
-  seo_description?: string;
-  legacy_id?: string;
+  legacy_id: string;
+  seo?: { seo_title?: string; seo_description?: string };
+}
+
+export interface SqlDemoTargetLocation {
+  sourceTable: 'OrganizationInfo' | 'InstituteAdditionalInfo' | 'FileBindingOrganizationInfo';
+  sourceId: number;
+  targetCollection: 'pages' | 'institutes';
+  targetLegacyId: string;
+  targetField: 'body' | 'description';
+  sectionKey: string;
+  anchor?: string;
+  publicDocumentPath?: string;
 }
 
 export interface SqlDemoAcceptedSupplements {
@@ -23,37 +33,52 @@ export interface SqlDemoAcceptedSupplements {
     order: number;
     seo?: { seo_title?: string; seo_description?: string };
   }[];
-  organizationPage: SqlDemoPageDto;
-  organizationSectionTargets: {
-    sourceTable: 'OrganizationInfo';
+  videoPlaylists: {
     sourceId: number;
-    targetSectionKey: string;
-    targetAnchor: string;
+    sourcePath: string;
+    revision: string;
+    sha256: string;
+    slug: string;
+    legacy_id: string;
+    seo?: { seo_title?: string; seo_description?: string };
+    videos: unknown[] | null;
+    thumbnailSourceFileId: string;
+    thumbnailSourceUrl: string;
+    thumbnailPublicUrl: string;
   }[];
+  targetLocations: SqlDemoTargetLocation[];
+}
+
+export interface SqlDemoVerifiedAssetMapping {
+  sourceFileId: string;
+  sourceUrl: string;
+  targetPublicUrl: string;
+  sha256: string;
+  detectedMimeType: string;
+  verification: {
+    status: 'verified';
+    loader: 'sql-demo-asset-loader';
+    attestationId: string;
+  };
 }
 
 export interface SqlDemoAllowlistedAssets {
-  images: {
-    sourceFileId: string;
-    sourceUrl: string;
-    targetPublicUrl: string;
-    sha256: string;
-    mimeType: string;
-    approvalId: string;
-  }[];
-  documents: {
-    sourceFileId: string;
-    sourceUrl: string;
-    targetPublicUrl: string;
-    sha256: string;
-    mimeType: 'application/pdf';
-    approvalId: string;
-  }[];
+  images: SqlDemoVerifiedAssetMapping[];
+  documents: (SqlDemoVerifiedAssetMapping & { detectedMimeType: 'application/pdf' })[];
+}
+
+export interface SqlDemoVideoReferenceDecision {
+  sourceTable: 'OrganizationInfo' | 'Seminars' | 'Articles';
+  sourceId: number;
+  field: 'content' | 'full_text' | 'body';
+  originalURL: string;
+  action: 'rutube-trailing-slash' | 'external-link';
+  expectedOutput: string;
 }
 
 export interface SqlDemoOwnerDecisions {
-  approvedUnlinkedArticleImages: { sourceFileId: string; approvalId: string }[];
-  externalVideoLinks: { sourceId: number; sourceUrl: string; approvalId: string }[];
+  approvedUnlinkedArticleImages: { sourceFileId: string; sourceUrl: string; decisionId: string }[];
+  videoReferences: SqlDemoVideoReferenceDecision[];
 }
 
 export interface SqlDemoRelease {
@@ -63,13 +88,24 @@ export interface SqlDemoRelease {
       order: number;
       seo?: { seo_title?: string; seo_description?: string };
     })[];
+    videos: (Omit<NonNullable<SqlPublicContentResult['entities']['videos']>[number], 'sourceId' | 'slug' | 'legacy_id' | 'title'> & {
+      name: string;
+      slug: string;
+      legacy_id: string;
+      videos: unknown[] | null;
+      seo?: { seo_title?: string; seo_description?: string };
+    })[];
   };
   provenance: SqlPublicContentResult['provenance'] & {
     acceptedCorpus: SqlDemoAcceptedSupplements['acceptedCorpus'];
     supplements: { sourcePath: string; revision: string; sha256: string }[];
-    approvedAssets: { sourceFileId: string; sha256: string; mimeType: string; approvalId: string }[];
-    ownerDecisionIds: string[];
-    externalVideoLinks: SqlDemoOwnerDecisions['externalVideoLinks'];
+    targetLocations: SqlDemoTargetLocation[];
+    assetMappings: SqlDemoVerifiedAssetMapping[];
+    videoSupplements: Pick<SqlDemoAcceptedSupplements['videoPlaylists'][number], 'sourceId' | 'sourcePath' | 'revision' | 'sha256' | 'thumbnailSourceFileId' | 'thumbnailSourceUrl' | 'thumbnailPublicUrl'>[];
+    ownerDecisions: {
+      approvedUnlinkedArticleImages: SqlDemoOwnerDecisions['approvedUnlinkedArticleImages'];
+      videoReferences: SqlDemoVideoReferenceDecision[];
+    };
   };
 }
 
@@ -79,5 +115,9 @@ export function composeSqlDemoRelease(
   allowlistedAssets: SqlDemoAllowlistedAssets,
   ownerDecisions: SqlDemoOwnerDecisions,
 ): SqlDemoRelease {
+  void mapped;
+  void acceptedSupplements;
+  void allowlistedAssets;
+  void ownerDecisions;
   throw new Error('composeSqlDemoRelease is not implemented');
 }
