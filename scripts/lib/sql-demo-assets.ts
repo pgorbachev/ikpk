@@ -1,36 +1,19 @@
+import { createHash } from 'node:crypto';
+
 export interface SqlDemoAssetSource {
   sourceHash: string;
   Files?: {
     id: string; fileType: string | null; originalName: string | null; extension: string | null;
     url: string | null; status: string; privacy: string;
-    [field: string]: unknown;
   }[];
-  FileBindingOrganizationInfo?: { id: number; fileId: string; organizationInfoId: number; [field: string]: unknown }[];
-  Articles?: { id: number; status: string; imageId: string | null; content: string | null; [field: string]: unknown }[];
-  Videos?: { id: number; status: string; imageId: string | null; link: string | null; [field: string]: unknown }[];
-}
-
-export interface SqlDemoVerifiedAssetMapping {
-  sourceFileId: string;
-  sourceUrl: string;
-  targetPublicUrl: string;
-  sha256: string;
-  detectedMimeType: string;
-  verification: {
-    status: 'verified';
-    loader: 'sql-demo-asset-loader';
-    attestationId: string;
-  };
-}
-
-export interface SqlDemoAllowlistedAssets {
-  images: SqlDemoVerifiedAssetMapping[];
-  documents: (SqlDemoVerifiedAssetMapping & { detectedMimeType: 'application/pdf' })[];
+  FileBindingOrganizationInfo?: { id: number; fileId: string; organizationInfoId: number }[];
+  Articles?: { id: number; status: string; imageId: string | null; content: string | null }[];
+  Videos?: { id: number; status: string; imageId: string | null; link: string | null }[];
 }
 
 export type SqlDemoAssetReachability =
   | { kind: 'sql-header' }
-  | { kind: 'article-body'; articleSourceId: number }
+  | { kind: 'article-body'; articleSourceIds: number[] }
   | { kind: 'video-thumbnail'; videoSourceId: number }
   | { kind: 'document-binding'; bindingSourceId: number }
   | { kind: 'static-supplement'; supplementName: string };
@@ -43,7 +26,6 @@ export interface SqlDemoAssetManifestEntry {
   sourceStatus: 'active' | 'disabled' | 'unlinked';
   sourcePrivacy: 'public' | 'private';
   reachability: SqlDemoAssetReachability;
-  targetPublicUrl?: string;
 }
 
 export interface SqlDemoAssetManifest {
@@ -77,6 +59,28 @@ export interface SqlDemoSupplementManifest {
   entries: SqlDemoSupplementEntry[];
 }
 
+/** Hashes only the named, ordered manifest payload; its advertised sha256 field is excluded. */
+export function computeSqlDemoSupplementManifestSha256(
+  manifest: Pick<SqlDemoSupplementManifest, 'schemaVersion' | 'scope' | 'codeRevision' | 'entries'>,
+): string {
+  const payload = {
+    schemaVersion: manifest.schemaVersion,
+    scope: manifest.scope,
+    codeRevision: manifest.codeRevision,
+    entries: manifest.entries.map((entry) => ({
+      name: entry.name,
+      scope: entry.scope,
+      sourcePath: entry.sourcePath,
+      revision: entry.revision,
+      sha256: entry.sha256,
+      ...(entry.replacesMissingSourceFileId === undefined
+        ? {}
+        : { replacesMissingSourceFileId: entry.replacesMissingSourceFileId }),
+    })),
+  };
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
 export interface SqlDemoAssetLoaderInput {
   /** Native reader/mapping output with its already-verified source digest. */
   source: SqlDemoAssetSource;
@@ -84,7 +88,6 @@ export interface SqlDemoAssetLoaderInput {
   assetRoot: string;
   assetManifest: SqlDemoAssetManifest;
   approvedBodyFileGrants: {
-    articleSourceId: number;
     sourceFileId: string;
     sourceSha256: string;
     decisionId: string;
@@ -95,25 +98,42 @@ export interface SqlDemoAssetLoaderInput {
 }
 
 /**
- * An attestation is created only by the loader after its offline verifier has checked
- * the resolved path, source SHA-256 and byte magic. It is never read from input data.
+ * An offline proof is created only after the verifier has checked the resolved path,
+ * source SHA-256 and byte magic. It is never read from input data.
  * Image verification is to reuse the shared import-media verifier; this loader does
  * not own a second raster codec. PDF validation is a separate document guard.
  */
-export interface SqlDemoOfflineAssetProof {
+interface SqlDemoOfflineSourceProof {
   sourceFileId: string;
   sourceUrl: string;
   archiveRelativePath: string;
   resolvedLocalPath: string;
   sourceSha256: string;
-  detectedMimeType: string;
-  targetPublicUrl: string;
   reachability: SqlDemoAssetReachability;
+  verification: {
+    status: 'verified';
+    loader: 'sql-demo-asset-loader';
+    attestationId: string;
+  };
+}
+
+export interface SqlDemoOfflineAssetProof extends SqlDemoOfflineSourceProof {
+  sourceFileType: 'image';
+  detectedMimeType: 'image/png' | 'image/jpeg';
+  detectedExtension: 'png' | 'jpg';
+}
+
+export interface SqlDemoOfflineDocumentProof extends SqlDemoOfflineSourceProof {
+  sourceFileType: 'document';
+  detectedMimeType: 'application/pdf';
+  detectedExtension: 'pdf';
 }
 
 export interface SqlDemoAssetLoaderResult {
-  allowlistedAssets: SqlDemoAllowlistedAssets;
+  /** Verified local raster sources; no upload or CMS public URL is implied by this result. */
   offlineMedia: SqlDemoOfflineAssetProof[];
+  /** PDF documents remain separate from raster media. */
+  offlineDocuments: SqlDemoOfflineDocumentProof[];
   supplements: {
     sourcePath: string;
     revision: string;
@@ -123,14 +143,15 @@ export interface SqlDemoAssetLoaderResult {
   }[];
   provenance: {
     baseline: { sqlSha256: string; archiveSha256: string };
-    assets: Pick<SqlDemoOfflineAssetProof, 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>[];
+    assets: (Pick<SqlDemoOfflineAssetProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
+      | Pick<SqlDemoOfflineDocumentProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>)[];
     supplements: SqlDemoAssetLoaderResult['supplements'];
   };
 }
 
 /**
- * Offline asset join boundary. The implementation must verify each local file before
- * constructing a composer attestation; callers cannot submit pre-verified mappings.
+ * Offline asset join boundary. The implementation must verify local bytes before
+ * emitting this proof; callers cannot submit pre-verified mappings or CMS URLs.
  */
 export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise<SqlDemoAssetLoaderResult> {
   void input;

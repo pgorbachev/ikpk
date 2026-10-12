@@ -3,12 +3,15 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSqlDemoAssets, type SqlDemoAssetLoaderInput } from './sql-demo-assets.js';
+import {
+  computeSqlDemoSupplementManifestSha256,
+  loadSqlDemoAssets,
+  type SqlDemoAssetLoaderInput,
+} from './sql-demo-assets.js';
 
 const syntheticSqlSha256 = 'a'.repeat(64);
 const syntheticArchiveSha256 = 'b'.repeat(64);
 const syntheticCodeRevision = 'synthetic-code-revision-42';
-const syntheticSupplementManifestSha256 = 'c'.repeat(64);
 const tempRoots: string[] = [];
 
 function sha256(bytes: Buffer): string {
@@ -49,6 +52,13 @@ async function putFile(base: string, relativePath: string, bytes: Buffer): Promi
 }
 
 function baseInput(base: string): SqlDemoAssetLoaderInput {
+  const supplementManifest = {
+    schemaVersion: 1 as const,
+    scope: 'sql-demo-approved-supplements' as const,
+    codeRevision: syntheticCodeRevision,
+    entries: [],
+  };
+  const supplementManifestSha256 = computeSqlDemoSupplementManifestSha256(supplementManifest);
   return {
     source: {
       sourceHash: syntheticSqlSha256,
@@ -68,18 +78,18 @@ function baseInput(base: string): SqlDemoAssetLoaderInput {
     },
     approvedBodyFileGrants: [],
     supplementRoot: join(base, 'supplements'),
-    supplementManifest: {
-      schemaVersion: 1,
-      scope: 'sql-demo-approved-supplements',
-      sha256: syntheticSupplementManifestSha256,
-      codeRevision: syntheticCodeRevision,
-      entries: [],
-    },
+    supplementManifest: { ...supplementManifest, sha256: supplementManifestSha256 },
     expectedSupplements: {
       codeRevision: syntheticCodeRevision,
-      manifestSha256: syntheticSupplementManifestSha256,
+      manifestSha256: supplementManifestSha256,
     },
   };
+}
+
+function pinSyntheticSupplements(input: SqlDemoAssetLoaderInput): void {
+  const digest = computeSqlDemoSupplementManifestSha256(input.supplementManifest);
+  input.supplementManifest.sha256 = digest;
+  input.expectedSupplements.manifestSha256 = digest;
 }
 
 function fileRow(overrides: Partial<NonNullable<SqlDemoAssetLoaderInput['source']['Files']>[number]> = {}) {
@@ -126,7 +136,7 @@ afterEach(async () => {
 });
 
 describe('offline SQL asset loader contract', () => {
-  it('joins by public Files identity and reports a local SHA/magic-derived alias, not a filename match', async () => {
+  it('joins by public Files identity and derives image MIME and extension from bytes', async () => {
     const base = await root();
     const input = await imageInput(base, { bytes: pngBytes() });
     // Caller-supplied "verified" claims are outside the manifest contract and must be ignored.
@@ -136,14 +146,13 @@ describe('offline SQL asset loader contract', () => {
 
     const result = await loadSqlDemoAssets(input);
 
-    expect(result.allowlistedAssets.images).toMatchObject([{
-      sourceFileId: 'file-1', sourceUrl: '/files/file-1.webp',
-      detectedMimeType: 'image/png', targetPublicUrl: expect.stringMatching(/\.png$/),
-      verification: { status: 'verified', loader: 'sql-demo-asset-loader' },
-    }]);
     expect(result.offlineMedia[0]).toMatchObject({
-      sourceFileId: 'file-1', sourceSha256: sha256(pngBytes()), detectedMimeType: 'image/png',
+      sourceFileType: 'image', sourceFileId: 'file-1', sourceUrl: '/files/file-1.webp',
+      sourceSha256: sha256(pngBytes()), detectedMimeType: 'image/png', detectedExtension: 'png',
+      verification: { status: 'verified', loader: 'sql-demo-asset-loader' },
     });
+    expect(result.offlineMedia[0]?.verification.attestationId).not.toBe('spoofed');
+    expect(result.offlineMedia[0]).not.toHaveProperty('targetPublicUrl');
     expect(result.offlineMedia[0]?.resolvedLocalPath).toContain('archive');
   });
 
@@ -183,9 +192,9 @@ describe('offline SQL asset loader contract', () => {
 
     const result = await loadSqlDemoAssets(input);
 
-    expect(result.allowlistedAssets.images[0]).toMatchObject({ detectedMimeType: 'image/jpeg' });
-    expect(result.allowlistedAssets.images[0]?.targetPublicUrl).toMatch(/\.jpg?$/);
-    expect(result.offlineMedia[0]).toMatchObject({ detectedMimeType: 'image/jpeg' });
+    expect(result.offlineMedia[0]).toMatchObject({
+      sourceFileType: 'image', detectedMimeType: 'image/jpeg', detectedExtension: 'jpg',
+    });
   });
 
   it('keeps an active public PDF document in the document set with a PDF byte guard', async () => {
@@ -197,10 +206,7 @@ describe('offline SQL asset loader contract', () => {
     input.source.Files = [fileRow({
       id: 'pdf-1', fileType: 'document', extension: 'pdf', originalName: 'notice.pdf', url: '/files/notice.pdf',
     })];
-    input.source.FileBindingOrganizationInfo = [{
-      id: 701, title: 'Synthetic notice', priority: 1, fileId: 'pdf-1', organizationInfoId: 601,
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
-    }];
+    input.source.FileBindingOrganizationInfo = [{ id: 701, fileId: 'pdf-1', organizationInfoId: 601 }];
     input.assetManifest.entries = [{
       sourceFileId: 'pdf-1', archiveRelativePath: 'pdf-1/notice.pdf', sha256: sha256(bytes),
       sourceFileType: 'document', sourceStatus: 'active', sourcePrivacy: 'public',
@@ -209,11 +215,11 @@ describe('offline SQL asset loader contract', () => {
 
     const result = await loadSqlDemoAssets(input);
 
-    expect(result.allowlistedAssets.documents).toMatchObject([{
-      sourceFileId: 'pdf-1', detectedMimeType: 'application/pdf',
+    expect(result.offlineDocuments).toMatchObject([{
+      sourceFileType: 'document', sourceFileId: 'pdf-1', detectedMimeType: 'application/pdf',
+      detectedExtension: 'pdf',
     }]);
-    expect(result.allowlistedAssets.images).toEqual([]);
-    expect(result.offlineMedia[0]).toMatchObject({ detectedMimeType: 'application/pdf' });
+    expect(result.offlineMedia).toEqual([]);
   });
 
   it('rejects non-PDF bytes even when SQL fileType and extension say document/pdf', async () => {
@@ -235,71 +241,95 @@ describe('offline SQL asset loader contract', () => {
     ['disabled', 'public'], ['active', 'private'], ['unlinked', 'public'],
   ] as const)('does not admit a %s/%s image without the exact body grant when required', async (status, privacy) => {
     const base = await root();
-    const input = await imageInput(base, { status, privacy, reachability: { kind: 'article-body', articleSourceId: 902 } });
+    const input = await imageInput(base, { status, privacy, reachability: { kind: 'article-body', articleSourceIds: [902] } });
     input.source.Articles = [{
-      id: 902, status: 'active', name: 'Synthetic article', imageId: null,
-      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>', author: 'Synthetic author',
-      priority: 1, seoTitle: '', seoDescription: '', slug: 'synthetic-article',
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      id: 902, status: 'active', imageId: null,
+      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>',
     }];
 
     await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(inactive|disabled|private|unlinked|owner|grant|approved)/i);
   });
 
-  it('requires the exact article ID, file ID and source SHA grant for an unlinked body image', async () => {
+  it('requires one exact file ID and source SHA grant for an unlinked body image', async () => {
     const base = await root();
-    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceId: 903 } });
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] } });
     const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
     input.source.Articles = [{
-      id: 903, status: 'active', name: 'Synthetic article', imageId: null,
-      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>', author: 'Synthetic author',
-      priority: 1, seoTitle: '', seoDescription: '', slug: 'synthetic-article',
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      id: 903, status: 'active', imageId: null,
+      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>',
     }];
     input.approvedBodyFileGrants = [{
-      articleSourceId: 903, sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
     }];
 
     const result = await loadSqlDemoAssets(input);
 
-    expect(result.offlineMedia[0]?.reachability).toEqual({ kind: 'article-body', articleSourceId: 903 });
-    expect(result.allowlistedAssets.images[0]?.verification.status).toBe('verified');
+    expect(result.offlineMedia[0]?.reachability).toEqual({ kind: 'article-body', articleSourceIds: [903] });
+    expect(result.offlineMedia[0]?.verification.status).toBe('verified');
   });
 
   it.each([
-    ['different article', (input: SqlDemoAssetLoaderInput) => { input.approvedBodyFileGrants[0]!.articleSourceId = 904; }],
     ['different file ID', (input: SqlDemoAssetLoaderInput) => { input.approvedBodyFileGrants[0]!.sourceFileId = 'other-file'; }],
     ['different source SHA', (input: SqlDemoAssetLoaderInput) => { input.approvedBodyFileGrants[0]!.sourceSha256 = 'e'.repeat(64); }],
   ])('rejects a body-file grant with a mismatched %s', async (_label, mutateGrant) => {
     const base = await root();
-    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceId: 903 } });
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] } });
     const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
     input.source.Articles = [{
-      id: 903, status: 'active', name: 'Synthetic article', imageId: null,
-      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>', author: 'Synthetic author',
-      priority: 1, seoTitle: '', seoDescription: '', slug: 'synthetic-article',
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      id: 903, status: 'active', imageId: null,
+      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>',
     }];
     input.approvedBodyFileGrants = [{
-      articleSourceId: 903, sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
     }];
     mutateGrant(input);
 
     await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(body|owner|grant|approval|identity|SHA)/i);
   });
 
-  it('accepts an active direct header image without any body grant', async () => {
+  it('accepts one file grant when the same body file is reached from two active articles', async () => {
     const base = await root();
-    const input = await imageInput(base, { status: 'active', reachability: { kind: 'sql-header' } });
-    input.source.Articles = [{
-      id: 904, status: 'active', name: 'Synthetic article', imageId: 'file-1',
-      content: '', author: 'Synthetic author', priority: 1, seoTitle: '', seoDescription: '', slug: 'header-image',
-      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903, 905] } });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    input.source.Articles = [903, 905].map((id) => ({
+      id, status: 'active', imageId: null,
+      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>',
+    }));
+    input.approvedBodyFileGrants = [{
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
     }];
 
     const result = await loadSqlDemoAssets(input);
 
-    expect(result.allowlistedAssets.images[0]?.sourceFileId).toBe('file-1');
+    expect(result.offlineMedia[0]?.reachability).toEqual({ kind: 'article-body', articleSourceIds: [903, 905] });
+    expect(input.approvedBodyFileGrants).toHaveLength(1);
+  });
+
+  it('rejects manifest article reachability that does not match active body URL references', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [904] } });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    input.source.Articles = [{
+      id: 903, status: 'active', imageId: null,
+      content: '<p><img src="/files/file-1.webp" alt="synthetic" /></p>',
+    }];
+    input.approvedBodyFileGrants = [{
+      sourceFileId: 'file-1', sourceSha256: sha256(bytes), decisionId: 'synthetic-decision-1',
+    }];
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(reachability|body reference|source reference)/i);
+  });
+
+  it('accepts an active direct header image without any body grant', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'active', reachability: { kind: 'sql-header' } });
+    input.source.Articles = [{
+      id: 904, status: 'active', imageId: 'file-1', content: '',
+    }];
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.offlineMedia[0]?.sourceFileId).toBe('file-1');
     expect(result.provenance.assets).toHaveLength(1);
   });
 
@@ -322,6 +352,7 @@ describe('offline SQL asset loader contract', () => {
       { name: 'synthetic-static-page', scope: 'public-static-page', sourcePath: 'static-page.json', revision: syntheticCodeRevision, sha256: sha256(staticBytes) },
       { name: 'synthetic-video-thumbnail', scope: 'public-video-thumbnail', sourcePath: 'video-thumb.jpg', revision: syntheticCodeRevision, sha256: sha256(thumbBytes) },
     ];
+    pinSyntheticSupplements(input);
 
     const result = await loadSqlDemoAssets(input);
 
@@ -341,25 +372,45 @@ describe('offline SQL asset loader contract', () => {
       sourcePath: 'branding-replacement.png', revision: syntheticCodeRevision,
       sha256: sha256(replacementBytes), replacesMissingSourceFileId: 'missing-original-77',
     }];
+    pinSyntheticSupplements(input);
 
     const result = await loadSqlDemoAssets(input);
 
     expect(result.supplements[0]).toMatchObject({
       scope: 'missing-original-replacement', replacesMissingSourceFileId: 'missing-original-77',
     });
-    expect(result.offlineMedia.some((asset) => asset.sourceFileId === 'missing-original-77')).toBe(false);
+    expect(result.offlineDocuments.some((asset) => asset.sourceFileId === 'missing-original-77')).toBe(false);
   });
 
-  it('rejects arbitrary supplement overlays and stale code revisions', async () => {
+  it('rejects a same-revision overlay added after the supplement manifest was pinned', async () => {
     const base = await root();
     const input = baseInput(base);
     input.supplementManifest.entries = [{
+      name: 'synthetic-static-page', scope: 'public-static-page', sourcePath: 'page.json',
+      revision: syntheticCodeRevision, sha256: sha256(Buffer.from('{"page":"approved"}')),
+    }];
+    pinSyntheticSupplements(input);
+    await putFile(base, 'supplements/page.json', Buffer.from('{"page":"approved"}'));
+    const overlayBytes = Buffer.from('{"overlay":true}');
+    await putFile(base, 'supplements/overlay.json', overlayBytes);
+    input.supplementManifest.entries.push({
       name: 'synthetic-overlay', scope: 'public-static-page', sourcePath: 'overlay.json',
+      revision: syntheticCodeRevision, sha256: sha256(overlayBytes),
+    });
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(manifest|supplement).*(hash|SHA|digest|pinned)/i);
+  });
+
+  it('rejects a supplement pinned to a stale code revision', async () => {
+    const base = await root();
+    const input = baseInput(base);
+    input.supplementManifest.entries = [{
+      name: 'synthetic-static-page', scope: 'public-static-page', sourcePath: 'page.json',
       revision: 'stale-code-revision', sha256: 'f'.repeat(64),
     }];
-    await putFile(base, 'supplements/overlay.json', Buffer.from('{"overlay":true}'));
+    pinSyntheticSupplements(input);
 
-    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(overlay|revision|pinned|supplement)/i);
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(revision|pinned|supplement)/i);
   });
 
   it('rejects a supplement manifest whose digest differs from the pinned release', async () => {
@@ -378,6 +429,7 @@ describe('offline SQL asset loader contract', () => {
       name: 'synthetic-static-page', scope: 'public-static-page', sourcePath: 'static-page.json',
       revision: syntheticCodeRevision, sha256: sha256(Buffer.from('{"page":"approved"}')),
     }];
+    pinSyntheticSupplements(input);
 
     await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(supplement|SHA|hash|digest)/i);
   });
