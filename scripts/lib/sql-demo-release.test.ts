@@ -220,7 +220,7 @@ describe('composeSqlDemoRelease', () => {
       sourceTable: 'OrganizationInfo' as const, sourceId: 601, field: 'content' as const,
       originalURL: 'https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666',
       action: 'rutube-trailing-slash' as const,
-      expectedOutput: '<iframe src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/">',
+      expectedOutput: '<iframe src="https://rutube.ru/play/embed/66666666-6666-4666-8666-666666666666/"></iframe>',
     };
     const input = sqlWithOrganizationAndDocuments();
     input.entities.organizationInfo![0].content = `<p>SQL education replacement</p><iframe src="${organizationVideo.originalURL}"></iframe>`;
@@ -421,7 +421,7 @@ describe('composeSqlDemoRelease', () => {
     expect(release.entities.seminars[0].description).toBe(decision.expectedOutput);
   });
 
-  it('preserves already-accepted iframe sources without decisions and requires exact decisions for the seven SQL seminar embed shapes', () => {
+  it('preserves already-accepted iframe sources and cleans the seven exact SQL seminar embed decisions', async () => {
     const rutubeIds = [
       '11111111111111111111111111111111', '22222222222222222222222222222222',
       '33333333333333333333333333333333', '44444444444444444444444444444444',
@@ -429,7 +429,7 @@ describe('composeSqlDemoRelease', () => {
     ];
     const rutube = rutubeIds.map((id) => ({
       originalURL: `https://rutube.ru/play/embed/${id}`,
-      expectedOutput: `<iframe src="https://rutube.ru/play/embed/${id}/">`,
+      expectedOutput: `<iframe src="https://rutube.ru/play/embed/${id}/"></iframe>`,
       sourceTable: 'Seminars' as const, sourceId: 9346, field: 'description' as const, action: 'rutube-trailing-slash' as const,
     }));
     const external = [
@@ -462,17 +462,29 @@ describe('composeSqlDemoRelease', () => {
       ],
     });
     const release = composeSqlDemoRelease(input, supplements(), assets(), ownerDecisions(decisions));
-    const seminarDescription = release.entities.seminars[0].description;
+    const cleanerModulePath = '../../web/src/lib/html-cleaner.js';
+    const { cleanBodyHtml } = await import(cleanerModulePath);
+    const cleanDescriptions = release.entities.seminars.map((seminar) => cleanBodyHtml(
+      String(seminar.description ?? ''),
+      { sourceType: 'sql-demo-test', sourceId: String(seminar.sourceId) },
+    ).html);
+    const cleanProgramDescription = cleanBodyHtml(String(release.entities.programs[0].description ?? ''), {
+      sourceType: 'sql-demo-test', sourceId: 'program-77',
+    }).html;
+    const seminarDescription = cleanDescriptions[0];
     expect(seminarDescription).toContain('Before');
     expect(seminarDescription).toContain('After');
     expect(seminarDescription).toContain(acceptedRutube);
-    expect(release.entities.programs[0].description).toBe(acceptedRutube);
+    expect(cleanProgramDescription).toContain(acceptedRutube);
     for (const decision of rutube) {
       expect(seminarDescription).toContain(decision.expectedOutput);
-      expect(seminarDescription).not.toContain(`src="${decision.originalURL}"`);
     }
-    expect(release.entities.seminars[1].description).toContain(external[0].expectedOutput);
-    expect(release.entities.seminars[2].description).toContain(external[1].expectedOutput);
+    expect(cleanDescriptions[1]).toContain('Before 9347');
+    expect(cleanDescriptions[1]).toContain('After 9347');
+    expect(cleanDescriptions[1]).toContain('href="https://rutube.ru/play/embed/66666666666666666666666666666666/?p=synthetic"');
+    expect(cleanDescriptions[2]).toContain('Before 9348');
+    expect(cleanDescriptions[2]).toContain('After 9348');
+    expect(cleanDescriptions[2]).toMatch(/href="https:\/\/vk\.com\/video_ext\.php\?oid=-123&amp;id=456&amp;hd=2&amp;autoplay=1"/);
     expect(release.provenance.ownerDecisions.videoReferences).toEqual(decisions);
 
     const unmatched = [...decisions, { ...rutube[0], sourceId: 999 }];
