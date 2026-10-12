@@ -455,10 +455,12 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const fileRows = optionalRows(source.Files, 'Files');
   requireUniqueStringIds(fileRows, 'Files');
   for (const file of fileRows) {
-    if (file.status !== 'active' && file.status !== 'deleted') invalid('Files', file.id, 'status', `has unsupported value ${JSON.stringify(file.status)}`);
+    if (file.status !== 'active' && file.status !== 'deleted' && file.status !== 'unlinked') {
+      invalid('Files', file.id, 'status', `has unsupported value ${JSON.stringify(file.status)}`);
+    }
     if (file.privacy !== 'public' && file.privacy !== 'private') invalid('Files', file.id, 'privacy', `has unsupported value ${JSON.stringify(file.privacy)}`);
-    if (file.status === 'deleted') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'status is not active' });
-    else if (file.privacy === 'private') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'privacy is not public' });
+    if (file.status !== 'active') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'status is not active' });
+    if (file.privacy === 'private') exclusions.push({ table: 'Files', sourceId: file.id, reason: 'privacy is not public' });
   }
 
   const news = activeNews.map((row) => {
