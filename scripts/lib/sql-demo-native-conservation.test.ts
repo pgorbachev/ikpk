@@ -80,7 +80,120 @@ function target(nonce: string, mediaId: number, mediaUrl: string, avatarId: numb
   };
 }
 
+function tenCollectionFixture(): { release: SqlDemoRelease; a: SqlDemoStrapi5Readback; b: SqlDemoStrapi5Readback } {
+  const release = structuredClone(expected);
+  const entities = release.entities as unknown as Record<string, Record<string, unknown>[]>;
+  entities.seminars = [{ sourceId: 201, legacy_id: 'seminar-one', name: 'Seminar', slug: 'seminar-one', description: 'Description', documents_state: 'unconfirmed', order: 1, full_text: null, learning_plan: 'Plan', learning_mode: 'Mode', recommendations: 'Recommendation', course_group_legacy_id: 'program-one', directTeachers: ['101'], seo: { seo_title: 'Seminar SEO', seo_description: 'Seminar summary' } }];
+  entities.events = [{ sourceId: 301, legacy_id: '301', name: 'Event', startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', city: 'City', newPrice: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', imageId: null, seminar_legacy_id: 'seminar-one', primaryTeachers: ['101'] }];
+  entities.news = [{ sourceId: 501, legacy_id: 'news-one', name: 'News', description: 'News description', date: '2030-01-02T03:04:05.000Z', link: null, priority: 1, imageId: null }];
+  entities.promotions = [{ sourceId: 601, legacy_id: 'promotion-one', name: 'Promotion', description: 'Promotion description', date: '2030-01-02T03:04:05.000Z', type: 'SHOP', link: null, priority: 1, active: true, imageId: null }];
+  entities.videos = [{ sourceId: 701, legacy_id: 'video-one', name: 'Video', slug: 'video-one', videos: [{ id: 'video-id-1', title: 'Video title' }], seo: { seo_title: 'Video SEO', seo_description: 'Video summary' } }];
+  entities.pages = [{ legacy_id: 'page-one', title: 'Page', slug: 'page-one', body: '<p>Page body</p>', seo: { seo_title: 'Page SEO', seo_description: 'Page summary' } }];
+  const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+  const relation = (id: number, collection: string, legacyId: string) => ({ id, documentId: `target-a-${collection}-${legacyId}`, legacy_id: legacyId });
+  const row = (id: number, collection: string, legacyId: string, fields: Record<string, unknown>) => ({ ...relation(id, collection, legacyId), publishedAt: '2031-01-02T00:00:00.000Z', ...fields });
+  a.collections.seminars = [row(6, 'seminars', 'seminar-one', { name: 'Seminar', slug: 'seminar-one', description: 'Description', documents_state: 'unconfirmed', order: 1, full_text: null, learning_plan: 'Plan', learning_mode: 'Mode', recommendations: 'Recommendation', seo: { seo_title: 'Seminar SEO', seo_description: 'Seminar summary' }, course_group: relation(2, 'course-groups', 'program-one'), teachers: [relation(5, 'teachers', '101')] })];
+  a.collections['schedule-entries'] = [row(7, 'schedule-entries', '301', { name: 'Event', startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', city: 'City', price: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', image: null, seminar: relation(6, 'seminars', 'seminar-one'), teachers: [relation(5, 'teachers', '101')] })];
+  a.collections['news-items'] = [row(8, 'news-items', 'news-one', { name: 'News', description: 'News description', date: '2030-01-02T03:04:05.000Z', link: null, priority: 1, image: null })];
+  a.collections.promotions = [row(9, 'promotions', 'promotion-one', { name: 'Promotion', description: 'Promotion description', date: '2030-01-02T03:04:05.000Z', type: 'SHOP', link: null, priority: 1, active: true, image: null })];
+  a.collections['video-playlists'] = [row(10, 'video-playlists', 'video-one', { name: 'Video', slug: 'video-one', videos: [{ id: 'video-id-1', title: 'Video title' }], seo: { seo_title: 'Video SEO', seo_description: 'Video summary' } })];
+  a.collections.pages = [row(11, 'pages', 'page-one', { title: 'Page', slug: 'page-one', body: '<p>Page body</p>', seo: { seo_title: 'Page SEO', seo_description: 'Page summary' } })];
+  return { release, a, b: structuredClone(a) };
+}
+
 describe('native SQL release conservation', () => {
+  it.each(['institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles', 'news-items', 'promotions', 'video-playlists', 'pages'] as const)('REVIEW rejects a lost record in %s', (collection) => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections[collection] = [];
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/missing/);
+  });
+
+  it('REVIEW baseline independently populates all ten collections', () => {
+    const { release, a, b } = tenCollectionFixture();
+    expect(Object.keys(a.collections)).toHaveLength(10);
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('REVIEW rejects unexpected content in an explicitly null seminar field', () => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections.seminars![0]!.full_text = '<p>Unexpected content</p>';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('REVIEW rejects an invented canonical media token in an HTML image src', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.entities.articles[0]!.body = `<p><img src="${IMAGE_URL}"></p>`;
+    a.collections.articles![0]!.body = '<p><img src="ikpk-media:file-image-1"></p>';
+    b.collections.articles![0]!.body = '<p><img src="ikpk-media:file-image-1"></p>';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('REVIEW accepts a single target media row legitimately deduplicating equal-byte source files', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.provenance.assetMappings[1]!.sha256 = SOURCE_SHA;
+    for (const rb of [a, b]) {
+      const media = rb.media[0]!;
+      (media.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources[AVATAR_URL] = { version: 1, sha256: SOURCE_SHA, storedSha256: STORED_SHA };
+      (rb as {media: SqlDemoStrapi5Readback['media']}).media = [media];
+      rb.collections.teachers![0]!.photo = { id: media.id, url: media.url };
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+  it('REVIEW accepts collection-scoped numeric Strapi IDs', () => {
+    const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const b = structuredClone(a);
+    for (const rb of [a, b]) {
+      rb.collections.articles![0]!.id = 1;
+      rb.collections.teachers![0]!.id = 1;
+      rb.collections['course-groups']![0]!.id = 1;
+      (rb.collections.articles![0]!.categories as {id: number}[])[0]!.id = 1;
+    }
+    expect(() => assertSqlDemoNativeConservation(expected, classification, a, b)).not.toThrow();
+  });
+
+  it('REVIEW accepts the real datetime representation of the approved article DAY', () => {
+    const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const b = structuredClone(a);
+    for (const rb of [a, b]) rb.collections.articles![0]!.published_date = '2021-03-04T00:00:00.000Z';
+    expect(() => assertSqlDemoNativeConservation(expected, classification, a, b)).not.toThrow();
+  });
+
+  it('REVIEW fails closed on malformed relation members', () => {
+    const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const b = structuredClone(a);
+    (b.collections.articles![0]!.categories as unknown[]).push(null);
+    expect(() => assertSqlDemoNativeConservation(expected, classification, a, b)).toThrow();
+  });
+
+  it('REVIEW detects private data accidentally present in published rows', () => {
+    const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const b = structuredClone(a);
+    b.collections.articles![0]!.authentication_token = 'SYNTHETIC-PRIVATE-TOKEN';
+    expect(() => assertSqlDemoNativeConservation(expected, classification, a, b)).toThrow();
+  });
+
+  it('REVIEW safely describes malformed media source claims without echoing sensitive URLs', () => {
+    const { release, a, b } = tenCollectionFixture();
+    (b.media[0]!.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources['https://synthetic.invalid/image?token=SYNTHETIC-PRIVATE-TOKEN'] = null;
+    let message: string | undefined;
+    try {
+      assertSqlDemoNativeConservation(release, classification, a, b);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/malformed/);
+    expect(message).not.toContain('SYNTHETIC-PRIVATE-TOKEN');
+  });
+
+  it('REVIEW rejects URL aliasing in ordinary title text', () => {
+    const e = structuredClone(expected);
+    e.entities.articles[0]!.title = IMAGE_URL;
+    const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
+    const b = structuredClone(a);
+    a.collections.articles![0]!.title = 'https://cms-a.synthetic.invalid/uploads/image-one.webp';
+    b.collections.articles![0]!.title = 'https://cms-a.synthetic.invalid/uploads/image-one.webp';
+    expect(() => assertSqlDemoNativeConservation(e, classification, a, b)).toThrow();
+  });
   it('accepts equivalent published targets with different generated IDs and upload URLs', () => {
     const targetA = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
     const targetB = target('target-b', 902, 'https://cms-b.synthetic.invalid/uploads/image-one.webp', 903, 'https://cms-b.synthetic.invalid/uploads/teacher-one.webp', ['program-two', 'program-one']);
