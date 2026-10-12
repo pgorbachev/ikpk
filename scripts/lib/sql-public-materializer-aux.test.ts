@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapSqlPublicContent, type SqlPublicContentResult, type SqlPublicSource } from './sql-public-content.js';
+import { mapSqlPublicContent, type SqlPublicSource } from './sql-public-content.js';
 import { materializeSqlPublicContent, type SqlMaterializerOptions, type SqlStrapiRestClient } from './sql-public-materializer.js';
 
 type PublicationValidator = (input: { type: string; record: Record<string, unknown> }) => { ok: boolean; missing: string[]; message: string };
@@ -81,7 +81,7 @@ function mappedContent(): AuxMapped {
 }
 
 function materializeComposed(mapped: AuxMapped, target: NativeStrapiTarget) {
-  return materializeSqlPublicContent(mapped as unknown as SqlPublicContentResult, optionsFor(target));
+  return materializeSqlPublicContent(mapped, optionsFor(target));
 }
 
 type Collection = 'institutes' | 'course-groups' | 'teachers' | 'seminars' | 'schedule-entries' | 'articles' | 'news-items' | 'promotions' | 'video-playlists' | 'pages';

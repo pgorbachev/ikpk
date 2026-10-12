@@ -24,8 +24,34 @@ export interface SqlMaterializerOptions {
   };
 }
 
-type Collection = 'institutes' | 'course-groups' | 'teachers' | 'seminars' | 'schedule-entries' | 'articles';
-type SourceTable = 'Institutes' | 'Programs' | 'Teachers' | 'Seminars' | 'Events' | 'Articles';
+export interface SqlMaterializerPage extends Record<string, unknown> {
+  title: string;
+  slug: string;
+  body: string;
+  legacy_id: string;
+  seo: { seo_title: string; seo_description: string };
+}
+
+export interface SqlMaterializerVideoPlaylist extends Record<string, unknown> {
+  name: string;
+  slug: string;
+  legacy_id: string;
+  videos: unknown[] | null;
+  seo: { seo_title: string; seo_description: string };
+}
+
+/** SQL content after public composition; playlist and page DTOs intentionally have no SQL sourceId. */
+export type SqlMaterializerInput = Omit<SqlPublicContentResult, 'entities'> & {
+  entities: Omit<SqlPublicContentResult['entities'], 'videos'> & {
+    videos?: readonly SqlMaterializerVideoPlaylist[];
+    pages?: readonly SqlMaterializerPage[];
+  };
+};
+
+type Collection = 'institutes' | 'course-groups' | 'teachers' | 'seminars' | 'schedule-entries' | 'articles'
+  | 'news-items' | 'promotions' | 'video-playlists' | 'pages';
+type SourceTable = 'Institutes' | 'Programs' | 'Teachers' | 'Seminars' | 'Events' | 'Articles'
+  | 'News' | 'Promotions' | 'Videos' | 'Pages';
 type RecordValue = Record<string, unknown>;
 
 interface RelationPlan {
@@ -38,13 +64,16 @@ interface RelationPlan {
 interface EntityPlan {
   collection: Collection;
   sourceTable: SourceTable;
-  entity: SqlPublicEntity;
+  entity: RecordValue;
   legacyId: string;
   data: RecordValue;
   imageField?: 'image' | 'photo';
   imageSourceId?: string | null;
   imageRequired?: boolean;
+  imageFormat?: 'connect' | 'numeric';
   relations: RelationPlan[];
+  verifyAttributes?: boolean;
+  populate?: readonly string[];
 }
 
 interface StoredRef {
@@ -53,17 +82,20 @@ interface StoredRef {
 
 const API_COLLECTIONS: readonly Collection[] = [
   'institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles',
+  'news-items', 'promotions', 'video-playlists', 'pages',
 ];
 
-function recordContext(table: SourceTable, entity: SqlPublicEntity): string {
-  return `${table}#${String(entity.sourceId)}`;
+function recordContext(table: SourceTable, entity: RecordValue): string {
+  return Number.isSafeInteger(entity.sourceId)
+    ? `${table}#${String(entity.sourceId)}`
+    : `${table}/${String(entity.legacy_id ?? 'unknown')}`;
 }
 
 function fail(context: string, message: string): never {
   throw new Error(`${context}: ${message}`);
 }
 
-function requiredString(entity: SqlPublicEntity, table: SourceTable, field: string, allowEmpty = false): string {
+function requiredString(entity: RecordValue, table: SourceTable, field: string, allowEmpty = false): string {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (typeof value !== 'string' || (!allowEmpty && !value.trim())) {
@@ -72,7 +104,7 @@ function requiredString(entity: SqlPublicEntity, table: SourceTable, field: stri
   return value;
 }
 
-function nullableString(entity: SqlPublicEntity, table: SourceTable, field: string): string | null {
+function nullableString(entity: RecordValue, table: SourceTable, field: string): string | null {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (value === null || value === undefined) return null;
@@ -80,20 +112,20 @@ function nullableString(entity: SqlPublicEntity, table: SourceTable, field: stri
   return value;
 }
 
-function requiredNumber(entity: SqlPublicEntity, table: SourceTable, field: string): number {
+function requiredNumber(entity: RecordValue, table: SourceTable, field: string): number {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (typeof value !== 'number' || !Number.isFinite(value)) return fail(context, `${field} must be numeric`);
   return value;
 }
 
-function requiredInteger(entity: SqlPublicEntity, table: SourceTable, field: string): number {
+function requiredInteger(entity: RecordValue, table: SourceTable, field: string): number {
   const value = requiredNumber(entity, table, field);
   if (!Number.isSafeInteger(value)) return fail(recordContext(table, entity), `${field} must be an integer`);
   return value;
 }
 
-function nullableNumber(entity: SqlPublicEntity, table: SourceTable, field: string): number | null {
+function nullableNumber(entity: RecordValue, table: SourceTable, field: string): number | null {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (value === null || value === undefined) return null;
@@ -101,14 +133,14 @@ function nullableNumber(entity: SqlPublicEntity, table: SourceTable, field: stri
   return value;
 }
 
-function requiredBoolean(entity: SqlPublicEntity, table: SourceTable, field: string): boolean {
+function requiredBoolean(entity: RecordValue, table: SourceTable, field: string): boolean {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (typeof value !== 'boolean') return fail(context, `${field} must be boolean`);
   return value;
 }
 
-function stringList(entity: SqlPublicEntity, table: SourceTable, field: string): string[] {
+function stringList(entity: RecordValue, table: SourceTable, field: string): string[] {
   const context = recordContext(table, entity);
   const value = entity[field];
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
@@ -123,11 +155,11 @@ function requiredSourceId(entity: SqlPublicEntity, table: SourceTable): number {
   return entity.sourceId;
 }
 
-function requiredLegacyId(entity: SqlPublicEntity, table: SourceTable): string {
+function requiredLegacyId(entity: RecordValue, table: SourceTable): string {
   return requiredString(entity, table, 'legacy_id');
 }
 
-function seoComponent(entity: SqlPublicEntity, table: SourceTable): RecordValue {
+function seoComponent(entity: RecordValue, table: SourceTable): RecordValue {
   const context = recordContext(table, entity);
   const value = entity.seo;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(context, 'seo must contain seo_title and seo_description');
@@ -137,7 +169,7 @@ function seoComponent(entity: SqlPublicEntity, table: SourceTable): RecordValue 
   return { seo_title: seo.seo_title, seo_description: seo.seo_description };
 }
 
-function entityPlans(mapped: SqlPublicContentResult, options: SqlMaterializerOptions): EntityPlan[] {
+function entityPlans(mapped: SqlMaterializerInput | SqlPublicContentResult, options: SqlMaterializerOptions): EntityPlan[] {
   const teacherClassification = new Map<number, 'teacher' | 'method-author'>();
   for (const candidate of options.classification.teachers) {
     if (!['teacher', 'method-author'].includes(candidate.trait)) throw new Error(`Teachers#${candidate.sourceId}: classification trait is unsupported`);
@@ -306,6 +338,76 @@ function entityPlans(mapped: SqlPublicContentResult, options: SqlMaterializerOpt
       }) }],
     });
   }
+  for (const entity of mapped.entities.news ?? []) {
+    const table: SourceTable = 'News';
+    const legacyId = requiredLegacyId(entity, table);
+    plans.push({
+      collection: 'news-items', sourceTable: table, entity, legacyId,
+      data: {
+        name: requiredString(entity, table, 'name'),
+        description: requiredString(entity, table, 'description'),
+        date: requiredString(entity, table, 'date'),
+        link: nullableString(entity, table, 'link'),
+        priority: requiredInteger(entity, table, 'priority'),
+        legacy_id: legacyId,
+      },
+      imageField: 'image', imageSourceId: nullableString(entity, table, 'imageId'),
+      imageFormat: 'numeric', relations: [], verifyAttributes: true, populate: ['image'],
+    });
+  }
+  for (const entity of mapped.entities.promotions ?? []) {
+    const table: SourceTable = 'Promotions';
+    const legacyId = requiredLegacyId(entity, table);
+    const promotionType = requiredString(entity, table, 'type');
+    if (promotionType !== 'SHOP' && promotionType !== 'INSTITUTE') {
+      fail(recordContext(table, entity), `type has unsupported value ${promotionType}`);
+    }
+    plans.push({
+      collection: 'promotions', sourceTable: table, entity, legacyId,
+      data: {
+        name: requiredString(entity, table, 'name'),
+        description: requiredString(entity, table, 'description'),
+        date: requiredString(entity, table, 'date'),
+        type: promotionType,
+        link: nullableString(entity, table, 'link'),
+        priority: requiredInteger(entity, table, 'priority'),
+        active: requiredBoolean(entity, table, 'active'),
+        legacy_id: legacyId,
+      },
+      imageField: 'image', imageSourceId: nullableString(entity, table, 'imageId'),
+      imageFormat: 'numeric', relations: [], verifyAttributes: true, populate: ['image'],
+    });
+  }
+  for (const candidate of mapped.entities.videos ?? []) {
+    const table: SourceTable = 'Videos';
+    const entity: RecordValue = candidate;
+    const legacyId = requiredLegacyId(entity, table);
+    const name = requiredString(entity, table, 'name');
+    const slug = requiredString(entity, table, 'slug');
+    const videos = entity.videos;
+    if (videos !== null && !Array.isArray(videos)) fail(recordContext(table, entity), 'videos must be an array or null');
+    const seo = seoComponent(entity, table);
+    plans.push({
+      collection: 'video-playlists', sourceTable: table, entity, legacyId,
+      data: { name, slug, videos, legacy_id: legacyId, seo },
+      relations: [], verifyAttributes: true, populate: ['seo'],
+    });
+  }
+  for (const entity of mapped.entities.pages ?? []) {
+    const table: SourceTable = 'Pages';
+    const legacyId = requiredLegacyId(entity, table);
+    plans.push({
+      collection: 'pages', sourceTable: table, entity, legacyId,
+      data: {
+        title: requiredString(entity, table, 'title'),
+        slug: requiredString(entity, table, 'slug'),
+        body: requiredString(entity, table, 'body'),
+        legacy_id: legacyId,
+        seo: seoComponent(entity, table),
+      },
+      relations: [], verifyAttributes: true, populate: ['seo'],
+    });
+  }
   return plans;
 }
 
@@ -363,6 +465,85 @@ async function findExisting(plan: EntityPlan, target: SqlStrapiRestClient): Prom
   return published ?? draft ?? null;
 }
 
+function slugIsUnique(plan: EntityPlan): boolean {
+  return typeof plan.data.slug === 'string';
+}
+
+function validatePlanIdentities(plans: readonly EntityPlan[]): void {
+  const legacyIds = new Map<Collection, Map<string, EntityPlan>>();
+  const slugs = new Map<Collection, Map<string, EntityPlan>>();
+  for (const plan of plans) {
+    const collectionIds = legacyIds.get(plan.collection) ?? new Map<string, EntityPlan>();
+    const previousLegacyId = collectionIds.get(plan.legacyId);
+    if (previousLegacyId) {
+      fail(recordContext(plan.sourceTable, plan.entity), `legacy_id ${plan.legacyId} collides with another planned ${plan.collection} document`);
+    }
+    collectionIds.set(plan.legacyId, plan);
+    legacyIds.set(plan.collection, collectionIds);
+
+    if (slugIsUnique(plan)) {
+      const slug = requiredString(plan.data, plan.sourceTable, 'slug');
+      const collectionSlugs = slugs.get(plan.collection) ?? new Map<string, EntityPlan>();
+      if (collectionSlugs.has(slug)) {
+        fail(recordContext(plan.sourceTable, plan.entity), `slug ${slug} collides with another planned ${plan.collection} document`);
+      }
+      collectionSlugs.set(slug, plan);
+      slugs.set(plan.collection, collectionSlugs);
+    }
+  }
+
+  for (const plan of plans) {
+    for (const relation of plan.relations) {
+      for (const relationTarget of relation.targets) {
+        if (!legacyIds.get(relationTarget.collection)?.has(relationTarget.legacyId)) {
+          fail(recordContext(plan.sourceTable, plan.entity), `${relation.field} relation target ${relationTarget.collection}/${relationTarget.legacyId} is missing from the materialization plan`);
+        }
+      }
+    }
+  }
+}
+
+async function findSlugCollisions(plan: EntityPlan, target: SqlStrapiRestClient): Promise<void> {
+  if (!slugIsUnique(plan)) return;
+  const context = recordContext(plan.sourceTable, plan.entity);
+  const slug = requiredString(plan.data, plan.sourceTable, 'slug');
+  const filter = `filters[slug][$eq]=${encodeURIComponent(slug)}&pagination[pageSize]=2`;
+  const byStatus = new Map<'published' | 'draft', RecordValue>();
+  for (const status of ['published', 'draft'] as const) {
+    let results: RecordValue[];
+    try {
+      results = responseList(
+        await target.request('GET', `/api/${plan.collection}?${filter}&status=${status}`),
+        `${context} slug lookup`,
+      ).filter((result) => result.slug === slug);
+    } catch {
+      return fail(context, 'slug lookup request failed');
+    }
+    if (results.length > 1) return fail(context, `slug ${slug} matches multiple ${status} documents`);
+    if (results.length === 1) {
+      if (results[0]!.legacy_id !== plan.legacyId) {
+        return fail(context, `slug ${slug} is already used by a different ${plan.collection} legacy_id`);
+      }
+      byStatus.set(status, results[0]!);
+    }
+  }
+  const published = byStatus.get('published');
+  const draft = byStatus.get('draft');
+  if (published && draft && documentId(published, context) !== documentId(draft, context)) {
+    fail(context, `slug ${slug} points to different published and draft documents`);
+  }
+}
+
+async function preflightPlans(plans: readonly EntityPlan[], target: SqlStrapiRestClient): Promise<Map<EntityPlan, RecordValue | null>> {
+  validatePlanIdentities(plans);
+  const existing = new Map<EntityPlan, RecordValue | null>();
+  for (const plan of plans) {
+    existing.set(plan, await findExisting(plan, target));
+    await findSlugCollisions(plan, target);
+  }
+  return existing;
+}
+
 function validateMedia(media: SqlResolvedMedia, context: string): void {
   if (!Number.isSafeInteger(media.id) || media.id <= 0) fail(context, 'media resolver returned an invalid target ID');
   if (!/^[a-f\d]{64}$/i.test(media.sourceHash) || !/^[a-f\d]{64}$/i.test(media.storedHash)) {
@@ -392,15 +573,14 @@ async function payloadFor(plan: EntityPlan, options: SqlMaterializerOptions): Pr
       validateMedia(media, context);
       // sourceIdentity and byte hashes stay in the private resolver boundary. Only Strapi's
       // numeric media ID is part of the public Content API payload.
-      data[plan.imageField] = { connect: [media.id] };
+      data[plan.imageField] = plan.imageFormat === 'numeric' ? media.id : { connect: [media.id] };
     }
   }
   return data;
 }
 
-async function writeDraft(plan: EntityPlan, data: RecordValue, target: SqlStrapiRestClient): Promise<StoredRef> {
+async function writeDraft(plan: EntityPlan, data: RecordValue, existing: RecordValue | null, target: SqlStrapiRestClient): Promise<StoredRef> {
   const context = recordContext(plan.sourceTable, plan.entity);
-  const existing = await findExisting(plan, target);
   try {
     if (existing) {
       const id = documentId(existing, context);
@@ -449,15 +629,59 @@ async function writeRelations(plan: EntityPlan, document: StoredRef, data: Recor
   }
 }
 
-async function publishAndVerify(plan: EntityPlan, document: StoredRef, target: SqlStrapiRestClient): Promise<void> {
+function populatedAttributeMatches(expected: unknown, actual: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && expected.length === actual.length
+      && expected.every((value, index) => populatedAttributeMatches(value, actual[index]));
+  }
+  if (expected && typeof expected === 'object') {
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+    return Object.entries(expected as RecordValue).every(([key, value]) =>
+      Object.prototype.hasOwnProperty.call(actual, key)
+      && populatedAttributeMatches(value, (actual as RecordValue)[key]));
+  }
+  return Object.is(expected, actual);
+}
+
+function populatedMediaId(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return Number.NaN;
+  const record = value as RecordValue;
+  if (Number.isSafeInteger(record.id)) return record.id as number;
+  if (record.data && typeof record.data === 'object' && !Array.isArray(record.data)) {
+    const data = record.data as RecordValue;
+    return Number.isSafeInteger(data.id) ? data.id as number : Number.NaN;
+  }
+  return Number.NaN;
+}
+
+function verifyMaterializedAttributes(plan: EntityPlan, expected: RecordValue, actual: RecordValue): void {
+  const context = recordContext(plan.sourceTable, plan.entity);
+  for (const [field, value] of Object.entries(expected)) {
+    if (!Object.prototype.hasOwnProperty.call(actual, field)) fail(context, `published Content API verification omitted ${field}`);
+    if (field === 'image' || field === 'photo') {
+      const expectedId = populatedMediaId(value);
+      const actualId = populatedMediaId(actual[field]);
+      if (expectedId !== actualId) fail(context, `published Content API verification changed ${field}`);
+    } else if (!populatedAttributeMatches(value, actual[field])) {
+      fail(context, `published Content API verification changed ${field}`);
+    }
+  }
+}
+
+async function publishAndVerify(plan: EntityPlan, document: StoredRef, expected: RecordValue, target: SqlStrapiRestClient): Promise<void> {
   const context = recordContext(plan.sourceTable, plan.entity);
   try {
     await target.request('PUT', `/api/${plan.collection}/${encodeURIComponent(document.documentId)}?status=published`, { data: {} });
-    const response = await target.request('GET', `/api/${plan.collection}/${encodeURIComponent(document.documentId)}?status=published`);
+    const populate = plan.populate?.map((field) => `populate[${field}]=true`).join('&');
+    const query = ['status=published', populate].filter(Boolean).join('&');
+    const response = await target.request('GET', `/api/${plan.collection}/${encodeURIComponent(document.documentId)}?${query}`);
     const published = responseRecord(response, context);
     if (documentId(published, context) !== document.documentId || typeof published.publishedAt !== 'string' || !published.publishedAt) {
       fail(context, 'published Content API verification failed');
     }
+    if (plan.verifyAttributes) verifyMaterializedAttributes(plan, expected, published);
   } catch {
     fail(context, 'publish or verification failed');
   }
@@ -468,18 +692,21 @@ async function publishAndVerify(plan: EntityPlan, document: StoredRef, target: S
  * Provenance and source media identities remain private to the caller/resolver boundary.
  */
 export async function materializeSqlPublicContent(
-  mapped: SqlPublicContentResult,
+  mapped: SqlMaterializerInput | SqlPublicContentResult,
   options: SqlMaterializerOptions,
 ): Promise<void> {
   if (options.classification.status !== 'pending-confirmation') throw new Error('SQL classification must remain pending-confirmation');
 
   // Validate source-ID coverage and every required public projection before the first target write.
   const plans = entityPlans(mapped, options);
+  const existing = await preflightPlans(plans, options.target);
+  const payloads = new Map<EntityPlan, RecordValue>();
+  for (const plan of plans) payloads.set(plan, await payloadFor(plan, options));
   const refs = new Map<Collection, Map<string, StoredRef>>(API_COLLECTIONS.map((collection) => [collection, new Map()]));
 
   for (const plan of plans) {
-    const data = await payloadFor(plan, options);
-    const ref = await writeDraft(plan, data, options.target);
+    const data = payloads.get(plan)!;
+    const ref = await writeDraft(plan, data, existing.get(plan) ?? null, options.target);
     refs.get(plan.collection)!.set(plan.legacyId, ref);
   }
 
@@ -491,6 +718,6 @@ export async function materializeSqlPublicContent(
 
   for (const plan of plans) {
     const ref = refs.get(plan.collection)!.get(plan.legacyId)!;
-    await publishAndVerify(plan, ref, options.target);
+    await publishAndVerify(plan, ref, payloads.get(plan)!, options.target);
   }
 }
