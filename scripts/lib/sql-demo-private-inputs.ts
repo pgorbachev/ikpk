@@ -901,8 +901,16 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
         let hasRadixPanel = false;
         const directElements = (parent: ReturnType<typeof parsedHtml>): ReturnType<typeof parsedHtml>[] =>
           (parent.childNodes ?? []).filter((child) => (child as ReturnType<typeof parsedHtml>).tagName) as ReturnType<typeof parsedHtml>[];
-        const containers = directElements(node).filter((child) =>
-          child.tagName === 'div' && attr(child, 'data-state') === 'closed');
+        const directDivs = directElements(node).filter((child) => child.tagName === 'div');
+        const containers = directDivs.flatMap((child) => {
+          if (attr(child, 'data-state') === 'closed') return [child];
+          // The approved source page wraps the Radix root in one CSS-module div.
+          // Keep this finite shape explicit; do not search through arbitrary wrappers.
+          if (!attr(child, 'class')) return [];
+          const nested = directElements(child).filter((candidate) =>
+            candidate.tagName === 'div' && attr(candidate, 'data-state') === 'closed');
+          return directElements(child).length === 1 ? nested : [];
+        });
         if (containers.length === 1) {
           const [container] = containers;
           const triggers = directElements(container!).filter((child) => {
@@ -911,8 +919,14 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
               token === 'collapsible_trigger' || /^collapsible_trigger__[A-Za-z0-9_-]+$/.test(token));
           });
           if (triggers.length === 1) {
-            const headings = directElements(triggers[0]!).filter((child) =>
-              child.tagName === 'h2' && attr(child, 'data-collapsible-title') === 'true');
+            const trigger = triggers[0]!;
+            const directHeadings = directElements(trigger).filter((child) => child.tagName === 'h2');
+            const wrappedHeadings = directElements(trigger)
+              .filter((child) => child.tagName === 'div')
+              .flatMap((wrapper) => directElements(wrapper)
+                .filter((child) => child.tagName === 'div')
+                .flatMap((inner) => directElements(inner).filter((child) => child.tagName === 'h2')));
+            const headings = [...directHeadings, ...wrappedHeadings];
             if (headings.length === 1) {
               title = textContent(headings[0]!).trim();
               hasRadixPanel = title.length > 0;

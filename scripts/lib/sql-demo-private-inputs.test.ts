@@ -1217,6 +1217,17 @@ describe('SQL demo private input preparation and normalization', () => {
       .toEqual([{ sourceId: 702, anchor: 'section-1' }, { sourceId: 401, anchor: 'section-3' }]);
   });
 
+  it('matches the approved wrapped Radix source shape without relying on a synthetic title marker', () => {
+    const item = (id: number, title: string) => `<li id="${id}"><div class="module_outer"><div class="module_root" data-state="closed"><button aria-expanded="false" class="collapsible_trigger__abc-123_X" data-state="closed" type="button"><div class="module_triggerContent"><div class="module_title"><h2>${title}</h2></div><div class="module_icon"><svg></svg></div></div></button></div></div></li>`;
+    const body = `<ul>${item(702, 'Synthetic SQL section B')}${item(401, 'Synthetic SQL section A')}</ul>`;
+    const result = normalize({ config: configWithStaticPageBody(body) });
+
+    expect(result.composer.acceptedSupplements.targetLocations
+      .filter((location) => location.sourceTable === 'OrganizationInfo')
+      .map(({ sourceId, anchor }) => ({ sourceId, anchor })))
+      .toEqual([{ sourceId: 702, anchor: 'section-1' }, { sourceId: 401, anchor: 'section-2' }]);
+  });
+
   it.each([
     ['a class substring', 'prefix-collapsible_trigger__abc123'],
     ['a lookalike prefix', 'not_collapsible_trigger__abc123'],
