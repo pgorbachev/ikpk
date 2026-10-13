@@ -9,6 +9,7 @@ import {
   type SqlDemoPrivateInputRootConfig,
   type SqlDemoPrivateJsonName,
 } from './sql-demo-private-inputs.js';
+import { composeSqlDemoRelease } from './sql-demo-release.js';
 
 const sha256 = (value: Uint8Array | string): string => createHash('sha256').update(value).digest('hex');
 const hash = (digit: string): string => digit.repeat(64);
@@ -902,6 +903,68 @@ describe('SQL demo private input preparation and normalization', () => {
       action: 'external-link',
       expectedOutput: `<a href="${SYNTHETIC_RUTUBE_URL}" rel="noopener noreferrer">Открыть видео</a>`,
     }]);
+  });
+
+  it('composes the normalized canonical Rutube decision with its security attributes', () => {
+    const rutubeUrl = 'https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab';
+    const decisionFile = {
+      schema_version: 1,
+      scope: 'approved SQL video source reference decisions',
+      source_reference_count: 1,
+      canonicalized_same_host_embed_count: 1,
+      external_safe_link_count: 0,
+      owner_decision_date: '2026-10-12',
+      owner_decision_summary: 'Synthetic canonical Rutube embed decision',
+      target_rel: 'noopener noreferrer',
+      records: [{
+        decision: 'canonicalize_same_https_rutube_embed_id',
+        link_text: 'Synthetic video',
+        safe_target_href: rutubeUrl,
+        source_id: 900,
+        source_slug: 'seminar-900',
+        source_table: 'Seminars',
+        source_url: rutubeUrl,
+        target_rel: 'noopener noreferrer',
+      }],
+    };
+    const input = config({ privateJson: privateDocuments({ 'video-source-reference-decisions.json': decisionFile }) });
+    const nativeSource = {
+      ...source,
+      Seminars: source.Seminars.map((row) => ({
+        ...row,
+        description: `<iframe src="${rutubeUrl}"></iframe>`,
+      })),
+    };
+    const mappedWithRutube = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        seminars: mapped.entities.seminars.map((row) => ({
+          ...row,
+          description: `<iframe src="${rutubeUrl}"></iframe>`,
+        })),
+      },
+    };
+    const normalized = normalize({ config: input, nativeSqlPublicSource: nativeSource, mapped: mappedWithRutube });
+    const compositionInput = {
+      ...mappedWithRutube,
+      entities: {
+        ...mappedWithRutube.entities,
+        institutes: [], programs: [], teachers: [], events: [], articles: [], news: [], promotions: [], videos: [],
+        organizationInfo: [], documents: [], instituteAdditionalInfo: [],
+      },
+    };
+    const release = composeSqlDemoRelease(
+      compositionInput,
+      { ...normalized.composer.acceptedSupplements, targetLocations: [] },
+      { images: [], documents: [] },
+      { approvedUnlinkedArticleImages: [], approvedPublicRichTextImages: [], missingOriginalReplacements: [], videoReferences: normalized.composer.ownerDecisions.videoReferences },
+    );
+
+    expect(normalized.composer.ownerDecisions.videoReferences[0]?.expectedOutput)
+      .toBe(`<iframe src="${rutubeUrl}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`);
+    expect(release.entities.seminars[0]?.description)
+      .toBe(`<iframe src="${rutubeUrl}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`);
   });
 
   it('rejects document binding metadata without a matching verified byte proof', () => {

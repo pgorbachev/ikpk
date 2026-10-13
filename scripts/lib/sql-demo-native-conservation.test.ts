@@ -235,6 +235,17 @@ describe('native SQL release conservation', () => {
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
   });
 
+  it('REVIEW requires an explicit readback key when a composed collection is empty', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.entities.pages = [];
+    a.collections.pages = [];
+    b.collections.pages = [];
+
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+    delete b.collections.pages;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/pages|collection/i);
+  });
+
   it('REVIEW rejects unexpected content in an explicitly null seminar field', () => {
     const { release, a, b } = tenCollectionFixture();
     b.collections.seminars![0]!.full_text = '<p>Unexpected content</p>';
@@ -304,6 +315,45 @@ describe('native SQL release conservation', () => {
     }
     expect(message).toMatch(/malformed/);
     expect(message).not.toContain('SYNTHETIC-PRIVATE-TOKEN');
+  });
+
+  it('REVIEW rejects an unknown claimed SQL source URL without echoing its query', () => {
+    const { release, a, b } = tenCollectionFixture();
+    const privateClaimedUrl = 'https://synthetic.invalid/file?token=SYNTHETIC-PRIVATE-TOKEN';
+    const sources = (b.media[0]!.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources;
+    sources[privateClaimedUrl] = { version: 1, sha256: SOURCE_SHA, storedSha256: STORED_SHA };
+
+    let message: string | undefined;
+    try {
+      assertSqlDemoNativeConservation(release, classification, a, b);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toBeDefined();
+    expect(message).not.toContain('SYNTHETIC-PRIVATE-TOKEN');
+  });
+
+  it('REVIEW enforces single and many native relation shapes while ignoring unrelated provider metadata', () => {
+    const { release, a, b } = tenCollectionFixture();
+    b.media[0]!.provider_metadata = {
+      ...(b.media[0]!.provider_metadata as Record<string, unknown>),
+      unrelated_provider_metadata: { status: 'synthetic' },
+    };
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    const singleAsArray = structuredClone(b);
+    singleAsArray.collections.seminars![0]!.course_group = [singleAsArray.collections['course-groups']![0]];
+    singleAsArray.collections.teachers![0]!.institute = [singleAsArray.collections.institutes![0]];
+    let singleRelationError: string | undefined;
+    try { assertSqlDemoNativeConservation(release, classification, a, singleAsArray); }
+    catch (error) { singleRelationError = (error as Error).message; }
+
+    const manyAsObject = structuredClone(b);
+    manyAsObject.collections.articles![0]!.categories = manyAsObject.collections['course-groups']![0];
+    let manyRelationError: string | undefined;
+    try { assertSqlDemoNativeConservation(release, classification, a, manyAsObject); }
+    catch (error) { manyRelationError = (error as Error).message; }
+    expect([singleRelationError, manyRelationError]).toEqual([expect.any(String), expect.any(String)]);
   });
 
   it('REVIEW rejects URL aliasing in ordinary title text', () => {
