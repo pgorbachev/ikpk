@@ -129,7 +129,7 @@ function metaLine(entry: ScheduleEntry): string {
               )}
               <div class="schedule-foot">
                 <span class:list={['schedule-price', entry.isFree && 'schedule-price-free']}>
-                  {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
+                  {entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice)}
                 </span>
                 <a
                   class="seminar-register-link"

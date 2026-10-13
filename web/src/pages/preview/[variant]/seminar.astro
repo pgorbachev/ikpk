@@ -66,7 +66,7 @@ const schedule = nearest
         {
           dateLabel: formatScheduleDateRange(nearest.startAt, nearest.endAt),
           cityName: nearest.city?.name || 'Уточняется',
-          priceLabel: nearest.isFree ? 'Бесплатно' : formatPrice(nearest.newPrice),
+          priceLabel: nearest.isFree === true ? 'Бесплатно' : formatPrice(nearest.newPrice),
           durationLabel: nearest.duration ? `${nearest.duration} ч` : '',
           formHref: registrationHref(nearest.registrationFormLink) || '/raspisanie-i-tseny',
           teacher: lead
