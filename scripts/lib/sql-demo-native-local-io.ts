@@ -34,7 +34,7 @@ export interface SqlDemoNativeLocalIoOptions {
     nodeExecutable: string;
     cmsStartScript: string;
   };
-  targets: Record<'A' | 'B', SqlDemoNativeTargetConfig & { staticFilesDirectory: string }>;
+  targets: { A: SqlDemoNativeTargetConfig & { staticFilesDirectory: string }; B?: SqlDemoNativeTargetConfig & { staticFilesDirectory: string } };
   privateArtifactsRoot: string;
   privateInputsRoot: string;
   resolveToken: () => Promise<string>;
@@ -124,13 +124,14 @@ function validateOptions(options: SqlDemoNativeLocalIoOptions): void {
     || options.source.reader.connection.user !== options.source.user
     || options.source.reader.connection.unixSocketPath !== options.source.socketDirectory) throw fail('SQL source configuration does not match the pinned reader');
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(options.source.database) || !/^[a-z_][a-z0-9_]{0,62}$/.test(options.source.user)) throw fail('SQL role and database names are invalid');
-  const targets = [options.targets?.A, options.targets?.B];
-  if (targets.some((target) => !target)) throw fail('Both native CMS targets are required');
-  const [a, b] = targets as SqlDemoNativeLocalIoOptions['targets'][keyof SqlDemoNativeLocalIoOptions['targets']][];
-  const urlA = loopback(a.baseUrl); const urlB = loopback(b.baseUrl);
-  const paths = [a.dataDirectory, a.uploadDirectory, a.staticFilesDirectory, b.dataDirectory, b.uploadDirectory, b.staticFilesDirectory];
+  const targets = Object.values(options.targets ?? {});
+  if (!options.targets?.A) throw fail('Native CMS target A is required');
+  const urls = targets.map((target) => loopback(target.baseUrl));
+  const paths = targets.flatMap((target) => [target.dataDirectory, target.uploadDirectory, target.staticFilesDirectory]);
   for (const [index, path] of paths.entries()) requireAbs(`Target storage ${index + 1}`, path);
-  if (urlA.origin === urlB.origin || a.namespace === b.namespace || !/^ikpk_sql_demo_native_[a-z0-9]+$/.test(a.namespace) || !/^ikpk_sql_demo_native_[a-z0-9]+$/.test(b.namespace)
+  if (targets.some((target) => !/^ikpk_sql_demo_native_[a-z0-9]+$/.test(target.namespace))
+    || urls.some((url, index) => urls.slice(index + 1).some((other) => url.origin === other.origin))
+    || targets.some((target, index) => targets.slice(index + 1).some((other) => target.namespace === other.namespace))
     || paths.some((path, index) => paths.slice(index + 1).some((other) => inside(path, other) || inside(other, path)))) throw fail('Native CMS targets must have distinct loopback endpoints and isolated storage');
   if (!['develop', 'start'].includes(options.cms.cmsStartScript)) throw fail('CMS start command must be develop or start');
   const protectedPaths = [options.cms.sourceDirectory, options.cms.candidateRoot, options.privateArtifactsRoot, options.privateInputsRoot, options.source.clusterDataDirectory];
@@ -172,8 +173,8 @@ async function assertEmptyTargetDirectories(paths: readonly string[]): Promise<v
   }
 }
 async function assertFreshTargetDirectories(options: SqlDemoNativeLocalIoOptions): Promise<void> {
-  await assertEmptyTargetDirectories([options.targets.A.dataDirectory, options.targets.A.uploadDirectory, options.targets.A.staticFilesDirectory,
-    options.targets.B.dataDirectory, options.targets.B.uploadDirectory, options.targets.B.staticFilesDirectory]);
+  await assertEmptyTargetDirectories(Object.values(options.targets).flatMap((target) =>
+    [target.dataDirectory, target.uploadDirectory, target.staticFilesDirectory]));
 }
 
 async function assertPortFree(endpoint: string): Promise<void> {
@@ -419,8 +420,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await pinnedCode(config, runFile);
     await assertStoppedCluster(config.source.clusterDataDirectory, processInspector.isAlive);
     await assertFreshTargetDirectories(config);
-    await assertPortFree(config.targets.A.baseUrl);
-    await assertPortFree(config.targets.B.baseUrl);
+    for (const target of Object.values(config.targets)) await assertPortFree(target.baseUrl);
     await checkPrivateDirectory(config.cms.candidateRoot, true);
     await checkPrivateDirectory(config.privateArtifactsRoot, true);
     await checkPrivateDirectory(config.privateInputsRoot, true);
@@ -482,10 +482,11 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
 
   async function openTarget(input: SqlDemoNativeTargetConfig & { name: 'A' | 'B'; token: string }): Promise<SqlDemoNativeOwnedTarget> {
     await pinnedCode(config, runFile);
-    await assertPortFree(config.targets[input.name].baseUrl);
-    if (input.baseUrl !== config.targets[input.name].baseUrl || input.namespace !== config.targets[input.name].namespace
-      || input.dataDirectory !== config.targets[input.name].dataDirectory || input.uploadDirectory !== config.targets[input.name].uploadDirectory) throw fail('CMS target differs from the validated local target configuration');
     const targetConfig = config.targets[input.name];
+    if (!targetConfig) throw fail(`CMS target ${input.name} is not configured`);
+    await assertPortFree(targetConfig.baseUrl);
+    if (input.baseUrl !== targetConfig.baseUrl || input.namespace !== targetConfig.namespace
+      || input.dataDirectory !== targetConfig.dataDirectory || input.uploadDirectory !== targetConfig.uploadDirectory) throw fail('CMS target differs from the validated local target configuration');
     await assertEmptyTargetDirectories([targetConfig.dataDirectory, targetConfig.uploadDirectory, targetConfig.staticFilesDirectory]);
     const base = await checkPrivateDirectory(config.cms.candidateRoot, true);
     const candidateDirectory = join(base, `target-${input.name.toLowerCase()}-${process.pid}-${Date.now()}`);
@@ -747,11 +748,13 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     async readPdfBytes(path) { return safePrivateRead(config.privateInputsRoot, path); },
     async writeStaticDocument(target, publicPath, bytes) {
       const state = owned(target); await verifyTargetProcess(target, state);
+      const targetConfig = config.targets[target.name];
+      if (!targetConfig) throw fail(`CMS target ${target.name} is not configured`);
       const relativePath = publicPath.replace(/^\/static-files\//, '');
       const decoded = relativePath.split('/').map((part) => { try { return decodeURIComponent(part); } catch { return '\0'; } });
       if (relativePath === publicPath || relativePath.includes('\\') || decoded.some((part) => !part || part === '.' || part === '..' || part.includes('/') || part.includes('\\') || part.includes('\0'))) throw fail('Static PDF path is invalid');
       if (!Buffer.from(bytes).subarray(0, 5).equals(Buffer.from('%PDF-'))) throw fail('Static document is not a PDF');
-      const root = await realpath(config.targets[target.name].staticFilesDirectory);
+      const root = await realpath(targetConfig.staticFilesDirectory);
       const destination = resolve(root, ...relativePath.split('/'));
       if (!inside(root, destination)) throw fail('Static PDF path escapes its target root');
       const parent = dirname(destination);
@@ -766,10 +769,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     },
     async readStaticDocument(target, publicPath) {
       owned(target);
+      const targetConfig = config.targets[target.name];
+      if (!targetConfig) throw fail(`CMS target ${target.name} is not configured`);
       const relativePath = publicPath.replace(/^\/static-files\//, '');
       const decoded = relativePath.split('/').map((part) => { try { return decodeURIComponent(part); } catch { return '\0'; } });
       if (relativePath === publicPath || relativePath.includes('\\') || decoded.some((part) => !part || part === '.' || part === '..' || part.includes('/') || part.includes('\\') || part.includes('\0'))) throw fail('Static PDF path is invalid');
-      const bytes = await safePrivateRead(config.targets[target.name].staticFilesDirectory, join(config.targets[target.name].staticFilesDirectory, ...relativePath.split('/')));
+      const bytes = await safePrivateRead(targetConfig.staticFilesDirectory, join(targetConfig.staticFilesDirectory, ...relativePath.split('/')));
       const expected = owned(target).documents.get(publicPath);
       if (!expected || expected.sha256 !== sha256(bytes) || expected.bytes !== bytes.byteLength) throw fail('Published static document bytes do not match the owned write witness');
       return bytes;
@@ -841,6 +846,63 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       } finally { await file.close(); }
       try { await rename(pendingPath, path); }
       catch (error) { await unlink(pendingPath).catch(() => undefined); throw error; }
+    },
+    async captureLiveSnapshot(target, destination) {
+      const state = owned(target);
+      await verifyTargetProcess(target, state);
+      if (target.name !== 'A' || !state.token) throw fail('Live snapshot requires the active owned prototype target');
+      const targetConfig = config.targets.A;
+      const output = resolve(destination);
+      await checkPrivateDirectory(output, true);
+      const webRoot = resolve(config.cms.sourceDirectory, '..', 'web');
+      const captureScript = join(webRoot, 'scripts', 'capture-content-snapshot.ts');
+      const stdoutPath = join(config.privateArtifactsRoot, 'prototype-snapshot.stdout.log');
+      const stderrPath = join(config.privateArtifactsRoot, 'prototype-snapshot.stderr.log');
+      const stdout = await open(stdoutPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o600);
+      const stderr = await open(stderrPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o600);
+      let child: Child | undefined;
+      try {
+        child = childProcess(spawn, config.cms.nodeExecutable, [captureScript], {
+          cwd: webRoot,
+          env: {
+            PATH: safeEnvironment.PATH,
+            HOME: config.privateArtifactsRoot,
+            CMS_URL: target.baseUrl,
+            CMS_TOKEN: state.token,
+            CONTENT_SNAPSHOT_DIR: output,
+          },
+          stdio: ['ignore', stdout.fd, stderr.fd],
+        });
+        await waitForExit(child, 1_800_000);
+        if (child.exitCode !== 0 || child.signalCode !== null) throw fail('Live CMS snapshot process failed');
+      } finally {
+        await stdout.sync().catch(() => undefined);
+        await stderr.sync().catch(() => undefined);
+        await stdout.close();
+        await stderr.close();
+      }
+      await verifyTargetProcess(target, state);
+      const staticRoot = await realpath(targetConfig.staticFilesDirectory);
+      const staticDestination = join(output, 'static-files');
+      await mkdir(staticDestination, { recursive: true, mode: 0o700 });
+      const copyTree = async (source: string, destinationPath: string): Promise<void> => {
+        for (const name of await readdir(source)) {
+          if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) throw fail('Static-file name is invalid');
+          const sourcePath = join(source, name);
+          const stat = await lstat(sourcePath);
+          if (stat.isSymbolicLink()) throw fail('Static-file tree contains a symbolic link');
+          const destinationFile = join(destinationPath, name);
+          if (stat.isDirectory()) {
+            await mkdir(destinationFile, { recursive: true, mode: 0o700 });
+            await copyTree(sourcePath, destinationFile);
+          } else if (stat.isFile()) {
+            const bytes = await safePrivateRead(staticRoot, sourcePath);
+            const file = await open(destinationFile, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+            try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
+          } else throw fail('Static-file tree contains an unsupported filesystem entry');
+        }
+      };
+      await copyTree(staticRoot, staticDestination);
     },
   } as SqlDemoNativeRehearsalIo;
 }

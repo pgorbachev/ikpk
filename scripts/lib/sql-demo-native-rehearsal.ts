@@ -56,6 +56,8 @@ export interface SqlDemoNativeRehearsalIo {
   createFreshClient(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoNativeOwnedTarget>;
   readPublished(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoStrapi5Readback>;
   capture(targets: readonly SqlDemoNativeOwnedTarget[]): Promise<void>;
+  /** Live CMS snapshot; only required by the one-target prototype path. */
+  captureLiveSnapshot?(target: SqlDemoNativeOwnedTarget, destination: string): Promise<void>;
   stopOwnedSqlSource(lease: SqlDemoNativeSqlSourceLease): Promise<void>;
 }
 
@@ -75,6 +77,25 @@ export interface SqlDemoNativeRehearsalResult {
   rasterCount: number;
   documentCount: number;
   repeatedTarget: 'A';
+}
+
+export interface SqlDemoNativePrototypeInput {
+  reader: SqlPublicReaderOptions;
+  privateInputConfig: SqlDemoPrivateInputRootConfig;
+  target: SqlDemoNativeTargetConfig;
+  snapshotDirectory: string;
+  materializeApprovedAssets?: (manifest: SqlDemoNormalizedPrivateInputs['loader']['assetManifest']) => Promise<void>;
+  io: SqlDemoNativeRehearsalIo;
+}
+
+export interface SqlDemoNativePrototypeResult {
+  status: 'single-target-prototype-success';
+  sourceHash: string;
+  target: 'A';
+  collectionCounts: Record<string, number>;
+  rasterCount: number;
+  documentCount: number;
+  mediaCount: number;
 }
 
 export class SqlDemoNativeRehearsalError extends Error {
@@ -638,6 +659,112 @@ export async function runSqlDemoNativeRehearsal(
     await input.io.capture(captureTargets);
   } catch {
     throw safeFailure('CAPTURE_FAILED', 'Native rehearsal evidence could not be captured');
+  }
+  return result;
+}
+
+/** Import and read back exactly one owned local CMS target for the approved prototype path. */
+export async function runSqlDemoNativePrototype(
+  input: SqlDemoNativePrototypeInput,
+): Promise<SqlDemoNativePrototypeResult> {
+  validateTarget(input.target);
+  if (!isAbsolute(input.snapshotDirectory)) throw safeFailure('SNAPSHOT_DESTINATION_INVALID', 'Prototype snapshot destination must be an absolute private path');
+  assertLoadedVipsFloor();
+  let sqlSourceLease: SqlDemoNativeSqlSourceLease | undefined;
+  let target: SqlDemoNativeOwnedTarget | undefined;
+  let primaryError: unknown;
+  let result: SqlDemoNativePrototypeResult | undefined;
+  try {
+    const mapperOptions = prepareSqlDemoPrivateInputs(input.privateInputConfig);
+    let token: string;
+    try {
+      token = await input.io.resolveCmsToken();
+    } catch {
+      throw safeFailure('CMS_CREDENTIALS_UNAVAILABLE', 'CMS credential could not be resolved');
+    }
+    if (typeof token !== 'string' || !token.trim()) throw safeFailure('CMS_CREDENTIALS_UNAVAILABLE', 'CMS credential could not be resolved');
+
+    let source: SqlPublicReaderResult;
+    try {
+      const acquired = await input.io.acquireOwnedSqlSource(input.reader);
+      sqlSourceLease = acquired.lease;
+      source = await readSqlPublicSource(acquired.reader);
+    } catch {
+      throw safeFailure('SQL_SOURCE_INVALID', 'Pinned read-only SQL source could not be verified');
+    }
+
+    let mapped: SqlPublicContentResult;
+    let normalized: SqlDemoNormalizedPrivateInputs;
+    let assets: SqlDemoAssetLoaderResult;
+    try {
+      mapped = mapSqlPublicContent(source as SqlPublicSource, mapperOptions);
+      normalized = normalizeSqlDemoPrivateInputs({
+        config: input.privateInputConfig,
+        mapperOptions,
+        nativeSqlPublicSource: source as SqlPublicSource,
+        mapped,
+      });
+      if (input.materializeApprovedAssets) await input.materializeApprovedAssets(normalized.loader.assetManifest);
+      assets = await loadSqlDemoAssets({
+        ...normalized.loader,
+        source,
+        selectedPublicHeaders: selectedPublicHeaders(mapped, source.sourceHash),
+      });
+    } catch (error) {
+      throw mapFailure(error);
+    }
+
+    const pdfBytes = await readApprovedPdfBytes(assets, input.io);
+    try {
+      target = await input.io.openOwnedTarget({ ...input.target, name: 'A', token });
+    } catch {
+      throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Owned CMS process for prototype target A could not be started');
+    }
+    assertOwnedTarget(target, 'A', input.target);
+    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io);
+    assertSqlDemoNativeConservation(imported.release, normalized.materializer, imported.readback, imported.readback);
+
+    if (!input.io.captureLiveSnapshot) throw safeFailure('LIVE_SNAPSHOT_UNAVAILABLE', 'Prototype adapter does not provide live CMS snapshot capture');
+    try {
+      await input.io.captureLiveSnapshot(target, resolve(input.snapshotDirectory));
+    } catch {
+      throw safeFailure('LIVE_SNAPSHOT_FAILED', 'Live CMS snapshot or static-file projection failed');
+    }
+
+    result = {
+      status: 'single-target-prototype-success',
+      sourceHash: source.sourceHash,
+      target: 'A',
+      collectionCounts: Object.fromEntries(Object.entries(imported.readback.collections).map(([name, rows]) => [name, rows?.length ?? 0])),
+      rasterCount: assets.offlineMedia.length,
+      documentCount: assets.offlineDocuments.length,
+      mediaCount: imported.readback.media.length,
+    };
+  } catch (error) {
+    primaryError = error;
+  } finally {
+    if (target) {
+      try {
+        await input.io.stopOwnedTarget(target);
+      } catch {
+        if (primaryError === undefined) primaryError = safeFailure('TARGET_CLEANUP_FAILED', 'Owned prototype CMS target A could not be stopped');
+      }
+    }
+    if (sqlSourceLease !== undefined) {
+      try {
+        await input.io.stopOwnedSqlSource(sqlSourceLease);
+      } catch {
+        if (primaryError === undefined) primaryError = safeFailure('SQL_SOURCE_CLEANUP_FAILED', 'Owned SQL source could not be stopped');
+      }
+    }
+  }
+  if (primaryError !== undefined) throw primaryError;
+  if (!result) throw safeFailure('REHEARSAL_FAILED', 'Single-target prototype did not produce a result');
+  try {
+    if (!target) throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Prototype target A was not retained for evidence capture');
+    await input.io.capture([target]);
+  } catch {
+    throw safeFailure('CAPTURE_FAILED', 'Single-target prototype evidence could not be captured');
   }
   return result;
 }
