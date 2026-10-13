@@ -2,6 +2,9 @@ import type { SqlDemoRelease } from './sql-demo-release.js';
 import type { SqlDemoVerifiedAssetMapping } from './sql-demo-release.js';
 import { projectSqlPublicContentForConservation, type SqlMaterializerInput, type SqlMaterializerOptions, type SqlMaterializerProjectionRecord } from './sql-public-materializer.js';
 
+const parse5Url = new URL('../../web/node_modules/parse5/dist/index.js', import.meta.url);
+const { parseFragment } = await import(parse5Url.href);
+
 export type SqlDemoNativeCollection =
   | 'institutes'
   | 'course-groups'
@@ -41,6 +44,10 @@ const COLLECTIONS: readonly SqlDemoNativeCollection[] = [
 ];
 const SHA256 = /^[a-f\d]{64}$/i;
 type Row = Record<string, unknown>;
+type HtmlNode = { nodeName?: string; tagName?: string; value?: string; data?: string; attrs?: { name: string; value: string }[]; childNodes?: HtmlNode[] };
+type CanonicalMediaAliases = ReadonlyMap<string, ReadonlySet<string>>;
+const STRAPI_SYSTEM_FIELDS = new Set(['id', 'documentId', 'publishedAt', 'createdAt', 'updatedAt', 'locale']);
+const RICH_HTML_FIELDS = new Set(['body', 'description', 'full_text', 'learning_plan', 'learning_mode', 'recommendations', 'additionalText', 'bio']);
 
 function fail(identity: string, detail: string): never {
   throw new Error(`${identity}: ${detail}`);
@@ -61,30 +68,62 @@ function sha(value: unknown, context: string): string {
   return value.toLowerCase();
 }
 
-function compareValue(expected: unknown, actual: unknown, aliases: ReadonlyMap<string, string>): boolean {
+function compareValue(expected: unknown, actual: unknown): boolean {
   if (typeof expected === 'string' && typeof actual === 'string') {
-    return canonicalText(expected, aliases) === canonicalText(actual, aliases);
+    return expected === actual;
   }
   if (Array.isArray(expected)) {
     return Array.isArray(actual) && expected.length === actual.length
-      && expected.every((value, index) => compareValue(value, actual[index], aliases));
+      && expected.every((value, index) => compareValue(value, actual[index]));
   }
   if (expected && typeof expected === 'object') {
     const actualRecord = asRecord(actual);
     if (!actualRecord) return false;
-    return Object.entries(expected as Row).every(([key, value]) =>
+    const expectedEntries = Object.entries(expected as Row);
+    const expectedKeys = new Set(expectedEntries.map(([key]) => key));
+    const actualKeys = Object.keys(actualRecord).filter((key) => expectedKeys.has(key) || !STRAPI_SYSTEM_FIELDS.has(key));
+    return actualKeys.length === expectedEntries.length && expectedEntries.every(([key, value]) =>
       Object.prototype.hasOwnProperty.call(actualRecord, key)
-      && compareValue(value, actualRecord[key], aliases));
+      && compareValue(value, actualRecord[key]));
   }
   return Object.is(expected, actual);
 }
 
-function canonicalText(value: string, aliases: ReadonlyMap<string, string>): string {
-  let result = value;
-  for (const [url, fileIdentity] of [...aliases].sort(([left], [right]) => right.length - left.length)) {
-    if (url) result = result.split(url).join(`ikpk-media:${fileIdentity}`);
+function canonicalHtml(value: string, aliases: CanonicalMediaAliases): unknown {
+  const projectNode = (node: HtmlNode): unknown => {
+    if (node.tagName === 'img') {
+      const attrs = (node.attrs ?? []).map(({ name, value: attrValue }) => ({
+        name,
+        value: name === 'src' && aliases.has(attrValue)
+          ? `ikpk-verified-media:${[...aliases.get(attrValue)!].sort().join(',')}`
+          : attrValue,
+      })).sort((left, right) => left.name.localeCompare(right.name));
+      return { tagName: node.tagName, attrs, children: (node.childNodes ?? []).map(projectNode) };
+    }
+    if (node.tagName) {
+      return {
+        tagName: node.tagName,
+        attrs: (node.attrs ?? []).map(({ name, value }) => ({ name, value })).sort((left, right) => left.name.localeCompare(right.name)),
+        children: (node.childNodes ?? []).map(projectNode),
+      };
+    }
+    if (node.nodeName === '#text') return { text: node.value ?? '' };
+    if (node.nodeName === '#comment') return { comment: node.data ?? '' };
+    return (node.childNodes ?? []).map(projectNode);
+  };
+  return projectNode(parseFragment(value) as HtmlNode);
+}
+
+function sameAttribute(field: string, expected: unknown, actual: unknown, aliases: CanonicalMediaAliases): boolean {
+  if (field === 'published_date' && typeof expected === 'string' && typeof actual === 'string') {
+    const expectedDay = /^\d{4}-\d{2}-\d{2}$/.test(expected) ? expected : null;
+    const actualMidnight = /^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.000)?Z$/.exec(actual)?.[1] ?? null;
+    return expected === actual || (expectedDay !== null && expectedDay === actualMidnight);
   }
-  return result;
+  if (RICH_HTML_FIELDS.has(field) && typeof expected === 'string' && typeof actual === 'string') {
+    return JSON.stringify(canonicalHtml(expected, aliases)) === JSON.stringify(canonicalHtml(actual, aliases));
+  }
+  return compareValue(expected, actual);
 }
 
 function mediaSources(value: unknown, context: string): Record<string, Row> {
@@ -95,7 +134,7 @@ function mediaSources(value: unknown, context: string): Record<string, Row> {
   const result: Record<string, Row> = {};
   for (const [url, claim] of Object.entries(sources)) {
     const record = asRecord(claim);
-    if (!record) return fail(context, `provider_metadata source claim for ${url} is malformed`);
+    if (!record) return fail(context, 'provider_metadata contains a malformed source claim');
     result[url] = record;
   }
   return result;
@@ -103,16 +142,22 @@ function mediaSources(value: unknown, context: string): Record<string, Row> {
 
 interface TargetIndex {
   byLegacy: Map<SqlDemoNativeCollection, Map<string, SqlDemoStrapi5PublishedRecord>>;
-  aliases: Map<string, string>;
-  mediaFileById: Map<number, string>;
+  aliases: Map<string, Set<string>>;
+  mediaFileIdsById: Map<number, Set<string>>;
   storedHashByFile: Map<string, string>;
+}
+
+function addAlias(aliases: Map<string, Set<string>>, url: string, fileId: string): void {
+  const fileIds = aliases.get(url) ?? new Set<string>();
+  fileIds.add(fileId);
+  aliases.set(url, fileIds);
 }
 
 function indexMedia(
   expected: SqlDemoRelease,
   readback: SqlDemoStrapi5Readback,
   targetName: string,
-): { aliases: Map<string, string>; mediaFileById: Map<number, string>; storedHashByFile: Map<string, string> } {
+): { aliases: Map<string, Set<string>>; mediaFileIdsById: Map<number, Set<string>>; storedHashByFile: Map<string, string> } {
   const imageMappings = expected.provenance.assetMappings.filter((asset) => asset.detectedMimeType.startsWith('image/'));
   const byFile = new Map<string, SqlDemoVerifiedAssetMapping>();
   const bySourceUrl = new Map<string, string>();
@@ -129,12 +174,12 @@ function indexMedia(
   const idSeen = new Set<number>();
   const urlSeen = new Set<string>();
   const actualByFile = new Map<string, SqlDemoStrapi5MediaReadback>();
-  const fileByMediaId = new Map<number, string>();
+  const fileIdsByMediaId = new Map<number, Set<string>>();
   const storedHashByFile = new Map<string, string>();
-  const aliases = new Map<string, string>();
+  const aliases = new Map<string, Set<string>>();
   for (const asset of imageMappings) {
-    aliases.set(asset.sourceUrl, asset.sourceFileId);
-    aliases.set(asset.targetPublicUrl, asset.sourceFileId);
+    addAlias(aliases, asset.sourceUrl, asset.sourceFileId);
+    addAlias(aliases, asset.targetPublicUrl, asset.sourceFileId);
   }
 
   for (const media of readback.media) {
@@ -163,21 +208,26 @@ function indexMedia(
     for (const fileId of new Set(claimsForMedia)) {
       if (actualByFile.has(fileId)) fail(`${targetName} Files#${fileId}`, 'source media appears in multiple target media rows');
       actualByFile.set(fileId, media);
-      fileByMediaId.set(media.id, fileId);
+      const fileIds = fileIdsByMediaId.get(media.id) ?? new Set<string>();
+      fileIds.add(fileId);
+      fileIdsByMediaId.set(media.id, fileIds);
       storedHashByFile.set(fileId, storedSha);
-      aliases.set(media.url, fileId);
+      addAlias(aliases, media.url, fileId);
     }
   }
 
   for (const asset of imageMappings) {
     if (!actualByFile.has(asset.sourceFileId)) fail(`${targetName} Files#${asset.sourceFileId}`, 'expected source media is missing');
   }
-  return { aliases, mediaFileById: fileByMediaId, storedHashByFile };
+  return { aliases, mediaFileIdsById: fileIdsByMediaId, storedHashByFile };
 }
 
 function relationRows(value: unknown): Row[] | null {
   const normalized = asRecord(value)?.data ?? value;
-  if (Array.isArray(normalized)) return normalized.map((item) => asRecord(item)).filter((item): item is Row => item !== null);
+  if (Array.isArray(normalized)) {
+    const records = normalized.map((item) => asRecord(item));
+    return records.some((item) => item === null) ? null : records as Row[];
+  }
   const record = asRecord(normalized);
   return record ? [record] : null;
 }
@@ -200,7 +250,7 @@ function compareRelations(
       }
       const target = index.byLegacy.get(relation.collection)?.get(reference.legacy_id);
       if (!target || target.documentId !== reference.documentId || target.id !== reference.id) {
-        fail(context, `${relation.field} relation target ${reference.legacy_id} has inconsistent IDs`);
+        fail(context, `${relation.field} relation target has inconsistent IDs`);
       }
       actualLegacyIds.push(reference.legacy_id);
     }
@@ -234,22 +284,22 @@ function compareTarget(
     expectedByCollection.set(collection, rows);
   }
 
-  const seenIds = new Set<number>();
-  const seenDocumentIds = new Set<string>();
   for (const collection of COLLECTIONS) {
     const rows = readback.collections[collection] ?? [];
     const expectedRows = expectedByCollection.get(collection) ?? [];
     const index = new Map<string, SqlDemoStrapi5PublishedRecord>();
+    const seenIds = new Set<number>();
+    const seenDocumentIds = new Set<string>();
     byLegacy.set(collection, index);
     for (const row of rows) {
       const matchingPlan = expectedRows.find((plan) => plan.legacyId === row?.legacy_id);
-      const context = matchingPlan ? identity(matchingPlan) : `${targetName} ${collection}/${String(row?.legacy_id ?? 'unknown')}`;
+      const context = matchingPlan ? identity(matchingPlan) : `${targetName} ${collection}`;
       if (!row || !Number.isSafeInteger(row.id) || row.id <= 0) fail(context, 'published row has an invalid numeric id');
       if (typeof row.documentId !== 'string' || !row.documentId.trim()) fail(context, 'published row is missing documentId');
       if (typeof row.legacy_id !== 'string' || !row.legacy_id.trim()) fail(context, 'published row is missing legacy_id');
       if (typeof row.publishedAt !== 'string' || !row.publishedAt.trim()) fail(context, 'row is not published');
-      if (seenIds.has(row.id)) fail(context, 'duplicate numeric Strapi id');
-      if (seenDocumentIds.has(row.documentId)) fail(context, 'duplicate documentId');
+      if (seenIds.has(row.id)) fail(context, 'duplicate numeric Strapi id in collection');
+      if (seenDocumentIds.has(row.documentId)) fail(context, 'duplicate documentId in collection');
       seenIds.add(row.id);
       seenDocumentIds.add(row.documentId);
       if (index.has(row.legacy_id)) fail(context, 'duplicate logical source row');
@@ -261,7 +311,7 @@ function compareTarget(
       const missing = expectedRows.find((plan) => !actualIds.has(plan.legacyId));
       const extra = rows.find((row) => !expectedIds.has(row.legacy_id));
       if (missing) fail(identity(missing), `${targetName} ${collection} row is missing`);
-      if (extra) fail(`${targetName} ${collection}/${extra.legacy_id}`, 'extra logical source row');
+      if (extra) fail(`${targetName} ${collection}`, 'extra logical source row');
       fail(`${targetName} ${collection}`, 'row count differs from the composed release');
     }
   }
@@ -269,17 +319,24 @@ function compareTarget(
   const targetIndex: TargetIndex = {
     byLegacy,
     aliases: media.aliases,
-    mediaFileById: media.mediaFileById,
+    mediaFileIdsById: media.mediaFileIdsById,
     storedHashByFile: media.storedHashByFile,
   };
   for (const plan of plans) {
     const row = byLegacy.get(plan.collection as SqlDemoNativeCollection)?.get(plan.legacyId);
     if (!row) fail(identity(plan), `${targetName} ${plan.collection} row is missing`);
     const context = identity(plan);
+    const unexpectedFields = Object.keys(row).filter((field) =>
+      !Object.prototype.hasOwnProperty.call(plan.attributes, field)
+      && !STRAPI_SYSTEM_FIELDS.has(field)
+      && field !== 'legacy_id'
+      && field !== plan.image?.field
+      && !plan.relations.some((relation) => relation.field === field));
+    if (unexpectedFields.length) fail(context, `published row contains unexpected ${plan.collection} field`);
     for (const [field, value] of Object.entries(plan.attributes)) {
       if (field === 'image' || field === 'photo') continue;
       if (!Object.prototype.hasOwnProperty.call(row, field)) fail(context, `${targetName} readback omitted ${field}`);
-      if (!compareValue(value, row[field], targetIndex.aliases)) fail(context, `${field} differs from the composed release`);
+      if (!sameAttribute(field, value, row[field], targetIndex.aliases)) fail(context, `${field} differs from the composed release`);
     }
     if (plan.image) {
       const expectedFileId = plan.image.sourceId;
@@ -289,8 +346,8 @@ function compareTarget(
       } else {
         const image = asRecord(asRecord(rawImage)?.data ?? rawImage);
         if (!image || !Number.isSafeInteger(image.id)) fail(context, `${plan.image.field} media reference is missing or malformed`);
-        const actualFileId = targetIndex.mediaFileById.get(image.id as number);
-        if (actualFileId !== expectedFileId) fail(context, `${plan.image.field} does not resolve to Files#${expectedFileId}`);
+        const actualFileIds = targetIndex.mediaFileIdsById.get(image.id as number);
+        if (!actualFileIds?.has(expectedFileId)) fail(context, `${plan.image.field} does not resolve to Files#${expectedFileId}`);
         const targetMedia = readback.media.find((item) => item.id === image.id);
         if (!targetMedia || image.url !== targetMedia.url) fail(context, `${plan.image.field} URL and media id are inconsistent`);
       }
@@ -332,37 +389,6 @@ export function assertSqlDemoNativeConservation(
   for (const [fileId, storedHashA] of indexA.storedHashByFile) {
     if (indexB.storedHashByFile.get(fileId) !== storedHashA) {
       fail(`Files#${fileId}`, 'independently verified stored-byte hash differs between targets');
-    }
-  }
-
-  for (const plan of plans) {
-    const rowA = indexA.byLegacy.get(plan.collection as SqlDemoNativeCollection)?.get(plan.legacyId);
-    const rowB = indexB.byLegacy.get(plan.collection as SqlDemoNativeCollection)?.get(plan.legacyId);
-    if (!rowA || !rowB) fail(identity(plan), 'verified target row disappeared during comparison');
-    const context = identity(plan);
-    for (const field of Object.keys(plan.attributes)) {
-      if (field === 'image' || field === 'photo') continue;
-      if (!compareValue(rowA[field], rowB[field], new Map())) {
-        // URL-bearing body fields are compared after stable source-file canonicalization below.
-        if (typeof rowA[field] !== 'string' || typeof rowB[field] !== 'string'
-          || canonicalText(rowA[field] as string, indexA.aliases) !== canonicalText(rowB[field] as string, indexB.aliases)) {
-          fail(context, `${field} differs between target A and target B`);
-        }
-      }
-    }
-    if (plan.image) {
-      const imageA = asRecord(asRecord(rowA[plan.image.field])?.data ?? rowA[plan.image.field]);
-      const imageB = asRecord(asRecord(rowB[plan.image.field])?.data ?? rowB[plan.image.field]);
-      const fileA = Number.isSafeInteger(imageA?.id) ? indexA.mediaFileById.get(imageA!.id as number) : undefined;
-      const fileB = Number.isSafeInteger(imageB?.id) ? indexB.mediaFileById.get(imageB!.id as number) : undefined;
-      if (fileA !== fileB) fail(context, `${plan.image.field} source media identity differs between targets`);
-    }
-    for (const relation of plan.relations) {
-      const idsA = relationRows(rowA[relation.field])?.map((item) => item.legacy_id).sort() ?? [];
-      const idsB = relationRows(rowB[relation.field])?.map((item) => item.legacy_id).sort() ?? [];
-      if (idsA.length !== idsB.length || idsA.some((id, position) => id !== idsB[position])) {
-        fail(context, `${relation.field} relation differs between targets`);
-      }
     }
   }
 }

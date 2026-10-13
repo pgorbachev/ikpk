@@ -440,7 +440,12 @@ export function projectSqlPublicContentForConservation(
     sourceTable: plan.sourceTable,
     ...(Number.isSafeInteger(plan.entity.sourceId) ? { sourceId: plan.entity.sourceId as number } : {}),
     legacyId: plan.legacyId,
-    attributes: { ...plan.data },
+    attributes: {
+      ...plan.data,
+      ...(plan.sourceTable === 'Seminars'
+        ? Object.fromEntries(['full_text', 'learning_plan', 'learning_mode', 'recommendations'].map((field) => [field, plan.entity[field] ?? null]))
+        : {}),
+    },
     ...(plan.imageField ? { image: { field: plan.imageField, sourceId: plan.imageSourceId ?? null } } : {}),
     relations: plan.relations.map((relation) => ({
       field: relation.field,
