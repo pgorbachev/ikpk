@@ -15,6 +15,7 @@ import type {
   SqlDemoAllowlistedAssets,
   SqlDemoOwnerDecisions,
 } from './sql-demo-release.js';
+import { canonicalSqlDemoRutubeIframe } from './sql-demo-release.js';
 
 export const SQL_DEMO_PRIVATE_JSON_NAMES = [
   'approved-supplements.json',
@@ -940,12 +941,8 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     const targetRel = valueAt(row, 'target_rel', 'targetRel');
     if (targetRel !== expectedRel) throw new Error(`Seminars#${sourceId} video decision rel policy differs from its pinned manifest`);
     const linkText = string(valueAt(row, 'link_text', 'linkText'), `Seminars#${sourceId} video link text`);
-    const pathEnd = safeHref.search(/[?#]/);
-    const pathPart = pathEnd < 0 ? safeHref : safeHref.slice(0, pathEnd);
-    const suffix = pathEnd < 0 ? '' : safeHref.slice(pathEnd);
-    const slashHref = `${pathPart.endsWith('/') ? pathPart : `${pathPart}/`}${suffix}`;
     const expectedOutput = action === 'rutube-trailing-slash'
-      ? `<iframe src="${slashHref}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`
+      ? canonicalSqlDemoRutubeIframe(safeHref)
       : `<a href="${safeHref}" rel="${string(targetRel, `Seminars#${sourceId} target rel`)}">Открыть видео</a>`;
     void linkText;
     videoReferences.push({ sourceTable: 'Seminars', sourceId, field: 'description', originalURL: sourceUrl, action, expectedOutput });

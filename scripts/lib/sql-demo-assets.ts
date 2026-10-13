@@ -238,18 +238,12 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
 
   const sourceFiles = input.source.Files ?? [];
   const filesById = new Map<string, NonNullable<SqlDemoAssetSource['Files']>[number]>();
-  const filesByUrl = new Map<string, NonNullable<SqlDemoAssetSource['Files']>[number][]>();
   for (const file of sourceFiles) {
     if (!file || typeof file.id !== 'string' || !file.id) {
       throw new Error('Files has a missing or invalid file identity');
     }
     if (filesById.has(file.id)) throw new Error(`Files#${file.id} has a duplicate identity`);
     filesById.set(file.id, file);
-    if (typeof file.url === 'string' && file.url) {
-      const matches = filesByUrl.get(file.url) ?? [];
-      matches.push(file);
-      filesByUrl.set(file.url, matches);
-    }
   }
 
   const reachability = new Map<string, {

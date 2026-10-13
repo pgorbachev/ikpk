@@ -83,6 +83,14 @@ export interface SqlDemoVideoReferenceDecision {
   expectedOutput: string;
 }
 
+/** Render the one owner-approved canonical Rutube embed shape used at both boundaries. */
+export function canonicalSqlDemoRutubeIframe(originalURL: string): string {
+  if (!/^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}$/i.test(originalURL)) {
+    throw new Error('Rutube URL is outside the approved canonical embed shape');
+  }
+  return `<iframe src="${originalURL}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+}
+
 export interface SqlDemoPublicRichTextImageDecision {
   sourceTable: 'Programs' | 'Seminars';
   sourceId: number;
@@ -604,8 +612,11 @@ export function composeSqlDemoRelease(
       if (url.protocol !== 'https:' || url.hostname !== 'rutube.ru' || !rutubePath || url.search || url.hash || url.pathname.endsWith('/')) {
         fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube slash decision is outside the exact no-query embed shape');
       }
+      const canonicalOutput = canonicalSqlDemoRutubeIframe(decision.originalURL);
+      // Retain only the exact previous serialized form; transforms below always emit the canonical secured iframe.
+      const previousOutput = `<iframe src="${decision.originalURL}/"></iframe>`;
       if (!/^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}$/i.test(decision.originalURL)
-        || decision.expectedOutput !== `<iframe src="${decision.originalURL}/"></iframe>`) {
+        || (decision.expectedOutput !== canonicalOutput && decision.expectedOutput !== previousOutput)) {
         fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube output does not match the approved closed trailing-slash transform');
       }
       return;
@@ -644,7 +655,10 @@ export function composeSqlDemoRelease(
       const decision = required(videoDecisionByKey.get(key), `${sourceTable}#${sourceId}`, `unmatched iframe in ${field}`);
       if (usedVideoDecisionKeys.has(key)) fail(`${sourceTable}#${sourceId}`, `video decision matched more than one iframe in ${field}`);
       usedVideoDecisionKeys.add(key);
-      replacements.push({ start: iframeLocation.startOffset, end: iframeLocation.endOffset, value: decision.expectedOutput });
+      const output = decision.action === 'rutube-trailing-slash'
+        ? canonicalSqlDemoRutubeIframe(decision.originalURL)
+        : decision.expectedOutput;
+      replacements.push({ start: iframeLocation.startOffset, end: iframeLocation.endOffset, value: output });
     }
     return replacements.sort((left, right) => right.start - left.start).reduce(
       (result, replacement) => `${result.slice(0, replacement.start)}${replacement.value}${result.slice(replacement.end)}`,

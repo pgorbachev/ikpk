@@ -242,15 +242,14 @@ function indexMedia(
     const claimsForMedia: string[] = [];
     for (const [sourceUrl, claim] of Object.entries(sourceClaims)) {
       const fileId = bySourceUrl.get(sourceUrl);
-      if (fileId) {
-        const asset = byFile.get(fileId)!;
-        if (sha(claim.sha256, `${targetName} Files#${fileId} source claim`) !== asset.sha256.toLowerCase()) {
-          fail(`${targetName} Files#${fileId}`, 'source SHA-256 claim differs from the composed release');
-        }
-        const claimedStoredSha = sha(claim.storedSha256, `${targetName} Files#${fileId} stored hash claim`);
-        if (claimedStoredSha !== storedSha) fail(`${targetName} Files#${fileId}`, 'provider metadata stored hash differs from the independent stored-byte witness');
-        claimsForMedia.push(fileId);
+      if (!fileId) fail(`${targetName} media#${media.id}`, 'provider metadata claims an unknown SQL source URL');
+      const asset = byFile.get(fileId)!;
+      if (sha(claim.sha256, `${targetName} Files#${fileId} source claim`) !== asset.sha256.toLowerCase()) {
+        fail(`${targetName} Files#${fileId}`, 'source SHA-256 claim differs from the composed release');
       }
+      const claimedStoredSha = sha(claim.storedSha256, `${targetName} Files#${fileId} stored hash claim`);
+      if (claimedStoredSha !== storedSha) fail(`${targetName} Files#${fileId}`, 'provider metadata stored hash differs from the independent stored-byte witness');
+      claimsForMedia.push(fileId);
     }
     if (!claimsForMedia.length) fail(`${targetName} media#${media.id}`, 'extra media row has no expected SQL source-file identity');
     for (const fileId of new Set(claimsForMedia)) {
@@ -270,13 +269,14 @@ function indexMedia(
   return { expectedMediaByUrl, physicalMediaByUrl, mediaFileIdsById: fileIdsByMediaId, storedHashByFile };
 }
 
-function relationRows(value: unknown): Row[] | null {
-  const normalized = asRecord(value)?.data ?? value;
-  if (Array.isArray(normalized)) {
-    const records = normalized.map((item) => asRecord(item));
+function relationRows(value: unknown, cardinality: 'single' | 'many'): Row[] | null {
+  if (cardinality === 'many') {
+    if (!Array.isArray(value)) return null;
+    const records = value.map((item) => asRecord(item));
     return records.some((item) => item === null) ? null : records as Row[];
   }
-  const record = asRecord(normalized);
+  if (value == null || Array.isArray(value)) return null;
+  const record = asRecord(value);
   return record ? [record] : null;
 }
 
@@ -289,7 +289,7 @@ function compareRelations(
   for (const relation of plan.relations) {
     const raw = actual[relation.field];
     if (relation.cardinality === 'single' && raw == null && relation.optional && relation.legacyIds.length === 0) continue;
-    const references = relationRows(raw);
+    const references = relationRows(raw, relation.cardinality);
     if (!references) fail(context, `${relation.field} relation is missing or malformed`);
     const actualLegacyIds: string[] = [];
     for (const reference of references) {
@@ -369,7 +369,11 @@ function compareTarget(
   }
 
   for (const collection of COLLECTIONS) {
-    const rows = readback.collections[collection] ?? [];
+    if (!readback.collections || !Object.prototype.hasOwnProperty.call(readback.collections, collection)) {
+      fail(`${targetName} ${collection}`, 'collection readback key is missing');
+    }
+    const rows = readback.collections[collection];
+    if (!Array.isArray(rows)) fail(`${targetName} ${collection}`, 'collection readback is malformed');
     const expectedRows = expectedByCollection.get(collection) ?? [];
     const index = new Map<string, SqlDemoStrapi5PublishedRecord>();
     const seenIds = new Set<number>();
