@@ -67,6 +67,12 @@ const sourceOwners = new WeakMap<object, LeaseState>();
 type ExecOptions = { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number; maxBuffer?: number };
 
 function fail(message: string): Error { return new Error(message); }
+function failStage(stage: 'SourceUrlIdentity' | 'UploadHttpStatus' | 'UploadIdentityHttpStatus' | 'StoredMediaBytes' | 'PersistentMediaIdentity', status?: number): Error {
+  const error = new Error(`Native CMS ${stage} validation failed`);
+  error.name = `NativeCms${stage}Error`;
+  if (status !== undefined) Object.assign(error, { safeHttpStatus: status });
+  return error;
+}
 function sha256(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
 function sourceWitness(stdout: string): SourceTableWitness {
   const parsed: unknown = JSON.parse(stdout.trim());
@@ -557,6 +563,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           HOME: join(candidateDirectory, '.home'),
           TMPDIR: join(candidateDirectory, '.tmp'),
           NODE_ENV: 'production',
+          CI: 'true',
           HOST: '127.0.0.1', PORT: baseUrl.port,
           DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: join(dataDirectory, 'data.db'),
           STRAPI_TELEMETRY_DISABLED: 'true',
@@ -723,16 +730,22 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const expected = 'sourceBytesAvailable' in proof ? proof.substitution.replacementSha256 : proof.sourceSha256;
       const mime = pngMime(bytes);
       if (!mime || mime !== proof.detectedMimeType || !HASH.test(expected) || sha256(bytes) !== expected.toLowerCase()) throw fail('Raster bytes do not match their reviewed source hash and MIME');
-      const sourceURL = new URL(proof.sourceUrl);
-      if (!['http:', 'https:'].includes(sourceURL.protocol) || sourceURL.username || sourceURL.password) throw fail('Raster source identity URL is invalid');
+      const relativeLegacyUrl = ['/media/legacy/logo-v2.png', '/media/legacy/logo-upledger-inst.png', '/media/legacy/logo-barral-inst.png'].includes(proof.sourceUrl);
+      if (!relativeLegacyUrl) {
+        let sourceURL: URL;
+        try { sourceURL = new URL(proof.sourceUrl); }
+        catch { throw failStage('SourceUrlIdentity'); }
+        if (!['http:', 'https:'].includes(sourceURL.protocol) || sourceURL.username || sourceURL.password) throw failStage('SourceUrlIdentity');
+      }
       const prior = currentInventory as StrapiMediaInventory;
       const sourceUrl = proof.sourceUrl;
       const sourceHash = expected.toLowerCase();
       const exact = [...prior.mediaById.values()].find((file) => Object.hasOwn(sourceClaims(file), sourceUrl));
       if (exact) {
         const claim = sourceClaims(exact)[sourceUrl] as { version?: unknown; sha256?: unknown; storedSha256?: unknown } | undefined;
-        if (claim?.version !== 1 || claim.sha256 !== sourceHash || claim.storedSha256 !== sourceHash
-          || prior.storedHashById.get(exact.id) !== sourceHash) throw fail('Existing source URL identity does not match its verified stored bytes');
+        const actualStoredHash = prior.storedHashById.get(exact.id);
+        if (claim?.version !== 1 || claim.sha256 !== sourceHash || !actualStoredHash
+          || claim.storedSha256 !== actualStoredHash) throw fail('Existing source URL identity does not match its verified stored bytes');
         return { id: exact.id, url: exact.url };
       }
       const unbound = [...prior.mediaById.values()].sort((left, right) => left.id - right.id).find((file) =>
@@ -760,26 +773,40 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       await verifyTargetProcess(target, state);
       const uploadedResponse = await fetcher(new URL('/api/upload', target.baseUrl), { method: 'POST', redirect: 'manual', headers: { ...bearer(state.token), 'content-type': body.contentType }, body: body.body });
       await verifyTargetProcess(target, state);
-      if (uploadedResponse.status < 200 || uploadedResponse.status >= 300 || uploadedResponse.redirected) throw fail('CMS refused the raster upload');
+      if (uploadedResponse.status < 200 || uploadedResponse.status >= 300 || uploadedResponse.redirected) throw failStage('UploadHttpStatus', uploadedResponse.status);
       const uploaded = await uploadedResponse.json() as unknown;
       const result = Array.isArray(uploaded) ? uploaded[0] as { id?: unknown; url?: unknown } : undefined;
       if (!Number.isSafeInteger(result?.id) || (result?.id as number) <= 0 || typeof result?.url !== 'string') throw fail('CMS upload response has no media identity');
       const uploadUrl = safeUrlPath(result.url, target.baseUrl, '/uploads/');
+      let storedBytes: Buffer;
+      try { storedBytes = await fetchTargetBytes(target, uploadUrl.toString()); }
+      catch { throw failStage('StoredMediaBytes'); }
+      const storedHash = sha256(storedBytes);
       const identityResponse = await fetcher(new URL(`/api/media-import-identities/${result.id}`, target.baseUrl), {
         method: 'PUT', redirect: 'manual', headers: { ...bearer(state.token), 'content-type': 'application/json' },
-        body: JSON.stringify({ sourceUrl, sourceSha256: sourceHash, expectedStoredSha256: sourceHash }),
+        body: JSON.stringify({ sourceUrl, sourceSha256: sourceHash, expectedStoredSha256: storedHash }),
       });
       await verifyTargetProcess(target, state);
-      if (identityResponse.status < 200 || identityResponse.status >= 300 || identityResponse.redirected) throw fail('CMS did not persist the media source identity');
+      if (identityResponse.status < 200 || identityResponse.status >= 300 || identityResponse.redirected) throw failStage('UploadIdentityHttpStatus', identityResponse.status);
       const identityBody = await identityResponse.json() as { data?: { storedSha256?: unknown } };
-      if (identityBody.data?.storedSha256 !== expected.toLowerCase()) throw fail('CMS source identity endpoint returned a different stored byte hash');
-      const stored = await fetchTargetBytes(target, uploadUrl.toString());
-      if (sha256(stored) !== expected.toLowerCase()) throw fail('Uploaded media bytes differ from the source bytes');
-      const refreshed = await inventory(target);
-      if (refreshed.storedHashById.get(result.id as number) !== expected.toLowerCase()) throw fail('Uploaded media is missing from the refreshed persistent inventory');
-      for (const [id, file] of refreshed.mediaById) prior.mediaById.set(id, file);
-      for (const [id, hash] of refreshed.storedHashById) prior.storedHashById.set(id, hash);
-      for (const [hash, id] of refreshed.byStoredHash) if (!prior.byStoredHash.has(hash)) prior.byStoredHash.set(hash, id);
+      if (identityBody.data?.storedSha256 !== storedHash) throw failStage('PersistentMediaIdentity');
+      const persisted = await (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/${result.id}?populate=*`) as {
+        id?: unknown; url?: unknown; name?: unknown; mime?: unknown; provider_metadata?: unknown;
+      };
+      if (persisted.id !== result.id || typeof persisted.url !== 'string'
+        || safeUrlPath(persisted.url, target.baseUrl, '/uploads/').pathname !== uploadUrl.pathname
+        || sourceClaims(persisted as { provider_metadata?: unknown })[sourceUrl] === undefined) throw failStage('PersistentMediaIdentity');
+      prior.mediaById.set(result.id as number, {
+        id: result.id as number, url: uploadUrl.pathname,
+        ...(typeof persisted.name === 'string' ? { name: persisted.name } : {}),
+        ...(typeof persisted.mime === 'string' ? { mime: persisted.mime } : {}),
+        provider_metadata: persisted.provider_metadata,
+      });
+      prior.storedHashById.set(result.id as number, storedHash);
+      const existingStoredId = prior.byStoredHash.get(storedHash);
+      if (existingStoredId === undefined || (result.id as number) < existingStoredId) prior.byStoredHash.set(storedHash, result.id as number);
+      const existingSourceId = prior.bySourceHash.get(sourceHash);
+      if (existingSourceId === undefined || (result.id as number) < existingSourceId) prior.bySourceHash.set(sourceHash, result.id as number);
       return { id: result.id as number, url: uploadUrl.pathname };
     },
     async readStoredMediaBytes(target, mediaId) {

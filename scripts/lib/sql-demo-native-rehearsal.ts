@@ -149,6 +149,9 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
   return {
     causeCategory,
     frames,
+    ...((error as { safeHttpStatus?: unknown } | null)?.safeHttpStatus && Number.isSafeInteger((error as { safeHttpStatus: number }).safeHttpStatus)
+      ? { signals: { httpStatus: (error as { safeHttpStatus: number }).safeHttpStatus } }
+      : {}),
     ...(organizationInfo ? { signals: { domMatches: Number(organizationInfo[1]), exactTitleMatches: Number(organizationInfo[2]) } } : {}),
     ...(videoAssociation ? { signals: {
       sourceRow: Number(videoAssociation[1] === 'true'),
@@ -352,7 +355,7 @@ async function uploadRasters(
       validateUpload(upload, target, proof.sourceFileId);
     } catch (error) {
       if (error instanceof SqlDemoNativeRehearsalError) throw error;
-      throw safeFailure('MEDIA_BINDING_FAILED', 'CMS raster upload failed', `Files#${proof.sourceFileId}`);
+      throw safeFailure('MEDIA_BINDING_FAILED', 'CMS raster upload failed', `Files#${proof.sourceFileId}`, safeDiagnostic(error));
     }
     let storedHash: string;
     try {

@@ -309,6 +309,7 @@ describe('concrete native local rehearsal adapter', () => {
     }
     const spawn = (config.runtime.spawn as ReturnType<typeof vi.fn>).mock.calls.find((call) => call[0] === config.cms.nodeExecutable);
     expect(spawn?.[1]).toEqual([expect.stringContaining('/node_modules/@strapi/strapi/bin/strapi.js'), 'start']);
+    expect((spawn?.[2] as { env?: NodeJS.ProcessEnv }).env).toMatchObject({ NODE_ENV: 'production', CI: 'true', STRAPI_TELEMETRY_DISABLED: 'true' });
     expect(owned.process.pid).toBeGreaterThan(0);
   });
 
@@ -352,12 +353,16 @@ describe('concrete native local rehearsal adapter', () => {
     payload.writeUInt32BE(13, 8);
     payload.write('IHDR', 12, 'ascii');
     const sha256 = createHash('sha256').update(payload).digest('hex');
+    const storedPayload = Buffer.from('CMS-optimized stored image bytes');
+    const storedSha256 = createHash('sha256').update(storedPayload).digest('hex');
     const media: { id: number; url: string; name: string; mime: string; provider_metadata?: unknown }[] = [];
-    const identities: { sourceUrl: string; sourceSha256?: string }[] = [];
+    const identities: { sourceUrl: string; sourceSha256?: string; expectedStoredSha256?: string }[] = [];
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (_input, init) => {
       const url = new URL(String(_input));
       if (url.pathname === '/_health') return new Response('{}', { status: 200 });
       if (url.pathname === '/api/upload/files/page') return new Response(JSON.stringify({ data: media, meta: { pagination: { page: 1, pageCount: media.length ? 1 : 0, total: media.length } } }), { status: 200 });
+      const mediaIdMatch = /^\/api\/upload\/files\/(\d+)$/.exec(url.pathname);
+      if (mediaIdMatch) return new Response(JSON.stringify(media.find((candidate) => candidate.id === Number(mediaIdMatch[1]))), { status: 200 });
       if (url.pathname === '/api/upload' && init?.method === 'POST') {
         const row = { id: 71 + media.length, url: `/uploads/actual-${71 + media.length}.png`, name: `actual-${71 + media.length}.png`, mime: 'image/png' };
         media.push(row);
@@ -365,14 +370,14 @@ describe('concrete native local rehearsal adapter', () => {
       }
       const identityMatch = /^\/api\/media-import-identities\/(\d+)$/.exec(url.pathname);
       if (identityMatch) {
-        const body = JSON.parse(String(init?.body)) as { sourceUrl: string; sourceSha256: string };
+        const body = JSON.parse(String(init?.body)) as { sourceUrl: string; sourceSha256: string; expectedStoredSha256: string };
         const row = media.find((candidate) => candidate.id === Number(identityMatch[1]))!;
-        identities.push({ sourceUrl: body.sourceUrl, sourceSha256: body.sourceSha256 });
+        identities.push({ sourceUrl: body.sourceUrl, sourceSha256: body.sourceSha256, expectedStoredSha256: body.expectedStoredSha256 });
         const prior = (row.provider_metadata as { ikpk_media_import?: { sources?: Record<string, unknown> } } | undefined)?.ikpk_media_import?.sources ?? {};
-        row.provider_metadata = { ikpk_media_import: { sources: { ...prior, [body.sourceUrl]: { version: 1, sha256: body.sourceSha256, storedSha256: sha256 } } } };
-        return new Response(JSON.stringify({ data: { id: row.id, storedSha256: sha256 } }), { status: 200 });
+        row.provider_metadata = { ikpk_media_import: { sources: { ...prior, [body.sourceUrl]: { version: 1, sha256: body.sourceSha256, storedSha256: body.expectedStoredSha256 } } } };
+        return new Response(JSON.stringify({ data: { id: row.id, storedSha256: body.expectedStoredSha256 } }), { status: 200 });
       }
-      return new Response(payload, { status: 200 });
+      return new Response(url.pathname.startsWith('/uploads/') ? storedPayload : payload, { status: 200 });
     });
     const io = await makeAdapter({ runtime: { fetch } });
     const owned = await target(io);
@@ -383,7 +388,7 @@ describe('concrete native local rehearsal adapter', () => {
       verification: { status: 'verified' as const, loader: 'sql-demo-asset-loader', attestationId: 'synthetic' },
       sourceFileType: 'image' as const, detectedMimeType: 'image/png' as const, detectedExtension: 'png' as const,
     } satisfies SqlDemoOfflineAssetProof);
-    const firstProof = proof('f-71', 'https://legacy.example/first.png');
+    const firstProof = proof('f-71', '/media/legacy/logo-v2.png');
     const secondProof = proof('f-72', 'https://legacy.example/second.png');
     const inventory = await io.refreshMediaInventory(owned);
     const first = await io.uploadRaster(owned, inventory, firstProof, payload);
@@ -396,10 +401,12 @@ describe('concrete native local rehearsal adapter', () => {
     expect(init.redirect).toBe('manual');
     expect(Buffer.from(init.body as ArrayBuffer).includes(payload)).toBe(true);
     expect(identities).toEqual([
-      { sourceUrl: firstProof.sourceUrl, sourceSha256: sha256 },
-      { sourceUrl: secondProof.sourceUrl, sourceSha256: sha256 },
+      { sourceUrl: firstProof.sourceUrl, sourceSha256: sha256, expectedStoredSha256: storedSha256 },
+      { sourceUrl: secondProof.sourceUrl, sourceSha256: sha256, expectedStoredSha256: storedSha256 },
     ]);
+    expect(fetch.mock.calls.filter(([url]) => new URL(String(url)).pathname === '/api/upload/files/page')).toHaveLength(1);
     const repeatedInventory = await io.refreshMediaInventory(owned);
+    expect(fetch.mock.calls.filter(([url]) => new URL(String(url)).pathname === '/api/upload/files/page')).toHaveLength(2);
     expect(await io.uploadRaster(owned, repeatedInventory, firstProof, payload)).toEqual(first);
     expect(await io.uploadRaster(owned, repeatedInventory, secondProof, payload)).toEqual(second);
   });
