@@ -580,8 +580,8 @@
     "file": "components/schedule/ScheduleEventCard.astro",
     "nodeKind": "element",
     "locator": "components/schedule/ScheduleEventCard.astro:L123:C1:style",
-    "fingerprint": "be89ce054bc332c2356f900846f5f099116dc871421c78d17b057efff1e57d71",
-    "identity": "style|body:3f8226be964a6e83"
+    "fingerprint": "1dcf28b32ce2b50f91328de351e20efbb5c8aa06587e5082ad2bb5a0e71d0f7d",
+    "identity": "style|body:65f7d93f8e4e707b"
   },
   {
     "slotId": "src:components/schedule/ScheduleFilters.astro:L105:C1:style",
