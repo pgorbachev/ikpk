@@ -953,8 +953,12 @@ describe('SQL demo private input preparation and normalization', () => {
         video_thumbnails: [{ source_file_id: 'thumb-1', source_video_id: 77, source_video_name: 'Synthetic video', target_media_id: 'target-thumb' }],
       },
     }) });
-    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video', imageId: 'thumb-1' };
-    const mappedWithVideo = { ...mapped, entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] } };
+    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video' };
+    const mappedWithVideo = {
+      ...mapped,
+      entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] },
+      provenance: { ...mapped.provenance, videoMetadata: [{ sourceId: 77, link: '/synthetic/video', priority: 1, imageId: 'thumb-1' }] },
+    };
 
     const result = normalize({ config: input, mapped: mappedWithVideo });
     const thumbnailEntries = result.loader.assetManifest.entries.filter((entry) => entry.sourceFileId === 'thumb-1');
@@ -965,8 +969,12 @@ describe('SQL demo private input preparation and normalization', () => {
   });
 
   it('rejects reached thumbnail metadata bound to another video or file identity', () => {
-    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video', imageId: 'thumb-1' };
-    const mappedWithVideo = { ...mapped, entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] } };
+    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video' };
+    const mappedWithVideo = {
+      ...mapped,
+      entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] },
+      provenance: { ...mapped.provenance, videoMetadata: [{ sourceId: 77, link: '/synthetic/video', priority: 1, imageId: 'thumb-1' }] },
+    };
     const changedVideo = { ...source, Videos: (source.Videos ?? []).map((row) => ({ ...row, imageId: 'file-unselected' })) };
     const manifest = (videoId: number) => privateDocuments({
       'reached-media-manifest.json': {

@@ -397,12 +397,18 @@ function htmlImages(html: string): string[] {
 function selectedHeaders(mapped: SqlPublicContentResult): SqlDemoSelectedPublicHeaderReference[] {
   const tableFor: Record<string, SqlDemoSelectedPublicHeaderReference['sourceTable']> = {
     institutes: 'Institutes', programs: 'Programs', teachers: 'Teachers', events: 'Events', articles: 'Articles',
-    news: 'News', promotions: 'Promotions', videos: 'Videos',
+    news: 'News', promotions: 'Promotions',
   };
   const refs: SqlDemoSelectedPublicHeaderReference[] = [];
   for (const [collection, table] of Object.entries(tableFor)) {
     for (const entity of (mapped.entities[collection as keyof typeof mapped.entities] ?? []) as { sourceId: number; imageId?: unknown }[]) {
       if (typeof entity.imageId === 'string' && entity.imageId) refs.push({ sourceTable: table, sourceId: entity.sourceId, imageId: entity.imageId });
+    }
+  }
+  const selectedVideoIds = new Set((mapped.entities.videos ?? []).map((video) => video.sourceId));
+  for (const video of mapped.provenance.videoMetadata) {
+    if (selectedVideoIds.has(video.sourceId) && typeof video.imageId === 'string' && video.imageId) {
+      refs.push({ sourceTable: 'Videos', sourceId: video.sourceId, imageId: video.imageId });
     }
   }
   return refs;
