@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   const reader: SqlPublicReaderOptions = { dumpPath, expectedDumpHash: expectedDumpSha256, connection: sourceConnection };
   const io = createSqlDemoNativeLocalIo({
     source: { reader, clusterDataDirectory: clusterPath, postgresBinDirectory: pgBin, socketDirectory: socketPath, port: 55438, database: 'ikpk_source_rehearsal', user: 'ikpk_restore' },
-    cms: { sourceDirectory: join(repo, 'cms'), expectedCommit: cmsCommit, candidateRoot: cmsCandidateRoot, nodeExecutable: process.execPath, cmsStartScript: 'develop' },
+    cms: { sourceDirectory: join(repo, 'cms'), expectedCommit: cmsCommit, candidateRoot: cmsCandidateRoot, nodeExecutable: process.execPath, cmsStartScript: 'start' },
     targets: { A: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads, staticFilesDirectory: cmsStaticFiles } },
     privateArtifactsRoot: artifactsRoot,
     privateInputsRoot,

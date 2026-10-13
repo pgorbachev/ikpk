@@ -293,6 +293,25 @@ describe('concrete native local rehearsal adapter', () => {
     }
   });
 
+  it('builds the patched candidate without secrets before using single-process Strapi start', async () => {
+    const io = await makeAdapter({ cms: { cmsStartScript: 'start' } });
+    const config = configurations.get(io as object)!;
+    const owned = await target(io, 'A');
+    const calls = (config.runtime.execFile as ReturnType<typeof vi.fn>).mock.calls;
+    const installIndex = calls.findIndex((call) => call[0] === 'npm' && (call[1] as readonly string[])[0] === 'ci');
+    const buildIndex = calls.findIndex((call) => call[0] === 'npm' && (call[1] as readonly string[]).join(' ') === 'run build');
+    expect(buildIndex).toBeGreaterThan(installIndex);
+    const build = calls[buildIndex];
+    const buildEnv = (build?.[2] as { env?: NodeJS.ProcessEnv }).env ?? {};
+    expect(buildEnv).toMatchObject({ NODE_ENV: 'production', STRAPI_TELEMETRY_DISABLED: 'true' });
+    for (const key of ['APP_KEYS', 'JWT_SECRET', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY', 'IKPK_NATIVE_API_TOKEN_FILE', 'DATABASE_FILENAME']) {
+      expect(buildEnv).not.toHaveProperty(key);
+    }
+    const spawn = (config.runtime.spawn as ReturnType<typeof vi.fn>).mock.calls.find((call) => call[0] === config.cms.nodeExecutable);
+    expect(spawn?.[1]).toEqual([expect.stringContaining('/node_modules/@strapi/strapi/bin/strapi.js'), 'start']);
+    expect(owned.process.pid).toBeGreaterThan(0);
+  });
+
   it('executes tracked CMS source with a verified isolated install and excludes ignored dependency and secret files', async () => {
     const io = await makeAdapter();
     const config = configurations.get(io as object)!;

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
-import { chmod, lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, symlink, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { createConnection } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -52,6 +52,8 @@ type SourceLease = SqlDemoNativeSqlSourceLease & { readonly id: string; readonly
 type TargetState = {
   child: Child;
   candidateDirectory: string;
+  stdoutLog: FileHandle;
+  stderrLog: FileHandle;
   startTime: string;
   token: string;
   documents: Map<string, { sha256: string; bytes: number }>;
@@ -505,6 +507,14 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await mkdir(candidateDirectory, { recursive: false, mode: 0o700 });
     const cmsRoot = config.cms.sourceDirectory;
     const [dataDirectory, uploadDirectory, staticFilesDirectory] = [targetConfig.dataDirectory, targetConfig.uploadDirectory, targetConfig.staticFilesDirectory];
+    const targetSecrets = {
+      APP_KEYS: `${secret()},${secret()}`,
+      JWT_SECRET: secret(),
+      ADMIN_JWT_SECRET: secret(),
+      API_TOKEN_SALT: secret(),
+      TRANSFER_TOKEN_SALT: secret(),
+      ENCRYPTION_KEY: secret(),
+    };
     try {
       await copyTrackedCmsSource(cmsRoot, candidateDirectory, runFile);
       await installPinnedCmsDependencies(candidateDirectory, runFile, safeEnvironment.PATH);
@@ -515,22 +525,30 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       for (const path of [dataDirectory, uploadDirectory, staticFilesDirectory]) await checkPrivateDirectory(path, true);
       await symlink(uploadDirectory, join(candidateDirectory, 'public', 'uploads'));
       await symlink(staticFilesDirectory, join(candidateDirectory, 'public', 'static-files'));
+      if (config.cms.cmsStartScript === 'start') {
+        await runFile('npm', ['run', 'build'], {
+          cwd: candidateDirectory,
+          env: {
+            ...privateCmsNpmEnvironment(candidateDirectory, safeEnvironment.PATH),
+            NODE_ENV: 'production',
+            STRAPI_TELEMETRY_DISABLED: 'true',
+          },
+          timeout: 10 * 60 * 1000,
+          maxBuffer: 32 * 1024 * 1024,
+        });
+      }
     } catch (error) {
       await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
     const baseUrl = new URL(targetConfig.baseUrl);
     const strapiCli = join(candidateDirectory, 'node_modules', '@strapi', 'strapi', 'bin', 'strapi.js');
+    const logStem = join(config.privateArtifactsRoot, `cms-${input.name.toLowerCase()}-${process.pid}-${Date.now()}`);
+    const stdoutLog = await open(`${logStem}.stdout.log`, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+    let stderrLog: FileHandle | undefined;
     let child: Child;
-    const targetSecrets = {
-      APP_KEYS: `${secret()},${secret()}`,
-      JWT_SECRET: secret(),
-      ADMIN_JWT_SECRET: secret(),
-      API_TOKEN_SALT: secret(),
-      TRANSFER_TOKEN_SALT: secret(),
-      ENCRYPTION_KEY: secret(),
-    };
     try {
+      stderrLog = await open(`${logStem}.stderr.log`, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
       if (!inside(candidateDirectory, await realpath(strapiCli))) throw fail('Pinned Strapi CLI dependency escapes the private candidate');
       child = childProcess(spawn, config.cms.nodeExecutable, [strapiCli, config.cms.cmsStartScript], {
         cwd: candidateDirectory,
@@ -538,16 +556,18 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           PATH: safeEnvironment.PATH,
           HOME: join(candidateDirectory, '.home'),
           TMPDIR: join(candidateDirectory, '.tmp'),
-          NODE_ENV: 'development',
+          NODE_ENV: 'production',
           HOST: '127.0.0.1', PORT: baseUrl.port,
           DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: join(dataDirectory, 'data.db'),
           STRAPI_TELEMETRY_DISABLED: 'true',
           IKPK_NATIVE_API_TOKEN_FILE: join(candidateDirectory, '.tmp', 'native-api-token'),
           ...targetSecrets,
         },
-        stdio: ['ignore', 'ignore', 'ignore'],
+        stdio: ['ignore', stdoutLog.fd, stderrLog.fd],
       });
     } catch (error) {
+      await stdoutLog.close().catch(() => undefined);
+      await stderrLog?.close().catch(() => undefined);
       await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
@@ -556,7 +576,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       dataDirectory, uploadDirectory, client: undefined,
       process: { pid: child.pid, endpoint: targetConfig.baseUrl, namespace: targetConfig.namespace, dataDirectory, uploadDirectory },
     } as SqlDemoNativeOwnedTarget;
-    const state: TargetState = { child, candidateDirectory, startTime: '', token: '', documents: new Map() };
+    const state: TargetState = { child, candidateDirectory, stdoutLog, stderrLog: stderrLog!, startTime: '', token: '', documents: new Map() };
     targetOwners.set(target, state);
     target.client = clientFor(target, state, fetcher, () => verifyTargetProcess(target, state));
     try {
@@ -582,6 +602,8 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         await waitForExit(child).catch(() => undefined);
       }
       targetOwners.delete(target);
+      await state.stdoutLog.close().catch(() => undefined);
+      await state.stderrLog.close().catch(() => undefined);
       await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
@@ -593,6 +615,8 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     state.child.kill('SIGTERM');
     await waitForExit(state.child);
     state.token = '';
+    await state.stdoutLog.close();
+    await state.stderrLog.close();
     await rm(state.candidateDirectory, { recursive: true, force: true });
   }
 
