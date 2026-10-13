@@ -140,10 +140,20 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
   const organizationInfo = error instanceof Error
     ? error.message.match(/one exact static-page DOM position and title \(domMatches=(\d+), exactTitleMatches=(\d+)\)/)
     : null;
+  const videoAssociation = error instanceof Error
+    ? error.message.match(/video decision source association mismatch \(sourceRow=(true|false), mappedRow=(true|false), sourceUrlMatch=(true|false), mappedUrlMatch=(true|false), sourceSlugMatches=(true|false)\)/)
+    : null;
   return {
     causeCategory,
     frames,
     ...(organizationInfo ? { signals: { domMatches: Number(organizationInfo[1]), exactTitleMatches: Number(organizationInfo[2]) } } : {}),
+    ...(videoAssociation ? { signals: {
+      sourceRow: Number(videoAssociation[1] === 'true'),
+      mappedRow: Number(videoAssociation[2] === 'true'),
+      sourceUrlMatch: Number(videoAssociation[3] === 'true'),
+      mappedUrlMatch: Number(videoAssociation[4] === 'true'),
+      sourceSlugMatches: Number(videoAssociation[5] === 'true'),
+    } } : {}),
   };
 }
 

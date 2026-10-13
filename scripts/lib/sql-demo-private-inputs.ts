@@ -1017,9 +1017,12 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     }
     const seminar = source.Seminars.find((item) => item.id === sourceId && item.status === 'active');
     const mappedSeminar = mapped.entities.seminars.find((item) => item.sourceId === sourceId);
-    if (!seminar || !mappedSeminar || !seminar.description?.includes(sourceUrl) || !String(mappedSeminar.description ?? '').includes(sourceUrl) ||
-      (valueAt(row, 'source_slug', 'sourceSlug') != null && valueAt(row, 'source_slug', 'sourceSlug') !== mappedSeminar.slug)) {
-      throw new Error(`Seminars#${sourceId} video decision does not match active description source`);
+    const sourceUrlMatch = Boolean(seminar?.description?.includes(sourceUrl));
+    const mappedUrlMatch = Boolean(mappedSeminar && String(mappedSeminar.description ?? '').includes(sourceUrl));
+    const sourceSlug = valueAt(row, 'source_slug', 'sourceSlug');
+    const sourceSlugMatches = sourceSlug == null || sourceSlug === mappedSeminar?.slug;
+    if (!seminar || !mappedSeminar || !sourceUrlMatch || !mappedUrlMatch || !sourceSlugMatches) {
+      throw new Error(`video decision source association mismatch (sourceRow=${Boolean(seminar)}, mappedRow=${Boolean(mappedSeminar)}, sourceUrlMatch=${sourceUrlMatch}, mappedUrlMatch=${mappedUrlMatch}, sourceSlugMatches=${sourceSlugMatches})`);
     }
     const targetRel = valueAt(row, 'target_rel', 'targetRel');
     if (action === 'external-link' ? targetRel !== expectedRel : targetRel != null && targetRel !== expectedRel) {
