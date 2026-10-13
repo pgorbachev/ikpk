@@ -194,7 +194,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
  * (`unknownRecordFields`): новое поле без решения о нём — остановка, а не строка в логе.
  *
  * «Не используется в этом релизе» — решение, а не забытое соответствие: часть полей уже
- * заполнена в CMS (`trait`, даты новостей и акций, `documents_state`), но сайт их пока не
+ * заполнена в CMS (даты новостей и акций, `documents_state`), но сайт их пока не
  * показывает. Включение любого из них в сайт — отдельная работа.
  */
 const REVERSE = 'обратная сторона связи: прямая сторона уже в карте';
@@ -217,7 +217,7 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
     learning_mode: NOT_YET,
     recommendations: NOT_YET,
   },
-  teachers: { seminars: REVERSE, trait: NOT_YET },
+  teachers: { seminars: REVERSE },
   articles: { categories: NOT_YET },
   schedule_entries: { admin_label: 'служебная подпись для редактора, на сайт не выводится' },
   news: { date: NOT_YET },

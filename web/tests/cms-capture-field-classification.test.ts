@@ -43,7 +43,7 @@ describe('съём знает каждое поле записи CMS', () => {
   });
 
   it('поле, непереносимое у одного типа, у другого неизвестно', () => {
-    expect(unknownRecordFields('articles', { trait: 'teacher' })).toEqual(['articles.trait']);
+    expect(unknownRecordFields('articles', { documents_state: 'unconfirmed' })).toEqual(['articles.documents_state']);
   });
 
   it('каждое поле схемы cms/ в репозитории либо в карте, либо названо непереносимым', () => {
