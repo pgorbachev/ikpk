@@ -94,6 +94,50 @@ function pinSyntheticSupplements(input: SqlDemoAssetLoaderInput): void {
   input.expectedSupplements.manifestSha256 = digest;
 }
 
+type MissingOriginalReplacement = {
+  sourceFileId: string;
+  replacementPath: string;
+  replacementRevision: string;
+  replacementSha256: string;
+  sourceBytesAvailable: false;
+};
+
+type InputWithMissingOriginalReplacement = SqlDemoAssetLoaderInput & {
+  approvedMissingOriginalReplacements: MissingOriginalReplacement[];
+};
+
+async function missingOriginalReplacementInput(base: string): Promise<InputWithMissingOriginalReplacement> {
+  const sourceFileId = '1dec5ad5-a0ff-4b56-8ab9-f9ceb0308631';
+  const replacementPath = 'web/public/institutes/barral-logo.png';
+  const replacementRevision = syntheticCodeRevision;
+  const replacementBytes = pngBytes();
+  const replacementSha256 = sha256(replacementBytes);
+  await putFile(base, `supplements/${replacementPath}`, replacementBytes);
+
+  const input = baseInput(base) as InputWithMissingOriginalReplacement;
+  input.source.Institutes = [{ id: 3, status: 'active', imageId: sourceFileId }];
+  input.source.Files = [fileRow({
+    id: sourceFileId, fileType: 'image', status: 'active', privacy: 'public',
+    originalName: 'barral-original.webp', extension: 'webp', url: '/storage/institutes/barral-original.webp',
+  })];
+  input.selectedPublicHeaders.references = [{
+    sourceTable: 'Institutes', sourceId: 3, imageId: sourceFileId,
+  } as unknown as SqlDemoSelectedPublicHeaderReference];
+  input.approvedMissingOriginalReplacements = [{
+    sourceFileId, replacementPath, replacementRevision, replacementSha256, sourceBytesAvailable: false,
+  }];
+  input.supplementManifest.entries = [{
+    name: replacementPath,
+    scope: 'missing-original-replacement',
+    sourcePath: replacementPath,
+    revision: replacementRevision,
+    sha256: replacementSha256,
+    replacesMissingSourceFileId: sourceFileId,
+  }];
+  pinSyntheticSupplements(input);
+  return input;
+}
+
 function fileRow(overrides: Partial<NonNullable<SqlDemoAssetLoaderInput['source']['Files']>[number]> = {}) {
   return {
     id: 'file-1', fileType: 'image', originalName: 'synthetic.png', extension: 'webp',
@@ -530,6 +574,62 @@ describe('offline SQL asset loader contract', () => {
       scope: 'missing-original-replacement', replacesMissingSourceFileId: 'missing-original-77',
     });
     expect(result.offlineDocuments.some((asset) => asset.sourceFileId === 'missing-original-77')).toBe(false);
+  });
+
+  it('joins an approved named replacement to an active public header without claiming original bytes', async () => {
+    const input = await missingOriginalReplacementInput(await root());
+    const replacement = input.approvedMissingOriginalReplacements[0]!;
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.offlineMedia).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceFileId: replacement.sourceFileId,
+        sourceUrl: '/storage/institutes/barral-original.webp',
+        sourceBytesAvailable: false,
+        substitution: {
+          replacementSha256: replacement.replacementSha256,
+          replacementPath: replacement.replacementPath,
+          replacementRevision: replacement.replacementRevision,
+        },
+        detectedMimeType: 'image/png',
+        detectedExtension: 'png',
+      }),
+    ]));
+    const proof = result.offlineMedia.find((asset) => asset.sourceFileId === replacement.sourceFileId)!;
+    expect(proof).not.toHaveProperty('sourceSha256');
+    expect(result.provenance.assets).toContainEqual(expect.objectContaining({
+      sourceFileId: replacement.sourceFileId,
+      sourceBytesAvailable: false,
+      substitution: {
+        replacementSha256: replacement.replacementSha256,
+        replacementPath: replacement.replacementPath,
+        replacementRevision: replacement.replacementRevision,
+      },
+    }));
+    expect(result.provenance.assets.find((asset) => asset.sourceFileId === replacement.sourceFileId))
+      .not.toHaveProperty('sourceSha256');
+  });
+
+  it.each([
+    ['owner decision has the wrong source file ID', (input: InputWithMissingOriginalReplacement) => {
+      input.approvedMissingOriginalReplacements[0]!.sourceFileId = 'wrong-source-file';
+    }],
+    ['owner decision has the wrong replacement path', (input: InputWithMissingOriginalReplacement) => {
+      input.approvedMissingOriginalReplacements[0]!.replacementPath = 'web/public/institutes/not-barral.png';
+    }],
+    ['owner decision has the wrong replacement hash', (input: InputWithMissingOriginalReplacement) => {
+      input.approvedMissingOriginalReplacements[0]!.replacementSha256 = 'f'.repeat(64);
+    }],
+    ['the approved replacement supplement is absent', (input: InputWithMissingOriginalReplacement) => {
+      input.supplementManifest.entries = [];
+    }],
+  ])('rejects a missing-original replacement when %s', async (_label, mutate) => {
+    const input = await missingOriginalReplacementInput(await root());
+    mutate(input);
+    pinSyntheticSupplements(input);
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow();
   });
 
   it('rejects a same-revision overlay added after the supplement manifest was pinned', async () => {
