@@ -322,6 +322,15 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
     expect(input.io.stopOwnedSqlSource).toHaveBeenCalledTimes(1);
   });
 
+  it('does not publish a sourceWitnessVerified capture when final source verification fails during cleanup', async () => {
+    const input = options({ reader: { ...options().reader, dumpPath } });
+    vi.mocked(input.io.stopOwnedSqlSource).mockRejectedValueOnce(new Error('synthetic final SQL witness mismatch'));
+
+    await expect(run(input)).rejects.toMatchObject({ code: 'SQL_SOURCE_CLEANUP_FAILED' });
+    expect(input.io.stopOwnedSqlSource).toHaveBeenCalledTimes(1);
+    expect(input.io.capture).not.toHaveBeenCalled();
+  });
+
   it('acquires a SQL source lease only after pin preflight and stops that exact acquired lease', async () => {
     const input = options({ reader: { ...options().reader, dumpPath } });
     const events: string[] = [];
