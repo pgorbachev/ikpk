@@ -291,6 +291,37 @@ function acceptedId(
   return value;
 }
 
+function targetLegacyId(
+  accepted: SqlPublicContentOptions['acceptedLegacyIds'],
+  table: 'Programs' | 'Seminars' | 'Articles',
+  id: number,
+  derived: string,
+): string {
+  const value = accepted[table]?.[id];
+  if (value === undefined) return derived;
+  if (typeof value !== 'string' || !value.trim()) invalid(table, id, 'target identity', 'must be a non-empty string');
+  return value;
+}
+
+function sqlSlug(raw: Record<string, unknown>, table: 'Programs' | 'Seminars' | 'Articles', id: number): string {
+  const value = requiredString(raw, table, id, 'slug');
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
+    invalid(table, id, 'slug', 'must be a lowercase SQL URL slug');
+  }
+  return value;
+}
+
+function registerTargetIdentity(
+  table: 'Programs' | 'Seminars' | 'Articles',
+  id: number,
+  legacyId: string,
+  seen: Map<string, number>,
+): void {
+  const previousId = seen.get(legacyId);
+  if (previousId !== undefined) invalid(table, id, 'target identity', `collides with source record #${previousId}`);
+  seen.set(legacyId, id);
+}
+
 function requireUniqueTargets(
   accepted: SqlPublicContentOptions['acceptedLegacyIds'],
   table: 'Institutes' | 'Programs' | 'Seminars' | 'Articles',
@@ -428,6 +459,9 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     return { sourceId: id, legacy_id: legacyId, slug, name, shortName, description, imageId };
   });
   const instituteLegacyIds = new Map(institutes.map((item) => [item.sourceId, item.legacy_id]));
+  const programTargetIds = new Map<string, number>();
+  const seminarTargetIds = new Map<string, number>();
+  const articleTargetIds = new Map<string, number>();
 
   const exclusions = provenance.exclusions;
   const cityRows = optionalRows(source.Cities, 'Cities');
@@ -577,10 +611,11 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const programs = activePrograms.map((row) => {
     const id = recordId(row, 'Programs');
     const raw = row as unknown as Record<string, unknown>;
-    const slug = requiredString(raw, 'Programs', id, 'slug');
+    const slug = sqlSlug(raw, 'Programs', id);
     const instituteLegacyId = instituteLegacyIds.get(row.instituteId);
     if (!instituteLegacyId) invalid('Programs', id, 'instituteId', 'does not resolve to a selected institute');
-    const legacyId = acceptedId(options.acceptedLegacyIds, 'Programs', id);
+    const legacyId = targetLegacyId(options.acceptedLegacyIds, 'Programs', id, `${instituteLegacyId}/${slug}`);
+    registerTargetIdentity('Programs', id, legacyId, programTargetIds);
     const name = requiredString(raw, 'Programs', id, 'name');
     const description = nullableString(raw, 'Programs', id, 'content');
     const imageId = nullableString(raw, 'Programs', id, 'imageId');
@@ -644,10 +679,11 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const seminars = activeSeminars.map((row) => {
     const id = recordId(row, 'Seminars');
     const raw = row as unknown as Record<string, unknown>;
-    const slug = requiredString(raw, 'Seminars', id, 'slug');
+    const slug = sqlSlug(raw, 'Seminars', id);
     const programLegacyId = programLegacyIds.get(row.programId);
     if (!programLegacyId) invalid('Seminars', id, 'programId', 'does not resolve to an active program');
-    const legacyId = acceptedId(options.acceptedLegacyIds, 'Seminars', id);
+    const legacyId = targetLegacyId(options.acceptedLegacyIds, 'Seminars', id, `${programLegacyId}/${slug}`);
+    registerTargetIdentity('Seminars', id, legacyId, seminarTargetIds);
     const directTeachers = [...new Set((seminarTeacherLinks.get(id) ?? []).filter((teacherId) => {
       if (activeTeacherSet.has(teacherId)) return true;
       provenance.rejectedRelations.push({ table: 'SeminarsTeacher', sourceId: id, relation: 'teacherId', targetId: teacherId, reason: 'teacher is not active' });
@@ -677,6 +713,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     };
   });
   const seminarById = new Map(source.Seminars.map((row) => [row.id, row]));
+  const seminarLegacyIds = new Map(seminars.map((row) => [row.sourceId, row.legacy_id]));
   const activeSeminarSet = new Set(seminars.map((item) => item.sourceId));
 
   const eventTeacherLinks = new Map<number, number[]>();
@@ -697,6 +734,8 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
       exclusions.push({ table: 'Events', sourceId: id, reason: `parent seminar ${row.seminarId} is not active` });
       return [];
     }
+    const seminarLegacyId = seminarLegacyIds.get(row.seminarId);
+    if (!seminarLegacyId) invalid('Events', id, 'seminarId', 'does not resolve to an active target identity');
     const raw = row as unknown as Record<string, unknown>;
     if (typeof row.startAt !== 'string' || !row.startAt || typeof row.endAt !== 'string' || !row.endAt) invalid('Events', id, 'startAt/endAt', 'must be non-empty SQL values');
     if (typeof row.cityId !== 'number' || !Number.isSafeInteger(row.cityId) || row.cityId <= 0) invalid('Events', id, 'cityId', 'must be a positive integer');
@@ -714,7 +753,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
     const city = cityNames.get(row.cityId);
     if (source.Cities !== undefined && city === undefined) invalid('Events', id, 'cityId', `does not resolve to an active city (${row.cityId})`);
     return [{
-      sourceId: id, legacy_id: legacyId, seminar_legacy_id: acceptedId(options.acceptedLegacyIds, 'Seminars', row.seminarId),
+      sourceId: id, legacy_id: legacyId, seminar_legacy_id: seminarLegacyId,
       ...(source.Cities === undefined ? { cityId: row.cityId } : { city }),
       imageId: nullableString(raw, 'Events', id, 'imageId'), oldPrice: row.oldPrice, newPrice: row.newPrice,
       startAt: row.startAt, endAt: row.endAt,
@@ -735,8 +774,9 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
   const articles = activeArticles.map((row) => {
     const id = recordId(row, 'Articles');
     const raw = row as unknown as Record<string, unknown>;
-    const slug = requiredString(raw, 'Articles', id, 'slug');
-    const legacyId = acceptedId(options.acceptedLegacyIds, 'Articles', id);
+    const slug = sqlSlug(raw, 'Articles', id);
+    const legacyId = targetLegacyId(options.acceptedLegacyIds, 'Articles', id, slug);
+    registerTargetIdentity('Articles', id, legacyId, articleTargetIds);
     const title = requiredString(raw, 'Articles', id, 'name');
     const body = requiredString(raw, 'Articles', id, 'content', true);
     const publishedDate = publicationDate(row.createdAt, 'Articles', id);
