@@ -85,10 +85,16 @@ export interface SqlDemoVideoReferenceDecision {
 
 /** Render the one owner-approved canonical Rutube embed shape used at both boundaries. */
 export function canonicalSqlDemoRutubeIframe(originalURL: string): string {
-  if (!/^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}$/i.test(originalURL)) {
+  let url: URL;
+  try { url = new URL(originalURL); } catch {
     throw new Error('Rutube URL is outside the approved canonical embed shape');
   }
-  return `<iframe src="${originalURL}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+  const id = /^\/play\/embed\/([\da-f]{32})$/i.exec(url.pathname)?.[1];
+  if (url.protocol !== 'https:' || url.hostname !== 'rutube.ru' || url.username || url.password || url.port || url.hash || !id ||
+    [...url.searchParams.keys()].some((name) => name !== 'p') || url.searchParams.size > 1 || url.searchParams.get('p') === '') {
+    throw new Error('Rutube URL is outside the approved canonical embed shape');
+  }
+  return `<iframe src="https://rutube.ru/play/embed/${id}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
 }
 
 export interface SqlDemoPublicRichTextImageDecision {
@@ -609,29 +615,35 @@ export function composeSqlDemoRelease(
     try { url = new URL(decision.originalURL); } catch { return fail(`${decision.sourceTable}#${decision.sourceId}`, 'video decision URL is invalid'); }
     const rutubePath = /^\/play\/embed\/[\da-f]{32}\/?$/i.test(url.pathname);
     if (decision.action === 'rutube-trailing-slash') {
-      if (url.protocol !== 'https:' || url.hostname !== 'rutube.ru' || !rutubePath || url.search || url.hash || url.pathname.endsWith('/')) {
+      if (url.protocol !== 'https:' || url.hostname !== 'rutube.ru' || !rutubePath || url.hash ||
+        [...url.searchParams.keys()].some((name) => name !== 'p') || url.searchParams.size > 1 || url.searchParams.get('p') === '' || url.pathname.endsWith('/')) {
         fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube slash decision is outside the exact no-query embed shape');
       }
       const canonicalOutput = canonicalSqlDemoRutubeIframe(decision.originalURL);
       // Retain only the exact previous serialized form; transforms below always emit the canonical secured iframe.
       const previousOutput = `<iframe src="${decision.originalURL}/"></iframe>`;
-      if (!/^https:\/\/rutube\.ru\/play\/embed\/[\da-f]{32}$/i.test(decision.originalURL)
-        || (decision.expectedOutput !== canonicalOutput && decision.expectedOutput !== previousOutput)) {
+      if ((decision.expectedOutput !== canonicalOutput && decision.expectedOutput !== previousOutput)) {
         fail(`${decision.sourceTable}#${decision.sourceId}`, 'Rutube output does not match the approved closed trailing-slash transform');
       }
       return;
     }
-    if (decision.action !== 'external-link' || url.protocol !== 'https:' || url.hash) fail(`${decision.sourceTable}#${decision.sourceId}`, 'unsupported video decision action or URL');
+    if (decision.action !== 'external-link' || url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) {
+      fail(`${decision.sourceTable}#${decision.sourceId}`, 'unsupported video decision action or URL');
+    }
     const queryNames = [...url.searchParams.keys()];
     const rutubeQuery = url.hostname === 'rutube.ru'
-      && /^\/play\/embed\/[\da-f]{32}\/$/i.test(url.pathname)
+      && /^\/play\/embed\/[\da-f]{32}\/?$/i.test(url.pathname)
       && queryNames.length === 1 && queryNames[0] === 'p' && isNonEmptyString(url.searchParams.get('p'));
     const vkEmbed = url.hostname === 'vk.com'
       && url.pathname === '/video_ext.php'
       && queryNames.length === 4
       && new Set(queryNames).size === 4
       && ['oid', 'id', 'hd', 'autoplay'].every((name) => isNonEmptyString(url.searchParams.get(name)));
-    if (!rutubeQuery && !vkEmbed) fail(`${decision.sourceTable}#${decision.sourceId}`, 'external-link decision is outside the approved Rutube/VK embed shape');
+    const vkVideo = url.hostname === 'vk.com'
+      && /^\/video-\d+_\d+$/.test(url.pathname)
+      && queryNames.length === 1 && queryNames[0] === 'list'
+      && isNonEmptyString(url.searchParams.get('list'));
+    if (!rutubeQuery && !vkEmbed && !vkVideo) fail(`${decision.sourceTable}#${decision.sourceId}`, 'external-link decision is outside the approved Rutube/VK source shape');
     const expected = `<a href="${decision.originalURL}" rel="noopener noreferrer">Открыть видео</a>`;
     if (decision.expectedOutput !== expected) fail(`${decision.sourceTable}#${decision.sourceId}`, 'external-link output does not preserve the approved URL');
   };

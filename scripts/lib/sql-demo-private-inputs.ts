@@ -899,20 +899,26 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
         const id = attr(node, 'id') ?? '';
         let title = '';
         let hasRadixPanel = false;
-        parseNodes(node, (nested) => {
-          if (nested.tagName === 'div' && attr(nested, 'data-state') === 'closed') {
-            parseNodes(nested, (button) => {
-              if (button.tagName === 'button' && (attr(button, 'class') ?? '').split(/\s+/).includes('collapsible_trigger')) {
-                parseNodes(button, (heading) => {
-                  if (heading.tagName === 'h2' && attr(heading, 'data-collapsible-title') === 'true') {
-                    title = textContent(heading).trim();
-                    hasRadixPanel = true;
-                  }
-                });
-              }
-            });
+        const directElements = (parent: ReturnType<typeof parsedHtml>): ReturnType<typeof parsedHtml>[] =>
+          (parent.childNodes ?? []).filter((child) => (child as ReturnType<typeof parsedHtml>).tagName) as ReturnType<typeof parsedHtml>[];
+        const containers = directElements(node).filter((child) =>
+          child.tagName === 'div' && attr(child, 'data-state') === 'closed');
+        if (containers.length === 1) {
+          const [container] = containers;
+          const triggers = directElements(container!).filter((child) => {
+            if (child.tagName !== 'button') return false;
+            return (attr(child, 'class') ?? '').split(/\s+/).some((token) =>
+              token === 'collapsible_trigger' || /^collapsible_trigger__[A-Za-z0-9_-]+$/.test(token));
+          });
+          if (triggers.length === 1) {
+            const headings = directElements(triggers[0]!).filter((child) =>
+              child.tagName === 'h2' && attr(child, 'data-collapsible-title') === 'true');
+            if (headings.length === 1) {
+              title = textContent(headings[0]!).trim();
+              hasRadixPanel = title.length > 0;
+            }
           }
-        });
+        }
         topLevelItems.push({ id: hasRadixPanel ? id : '', title: hasRadixPanel ? title : '' });
       }
       for (const child of node.childNodes ?? []) collectItems(child as ReturnType<typeof parsedHtml>, insideItem);
@@ -968,21 +974,44 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     const sourceId = numberId(valueAt(row, 'source_id', 'sourceId'), 'video decision seminar ID');
     const sourceUrl = string(valueAt(row, 'source_url', 'sourceUrl'), `Seminars#${sourceId} source URL`);
     const safeHref = string(valueAt(row, 'safe_target_href', 'safeTargetHref'), `Seminars#${sourceId} safe target`);
-    if (sourceUrl !== safeHref) throw new Error(`Seminars#${sourceId} video decision must preserve its exact approved URL`);
-    const seminar = source.Seminars.find((item) => item.id === sourceId && item.status === 'active');
-    const mappedSeminar = mapped.entities.seminars.find((item) => item.sourceId === sourceId);
-    if (!seminar || !mappedSeminar || !seminar.description?.includes(sourceUrl) || !String(mappedSeminar.description ?? '').includes(sourceUrl) ||
-      valueAt(row, 'source_slug', 'sourceSlug') !== mappedSeminar.slug) throw new Error(`Seminars#${sourceId} video decision does not match active description source`);
     const decision = string(valueAt(row, 'decision'), `Seminars#${sourceId} video decision`);
     const action = decision.includes('canonicalize_same_https_rutube_embed_id') ? 'rutube-trailing-slash' : decision.includes('preserve_exact_source_url') || decision === 'external-link' ? 'external-link' : undefined;
     if (!action) throw new Error(`Seminars#${sourceId} video decision is unsupported`);
+    let sourceVideoUrl: URL;
+    let safeVideoUrl: URL;
+    try {
+      sourceVideoUrl = new URL(sourceUrl);
+      safeVideoUrl = new URL(safeHref);
+    } catch {
+      throw new Error(`Seminars#${sourceId} video decision URL is invalid`);
+    }
+    const canonicalRutube = action === 'rutube-trailing-slash'
+      && sourceVideoUrl.protocol === 'https:' && sourceVideoUrl.hostname === 'rutube.ru'
+      && !sourceVideoUrl.username && !sourceVideoUrl.password && !sourceVideoUrl.port && !sourceVideoUrl.hash
+      && /^\/play\/embed\/[\da-f]{32}$/i.test(sourceVideoUrl.pathname)
+      && [...sourceVideoUrl.searchParams.keys()].every((name) => name === 'p')
+      && sourceVideoUrl.searchParams.size <= 1
+      && sourceVideoUrl.searchParams.get('p') !== ''
+      && safeVideoUrl.protocol === 'https:' && safeVideoUrl.hostname === 'rutube.ru'
+      && !safeVideoUrl.username && !safeVideoUrl.password && !safeVideoUrl.port && !safeVideoUrl.search && !safeVideoUrl.hash
+      && safeVideoUrl.pathname === sourceVideoUrl.pathname;
+    if (action === 'rutube-trailing-slash' ? !canonicalRutube : safeHref !== sourceUrl) {
+      throw new Error(`Seminars#${sourceId} video decision must preserve the exact approved URL identity`);
+    }
+    const seminar = source.Seminars.find((item) => item.id === sourceId && item.status === 'active');
+    const mappedSeminar = mapped.entities.seminars.find((item) => item.sourceId === sourceId);
+    if (!seminar || !mappedSeminar || !seminar.description?.includes(sourceUrl) || !String(mappedSeminar.description ?? '').includes(sourceUrl) ||
+      (valueAt(row, 'source_slug', 'sourceSlug') != null && valueAt(row, 'source_slug', 'sourceSlug') !== mappedSeminar.slug)) {
+      throw new Error(`Seminars#${sourceId} video decision does not match active description source`);
+    }
     const targetRel = valueAt(row, 'target_rel', 'targetRel');
-    if (targetRel !== expectedRel) throw new Error(`Seminars#${sourceId} video decision rel policy differs from its pinned manifest`);
-    const linkText = string(valueAt(row, 'link_text', 'linkText'), `Seminars#${sourceId} video link text`);
+    if (action === 'external-link' ? targetRel !== expectedRel : targetRel != null && targetRel !== expectedRel) {
+      throw new Error(`Seminars#${sourceId} video decision rel policy differs from its pinned manifest`);
+    }
+    if (action === 'external-link') string(valueAt(row, 'link_text', 'linkText'), `Seminars#${sourceId} video link text`);
     const expectedOutput = action === 'rutube-trailing-slash'
       ? canonicalSqlDemoRutubeIframe(safeHref)
       : `<a href="${safeHref}" rel="${string(targetRel, `Seminars#${sourceId} target rel`)}">Открыть видео</a>`;
-    void linkText;
     videoReferences.push({ sourceTable: 'Seminars', sourceId, field: 'description', originalURL: sourceUrl, action, expectedOutput });
   }
 
