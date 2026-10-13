@@ -18,6 +18,7 @@ const SOURCE_SHA = createHash('sha256').update(DUMP_BYTES).digest('hex');
 const STORED_SHA = 'b'.repeat(64);
 const TARGET_URL = 'http://127.0.0.1:1337';
 const TARGET_NAMESPACE = 'ikpk_sql_demo_native_red';
+const COLLECTIONS = ['institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles', 'news-items', 'promotions', 'video-playlists', 'pages'] as const;
 const TARGETS: Record<TargetName, TargetConfig> = {
   A: {
     baseUrl: 'http://127.0.0.1:1337', namespace: 'ikpk_sql_demo_native_a',
@@ -70,7 +71,7 @@ type SqlDemoNativeRehearsalIo = {
   readStaticDocument(target: OwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: OwnedTarget): Promise<OwnedTarget>;
   readPublished(target: OwnedTarget): Promise<SqlDemoStrapi5Readback>;
-  readDraftContentCounts(target: OwnedTarget): Promise<Record<string, number>>;
+  readDraftContentIdentities(target: OwnedTarget): Promise<Record<string, readonly { legacyId: string; slug?: string }[]>>;
   prepareResumeMediaInventory(target: OwnedTarget, proofs: readonly SqlDemoOfflineAssetProof[]): Promise<unknown>;
   capture(targets: readonly OwnedTarget[]): Promise<void>;
   stopOwnedSqlSource(lease: OwnedSqlSource): Promise<void>;
@@ -88,6 +89,11 @@ type RehearsalInput = {
 async function run(input: RehearsalInput): Promise<unknown> {
   const { runSqlDemoNativeRehearsal } = await import('./sql-demo-native-rehearsal.js');
   return runSqlDemoNativeRehearsal(input as never);
+}
+
+async function runPrototype(input: Record<string, unknown>): Promise<unknown> {
+  const { runSqlDemoNativePrototype } = await import('./sql-demo-native-rehearsal.js');
+  return runSqlDemoNativePrototype(input as never);
 }
 
 const emptyNativeSource = Object.fromEntries([
@@ -207,7 +213,7 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
       client: { name: target.name, fresh: true, request: vi.fn(async () => undefined) },
     })),
     readPublished: vi.fn(async () => emptyReadback()),
-    readDraftContentCounts: vi.fn(async () => ({})),
+    readDraftContentIdentities: vi.fn(async () => Object.fromEntries(COLLECTIONS.map((collection) => [collection, []]))),
     prepareResumeMediaInventory: vi.fn(async () => ({})),
     capture: vi.fn(async () => undefined),
     stopOwnedSqlSource: vi.fn(async () => undefined),
@@ -254,7 +260,9 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
     } as never);
     vi.spyOn(await import('./sql-demo-private-inputs.js'), 'normalizeSqlDemoPrivateInputs').mockReturnValue({
       mapperOptions: { expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {} },
-      loader: {} as never, composer: {} as never, materializer: emptyClassification,
+      loader: { assetManifest: { entries: [] } } as never,
+      composer: { acceptedSupplements: { targetLocations: [] } } as never,
+      materializer: emptyClassification,
     } as never);
     vi.spyOn(await import('./sql-demo-assets.js'), 'loadSqlDemoAssets').mockResolvedValue({
       offlineMedia: [], offlineDocuments: [], supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
@@ -710,5 +718,24 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
     const safeError = JSON.stringify({ code: error.code, identity: error.identity, message: error.message });
     expect(safeError).not.toContain('SYNTHETIC-TOKEN');
     expect(safeError).not.toContain('private.example.invalid');
+  });
+
+  it('refuses an unexpected draft identity before continuing the preserved prototype target', async () => {
+    const base = options();
+    const draftIdentities = Object.fromEntries(COLLECTIONS.map((collection) => [collection, []])) as Record<string, readonly { legacyId: string; slug?: string }[]>;
+    draftIdentities.pages = [{ legacyId: 'unapproved-page', slug: 'unapproved-page' }];
+    vi.mocked(base.io.readDraftContentIdentities).mockResolvedValueOnce(draftIdentities);
+    const caught = await runPrototype({
+      reader: { ...base.reader, dumpPath },
+      privateInputConfig: base.privateInputConfig,
+      target: { ...TARGETS.A, resumeExistingMediaOnly: true },
+      snapshotDirectory: join(dumpDirectory, 'snapshot'),
+      io: base.io,
+    }).catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({ code: 'PARTIAL_TARGET_RESUME_INVALID' });
+    expect((caught as Error).message).not.toContain('unapproved-page');
+    expect(base.io.readDraftContentIdentities).toHaveBeenCalledTimes(1);
+    expect(base.io.prepareResumeMediaInventory).not.toHaveBeenCalled();
   });
 });

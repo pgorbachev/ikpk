@@ -6,7 +6,7 @@ import { createConnection } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { allowedSourceIdentity, buildStrapiMediaInventory, type StrapiMediaInventory } from './strapi-media-inventory.js';
 import { buildUploadBody } from './upload-body.js';
-import type { SqlDemoNativeRehearsalIo, SqlDemoNativeOwnedTarget, SqlDemoNativeSqlSourceLease, SqlDemoNativeTargetConfig, SqlDemoNativeUpload } from './sql-demo-native-rehearsal.js';
+import type { SqlDemoNativeRehearsalIo, SqlDemoNativeOwnedTarget, SqlDemoNativeSqlSourceLease, SqlDemoNativeTargetConfig, SqlDemoNativeUpload, SqlDemoNativeDraftIdentity } from './sql-demo-native-rehearsal.js';
 import type { SqlDemoOfflineAssetProof } from './sql-demo-assets.js';
 import type { SqlDemoStrapi5MediaReadback, SqlDemoStrapi5PublishedRecord, SqlDemoNativeCollection } from './sql-demo-native-conservation.js';
 import type { SqlPublicReaderOptions, SqlPublicPsqlInvocation } from './sql-public-reader.js';
@@ -314,6 +314,29 @@ function safeUrlPath(value: string, baseUrl: string, prefix: string): URL {
 }
 
 function bearer(token: string): Record<string, string> { return { authorization: `Bearer ${token}` }; }
+const SAFE_CONTENT_FIELDS = new Set([
+  'title', 'slug', 'body', 'legacy_id', 'name', 'description', 'city', 'entry_status',
+  'seo', 'metaTitle', 'metaDescription', 'canonicalURL', 'keywords', 'robots', 'structuredData',
+  'image', 'photo', 'videos', 'url', 'date', 'startDate', 'endDate', 'priority', 'anchor',
+]);
+
+function safeCmsValidationField(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const error = (value as Record<string, unknown>).error;
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined;
+  const details = (error as Record<string, unknown>).details;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return undefined;
+  const errors = (details as Record<string, unknown>).errors;
+  if (!Array.isArray(errors)) return undefined;
+  for (const item of errors) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const path = (item as Record<string, unknown>).path;
+    const field = Array.isArray(path) ? path[0] : undefined;
+    if (typeof field === 'string' && SAFE_CONTENT_FIELDS.has(field)) return field;
+  }
+  return undefined;
+}
+
 function clientFor(target: SqlDemoNativeOwnedTarget, state: TargetState, fetcher: typeof globalThis.fetch, verify: () => Promise<void>) {
   return {
     async request(method: string, path: string, body?: unknown): Promise<unknown> {
@@ -322,7 +345,14 @@ function clientFor(target: SqlDemoNativeOwnedTarget, state: TargetState, fetcher
       await verify();
       const response = await fetcher(url, { method, redirect: 'manual', headers: { ...bearer(state.token), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       await verify();
-      if (response.status < 200 || response.status >= 300) throw fail('Owned CMS API request failed');
+      if (response.status < 200 || response.status >= 300) {
+        let body: unknown;
+        try { body = await response.clone().json(); } catch { /* no response body needed for safe status diagnostics */ }
+        const error = Object.assign(new Error('Owned CMS API request failed'), {}) as Error & { safeHttpStatus?: number; safeField?: string };
+        error.safeHttpStatus = response.status;
+        error.safeField = safeCmsValidationField(body);
+        throw error;
+      }
       return response.json();
     },
   };
@@ -1090,12 +1120,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       state.lastSummary = { capturedAt: new Date().toISOString(), target: target.name, codeCommit: config.cms.expectedCommit, counts, entityIds, media: media.map(({ id, url, verifiedStoredSha256, provider_metadata }) => ({ id, url, verifiedStoredSha256, sourceIdentitySha256: sha256(Buffer.from(JSON.stringify(provider_metadata ?? null))) })), documents: [...state.documents.entries()].map(([path, witness]) => ({ path, ...witness })) };
       return { collections, media };
     },
-    async readDraftContentCounts(target) {
+    async readDraftContentIdentities(target) {
       const state = owned(target); await verifyTargetProcess(target, state);
-      const counts: Record<string, number> = {};
+      const identities: Record<string, readonly SqlDemoNativeDraftIdentity[]> = {};
       for (const collection of COLLECTIONS) {
         let page = 1; let pageCount = 1; let total = -1;
-        let seen = 0;
+        const seen: SqlDemoNativeDraftIdentity[] = [];
         while (page <= pageCount) {
           const response = await readPage(target, `/api/${collection}?status=draft&pagination[page]=${page}&pagination[pageSize]=100&populate=*`);
           const p = response.meta.pagination;
@@ -1104,15 +1134,16 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           for (const raw of response.data) {
             if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw fail(`CMS ${collection} contains an invalid draft record`);
             const row = raw as Record<string, unknown>;
-            if (!Number.isSafeInteger(row.id) || typeof row.documentId !== 'string' || !row.documentId) throw fail(`CMS ${collection} draft record is missing its identity`);
-            seen += 1;
+            if (!Number.isSafeInteger(row.id) || typeof row.documentId !== 'string' || !row.documentId || typeof row.legacy_id !== 'string' || !row.legacy_id) throw fail(`CMS ${collection} draft record is missing its identity`);
+            if (row.slug !== undefined && typeof row.slug !== 'string') throw fail(`CMS ${collection} draft identity has a malformed slug`);
+            seen.push({ legacyId: row.legacy_id, ...(typeof row.slug === 'string' ? { slug: row.slug } : {}) });
           }
           page += 1;
         }
-        if (seen !== total) throw fail(`CMS ${collection} draft pagination omitted records`);
-        counts[collection] = seen;
+        if (seen.length !== total) throw fail(`CMS ${collection} draft pagination omitted records`);
+        identities[collection] = seen;
       }
-      return counts;
+      return identities;
     },
     async capture(targets) {
       if (!sourceWitnessVerified || !verifiedSourceWitness) throw fail('Cannot capture before the pinned SQL source is verified and stopped');

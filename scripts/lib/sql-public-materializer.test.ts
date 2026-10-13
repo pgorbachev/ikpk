@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   mapSqlPublicContent,
   type SqlPublicSource,
@@ -355,6 +355,23 @@ function connectedMediaIds(value: unknown): number[] {
 }
 
 describe('materializeSqlPublicContent', () => {
+  it('preserves only safe HTTP status and allowlisted field diagnostics from a rejected draft write', async () => {
+    const target = new SyntheticStrapiTarget('safe-write-diagnostic');
+    const request = target.request.bind(target);
+    vi.spyOn(target, 'request').mockImplementation(async (method, path, body) => {
+      if (method === 'POST' && path.startsWith('/api/institutes?status=draft')) {
+        throw Object.assign(new Error('private CMS response body must not escape'), { safeHttpStatus: 422, safeField: 'slug' });
+      }
+      return request(method, path, body);
+    });
+    const error = await materializeSqlPublicContent(MAPPED, options(target, new SyntheticMediaResolver())).then(
+      () => undefined,
+      (failure: unknown) => failure as { safeHttpStatus?: number; safeField?: string },
+    );
+    expect(error).toMatchObject({ safeHttpStatus: 422, safeField: 'slug' });
+    expect((error as Error).message).not.toContain('private CMS response body');
+  });
+
   it('preserves nullable and absent SQL fields without inventing optional CMS values', async () => {
     const target = new SyntheticStrapiTarget('nullable-source-fields');
     const media = new SyntheticMediaResolver();

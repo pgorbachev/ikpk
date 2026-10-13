@@ -24,9 +24,11 @@ export type SqlDemoNativeTargetConfig = {
   namespace: string;
   dataDirectory: string;
   uploadDirectory: string;
-  /** Continue this private prototype target only when its existing media claims are complete. */
+  /** Continue this private prototype target only when media and draft identities are exact approved subsets. */
   resumeExistingMediaOnly?: boolean;
 };
+
+export type SqlDemoNativeDraftIdentity = { legacyId: string; slug?: string };
 
 export type SqlDemoNativeSqlSourceLease = { readonly id?: string };
 
@@ -59,7 +61,7 @@ export interface SqlDemoNativeRehearsalIo {
   readStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoNativeOwnedTarget>;
   readPublished(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoStrapi5Readback>;
-  readDraftContentCounts(target: SqlDemoNativeOwnedTarget): Promise<Record<string, number>>;
+  readDraftContentIdentities(target: SqlDemoNativeOwnedTarget): Promise<Record<string, readonly SqlDemoNativeDraftIdentity[]>>;
   prepareResumeMediaInventory(target: SqlDemoNativeOwnedTarget, proofs: readonly SqlDemoOfflineAssetProof[]): Promise<unknown>;
   capture(targets: readonly SqlDemoNativeOwnedTarget[]): Promise<void>;
   /** Live CMS snapshot; only required by the one-target prototype path. */
@@ -167,6 +169,7 @@ type TargetRun = {
 
 const HASH = /^[a-f\d]{64}$/i;
 const TARGET_NAMESPACE = /^ikpk_sql_demo_native(?:_[a-z0-9]+)?$/;
+const PROTOTYPE_COLLECTIONS = ['institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles', 'news-items', 'promotions', 'video-playlists', 'pages'] as const;
 
 function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string; networkCode?: string }): SqlDemoNativeRehearsalError {
   return new SqlDemoNativeRehearsalError(code, message, identity, diagnostic);
@@ -176,7 +179,11 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
   const causeCategory = error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/.test(error.name) ? error.name : 'unknown-error';
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const safeContext = error instanceof Error ? error.message.match(/^([A-Za-z][A-Za-z0-9]*#\d+):/) : null;
-  const safeField = error instanceof Error ? error.message.match(/\b([A-Za-z][A-Za-z0-9_]*) (?:must be|is required|is invalid|verification changed|is missing)\b/) : null;
+  const fieldAllowlist = new Set(['title', 'slug', 'body', 'legacy_id', 'name', 'description', 'city', 'entry_status', 'seo', 'metaTitle', 'metaDescription', 'canonicalURL', 'keywords', 'robots', 'structuredData', 'image', 'photo', 'videos', 'url', 'date', 'startDate', 'endDate', 'priority', 'anchor']);
+  const reportedField = error instanceof Error ? (error as Error & { safeField?: unknown }).safeField : undefined;
+  const safeField = typeof reportedField === 'string' && fieldAllowlist.has(reportedField)
+    ? reportedField
+    : error instanceof Error ? error.message.match(/\b([A-Za-z][A-Za-z0-9_]*) (?:must be|is required|is invalid|verification changed|is missing)\b/)?.[1] : undefined;
   const frames = [...new Set(stack.split(/\r?\n/).map((line) =>
     line.match(/((?:sql-demo-[A-Za-z0-9-]+|sql-public-(?:reader|materializer))\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter((frame): frame is string => Boolean(frame)))];
   const organizationInfo = error instanceof Error
@@ -192,7 +199,7 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
     causeCategory,
     frames,
     ...(safeContext ? { sourceIdentity: safeContext[1] } : {}),
-    ...(safeField ? { field: safeField[1] } : {}),
+    ...(safeField ? { field: safeField } : {}),
     ...((error as { safeNetworkCode?: unknown } | null)?.safeNetworkCode
       && /^[A-Z][A-Z0-9_]{1,40}$/.test((error as { safeNetworkCode: string }).safeNetworkCode)
       ? { networkCode: (error as { safeNetworkCode: string }).safeNetworkCode } : {}),
@@ -828,6 +835,7 @@ export async function runSqlDemoNativePrototype(
   let target: SqlDemoNativeOwnedTarget | undefined;
   let primaryError: unknown;
   let result: SqlDemoNativePrototypeResult | undefined;
+  let expectedDrafts = new Map<string, Map<string, string | undefined>>();
   try {
     const mapperOptions = prepareSqlDemoPrivateInputs(input.privateInputConfig);
     let token: string;
@@ -931,7 +939,11 @@ export async function runSqlDemoNativePrototype(
       );
       const approvedRasterIds = new Set(assets.offlineMedia.map((proof) => String(proof.sourceFileId)));
       const contentPlans = projectSqlPublicContentForConservation(preflightRelease as never, normalized.materializer);
+      expectedDrafts = new Map();
       for (const plan of contentPlans) {
+        const collection = expectedDrafts.get(plan.collection) ?? new Map<string, string | undefined>();
+        collection.set(plan.legacyId, typeof plan.attributes.slug === 'string' ? plan.attributes.slug : undefined);
+        expectedDrafts.set(plan.collection, collection);
         if (plan.image?.sourceId != null && !approvedRasterIds.has(plan.image.sourceId)) {
           throw safeFailure('MEDIA_BINDING_FAILED', 'Mapped content references a raster outside the approved source set', `${plan.sourceTable}#${plan.sourceId ?? 'unknown'}`);
         }
@@ -947,14 +959,34 @@ export async function runSqlDemoNativePrototype(
     assertOwnedTarget(target, 'A', input.target);
     if (input.target.resumeExistingMediaOnly) {
       let priorReadback: SqlDemoStrapi5Readback;
-      let draftCounts: Record<string, number>;
+      let draftIdentities: Record<string, readonly SqlDemoNativeDraftIdentity[]>;
       try { priorReadback = await input.io.readPublished(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
       const existingContentCount = Object.values(priorReadback.collections).reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
-      try { draftCounts = await input.io.readDraftContentCounts(target); }
+      try { draftIdentities = await input.io.readDraftContentIdentities(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
-      const existingDraftCount = Object.values(draftCounts).reduce((sum, count) => sum + count, 0);
-      if (existingContentCount !== 0 || existingDraftCount !== 0) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains content rows and is not a media-only checkpoint');
+      if (existingContentCount !== 0) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains published content and cannot be resumed');
+      if (Object.keys(draftIdentities).sort().join('\0') !== [...PROTOTYPE_COLLECTIONS].sort().join('\0')) {
+        throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory omitted or added a content collection');
+      }
+      for (const [collection, identities] of Object.entries(draftIdentities)) {
+        const approved = expectedDrafts.get(collection);
+        if (!approved) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains an unknown draft collection');
+        const seen = new Set<string>();
+        for (const identity of identities) {
+          if (!identity || typeof identity.legacyId !== 'string' || !identity.legacyId || seen.has(identity.legacyId)) {
+            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains a malformed or duplicate draft identity');
+          }
+          const approvedSlug = approved.get(identity.legacyId);
+          if (approvedSlug === undefined && !approved.has(identity.legacyId)) {
+            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains an unapproved draft identity');
+          }
+          if (approvedSlug !== undefined && identity.slug !== approvedSlug) {
+            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft identity does not match its approved slug');
+          }
+          seen.add(identity.legacyId);
+        }
+      }
     }
     let priorMediaInventory: unknown;
     if (input.target.resumeExistingMediaOnly) {

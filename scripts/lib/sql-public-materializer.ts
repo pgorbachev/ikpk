@@ -54,7 +54,17 @@ type SourceTable = 'Institutes' | 'Programs' | 'Teachers' | 'Seminars' | 'Events
   | 'News' | 'Promotions' | 'Videos' | 'Pages';
 type RecordValue = Record<string, unknown>;
 
-class SafeMaterializerError extends Error {}
+class SafeMaterializerError extends Error {
+  readonly safeHttpStatus?: number;
+  readonly safeField?: string;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    const diagnostic = cause as { safeHttpStatus?: unknown; safeField?: unknown } | null;
+    if (Number.isSafeInteger(diagnostic?.safeHttpStatus)) this.safeHttpStatus = diagnostic!.safeHttpStatus as number;
+    if (typeof diagnostic?.safeField === 'string') this.safeField = diagnostic.safeField;
+  }
+}
 
 interface RelationPlan {
   field: string;
@@ -93,8 +103,8 @@ function recordContext(table: SourceTable, entity: RecordValue): string {
     : `${table}/${String(entity.legacy_id ?? 'unknown')}`;
 }
 
-function fail(context: string, message: string): never {
-  throw new SafeMaterializerError(`${context}: ${message}`);
+function fail(context: string, message: string, cause?: unknown): never {
+  throw new SafeMaterializerError(`${context}: ${message}`, cause);
 }
 
 function requiredString(entity: RecordValue, table: SourceTable, field: string, allowEmpty = false): string {
@@ -647,8 +657,8 @@ async function writeDraft(plan: EntityPlan, data: RecordValue, existing: RecordV
     }
     const response = await target.request('POST', `/api/${plan.collection}?status=draft`, { data });
     return { documentId: documentId(responseRecord(response, context), context) };
-  } catch {
-    return fail(context, 'draft write failed');
+  } catch (error) {
+    return fail(context, 'draft write failed', error);
   }
 }
 

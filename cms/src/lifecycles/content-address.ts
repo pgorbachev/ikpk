@@ -2,6 +2,9 @@ import type { Core } from '@strapi/strapi';
 import { errors } from '@strapi/utils';
 import { checkIdentifier, addressOf, type AddressState, type RecordRef, type RecordType } from '../lib/content-address';
 import { KNOWN_CATALOG_SEGMENTS } from '../lib/build-route-segments';
+import { isTrustedImport } from '../seminar-management/rules.js';
+
+const TRUSTED_DEDICATED_STATIC_PAGES = new Set(['statyi', 'video']);
 
 const { ApplicationError } = errors;
 
@@ -164,7 +167,16 @@ export function registerContentAddressLifecycle(strapi: Core.Strapi): void {
       const state = await loadAddressState(strapi);
       const identity = await resolveCreateIdentity(strapi, event.model.uid, data.documentId, identifier, type, state);
       const record: RecordRef = { ...identity, type, identifier };
-      const verdict = checkIdentifier({ record, state });
+      const isFirstTrustedDedicatedImport = type === 'static-page'
+        && TRUSTED_DEDICATED_STATIC_PAGES.has(identifier)
+        && data.legacy_id === identifier
+        && (data.documentId === undefined || data.documentId === null || data.documentId === '')
+        && !state.records.some((other) => other.type === 'institute' && other.identifier === identifier)
+        && isTrustedImport(strapi);
+      const verdictState = isFirstTrustedDedicatedImport
+        ? { ...state, buildRouteSegments: state.buildRouteSegments.filter((segment) => segment !== identifier) }
+        : state;
+      const verdict = checkIdentifier({ record, state: verdictState });
       if (!verdict.ok) throw new ApplicationError(verdict.message);
     },
 

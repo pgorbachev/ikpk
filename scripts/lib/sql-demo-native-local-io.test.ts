@@ -145,6 +145,21 @@ afterEach(async () => {
 });
 
 describe('concrete native local rehearsal adapter', () => {
+  it('retains only a safe CMS status and allowlisted validation field for a failed request', async () => {
+    const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/_health') return new Response('{}', { status: 200 });
+      if (url.pathname === '/api/pages') return new Response(JSON.stringify({ error: { status: 422, details: { errors: [{ path: ['slug'], message: 'private body must not be logged' }] } } }), { status: 422 });
+      return new Response('{}', { status: 200 });
+    });
+    const io = await makeAdapter({ runtime: { fetch } });
+    const owned = await target(io);
+    const client = owned.client as { request(method: string, path: string, body?: unknown): Promise<unknown> };
+
+    await expect(client.request('POST', '/api/pages?status=draft', { data: { slug: 'synthetic' } }))
+      .rejects.toMatchObject({ safeHttpStatus: 422, safeField: 'slug' });
+  }, 30_000);
+
   it('uses distinct private npm user/global config paths without inheriting host credentials', () => {
     const environment = privateCmsNpmEnvironment('/private/tmp/cms-candidate', '/usr/bin:/bin');
 
@@ -468,14 +483,14 @@ describe('concrete native local rehearsal adapter', () => {
       }
       const collection = url.pathname.replace('/api/', '');
       const rows = url.searchParams.get('status') === 'draft' && collection === 'articles'
-        ? [{ id: 9, documentId: 'draft-article' }]
+        ? [{ id: 9, documentId: 'draft-article', legacy_id: 'articles-1', slug: 'article-1' }]
         : [];
       return new Response(JSON.stringify({ data: rows, meta: { pagination: { page: 1, pageCount: rows.length ? 1 : 0, total: rows.length } } }), { status: 200 });
     });
     const io = await makeAdapter({ runtime: { fetch } });
-    const counts = await io.readDraftContentCounts(await target(io));
-    expect(counts.articles).toBe(1);
-    expect(Object.entries(counts).filter(([, count]) => count > 0)).toEqual([['articles', 1]]);
+    const identities = await io.readDraftContentIdentities(await target(io));
+    expect(identities.articles).toEqual([{ legacyId: 'articles-1', slug: 'article-1' }]);
+    expect(Object.entries(identities).filter(([, rows]) => rows.length > 0)).toEqual([['articles', [{ legacyId: 'articles-1', slug: 'article-1' }]]]);
     const requests = fetch.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname.startsWith('/api/'));
     expect(requests).toHaveLength(collections.length);
     expect(requests.every((url) => url.searchParams.get('status') === 'draft')).toBe(true);
