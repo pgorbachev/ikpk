@@ -1200,9 +1200,12 @@ describe('SQL demo private input preparation and normalization', () => {
       '<li id="401"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section A</h2></button></div></li>',
       '</ul>',
     ].join('');
+    const organizationInfo = source.OrganizationInfo;
+    expect(organizationInfo).toBeDefined();
+    if (!organizationInfo) throw new Error('private input fixture requires OrganizationInfo rows');
     const nativeSource = {
       ...source,
-      OrganizationInfo: source.OrganizationInfo.map((row) => ({ ...row, content: null })),
+      OrganizationInfo: organizationInfo.map((row) => ({ ...row, content: null })),
     };
     const result = normalize({ config: configWithStaticPageBody(body), nativeSqlPublicSource: nativeSource });
 
@@ -1421,7 +1424,8 @@ describe('SQL demo private input preparation and normalization', () => {
     );
     expect(release.entities.seminars.map(({ sourceId, description }) => ({ sourceId, description })))
       .toEqual(rows.map(({ id, expected }) => ({ sourceId: id, description: expected })));
-    expect(release.entities.seminars.slice(5).every(({ description }) => !description?.includes('<iframe'))).toBe(true);
+    expect(release.entities.seminars.slice(5).every(({ description }) =>
+      description == null || (typeof description === 'string' && !description.includes('<iframe')))).toBe(true);
   });
 
   it.each([

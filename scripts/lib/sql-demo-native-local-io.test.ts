@@ -324,7 +324,7 @@ describe('concrete native local rehearsal adapter', () => {
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (_input, init) => {
       const url = new URL(String(_input));
       if (url.pathname === '/_health') return new Response('{}', { status: 200 });
-      if (url.pathname === '/api/upload/files') return new Response(JSON.stringify({ data: media, meta: { pagination: { page: 1, pageCount: media.length ? 1 : 0, total: media.length } } }), { status: 200 });
+      if (url.pathname === '/api/upload/files/page') return new Response(JSON.stringify({ data: media, meta: { pagination: { page: 1, pageCount: media.length ? 1 : 0, total: media.length } } }), { status: 200 });
       if (url.pathname === '/api/upload' && init?.method === 'POST') {
         const row = { id: 71 + media.length, url: `/uploads/actual-${71 + media.length}.png`, name: `actual-${71 + media.length}.png`, mime: 'image/png' };
         media.push(row);
@@ -390,7 +390,7 @@ describe('concrete native local rehearsal adapter', () => {
     rows.articles.push({ id: 2, documentId: 'doc-articles-2', legacy_id: 'articles-2', publishedAt: '2026-01-02T00:00:00.000Z' });
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname.endsWith('/api/upload/files')) {
+      if (url.pathname.endsWith('/api/upload/files/page')) {
         return new Response(JSON.stringify({ data: [], meta: { pagination: { page: 1, pageCount: 0, total: 0 } } }), { status: 200 });
       }
       const collection = url.pathname.replace('/api/', '') as SqlDemoNativeCollection;
@@ -409,7 +409,7 @@ describe('concrete native local rehearsal adapter', () => {
     expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(collections.length);
     for (const [input] of fetch.mock.calls) {
       const url = new URL(String(input));
-      if (url.pathname.startsWith('/api/') && !url.pathname.endsWith('/api/upload/files')) expect(url.search).toContain('populate');
+      if (url.pathname.startsWith('/api/') && !url.pathname.endsWith('/api/upload/files/page')) expect(url.search).toContain('populate');
     }
   });
 
@@ -420,7 +420,7 @@ describe('concrete native local rehearsal adapter', () => {
     const rows = Object.fromEntries(collections.map((name) => [name, [{ id: 1, documentId: `doc-${name}`, legacy_id: `${name}-1`, publishedAt: '2026-01-01T00:00:00.000Z', body: marker }]]));
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
       const url = new URL(String(input));
-      if (url.pathname.endsWith('/api/upload/files')) return new Response(JSON.stringify({ data: [{ id: 71, url: '/uploads/evidence.png' }], meta: { pagination: { page: 1, pageCount: 1, total: 1 } } }), { status: 200 });
+      if (url.pathname.endsWith('/api/upload/files/page')) return new Response(JSON.stringify({ data: [{ id: 71, url: '/uploads/evidence.png' }], meta: { pagination: { page: 1, pageCount: 1, total: 1 } } }), { status: 200 });
       if (url.pathname.endsWith('/uploads/evidence.png')) return new Response(storedBytes, { status: 200 });
       const collection = url.pathname.replace('/api/', '') as SqlDemoNativeCollection;
       const collectionRows = rows[collection];

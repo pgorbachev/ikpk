@@ -466,7 +466,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     const base = new URL(target.baseUrl);
     return buildStrapiMediaInventory({
       baseUrl: target.baseUrl,
-      getPage: async (page, pageSize) => (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files?pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`),
+      getPage: async (page, pageSize) => (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`),
       getBytes: async (url) => {
         const state = owned(target);
         await verifyTargetProcess(target, state);
