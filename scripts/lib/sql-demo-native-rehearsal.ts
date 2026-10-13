@@ -745,8 +745,6 @@ export async function runSqlDemoNativePrototype(
       if (input.materializeApprovedAssets) await input.materializeApprovedAssets(normalized.loader.assetManifest);
       assets = await loadSqlDemoAssets({
         ...normalized.loader,
-        source,
-        selectedPublicHeaders: selectedPublicHeaders(mapped, source.sourceHash),
       });
     } catch (error) {
       throw mapFailure(error);

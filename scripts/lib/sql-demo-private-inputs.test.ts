@@ -416,6 +416,14 @@ function videoDecisionInput(records: Record<string, unknown>[], seminarRows: { i
 }
 
 describe('SQL demo private input preparation and normalization', () => {
+  it('normalizes the prefixed native SQL reader digest for the strict asset loader boundary', () => {
+    const normalized = normalize();
+    expect(source.sourceHash).toBe(`sha256:${hash('a')}`);
+    expect(normalized.loader.source.sourceHash).toBe(hash('a'));
+    expect(normalized.loader.selectedPublicHeaders.sourceHash).toBe(hash('a'));
+    expect(normalized.loader.assetManifest.baselineSqlSha256).toBe(hash('a'));
+  });
+
   it('normalizes canonical decimal-string document IDs and preserves the bound document output', () => {
     const normalized = normalize({ config: documentManifestConfig('801', '702') });
     const documentEntry = normalized.loader.assetManifest.entries.find((entry) => entry.sourceFileId === 'pdf-1');
