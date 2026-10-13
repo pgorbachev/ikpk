@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import type { SqlDemoAssetLoaderResult, SqlDemoOfflineAssetProof, SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
@@ -13,8 +14,13 @@ import type { SqlPublicReaderOptions, SqlPublicReaderResult } from './sql-public
 import { readSqlPublicSource } from './sql-public-reader.js';
 import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-content.js';
 import { mapSqlPublicContent } from './sql-public-content.js';
-import type { SqlMaterializerOptions, SqlResolvedMedia, SqlStrapiRestClient } from './sql-public-materializer.js';
+import type { SqlMaterializerOptions, SqlMaterializerProjectionRecord, SqlResolvedMedia, SqlStrapiRestClient } from './sql-public-materializer.js';
 import { materializeSqlPublicContent, projectSqlPublicContentForConservation } from './sql-public-materializer.js';
+import { checkPublication } from './cms-publication-validation.js';
+const demo193SourceEmptyFields = createRequire(import.meta.url)('../../cms/src/lib/demo193-source-empty-fields.json') as {
+  sourceSqlSha256: string;
+  entries: { type: string; legacyId: string; slug: string; fields: string[] }[];
+};
 import { allowedSourceUrl, allowedSqlStorageKey } from './strapi-media-inventory.js';
 
 type TargetName = 'A' | 'B';
@@ -28,7 +34,9 @@ export type SqlDemoNativeTargetConfig = {
   resumeExistingMediaOnly?: boolean;
 };
 
-export type SqlDemoNativeDraftIdentity = { legacyId: string; slug?: string };
+export type SqlDemoNativeDraftIdentity = { legacyId: string; documentId: string; slug?: string };
+
+type PrototypeExpectedIdentities = ReadonlyMap<string, ReadonlyMap<string, string | undefined>>;
 
 export type SqlDemoNativeSqlSourceLease = { readonly id?: string };
 
@@ -105,6 +113,7 @@ export interface SqlDemoNativePrototypeResult {
   documentCount: number;
   mediaCount: number;
   targetLocationCounts: { organizationInfo: number; instituteAdditionalInfo: number; documents: number };
+  publicationScan: { planCount: number; exceptionCount: number; exceptionsByField: Record<string, number> };
   sourceUrlClassification: {
     approvedRelativeCount: number;
     verifiedStorageKeyCount: number;
@@ -170,6 +179,165 @@ type TargetRun = {
 const HASH = /^[a-f\d]{64}$/i;
 const TARGET_NAMESPACE = /^ikpk_sql_demo_native(?:_[a-z0-9]+)?$/;
 const PROTOTYPE_COLLECTIONS = ['institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles', 'news-items', 'promotions', 'video-playlists', 'pages'] as const;
+const DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+type Demo193EmptyField = 'description' | 'seo_title' | 'seo_description';
+type Demo193SourceEmptyEntry = { type: string; legacyId: string; slug: string; fields: Demo193EmptyField[] };
+
+const PUBLICATION_TYPE_BY_COLLECTION: Record<string, string> = {
+  institutes: 'institute',
+  'course-groups': 'course-group',
+  teachers: 'person',
+  seminars: 'seminar',
+  'schedule-entries': 'schedule-entry',
+  articles: 'article',
+  'news-items': 'news-item',
+  promotions: 'promotion',
+  'video-playlists': 'video-playlist',
+  pages: 'static-page',
+};
+
+function publicationRecordForPlan(plan: SqlMaterializerProjectionRecord): Record<string, unknown> {
+  const attributes = plan.attributes;
+  const seo = attributes.seo && typeof attributes.seo === 'object'
+    ? attributes.seo as Record<string, unknown>
+    : {};
+  const relationValue = (field: string): unknown => {
+    const relation = plan.relations.find((candidate) => candidate.field === field);
+    if (!relation?.legacyIds.length) return [];
+    return relation.legacyIds.map((legacyId) => ({ legacy_id: legacyId }));
+  };
+  const commonSeo = { seo_title: seo.seo_title, seo_description: seo.seo_description };
+  switch (plan.collection) {
+    case 'institutes':
+      return { name: attributes.name, identifier: attributes.slug, description: attributes.description, order: attributes.order, ...commonSeo };
+    case 'course-groups':
+      return { name: attributes.name, identifier: attributes.slug, institute: relationValue('institute'), description: attributes.description, ...commonSeo };
+    case 'teachers':
+      return { name: attributes.name, identifier: attributes.slug, trait: attributes.trait };
+    case 'seminars':
+      return {
+        name: attributes.name, identifier: attributes.slug, course_group: relationValue('course_group'),
+        description: attributes.description, documentsState: attributes.documents_state,
+        documents: attributes.documents, ...commonSeo,
+      };
+    case 'schedule-entries':
+      return {
+        seminar: relationValue('seminar'), startAt: attributes.startAt, endAt: attributes.endAt,
+        city: attributes.city, status: attributes.entry_status,
+      };
+    case 'articles':
+      return {
+        title: attributes.title, identifier: attributes.slug, body: attributes.body,
+        image: plan.image?.sourceId, published_at: attributes.published_date,
+        categories: relationValue('categories'), ...commonSeo,
+      };
+    case 'video-playlists':
+      return { title: attributes.name, identifier: attributes.slug };
+    case 'pages':
+      return { title: attributes.title, identifier: attributes.slug, body: attributes.body, ...commonSeo };
+    case 'news-items':
+      return { title: attributes.name, date: attributes.date, body: attributes.description };
+    case 'promotions':
+      return { title: attributes.name, date: attributes.date, body: attributes.description };
+    default:
+      return {};
+  }
+}
+
+/** Validate every composed CMS publication payload and bind the approved empty fields to exact source identities. */
+export function validatePrototypePublicationPlans(
+  plans: readonly SqlMaterializerProjectionRecord[],
+  sourceSqlSha256: string,
+): { planCount: number; exceptionCount: number; exceptionsByField: Record<string, number> } {
+  const sourceSqlHash = sourceSqlSha256.replace(/^sha256:/, '');
+  if (
+    sourceSqlHash !== DEMO193_SOURCE_SQL_SHA256 ||
+    demo193SourceEmptyFields.sourceSqlSha256 !== DEMO193_SOURCE_SQL_SHA256
+  ) throw new Error('Demo193 publication exception source pin does not match the composed SQL source');
+
+  const entries = demo193SourceEmptyFields.entries as Demo193SourceEmptyEntry[];
+  const allowlist = new Map(entries.map((entry) => [`${entry.type}\0${entry.legacyId}\0${entry.slug}`, entry]));
+  const used = new Set<string>();
+  const exceptionsByField: Record<string, number> = {};
+  for (const plan of plans) {
+    const type = PUBLICATION_TYPE_BY_COLLECTION[plan.collection];
+    if (!type) throw new Error('Composed release has an unsupported publication collection');
+    const record = publicationRecordForPlan(plan);
+    const verdict = checkPublication({ type, record });
+    if (!verdict.ok && !verdict.message.startsWith('не заполнены обязательные поля:')) {
+      throw Object.assign(new Error('Composed source fails a non-field publication invariant'), {
+        safeField: type === 'seminar' ? 'documents' : 'publication',
+      });
+    }
+    let missing = verdict.missing;
+    if (!verdict.ok && missing.length === 0) {
+      missing = type === 'person' ? ['trait'] : type === 'seminar' ? ['documents'] : ['publication'];
+    }
+    if (missing.length === 0) continue;
+    const slug = typeof plan.attributes.slug === 'string' ? plan.attributes.slug : '';
+    const key = `${type}\0${plan.legacyId}\0${slug}`;
+    const entry = allowlist.get(key);
+    const expectedFields = entry ? [...entry.fields].sort() : [];
+    const actualFields = [...missing].sort();
+    if (!entry || expectedFields.length !== actualFields.length || actualFields.some((field, index) => field !== expectedFields[index])) {
+      const identity = Number.isSafeInteger(plan.sourceId) ? `${plan.sourceTable}#${plan.sourceId}` : `${plan.sourceTable}/${plan.legacyId}`;
+      throw Object.assign(new Error(`${identity}: publication fields do not match the pinned source-empty allowlist`), {
+        safeField: actualFields[0] ?? 'publication',
+      });
+    }
+    if (used.has(key)) throw new Error('Pinned source-empty allowlist identity is duplicated in the composed release');
+    used.add(key);
+    for (const field of actualFields) exceptionsByField[field] = (exceptionsByField[field] ?? 0) + 1;
+  }
+  if (used.size !== entries.length) throw new Error('Pinned source-empty allowlist contains an identity absent from the composed release');
+  return { planCount: plans.length, exceptionCount: used.size, exceptionsByField };
+}
+
+/** Check only source identities across the private partial target; materialization overwrites planned drafts. */
+export function validatePrototypeResumeContentIdentities(
+  published: SqlDemoStrapi5Readback,
+  drafts: Record<string, readonly SqlDemoNativeDraftIdentity[]>,
+  expected: PrototypeExpectedIdentities,
+): void {
+  if (
+    Object.keys(drafts).sort().join('\0') !== [...PROTOTYPE_COLLECTIONS].sort().join('\0') ||
+    Object.keys(published.collections).sort().join('\0') !== [...PROTOTYPE_COLLECTIONS].sort().join('\0')
+  ) throw new Error('Existing prototype content inventory omitted or added a collection');
+
+  for (const collection of PROTOTYPE_COLLECTIONS) {
+    const approved = expected.get(collection);
+    if (!approved) throw new Error('Existing prototype target contains an unknown collection');
+    const publishedRows = published.collections[collection] ?? [];
+    const draftRows = drafts[collection] ?? [];
+    const publishedByLegacy = new Map<string, string>();
+    const draftByLegacy = new Map<string, string>();
+    const validateIdentities = (rows: readonly { legacy_id?: unknown; legacyId?: unknown; documentId?: unknown; slug?: unknown }[], status: 'published' | 'draft', byLegacy: Map<string, string>) => {
+      const documentIds = new Set<string>();
+      for (const row of rows) {
+        const legacyId = typeof row.legacy_id === 'string' ? row.legacy_id : row.legacyId;
+        if (typeof legacyId !== 'string' || !legacyId || typeof row.documentId !== 'string' || !row.documentId || byLegacy.has(legacyId) || documentIds.has(row.documentId)) {
+          throw new Error(`Existing prototype ${status} identities are malformed or duplicated`);
+        }
+        const approvedSlug = approved.get(legacyId);
+        if (approvedSlug === undefined && !approved.has(legacyId)) {
+          throw new Error(`Existing prototype ${status} inventory contains an unapproved identity`);
+        }
+        if (approvedSlug !== undefined && row.slug !== approvedSlug) {
+          throw new Error(`Existing prototype ${status} identity does not match its approved slug`);
+        }
+        byLegacy.set(legacyId, row.documentId);
+        documentIds.add(row.documentId);
+      }
+    };
+    validateIdentities(publishedRows, 'published', publishedByLegacy);
+    validateIdentities(draftRows, 'draft', draftByLegacy);
+    for (const [legacyId, documentId] of publishedByLegacy) {
+      if (draftByLegacy.has(legacyId) && draftByLegacy.get(legacyId) !== documentId) {
+        throw new Error('Existing draft and published twins do not share one approved document identity');
+      }
+    }
+  }
+}
 
 function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string; networkCode?: string }): SqlDemoNativeRehearsalError {
   return new SqlDemoNativeRehearsalError(code, message, identity, diagnostic);
@@ -835,6 +1003,7 @@ export async function runSqlDemoNativePrototype(
   let target: SqlDemoNativeOwnedTarget | undefined;
   let primaryError: unknown;
   let result: SqlDemoNativePrototypeResult | undefined;
+  let publicationScan: SqlDemoNativePrototypeResult['publicationScan'] | undefined;
   let expectedDrafts = new Map<string, Map<string, string | undefined>>();
   try {
     const mapperOptions = prepareSqlDemoPrivateInputs(input.privateInputConfig);
@@ -939,6 +1108,7 @@ export async function runSqlDemoNativePrototype(
       );
       const approvedRasterIds = new Set(assets.offlineMedia.map((proof) => String(proof.sourceFileId)));
       const contentPlans = projectSqlPublicContentForConservation(preflightRelease as never, normalized.materializer);
+      publicationScan = validatePrototypePublicationPlans(contentPlans, source.sourceHash);
       expectedDrafts = new Map();
       for (const plan of contentPlans) {
         const collection = expectedDrafts.get(plan.collection) ?? new Map<string, string | undefined>();
@@ -962,31 +1132,10 @@ export async function runSqlDemoNativePrototype(
       let draftIdentities: Record<string, readonly SqlDemoNativeDraftIdentity[]>;
       try { priorReadback = await input.io.readPublished(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
-      const existingContentCount = Object.values(priorReadback.collections).reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
       try { draftIdentities = await input.io.readDraftContentIdentities(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
-      if (existingContentCount !== 0) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains published content and cannot be resumed');
-      if (Object.keys(draftIdentities).sort().join('\0') !== [...PROTOTYPE_COLLECTIONS].sort().join('\0')) {
-        throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory omitted or added a content collection');
-      }
-      for (const [collection, identities] of Object.entries(draftIdentities)) {
-        const approved = expectedDrafts.get(collection);
-        if (!approved) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains an unknown draft collection');
-        const seen = new Set<string>();
-        for (const identity of identities) {
-          if (!identity || typeof identity.legacyId !== 'string' || !identity.legacyId || seen.has(identity.legacyId)) {
-            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains a malformed or duplicate draft identity');
-          }
-          const approvedSlug = approved.get(identity.legacyId);
-          if (approvedSlug === undefined && !approved.has(identity.legacyId)) {
-            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains an unapproved draft identity');
-          }
-          if (approvedSlug !== undefined && identity.slug !== approvedSlug) {
-            throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft identity does not match its approved slug');
-          }
-          seen.add(identity.legacyId);
-        }
-      }
+      try { validatePrototypeResumeContentIdentities(priorReadback, draftIdentities, expectedDrafts); }
+      catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content identities are not an approved source-backed subset', undefined, safeDiagnostic(error)); }
     }
     let priorMediaInventory: unknown;
     if (input.target.resumeExistingMediaOnly) {
@@ -1012,6 +1161,7 @@ export async function runSqlDemoNativePrototype(
       documentCount: assets.offlineDocuments.length,
       mediaCount: imported.readback.media.length,
       targetLocationCounts,
+      publicationScan: publicationScan!,
       sourceUrlClassification,
     };
   } catch (error) {

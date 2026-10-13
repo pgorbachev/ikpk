@@ -1,0 +1,1974 @@
+{
+  "sourceSqlSha256": "b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2",
+  "entries": [
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/dolgoletie",
+      "slug": "dolgoletie",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/imunnyj-otvet",
+      "slug": "imunnyj-otvet",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya",
+      "slug": "kraniosakralnaya-terapiya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye",
+      "slug": "kraniosakralnaya-terapiya-specializirovannye",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/mozg",
+      "slug": "mozg",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye",
+      "slug": "pediatriya-akusherstvo-i-novorozhdennye",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury",
+      "slug": "primenenie-principov-akupunktury",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi",
+      "slug": "vebinary-i-mezhseminarskie-vstrechi",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-barralya/nevralnye-tehniki",
+      "slug": "nevralnye-tehniki",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-barralya/prodvinutye-visceralnye-tehniki",
+      "slug": "prodvinutye-visceralnye-tehniki",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-barralya/specializirovannye-programmy",
+      "slug": "specializirovannye-programmy",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-barralya/tehniki-vyslushivaniya",
+      "slug": "tehniki-vyslushivaniya",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-barralya/visceralnye-tehniki",
+      "slug": "visceralnye-tehniki",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls",
+      "slug": "avtorskie-seminary-zharovoj-ls",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
+      "slug": "korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+      "slug": "kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/massazh",
+      "slug": "massazh",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
+      "slug": "pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii",
+      "slug": "postdiplomnye-programmy-po-prikladnoj-kineziologii",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya",
+      "slug": "prikladnaya-kineziologiya",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa",
+      "slug": "prikladnaya-kineziologiya-dlya-fitnesa",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya",
+      "slug": "psihokineziologiya",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye",
+      "slug": "specializirovannye",
+      "fields": [
+        "description"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk",
+      "slug": "vebinary-i-mezhseminarskie-vstrechi-ikpk",
+      "fields": [
+        "description",
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "course-group",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina",
+      "slug": "vibracionnaya-medicina",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
+      "slug": "kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
+      "slug": "kraniosakralnaya-terapiya-i-immunnyj-otvet",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
+      "slug": "csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "slug": "kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
+      "slug": "kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
+      "slug": "kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
+      "slug": "kraniosakralnaya-terapiya-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
+      "slug": "kraniosakralnaya-terapiya-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
+      "slug": "kraniosakralnaya-terapiya-edvans-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
+      "slug": "kraniosakralnaya-terapiya-edvans-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
+      "slug": "somato-emocionalnoe-osvobozhdenie-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
+      "slug": "somato-emocionalnoe-osvobozhdenie-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/mozg/mozg-govorit-1",
+      "slug": "mozg-govorit-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/mozg/mozg-govorit-2",
+      "slug": "mozg-govorit-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
+      "slug": "csp-2-kraniosakralnaya-terapiya-v-pediatrii-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1",
+      "slug": "kraniosakralnaya-terapiya-v-pediatrii-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1",
+      "slug": "kst-v-akusherstve-uroven-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
+      "slug": "ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
+      "slug": "raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo",
+      "slug": "travma-i-energeticheskoe-telo",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
+      "slug": "integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-bez-ilyuzij-chto-nuzhno-znat",
+      "slug": "kst-bez-ilyuzij-chto-nuzhno-znat",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
+      "slug": "kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
+      "slug": "mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
+      "slug": "seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
+      "slug": "vebinar-kst-tehniki-lyogkogo-prikosnoveniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst",
+      "slug": "vebinar-s-chego-nachinaetsya-kst",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
+      "slug": "centralnye-i-perifericheskie-svyazi",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
+      "slug": "integrativnyj-podhod-k-travme",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
+      "slug": "manipulyacii-na-kranialnyh-nervah",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
+      "slug": "tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
+      "slug": "tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
+      "slug": "nizhnie-konechnosti",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
+      "slug": "pozvonochnik-i-taz",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
+      "slug": "verhnie-konechnosti",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
+      "slug": "visceralnye-komponenty-shei-i-grudnoj-kletki",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
+      "slug": "viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov",
+      "slug": "klinicheskij-razbor-pacientov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
+      "slug": "integrativnyj-podhod-k-ocenke-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
+      "slug": "bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
+      "slug": "bryushnaya-polost-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
+      "slug": "bryushnaya-polost-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/grudnaya-kletka",
+      "slug": "grudnaya-kletka",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
+      "slug": "manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
+      "slug": "rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-barralya/visceralnye-tehniki/taz",
+      "slug": "taz",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/bezopasnost-kak-bazovaya-potrebnost-cheloveka",
+      "slug": "bezopasnost-kak-bazovaya-potrebnost-cheloveka",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
+      "slug": "korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
+      "slug": "korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
+      "slug": "korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu",
+      "slug": "opredelenie-tipov-doshi-po-kristoferu-smitu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete",
+      "slug": "sabotazh-eto-chashe-chem-vy-dumaete",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap",
+      "slug": "strahi-i-fobii-fap",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
+      "slug": "korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
+      "slug": "korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
+      "slug": "korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
+      "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
+      "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
+      "slug": "meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
+      "slug": "karta-patologij",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
+      "slug": "miofascialnyj-massazh-tela-zhenskij-massazh",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
+      "slug": "sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1",
+      "slug": "seminar-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven",
+      "slug": "seminar-1-prodvinutyj-uroven",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven",
+      "slug": "seminar-2-srednij-uroven",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
+      "slug": "seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
+      "slug": "disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1",
+      "slug": "kineziologiya-uglevodnyj-obmen-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
+      "slug": "myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1",
+      "slug": "nejropsihokineziologiya-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2",
+      "slug": "nejropsihokineziologiya-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3",
+      "slug": "nejropsihokineziologiya-3",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
+      "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
+      "slug": "bolevye-sindromy-i-rabota-s-nimi",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
+      "slug": "diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
+      "slug": "myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
+      "slug": "vnutrennie-organy-i-ih-vliyanie-na-myshcy",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+      "slug": "funkcionalnye-narusheniya-biohimicheskih-processov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+      "slug": "funkcionalnye-narusheniya-elektromagnitnyh-processov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+      "slug": "funkcionalnye-narusheniya-emocionalnoj-sfery",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+      "slug": "kraniosakralnaya-sistema",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+      "slug": "osnovy-manualnogo-myshechnogo-testirovaniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+      "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+      "slug": "strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+      "slug": "visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
+      "slug": "antistressovaya-kineziologiya-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
+      "slug": "antistressovaya-kineziologiya-vvedenie-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka",
+      "slug": "energeticheskaya-sistema-cheloveka",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya",
+      "slug": "formirovanie-muzhskogo-i-zhenskogo-povedeniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+      "slug": "individualnye-osobennosti-cheloveka-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+      "slug": "individualnye-osobennosti-cheloveka-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya",
+      "slug": "kak-dostich-izobiliya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+      "slug": "kineziologiya-zdorovya-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+      "slug": "kineziologiya-zdorovya-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/proshenie",
+      "slug": "proshenie",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya",
+      "slug": "revnost-zavist-otricanie-sebya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya",
+      "slug": "semejnye-otnosheniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya",
+      "slug": "slozhnye-formy-povedeniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/bioregulyacionnaya-sistemnaya-medicina-osnovy-prikladnoj-kineziologii",
+      "slug": "bioregulyacionnaya-sistemnaya-medicina-osnovy-prikladnoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
+      "slug": "disfunkcii-yader-cherepno-mozgovyh-nervov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/endokrinotoksichnost",
+      "slug": "endokrinotoksichnost",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnaya-biohimiya-zabolevanij-zheludochno-kishechnogo-trakta",
+      "slug": "funkcionalnaya-biohimiya-zabolevanij-zheludochno-kishechnogo-trakta",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
+      "slug": "funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gomeopatiya-osnovy-metoda-nasledie-gannemana",
+      "slug": "gomeopatiya-osnovy-metoda-nasledie-gannemana",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii",
+      "slug": "infekcii-i-psevdoinfekcii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
+      "slug": "infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov",
+      "slug": "intensiv-dlya-prikladnyh-kineziologov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov",
+      "slug": "korrekciya-shramov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1",
+      "slug": "osnovy-energeticheskoj-kineziologii-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osoznanie-i-upravlenie-svoej-zhiznyu",
+      "slug": "osoznanie-i-upravlenie-svoej-zhiznyu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
+      "slug": "rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
+      "slug": "seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu",
+      "slug": "telo-v-trevoge-put-k-vosstanovleniyu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii",
+      "slug": "viscerotoksichnost-i-osnovy-detoksikacii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/metod-sistemnogo-rezonansa-tri-metoda-odna-sistema",
+      "slug": "metod-sistemnogo-rezonansa-tri-metoda-odna-sistema",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
+      "slug": "pereprogrammirovanie-nejroreceptornyh-polej-p-dtr",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
+      "slug": "tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-endokrinotoksichnost-vneshnej-sredy",
+      "slug": "vebinar-endokrinotoksichnost-vneshnej-sredy",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii",
+      "slug": "vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-vozvrashenie",
+      "slug": "vebinar-vozvrashenie",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
+      "slug": "yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1",
+      "slug": "stimulyaciya-zhiznennoj-sily-kletki-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "seminar",
+      "legacyId": "institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
+      "slug": "stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "90percent-narushenij-v-skeletno-myshechnoj-sisteme",
+      "slug": "90percent-narushenij-v-skeletno-myshechnoj-sisteme",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "beremennost-rody-i-vozmozhnosti-osteopatii",
+      "slug": "beremennost-rody-i-vozmozhnosti-osteopatii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
+      "slug": "diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
+      "slug": "diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "gipertenziya",
+      "slug": "gipertenziya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "giperventilyaciya-i-kraniosakralnyj-mehanizm",
+      "slug": "giperventilyaciya-i-kraniosakralnyj-mehanizm",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "gryzha-pishevodnogo-otverstiya-diafragmy",
+      "slug": "gryzha-pishevodnogo-otverstiya-diafragmy",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
+      "slug": "institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
+      "slug": "institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
+      "slug": "ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
+      "slug": "ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
+      "slug": "istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "izmeneniya-v-hiropraktike-v-svete-protomorfologii",
+      "slug": "izmeneniya-v-hiropraktike-v-svete-protomorfologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
+      "slug": "izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "kislotno-shelochnoj-balans-i-lechenie-pacienta",
+      "slug": "kislotno-shelochnoj-balans-i-lechenie-pacienta",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
+      "slug": "klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
+      "slug": "kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
+      "slug": "krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "lechenie-allergij-v-hiropraktike",
+      "slug": "lechenie-allergij-v-hiropraktike",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "lechenie-bronhialnoj-astmy",
+      "slug": "lechenie-bronhialnoj-astmy",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "metody-issledovaniya-mochi",
+      "slug": "metody-issledovaniya-mochi",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
+      "slug": "mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
+      "slug": "mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
+      "slug": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
+      "slug": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
+      "slug": "narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
+      "slug": "novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "osnovnye-principy-osteopatii",
+      "slug": "osnovnye-principy-osteopatii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
+      "slug": "otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
+      "slug": "pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "pishevoj-faktor-v-hiropraktike",
+      "slug": "pishevoj-faktor-v-hiropraktike",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
+      "slug": "povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "predmet-prikladnoj-kineziologii",
+      "slug": "predmet-prikladnoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
+      "slug": "prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
+      "slug": "prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "principy-balansirovaniya-myshc",
+      "slug": "principy-balansirovaniya-myshc",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "problemy-kolennogo-sustava",
+      "slug": "problemy-kolennogo-sustava",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "provokaciya-shejnyh-pozvonkov",
+      "slug": "provokaciya-shejnyh-pozvonkov",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
+      "slug": "raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
+      "slug": "raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "respiratornye-funkcii-cherepa",
+      "slug": "respiratornye-funkcii-cherepa",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "sakroiliokalnye-i-iliosakralnye-narusheniya",
+      "slug": "sakroiliokalnye-i-iliosakralnye-narusheniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "seminar-po-kraniosakralnoj-terapii-1-otzyv",
+      "slug": "seminar-po-kraniosakralnoj-terapii-1-otzyv",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "seminar-po-kraniosakralnoj-terapii-2-otzyv",
+      "slug": "seminar-po-kraniosakralnoj-terapii-2-otzyv",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "shizofreniya",
+      "slug": "shizofreniya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "sindrom-tarzalnogo-tunnelya",
+      "slug": "sindrom-tarzalnogo-tunnelya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "sluchaj-lecheniya-enureza",
+      "slug": "sluchaj-lecheniya-enureza",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "terapevticheskoe-znachenie-visceralnoj-manipulyacii",
+      "slug": "terapevticheskoe-znachenie-visceralnoj-manipulyacii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
+      "slug": "upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
+      "slug": "uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "ustalost-i-borba-s-neyu",
+      "slug": "ustalost-i-borba-s-neyu",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "visceralnaya-manipulyaciya",
+      "slug": "visceralnaya-manipulyaciya",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
+      "slug": "visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
+      "slug": "visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
+      "slug": "visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
+      "slug": "vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
+      "slug": "vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
+      "slug": "vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
+      "slug": "vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zabolevaniya-zheludochno-kishechnogo-trakta-1",
+      "slug": "zabolevaniya-zheludochno-kishechnogo-trakta-1",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zabolevaniya-zheludochno-kishechnogo-trakta-2",
+      "slug": "zabolevaniya-zheludochno-kishechnogo-trakta-2",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zabolevaniya-zheludochno-kishechnogo-trakta-3",
+      "slug": "zabolevaniya-zheludochno-kishechnogo-trakta-3",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zabolevaniya-zheludochno-kishechnogo-trakta-4",
+      "slug": "zabolevaniya-zheludochno-kishechnogo-trakta-4",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zadnij-ilium-i-nejrolimfaticheskij-refleks",
+      "slug": "zadnij-ilium-i-nejrolimfaticheskij-refleks",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
+      "slug": "zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    },
+    {
+      "type": "article",
+      "legacyId": "znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
+      "slug": "znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
+      "fields": [
+        "seo_description",
+        "seo_title"
+      ]
+    }
+  ]
+}

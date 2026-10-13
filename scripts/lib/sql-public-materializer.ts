@@ -463,7 +463,10 @@ export function projectSqlPublicContentForConservation(
     attributes: {
       ...plan.data,
       ...(plan.sourceTable === 'Seminars'
-        ? Object.fromEntries(['full_text', 'learning_plan', 'learning_mode', 'recommendations'].map((field) => [field, plan.entity[field] ?? null]))
+        ? {
+          ...Object.fromEntries(['full_text', 'learning_plan', 'learning_mode', 'recommendations'].map((field) => [field, plan.entity[field] ?? null])),
+          documents: plan.entity.documents ?? [],
+        }
         : {}),
     },
     ...(plan.imageField ? { image: { field: plan.imageField, sourceId: plan.imageSourceId ?? null } } : {}),
@@ -746,7 +749,7 @@ async function publishAndVerify(plan: EntityPlan, document: StoredRef, expected:
     if (plan.verifyAttributes) verifyMaterializedAttributes(plan, expected, published);
   } catch (error) {
     if (error instanceof SafeMaterializerError) throw error;
-    fail(context, 'publish or verification failed');
+    fail(context, 'publish or verification failed', error);
   }
 }
 

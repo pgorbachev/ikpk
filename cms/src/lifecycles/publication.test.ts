@@ -19,6 +19,7 @@ function makeStrapi(opts: {
   draftsByUid?: Record<string, Record<string, unknown>>;
   courseGroupsByDocumentId?: Record<string, { slug: string }>;
   articles?: FakeArticle[];
+  trustedImport?: boolean;
 }) {
   let middleware!: Middleware;
   const drafts = opts.draftsByUid ?? {};
@@ -26,10 +27,17 @@ function makeStrapi(opts: {
   const articles = opts.articles ?? [];
 
   const strapi = {
+    requestContext: {
+      get() {
+        return opts.trustedImport
+          ? { state: { auth: { strategy: { name: 'content-api-token' }, credentials: { type: 'full-access' } } } }
+          : { state: { auth: { strategy: { name: 'admin' }, credentials: { type: 'full-access' } } } };
+      },
+    },
     documents(uid: string) {
       return {
         async findOne({ documentId }: { documentId: string; status?: string }) {
-          if (uid === 'api::course-group.course-group') return courseGroups[documentId] ?? null;
+          if (uid === 'api::course-group.course-group') return courseGroups[documentId] ?? drafts[documentId] ?? null;
           return drafts[documentId] ?? null;
         },
       };
@@ -80,6 +88,115 @@ test('publish: пропускает институт со всеми обяза�
   });
   const result = await run({ uid: 'api::institute.institute', action: 'publish', params: { documentId: 'doc-1' } });
   assert.equal(result, 'next-called');
+});
+
+test('publish: prototype permits only the pinned empty SQL fields for an exact full-access import identity', async () => {
+  const previousFlag = process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+  const previousHash = process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+  process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = '1';
+  process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+  try {
+    const { run } = makeStrapi({
+      trustedImport: true,
+      draftsByUid: {
+        'doc-1': {
+          name: 'Программа',
+          slug: 'dolgoletie',
+          legacy_id: 'institut-apledzhera/dolgoletie',
+          institute: { id: 1 },
+          description: null,
+          seo: null,
+        },
+      },
+    });
+    assert.equal(await run({
+      uid: 'api::course-group.course-group',
+      action: 'publish',
+      params: { documentId: 'doc-1' },
+    }), 'next-called');
+  } finally {
+    if (previousFlag === undefined) delete process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+    else process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = previousFlag;
+    if (previousHash === undefined) delete process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+    else process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = previousHash;
+  }
+});
+
+test('publish: source-empty SEO exception does not bypass issued-seminar document invariant', async () => {
+  const previousFlag = process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+  const previousHash = process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+  process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = '1';
+  process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+  try {
+    const { run } = makeStrapi({
+      trustedImport: true,
+      draftsByUid: {
+        'doc-seminar': {
+          name: 'Семинар',
+          slug: 'kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya',
+          legacy_id: 'institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya',
+          course_group: { id: 1 },
+          description: 'source-backed',
+          documents_state: 'issued',
+          documents: [],
+          seo: null,
+        },
+      },
+    });
+    await assert.rejects(
+      () => run({ uid: 'api::seminar.seminar', action: 'publish', params: { documentId: 'doc-seminar' } }),
+      /состояние «выдаются» требует непустого набора записей о документах/,
+    );
+  } finally {
+    if (previousFlag === undefined) delete process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+    else process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = previousFlag;
+    if (previousHash === undefined) delete process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+    else process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = previousHash;
+  }
+});
+
+test('publish: pinned source-empty exception rejects admin, wrong source pin, and a different identity', async () => {
+  const previousFlag = process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+  const previousHash = process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+  process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = '1';
+  process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+  const record = {
+    name: 'Программа',
+    slug: 'dolgoletie',
+    legacy_id: 'institut-apledzhera/dolgoletie',
+    institute: { id: 1 },
+    description: null,
+    seo: null,
+  };
+  try {
+    const admin = makeStrapi({ draftsByUid: { 'doc-1': record } });
+    await assert.rejects(
+      () => admin.run({ uid: 'api::course-group.course-group', action: 'publish', params: { documentId: 'doc-1' } }),
+      /не заполнены обязательные поля/,
+    );
+
+    process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = '0'.repeat(64);
+    const wrongPin = makeStrapi({ trustedImport: true, draftsByUid: { 'doc-1': record } });
+    await assert.rejects(
+      () => wrongPin.run({ uid: 'api::course-group.course-group', action: 'publish', params: { documentId: 'doc-1' } }),
+      /не заполнены обязательные поля/,
+    );
+
+    process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+    const wrongIdentity = makeStrapi({
+      trustedImport: true,
+      draftsByUid: { 'doc-1': { ...record, legacy_id: 'unapproved/source' } },
+    });
+    await assert.rejects(
+      () => wrongIdentity.run({ uid: 'api::course-group.course-group', action: 'publish', params: { documentId: 'doc-1' } }),
+      /не заполнены обязательные поля/,
+    );
+  } finally {
+    if (previousFlag === undefined) delete process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION;
+    else process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION = previousFlag;
+    if (previousHash === undefined) delete process.env.IKPK_DEMO193_SOURCE_SQL_SHA256;
+    else process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 = previousHash;
+  }
 });
 
 test('publish: не блокирует create/update — только действие publish', async () => {

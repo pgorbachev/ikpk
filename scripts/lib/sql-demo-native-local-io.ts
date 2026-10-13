@@ -735,6 +735,10 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           STRAPI_TELEMETRY_DISABLED: 'true',
           IKPK_NATIVE_API_TOKEN_FILE: join(candidateDirectory, '.tmp', 'native-api-token'),
           IKPK_NATIVE_API_TOKEN_NAME: `sql-demo-native-${randomBytes(12).toString('hex')}`,
+          ...(input.resumeExistingMediaOnly ? {
+            IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION: '1',
+            IKPK_DEMO193_SOURCE_SQL_SHA256: 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+          } : {}),
           ...targetSecrets,
         },
         stdio: ['ignore', stdoutLog.fd, stderrLog.fd],
@@ -1136,7 +1140,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
             const row = raw as Record<string, unknown>;
             if (!Number.isSafeInteger(row.id) || typeof row.documentId !== 'string' || !row.documentId || typeof row.legacy_id !== 'string' || !row.legacy_id) throw fail(`CMS ${collection} draft record is missing its identity`);
             if (row.slug !== undefined && typeof row.slug !== 'string') throw fail(`CMS ${collection} draft identity has a malformed slug`);
-            seen.push({ legacyId: row.legacy_id, ...(typeof row.slug === 'string' ? { slug: row.slug } : {}) });
+            seen.push({ legacyId: row.legacy_id, documentId: row.documentId, ...(typeof row.slug === 'string' ? { slug: row.slug } : {}) });
           }
           page += 1;
         }

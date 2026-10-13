@@ -1,4 +1,5 @@
 import type { Core } from '@strapi/strapi';
+import { createRequire } from 'node:module';
 import { errors } from '@strapi/utils';
 import {
   checkPublication,
@@ -8,6 +9,11 @@ import {
   type DocumentRecord,
   type DocumentsState,
 } from '../lib/publication-validation';
+import { isTrustedImport } from '../seminar-management/rules.js';
+const sourceEmptyFields = createRequire(`${process.cwd()}/src/lifecycles/publication.ts`)('../lib/demo193-source-empty-fields.json') as {
+  sourceSqlSha256: string;
+  entries: SourceEmptyFieldEntry[];
+};
 
 const { ApplicationError } = errors;
 
@@ -39,6 +45,50 @@ const TYPE_BY_UID: Record<string, PublicationType> = {
 const COURSE_GROUP_UID = 'api::course-group.course-group';
 const ARTICLE_UID = 'api::article.article';
 const SEMINAR_UID = 'api::seminar.seminar';
+const DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+const DEMO193_PUBLICATION_TYPE: Partial<Record<PublicationType, string>> = {
+  'course-group': 'course-group',
+  seminar: 'seminar',
+  article: 'article',
+};
+
+type SourceEmptyField = 'description' | 'seo_title' | 'seo_description';
+type SourceEmptyFieldEntry = {
+  type: string;
+  legacyId: string;
+  slug: string;
+  fields: SourceEmptyField[];
+};
+
+function allowsPinnedSourceEmptyFields(
+  strapi: Core.Strapi,
+  type: PublicationType,
+  entity: Record<string, unknown>,
+  missing: readonly string[],
+  verdictMessage: string,
+): boolean {
+  if (
+    process.env.IKPK_DEMO193_SOURCE_EMPTY_PUBLICATION !== '1' ||
+    process.env.IKPK_DEMO193_SOURCE_SQL_SHA256 !== DEMO193_SOURCE_SQL_SHA256 ||
+    sourceEmptyFields.sourceSqlSha256 !== DEMO193_SOURCE_SQL_SHA256 ||
+    !isTrustedImport(strapi)
+    // Do not treat other publication invariants (for example issued seminars requiring
+    // document rows) as source-empty required-field failures merely because `missing`
+    // happens to contain an allowlisted SEO field too.
+    || !verdictMessage.startsWith('не заполнены обязательные поля:')
+  ) return false;
+
+  const allowlistType = DEMO193_PUBLICATION_TYPE[type];
+  const legacyId = entity.legacy_id;
+  const slug = entity.slug;
+  if (!allowlistType || typeof legacyId !== 'string' || typeof slug !== 'string') return false;
+  const entry = (sourceEmptyFields.entries as SourceEmptyFieldEntry[]).find((candidate) =>
+    candidate.type === allowlistType && candidate.legacyId === legacyId && candidate.slug === slug);
+  if (!entry) return false;
+  const allowed = [...entry.fields].sort();
+  const actual = [...missing].sort();
+  return actual.length === allowed.length && actual.every((field, index) => field === allowed[index]);
+}
 
 /** Что нужно `populate`, чтобы обязательные поля-связи/компоненты не выглядели пустыми. */
 const POPULATE_BY_TYPE: Record<PublicationType, Record<string, unknown> | undefined> = {
@@ -310,7 +360,9 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
           : prospectiveEntity(type, existing, params.data ?? {});
         const record = buildPublicationRecord(type, entity);
         const verdict = checkPublication({ type, record });
-        if (!verdict.ok) throw new ApplicationError(verdict.message);
+        if (!verdict.ok && !allowsPinnedSourceEmptyFields(strapi, type, entity, verdict.missing, verdict.message)) {
+          throw new ApplicationError(verdict.message);
+        }
 
         if (type === 'seminar' && Array.isArray(entity.documents)) {
           for (const raw of entity.documents as Record<string, unknown>[]) {

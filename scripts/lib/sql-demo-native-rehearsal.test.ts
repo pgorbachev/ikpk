@@ -1,17 +1,23 @@
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-import { classifyMediaSourceUrls } from './sql-demo-native-rehearsal.js';
+import { classifyMediaSourceUrls, validatePrototypePublicationPlans, validatePrototypeResumeContentIdentities } from './sql-demo-native-rehearsal.js';
 import { loadSqlDemoAssets } from './sql-demo-assets.js';
 import type { SqlDemoOfflineAssetProof, SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
 import type { SqlDemoStrapi5Readback } from './sql-demo-native-conservation.js';
 import { prepareSqlDemoPrivateInputs } from './sql-demo-private-inputs.js';
 import type { SqlPublicReaderOptions } from './sql-public-reader.js';
 import type { SqlDemoRelease } from './sql-demo-release.js';
-import type { SqlMaterializerOptions } from './sql-public-materializer.js';
+import type { SqlMaterializerOptions, SqlMaterializerProjectionRecord } from './sql-public-materializer.js';
+
+const sourceEmptyFields = createRequire(import.meta.url)('../../cms/src/lib/demo193-source-empty-fields.json') as {
+  sourceSqlSha256: string;
+  entries: { type: string; legacyId: string; slug: string; fields: string[] }[];
+};
 
 const DUMP_BYTES = Buffer.from('synthetic immutable SQL dump');
 const SOURCE_SHA = createHash('sha256').update(DUMP_BYTES).digest('hex');
@@ -30,6 +36,42 @@ const TARGETS: Record<TargetName, TargetConfig> = {
   },
 };
 const prepareSqlDemoPrivateInputsActual = prepareSqlDemoPrivateInputs;
+
+function pinnedPublicationPlans(): SqlMaterializerProjectionRecord[] {
+  return sourceEmptyFields.entries.map((entry, index) => {
+    const attributes: Record<string, unknown> = {
+      name: 'source-backed',
+      title: 'source-backed',
+      slug: entry.slug,
+      description: 'source-backed',
+      published_date: '2026-10-13T00:00:00.000Z',
+      documents_state: 'unconfirmed',
+      documents: [],
+      body: 'source-backed',
+      seo: { seo_title: 'source-backed', seo_description: 'source-backed' },
+    };
+    for (const field of entry.fields) {
+      if (field === 'description') attributes.description = null;
+      else (attributes.seo as Record<string, unknown>)[field] = null;
+    }
+    const collection = (entry.type === 'course-group' ? 'course-groups' : entry.type === 'seminar' ? 'seminars' : 'articles') as SqlMaterializerProjectionRecord['collection'];
+    const sourceTable = entry.type === 'course-group' ? 'Programs' : entry.type === 'seminar' ? 'Seminars' : 'Articles';
+    const relations = entry.type === 'course-group'
+      ? [{ field: 'institute', cardinality: 'single' as const, legacyIds: ['approved-institute'], collection: 'institutes' as SqlMaterializerProjectionRecord['collection'] }]
+      : entry.type === 'seminar'
+        ? [{ field: 'course_group', cardinality: 'single' as const, legacyIds: ['approved-program'], collection: 'course-groups' as SqlMaterializerProjectionRecord['collection'] }]
+        : [{ field: 'categories', cardinality: 'many' as const, legacyIds: ['approved-program'], collection: 'course-groups' as SqlMaterializerProjectionRecord['collection'] }];
+    return {
+      collection,
+      sourceTable,
+      sourceId: index + 1,
+      legacyId: entry.legacyId,
+      attributes,
+      ...(entry.type === 'article' ? { image: { field: 'image' as const, sourceId: 'approved-image' } } : {}),
+      relations,
+    };
+  });
+}
 
 type TargetName = 'A' | 'B';
 type TargetConfig = {
@@ -71,7 +113,7 @@ type SqlDemoNativeRehearsalIo = {
   readStaticDocument(target: OwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: OwnedTarget): Promise<OwnedTarget>;
   readPublished(target: OwnedTarget): Promise<SqlDemoStrapi5Readback>;
-  readDraftContentIdentities(target: OwnedTarget): Promise<Record<string, readonly { legacyId: string; slug?: string }[]>>;
+  readDraftContentIdentities(target: OwnedTarget): Promise<Record<string, readonly { legacyId: string; documentId: string; slug?: string }[]>>;
   prepareResumeMediaInventory(target: OwnedTarget, proofs: readonly SqlDemoOfflineAssetProof[]): Promise<unknown>;
   capture(targets: readonly OwnedTarget[]): Promise<void>;
   stopOwnedSqlSource(lease: OwnedSqlSource): Promise<void>;
@@ -190,6 +232,48 @@ function targetConfig(input: TargetConfig & { name: TargetName; token: string })
     dataDirectory: input.dataDirectory, uploadDirectory: input.uploadDirectory,
   };
 }
+
+describe('pinned DEMO193 publication exceptions', () => {
+  it('accepts exactly the optional empty fields in every pinned source identity', () => {
+    expect(validatePrototypePublicationPlans(pinnedPublicationPlans(), sourceEmptyFields.sourceSqlSha256)).toEqual({
+      planCount: 218,
+      exceptionCount: 218,
+      exceptionsByField: { description: 21, seo_description: 211, seo_title: 211 },
+    });
+  });
+
+  it('keeps required identity/content fields strict and binds the exception to the pinned SQL digest', () => {
+    const plans = pinnedPublicationPlans();
+    const articles = plans.filter((plan) => plan.collection === 'articles');
+    articles[0]!.attributes.body = '';
+    expect(() => validatePrototypePublicationPlans(plans, sourceEmptyFields.sourceSqlSha256))
+      .toThrow(expect.objectContaining({ safeField: 'body' }));
+    expect(() => validatePrototypePublicationPlans(pinnedPublicationPlans(), '0'.repeat(64)))
+      .toThrow(/source pin/);
+  });
+
+  it('permits only exact published/draft source identities and requires twins to share documentId', () => {
+    const expected = new Map<string, ReadonlyMap<string, string | undefined>>([
+      ['pages', new Map([['statyi', 'statyi']])],
+      ...COLLECTIONS.filter((collection) => collection !== 'pages').map((collection) => [collection, new Map()] as const),
+    ]);
+    const published = emptyReadback();
+    published.collections.pages = [{ id: 1, documentId: 'approved-doc', legacy_id: 'statyi', slug: 'statyi', publishedAt: '2026-10-13T00:00:00.000Z' }];
+    validatePrototypeResumeContentIdentities(published, Object.fromEntries(COLLECTIONS.map((collection) => [
+      collection,
+      collection === 'pages' ? [{ legacyId: 'statyi', documentId: 'approved-doc', slug: 'statyi' }] : [],
+    ])), expected);
+
+    expect(() => validatePrototypeResumeContentIdentities(published, Object.fromEntries(COLLECTIONS.map((collection) => [
+      collection,
+      collection === 'pages' ? [{ legacyId: 'unapproved', documentId: 'foreign-doc', slug: 'unapproved' }] : [],
+    ])), expected)).toThrow(/unapproved identity/);
+    expect(() => validatePrototypeResumeContentIdentities(published, Object.fromEntries(COLLECTIONS.map((collection) => [
+      collection,
+      collection === 'pages' ? [{ legacyId: 'statyi', documentId: 'different-doc', slug: 'statyi' }] : [],
+    ])), expected)).toThrow(/one approved document identity/);
+  });
+});
 
 function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
   const io: SqlDemoNativeRehearsalIo = {
@@ -720,22 +804,14 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
     expect(safeError).not.toContain('private.example.invalid');
   });
 
-  it('refuses an unexpected draft identity before continuing the preserved prototype target', async () => {
-    const base = options();
-    const draftIdentities = Object.fromEntries(COLLECTIONS.map((collection) => [collection, []])) as Record<string, readonly { legacyId: string; slug?: string }[]>;
-    draftIdentities.pages = [{ legacyId: 'unapproved-page', slug: 'unapproved-page' }];
-    vi.mocked(base.io.readDraftContentIdentities).mockResolvedValueOnce(draftIdentities);
-    const caught = await runPrototype({
-      reader: { ...base.reader, dumpPath },
-      privateInputConfig: base.privateInputConfig,
-      target: { ...TARGETS.A, resumeExistingMediaOnly: true },
-      snapshotDirectory: join(dumpDirectory, 'snapshot'),
-      io: base.io,
-    }).catch((error: unknown) => error);
-
-    expect(caught).toMatchObject({ code: 'PARTIAL_TARGET_RESUME_INVALID' });
-    expect((caught as Error).message).not.toContain('unapproved-page');
-    expect(base.io.readDraftContentIdentities).toHaveBeenCalledTimes(1);
-    expect(base.io.prepareResumeMediaInventory).not.toHaveBeenCalled();
+  it('rejects an unexpected draft identity before media continuation', () => {
+    const expected = new Map<string, ReadonlyMap<string, string | undefined>>([
+      ...COLLECTIONS.map((collection) => [collection, new Map()] as const),
+    ]);
+    const drafts = Object.fromEntries(COLLECTIONS.map((collection) => [
+      collection,
+      collection === 'pages' ? [{ legacyId: 'unapproved-page', documentId: 'unknown-doc', slug: 'unapproved-page' }] : [],
+    ]));
+    expect(() => validatePrototypeResumeContentIdentities(emptyReadback(), drafts, expected)).toThrow(/unapproved identity/);
   });
 });
