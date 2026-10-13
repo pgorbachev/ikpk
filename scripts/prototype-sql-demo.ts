@@ -55,8 +55,8 @@ async function ensurePrivateDirectory(path: string): Promise<void> {
 }
 async function digestFile(path: string): Promise<string> { return sha256(await readFile(path)); }
 
-function extractManifestMembers(manifest: SqlDemoAssetManifest): void {
-  const rows = manifest.entries.map((entry) => ({ path: entry.archiveRelativePath, sha256: entry.sha256 }));
+function extractManifestMembers(manifest: SqlDemoAssetManifest, replacementSourceIds: string[]): void {
+  const rows = manifest.entries.map((entry) => ({ path: entry.archiveRelativePath, sha256: entry.sha256, sourceFileId: entry.sourceFileId }));
   // The one approved Barral replacement is deliberately absent from this ZIP list:
   // its bytes come from the separately pinned Git supplement, not the missing original.
   if (rows.length !== 618 || manifest.entries.filter((entry) => entry.sourceFileType === 'image').length !== 562 ||
@@ -66,35 +66,59 @@ function extractManifestMembers(manifest: SqlDemoAssetManifest): void {
   const python = String.raw`
 import hashlib, json, os, pathlib, stat, sys, zipfile
 archive, root = sys.argv[1], pathlib.Path(sys.argv[2]).resolve()
-rows = json.load(sys.stdin)
+payload = json.load(sys.stdin)
+rows = payload['rows']
+replacement_ids = set(payload['replacementSourceIds'])
 root.mkdir(mode=0o700, parents=True, exist_ok=True)
-if any(root.iterdir()): raise SystemExit('destination-not-empty')
-seen=set(); aggregate=hashlib.sha256(); total=0
+seen=set(); aggregate=hashlib.sha256(); total=0; missing=[]; validated=[]; written=0; reused=0
 with zipfile.ZipFile(archive) as z:
   names=set(z.namelist())
+  expected=set()
   for row in rows:
     name=row['path']
     p=pathlib.PurePosixPath(name)
     if p.is_absolute() or '\\' in name or any(x in ('', '.', '..') for x in p.parts) or name in seen: raise SystemExit('unsafe-or-duplicate-path')
     seen.add(name)
-    info=z.getinfo(name)
+    expected.add(name)
+    try: info=z.getinfo(name)
+    except KeyError:
+      missing.append(row['sourceFileId'] in replacement_ids)
+      continue
     if stat.S_ISLNK(info.external_attr >> 16): raise SystemExit('archive-symlink')
     data=z.read(info)
     digest=hashlib.sha256(data).hexdigest()
     if digest != row['sha256']: raise SystemExit('archive-byte-hash-mismatch')
+    validated.append((row, p, data, digest))
+  # Complete inventory and byte verification before creating any extracted files.
+  if missing:
+    print(json.dumps({'count':len(seen),'bytes':0,'identitySha256':hashlib.sha256().hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'writtenCount':0,'reusedCount':0,'unexpectedExistingCount':0}))
+    raise SystemExit(0)
+  for row, p, data, digest in validated:
     target=(root / pathlib.Path(*p.parts)).resolve()
     if root not in target.parents: raise SystemExit('path-escape')
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd=os.open(target, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
-    with os.fdopen(fd,'wb') as f: f.write(data)
+    if target.exists():
+      if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != row['sha256']: raise SystemExit('existing-file-hash-mismatch')
+      reused += 1
+    else:
+      fd=os.open(target, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
+      with os.fdopen(fd,'wb') as f: f.write(data)
+      written += 1
     aggregate.update((name+'\0'+digest+'\n').encode()); total += len(data)
-print(json.dumps({'count':len(seen),'bytes':total,'identitySha256':aggregate.hexdigest()}))
+unexpected=0
+for path in root.rglob('*'):
+  if path.is_symlink(): raise SystemExit('existing-tree-symlink')
+  if path.is_file() and path.relative_to(root).as_posix() not in expected: unexpected += 1
+result={'count':len(seen),'bytes':total,'identitySha256':aggregate.hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'writtenCount':written,'reusedCount':reused,'unexpectedExistingCount':unexpected}
+print(json.dumps(result))
 `;
   const output = execFileSync('python3', ['-c', python, archivePath, privateInputsRoot], {
-    encoding: 'utf8', input: JSON.stringify(rows), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: artifactsRoot }, maxBuffer: 1024 * 1024,
+    encoding: 'utf8', input: JSON.stringify({ rows, replacementSourceIds }), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: artifactsRoot }, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'],
   });
-  const result = JSON.parse(output) as { count: number; bytes: number; identitySha256: string };
-  if (result.count !== 619 || !Number.isSafeInteger(result.bytes) || !/^[a-f0-9]{64}$/.test(result.identitySha256)) throw new Error('approved archive extraction result did not match');
+  const result = JSON.parse(output) as { count: number; bytes: number; identitySha256: string; missingCount: number; missingApprovedReplacementCount: number; missingOtherCount: number; writtenCount: number; reusedCount: number; unexpectedExistingCount: number };
+  if (result.count !== 618 || result.missingCount || result.unexpectedExistingCount || !Number.isSafeInteger(result.bytes) || !/^[a-f0-9]{64}$/.test(result.identitySha256)) {
+    throw new Error(`approved archive inventory mismatch (count=${result.count}, missing=${result.missingCount}, replacementMissing=${result.missingApprovedReplacementCount}, otherMissing=${result.missingOtherCount}, unexpectedExisting=${result.unexpectedExistingCount})`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -115,10 +139,20 @@ async function main(): Promise<void> {
   const decisionPath = join(privateRepo, 'evidence/2026-10-13/sql-active-records-owner-decision.json');
   const decisionBytes = await readFile(decisionPath);
   if (sha256(decisionBytes) !== '0149411316a006dbc12f0f662c0b6aebd9d9ed8140be66e04a32aca18cca061e') throw new Error('all-active owner decision pin mismatch');
-  const decision = JSON.parse(decisionBytes.toString('utf8')) as { demoWriteOrImportAuthorization?: unknown; productionAcceptance?: unknown; identityAdditions?: { sourceTable: string; sourceId: number; identityAdditionApprovedForDemo193: boolean }[] };
+  const decision = JSON.parse(decisionBytes.toString('utf8')) as {
+    demoWriteOrImportAuthorization?: unknown;
+    productionAcceptance?: unknown;
+    identityAdditions?: { sourceTable: string; sourceId: number; identityAdditionApprovedForDemo193: boolean }[];
+    ownerDecision?: { media?: { missingOriginalReplacements?: { sourceFileId: string; sourceBytesAvailable: boolean; demoApproved: boolean }[] } };
+  };
   const additions = new Set((decision.identityAdditions ?? []).filter((row) => row.identityAdditionApprovedForDemo193).map((row) => `${row.sourceTable}#${row.sourceId}`));
   if (decision.demoWriteOrImportAuthorization !== true || decision.productionAcceptance !== false || additions.size !== 3 ||
       !['Seminars#361', 'Seminars#362', 'Teachers#88'].every((identity) => additions.has(identity))) throw new Error('all-active decision scope mismatch');
+  const replacements = decision.ownerDecision?.media?.missingOriginalReplacements ?? [];
+  if (replacements.length !== 1 || replacements[0]!.sourceBytesAvailable !== false || replacements[0]!.demoApproved !== true) {
+    throw new Error('pinned Barral missing-original replacement scope mismatch');
+  }
+  const replacementSourceIds = replacements.map((row) => row.sourceFileId);
 
   const approved = JSON.parse(Buffer.from(privateJson['approved-supplements.json'].bytes).toString('utf8')) as { supplements: { path: string; revision: string; sha256: string; bytes: number }[] };
   if (!Array.isArray(approved.supplements) || approved.supplements.length !== 31) throw new Error('approved Git blob count mismatch');
@@ -152,7 +186,7 @@ async function main(): Promise<void> {
     target: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads },
     snapshotDirectory,
     io,
-    materializeApprovedAssets: async (manifest) => extractManifestMembers(manifest),
+    materializeApprovedAssets: async (manifest) => extractManifestMembers(manifest, replacementSourceIds),
   });
   const snapshot = JSON.parse(await readFile(join(snapshotDirectory, 'snapshot.json'), 'utf8')) as { snapshotId?: unknown; fingerprint?: unknown; content?: { media?: unknown[]; types?: Record<string, unknown[]> } };
   if (typeof snapshot.snapshotId !== 'string' || typeof snapshot.fingerprint !== 'string' || !snapshot.content?.media?.length) throw new Error('live CMS snapshot identity or media store was missing');
