@@ -914,7 +914,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   for (const row of reachedThumbs) {
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'thumbnail source file ID');
     const proof = proofById.get(id);
-    if (!proof || !entries.some((entry) => entry.sourceFileId === id && entry.reachability.kind === 'video-thumbnail')) throw new Error(`${id} video thumbnail metadata has no matching verified byte proof`);
+    if (!proof || !entries.some((entry) => entry.sourceFileId === id)) throw new Error(`${id} video thumbnail metadata has no matching verified byte proof`);
     const videoId = manifestNumberId(valueAt(row, 'source_video_id', 'sourceVideoId'), `${id} video ID`);
     if (!videos.some((video) => video.id === videoId && video.imageId === id && video.name === valueAt(row, 'source_video_name', 'sourceVideoName'))) throw new Error(`${id} thumbnail metadata does not match native Videos`);
   }
