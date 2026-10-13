@@ -144,7 +144,7 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
     ? error.message.match(/video decision source association mismatch \(sourceRow=(true|false), mappedRow=(true|false), sourceUrlMatch=(true|false), mappedUrlMatch=(true|false), sourceSlugMatches=(true|false)\)/)
     : null;
   const assetInventory = error instanceof Error
-    ? error.message.match(/approved archive inventory mismatch \(count=(\d+), missing=(\d+), replacementMissing=(\d+), otherMissing=(\d+), unexpectedExisting=(\d+)\)/)
+    ? error.message.match(/approved archive inventory mismatch \(count=(\d+), missing=(\d+), replacementMissing=(\d+), otherMissing=(\d+), ambiguous=(\d+), unexpectedExisting=(\d+)\)/)
     : null;
   return {
     causeCategory,
@@ -162,7 +162,8 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
       missingEntryCount: Number(assetInventory[2]),
       missingApprovedReplacementCount: Number(assetInventory[3]),
       missingOtherEntryCount: Number(assetInventory[4]),
-      unexpectedExistingFileCount: Number(assetInventory[5]),
+      ambiguousArchiveMemberCount: Number(assetInventory[5]),
+      unexpectedExistingFileCount: Number(assetInventory[6]),
     } } : {}),
   };
 }

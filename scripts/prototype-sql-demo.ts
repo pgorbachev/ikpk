@@ -70,9 +70,13 @@ payload = json.load(sys.stdin)
 rows = payload['rows']
 replacement_ids = set(payload['replacementSourceIds'])
 root.mkdir(mode=0o700, parents=True, exist_ok=True)
-seen=set(); aggregate=hashlib.sha256(); total=0; missing=[]; validated=[]; written=0; reused=0
+seen=set(); claimed=set(); aggregate=hashlib.sha256(); total=0; missing=[]; ambiguous=0; validated=[]; written=0; reused=0
 with zipfile.ZipFile(archive) as z:
   names=set(z.namelist())
+  roots={pathlib.PurePosixPath(name).parts[0] for name in names if pathlib.PurePosixPath(name).parts}
+  if len(roots) != 1: raise SystemExit('archive-top-level-root-not-unique')
+  archive_root=next(iter(roots))
+  if '/' in archive_root or '\\' in archive_root or archive_root in ('.', '..'): raise SystemExit('unsafe-archive-root')
   expected=set()
   for row in rows:
     name=row['path']
@@ -80,18 +84,23 @@ with zipfile.ZipFile(archive) as z:
     if p.is_absolute() or '\\' in name or any(x in ('', '.', '..') for x in p.parts) or name in seen: raise SystemExit('unsafe-or-duplicate-path')
     seen.add(name)
     expected.add(name)
-    try: info=z.getinfo(name)
-    except KeyError:
+    member=name if name in names else f'{archive_root}/{name}'
+    if member not in names:
       missing.append(row['sourceFileId'] in replacement_ids)
       continue
+    if member in claimed: raise SystemExit('archive-member-reused')
+    claimed.add(member)
+    member_path=pathlib.PurePosixPath(member)
+    if member_path.is_absolute() or '\\' in member or any(x in ('', '.', '..') for x in member_path.parts): raise SystemExit('unsafe-archive-member-path')
+    info=z.getinfo(member)
     if stat.S_ISLNK(info.external_attr >> 16): raise SystemExit('archive-symlink')
     data=z.read(info)
     digest=hashlib.sha256(data).hexdigest()
     if digest != row['sha256']: raise SystemExit('archive-byte-hash-mismatch')
     validated.append((row, p, data, digest))
   # Complete inventory and byte verification before creating any extracted files.
-  if missing:
-    print(json.dumps({'count':len(seen),'bytes':0,'identitySha256':hashlib.sha256().hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'writtenCount':0,'reusedCount':0,'unexpectedExistingCount':0}))
+  if missing or ambiguous:
+    print(json.dumps({'count':len(seen),'bytes':0,'identitySha256':hashlib.sha256().hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'ambiguousMemberCount':ambiguous,'writtenCount':0,'reusedCount':0,'unexpectedExistingCount':0}))
     raise SystemExit(0)
   for row, p, data, digest in validated:
     target=(root / pathlib.Path(*p.parts)).resolve()
@@ -109,15 +118,15 @@ unexpected=0
 for path in root.rglob('*'):
   if path.is_symlink(): raise SystemExit('existing-tree-symlink')
   if path.is_file() and path.relative_to(root).as_posix() not in expected: unexpected += 1
-result={'count':len(seen),'bytes':total,'identitySha256':aggregate.hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'writtenCount':written,'reusedCount':reused,'unexpectedExistingCount':unexpected}
+result={'count':len(seen),'bytes':total,'identitySha256':aggregate.hexdigest(),'missingCount':len(missing),'missingApprovedReplacementCount':sum(missing),'missingOtherCount':len(missing)-sum(missing),'ambiguousMemberCount':ambiguous,'writtenCount':written,'reusedCount':reused,'unexpectedExistingCount':unexpected}
 print(json.dumps(result))
 `;
   const output = execFileSync('python3', ['-c', python, archivePath, privateInputsRoot], {
     encoding: 'utf8', input: JSON.stringify({ rows, replacementSourceIds }), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: artifactsRoot }, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'],
   });
-  const result = JSON.parse(output) as { count: number; bytes: number; identitySha256: string; missingCount: number; missingApprovedReplacementCount: number; missingOtherCount: number; writtenCount: number; reusedCount: number; unexpectedExistingCount: number };
-  if (result.count !== 618 || result.missingCount || result.unexpectedExistingCount || !Number.isSafeInteger(result.bytes) || !/^[a-f0-9]{64}$/.test(result.identitySha256)) {
-    throw new Error(`approved archive inventory mismatch (count=${result.count}, missing=${result.missingCount}, replacementMissing=${result.missingApprovedReplacementCount}, otherMissing=${result.missingOtherCount}, unexpectedExisting=${result.unexpectedExistingCount})`);
+  const result = JSON.parse(output) as { count: number; bytes: number; identitySha256: string; missingCount: number; missingApprovedReplacementCount: number; missingOtherCount: number; ambiguousMemberCount: number; writtenCount: number; reusedCount: number; unexpectedExistingCount: number };
+  if (result.count !== 618 || result.missingCount || result.ambiguousMemberCount || result.unexpectedExistingCount || !Number.isSafeInteger(result.bytes) || !/^[a-f0-9]{64}$/.test(result.identitySha256)) {
+    throw new Error(`approved archive inventory mismatch (count=${result.count}, missing=${result.missingCount}, replacementMissing=${result.missingApprovedReplacementCount}, otherMissing=${result.missingOtherCount}, ambiguous=${result.ambiguousMemberCount}, unexpectedExisting=${result.unexpectedExistingCount})`);
   }
 }
 
