@@ -89,7 +89,9 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'course_groups', field: 'image', source: 'image', transform: 'mediaRef' },
 
-  // seminars — БЕЗ institute_legacy_id: у семинара в схеме нет отношения `institute`
+  // seminars — без `seminar_status`, `price` и `duration`: в установленной схеме CMS их нет.
+  // Цена и длительность приходят из проведений, статус сайт не читает (`data.ts`, `Seminar`).
+  // БЕЗ institute_legacy_id: у семинара в схеме нет отношения `institute`
   // (только `course_group`). Институт восстанавливается ниже по цепочке group→institute.
   { type: 'seminars', field: 'legacy_id', source: 'legacy_id' },
   { type: 'seminars', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
@@ -98,9 +100,6 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'order', source: 'order' },
   { type: 'seminars', field: 'images', source: 'image', transform: 'mediaUrlList' },
   { type: 'seminars', field: 'course_group_legacy_id', source: 'course_group.legacy_id' },
-  { type: 'seminars', field: 'status', source: 'seminar_status' },
-  { type: 'seminars', field: 'price', source: 'price' },
-  { type: 'seminars', field: 'duration', source: 'duration' },
   { type: 'seminars', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'seminars', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'seminars', field: 'description_html', source: 'description' },
@@ -149,7 +148,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'schedule_entries', field: 'additionalText', source: 'additionalText' },
   { type: 'schedule_entries', field: 'duration', source: 'duration' },
   { type: 'schedule_entries', field: 'seminar', source: 'seminar' },
-  { type: 'schedule_entries', field: 'teachers', source: 'teachers' },
+  { type: 'schedule_entries', field: 'teachers', source: 'teachers', transform: 'entryTeachers' },
 
   // news
   { type: 'news', field: 'legacy_id', source: 'legacy_id' },
@@ -187,6 +186,69 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'video_playlists', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'video_playlists', field: 'seo_description', source: 'seo.seo_description' },
 ] as const;
+
+/**
+ * Поля записей CMS, которые съём НАМЕРЕННО не переносит в снимок, — с причиной. Список
+ * покрывает обе формы данных: прежнюю схему `cms/` и схему установленной CMS (4016ea47).
+ * Съём отказывает на поле записи, которого нет ни в `FIELD_MAP`, ни здесь
+ * (`unknownRecordFields`): новое поле без решения о нём — остановка, а не строка в логе.
+ *
+ * «Не используется в этом релизе» — решение, а не забытое соответствие: часть полей уже
+ * заполнена в CMS (`trait`, даты новостей и акций, `documents_state`), но сайт их пока не
+ * показывает. Включение любого из них в сайт — отдельная работа.
+ */
+const REVERSE = 'обратная сторона связи: прямая сторона уже в карте';
+const NOT_YET = 'не используется сайтом в этом релизе';
+const OLD_SCHEMA = 'только в прежней схеме; цена и длительность берутся из проведений, статус сайт не читает';
+export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  institutes: { course_groups: REVERSE },
+  course_groups: { seminars: REVERSE, is_article_category: NOT_YET },
+  seminars: {
+    schedule_entries: REVERSE,
+    seminar_status: OLD_SCHEMA,
+    price: OLD_SCHEMA,
+    duration: OLD_SCHEMA,
+    documents: NOT_YET,
+    documents_state: NOT_YET,
+    documents_confirmation_author: NOT_YET,
+    documents_confirmation_date: NOT_YET,
+    documents_confirmation_source: NOT_YET,
+    learning_plan: NOT_YET,
+    learning_mode: NOT_YET,
+    recommendations: NOT_YET,
+  },
+  teachers: { seminars: REVERSE, trait: NOT_YET },
+  articles: { categories: NOT_YET },
+  schedule_entries: { admin_label: 'служебная подпись для редактора, на сайт не выводится' },
+  news: { date: NOT_YET },
+  promotions: { date: NOT_YET },
+};
+
+/** Служебные поля ответа Strapi 5 и компонента: не атрибуты схемы. */
+const SYSTEM_FIELDS = new Set(['id', 'documentId', 'createdAt', 'updatedAt', 'publishedAt']);
+/** Подполя компонента `shared.seo`, которые сайт пока не читает. */
+const UNMAPPED_SEO_FIELDS = new Set(['og_image', 'noindex']);
+
+/**
+ * Поля записи, о которых нет решения: ни в карте, ни в `UNMAPPED_SCHEMA_FIELDS`, ни служебные.
+ * Проверяются и подполя `seo` — компонент тоже меняется вместе со схемой.
+ */
+export function unknownRecordFields(type: string, record: Record<string, unknown>): string[] {
+  const mapped = FIELD_MAP.filter((e) => e.type === type).map((e) => e.source);
+  const roots = new Set(mapped.map((source) => source.split('.')[0]!));
+  const seoMapped = new Set(mapped.filter((s) => s.startsWith('seo.')).map((s) => s.slice(4)));
+  const unknown: string[] = [];
+  for (const [field, value] of Object.entries(record)) {
+    if (SYSTEM_FIELDS.has(field)) continue;
+    if (!roots.has(field) && !UNMAPPED_SCHEMA_FIELDS[type]?.[field]) unknown.push(`${type}.${field}`);
+    if (field === 'seo' && value && typeof value === 'object') {
+      for (const sub of Object.keys(value)) {
+        if (sub !== 'id' && !seoMapped.has(sub) && !UNMAPPED_SEO_FIELDS.has(sub)) unknown.push(`${type}.seo.${sub}`);
+      }
+    }
+  }
+  return unknown;
+}
 
 /**
  * Полнота относительно КОНТРАКТА снимка (`content-contract.ts`, `REQUIRED_SNAPSHOT_FIELDS`),

@@ -75,6 +75,10 @@ const relRef = (prefix: string, name: string): Record<string, unknown> => ({
   legacy_id: key(prefix),
 });
 
+/** Поле, которого у типа в схеме CMS нет, в ответе заглушки тоже не появляется. */
+const without = (record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(record).filter(([k]) => !keys.includes(k)));
+
 /** Внешняя ссылка в теле статьи: предмет сценария «внешние ссылки в содержимом сохраняются». */
 export const EXTERNAL_LINK_IN_BODY = 'https://example.invalid/external-article';
 
@@ -117,7 +121,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           image: stubMedia(3),
           price: 1000,
           duration: '2 days',
-          status: 'active',
+          seminar_status: 'planned',
           course_group: relRef('cg', 'Program'),
           teachers: [relRef('teach', 'Teacher')],
           seo: seo('Seminar'),
@@ -137,7 +141,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     articles: {
       records: [
         {
-          ...base('art', 'Article'),
+          ...without(base('art', 'Article'), 'name'),
           title: 'Article',
           body: `<p>body with <a href="${EXTERNAL_LINK_IN_BODY}">external link</a></p>`,
           image: stubMedia(5),
@@ -149,14 +153,14 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     'schedule-entries': {
       records: [
         {
-          ...base('ev', 'Event'),
+          ...without(base('ev', 'Event'), 'slug'),
           startAt: '2026-09-01T00:00:00.000Z',
           endAt: '2026-09-02T00:00:00.000Z',
           city: 'Saint Petersburg',
           price: 5000,
           oldPrice: 6000,
           isFree: false,
-          status: 'active',
+          entry_status: 'active',
           registrationFormLink: 'https://example.invalid/form',
           description: '<p>event description</p>',
           additionalText: '<p>addendum</p>',
@@ -169,7 +173,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     'news-items': {
       records: [
         {
-          ...base('news', 'News'),
+          ...without(base('news', 'News'), 'slug'),
           description: '<p>news</p>',
           image: stubMedia(6),
           link: 'https://example.invalid',
@@ -180,7 +184,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     promotions: {
       records: [
         {
-          ...base('promo', 'Promotion'),
+          ...without(base('promo', 'Promotion'), 'slug'),
           description: '<p>promotion</p>',
           // Тот же файл, что у новости: повторная ссылка на одно содержимое обязана дать ОДНУ
           // запись хранилища, а не две (идемпотентность по содержимому).
@@ -194,7 +198,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     pages: {
       records: [
         {
-          ...base('page', 'Page'),
+          ...without(base('page', 'Page'), 'name'),
           title: 'Page',
           body: '<p>page body</p>',
           seo: seo('Page'),

@@ -13,6 +13,7 @@ import {
   FIELD_MAP,
   SOURCE_TYPES,
   checkFieldMapAgainstSchema,
+  unknownRecordFields,
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
@@ -179,12 +180,51 @@ function mediaUrlList(value: unknown): unknown {
   return ref?.url ? [ref.url] : undefined;
 }
 
+/**
+ * Преподаватели проведения. Прежнее JSON-поле давало `{id, fullName}` — эту форму ищет страница
+ * семинара; установленная CMS отдаёт связь с записью преподавателя, и она сводится к той же
+ * форме. Связь без `legacy_id` или имени — отказ: страница построила бы ссылку в никуда.
+ */
+function entryTeachers(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    const t = item as Record<string, unknown> | null;
+    if (t && typeof t === 'object' && 'fullName' in t) return t;
+    const id = t?.legacy_id;
+    if (t && typeof t.name === 'string' && (typeof id === 'string' || typeof id === 'number') && id !== '') {
+      return { id, fullName: t.name };
+    }
+    throw new Error(`schedule_entries.teachers: неподдерживаемая форма преподавателя ${JSON.stringify(t)?.slice(0, 120)}`);
+  });
+}
+
+const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList']);
+
+/**
+ * Установленная CMS отдаёт медиа списком (`multiple: true`), прежняя схема — объектом. Сайт
+ * показывает одно изображение: список из одного элемента разворачивается, из нескольких — отказ,
+ * потому что молча выбрать одно значило бы потерять остальные. Любая другая форма — тоже отказ:
+ * так 13.10.2026 пропали все фото, а съём остался зелёным.
+ */
+function singleMedia(value: unknown, where: string): unknown {
+  if (Array.isArray(value) && value.length > 1) {
+    throw new Error(`${where}: ${value.length} файла в поле, сайт показывает одно`);
+  }
+  const item = Array.isArray(value) ? (value[0] ?? null) : value;
+  if (item === null || item === undefined) return item;
+  if (typeof item !== 'object' || typeof (item as Record<string, unknown>).url !== 'string') {
+    throw new Error(`${where}: неподдерживаемая форма медиа ${JSON.stringify(item)?.slice(0, 120)}`);
+  }
+  return item;
+}
+
 const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
   mediaUrl,
   mediaUrlList,
   refList,
+  entryTeachers,
   // `legacy_url` в CMS нет: выводится из `legacy_id`, тем же способом, что и
   // `scripts/refresh-catalog.ts` (`legacy_url: `/${group}/${s.slug}``) — относительный путь,
   // без домена.
@@ -193,6 +233,9 @@ const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
 
 function applyEntry(record: Record<string, unknown>, entry: FieldMapEntry, out: Record<string, unknown>): void {
   let value = resolveSource(record, entry.source);
+  if (entry.transform && MEDIA_TRANSFORMS.has(entry.transform)) {
+    value = singleMedia(value, `${entry.type}.${entry.source}`);
+  }
   if (entry.transform) {
     const fn = TRANSFORMS[entry.transform];
     if (!fn) throw new Error(`неизвестное преобразование ${entry.transform} (${entry.type}.${entry.field})`);
@@ -377,6 +420,21 @@ async function liveCapture(): Promise<void> {
     const first = mapCheck.missingSources[0]!;
     throw new Error(
       `источник исчез из схемы: поле снимка ${first.type}.${first.field} ждёт ${first.source}`,
+    );
+  }
+
+  // Поле записи без решения о нём — отказ, а не тихая потеря: проверяется ответ CMS, а не схема
+  // в checkout, потому что расходятся именно они.
+  const unknown = new Set<string>();
+  for (const st of SOURCE_TYPES) {
+    for (const record of rawByType[st.type]!) {
+      for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
+    }
+  }
+  if (unknown.size > 0) {
+    throw new Error(
+      `поля CMS без решения: ${[...unknown].sort().join(', ')} — добавить в FIELD_MAP или в ` +
+        'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts); снимок не записан',
     );
   }
 

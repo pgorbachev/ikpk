@@ -75,12 +75,16 @@ const base = (prefix: string, n: number, name: string): Record<string, unknown> 
   publishedAt: '2026-02-01T00:00:00.000Z',
 });
 
+/** Поле, которого у типа в схеме CMS нет, в ответе заглушки тоже не появляется. */
+const without = (record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(record).filter(([k]) => !keys.includes(k)));
+
 const ARTICLE_COUNT = 130;
 
 function article(n: number, over: Record<string, unknown> = {}): Record<string, unknown> {
   const title = `Статья ${n}`;
   return {
-    ...base('art', n, title),
+    ...without(base('art', n, title), 'name'),
     title,
     body: `<p>Тело статьи ${n}</p>`,
     image: media(n),
@@ -100,7 +104,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const seminars = Array.from({ length: 4 }, (_, i) =>
     ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', course_group: ref('cg', 1, 'Программа 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
-    ...base('ev', i + 1, `Событие ${i + 1}`),
+    ...without(base('ev', i + 1, `Событие ${i + 1}`), 'slug'),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
     endAt: `2026-09-0${i + 2}T00:00:00.000Z`,
     city: 'Санкт-Петербург',
@@ -123,9 +127,9 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     teachers: { records: teachers },
     articles: { records: Array.from({ length: ARTICLE_COUNT }, (_, i) => article(i + 1)) },
     'schedule-entries': { records: scheduleEntries },
-    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('news', i + 1, `Новость ${i + 1}`), description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
-    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...base('promo', i + 1, `Акция ${i + 1}`), description: '<p>Акция</p>', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
-    pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...base('page', i + 1, `Страница ${i + 1}`), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
+    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
+    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), description: '<p>Акция</p>', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
+    pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('page', i + 1, `Страница ${i + 1}`), 'name'), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
     ...over,
   };
