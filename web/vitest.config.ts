@@ -75,6 +75,7 @@ export default defineConfig({
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
       'tests/rich-content-render.test.ts',
+      'tests/maintenance-notice.render.test.ts',
     ],
   },
 });

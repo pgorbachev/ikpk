@@ -19,6 +19,7 @@ interface Props {
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
+import MaintenanceNotice from '../components/MaintenanceNotice.astro';
 import MotionScript from '../components/MotionScript.astro';
 import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
@@ -59,6 +60,7 @@ const {
         Демо-стенд: формы заявки отключены, обращения в CRM не создаются
       </div>
     )}
+    <MaintenanceNotice />
     <TopNav />
     {/* data-pagefind-body: индексируется только контент — шапка/футер с
         одинаковыми ссылками на всех страницах размывали релевантность.
