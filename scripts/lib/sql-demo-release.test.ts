@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { composeSqlDemoRelease, type SqlDemoAcceptedSupplements, type SqlDemoAllowlistedAssets, type SqlDemoOwnerDecisions, type SqlDemoTargetLocation, type SqlDemoVideoReferenceDecision } from './sql-demo-release.js';
+import { projectSqlPublicContentForConservation } from './sql-public-materializer.js';
 import type { SqlPublicContentResult } from './sql-public-content.js';
 
 const sourceHash = `sha256:${'a'.repeat(64)}`;
@@ -141,6 +142,15 @@ function syntheticVideoInputs() {
 }
 
 describe('composeSqlDemoRelease', () => {
+  it('passes the composed institute order and SEO fields into the CMS materializer plan', () => {
+    const release = composeSqlDemoRelease(mapped(), supplements(), assets(), ownerDecisions());
+    const plan = projectSqlPublicContentForConservation(release as never, { status: 'pending-confirmation', teachers: [], articles: [] });
+    expect(plan.find((item) => item.sourceTable === 'Institutes')).toMatchObject({
+      sourceId: 1,
+      attributes: { order: 7, seo: { seo_title: 'Accepted institute SEO', seo_description: 'Accepted institute description' } },
+    });
+  });
+
   it('keeps active SQL article fields authoritative when accepted corpus supplements are composed', () => {
     const sqlArticle = {
       sourceId: 361,
