@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
-import { chmod, cp, lstat, mkdir, open, readFile, readdir, realpath, symlink } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { createConnection } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -16,11 +16,6 @@ const COLLECTIONS: readonly SqlDemoNativeCollection[] = [
   'institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles',
   'news-items', 'promotions', 'video-playlists', 'pages',
 ];
-const collectionApi: Record<SqlDemoNativeCollection, string> = {
-  institutes: 'institutes', 'course-groups': 'course-groups', teachers: 'teachers', seminars: 'seminars',
-  'schedule-entries': 'schedule-entries', articles: 'articles', 'news-items': 'news-items',
-  promotions: 'promotions', 'video-playlists': 'video-playlists', pages: 'pages',
-};
 
 export interface SqlDemoNativeLocalIoOptions {
   source: {
@@ -56,12 +51,13 @@ type Child = ChildProcess & { pid: number };
 type SourceLease = SqlDemoNativeSqlSourceLease & { readonly id: string; readonly pid: number };
 type TargetState = {
   child: Child;
+  candidateDirectory: string;
   startTime: string;
   token: string;
   documents: Map<string, { sha256: string; bytes: number }>;
   lastSummary?: Record<string, unknown>;
 };
-type SourceTableWitness = { hash: string; tables: readonly { table: string; count: number; sha256: string }[] };
+type SourceTableWitness = { scope: 'reviewed-read-only-projection'; hash: string; tables: readonly { table: string; count: number; sha256: string }[] };
 type LeaseState = { child: Child; pid: number; startTime: string; cluster: string; pgCtl: string; psql: string; invocation?: SqlPublicPsqlInvocation; sourceWitness?: SourceTableWitness };
 
 const targetOwners = new WeakMap<object, TargetState>();
@@ -77,8 +73,17 @@ function sourceWitness(stdout: string): SourceTableWitness {
     if (!Array.isArray(rows)) throw fail('Source witness omitted a projected table');
     return { table, count: rows.length, sha256: sha256(Buffer.from(JSON.stringify(rows))) };
   });
-  return { hash: sha256(Buffer.from(JSON.stringify(tables))), tables };
+  return { scope: 'reviewed-read-only-projection', hash: sha256(Buffer.from(JSON.stringify(tables))), tables };
 }
+function sourceClaims(file: { provider_metadata?: unknown } | undefined): Record<string, unknown> {
+  const metadata = file?.provider_metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  const imported = (metadata as Record<string, unknown>).ikpk_media_import;
+  if (!imported || typeof imported !== 'object' || Array.isArray(imported)) return {};
+  const sources = (imported as Record<string, unknown>).sources;
+  return sources && typeof sources === 'object' && !Array.isArray(sources) ? sources as Record<string, unknown> : {};
+}
+function secret(): string { return randomBytes(32).toString('base64url'); }
 function isReviewedReadOnlyProjection(sql: string): boolean {
   const statements = sql.split(';').map((statement) => statement.trim()).filter(Boolean);
   return statements.length === 4 && statements[0] === 'BEGIN READ ONLY'
@@ -274,6 +279,123 @@ async function safePrivateRead(root: string, path: string): Promise<Buffer> {
   } finally { await handle.close(); }
 }
 
+async function copyTrackedCmsSource(
+  source: string,
+  destination: string,
+  exec: (command: string, args: readonly string[], options?: ExecOptions) => Promise<{ stdout: string }>,
+): Promise<void> {
+  const { stdout } = await exec('git', ['-C', source, 'ls-files', '-z']);
+  const paths = stdout.split('\0').filter(Boolean);
+  if (!paths.length) throw fail('Pinned CMS source has no tracked files');
+  for (const path of paths) {
+    const parts = path.split('/');
+    const top = parts[0] ?? '';
+    if (['.git', '.tmp', '.cache', '.strapi', 'dist', 'build', 'public'].includes(top)
+      || parts.some((part) => part === '.env' || part.startsWith('.env.'))) continue;
+    const sourcePath = resolve(source, ...parts);
+    const destinationPath = resolve(destination, ...parts);
+    if (!inside(source, sourcePath) || !inside(destination, destinationPath)) throw fail('Pinned CMS source contains an unsafe tracked path');
+    const stat = await lstat(sourcePath);
+    await mkdir(dirname(destinationPath), { recursive: true, mode: 0o700 });
+    if (stat.isSymbolicLink()) {
+      const link = await readlink(sourcePath);
+      const linkedPath = resolve(dirname(sourcePath), link);
+      const linkedRelative = relative(source, linkedPath).split(sep).join('/');
+      if (isAbsolute(link) || !inside(source, linkedPath)
+        || !paths.some((candidate) => candidate === linkedRelative || candidate.startsWith(`${linkedRelative}/`))) {
+        throw fail('Pinned CMS source contains an untracked or escaping symbolic link');
+      }
+      await symlink(link, destinationPath);
+      continue;
+    }
+    if (!stat.isFile()) throw fail('Pinned CMS source contains a non-file tracked entry');
+    const mode = (stat.mode & 0o111) === 0 ? 0o600 : 0o700;
+    await writeFile(destinationPath, await readFile(sourcePath), { mode, flag: 'wx' });
+  }
+}
+
+async function installPinnedCmsDependencies(
+  candidateDirectory: string,
+  exec: (command: string, args: readonly string[], options?: ExecOptions) => Promise<{ stdout: string }>,
+  pathValue: string,
+): Promise<void> {
+  const packageLock = join(candidateDirectory, 'package-lock.json');
+  const lockHash = sha256(await readFile(packageLock));
+  try {
+    const npmrc = await readFile(join(candidateDirectory, '.npmrc'), 'utf8');
+    if (/(?:_auth|password|token)\s*=/i.test(npmrc)) throw fail('Pinned CMS npm configuration contains credentials');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const home = join(candidateDirectory, '.home');
+  const temp = join(candidateDirectory, '.tmp');
+  await mkdir(home, { recursive: true, mode: 0o700 });
+  await mkdir(temp, { recursive: true, mode: 0o700 });
+  await exec('npm', ['ci', '--no-audit', '--no-fund'], {
+    cwd: candidateDirectory,
+    env: {
+      PATH: pathValue,
+      HOME: home,
+      TMPDIR: temp,
+      CI: 'true',
+      npm_config_userconfig: '/dev/null',
+      npm_config_globalconfig: '/dev/null',
+      npm_config_audit: 'false',
+      npm_config_fund: 'false',
+      npm_config_update_notifier: 'false',
+    },
+    timeout: 10 * 60 * 1000,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (sha256(await readFile(packageLock)) !== lockHash) throw fail('Pinned CMS lockfile changed during the isolated install');
+}
+
+async function installNativeTokenBootstrap(candidateDirectory: string, tokenPath: string): Promise<void> {
+  if (!inside(candidateDirectory, tokenPath)) throw fail('Native API token handoff path is unsafe');
+  const typescriptEntry = join(candidateDirectory, 'src', 'index.ts');
+  const javascriptEntry = join(candidateDirectory, 'src', 'index.js');
+  let entry: string;
+  let importPath: string;
+  try {
+    await lstat(typescriptEntry);
+    entry = typescriptEntry;
+    const originalEntry = join(candidateDirectory, 'src', 'index.native-adapter-original.ts');
+    await rename(entry, originalEntry);
+    importPath = './index.native-adapter-original';
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    try { await lstat(javascriptEntry); }
+    catch (javascriptError) {
+      if ((javascriptError as NodeJS.ErrnoException).code !== 'ENOENT') throw javascriptError;
+      throw fail('Pinned CMS has no application bootstrap entrypoint');
+    }
+    entry = typescriptEntry;
+    importPath = './index.js';
+  }
+  const typeImport = "import type { Core } from '@strapi/strapi';\n";
+  const contextType = ': { strapi: Core.Strapi }';
+  const serviceType = " as { create(input: Record<string, unknown>): Promise<{ accessKey?: unknown }> }";
+  const wrapper = `${typeImport}import { writeFile } from 'node:fs/promises';\nimport nativeOriginal from '${importPath}';\n\nexport default {\n  ...nativeOriginal,\n  async bootstrap({ strapi }${contextType}) {\n    if (nativeOriginal.bootstrap) await nativeOriginal.bootstrap({ strapi });\n    const tokenFile = process.env.IKPK_NATIVE_API_TOKEN_FILE;\n    if (!tokenFile) throw new Error('Native API token handoff path is missing');\n    const tokenService = strapi.service('admin::api-token')${serviceType};\n    const created = await tokenService.create({ name: 'sql-demo-native-rehearsal', description: 'Private ephemeral native rehearsal target', type: 'full-access', kind: 'content-api', lifespan: null });\n    if (typeof created.accessKey !== 'string' || !created.accessKey) throw new Error('Native API token creation failed');\n    await writeFile(tokenFile, created.accessKey, { encoding: 'utf8', flag: 'wx', mode: 0o600 });\n  },\n};\n`;
+  await writeFile(entry, wrapper, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+}
+
+async function takeNativeApiToken(path: string): Promise<string | undefined> {
+  let handle;
+  try { handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0) throw fail('Native API token handoff is not owner-only');
+    const token = (await handle.readFile('utf8')).trim();
+    if (!token || token.length > 4096 || /\s/.test(token)) throw fail('Native API token handoff is malformed');
+    await unlink(path);
+    return token;
+  } finally { await handle.close(); }
+}
+
 export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions | Record<string, unknown>): SqlDemoNativeRehearsalIo {
   const config = options as SqlDemoNativeLocalIoOptions;
   validateOptions(config);
@@ -305,14 +427,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await checkPrivateDirectory(join(config.privateArtifactsRoot, '.psql-home'), true);
   }
   const sourceEnvironment = { PATH: safeEnvironment.PATH, HOME: join(config.privateArtifactsRoot, '.psql-home'), PGOPTIONS: '-c default_transaction_read_only=on' };
-  const knownTargets = new Set<object>();
-  let capturedSourceWitness: SourceTableWitness | undefined;
-  let activeSourceLease: object | undefined;
+  let verifiedSourceWitness: SourceTableWitness | undefined;
   let sourceWitnessVerified = false;
 
   function owned(target: SqlDemoNativeOwnedTarget): TargetState {
     const state = targetOwners.get(target as object);
-    if (!state || !knownTargets.has(target as object)) throw fail('Target handle was not acquired by this adapter');
+    if (!state) throw fail('Target handle was not acquired by this adapter');
     return state;
   }
 
@@ -371,44 +491,60 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     const candidateDirectory = join(base, `target-${input.name.toLowerCase()}-${process.pid}-${Date.now()}`);
     await mkdir(candidateDirectory, { recursive: false, mode: 0o700 });
     const cmsRoot = config.cms.sourceDirectory;
-    await cp(cmsRoot, candidateDirectory, {
-      recursive: true, dereference: false,
-      filter: (path) => {
-        const relativePath = relative(cmsRoot, path);
-        const name = relativePath.split(sep)[0] ?? '';
-        return !['.git', '.tmp', '.cache', '.strapi', 'dist', 'build', 'public'].includes(name) && !name.startsWith('.env');
-      },
-    });
     const [dataDirectory, uploadDirectory, staticFilesDirectory] = [targetConfig.dataDirectory, targetConfig.uploadDirectory, targetConfig.staticFilesDirectory];
-    for (const path of [dataDirectory, uploadDirectory, staticFilesDirectory]) await checkPrivateDirectory(path, true);
-    await mkdir(join(candidateDirectory, 'public'), { recursive: true, mode: 0o700 });
-    await mkdir(join(candidateDirectory, '.tmp'), { recursive: true, mode: 0o700 });
-    await mkdir(join(candidateDirectory, '.home'), { recursive: true, mode: 0o700 });
-    await symlink(uploadDirectory, join(candidateDirectory, 'public', 'uploads'));
-    await symlink(staticFilesDirectory, join(candidateDirectory, 'public', 'static-files'));
+    try {
+      await copyTrackedCmsSource(cmsRoot, candidateDirectory, runFile);
+      await installPinnedCmsDependencies(candidateDirectory, runFile, safeEnvironment.PATH);
+      await mkdir(join(candidateDirectory, 'public'), { recursive: true, mode: 0o700 });
+      await mkdir(join(candidateDirectory, '.tmp'), { recursive: true, mode: 0o700 });
+      await mkdir(join(candidateDirectory, '.home'), { recursive: true, mode: 0o700 });
+      await installNativeTokenBootstrap(candidateDirectory, join(candidateDirectory, '.tmp', 'native-api-token'));
+      for (const path of [dataDirectory, uploadDirectory, staticFilesDirectory]) await checkPrivateDirectory(path, true);
+      await symlink(uploadDirectory, join(candidateDirectory, 'public', 'uploads'));
+      await symlink(staticFilesDirectory, join(candidateDirectory, 'public', 'static-files'));
+    } catch (error) {
+      await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
     const baseUrl = new URL(targetConfig.baseUrl);
     const strapiCli = join(candidateDirectory, 'node_modules', '@strapi', 'strapi', 'bin', 'strapi.js');
-    if (!inside(candidateDirectory, await realpath(strapiCli))) throw fail('Pinned Strapi CLI dependency escapes the private candidate');
-    const child = childProcess(spawn, config.cms.nodeExecutable, [strapiCli, config.cms.cmsStartScript], {
-      cwd: candidateDirectory,
-      env: {
-        PATH: safeEnvironment.PATH,
-        HOME: join(candidateDirectory, '.home'),
-        TMPDIR: join(candidateDirectory, '.tmp'),
-        NODE_ENV: 'development',
-        HOST: '127.0.0.1', PORT: baseUrl.port,
-        DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: join(dataDirectory, 'data.db'),
-        STRAPI_TELEMETRY_DISABLED: 'true',
-      },
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
+    let child: Child;
+    const targetSecrets = {
+      APP_KEYS: `${secret()},${secret()}`,
+      JWT_SECRET: secret(),
+      ADMIN_JWT_SECRET: secret(),
+      API_TOKEN_SALT: secret(),
+      TRANSFER_TOKEN_SALT: secret(),
+      ENCRYPTION_KEY: secret(),
+    };
+    try {
+      if (!inside(candidateDirectory, await realpath(strapiCli))) throw fail('Pinned Strapi CLI dependency escapes the private candidate');
+      child = childProcess(spawn, config.cms.nodeExecutable, [strapiCli, config.cms.cmsStartScript], {
+        cwd: candidateDirectory,
+        env: {
+          PATH: safeEnvironment.PATH,
+          HOME: join(candidateDirectory, '.home'),
+          TMPDIR: join(candidateDirectory, '.tmp'),
+          NODE_ENV: 'development',
+          HOST: '127.0.0.1', PORT: baseUrl.port,
+          DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: join(dataDirectory, 'data.db'),
+          STRAPI_TELEMETRY_DISABLED: 'true',
+          IKPK_NATIVE_API_TOKEN_FILE: join(candidateDirectory, '.tmp', 'native-api-token'),
+          ...targetSecrets,
+        },
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    } catch (error) {
+      await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
     const target: SqlDemoNativeOwnedTarget = {
       name: input.name, baseUrl: targetConfig.baseUrl, namespace: targetConfig.namespace,
       dataDirectory, uploadDirectory, client: undefined,
       process: { pid: child.pid, endpoint: targetConfig.baseUrl, namespace: targetConfig.namespace, dataDirectory, uploadDirectory },
     } as SqlDemoNativeOwnedTarget;
-    const state: TargetState = { child, startTime: '', token: input.token, documents: new Map() };
-    targetOwners.set(target, state); knownTargets.add(target);
+    const state: TargetState = { child, candidateDirectory, startTime: '', token: '', documents: new Map() };
+    targetOwners.set(target, state);
     target.client = clientFor(target, state, fetcher, () => verifyTargetProcess(target, state));
     try {
       state.startTime = await processInspector.startTime(child.pid);
@@ -419,7 +555,10 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           await verifyTargetProcess(target, state);
           const response = await fetcher(new URL('/_health', target.baseUrl), { redirect: 'manual' });
           if (response.status >= 200 && response.status < 300 && !response.redirected
-            && await processInspector.listenerPid(Number(baseUrl.port)) === child.pid) return target;
+            && await processInspector.listenerPid(Number(baseUrl.port)) === child.pid) {
+            const token = await takeNativeApiToken(join(candidateDirectory, '.tmp', 'native-api-token'));
+            if (token) { state.token = token; return target; }
+          }
         } catch { /* Retry only the owned local readiness probe. */ }
         await new Promise((resolveWait) => setTimeout(resolveWait, 500));
       }
@@ -429,8 +568,8 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         child.kill('SIGTERM');
         await waitForExit(child).catch(() => undefined);
       }
-      knownTargets.delete(target);
       targetOwners.delete(target);
+      await rm(candidateDirectory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
   }
@@ -440,8 +579,8 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await verifyTargetProcess(target, state);
     state.child.kill('SIGTERM');
     await waitForExit(state.child);
-    knownTargets.delete(target);
-    targetOwners.delete(target);
+    state.token = '';
+    await rm(state.candidateDirectory, { recursive: true, force: true });
   }
 
   return {
@@ -463,15 +602,31 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const lock = await pidFromCluster(cluster);
       if (lock !== undefined) throw fail('PostgreSQL source cluster is already owned or has a stale PID');
       const child = childProcess(spawn, pgCtl, ['start', '-D', cluster, '-o', `-h '' -k ${config.source.socketDirectory} -p ${config.source.port} -c default_transaction_read_only=on`, '-w'], { env: sourceEnvironment, stdio: ['ignore', 'ignore', 'ignore'] });
-      await waitForExit(child, 120_000);
-      if (child.exitCode !== 0) throw fail('Owned PostgreSQL cluster failed to start');
-      const pid = await pidFromCluster(cluster);
-      if (!pid || !processInspector.isAlive(pid)) throw fail('PostgreSQL source process ownership could not be established');
-      const startTime = await processInspector.startTime(pid);
+      let pid: number | undefined;
+      let startTime: string | undefined;
+      try {
+        await waitForExit(child, 120_000);
+        pid = await pidFromCluster(cluster);
+        if (pid !== undefined && processInspector.isAlive(pid)) startTime = await processInspector.startTime(pid);
+        if (child.exitCode !== 0) throw fail('Owned PostgreSQL cluster failed to start');
+        if (pid === undefined || startTime === undefined) throw fail('PostgreSQL source process ownership could not be established');
+      } catch (error) {
+        let cleanupFailed = false;
+        if (pid !== undefined) {
+          try {
+            if (await pidFromCluster(cluster) === pid && processInspector.isAlive(pid)
+              && (startTime === undefined || await processInspector.startTime(pid) === startTime)) {
+              await runFile(pgCtl, ['stop', '-D', cluster, '-m', 'fast', '-w'], { env: sourceEnvironment, timeout: 30_000 });
+            }
+          } catch { cleanupFailed = true; }
+        }
+        if (cleanupFailed) throw fail('Owned PostgreSQL cluster could not be stopped after startup failed');
+        throw error;
+      }
+      if (pid === undefined || startTime === undefined) throw fail('PostgreSQL source process ownership could not be established');
       const lease = Object.freeze({ id: `${pid}:${startTime}`, pid }) as SourceLease;
       const leaseState: LeaseState = { child, pid, startTime, cluster, pgCtl, psql };
       sourceOwners.set(lease, leaseState);
-      activeSourceLease = lease;
       const leasedReader: SqlPublicReaderOptions = {
         ...reader,
         connection: { ...reader.connection, unixSocketPath: config.source.socketDirectory, port: config.source.port, database: config.source.database, user: config.source.user },
@@ -482,7 +637,6 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           if (await pidFromCluster(cluster) !== pid || await processInspector.startTime(pid) !== startTime) throw fail('PostgreSQL source process identity changed during read');
           leaseState.invocation = invocation;
           leaseState.sourceWitness = sourceWitness(stdout);
-          capturedSourceWitness = leaseState.sourceWitness;
           return stdout;
         },
       };
@@ -496,14 +650,23 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       let verificationFailure: unknown;
       try {
         if (!state.invocation || !state.sourceWitness) throw fail('Source readback witness was not captured');
-        const { stdout } = await runFile(state.psql, [...state.invocation.args], { env: { ...process.env, PGOPTIONS: '-c default_transaction_read_only=on' }, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
+        const { stdout } = await runFile(state.psql, [...state.invocation.args], { env: sourceEnvironment, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
         if (await pidFromCluster(state.cluster) !== state.pid || await processInspector.startTime(state.pid) !== state.startTime) throw fail('PostgreSQL source process identity changed during verification');
         if (sourceWitness(stdout).hash !== state.sourceWitness.hash) throw fail('Pinned SQL source projection changed during the rehearsal');
       } catch (error) { verificationFailure = error; }
-      await runFile(state.pgCtl, ['stop', '-D', state.cluster, '-m', 'fast', '-w'], { env: sourceEnvironment });
-      sourceOwners.delete(lease as object);
-      if (activeSourceLease === lease) activeSourceLease = undefined;
+      let cleanupFailure: unknown;
+      try {
+        if (await pidFromCluster(state.cluster) !== state.pid || !processInspector.isAlive(state.pid)
+          || await processInspector.startTime(state.pid) !== state.startTime) throw fail('Refusing to stop an unowned PostgreSQL process');
+        await runFile(state.pgCtl, ['stop', '-D', state.cluster, '-m', 'fast', '-w'], { env: sourceEnvironment });
+      } catch (error) { cleanupFailure = error; }
+      finally {
+        sourceOwners.delete(lease as object);
+      }
+      if (cleanupFailure) throw fail('Owned PostgreSQL source could not be stopped');
       if (verificationFailure) throw fail('Source pre/post table witness verification failed');
+      verifiedSourceWitness = state.sourceWitness;
+      sourceWitnessVerified = true;
     },
 
     openOwnedTarget: openTarget,
@@ -518,11 +681,34 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const sourceURL = new URL(proof.sourceUrl);
       if (!['http:', 'https:'].includes(sourceURL.protocol) || sourceURL.username || sourceURL.password) throw fail('Raster source identity URL is invalid');
       const prior = currentInventory as StrapiMediaInventory;
-      if (prior?.bySourceHash instanceof Map && prior.bySourceHash.has(expected.toLowerCase())) {
-        const id = prior.bySourceHash.get(expected.toLowerCase())!;
-        const file = prior.mediaById.get(id);
-        if (!file || prior.storedHashById.get(id) !== expected.toLowerCase()) throw fail('Existing media identity has no matching stored byte witness');
-        return { id, url: file.url };
+      const sourceUrl = proof.sourceUrl;
+      const sourceHash = expected.toLowerCase();
+      const exact = [...prior.mediaById.values()].find((file) => Object.hasOwn(sourceClaims(file), sourceUrl));
+      if (exact) {
+        const claim = sourceClaims(exact)[sourceUrl] as { version?: unknown; sha256?: unknown; storedSha256?: unknown } | undefined;
+        if (claim?.version !== 1 || claim.sha256 !== sourceHash || claim.storedSha256 !== sourceHash
+          || prior.storedHashById.get(exact.id) !== sourceHash) throw fail('Existing source URL identity does not match its verified stored bytes');
+        return { id: exact.id, url: exact.url };
+      }
+      const unbound = [...prior.mediaById.values()].sort((left, right) => left.id - right.id).find((file) =>
+        prior.storedHashById.get(file.id) === sourceHash && Object.keys(sourceClaims(file)).length === 0);
+      if (unbound) {
+        const identityResponse = await fetcher(new URL(`/api/media-import-identities/${unbound.id}`, target.baseUrl), {
+          method: 'PUT', redirect: 'manual', headers: { ...bearer(state.token), 'content-type': 'application/json' },
+          body: JSON.stringify({ sourceUrl, sourceSha256: sourceHash, expectedStoredSha256: sourceHash }),
+        });
+        await verifyTargetProcess(target, state);
+        if (identityResponse.status < 200 || identityResponse.status >= 300 || identityResponse.redirected) throw fail('CMS did not persist the media source identity');
+        const identityBody = await identityResponse.json() as { data?: { storedSha256?: unknown } };
+        if (identityBody.data?.storedSha256 !== sourceHash) throw fail('CMS source identity endpoint returned a different stored byte hash');
+        const stored = await fetchTargetBytes(target, unbound.url);
+        if (sha256(stored) !== sourceHash) throw fail('Reused media bytes differ from the source bytes');
+        const metadata = unbound.provider_metadata && typeof unbound.provider_metadata === 'object' && !Array.isArray(unbound.provider_metadata)
+          ? unbound.provider_metadata as Record<string, unknown> : {};
+        const imported = metadata.ikpk_media_import && typeof metadata.ikpk_media_import === 'object' && !Array.isArray(metadata.ikpk_media_import)
+          ? metadata.ikpk_media_import as Record<string, unknown> : {};
+        unbound.provider_metadata = { ...metadata, ikpk_media_import: { ...imported, sources: { ...sourceClaims(unbound), [sourceUrl]: { version: 1, sha256: sourceHash, storedSha256: sourceHash } } } };
+        return { id: unbound.id, url: unbound.url };
       }
       const filename = `source-${proof.sourceFileId.replace(/[^A-Za-z0-9._-]/g, '_')}.${mime === 'image/jpeg' ? 'jpg' : mime === 'image/png' ? 'png' : 'webp'}`;
       const body = buildUploadBody(Buffer.from(bytes), filename, mime);
@@ -536,7 +722,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const uploadUrl = safeUrlPath(result.url, target.baseUrl, '/uploads/');
       const identityResponse = await fetcher(new URL(`/api/media-import-identities/${result.id}`, target.baseUrl), {
         method: 'PUT', redirect: 'manual', headers: { ...bearer(state.token), 'content-type': 'application/json' },
-        body: JSON.stringify({ sourceUrl: proof.sourceUrl, sourceSha256: expected.toLowerCase(), expectedStoredSha256: expected.toLowerCase() }),
+        body: JSON.stringify({ sourceUrl, sourceSha256: sourceHash, expectedStoredSha256: sourceHash }),
       });
       await verifyTargetProcess(target, state);
       if (identityResponse.status < 200 || identityResponse.status >= 300 || identityResponse.redirected) throw fail('CMS did not persist the media source identity');
@@ -546,6 +732,9 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       if (sha256(stored) !== expected.toLowerCase()) throw fail('Uploaded media bytes differ from the source bytes');
       const refreshed = await inventory(target);
       if (refreshed.storedHashById.get(result.id as number) !== expected.toLowerCase()) throw fail('Uploaded media is missing from the refreshed persistent inventory');
+      for (const [id, file] of refreshed.mediaById) prior.mediaById.set(id, file);
+      for (const [id, hash] of refreshed.storedHashById) prior.storedHashById.set(id, hash);
+      for (const [hash, id] of refreshed.byStoredHash) if (!prior.byStoredHash.has(hash)) prior.byStoredHash.set(hash, id);
       return { id: result.id as number, url: uploadUrl.pathname };
     },
     async readStoredMediaBytes(target, mediaId) {
@@ -574,7 +763,6 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const handle = await open(destination, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o600);
       try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
       state.documents.set(publicPath, { sha256: sha256(bytes), bytes: bytes.byteLength });
-      void state;
     },
     async readStaticDocument(target, publicPath) {
       owned(target);
@@ -589,7 +777,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     async createFreshClient(target) {
       const state = owned(target); await verifyTargetProcess(target, state);
       const fresh = { ...target, client: clientFor(target, state, fetcher, () => verifyTargetProcess(target, state)) };
-      targetOwners.set(fresh, state); knownTargets.add(fresh);
+      targetOwners.set(fresh, state);
       return fresh;
     },
     async readPublished(target) {
@@ -601,7 +789,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         const records: SqlDemoNativePublishedRecord[] = [];
         let page = 1; let pageCount = 1; let total = -1;
         while (page <= pageCount) {
-          const response = await readPage(target, `/api/${collectionApi[collection]}?status=published&pagination[page]=${page}&pagination[pageSize]=100&populate=*`);
+          const response = await readPage(target, `/api/${collection}?status=published&pagination[page]=${page}&pagination[pageSize]=100&populate=*`);
           const p = response.meta.pagination;
           if (p.page !== page || (total >= 0 && p.total !== total)) throw fail(`CMS ${collection} pagination changed during readback`);
           total = p.total; pageCount = p.pageCount;
@@ -628,12 +816,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       return { collections, media };
     },
     async capture(targets) {
-      const leaseState = activeSourceLease ? sourceOwners.get(activeSourceLease) : undefined;
-      if (!leaseState?.invocation || !leaseState.sourceWitness) throw fail('Cannot capture without a pinned SQL source witness');
-      const sourceReadback = await runFile(leaseState.psql, [...leaseState.invocation.args], { env: sourceEnvironment, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
-      if (await pidFromCluster(leaseState.cluster) !== leaseState.pid || await processInspector.startTime(leaseState.pid) !== leaseState.startTime
-        || sourceWitness(sourceReadback.stdout).hash !== leaseState.sourceWitness.hash) throw fail('Pinned SQL source changed before evidence capture');
-      sourceWitnessVerified = true;
+      if (!sourceWitnessVerified || !verifiedSourceWitness) throw fail('Cannot capture before the pinned SQL source is verified and stopped');
       const rows: Record<string, unknown> = {};
       for (const target of targets) {
         const state = owned(target);
@@ -642,8 +825,22 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       }
       const root = await checkPrivateDirectory(config.privateArtifactsRoot, true);
       const path = join(root, `native-sql-rehearsal-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-      const file = await open(path, 'wx', 0o600);
-      try { await file.writeFile(`${JSON.stringify({ sourceHash: config.source.reader.expectedDumpHash, sourceTableWitnesses: capturedSourceWitness?.tables, sourceWitnessVerified, codeCommit: config.cms.expectedCommit, targets: rows }, null, 2)}\n`); await file.sync(); } finally { await file.close(); }
+      const pendingPath = `${path}.${randomBytes(8).toString('hex')}.pending`;
+      const file = await open(pendingPath, 'wx', 0o600);
+      try {
+        await file.writeFile(`${JSON.stringify({
+          sourceHash: config.source.reader.expectedDumpHash,
+          sourceWitnessScope: verifiedSourceWitness.scope,
+          sourceTableCount: verifiedSourceWitness.tables.length,
+          sourceTableWitnesses: verifiedSourceWitness.tables,
+          sourceWitnessVerified,
+          codeCommit: config.cms.expectedCommit,
+          targets: rows,
+        }, null, 2)}\n`);
+        await file.sync();
+      } finally { await file.close(); }
+      try { await rename(pendingPath, path); }
+      catch (error) { await unlink(pendingPath).catch(() => undefined); throw error; }
     },
   } as SqlDemoNativeRehearsalIo;
 }

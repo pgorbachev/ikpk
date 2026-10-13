@@ -509,6 +509,7 @@ export async function runSqlDemoNativeRehearsal(
 
   let sqlSourceLease: SqlDemoNativeSqlSourceLease | undefined;
   const ownedTargets: SqlDemoNativeOwnedTarget[] = [];
+  const captureTargets: SqlDemoNativeOwnedTarget[] = [];
   let primaryError: unknown;
   let result: SqlDemoNativeRehearsalResult | undefined;
   try {
@@ -577,6 +578,7 @@ export async function runSqlDemoNativeRehearsal(
     assertSqlDemoNativeConservation(runA.release, normalized.materializer, runA.readback, runA.readback);
     assertSqlDemoNativeConservation(runB.release, normalized.materializer, runB.readback, runB.readback);
     assertSqlDemoNativeConservation(runA.release, normalized.materializer, runA.readback, runB.readback);
+    captureTargets.push(targetA, targetB);
 
     let repeatA: SqlDemoNativeOwnedTarget;
     try {
@@ -604,11 +606,6 @@ export async function runSqlDemoNativeRehearsal(
     assertSqlDemoNativeConservation(runA.release, normalized.materializer, runA.readback, repeatedReadback);
     sameTargetEntityIdentity(runA.readback, repeatedReadback);
 
-    try {
-      await input.io.capture([targetA, targetB]);
-    } catch {
-      throw safeFailure('CAPTURE_FAILED', 'Native rehearsal evidence could not be captured');
-    }
     result = {
       status: 'success',
       sourceHash: source.sourceHash,
@@ -637,5 +634,10 @@ export async function runSqlDemoNativeRehearsal(
   }
   if (primaryError !== undefined) throw primaryError;
   if (!result) throw safeFailure('REHEARSAL_FAILED', 'Native SQL rehearsal did not produce a result');
+  try {
+    await input.io.capture(captureTargets);
+  } catch {
+    throw safeFailure('CAPTURE_FAILED', 'Native rehearsal evidence could not be captured');
+  }
   return result;
 }

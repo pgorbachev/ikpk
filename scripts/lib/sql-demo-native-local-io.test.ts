@@ -100,7 +100,11 @@ async function makeConfiguration(overrides: Record<string, unknown> = {}) {
         const pid = ++nextPid;
         if (args[0] === 'start') writeFileSync(join(sourceCluster, 'postmaster.pid'), '8401\n');
         const env = options.env as NodeJS.ProcessEnv | undefined;
-        if (command === process.execPath && env?.PORT) listeners.set(Number(env.PORT), pid);
+        if (command === process.execPath && env?.PORT) {
+          listeners.set(Number(env.PORT), pid);
+          const tokenFile = env.IKPK_NATIVE_API_TOKEN_FILE;
+          if (tokenFile) writeFileSync(tokenFile, `minted-strapi-token-${env.PORT}`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+        }
         const child: ChildLike = {
           pid, exitCode: command.endsWith('/pg_ctl') ? 0 : null, signalCode: null,
           once: vi.fn(), on: vi.fn(), kill: vi.fn(),
@@ -247,7 +251,7 @@ describe('concrete native local rehearsal adapter', () => {
       .filter((call) => call[0] === config.cms.nodeExecutable);
     expect(starts).toHaveLength(2);
     const environments = starts.map((call) => (call[2] as { env?: NodeJS.ProcessEnv }).env ?? {});
-    for (const key of ['APP_KEYS', 'JWT_SECRET', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT']) {
+    for (const key of ['APP_KEYS', 'JWT_SECRET', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY']) {
       expect(environments.map((env) => env[key])).toEqual(expect.arrayContaining([expect.any(String), expect.any(String)]));
       expect(environments[0]?.[key]).not.toBe(environments[1]?.[key]);
     }
@@ -266,8 +270,10 @@ describe('concrete native local rehearsal adapter', () => {
       .filter((call) => new URL(String(call[0])).pathname === '/api/articles')
       .map((call) => (call[1] as RequestInit).headers as Record<string, string>);
     expect(authorizations.map((headers) => headers.authorization)).toEqual([
-      'Bearer synthetic-api-token-A', 'Bearer synthetic-api-token-B',
+      'Bearer minted-strapi-token-19331', 'Bearer minted-strapi-token-19332',
     ]);
+    expect(authorizations.map((headers) => headers.authorization)).not.toContain('Bearer synthetic-api-token-A');
+    expect(authorizations.map((headers) => headers.authorization)).not.toContain('Bearer synthetic-api-token-B');
     for (const [, , options] of starts as [string, readonly string[], { cwd?: string } ][]) {
       await expect(readFile(join(options.cwd!, '.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     }
@@ -429,6 +435,9 @@ describe('concrete native local rehearsal adapter', () => {
     await readSqlPublicSource(source.reader);
     await io.readPublished(a);
     await io.readPublished(b);
+    await io.stopOwnedTarget(a);
+    await io.stopOwnedTarget(b);
+    await io.stopOwnedSqlSource(source.lease);
     await io.capture([a, b]);
     const files = await (await import('node:fs/promises')).readdir(join(scratch, 'private-artifacts'), { recursive: true, withFileTypes: true });
     expect(files.length).toBeGreaterThan(0);
