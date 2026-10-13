@@ -50,6 +50,35 @@ test('safe admin redirect accepts only same-origin internal paths', async () => 
   }
 });
 
+test('admin redirect validates values after URLSearchParams decodes the query once', async (t) => {
+  const { safeAdminRedirect } = await import(pathToFileURL(redirectGuardModule).href);
+  const redirectFromQuery = (query) => new URLSearchParams(query).get('redirectTo');
+  const layeredRedirects = [
+    ['residual encoded slashes', 'redirectTo=/%25252F%25252Fattacker.example/path'],
+    ['residual encoded backslashes', 'redirectTo=/%25255C%25255Cattacker.example/path'],
+    ['residual encoded control character', 'redirectTo=/x%252500y'],
+    ['invalid escape after the second decode', 'redirectTo=/x%2525ZZ'],
+  ];
+
+  for (const [label, query] of layeredRedirects) {
+    await t.test(label, () => {
+      const redirectTo = redirectFromQuery(query);
+      assert.equal(typeof redirectTo, 'string', 'query value should be present');
+      assert.equal(safeAdminRedirect(redirectTo, adminOrigin), '/');
+    });
+  }
+
+  await t.test('ordinary encoded internal Unicode paths and query values remain supported', () => {
+    const redirectTo = redirectFromQuery(
+      'redirectTo=%2Fcontent-manager%2F%D0%9F%D0%BE%D0%B8%D1%81%D0%BA%3Fpage%3D2%26search%3D%25D0%2590'
+    );
+    assert.equal(
+      safeAdminRedirect(redirectTo, adminOrigin),
+      '/content-manager/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA?page=2&search=%D0%90'
+    );
+  });
+});
+
 test(
   'the pinned Strapi login consumer is transformed to call the guard after login',
   {
