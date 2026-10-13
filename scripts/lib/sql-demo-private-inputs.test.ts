@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-content.js';
 import { mapSqlPublicContent } from './sql-public-content.js';
+import { loadSqlDemoAssets } from './sql-demo-assets.js';
 import {
   normalizeSqlDemoPrivateInputs,
   prepareSqlDemoPrivateInputs,
@@ -519,6 +523,116 @@ describe('SQL demo private input preparation and normalization', () => {
     owner.mediaAllowlist.entries[0]!.sourceSha256 = hash('9');
     const input = config({ privateJson: privateDocuments({ 'demo-owner-decisions.json': owner }) });
     expect(() => normalize({ config: input })).toThrow(/body-granted.*(hash|sha-?256|grant)/i);
+  });
+
+  it('accepts an exactly granted JPEG whose original SQL extension is WebP and preserves byte-derived MIME and extension', async () => {
+    const sourceFileId = 'synthetic-authorized-jpeg';
+    const sourceUrl = '/synthetic/authorized-body.webp';
+    const archiveRelativePath = 'media/authorized-body.webp';
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    const jpegSha256 = sha256(jpeg);
+    const png = Buffer.alloc(33);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
+    png.writeUInt32BE(13, 8);
+    png.write('IHDR', 12, 'ascii');
+    png.writeUInt32BE(1, 16);
+    png.writeUInt32BE(1, 20);
+    const pngSha256 = sha256(png);
+
+    const reached = JSON.parse(Buffer.from(privateDocuments()['reached-media-manifest.json'].bytes).toString('utf8')) as {
+      verified_assets: Record<string, unknown>[];
+    };
+    reached.verified_assets = ['file-1', 'file-2', 'file-3', 'file-501'].map((id) => proof(id, `media/${id}.png`, pngSha256, 'image', { bytes: png.byteLength }));
+    const owner = JSON.parse(Buffer.from(privateDocuments()['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+      mediaAllowlist: Record<string, unknown>;
+    };
+    owner.mediaAllowlist = {
+      ...owner.mediaAllowlist,
+      exactIdentityCount: 1,
+      entries: [{ sourceFileId, sourceSha256: jpegSha256, decisionId: 'synthetic-exact-jpeg-grant', demoApproved: true, verifiedMime: 'image/jpeg', approvedExtension: 'jpg', sourceBytes: jpeg.byteLength }],
+    };
+    const input = config({ privateJson: privateDocuments({
+      'reached-media-manifest.json': reached,
+      'article-body-reached-public-unlinked-media.json': {
+        schema_version: 1,
+        scope: 'article-body-reached-public-unlinked-media',
+        baseline_sql_sha256: hash('a'),
+        archive_sha256: hash('b'),
+        entries: [{
+          source_file_id: sourceFileId,
+          archive_relative_path: archiveRelativePath,
+          bytes: jpeg.byteLength,
+          crc_verified: true,
+          declared_extension: 'webp',
+          sha256: jpegSha256,
+          source_file_type: 'image',
+          source_privacy: 'public',
+          source_status: 'unlinked',
+          extension_matches_magic: false,
+          magic_class: 'jpeg',
+          verified_mime: 'image/jpeg',
+          allowlist_class: 'synthetic exact body-image grant',
+          reachability: 'synthetic active article HTML image reference',
+        }],
+      },
+      'demo-owner-decisions.json': owner,
+    }) });
+    const articleHtml = `<p><img src="${sourceUrl}"></p>`;
+    const sourceWithJpeg = {
+      ...source,
+      Articles: source.Articles.map((article) => ({ ...article, content: articleHtml })),
+      Files: [...(source.Files ?? []), file(sourceFileId, 'image', 'unlinked', 'public', sourceUrl, 'webp')],
+    };
+    const mappedWithJpeg = {
+      ...mapped,
+      entities: { ...mapped.entities, articles: mapped.entities.articles.map((article) => ({ ...article, body: articleHtml })) },
+    };
+    const privateProofBefore = Buffer.from(input.privateJson['article-body-reached-public-unlinked-media.json'].bytes);
+    const normalized = normalize({ config: input, nativeSqlPublicSource: sourceWithJpeg, mapped: mappedWithJpeg });
+    expect(normalized.loader.approvedBodyFileGrants).toEqual([{
+      sourceFileId, sourceSha256: jpegSha256, decisionId: 'synthetic-exact-jpeg-grant',
+    }]);
+    expect(input.privateJson['article-body-reached-public-unlinked-media.json'].bytes).toEqual(privateProofBefore);
+
+    const temporaryRoot = await mkdtemp(join(tmpdir(), 'ikpk-sql-demo-magic-metadata-'));
+    try {
+      const assetRoot = join(temporaryRoot, 'assets');
+      const supplementRoot = join(temporaryRoot, 'supplements');
+      await mkdir(join(assetRoot, 'media'), { recursive: true });
+      await mkdir(join(supplementRoot, 'synthetic-corpus'), { recursive: true });
+      await writeFile(join(assetRoot, 'media', 'file-1.png'), png);
+      await writeFile(join(assetRoot, 'media', 'file-2.png'), png);
+      await writeFile(join(assetRoot, 'media', 'file-3.png'), png);
+      await writeFile(join(assetRoot, 'media', 'file-501.png'), png);
+      await writeFile(join(assetRoot, archiveRelativePath), jpeg);
+      await writeFile(join(supplementRoot, staticPageSupplement.path), pageCorpusBytes);
+
+      const loaded = await loadSqlDemoAssets({ ...normalized.loader, assetRoot, supplementRoot });
+      expect(loaded.offlineMedia.find((entry) => entry.sourceFileId === sourceFileId)).toMatchObject({
+        detectedMimeType: 'image/jpeg', detectedExtension: 'jpg', sourceSha256: jpegSha256,
+      });
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+
+    const originalProof = JSON.parse(privateProofBefore.toString('utf8')) as { entries: Record<string, unknown>[] };
+    for (const [label, contradictoryFields] of [
+      ['declared target extension', { target_extension_from_magic: 'webp' }],
+      ['MIME versus magic', { verified_mime: 'image/png', target_extension_from_magic: 'png' }],
+      ['unsupported MIME', { verified_mime: 'image/gif' }],
+      ['unsupported magic', { magic_class: 'unknown' }],
+    ] as const) {
+      const invalidProof = {
+        ...originalProof,
+        entries: [{ ...originalProof.entries[0]!, ...contradictoryFields }],
+      };
+      const invalidConfig = config({ privateJson: privateDocuments({
+        'reached-media-manifest.json': reached,
+        'article-body-reached-public-unlinked-media.json': invalidProof,
+        'demo-owner-decisions.json': owner,
+      }) });
+      expect(() => normalize({ config: invalidConfig, nativeSqlPublicSource: sourceWithJpeg, mapped: mappedWithJpeg }), label).toThrow();
+    }
   });
 
   it('keeps demo provisional classification separate from pending primary approval and production acceptance', () => {
