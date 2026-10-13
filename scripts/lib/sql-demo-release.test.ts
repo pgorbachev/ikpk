@@ -389,6 +389,15 @@ describe('composeSqlDemoRelease', () => {
     expect(() => composeSqlDemoRelease(sqlWithOrganizationAndDocuments(), wrongTarget, documentAssets, ownerDecisions())).toThrow(/InstituteAdditionalInfo#801.*target/);
   });
 
+  it('preserves AdditionalInfo description when its SQL heading is null instead of inventing a title', () => {
+    const release = composeSqlDemoRelease(mapped({
+      instituteAdditionalInfo: [{ sourceId: 801, legacy_id: '801', instituteId: 1, name: null, description: '<p>Exact SQL description</p>' }],
+    }), supplements({ targetLocations: [baseTargetLocations()[2]] }), assets(), ownerDecisions());
+    const description = release.entities.institutes[0]?.description;
+    expect(description).toContain('<section id="institute-section-1"><p>Exact SQL description</p></section>');
+    expect(description).not.toContain('<h2>');
+  });
+
   it('requires one pinned corpus entry per page slug and rejects duplicate CMS page identities', () => {
     const duplicateSlug = supplements({ pages: [
       ...supplements().pages,

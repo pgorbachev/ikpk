@@ -338,14 +338,14 @@ export function composeSqlDemoRelease(
       const location = requireLocation('InstituteAdditionalInfo', id, 'institutes', 'description');
       const source = required(institutesBySourceId.get(String(row.instituteId)), `InstituteAdditionalInfo#${id}`, 'instituteId does not resolve to a mapped institute');
       if (source.legacy_id !== location.targetLegacyId) fail(`InstituteAdditionalInfo#${id}`, 'target does not match instituteId');
-      const sectionName = requiredString(row.name, `InstituteAdditionalInfo#${id}`, 'named section requires a non-empty name');
       const anchor = requiredString(location.anchor, `InstituteAdditionalInfo#${id}`, 'institute section anchor is required');
       if (!/^institute-section-[1-9]\d*$/.test(anchor)) fail(`InstituteAdditionalInfo#${id}`, 'institute section anchor is required');
       const anchors = anchorByInstitute.get(source.legacy_id) ?? new Set<string>();
       if (anchors.has(anchor)) fail(`InstituteAdditionalInfo#${id}`, `duplicate target anchor ${anchor}`);
       anchors.add(anchor);
       anchorByInstitute.set(source.legacy_id, anchors);
-      const section = `<section id="${escapeHtml(anchor)}"><h2>${escapeHtml(sectionName)}</h2>${typeof row.description === 'string' ? row.description : ''}</section>`;
+      const sectionHeading = isNonEmptyString(row.name) ? `<h2>${escapeHtml(row.name)}</h2>` : '';
+      const section = `<section id="${escapeHtml(anchor)}">${sectionHeading}${typeof row.description === 'string' ? row.description : ''}</section>`;
       const entries = additionalByInstitute.get(source.legacy_id) ?? [];
       entries.push(section);
       additionalByInstitute.set(source.legacy_id, entries);
