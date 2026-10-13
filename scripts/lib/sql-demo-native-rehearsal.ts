@@ -526,7 +526,7 @@ async function importTarget(
 
 function mapFailure(error: unknown): SqlDemoNativeRehearsalError {
   if (error instanceof SqlDemoNativeRehearsalError) return error;
-  return safeFailure('MAPPING_FAILED', 'SQL source mapping or private-input validation failed', sourceIdentity(error));
+  return safeFailure('MAPPING_FAILED', 'SQL source mapping or private-input validation failed', sourceIdentity(error), safeDiagnostic(error));
 }
 
 /** Run the pinned public SQL projection against two independently owned local CMS targets. */
