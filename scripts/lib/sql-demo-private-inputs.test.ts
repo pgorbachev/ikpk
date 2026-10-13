@@ -195,6 +195,58 @@ function config(overrides: Partial<SqlDemoPrivateInputRootConfig> = {}): SqlDemo
   };
 }
 
+function metadataSupplementConfig(options: { omitBlobPath?: string } = {}) {
+  const acceptedRevision = ACCEPTED_CORPUS_REVISION;
+  const instituteRows = [1, 2, 3].map((sourceId) => ({
+    description_html: `<p>Synthetic institute ${sourceId}</p>`, description_text: `Synthetic institute ${sourceId}`,
+    images: [], legacy_id: `institute-${sourceId}`, legacy_url: `/institutes/${sourceId}`,
+    name: `Synthetic institute ${sourceId}`, order: sourceId,
+    seo_description: `Accepted institute description ${sourceId}`, seo_title: `Accepted institute SEO ${sourceId}`,
+    slug: `institute-${sourceId}`,
+  }));
+  const playlistIds = [31, 32, 33, 34, 36, 37];
+  const playlistRows = playlistIds.map((sourceId) => ({
+    description_html: `<p>Synthetic playlist ${sourceId}</p>`, description_text: `Synthetic playlist ${sourceId}`,
+    images: [], legacy_id: `video/pleylist/${sourceId}`, legacy_url: `/video/pleylist/${sourceId}`,
+    seo_description: `Accepted video description ${sourceId}`, seo_title: `Accepted video SEO ${sourceId}`,
+    slug: String(sourceId), title: `Synthetic SQL playlist ${sourceId}`,
+  }));
+  const specs = [
+    ['discovery/entities/institutes.json', acceptedRevision, 'accepted institute slug/order/SEO supplement', instituteRows],
+    ['fixtures/content-snapshot/types/institutes.json', acceptedRevision, 'accepted institute slug/order/SEO supplement', instituteRows],
+    ['discovery/entities/video_playlists.json', acceptedRevision, 'accepted video slug/mirror supplement', playlistRows],
+    ['fixtures/content-snapshot/types/video_playlists.json', acceptedRevision, 'accepted video slug/mirror supplement', playlistRows],
+    ['web/src/lib/video-mirrors.ts', APPLICATION_REVISION, 'approved video slug and mirror mapping', 'export const syntheticMirrorPin = true;\n'],
+    ['web/src/pages/teachers/index.astro', APPLICATION_REVISION, 'unselected synthetic application blob', 'export const unrelatedPin = true;\n'],
+  ] as const;
+  const rows = specs.map(([path, revision, role, value]) => {
+    const bytes = typeof value === 'string' ? Buffer.from(value) : jsonBytes(value);
+    return {
+      pin: { path, revision, role, sha256: sha256(bytes), bytes: bytes.byteLength, same_blob_verified_at: '2026-10-12' },
+      blob: { path, revision, sha256: sha256(bytes), bytes },
+    };
+  });
+  const basePrivate = privateDocuments();
+  const approvedBytes = Buffer.from(basePrivate['approved-supplements.json'].bytes);
+  const approved = JSON.parse(approvedBytes.toString()) as { supplements: unknown[] };
+  approved.supplements.push(...rows.map(({ pin }) => pin));
+  const privateJson = privateDocuments({
+    'approved-supplements.json': approved,
+    'content-media-manifest.json': JSON.parse(Buffer.from(basePrivate['content-media-manifest.json'].bytes).toString()),
+  });
+  const metadataBlobs = rows
+    .filter(({ blob }) => blob.path !== options.omitBlobPath)
+    .map(({ blob }) => blob);
+  const applicationUnselected = rows.find(({ blob }) => blob.path === 'web/src/pages/teachers/index.astro')!.blob;
+  const inputConfig = config({
+    privateJson,
+    supplementBlobs: [staticPageSupplement, ...metadataBlobs].map((blob) => ({
+      path: blob.path, revision: blob.revision, sha256: blob.sha256, bytes: blob.bytes,
+    })),
+  });
+  return { inputConfig, playlistIds, instituteRows, playlistRows, applicationUnselected };
+}
+
 const createdAt = '2026-01-01 00:00:00';
 const updatedAt = '2026-01-01 00:00:00';
 const file = (id: string, fileType: 'image' | 'document', status: string, privacy: string, url: string, extension: string) => ({
@@ -282,6 +334,61 @@ function normalize(overrides: Partial<Parameters<typeof normalizeSqlDemoPrivateI
 }
 
 describe('SQL demo private input preparation and normalization', () => {
+  it('normalizes institute and video playlist DTO metadata from the exact accepted source blobs', () => {
+    const fixture = metadataSupplementConfig();
+    const videos = fixture.playlistIds.map((sourceId) => ({
+      id: sourceId, name: `Synthetic SQL playlist ${sourceId}`, link: `/synthetic/sql-playlist/${sourceId}`,
+      status: 'active', priority: sourceId, imageId: null,
+      createdAt, updatedAt,
+    }));
+    const sourceWithVideos = { ...source, Videos: [...(source.Videos ?? []), ...videos] };
+    const mappedWithVideos = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        videos: videos.map((video) => ({
+          sourceId: video.id, legacy_id: `video/pleylist/${video.id}`, slug: String(video.id),
+          title: video.name, imageId: null,
+        })),
+      },
+      provenance: {
+        ...mapped.provenance,
+        videoMetadata: videos.map(({ id: sourceId, link, priority, imageId }) => ({ sourceId, link, priority, imageId })),
+      },
+    };
+    const result = normalize({ config: fixture.inputConfig, nativeSqlPublicSource: sourceWithVideos, mapped: mappedWithVideos });
+
+    expect(result.composer.acceptedSupplements.instituteMetadata).toEqual(fixture.instituteRows.map((row, index) => ({
+      sourceId: index + 1, slug: row.slug, order: row.order,
+      seo: { seo_title: row.seo_title, seo_description: row.seo_description },
+    })));
+    expect(result.composer.acceptedSupplements.videoPlaylists).toHaveLength(6);
+    expect(result.composer.acceptedSupplements.videoPlaylists.map(({ sourceId, sourcePath, revision, sha256: blobSha, slug, legacy_id, seo, videos: embeddedVideos }) => ({
+      sourceId, sourcePath, revision, sha256: blobSha, slug, legacy_id, seo, videos: embeddedVideos,
+    }))).toEqual(fixture.playlistIds.map((sourceId) => {
+      const row = fixture.playlistRows.find((item) => item.legacy_id === `video/pleylist/${sourceId}`)!;
+      return {
+        sourceId, sourcePath: 'discovery/entities/video_playlists.json', revision: ACCEPTED_CORPUS_REVISION,
+        sha256: sha256(jsonBytes(fixture.playlistRows)), slug: row.slug, legacy_id: row.legacy_id,
+        seo: { seo_title: row.seo_title, seo_description: row.seo_description }, videos: null,
+      };
+    }));
+    expect(JSON.stringify(result.composer.acceptedSupplements.videoPlaylists)).not.toMatch(/sql-playlist|priority|imageId|targetPublicUrl/);
+  });
+
+  it.each([
+    ['discovery/entities/institutes.json', 'accepted data'],
+    ['fixtures/content-snapshot/types/institutes.json', 'accepted data copy'],
+    ['discovery/entities/video_playlists.json', 'accepted video data'],
+    ['fixtures/content-snapshot/types/video_playlists.json', 'accepted video data copy'],
+    ['web/src/lib/video-mirrors.ts', 'application data'],
+  ])('requires selected %s bytes across accepted and application revisions; unrelated pinned bytes do not fill a missing %s selection', (path) => {
+    const fixture = metadataSupplementConfig({ omitBlobPath: path });
+    expect(fixture.applicationUnselected.path).toBe('web/src/pages/teachers/index.astro');
+
+    expect(() => prepareSqlDemoPrivateInputs(fixture.inputConfig)).toThrow(new RegExp(path.replaceAll('/', '\\/').replaceAll('.', '\\.') + '.*(accepted|missing|pin)', 'i'));
+  });
+
   it('checks every pinned raw JSON digest before attempting to parse any file', () => {
     const input = config();
     const firstBytes = Buffer.from('{ malformed json');

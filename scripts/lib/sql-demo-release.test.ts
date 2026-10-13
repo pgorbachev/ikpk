@@ -202,6 +202,57 @@ describe('composeSqlDemoRelease', () => {
     });
   });
 
+  it('composes all six accepted playlists while requiring thumbnail attestations only for native SQL image IDs', () => {
+    const ids = [31, 32, 33, 34, 36, 37];
+    const thumbnailIds = new Set([31, 34, 37]);
+    const input = mapped({
+      videos: ids.map((sourceId) => ({
+        sourceId,
+        legacy_id: `video/pleylist/${sourceId}`,
+        slug: String(sourceId),
+        title: `Synthetic SQL playlist ${sourceId}`,
+        ...(thumbnailIds.has(sourceId) ? { imageId: `thumb-${sourceId}` } : { imageId: null }),
+      })),
+    });
+    input.provenance.videoMetadata = ids.map((sourceId) => ({
+      sourceId, link: `/synthetic/sql-playlist/${sourceId}`, priority: sourceId,
+      imageId: thumbnailIds.has(sourceId) ? `thumb-${sourceId}` : null,
+    }));
+    const videoPlaylists = ids.map((sourceId) => ({
+      sourceId, sourcePath: 'synthetic-corpus/video_playlists.json', revision: 'accepted-video-r1', sha256: 'f'.repeat(64),
+      slug: String(sourceId), legacy_id: `video/pleylist/${sourceId}`,
+      seo: { seo_title: `Accepted SEO ${sourceId}`, seo_description: `Accepted description ${sourceId}` },
+      videos: null,
+      ...(thumbnailIds.has(sourceId) ? {
+        thumbnailSourceFileId: `thumb-${sourceId}`,
+        thumbnailSourceUrl: `/accepted/thumb-${sourceId}.jpg`,
+        thumbnailPublicUrl: `/media/video-thumbs/synthetic-${sourceId}.jpg`,
+      } : {
+        thumbnailSourceFileId: null,
+        thumbnailSourceUrl: null,
+        thumbnailPublicUrl: null,
+      }),
+    }));
+    const accepted = supplements({
+      videoPlaylists: videoPlaylists as unknown as SqlDemoAcceptedSupplements['videoPlaylists'],
+    });
+    const verifiedImages = [...thumbnailIds].map((sourceId) => attestation(
+      `thumb-${sourceId}`, `/accepted/thumb-${sourceId}.jpg`, `/media/video-thumbs/synthetic-${sourceId}.jpg`,
+      'image/jpeg', `attest-thumb-${sourceId}`,
+    ));
+
+    const release = composeSqlDemoRelease(input, accepted, assets({ images: verifiedImages }), ownerDecisions());
+
+    expect(release.entities.videos).toHaveLength(6);
+    expect(release.entities.videos.map(({ legacy_id, name, videos }) => ({ legacy_id, name, videos }))).toEqual(ids.map((sourceId) => ({
+      legacy_id: `video/pleylist/${sourceId}`, name: `Synthetic SQL playlist ${sourceId}`, videos: null,
+    })));
+    expect(release.provenance.videoSupplements).toHaveLength(6);
+    expect(release.provenance.videoSupplements.filter(({ thumbnailSourceFileId }) => thumbnailSourceFileId === null)).toHaveLength(3);
+    expect(release.provenance.assetMappings.map(({ sourceFileId }) => sourceFileId).sort()).toEqual(['thumb-31', 'thumb-34', 'thumb-37']);
+    expect(JSON.stringify(release.entities.videos)).not.toMatch(/sql-playlist|thumb-|priority|sourceId/);
+  });
+
   it.each([
     ['missing', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => videoPlaylists.slice(0, 2)],
     ['duplicate', (videoPlaylists: ReturnType<typeof syntheticVideoInputs>['supplements']['videoPlaylists']) => [...videoPlaylists, videoPlaylists[0]]],
