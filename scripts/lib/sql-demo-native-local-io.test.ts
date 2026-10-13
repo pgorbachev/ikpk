@@ -488,6 +488,7 @@ describe('concrete native local rehearsal adapter', () => {
     const storedSha256 = createHash('sha256').update(storedBytes).digest('hex');
     const file = {
       id: 71, url: '/uploads/actual-71.png', mime: 'image/png',
+      formats: { thumbnail: { url: '/uploads/thumbnail-71.png' } },
       provider_metadata: { ikpk_media_import: { sources: { [sourceUrl]: { version: 1, sha256: sourceSha256, storedSha256 } } } },
     };
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
@@ -502,6 +503,7 @@ describe('concrete native local rehearsal adapter', () => {
     for (const directory of [config.targets.A.dataDirectory, config.targets.A.uploadDirectory, config.targets.A.staticFilesDirectory]) await mkdir(directory, { recursive: true, mode: 0o700 });
     await writeFile(join(config.targets.A.dataDirectory, 'data.db'), 'synthetic preserved prototype database', { mode: 0o600 });
     await writeFile(join(config.targets.A.uploadDirectory, 'actual-71.png'), storedBytes, { mode: 0o600 });
+    await writeFile(join(config.targets.A.uploadDirectory, 'thumbnail-71.png'), 'approved CMS-generated thumbnail', { mode: 0o600 });
     const { createSqlDemoNativeLocalIo } = await import('./sql-demo-native-local-io.js');
     const io = createSqlDemoNativeLocalIo(config) as SqlDemoNativeRehearsalIo;
     configurations.set(io as object, config);
@@ -516,6 +518,9 @@ describe('concrete native local rehearsal adapter', () => {
     expect(inventory).toMatchObject({ mediaById: expect.any(Map), storedHashById: expect.any(Map) });
     expect(storedSha256).not.toBe(sourceSha256);
     await expect(io.prepareResumeMediaInventory(owned, [proof, { ...proof, sourceFileId: '72', sourceUrl: 'media/2024/03/08/extra.png' }])).rejects.toThrow();
+    await writeFile(join(config.targets.A.uploadDirectory, 'unexpected.png'), 'extra bytes', { mode: 0o600 });
+    await expect(io.prepareResumeMediaInventory(owned, [proof])).rejects.toThrow();
+    await rm(join(config.targets.A.uploadDirectory, 'unexpected.png'));
 
     fetch.mockResolvedValueOnce(new Response(JSON.stringify({ data: [file], meta: { pagination: { page: 1, pageCount: 1, total: 1 } } }), { status: 200 }));
     fetch.mockRejectedValueOnce(Object.assign(new TypeError('private transport detail'), {

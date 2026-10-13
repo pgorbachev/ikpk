@@ -221,12 +221,17 @@ async function assertResumableMediaTarget(target: SqlDemoNativeLocalIoOptions['t
   await checkTree(target.staticFilesDirectory);
 }
 
-async function readOwnedStoredUpload(uploadDirectory: string, value: string, baseUrl: string): Promise<{ basename: string; bytes: Uint8Array }> {
+function storedUploadBasename(value: string, baseUrl: string): string {
   const url = safeUrlPath(value, baseUrl, '/uploads/');
   const basename = url.pathname.slice('/uploads/'.length);
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(basename) || basename === '.' || basename === '..') {
     throw fail('Stored upload URL is not one safe direct-child filename');
   }
+  return basename;
+}
+
+async function readOwnedStoredUpload(uploadDirectory: string, value: string, baseUrl: string): Promise<{ basename: string; bytes: Uint8Array }> {
+  const basename = storedUploadBasename(value, baseUrl);
   const root = await realpath(uploadDirectory);
   const path = join(root, basename);
   const before = await lstat(path);
@@ -550,9 +555,33 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     const base = new URL(target.baseUrl);
     const resumeStoredFiles = Boolean(config.targets[target.name]?.resumeExistingMediaOnly);
     const seenStoredBasenames = new Set<string>();
+    const expectedStoredBasenames = new Set<string>();
+    const addExpectedStoredBasename = (value: string) => {
+      const basename = storedUploadBasename(value, target.baseUrl);
+      if (expectedStoredBasenames.has(basename)) throw fail('CMS media inventory contains duplicate original or format paths');
+      expectedStoredBasenames.add(basename);
+    };
     const result = await buildStrapiMediaInventory({
       baseUrl: target.baseUrl,
-      getPage: async (page, pageSize) => (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`),
+      getPage: async (page, pageSize) => {
+        const value = await (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`);
+        if (resumeStoredFiles && value && typeof value === 'object' && !Array.isArray(value)) {
+          const data = (value as { data?: unknown }).data;
+          if (Array.isArray(data)) for (const raw of data) {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+            const file = raw as { url?: unknown; formats?: unknown };
+            if (typeof file.url === 'string') addExpectedStoredBasename(file.url);
+            if (file.formats && typeof file.formats === 'object' && !Array.isArray(file.formats)) {
+              for (const format of Object.values(file.formats as Record<string, unknown>)) {
+                if (format && typeof format === 'object' && !Array.isArray(format) && typeof (format as { url?: unknown }).url === 'string') {
+                  addExpectedStoredBasename((format as { url: string }).url);
+                }
+              }
+            }
+          }
+        }
+        return value;
+      },
       getBytes: async (url) => {
         const state = owned(target);
         await verifyTargetProcess(target, state);
@@ -586,9 +615,13 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       },
     });
     if (resumeStoredFiles) {
+      for (const basename of expectedStoredBasenames) {
+        if (seenStoredBasenames.has(basename)) continue;
+        await readOwnedStoredUpload(target.uploadDirectory, `/uploads/${basename}`, target.baseUrl);
+      }
       const entries = await readdir(target.uploadDirectory, { withFileTypes: true });
       const actual = entries.map((entry) => entry.name).sort();
-      const expected = [...seenStoredBasenames].sort();
+      const expected = [...expectedStoredBasenames].sort();
       if (entries.some((entry) => !entry.isFile() || entry.isSymbolicLink())
         || actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
         throw fail('Owned upload directory does not exactly match CMS media inventory paths');
