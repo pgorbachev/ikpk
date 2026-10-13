@@ -67,6 +67,16 @@ const sourceOwners = new WeakMap<object, LeaseState>();
 type ExecOptions = { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number; maxBuffer?: number };
 
 function fail(message: string): Error { return new Error(message); }
+function safeFetchCode(error: unknown): string {
+  const allowed = new Set(['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT']);
+  let current = error;
+  for (let depth = 0; depth < 3 && current && typeof current === 'object'; depth += 1) {
+    const record = current as { code?: unknown; cause?: unknown };
+    if (typeof record.code === 'string' && allowed.has(record.code)) return record.code;
+    current = record.cause;
+  }
+  return error instanceof TypeError ? 'FETCH_FAILED' : 'UNKNOWN';
+}
 function failStage(stage: 'SourceUrlIdentity' | 'UploadHttpStatus' | 'UploadIdentityHttpStatus' | 'StoredMediaBytes' | 'PersistentMediaIdentity', status?: number): Error {
   const error = new Error(`Native CMS ${stage} validation failed`);
   error.name = `NativeCms${stage}Error`;
@@ -209,6 +219,29 @@ async function assertResumableMediaTarget(target: SqlDemoNativeLocalIoOptions['t
   };
   await checkTree(target.uploadDirectory);
   await checkTree(target.staticFilesDirectory);
+}
+
+async function readOwnedStoredUpload(uploadDirectory: string, value: string, baseUrl: string): Promise<{ basename: string; bytes: Uint8Array }> {
+  const url = safeUrlPath(value, baseUrl, '/uploads/');
+  const basename = url.pathname.slice('/uploads/'.length);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(basename) || basename === '.' || basename === '..') {
+    throw fail('Stored upload URL is not one safe direct-child filename');
+  }
+  const root = await realpath(uploadDirectory);
+  const path = join(root, basename);
+  const before = await lstat(path);
+  if (!before.isFile() || before.isSymbolicLink()) throw fail('Stored upload is not an owner regular file');
+  const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const opened = await handle.stat();
+    const canonical = await realpath(path);
+    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || canonical !== path || !inside(root, canonical)) {
+      throw fail('Stored upload identity changed while opening');
+    }
+    return { basename, bytes: await handle.readFile() };
+  } finally {
+    await handle.close();
+  }
 }
 
 async function assertPortFree(endpoint: string): Promise<void> {
@@ -515,7 +548,9 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
 
   async function inventory(target: SqlDemoNativeOwnedTarget): Promise<StrapiMediaInventory> {
     const base = new URL(target.baseUrl);
-    return buildStrapiMediaInventory({
+    const resumeStoredFiles = Boolean(config.targets[target.name]?.resumeExistingMediaOnly);
+    const seenStoredBasenames = new Set<string>();
+    const result = await buildStrapiMediaInventory({
       baseUrl: target.baseUrl,
       getPage: async (page, pageSize) => (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&populate=*`),
       getBytes: async (url) => {
@@ -523,12 +558,44 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         await verifyTargetProcess(target, state);
         const parsed = safeUrlPath(url, target.baseUrl, '/uploads/');
         if (parsed.origin !== base.origin) throw fail('Media inventory attempted a cross-origin read');
+        if (resumeStoredFiles) {
+          const stored = await readOwnedStoredUpload(target.uploadDirectory, parsed.toString(), target.baseUrl);
+          if (seenStoredBasenames.has(stored.basename)) throw fail('CMS media inventory contains duplicate stored upload paths');
+          seenStoredBasenames.add(stored.basename);
+          if (seenStoredBasenames.size === 1) {
+            let response: Response;
+            try { response = await fetcher(parsed, { redirect: 'manual', headers: bearer(state.token) }); }
+            catch (error) {
+              const failure = fail('Owned CMS stored-media sample fetch failed');
+              failure.name = 'NativeCmsStoredMediaSampleFetchError';
+              Object.assign(failure, { safeNetworkCode: safeFetchCode(error) });
+              throw failure;
+            }
+            await verifyTargetProcess(target, state);
+            if (response.status !== 200 || response.redirected || !Buffer.from(await response.arrayBuffer()).equals(Buffer.from(stored.bytes))) {
+              throw fail('Owned CMS stored-media sample does not match its private file');
+            }
+          }
+          await verifyTargetProcess(target, state);
+          return stored.bytes;
+        }
         const response = await fetcher(parsed, { redirect: 'manual', headers: bearer(state.token) });
         await verifyTargetProcess(target, state);
         if (response.status !== 200 || response.redirected) throw fail('Stored media read failed');
         return new Uint8Array(await response.arrayBuffer());
       },
     });
+    if (resumeStoredFiles) {
+      const entries = await readdir(target.uploadDirectory, { withFileTypes: true });
+      const actual = entries.map((entry) => entry.name).sort();
+      const expected = [...seenStoredBasenames].sort();
+      if (entries.some((entry) => !entry.isFile() || entry.isSymbolicLink())
+        || actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
+        throw fail('Owned upload directory does not exactly match CMS media inventory paths');
+      }
+      await verifyTargetProcess(target, owned(target));
+    }
+    return result;
   }
 
   async function openTarget(input: SqlDemoNativeTargetConfig & { name: 'A' | 'B'; token: string }): Promise<SqlDemoNativeOwnedTarget> {

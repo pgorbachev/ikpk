@@ -141,7 +141,7 @@ export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativ
 export class SqlDemoNativeRehearsalError extends Error {
   readonly code: string;
   readonly identity?: string;
-  readonly diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string };
+  readonly diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string; networkCode?: string };
 
   constructor(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> }) {
     super(message);
@@ -168,11 +168,11 @@ type TargetRun = {
 const HASH = /^[a-f\d]{64}$/i;
 const TARGET_NAMESPACE = /^ikpk_sql_demo_native(?:_[a-z0-9]+)?$/;
 
-function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string }): SqlDemoNativeRehearsalError {
+function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string; networkCode?: string }): SqlDemoNativeRehearsalError {
   return new SqlDemoNativeRehearsalError(code, message, identity, diagnostic);
 }
 
-function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string } {
+function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string; networkCode?: string } {
   const causeCategory = error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/.test(error.name) ? error.name : 'unknown-error';
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const safeContext = error instanceof Error ? error.message.match(/^([A-Za-z][A-Za-z0-9]*#\d+):/) : null;
@@ -193,6 +193,9 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
     frames,
     ...(safeContext ? { sourceIdentity: safeContext[1] } : {}),
     ...(safeField ? { field: safeField[1] } : {}),
+    ...((error as { safeNetworkCode?: unknown } | null)?.safeNetworkCode
+      && /^[A-Z][A-Z0-9_]{1,40}$/.test((error as { safeNetworkCode: string }).safeNetworkCode)
+      ? { networkCode: (error as { safeNetworkCode: string }).safeNetworkCode } : {}),
     ...((error as { safeHttpStatus?: unknown } | null)?.safeHttpStatus && Number.isSafeInteger((error as { safeHttpStatus: number }).safeHttpStatus)
       ? { signals: { httpStatus: (error as { safeHttpStatus: number }).safeHttpStatus } }
       : {}),

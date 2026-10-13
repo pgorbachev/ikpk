@@ -501,6 +501,7 @@ describe('concrete native local rehearsal adapter', () => {
     delete (config.targets as { B?: unknown }).B;
     for (const directory of [config.targets.A.dataDirectory, config.targets.A.uploadDirectory, config.targets.A.staticFilesDirectory]) await mkdir(directory, { recursive: true, mode: 0o700 });
     await writeFile(join(config.targets.A.dataDirectory, 'data.db'), 'synthetic preserved prototype database', { mode: 0o600 });
+    await writeFile(join(config.targets.A.uploadDirectory, 'actual-71.png'), storedBytes, { mode: 0o600 });
     const { createSqlDemoNativeLocalIo } = await import('./sql-demo-native-local-io.js');
     const io = createSqlDemoNativeLocalIo(config) as SqlDemoNativeRehearsalIo;
     configurations.set(io as object, config);
@@ -515,6 +516,23 @@ describe('concrete native local rehearsal adapter', () => {
     expect(inventory).toMatchObject({ mediaById: expect.any(Map), storedHashById: expect.any(Map) });
     expect(storedSha256).not.toBe(sourceSha256);
     await expect(io.prepareResumeMediaInventory(owned, [proof, { ...proof, sourceFileId: '72', sourceUrl: 'media/2024/03/08/extra.png' }])).rejects.toThrow();
+
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ data: [file], meta: { pagination: { page: 1, pageCount: 1, total: 1 } } }), { status: 200 }));
+    fetch.mockRejectedValueOnce(Object.assign(new TypeError('private transport detail'), {
+      cause: Object.assign(new Error('private nested detail'), { code: 'ECONNRESET' }),
+    }));
+    const sampleFailure = await io.prepareResumeMediaInventory(owned, [proof]).catch((error: unknown) => error);
+    expect(sampleFailure).toMatchObject({ name: 'NativeCmsStoredMediaSampleFetchError', safeNetworkCode: 'ECONNRESET' });
+    expect(JSON.stringify(sampleFailure)).not.toContain('private');
+
+    await writeFile(join(config.targets.A.uploadDirectory, 'actual-71.png'), 'unapproved stored bytes', { mode: 0o600 });
+    await expect(io.prepareResumeMediaInventory(owned, [proof])).rejects.toThrow();
+    await rm(join(config.targets.A.uploadDirectory, 'actual-71.png'));
+    await symlink(join(scratch, 'private-inputs', '71.png'), join(config.targets.A.uploadDirectory, 'actual-71.png'));
+    await expect(io.prepareResumeMediaInventory(owned, [proof])).rejects.toThrow();
+    await rm(join(config.targets.A.uploadDirectory, 'actual-71.png'));
+    file.url = '/uploads/%2e%2e%2foutside.png';
+    await expect(io.prepareResumeMediaInventory(owned, [proof])).rejects.toThrow();
   });
 
   it('resumes static documents only when the complete path set and bytes match approved proofs', async () => {
