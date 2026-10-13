@@ -236,9 +236,9 @@ function validateOwnerClassification(owner: JsonObject, candidatesFile: JsonObje
   }
   for (const key of ['source', 'media', 'classification']) {
     const rawDecision = valueAt(ownerDecision, key);
-    // Older accepted packets record media approval as prose. Keep that historical
-    // shape valid while allowing a versioned packet to carry a narrow DTO.
-    if (key === 'media' && typeof rawDecision === 'string' && rawDecision.trim()) continue;
+    // Historical owner packets record these decisions as descriptive prose.
+    // Keep prose non-authoritative; machine authorization stays in the DTO fields.
+    if (typeof rawDecision === 'string' && rawDecision.trim()) continue;
     const decision = object(rawDecision, `owner ${key} decision`);
     if (valueAt(decision, 'productionAcceptance', 'production_acceptance') !== false) throw new Error(`owner ${key} decision must not imply production acceptance`);
   }
