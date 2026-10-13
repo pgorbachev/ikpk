@@ -228,7 +228,7 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
       '/media/legacy/logo-v2.png',
       'https://legacy.example/image.png',
       'javascript:alert(1)',
-    ])).toEqual({ approvedRelativeCount: 1, validAbsoluteCount: 1, invalidCount: 1, firstClass: 'approved-relative' });
+    ])).toEqual({ approvedRelativeCount: 1, validAbsoluteCount: 1, invalidCount: 1, invalidRelativeCount: 0, invalidAbsoluteCount: 1, otherInvalidCount: 0, firstClass: 'approved-relative', firstInvalidShape: 'absolute' });
   });
 
   let dumpDirectory: string;

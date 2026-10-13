@@ -101,7 +101,11 @@ export interface SqlDemoNativePrototypeResult {
     approvedRelativeCount: number;
     validAbsoluteCount: number;
     invalidCount: number;
+    invalidRelativeCount: number;
+    invalidAbsoluteCount: number;
+    otherInvalidCount: number;
     firstClass: 'approved-relative' | 'valid-absolute' | 'invalid' | 'none';
+    firstInvalidShape: 'relative' | 'absolute' | 'other' | 'none';
   };
 }
 
@@ -115,7 +119,11 @@ export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativ
   let approvedRelativeCount = 0;
   let validAbsoluteCount = 0;
   let invalidCount = 0;
+  let invalidRelativeCount = 0;
+  let invalidAbsoluteCount = 0;
+  let otherInvalidCount = 0;
   let firstClass: SqlDemoNativePrototypeResult['sourceUrlClassification']['firstClass'] = 'none';
+  let firstInvalidShape: SqlDemoNativePrototypeResult['sourceUrlClassification']['firstInvalidShape'] = 'none';
   values.forEach((value, index) => {
     const kind = APPROVED_RELATIVE_MEDIA_URLS.has(value)
       ? 'approved-relative'
@@ -123,9 +131,21 @@ export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativ
     if (index === 0) firstClass = kind;
     if (kind === 'approved-relative') approvedRelativeCount += 1;
     else if (kind === 'valid-absolute') validAbsoluteCount += 1;
-    else invalidCount += 1;
+    else {
+      invalidCount += 1;
+      let shape: 'relative' | 'absolute' | 'other';
+      if (value.startsWith('/')) shape = 'relative';
+      else {
+        try { shape = new URL(value).protocol ? 'absolute' : 'other'; }
+        catch { shape = 'other'; }
+      }
+      if (firstInvalidShape === 'none') firstInvalidShape = shape;
+      if (shape === 'relative') invalidRelativeCount += 1;
+      else if (shape === 'absolute') invalidAbsoluteCount += 1;
+      else otherInvalidCount += 1;
+    }
   });
-  return { approvedRelativeCount, validAbsoluteCount, invalidCount, firstClass };
+  return { approvedRelativeCount, validAbsoluteCount, invalidCount, invalidRelativeCount, invalidAbsoluteCount, otherInvalidCount, firstClass, firstInvalidShape };
 }
 
 export class SqlDemoNativeRehearsalError extends Error {
@@ -792,9 +812,15 @@ export async function runSqlDemoNativePrototype(
           approvedRelativeCount: sourceUrlClassification.approvedRelativeCount,
           validAbsoluteCount: sourceUrlClassification.validAbsoluteCount,
           invalidCount: sourceUrlClassification.invalidCount,
+          invalidRelativeCount: sourceUrlClassification.invalidRelativeCount,
+          invalidAbsoluteCount: sourceUrlClassification.invalidAbsoluteCount,
+          otherInvalidCount: sourceUrlClassification.otherInvalidCount,
           firstApprovedRelative: Number(sourceUrlClassification.firstClass === 'approved-relative'),
           firstValidAbsolute: Number(sourceUrlClassification.firstClass === 'valid-absolute'),
           firstInvalid: Number(sourceUrlClassification.firstClass === 'invalid'),
+          firstInvalidRelative: Number(sourceUrlClassification.firstInvalidShape === 'relative'),
+          firstInvalidAbsolute: Number(sourceUrlClassification.firstInvalidShape === 'absolute'),
+          firstInvalidOther: Number(sourceUrlClassification.firstInvalidShape === 'other'),
         },
       });
     }
