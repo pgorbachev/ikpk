@@ -57,9 +57,11 @@ async function digestFile(path: string): Promise<string> { return sha256(await r
 
 function extractManifestMembers(manifest: SqlDemoAssetManifest): void {
   const rows = manifest.entries.map((entry) => ({ path: entry.archiveRelativePath, sha256: entry.sha256 }));
-  if (rows.length !== 619 || manifest.entries.filter((entry) => entry.sourceFileType === 'image').length !== 563 ||
+  // The one approved Barral replacement is deliberately absent from this ZIP list:
+  // its bytes come from the separately pinned Git supplement, not the missing original.
+  if (rows.length !== 618 || manifest.entries.filter((entry) => entry.sourceFileType === 'image').length !== 562 ||
       manifest.entries.filter((entry) => entry.sourceFileType === 'document').length !== 56) {
-    throw new Error('approved archive identity count was not 563 raster plus 56 PDF');
+    throw new Error('archive proof set was not 562 original raster plus 56 PDF; Barral replacement is separately pinned');
   }
   const python = String.raw`
 import hashlib, json, os, pathlib, stat, sys, zipfile
