@@ -724,7 +724,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   const bindings = source.FileBindingOrganizationInfo ?? [];
   for (const row of reachedDocs) {
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'document metadata source file ID');
-    const bindingId = numberId(valueAt(row, 'binding_id', 'bindingId'), `${id} binding ID`);
+    const bindingId = manifestNumberId(valueAt(row, 'binding_id', 'bindingId'), `${id} binding ID`);
     const binding = bindings.find((item) => item.id === bindingId && item.fileId === id);
     const info = binding && (source.OrganizationInfo ?? []).filter((item) => item.id === binding.organizationInfoId && item.status === 'active');
     if (!binding || info?.length !== 1) throw new Error(`${id} document metadata does not match native FileBindingOrganizationInfo`);
@@ -940,11 +940,12 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'document metadata source file ID');
     const proof = proofById.get(id);
     if (!proof || !entries.some((entry) => entry.sourceFileId === id && entry.sourceFileType === 'document')) throw new Error(`${id} document metadata has no matching verified byte proof`);
-    const bindingId = numberId(valueAt(row, 'binding_id', 'bindingId'), `${id} binding ID`);
+    const bindingId = manifestNumberId(valueAt(row, 'binding_id', 'bindingId'), `${id} binding ID`);
     const binding = bindings.find((item) => item.id === bindingId && item.fileId === id);
     if (!binding) throw new Error(`${id} document metadata does not match native FileBindingOrganizationInfo`);
     const info = (source.OrganizationInfo ?? []).find((item) => item.id === binding.organizationInfoId && item.status === 'active');
-    if (!info || valueAt(row, 'organization_info_id', 'organizationInfoId') !== info.id ||
+    const organizationInfoId = manifestNumberId(valueAt(row, 'organization_info_id', 'organizationInfoId'), `${id} organization info ID`);
+    if (!info || organizationInfoId !== info.id ||
       valueAt(row, 'priority') !== binding.priority || valueAt(row, 'title') !== binding.title || valueAt(row, 'section_name', 'sectionName') !== info.name) {
       throw new Error(`${id} document metadata does not match native binding and section identity`);
     }

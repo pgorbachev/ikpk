@@ -371,7 +371,7 @@ describe('SQL demo private input preparation and normalization', () => {
       reachability: { kind: 'document-binding', bindingSourceId: 801 },
     });
 
-    const output = mapSqlPublicContent(source, normalized.mapperOptions);
+    const output = mapSqlPublicContent({ ...source, Videos: undefined }, normalized.mapperOptions);
     expect(output.entities.documents).toContainEqual(expect.objectContaining({
       sourceId: 'pdf-1',
       fileId: 'pdf-1',
