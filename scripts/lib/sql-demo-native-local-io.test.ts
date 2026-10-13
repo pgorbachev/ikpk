@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { privateCmsNpmEnvironment } from './sql-demo-native-local-io.js';
 import type { SqlDemoNativeRehearsalIo, SqlDemoNativeOwnedTarget } from './sql-demo-native-rehearsal.js';
 import type { SqlDemoNativeCollection } from './sql-demo-native-conservation.js';
 import type { SqlDemoOfflineAssetProof } from './sql-demo-assets.js';
@@ -144,6 +145,18 @@ afterEach(async () => {
 });
 
 describe('concrete native local rehearsal adapter', () => {
+  it('uses distinct private npm user/global config paths without inheriting host credentials', () => {
+    const environment = privateCmsNpmEnvironment('/private/tmp/cms-candidate', '/usr/bin:/bin');
+
+    expect(environment.npm_config_userconfig).toBe('/private/tmp/cms-candidate/.home/.npmrc');
+    expect(environment.npm_config_globalconfig).toBe('/dev/null');
+    expect(environment.npm_config_userconfig).not.toBe(environment.npm_config_globalconfig);
+    expect(Object.keys(environment).sort()).toEqual([
+      'CI', 'HOME', 'PATH', 'TMPDIR', 'npm_config_audit', 'npm_config_fund',
+      'npm_config_globalconfig', 'npm_config_update_notifier', 'npm_config_userconfig',
+    ]);
+  });
+
   it('is a real runner IO adapter and fences invalid endpoints before token, process, or network access', async () => {
     const spawn = vi.fn<(...args: [string, readonly string[], Record<string, unknown>?]) => ChildLike>();
     const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>();

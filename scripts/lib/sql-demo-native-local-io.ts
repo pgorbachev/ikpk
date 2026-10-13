@@ -332,23 +332,30 @@ async function installPinnedCmsDependencies(
   const temp = join(candidateDirectory, '.tmp');
   await mkdir(home, { recursive: true, mode: 0o700 });
   await mkdir(temp, { recursive: true, mode: 0o700 });
+  const userConfig = join(home, '.npmrc');
+  await writeFile(userConfig, '', { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   await exec('npm', ['ci', '--no-audit', '--no-fund'], {
     cwd: candidateDirectory,
-    env: {
-      PATH: pathValue,
-      HOME: home,
-      TMPDIR: temp,
-      CI: 'true',
-      npm_config_userconfig: '/dev/null',
-      npm_config_globalconfig: '/dev/null',
-      npm_config_audit: 'false',
-      npm_config_fund: 'false',
-      npm_config_update_notifier: 'false',
-    },
+    env: privateCmsNpmEnvironment(candidateDirectory, pathValue),
     timeout: 10 * 60 * 1000,
     maxBuffer: 32 * 1024 * 1024,
   });
   if (sha256(await readFile(packageLock)) !== lockHash) throw fail('Pinned CMS lockfile changed during the isolated install');
+}
+
+export function privateCmsNpmEnvironment(candidateDirectory: string, pathValue: string): NodeJS.ProcessEnv {
+  const home = join(candidateDirectory, '.home');
+  return {
+    PATH: pathValue,
+    HOME: home,
+    TMPDIR: join(candidateDirectory, '.tmp'),
+    CI: 'true',
+    npm_config_userconfig: join(home, '.npmrc'),
+    npm_config_globalconfig: '/dev/null',
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
+    npm_config_update_notifier: 'false',
+  };
 }
 
 async function installNativeTokenBootstrap(candidateDirectory: string, tokenPath: string): Promise<void> {
