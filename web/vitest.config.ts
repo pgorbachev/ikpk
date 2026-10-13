@@ -87,6 +87,7 @@ export default defineConfig({
       'tests/trial-environment.test.ts',
       'tests/server-provisioning-container.test.ts',
       'tests/server-provisioning-verify.test.ts',
+      'tests/maintenance-notice.render.test.ts',
     ],
   },
 });
