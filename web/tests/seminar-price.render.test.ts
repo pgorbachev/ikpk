@@ -35,18 +35,18 @@ describe('стоимость платного семинара: главная, 
     vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
     vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2026-10-13');
     const visible = (value: string) => value.replace(/\s|&nbsp;|&#160;/g, ' ');
-    expect(visible(getUpcomingSeminars(1, new Date('2026-10-13T12:00:00Z'))[0].priceLabel)).toBe(label);
+    expect.soft(visible(getUpcomingSeminars(1, new Date('2026-10-13T12:00:00Z'))[0].priceLabel)).toBe(label);
 
-    const container = await AstroContainer.create();
+    const container = await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } });
     const scheduleHtml = await container.renderToString(SchedulePage, {
       request: new Request('https://ikpk.su/raspisanie-i-tseny'),
     });
-    expect(visible(scheduleHtml)).toContain(label);
+    expect.soft(visible(scheduleHtml).includes(label), 'цена в расписании').toBe(true);
     const seminarHtml = await container.renderToString(SeminarPage, {
       props: { seminar, courseGroup, institute },
       request: new Request(`https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`),
     });
-    expect(visible(seminarHtml)).toContain(label);
+    expect.soft(visible(seminarHtml).includes(label), 'цена на странице семинара').toBe(true);
     const schemas = [...seminarHtml.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)]
       .map((match) => JSON.parse(match[1]));
     const event = schemas.find((schema) => schema['@type'] === 'Event');
