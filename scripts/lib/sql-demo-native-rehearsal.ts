@@ -18,7 +18,7 @@ import { materializeSqlPublicContent } from './sql-public-materializer.js';
 
 type TargetName = 'A' | 'B';
 
-type SqlDemoNativeTargetConfig = {
+export type SqlDemoNativeTargetConfig = {
   baseUrl: string;
   namespace: string;
   dataDirectory: string;
