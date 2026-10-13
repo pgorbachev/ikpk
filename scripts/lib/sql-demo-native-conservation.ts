@@ -44,8 +44,10 @@ const COLLECTIONS: readonly SqlDemoNativeCollection[] = [
 ];
 const SHA256 = /^[a-f\d]{64}$/i;
 type Row = Record<string, unknown>;
-type HtmlNode = { nodeName?: string; tagName?: string; value?: string; data?: string; attrs?: { name: string; value: string }[]; childNodes?: HtmlNode[] };
-type CanonicalMediaAliases = ReadonlyMap<string, ReadonlySet<string>>;
+type HtmlNode = { nodeName?: string; tagName?: string; value?: string; data?: string; attrs?: { name: string; value: string }[]; childNodes?: HtmlNode[]; content?: HtmlNode };
+type CanonicalHtmlAttribute = { kind: 'raw'; value: string } | { kind: 'verified-image'; sourceFileId: string };
+type ExpectedMediaByUrl = ReadonlyMap<string, ReadonlySet<string>>;
+type PhysicalMediaByUrl = ReadonlyMap<string, ReadonlySet<string>>;
 const STRAPI_SYSTEM_FIELDS = new Set(['id', 'documentId', 'publishedAt', 'createdAt', 'updatedAt', 'locale']);
 const RICH_HTML_FIELDS = new Set(['body', 'description', 'full_text', 'learning_plan', 'learning_mode', 'recommendations', 'additionalText', 'bio']);
 
@@ -80,49 +82,93 @@ function compareValue(expected: unknown, actual: unknown): boolean {
     const actualRecord = asRecord(actual);
     if (!actualRecord) return false;
     const expectedEntries = Object.entries(expected as Row);
-    const expectedKeys = new Set(expectedEntries.map(([key]) => key));
-    const actualKeys = Object.keys(actualRecord).filter((key) => expectedKeys.has(key) || !STRAPI_SYSTEM_FIELDS.has(key));
-    return actualKeys.length === expectedEntries.length && expectedEntries.every(([key, value]) =>
+    return Object.keys(actualRecord).length === expectedEntries.length && expectedEntries.every(([key, value]) =>
       Object.prototype.hasOwnProperty.call(actualRecord, key)
       && compareValue(value, actualRecord[key]));
   }
   return Object.is(expected, actual);
 }
 
-function canonicalHtml(value: string, aliases: CanonicalMediaAliases): unknown {
-  const projectNode = (node: HtmlNode): unknown => {
-    if (node.tagName === 'img') {
-      const attrs = (node.attrs ?? []).map(({ name, value: attrValue }) => ({
-        name,
-        value: name === 'src' && aliases.has(attrValue)
-          ? `ikpk-verified-media:${[...aliases.get(attrValue)!].sort().join(',')}`
-          : attrValue,
-      })).sort((left, right) => left.name.localeCompare(right.name));
-      return { tagName: node.tagName, attrs, children: (node.childNodes ?? []).map(projectNode) };
-    }
-    if (node.tagName) {
-      return {
-        tagName: node.tagName,
-        attrs: (node.attrs ?? []).map(({ name, value }) => ({ name, value })).sort((left, right) => left.name.localeCompare(right.name)),
-        children: (node.childNodes ?? []).map(projectNode),
-      };
-    }
-    if (node.nodeName === '#text') return { text: node.value ?? '' };
-    if (node.nodeName === '#comment') return { comment: node.data ?? '' };
-    return (node.childNodes ?? []).map(projectNode);
-  };
-  return projectNode(parseFragment(value) as HtmlNode);
+function canonicalImageSrcPair(
+  expectedUrl: string,
+  actualUrl: string,
+  expectedMediaByUrl: ExpectedMediaByUrl,
+  physicalMediaByUrl: PhysicalMediaByUrl,
+): [CanonicalHtmlAttribute, CanonicalHtmlAttribute] | null {
+  const sourceFileIds = expectedMediaByUrl.get(expectedUrl);
+  if (!sourceFileIds) {
+    return [{ kind: 'raw', value: expectedUrl }, { kind: 'raw', value: actualUrl }];
+  }
+  if (sourceFileIds.size !== 1) return null;
+  const [sourceFileId] = sourceFileIds;
+  if (!sourceFileId || !physicalMediaByUrl.get(actualUrl)?.has(sourceFileId)) return null;
+  const canonical: CanonicalHtmlAttribute = { kind: 'verified-image', sourceFileId };
+  return [canonical, canonical];
 }
 
-function sameAttribute(field: string, expected: unknown, actual: unknown, aliases: CanonicalMediaAliases): boolean {
+function sameHtml(expected: string, actual: string, expectedMediaByUrl: ExpectedMediaByUrl, physicalMediaByUrl: PhysicalMediaByUrl): boolean {
+  const expectedRoot = parseFragment(expected) as HtmlNode;
+  const actualRoot = parseFragment(actual) as HtmlNode;
+  const sameChildren = (left: readonly HtmlNode[], right: readonly HtmlNode[], inTemplate: boolean): boolean =>
+    left.length === right.length && left.every((node, index) => sameNode(node, right[index]!, inTemplate));
+  const sameAttributes = (
+    left: readonly { name: string; value: string }[],
+    right: readonly { name: string; value: string }[],
+    inTemplate: boolean,
+    isImage: boolean,
+  ): boolean => {
+    if (left.length !== right.length) return false;
+    return left.every((attribute, index) => {
+      const actualAttribute = right[index]!;
+      if (attribute.name !== actualAttribute.name) return false;
+      if (attribute.name === 'src' && !inTemplate && isImage) {
+        const pair = canonicalImageSrcPair(attribute.value, actualAttribute.value, expectedMediaByUrl, physicalMediaByUrl);
+        return pair !== null && JSON.stringify(pair[0]) === JSON.stringify(pair[1]);
+      }
+      return attribute.value === actualAttribute.value;
+    });
+  };
+  const sameNode = (left: HtmlNode, right: HtmlNode, inTemplate: boolean): boolean => {
+    if (left.tagName !== right.tagName || left.nodeName !== right.nodeName) return false;
+    if (left.tagName === 'template') {
+      const leftAttrs = [...(left.attrs ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+      const rightAttrs = [...(right.attrs ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+      if (!sameAttributes(leftAttrs, rightAttrs, true, false)) return false;
+      return sameChildren(left.content?.childNodes ?? [], right.content?.childNodes ?? [], true);
+    }
+    if (left.tagName) {
+      const leftAttrs = [...(left.attrs ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+      const rightAttrs = [...(right.attrs ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+      if (!sameAttributes(leftAttrs, rightAttrs, inTemplate, left.tagName === 'img')) return false;
+    } else if (left.nodeName === '#text' && left.value !== right.value) return false;
+    else if (left.nodeName === '#comment' && left.data !== right.data) return false;
+    return sameChildren(left.childNodes ?? [], right.childNodes ?? [], inTemplate);
+  };
+  return sameChildren(expectedRoot.childNodes ?? [], actualRoot.childNodes ?? [], false)
+    && expectedRoot.nodeName === actualRoot.nodeName;
+}
+
+function sameSeo(expected: unknown, actual: unknown): boolean {
+  const expectedRecord = asRecord(expected);
+  const actualRecord = asRecord(actual);
+  if (!expectedRecord || !actualRecord) return false;
+  const actualKeys = Object.keys(actualRecord).filter((key) => key !== 'id');
+  if (actualKeys.length !== Object.keys(expectedRecord).length) return false;
+  if (Object.prototype.hasOwnProperty.call(actualRecord, 'id')
+    && (!Number.isSafeInteger(actualRecord.id) || (actualRecord.id as number) <= 0)) return false;
+  return compareValue(expectedRecord, Object.fromEntries(actualKeys.map((key) => [key, actualRecord[key]])));
+}
+
+function sameAttribute(field: string, expected: unknown, actual: unknown, expectedMediaByUrl: ExpectedMediaByUrl, physicalMediaByUrl: PhysicalMediaByUrl): boolean {
   if (field === 'published_date' && typeof expected === 'string' && typeof actual === 'string') {
     const expectedDay = /^\d{4}-\d{2}-\d{2}$/.test(expected) ? expected : null;
     const actualMidnight = /^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.000)?Z$/.exec(actual)?.[1] ?? null;
     return expected === actual || (expectedDay !== null && expectedDay === actualMidnight);
   }
   if (RICH_HTML_FIELDS.has(field) && typeof expected === 'string' && typeof actual === 'string') {
-    return JSON.stringify(canonicalHtml(expected, aliases)) === JSON.stringify(canonicalHtml(actual, aliases));
+    return sameHtml(expected, actual, expectedMediaByUrl, physicalMediaByUrl);
   }
+  if (field === 'seo') return sameSeo(expected, actual);
   return compareValue(expected, actual);
 }
 
@@ -142,7 +188,8 @@ function mediaSources(value: unknown, context: string): Record<string, Row> {
 
 interface TargetIndex {
   byLegacy: Map<SqlDemoNativeCollection, Map<string, SqlDemoStrapi5PublishedRecord>>;
-  aliases: Map<string, Set<string>>;
+  expectedMediaByUrl: Map<string, Set<string>>;
+  physicalMediaByUrl: Map<string, Set<string>>;
   mediaFileIdsById: Map<number, Set<string>>;
   storedHashByFile: Map<string, string>;
 }
@@ -157,7 +204,7 @@ function indexMedia(
   expected: SqlDemoRelease,
   readback: SqlDemoStrapi5Readback,
   targetName: string,
-): { aliases: Map<string, Set<string>>; mediaFileIdsById: Map<number, Set<string>>; storedHashByFile: Map<string, string> } {
+): { expectedMediaByUrl: Map<string, Set<string>>; physicalMediaByUrl: Map<string, Set<string>>; mediaFileIdsById: Map<number, Set<string>>; storedHashByFile: Map<string, string> } {
   const imageMappings = expected.provenance.assetMappings.filter((asset) => asset.detectedMimeType.startsWith('image/'));
   const byFile = new Map<string, SqlDemoVerifiedAssetMapping>();
   const bySourceUrl = new Map<string, string>();
@@ -176,10 +223,11 @@ function indexMedia(
   const actualByFile = new Map<string, SqlDemoStrapi5MediaReadback>();
   const fileIdsByMediaId = new Map<number, Set<string>>();
   const storedHashByFile = new Map<string, string>();
-  const aliases = new Map<string, Set<string>>();
+  const expectedMediaByUrl = new Map<string, Set<string>>();
+  const physicalMediaByUrl = new Map<string, Set<string>>();
   for (const asset of imageMappings) {
-    addAlias(aliases, asset.sourceUrl, asset.sourceFileId);
-    addAlias(aliases, asset.targetPublicUrl, asset.sourceFileId);
+    addAlias(expectedMediaByUrl, asset.sourceUrl, asset.sourceFileId);
+    addAlias(expectedMediaByUrl, asset.targetPublicUrl, asset.sourceFileId);
   }
 
   for (const media of readback.media) {
@@ -212,14 +260,14 @@ function indexMedia(
       fileIds.add(fileId);
       fileIdsByMediaId.set(media.id, fileIds);
       storedHashByFile.set(fileId, storedSha);
-      addAlias(aliases, media.url, fileId);
+      addAlias(physicalMediaByUrl, media.url, fileId);
     }
   }
 
   for (const asset of imageMappings) {
     if (!actualByFile.has(asset.sourceFileId)) fail(`${targetName} Files#${asset.sourceFileId}`, 'expected source media is missing');
   }
-  return { aliases, mediaFileIdsById: fileIdsByMediaId, storedHashByFile };
+  return { expectedMediaByUrl, physicalMediaByUrl, mediaFileIdsById: fileIdsByMediaId, storedHashByFile };
 }
 
 function relationRows(value: unknown): Row[] | null {
@@ -266,6 +314,42 @@ function compareRelations(
       fail(context, `${relation.field} relation does not match the composed release`);
     }
   }
+}
+
+function isMultipleMediaField(plan: SqlMaterializerProjectionRecord): boolean {
+  return (plan.collection === 'institutes' && plan.image?.field === 'image')
+    || (plan.collection === 'course-groups' && plan.image?.field === 'image')
+    || (plan.collection === 'teachers' && plan.image?.field === 'photo');
+}
+
+function compareImage(
+  plan: SqlMaterializerProjectionRecord,
+  row: Row,
+  index: TargetIndex,
+  readback: SqlDemoStrapi5Readback,
+): void {
+  if (!plan.image) return;
+  const context = identity(plan);
+  const field = plan.image.field;
+  if (!Object.prototype.hasOwnProperty.call(row, field)) fail(context, `${field} readback is missing`);
+  const raw = row[field];
+  const multiple = isMultipleMediaField(plan);
+  const expectedFileId = plan.image.sourceId;
+  if (expectedFileId === null) {
+    if (multiple) {
+      if (!Array.isArray(raw) || raw.length !== 0) fail(context, `${field} must be an empty media array`);
+    } else if (raw != null) fail(context, `${field} should be null`);
+    return;
+  }
+
+  const references = multiple ? (Array.isArray(raw) ? raw : null) : (Array.isArray(raw) ? null : [raw]);
+  if (!references || references.length !== 1) fail(context, `${field} must contain exactly one media reference`);
+  const image = asRecord(asRecord(references[0])?.data ?? references[0]);
+  if (!image || !Number.isSafeInteger(image.id)) fail(context, `${field} media reference is missing or malformed`);
+  const actualFileIds = index.mediaFileIdsById.get(image.id as number);
+  if (!actualFileIds?.has(expectedFileId)) fail(context, `${field} does not resolve to Files#${expectedFileId}`);
+  const targetMedia = readback.media.find((item) => item.id === image.id);
+  if (!targetMedia || image.url !== targetMedia.url) fail(context, `${field} URL and media id are inconsistent`);
 }
 
 function compareTarget(
@@ -318,7 +402,8 @@ function compareTarget(
 
   const targetIndex: TargetIndex = {
     byLegacy,
-    aliases: media.aliases,
+    expectedMediaByUrl: media.expectedMediaByUrl,
+    physicalMediaByUrl: media.physicalMediaByUrl,
     mediaFileIdsById: media.mediaFileIdsById,
     storedHashByFile: media.storedHashByFile,
   };
@@ -331,36 +416,25 @@ function compareTarget(
       && !STRAPI_SYSTEM_FIELDS.has(field)
       && field !== 'legacy_id'
       && field !== plan.image?.field
+      && !(plan.collection === 'schedule-entries' && field === 'admin_label')
       && !plan.relations.some((relation) => relation.field === field));
     if (unexpectedFields.length) fail(context, `published row contains unexpected ${plan.collection} field`);
+    if (plan.collection === 'schedule-entries' && Object.prototype.hasOwnProperty.call(row, 'admin_label')
+      && typeof row.admin_label !== 'string') fail(context, 'schedule-entries admin_label must be a string');
     for (const [field, value] of Object.entries(plan.attributes)) {
       if (field === 'image' || field === 'photo') continue;
       if (!Object.prototype.hasOwnProperty.call(row, field)) fail(context, `${targetName} readback omitted ${field}`);
-      if (!sameAttribute(field, value, row[field], targetIndex.aliases)) fail(context, `${field} differs from the composed release`);
-    }
-    if (plan.image) {
-      const expectedFileId = plan.image.sourceId;
-      const rawImage = row[plan.image.field];
-      if (expectedFileId === null) {
-        if (rawImage != null) fail(context, `${plan.image.field} should be null`);
-      } else {
-        const image = asRecord(asRecord(rawImage)?.data ?? rawImage);
-        if (!image || !Number.isSafeInteger(image.id)) fail(context, `${plan.image.field} media reference is missing or malformed`);
-        const actualFileIds = targetIndex.mediaFileIdsById.get(image.id as number);
-        if (!actualFileIds?.has(expectedFileId)) fail(context, `${plan.image.field} does not resolve to Files#${expectedFileId}`);
-        const targetMedia = readback.media.find((item) => item.id === image.id);
-        if (!targetMedia || image.url !== targetMedia.url) fail(context, `${plan.image.field} URL and media id are inconsistent`);
+      if (!sameAttribute(field, value, row[field], targetIndex.expectedMediaByUrl, targetIndex.physicalMediaByUrl)) {
+        fail(context, `${field} differs from the composed release`);
       }
     }
+    compareImage(plan, row, targetIndex, readback);
     compareRelations(plan, row, targetIndex);
   }
   return targetIndex;
 }
 
-/**
- * Compare each freshly read Strapi target with the composed SQL release, then compare
- * the two logical results while ignoring generated document and media identities.
- */
+/** Validate each freshly read Strapi target against the composed SQL release. */
 export function assertSqlDemoNativeConservation(
   expected: SqlDemoRelease,
   classification: SqlMaterializerOptions['classification'],
