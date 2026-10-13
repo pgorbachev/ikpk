@@ -98,7 +98,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const teachers = Array.from({ length: 5 }, (_, i) =>
     ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', trait: i === 0 ? 'method-author' : 'teacher', institute_legacy_id: 'raw-legacy-institute', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
-    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', status: 'active', course_group: ref('cg', 1, 'Программа 1'), institute: ref('inst', 1, 'Институт 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
+    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', course_group: ref('cg', 1, 'Программа 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
     ...base('ev', i + 1, `Событие ${i + 1}`),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
@@ -107,7 +107,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     price: 5000,
     oldPrice: 6000,
     isFree: false,
-    status: 'active',
+    entry_status: 'active',
     registrationFormLink: 'https://example.invalid/form',
     description: '<p>Описание события</p>',
     additionalText: '<p>Дополнение</p>',
@@ -720,3 +720,106 @@ describe('съём отказывается сам, когда общий сро
     expect(existsSync(join(dir, 'snapshot.json')), 'снимок не записан').toBe(true);
   });
 });
+
+// ═════════════════════════ Формы установленной CMS: медиа-списки и связь преподавателей ═══════
+
+describe('съём понимает формы данных установленной CMS', () => {
+  // Установленная CMS (4016ea47) отдаёт `photo`/`image` списком (`multiple: true`), а
+  // преподавателей проведения — связью с записью преподавателя. Съём 13.10.2026 по прежним
+  // формам дал 0 фото из 32 и преподавателей проведений, которых страница не находит.
+  const d = dataset();
+  const listed = (name: string, field: string): StubCollection => ({
+    records: d[name]!.records.map((r) => ({ ...r, [field]: [r[field]] })),
+  });
+  const relationEntries: StubCollection = {
+    records: d['schedule-entries']!.records.map((r, i) => ({
+      ...r,
+      teachers:
+        i === 0
+          ? [{ ...ref('teach', 2, 'Преподаватель 2'), id: 902, bio: '<p>Биография</p>' }]
+          : r.teachers,
+    })),
+  };
+
+  it('фото, изображения институтов и программ из списка из одного элемента сохраняются', async () => {
+    const cms = await stub({
+      teachers: listed('teachers', 'photo'),
+      institutes: listed('institutes', 'image'),
+      'course-groups': listed('course-groups', 'image'),
+    });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    const types = typesOf(readSnapshot(dir));
+    expect(types.teachers!.map((t) => t.photo)).toEqual(
+      Array.from({ length: 5 }, (_, i) => `/uploads/img-${i + 1}.webp`),
+    );
+    expect(types.institutes!.map((t) => t.images)).toEqual([['/uploads/img-1.webp'], ['/uploads/img-2.webp']]);
+    expect(types.institutes![0]!.image).toEqual({ url: '/uploads/img-1.webp', id: 'media-1' });
+    expect(types.course_groups!.map((t) => t.images)).toEqual(
+      Array.from({ length: 3 }, (_, i) => [`/uploads/img-${i + 1}.webp`]),
+    );
+  });
+
+  it('медиа-список из нескольких элементов — отказ с названием поля, а не молчаливый выбор', async () => {
+    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 0 ? [media(1), media(2)] : r.photo }));
+    const cms = await stub({ teachers: { records: two } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл при двух фото у одной записи:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('преподаватель проведения из связи приходит в форме, которую ищет страница', async () => {
+    const cms = await stub({ 'schedule-entries': relationEntries });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    const entries = typesOf(readSnapshot(dir)).schedule_entries!;
+    expect(entries[0]!.teachers).toEqual([{ id: 'teach-002', fullName: 'Преподаватель 2' }]);
+    // Прежняя JSON-форма `{id, fullName}` остаётся как есть.
+    expect(entries[1]!.teachers).toEqual([{ id: 1, fullName: 'Преподаватель 1' }]);
+  });
+
+  it('поле записи без решения о нём — отказ с названием поля, снимок не пишется', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, mystery: 'x' })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с неизвестным полем:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.mystery/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('медиа неподдерживаемой формы — отказ, а не пропавшее фото', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: 17 })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с фото-числом:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo/);
+  });
+
+  it('преподаватель проведения без legacy_id — отказ, а не ссылка в никуда', async () => {
+    const broken: StubCollection = {
+      records: d['schedule-entries']!.records.map((r) => ({ ...r, teachers: [{ id: 5, documentId: 'x', name: 'Без идентификатора' }] })),
+    };
+    const cms = await stub({ 'schedule-entries': broken });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с неполной связью:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/schedule_entries\.teachers/);
+  });
+});
+
