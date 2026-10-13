@@ -1,13 +1,5 @@
 [
   {
-    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
-    "file": "components/MaintenanceNotice.astro",
-    "nodeKind": "element",
-    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
-    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
-    "identity": "style|body:0830de20854fd197"
-  },
-  {
     "slotId": "src:components/Analytics.astro:L21:C1:script",
     "file": "components/Analytics.astro",
     "nodeKind": "element",
@@ -542,6 +534,14 @@
     "locator": "components/institutes/InstituteTeacherCard.astro:L33:C1:style",
     "fingerprint": "59c1872967c9c44bbfc89d8529b615b30ad1d58c4ff4b93b98d637f756fcb3e9",
     "identity": "style|body:c2e6851b278428bf"
+  },
+  {
+    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
+    "file": "components/MaintenanceNotice.astro",
+    "nodeKind": "element",
+    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
+    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
+    "identity": "style|body:0830de20854fd197"
   },
   {
     "slotId": "src:components/MotionScript.astro:L11:C1:script",
