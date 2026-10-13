@@ -4,7 +4,7 @@ import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promi
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSqlDemoNativeLocalIo } from './lib/sql-demo-native-local-io.js';
-import { runSqlDemoNativePrototype } from './lib/sql-demo-native-rehearsal.js';
+import { runSqlDemoNativePrototype, SqlDemoNativeRehearsalError } from './lib/sql-demo-native-rehearsal.js';
 import { SQL_DEMO_PRIVATE_JSON_NAMES } from './lib/sql-demo-private-inputs.js';
 import type { SqlDemoPrivateInputRootConfig } from './lib/sql-demo-private-inputs.js';
 import type { SqlDemoAssetManifest } from './lib/sql-demo-assets.js';
@@ -180,6 +180,7 @@ main().catch((error) => {
   const name = error instanceof Error ? error.name : 'unknown-error';
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const safeFrames = [...new Set(stack.split(/\r?\n/).map((line) => line.match(/(sql-demo-[a-z-]+\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter(Boolean))];
-  process.stderr.write(`${JSON.stringify({ category: name, frames: safeFrames, message: 'details withheld' })}\n`);
+  const diagnostic = error instanceof SqlDemoNativeRehearsalError ? error.diagnostic : undefined;
+  process.stderr.write(`${JSON.stringify({ category: name, ...(error instanceof SqlDemoNativeRehearsalError ? { code: error.code } : {}), ...(diagnostic ? { causeCategory: diagnostic.causeCategory, causeFrames: diagnostic.frames } : {}), frames: safeFrames, message: 'details withheld' })}\n`);
   process.exitCode = 1;
 });
