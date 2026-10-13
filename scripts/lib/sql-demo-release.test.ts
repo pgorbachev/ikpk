@@ -459,6 +459,7 @@ describe('composeSqlDemoRelease', () => {
     } as SqlDemoAllowlistedAssets['images'][number];
     const seminarImage = {
       ...attestation(seminarFileId, '/storage/seminar-learning.png', seminarTarget, 'image/png', 'attest-seminar-rich'),
+      sha256: 'e'.repeat(64),
       sourceReferenceAlias: seminarAlias,
     } as SqlDemoAllowlistedAssets['images'][number];
     const input = mapped({
