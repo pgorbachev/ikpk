@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import { loadSqlDemoAssets } from './sql-demo-assets.js';
+import type { SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
 import type { SqlDemoStrapi5Readback } from './sql-demo-native-conservation.js';
+import { prepareSqlDemoPrivateInputs } from './sql-demo-private-inputs.js';
 import type { SqlPublicReaderOptions } from './sql-public-reader.js';
 import type { SqlDemoRelease } from './sql-demo-release.js';
 import type { SqlMaterializerOptions } from './sql-public-materializer.js';
@@ -15,6 +17,7 @@ const SOURCE_SHA = createHash('sha256').update(DUMP_BYTES).digest('hex');
 const STORED_SHA = 'b'.repeat(64);
 const TARGET_URL = 'http://127.0.0.1:1337';
 const TARGET_NAMESPACE = 'ikpk_sql_demo_native_red';
+const prepareSqlDemoPrivateInputsActual = prepareSqlDemoPrivateInputs;
 
 type TargetName = 'A' | 'B';
 type OwnedTarget = {
@@ -96,11 +99,26 @@ const emptyReadback = (): SqlDemoStrapi5Readback => ({
   media: [],
 });
 
+function pdfProof(sourceFileId: string, sourceUrl: string, sourceSha256: string, resolvedLocalPath: string): SqlDemoOfflineDocumentProof {
+  return {
+    sourceFileId,
+    sourceUrl,
+    archiveRelativePath: resolvedLocalPath,
+    resolvedLocalPath,
+    sourceSha256,
+    reachability: { kind: 'document-binding', bindingSourceId: 501 },
+    verification: { status: 'verified', loader: 'sql-demo-asset-loader', attestationId: `synthetic-${sourceFileId}` },
+    sourceFileType: 'document',
+    detectedMimeType: 'application/pdf',
+    detectedExtension: 'pdf',
+  };
+}
+
 function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
   const io: SqlDemoNativeRehearsalIo = {
     resolveCmsToken: vi.fn(async () => 'SYNTHETIC-TOKEN'),
     openOwnedTarget: vi.fn(async ({ name, baseUrl, namespace }) => ({
-      name, baseUrl, namespace, client: { name },
+      name, baseUrl, namespace, client: { name, request: vi.fn(async () => undefined) },
       process: { pid: name === 'A' ? 4101 : 4102, endpoint: baseUrl, namespace },
     })),
     refreshMediaInventory: vi.fn(async () => []),
@@ -108,7 +126,10 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
     readStoredMediaBytes: vi.fn(async () => Buffer.from('synthetic stored bytes')),
     readPdfBytes: vi.fn(async () => Buffer.from('%PDF-1.7\nsynthetic document\n%%EOF\n')),
     writeStaticDocument: vi.fn(async () => undefined),
-    createFreshClient: vi.fn(async (target) => ({ ...target, client: { name: target.name, fresh: true } })),
+    createFreshClient: vi.fn(async (target) => ({
+      ...target,
+      client: { name: target.name, fresh: true, request: vi.fn(async () => undefined) },
+    })),
     readPublished: vi.fn(async () => emptyReadback()),
     capture: vi.fn(async () => undefined),
     stopOwnedSqlSource: vi.fn(async () => undefined),
@@ -121,7 +142,7 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
   };
   return {
     reader,
-    privateInputConfig: {} as never,
+    privateInputConfig: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, privateJson: {} } as never,
     target: { baseUrl: TARGET_URL, namespace: TARGET_NAMESPACE },
     io,
     ...overrides,
@@ -139,6 +160,10 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     dumpPath = join(dumpDirectory, 'baseline.sql');
     await writeFile(dumpPath, DUMP_BYTES);
     vi.spyOn(await import('./sql-public-content.js'), 'mapSqlPublicContent').mockReturnValue(emptyMapped as never);
+    vi.spyOn(await import('./sql-demo-private-inputs.js'), 'prepareSqlDemoPrivateInputs').mockReturnValue({
+      expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {},
+      classificationCandidates: { teachers: [], articles: [] },
+    } as never);
     vi.spyOn(await import('./sql-demo-private-inputs.js'), 'normalizeSqlDemoPrivateInputs').mockReturnValue({
       mapperOptions: { expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {} },
       loader: {} as never, composer: {} as never, materializer: emptyClassification,
@@ -148,7 +173,7 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     } as never);
     vi.spyOn(await import('./sql-demo-release.js'), 'composeSqlDemoRelease').mockReturnValue(emptyRelease);
     vi.spyOn(await import('./sql-public-materializer.js'), 'materializeSqlPublicContent').mockResolvedValue(undefined as never);
-    sharp.versions.vips = '8.18.2';
+    sharp.versions.vips = '8.18.7';
   });
 
   afterEach(async () => {
@@ -174,9 +199,23 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     });
     input.reader = { ...input.reader, dumpPath, runPsql };
     await run(input);
+    const prepare = vi.mocked(prepareSqlDemoPrivateInputs);
+    const resolveToken = vi.mocked(input.io.resolveCmsToken);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(resolveToken).toHaveBeenCalledTimes(1);
+    expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(resolveToken.mock.invocationCallOrder[0]!);
     expect(runPsql).toHaveBeenCalledTimes(1);
     expect(await readFile(dumpPath)).toEqual(DUMP_BYTES);
     expect(input.io.stopOwnedSqlSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects missing raw private-input pins before resolving credentials', async () => {
+    const input = options();
+    vi.mocked(prepareSqlDemoPrivateInputs).mockImplementationOnce(prepareSqlDemoPrivateInputsActual);
+    await expect(run(input)).rejects.toThrow('approved-supplements.json raw bytes are missing');
+    expect(prepareSqlDemoPrivateInputs).toHaveBeenCalledTimes(1);
+    expect(input.io.resolveCmsToken).not.toHaveBeenCalled();
+    expect(input.reader.runPsql).not.toHaveBeenCalled();
   });
 
   it('stops the owned source in finally when mapping fails and preserves the pinned dump', async () => {
@@ -209,8 +248,8 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
       offlineDocuments: [], supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
     } as never);
     vi.mocked(input.io.refreshMediaInventory).mockResolvedValueOnce({ files: [] });
-    vi.mocked(input.io.uploadRaster).mockResolvedValueOnce({ id: 91, url: '/uploads/normalized-91.webp' });
-    vi.mocked(input.io.readStoredMediaBytes).mockResolvedValueOnce(storedBytes);
+    vi.mocked(input.io.uploadRaster).mockResolvedValue({ id: 91, url: '/uploads/normalized-91.webp' });
+    vi.mocked(input.io.readStoredMediaBytes).mockResolvedValue(storedBytes);
     await run(input);
     expect(input.io.refreshMediaInventory).toHaveBeenCalled();
     expect(input.io.uploadRaster).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'source-9', expectedSource);
@@ -233,9 +272,24 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     const input = options({ reader: { ...options().reader, dumpPath } });
     const pdfBytes = Buffer.from('%PDF-1.7\nsynthetic approved PDF\n%%EOF\n');
     const pdfPath = 'web/public/static-files/source-501.pdf';
+    const sourceUrl = '/sql/source-501.pdf';
+    vi.spyOn(await import('./sql-public-content.js'), 'mapSqlPublicContent').mockReturnValueOnce({
+      ...emptyMapped,
+      entities: { ...emptyMapped.entities, documents: [{
+        fileId: 'pdf-501', bindingSourceId: 501, url: sourceUrl,
+      }] },
+    } as never);
+    vi.spyOn(await import('./sql-demo-private-inputs.js'), 'normalizeSqlDemoPrivateInputs').mockReturnValueOnce({
+      mapperOptions: { expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {} },
+      loader: {} as never,
+      composer: { acceptedSupplements: { targetLocations: [{
+        sourceTable: 'FileBindingOrganizationInfo', sourceId: 501, publicDocumentPath: '/static-files/source-501.pdf',
+      }] } } as never,
+      materializer: emptyClassification,
+    } as never);
     vi.spyOn(await import('./sql-demo-assets.js'), 'loadSqlDemoAssets').mockResolvedValueOnce({
       offlineMedia: [],
-      offlineDocuments: [{ sourceFileId: 'pdf-501', resolvedLocalPath: pdfPath, targetPublicPath: '/static-files/source-501.pdf', sourceSha256: createHash('sha256').update(pdfBytes).digest('hex') }],
+      offlineDocuments: [pdfProof('pdf-501', sourceUrl, createHash('sha256').update(pdfBytes).digest('hex'), pdfPath)],
       supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
     } as never);
     vi.mocked(input.io.readPdfBytes).mockResolvedValueOnce(pdfBytes);
@@ -248,7 +302,7 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     const input = options({ reader: { ...options().reader, dumpPath } });
     const bytes = Buffer.from('%PDF-1.7\nsynthetic expected\n%%EOF\n');
     vi.spyOn(await import('./sql-demo-assets.js'), 'loadSqlDemoAssets').mockResolvedValueOnce({
-      offlineMedia: [], offlineDocuments: [{ sourceFileId: 'pdf-88', resolvedLocalPath: 'supplements/88.pdf', sourceSha256: createHash('sha256').update(bytes).digest('hex') }],
+      offlineMedia: [], offlineDocuments: [pdfProof('pdf-88', '/sql/pdf-88.pdf', createHash('sha256').update(bytes).digest('hex'), 'supplements/88.pdf')],
       supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
     } as never);
     if (mode === 'missing') vi.mocked(input.io.readPdfBytes).mockRejectedValueOnce(new Error('missing synthetic PDF'));
@@ -264,7 +318,10 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     const events: string[] = [];
     vi.mocked(input.io.openOwnedTarget).mockImplementation(async ({ name, baseUrl, namespace }) => {
       events.push(`open-${name}`);
-      return { name, baseUrl, namespace, client: { name }, process: { pid: name === 'A' ? 4101 : 4102, endpoint: baseUrl, namespace } };
+      return {
+        name, baseUrl, namespace, client: { name, request: vi.fn(async () => undefined) },
+        process: { pid: name === 'A' ? 4101 : 4102, endpoint: baseUrl, namespace },
+      };
     });
     vi.mocked(input.io.readPublished).mockImplementation(async (target) => {
       events.push(`published-${target.name}`);
@@ -272,10 +329,11 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     });
     const conservation = vi.spyOn(await import('./sql-demo-native-conservation.js'), 'assertSqlDemoNativeConservation');
     await run(input);
-    expect(events).toEqual(['open-A', 'published-A', 'open-B', 'published-B']);
-    expect(conservation).toHaveBeenCalledTimes(3);
-    expect(input.io.readPublished).toHaveBeenCalledTimes(2);
-    expect(input.io.readPublished.mock.calls[0]?.[0].process.pid).not.toEqual(input.io.readPublished.mock.calls[1]?.[0].process.pid);
+    expect(events).toEqual(['open-A', 'published-A', 'open-B', 'published-B', 'published-A']);
+    expect(conservation).toHaveBeenCalledTimes(4);
+    expect(input.io.readPublished).toHaveBeenCalledTimes(3);
+    const readTargets = vi.mocked(input.io.readPublished).mock.calls.map(([target]) => target.process.pid);
+    expect(readTargets[0]).not.toEqual(readTargets[1]);
     expect(input.io.capture).toHaveBeenCalledTimes(1);
   });
 
@@ -284,7 +342,7 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     vi.mocked(input.io.refreshMediaInventory).mockResolvedValue({ runNonce: 'inventory-refetched' });
     await run(input);
     expect(input.io.createFreshClient).toHaveBeenCalledWith(expect.objectContaining({ name: 'A' }));
-    expect(input.io.refreshMediaInventory.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(input.io.refreshMediaInventory).toHaveBeenCalledTimes(3);
     expect(input.io.createFreshClient).toHaveBeenCalledTimes(1);
   });
 
@@ -298,7 +356,7 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
   it('rejects a process handle whose endpoint or namespace does not prove the requested owned target', async () => {
     const input = options({ reader: { ...options().reader, dumpPath } });
     vi.mocked(input.io.openOwnedTarget).mockImplementationOnce(async ({ name, baseUrl, namespace }) => ({
-      name, baseUrl, namespace, client: { name },
+      name, baseUrl, namespace, client: { name, request: vi.fn(async () => undefined) },
       process: { pid: 4101, endpoint: 'http://193.124.115.99', namespace: 'production' },
     }));
     await expect(run(input)).rejects.toMatchObject({ code: 'TARGET_OWNERSHIP_UNPROVEN' });
@@ -312,9 +370,10 @@ describe('native SQL DEMO193 rehearsal orchestration', () => {
     vi.spyOn(await import('./sql-public-content.js'), 'mapSqlPublicContent').mockImplementationOnce(() => {
       throw Object.assign(privateFailure, { identity: 'Articles#77' });
     });
-    const error = await run(input).catch((cause: unknown) => cause as Record<string, unknown>);
+    const caught = await run(input).catch((cause: unknown) => cause);
+    const error = caught as Error & { code?: string; identity?: string };
     expect(error).toMatchObject({ code: 'MAPPING_FAILED', identity: 'Articles#77' });
-    const safeError = JSON.stringify({ ...error, message: (error as Error).message });
+    const safeError = JSON.stringify({ code: error.code, identity: error.identity, message: error.message });
     expect(safeError).not.toContain('SYNTHETIC-TOKEN');
     expect(safeError).not.toContain('private.example.invalid');
   });
