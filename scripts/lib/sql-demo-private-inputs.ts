@@ -366,6 +366,14 @@ function parseNodes(node: ReturnType<typeof parsedHtml>, visit: (node: NonNullab
   visit(node);
   for (const child of node.childNodes ?? []) parseNodes(child as ReturnType<typeof parsedHtml>, visit);
 }
+function htmlContainsExactUrl(html: unknown, expectedUrl: string): boolean {
+  if (typeof html !== 'string' || !html) return false;
+  let found = false;
+  parseNodes(parsedHtml(html), (node) => {
+    if (node.attrs?.some((item) => (item.name === 'src' || item.name === 'href') && item.value === expectedUrl)) found = true;
+  });
+  return found;
+}
 function attr(node: ReturnType<typeof parsedHtml>, name: string): string | undefined {
   return node.attrs?.find((item) => item.name === name)?.value;
 }
@@ -1017,8 +1025,8 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     }
     const seminar = source.Seminars.find((item) => item.id === sourceId && item.status === 'active');
     const mappedSeminar = mapped.entities.seminars.find((item) => item.sourceId === sourceId);
-    const sourceUrlMatch = Boolean(seminar?.description?.includes(sourceUrl));
-    const mappedUrlMatch = Boolean(mappedSeminar && String(mappedSeminar.description ?? '').includes(sourceUrl));
+    const sourceUrlMatch = htmlContainsExactUrl(seminar?.description, sourceUrl);
+    const mappedUrlMatch = htmlContainsExactUrl(mappedSeminar?.description, sourceUrl);
     const sourceSlug = valueAt(row, 'source_slug', 'sourceSlug');
     const sourceSlugMatches = sourceSlug == null || sourceSlug === mappedSeminar?.slug;
     if (!seminar || !mappedSeminar || !sourceUrlMatch || !mappedUrlMatch || !sourceSlugMatches) {

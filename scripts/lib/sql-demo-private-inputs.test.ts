@@ -383,11 +383,11 @@ function configWithStaticPageBody(bodyHtml: string) {
 
 function videoDecisionInput(records: Record<string, unknown>[], seminarRows: { id: number; slug: string; sourceUrl: string }[]) {
   const nativeSeminars = seminarRows.map(({ id, slug, sourceUrl }) => ({
-    ...source.Seminars[0]!, id, slug, description: `<iframe src="${sourceUrl}"></iframe>`,
+    ...source.Seminars[0]!, id, slug, description: `<iframe src="${sourceUrl.replace(/&/g, '&amp;')}"></iframe>`,
   }));
   const mappedSeminars = seminarRows.map(({ id, slug, sourceUrl }) => ({
     ...mapped.entities.seminars[0]!, sourceId: id, slug, legacy_id: slug,
-    description: `<iframe src="${sourceUrl}"></iframe>`,
+    description: `<iframe src="${sourceUrl.replace(/&/g, '&amp;')}"></iframe>`,
   }));
   const privateConfig = config({
     acceptedLegacyIds: {
@@ -1395,7 +1395,7 @@ describe('SQL demo private input preparation and normalization', () => {
       }
       const sourceUrl = index === 5
         ? `https://rutube.ru/play/embed/${'a'.repeat(32)}?p=synthetic-external-${id}`
-        : `https://vk.com/video-${id}_${id + 1}?list=synthetic-${id}`;
+        : `https://vk.com/video_ext.php?oid=-${id}&id=${id + 1}&hd=1&autoplay=1`;
       return {
         id, slug, sourceUrl,
         record: {
