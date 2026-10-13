@@ -109,6 +109,45 @@ const manifestNumberId = (value: unknown, label: string): number => {
 };
 const parsedHtml = (html: string): { nodeName?: string; tagName?: string; value?: string; attrs?: { name: string; value: string }[]; childNodes?: unknown[] } => parseFragment(html) as never;
 
+const IMAGE_MAGIC_METADATA: Record<string, { magicClass: string; extensions: readonly string[] }> = {
+  'image/png': { magicClass: 'png', extensions: ['png'] },
+  'image/jpeg': { magicClass: 'jpeg', extensions: ['jpg', 'jpeg'] },
+  'image/webp': { magicClass: 'webp', extensions: ['webp'] },
+};
+
+function validateByteProofMagic(proof: JsonObject, id: string, expectedType: 'image' | 'document', allowMissing = false): void {
+  const mime = valueAt(proof, 'mime_type_from_magic', 'verified_mime');
+  const magicClass = valueAt(proof, 'magic_class', 'magicClass');
+  const targetExtension = valueAt(proof, 'target_extension_from_magic', 'targetExtensionFromMagic');
+  if (proof.mime_type_from_magic !== undefined && proof.verified_mime !== undefined && proof.mime_type_from_magic !== proof.verified_mime) {
+    throw new Error(`${id} byte proof has contradictory MIME metadata`);
+  }
+  if (proof.target_extension_from_magic !== undefined && proof.targetExtensionFromMagic !== undefined && proof.target_extension_from_magic !== proof.targetExtensionFromMagic) {
+    throw new Error(`${id} byte proof has contradictory target extension metadata`);
+  }
+  const extensionMatch = valueAt(proof, 'extension_matches_magic', 'extensionMatchesMagic');
+  if (extensionMatch !== undefined && typeof extensionMatch !== 'boolean') throw new Error(`${id} byte proof extension match metadata is invalid`);
+  if (allowMissing && mime === undefined && magicClass === undefined && targetExtension === undefined) return;
+  if (expectedType === 'document') {
+    if (mime !== 'application/pdf' || magicClass !== 'pdf' || (targetExtension !== undefined && targetExtension !== 'pdf')) {
+      throw new Error(`${id} byte proof has unsupported or contradictory document magic metadata`);
+    }
+    const sourceExtension = valueAt(proof, 'source_extension', 'declared_extension');
+    if (extensionMatch === true && sourceExtension !== undefined && sourceExtension !== 'pdf') throw new Error(`${id} byte proof contradicts its source extension match claim`);
+    return;
+  }
+
+  const detected = IMAGE_MAGIC_METADATA[String(mime)];
+  if (!detected || (magicClass !== undefined && magicClass !== detected.magicClass) ||
+      (targetExtension !== undefined && !detected.extensions.includes(String(targetExtension)))) {
+    throw new Error(`${id} byte proof has unsupported or contradictory image magic metadata`);
+  }
+  const sourceExtension = valueAt(proof, 'source_extension', 'declared_extension');
+  if (extensionMatch === true && sourceExtension !== undefined && !detected.extensions.includes(String(sourceExtension))) {
+    throw new Error(`${id} byte proof contradicts its source extension match claim`);
+  }
+}
+
 function verifyRawPins(config: SqlDemoPrivateInputRootConfig): void {
   const baselineSql = digest(config.baseline.sqlSha256, 'baseline SQL SHA-256');
   digest(config.baseline.archiveSha256, 'baseline archive SHA-256');
@@ -541,11 +580,9 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     } else if (privacy !== 'public' || status !== expectedStatus) {
       throw new Error(`${id} byte proof status or privacy does not match native Files`);
     }
-    const mime = valueAt(proof, 'mime_type_from_magic', 'verified_mime');
-    const ext = valueAt(proof, 'source_extension', 'target_extension_from_magic');
-    if (valueAt(proof, 'extension_matches_magic') !== undefined && valueAt(proof, 'extension_matches_magic') !== true) throw new Error(`${id} byte proof extension does not match detected magic`);
-    if (expectedType === 'image' && proof !== selectedHeaderProof && (!['image/png', 'image/jpeg', 'image/webp'].includes(String(mime)) || !['png', 'jpg', 'jpeg', 'webp'].includes(String(ext)))) throw new Error(`${id} byte proof has unsupported image magic metadata`);
-    if (expectedType === 'document' && (mime !== 'application/pdf' || ext !== 'pdf')) throw new Error(`${id} byte proof has unsupported document magic metadata`);
+    // The source extension describes the original filename. It may disagree with
+    // the verified bytes; only an explicit target extension is a byte-magic claim.
+    validateByteProofMagic(proof, id, expectedType, proof === selectedHeaderProof && expectedType === 'image');
     const prior = entries.find((entry) => entry.sourceFileId === id);
     const next: SqlDemoAssetManifestEntry = {
       sourceFileId: id, archiveRelativePath: path, sha256: proofHash,

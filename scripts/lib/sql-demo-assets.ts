@@ -304,7 +304,11 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     usage.headerReferences.push({ ...reference });
   }
 
+  const selectedVideoIds = new Set(input.selectedPublicHeaders.references
+    .filter((reference) => reference.sourceTable === 'Videos')
+    .map((reference) => reference.sourceId));
   for (const video of input.source.Videos ?? []) {
+    if (!selectedVideoIds.has(video.id)) continue;
     if (video.status !== 'active' || video.imageId === null) continue;
     if (typeof video.imageId !== 'string' || !video.imageId) {
       throw new Error(`Videos#${video.id}.imageId is invalid`);
@@ -323,6 +327,9 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     ) {
       throw new Error('FileBindingOrganizationInfo has an invalid binding identity');
     }
+    // A binding is not a document authorization. Only files named by the
+    // separate public-asset allowlist become loader reachability.
+    if (!input.assetManifest.entries.some((entry) => entry?.sourceFileId === binding.fileId && entry.sourceFileType === 'document')) continue;
     const file = filesById.get(binding.fileId);
     if (!file) throw new Error(`FileBindingOrganizationInfo#${binding.id}.fileId does not join to Files`);
     assertKnownFileStatus(file);
