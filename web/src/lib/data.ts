@@ -423,8 +423,8 @@ export function getCourseGroupForSeminar(seminar: Seminar): CourseGroup | undefi
 
 // Helper: format price
 export function formatPrice(price: number): string {
-  if (price === 0) return 'Бесплатно';
-  if (!Number.isFinite(price)) return '';
+  // Бесплатность задаётся isFree у проведения, а не нулём в поле цены.
+  if (!Number.isFinite(price) || price <= 0) return 'Стоимость уточняется';
   return new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 }
 
