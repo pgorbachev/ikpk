@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import type { SqlDemoAssetLoaderResult, SqlDemoOfflineAssetProof, SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
 import { loadSqlDemoAssets } from './sql-demo-assets.js';
@@ -17,35 +18,52 @@ import { materializeSqlPublicContent } from './sql-public-materializer.js';
 
 type TargetName = 'A' | 'B';
 
+type SqlDemoNativeTargetConfig = {
+  baseUrl: string;
+  namespace: string;
+  dataDirectory: string;
+  uploadDirectory: string;
+};
+
+export type SqlDemoNativeSqlSourceLease = { readonly id?: string };
+
 export type SqlDemoNativeOwnedTarget = {
   name: TargetName;
   baseUrl: string;
   namespace: string;
+  dataDirectory: string;
+  uploadDirectory: string;
   client: unknown;
   /** Concrete process evidence supplied by the owned local-process adapter. */
-  process: { pid: number; endpoint: string; namespace: string };
+  process: { pid: number; endpoint: string; namespace: string; dataDirectory: string; uploadDirectory: string };
 };
 
-export type SqlDemoNativeUpload = { id: number; url: string };
+export type SqlDemoNativeUpload = { id: number; url: string; redirected?: boolean };
 
 /** The only injected effects are local process, CMS, and byte-I/O boundaries. */
 export interface SqlDemoNativeRehearsalIo {
   resolveCmsToken(): Promise<string>;
-  openOwnedTarget(input: { name: TargetName; baseUrl: string; namespace: string; token: string }): Promise<SqlDemoNativeOwnedTarget>;
+  acquireOwnedSqlSource(reader: SqlPublicReaderOptions): Promise<{ lease: SqlDemoNativeSqlSourceLease; reader: SqlPublicReaderOptions }>;
+  openOwnedTarget(input: SqlDemoNativeTargetConfig & { name: TargetName; token: string }): Promise<SqlDemoNativeOwnedTarget>;
+  stopOwnedTarget(target: SqlDemoNativeOwnedTarget): Promise<void>;
   refreshMediaInventory(target: SqlDemoNativeOwnedTarget): Promise<unknown>;
-  uploadRaster(target: SqlDemoNativeOwnedTarget, inventory: unknown, sourceFileId: string, sourceSha256: string): Promise<SqlDemoNativeUpload>;
+  readRasterBytes(path: string): Promise<Uint8Array>;
+  uploadRaster(target: SqlDemoNativeOwnedTarget, inventory: unknown, proof: SqlDemoOfflineAssetProof, bytes: Uint8Array): Promise<SqlDemoNativeUpload>;
   readStoredMediaBytes(target: SqlDemoNativeOwnedTarget, mediaId: number): Promise<Uint8Array>;
   readPdfBytes(path: string): Promise<Uint8Array>;
   writeStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string, bytes: Uint8Array): Promise<void>;
+  readStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoNativeOwnedTarget>;
   readPublished(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoStrapi5Readback>;
   capture(targets: readonly SqlDemoNativeOwnedTarget[]): Promise<void>;
-  stopOwnedSqlSource(): Promise<void>;
+  stopOwnedSqlSource(lease: SqlDemoNativeSqlSourceLease): Promise<void>;
 }
 
 export interface SqlDemoNativeRehearsalInput {
   reader: SqlPublicReaderOptions;
   privateInputConfig: SqlDemoPrivateInputRootConfig;
+  targets: Record<TargetName, SqlDemoNativeTargetConfig>;
+  /** Preflight destination fence retained for callers; never used as a target fallback. */
   target: { baseUrl: string; namespace: string };
   io: SqlDemoNativeRehearsalIo;
 }
@@ -72,7 +90,6 @@ export class SqlDemoNativeRehearsalError extends Error {
 }
 
 type LoadedRaster = {
-  proof: SqlDemoOfflineAssetProof;
   upload: SqlDemoNativeUpload;
   sourceHash: string;
   storedHash: string;
@@ -80,7 +97,6 @@ type LoadedRaster = {
 };
 
 type TargetRun = {
-  target: SqlDemoNativeOwnedTarget;
   release: SqlDemoRelease;
   readback: SqlDemoStrapi5Readback;
   rasters: Map<string, LoadedRaster>;
@@ -93,18 +109,47 @@ function safeFailure(code: string, message: string, identity?: string): SqlDemoN
   return new SqlDemoNativeRehearsalError(code, message, identity);
 }
 
-function validateTarget(target: SqlDemoNativeRehearsalInput['target']): void {
+function loopbackOrigin(target: { baseUrl: string; namespace: string }): URL {
   let url: URL;
   try {
     url = new URL(target.baseUrl);
   } catch {
     throw safeFailure('INVALID_TARGET', 'Target must be the owned loopback CMS endpoint');
   }
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.port !== '1337'
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port
     || url.username || url.password || url.pathname !== '/' || url.search || url.hash
     || !TARGET_NAMESPACE.test(target.namespace)) {
     throw safeFailure('INVALID_TARGET', 'Target must be the owned loopback CMS endpoint');
   }
+  return url;
+}
+
+function validateTarget(target: SqlDemoNativeRehearsalInput['target']): void {
+  loopbackOrigin(target);
+}
+
+function validateTargets(targets: SqlDemoNativeRehearsalInput['targets']): void {
+  const configs = [targets?.A, targets?.B];
+  if (configs.some((config) => !config || typeof config.dataDirectory !== 'string' || !config.dataDirectory.trim()
+    || typeof config.uploadDirectory !== 'string' || !config.uploadDirectory.trim())) {
+    throw safeFailure('INVALID_TARGET', 'Both owned loopback targets require isolated storage locations');
+  }
+  const [a, b] = configs as SqlDemoNativeTargetConfig[];
+  const originA = loopbackOrigin(a);
+  const originB = loopbackOrigin(b);
+  const directories = [a.dataDirectory, a.uploadDirectory, b.dataDirectory, b.uploadDirectory];
+  const pathsOverlap = (left: string, right: string): boolean => {
+    const leftToRight = relative(resolve(left), resolve(right));
+    const rightToLeft = relative(resolve(right), resolve(left));
+    return leftToRight === '' || rightToLeft === ''
+      || (!isAbsolute(leftToRight) && leftToRight !== '..' && !leftToRight.startsWith(`..${sep}`))
+      || (!isAbsolute(rightToLeft) && rightToLeft !== '..' && !rightToLeft.startsWith(`..${sep}`));
+  };
+  const distinct = originA.origin !== originB.origin
+    && a.namespace !== b.namespace
+    && directories.every((directory) => isAbsolute(directory))
+    && directories.every((directory, index) => directories.slice(index + 1).every((other) => !pathsOverlap(directory, other)));
+  if (!distinct) throw safeFailure('INVALID_TARGET', 'Targets A and B must have distinct origins, namespaces, and storage locations');
 }
 
 function assertLoadedVipsFloor(): void {
@@ -122,12 +167,14 @@ function assertLoadedVipsFloor(): void {
 function assertOwnedTarget(
   target: SqlDemoNativeOwnedTarget,
   name: TargetName,
-  expected: SqlDemoNativeRehearsalInput['target'],
+  expected: SqlDemoNativeTargetConfig,
 ): void {
   const process = target?.process;
   if (target?.name !== name || target.baseUrl !== expected.baseUrl || target.namespace !== expected.namespace
+    || target.dataDirectory !== expected.dataDirectory || target.uploadDirectory !== expected.uploadDirectory
     || !process || !Number.isSafeInteger(process.pid) || process.pid <= 0
-    || process.endpoint !== expected.baseUrl || process.namespace !== expected.namespace) {
+    || process.endpoint !== expected.baseUrl || process.namespace !== expected.namespace
+    || process.dataDirectory !== expected.dataDirectory || process.uploadDirectory !== expected.uploadDirectory) {
     throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', `Owned CMS process for target ${name} could not be verified`);
   }
 }
@@ -155,16 +202,21 @@ function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function validateUpload(upload: SqlDemoNativeUpload, sourceFileId: string): void {
+function validateUpload(upload: SqlDemoNativeUpload, target: SqlDemoNativeOwnedTarget, sourceFileId: string): void {
   let url: URL | undefined;
   try {
-    if (upload.url.startsWith('/')) url = new URL(upload.url, 'http://127.0.0.1:1337');
+    if (upload.url.startsWith('/')) url = new URL(upload.url, target.baseUrl);
     else url = new URL(upload.url);
   } catch {
     // Report a bounded error without reflecting an untrusted CMS URL.
   }
+  const pathSegments = url?.pathname.split('/').map((segment) => {
+    try { return decodeURIComponent(segment); } catch { return segment; }
+  }) ?? [];
   if (!Number.isSafeInteger(upload.id) || upload.id <= 0 || !url || !url.pathname.startsWith('/uploads/')
-    || url.username || url.password || url.search || url.hash) {
+    || pathSegments.some((segment) => segment === '..' || segment === '.' || segment.includes('/') || segment.includes('\\'))
+    || url.origin !== new URL(target.baseUrl).origin || url.username || url.password || url.search || url.hash
+    || upload.redirected === true) {
     throw safeFailure('MEDIA_BINDING_FAILED', 'CMS upload did not return a usable media ID and actual public URL', `Files#${sourceFileId}`);
   }
 }
@@ -219,16 +271,26 @@ async function uploadRasters(
 ): Promise<Map<string, LoadedRaster>> {
   const result = new Map<string, LoadedRaster>();
   for (const proof of proofs) {
-    const sourceHash = 'sourceBytesAvailable' in proof
+    const expectedHash = 'sourceBytesAvailable' in proof
       ? proof.substitution.replacementSha256
       : proof.sourceSha256;
-    if (!HASH.test(sourceHash)) {
+    if (!HASH.test(expectedHash)) {
       throw safeFailure('MEDIA_BINDING_FAILED', 'Approved raster has no valid source byte pin', `Files#${proof.sourceFileId}`);
+    }
+    let sourceBytes: Uint8Array;
+    try {
+      sourceBytes = await io.readRasterBytes(proof.resolvedLocalPath);
+    } catch {
+      throw safeFailure('MEDIA_SOURCE_BYTES_INVALID', 'Approved raster bytes could not be read from the loader-resolved path', `Files#${proof.sourceFileId}`);
+    }
+    const sourceHash = sha256(sourceBytes);
+    if (sourceHash !== expectedHash.toLowerCase()) {
+      throw safeFailure('MEDIA_SOURCE_BYTES_INVALID', 'Raster bytes do not match the loader source or approved replacement pin', `Files#${proof.sourceFileId}`);
     }
     let upload: SqlDemoNativeUpload;
     try {
-      upload = await io.uploadRaster(target, inventory, proof.sourceFileId, sourceHash);
-      validateUpload(upload, proof.sourceFileId);
+      upload = await io.uploadRaster(target, inventory, proof, sourceBytes);
+      validateUpload(upload, target, proof.sourceFileId);
     } catch (error) {
       if (error instanceof SqlDemoNativeRehearsalError) throw error;
       throw safeFailure('MEDIA_BINDING_FAILED', 'CMS raster upload failed', `Files#${proof.sourceFileId}`);
@@ -240,11 +302,7 @@ async function uploadRasters(
     } catch {
       throw safeFailure('MEDIA_BINDING_FAILED', 'Stored CMS raster bytes could not be independently verified', `Files#${proof.sourceFileId}`);
     }
-    if (!storedBytesHashValid(storedHash)) {
-      throw safeFailure('MEDIA_BINDING_FAILED', 'Stored CMS raster byte witness is invalid', `Files#${proof.sourceFileId}`);
-    }
     result.set(proof.sourceFileId, {
-      proof,
       upload,
       sourceHash: sourceHash.toLowerCase(),
       storedHash,
@@ -252,10 +310,6 @@ async function uploadRasters(
     });
   }
   return result;
-}
-
-function storedBytesHashValid(value: string): boolean {
-  return HASH.test(value);
 }
 
 function sameMediaBindings(previous: Map<string, LoadedRaster>, next: Map<string, LoadedRaster>): void {
@@ -328,7 +382,30 @@ function publicDocumentPath(
   if (!document || !location?.publicDocumentPath || document.url !== proof.sourceUrl) {
     throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved PDF has no matching SQL binding and pinned public path', `Files#${proof.sourceFileId}`);
   }
+  const segments = location.publicDocumentPath.split('/');
+  const decodedSegments = segments.map((segment) => {
+    try { return decodeURIComponent(segment); } catch { return segment; }
+  });
+  if (!location.publicDocumentPath.startsWith('/static-files/') || decodedSegments.some((segment) => segment === '.' || segment === '..' || segment.includes('/') || segment.includes('\\'))
+    || location.publicDocumentPath.includes('?') || location.publicDocumentPath.includes('#') || location.publicDocumentPath.includes('\\')) {
+    throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved PDF path is not a safe static document location', `Files#${proof.sourceFileId}`);
+  }
   return location.publicDocumentPath;
+}
+
+async function verifyPublishedPdf(
+  target: SqlDemoNativeOwnedTarget,
+  proof: SqlDemoOfflineDocumentProof,
+  publicPath: string,
+  io: SqlDemoNativeRehearsalIo,
+): Promise<void> {
+  let bytes: Uint8Array;
+  try {
+    bytes = await io.readStaticDocument(target, publicPath);
+  } catch {
+    throw safeFailure('DOCUMENT_BYTES_INVALID', 'Published static document could not be independently read', `Files#${proof.sourceFileId}`);
+  }
+  validatePdfBytes(proof, bytes);
 }
 
 async function materializeTarget(
@@ -382,6 +459,7 @@ async function importTarget(
     } catch {
       throw safeFailure('DOCUMENT_PUBLISH_FAILED', 'Approved static document could not be published', `Files#${document.sourceFileId}`);
     }
+    await verifyPublishedPdf(target, document, publicDocumentPath(document, mapped, normalized), io);
   }
   const images = assets.offlineMedia.map((proof) => {
     const uploaded = rasters.get(proof.sourceFileId);
@@ -409,13 +487,10 @@ async function importTarget(
   let readback: SqlDemoStrapi5Readback;
   try {
     readback = await io.readPublished(target);
-  } catch (error) {
-    const code = error && typeof error === 'object' && (error as { code?: unknown }).code === 'PUBLISHED_READBACK_FAILED'
-      ? 'PUBLISHED_READBACK_FAILED'
-      : 'PUBLISHED_READBACK_FAILED';
-    throw safeFailure(code, `Published Content API readback failed for target ${name}`);
+  } catch {
+    throw safeFailure('PUBLISHED_READBACK_FAILED', `Published Content API readback failed for target ${name}`);
   }
-  return { target, release, readback, rasters };
+  return { release, readback, rasters };
 }
 
 function mapFailure(error: unknown): SqlDemoNativeRehearsalError {
@@ -427,11 +502,13 @@ function mapFailure(error: unknown): SqlDemoNativeRehearsalError {
 export async function runSqlDemoNativeRehearsal(
   input: SqlDemoNativeRehearsalInput,
 ): Promise<SqlDemoNativeRehearsalResult> {
-  // Fence destination before resolving any credential, opening SQL, or creating a CMS client.
+  // Fence every destination before resolving credentials, opening SQL, or creating CMS clients.
   validateTarget(input.target);
+  validateTargets(input.targets);
   assertLoadedVipsFloor();
 
-  let ownedSqlSourceMayBeRunning = false;
+  let sqlSourceLease: SqlDemoNativeSqlSourceLease | undefined;
+  const ownedTargets: SqlDemoNativeOwnedTarget[] = [];
   let primaryError: unknown;
   let result: SqlDemoNativeRehearsalResult | undefined;
   try {
@@ -444,10 +521,13 @@ export async function runSqlDemoNativeRehearsal(
     }
     if (typeof token !== 'string' || !token.trim()) throw safeFailure('CMS_CREDENTIALS_UNAVAILABLE', 'CMS credential could not be resolved');
 
-    ownedSqlSourceMayBeRunning = true;
+    let leasedReader: SqlPublicReaderOptions;
     let source: SqlPublicReaderResult;
     try {
-      source = await readSqlPublicSource(input.reader);
+      const acquired = await input.io.acquireOwnedSqlSource(input.reader);
+      sqlSourceLease = acquired.lease;
+      leasedReader = acquired.reader;
+      source = await readSqlPublicSource(leasedReader);
     } catch {
       throw safeFailure('SQL_SOURCE_INVALID', 'Pinned read-only SQL source could not be verified');
     }
@@ -475,20 +555,22 @@ export async function runSqlDemoNativeRehearsal(
     const pdfBytes = await readApprovedPdfBytes(assets, input.io);
     let targetA: SqlDemoNativeOwnedTarget;
     try {
-      targetA = await input.io.openOwnedTarget({ ...input.target, name: 'A', token });
+      targetA = await input.io.openOwnedTarget({ ...input.targets.A, name: 'A', token });
+      ownedTargets.push(targetA);
     } catch {
       throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Owned CMS process for target A could not be started');
     }
-    assertOwnedTarget(targetA, 'A', input.target);
+    assertOwnedTarget(targetA, 'A', input.targets.A);
     const runA = await importTarget('A', targetA, mapped, normalized, assets, pdfBytes, input.io);
 
     let targetB: SqlDemoNativeOwnedTarget;
     try {
-      targetB = await input.io.openOwnedTarget({ ...input.target, name: 'B', token });
+      targetB = await input.io.openOwnedTarget({ ...input.targets.B, name: 'B', token });
+      ownedTargets.push(targetB);
     } catch {
       throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Owned CMS process for target B could not be started');
     }
-    assertOwnedTarget(targetB, 'B', input.target);
+    assertOwnedTarget(targetB, 'B', input.targets.B);
     assertDistinctTargets(targetA, targetB);
     const runB = await importTarget('B', targetB, mapped, normalized, assets, pdfBytes, input.io);
 
@@ -502,7 +584,7 @@ export async function runSqlDemoNativeRehearsal(
     } catch {
       throw safeFailure('REPEAT_A_FAILED', 'Fresh target A CMS client could not be created');
     }
-    assertOwnedTarget(repeatA, 'A', input.target);
+    assertOwnedTarget(repeatA, 'A', input.targets.A);
     if (repeatA.process.pid !== targetA.process.pid || repeatA.client === targetA.client) {
       throw safeFailure('REPEAT_A_FAILED', 'Repeated target A did not use a fresh client for the same owned process');
     }
@@ -515,6 +597,9 @@ export async function runSqlDemoNativeRehearsal(
     const repeatedRasters = await uploadRasters(repeatA, repeatedInventory, assets.offlineMedia, input.io);
     sameMediaBindings(runA.rasters, repeatedRasters);
     await materializeTarget(repeatA, runA.release, normalized.materializer, repeatedRasters);
+    for (const document of assets.offlineDocuments) {
+      await verifyPublishedPdf(repeatA, document, publicDocumentPath(document, mapped, normalized), input.io);
+    }
     const repeatedReadback = await input.io.readPublished(repeatA);
     assertSqlDemoNativeConservation(runA.release, normalized.materializer, runA.readback, repeatedReadback);
     sameTargetEntityIdentity(runA.readback, repeatedReadback);
@@ -535,9 +620,16 @@ export async function runSqlDemoNativeRehearsal(
   } catch (error) {
     primaryError = error;
   } finally {
-    if (ownedSqlSourceMayBeRunning) {
+    for (const target of [...ownedTargets].reverse()) {
       try {
-        await input.io.stopOwnedSqlSource();
+        await input.io.stopOwnedTarget(target);
+      } catch {
+        if (primaryError === undefined) primaryError = safeFailure('TARGET_CLEANUP_FAILED', `Owned CMS target ${target.name} could not be stopped`);
+      }
+    }
+    if (sqlSourceLease !== undefined) {
+      try {
+        await input.io.stopOwnedSqlSource(sqlSourceLease);
       } catch {
         if (primaryError === undefined) primaryError = safeFailure('SQL_SOURCE_CLEANUP_FAILED', 'Owned SQL source could not be stopped');
       }
