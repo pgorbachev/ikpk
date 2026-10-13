@@ -271,7 +271,7 @@ describe('composeSqlDemoRelease', () => {
       sourceTable: 'OrganizationInfo' as const, sourceId: 601, field: 'content' as const,
       originalURL: 'https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef',
       action: 'rutube-trailing-slash' as const,
-      expectedOutput: '<iframe src="https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef/"></iframe>',
+      expectedOutput: '<iframe src="https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>',
     };
     const input = sqlWithOrganizationAndDocuments();
     input.entities.organizationInfo![0].content = `<p>SQL education replacement</p><iframe src="${organizationVideo.originalURL}"></iframe>`;
