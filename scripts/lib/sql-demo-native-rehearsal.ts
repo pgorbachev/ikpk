@@ -15,7 +15,7 @@ import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-conte
 import { mapSqlPublicContent } from './sql-public-content.js';
 import type { SqlMaterializerOptions, SqlResolvedMedia, SqlStrapiRestClient } from './sql-public-materializer.js';
 import { materializeSqlPublicContent } from './sql-public-materializer.js';
-import { allowedSourceUrl } from './strapi-media-inventory.js';
+import { allowedSourceUrl, allowedSqlStorageKey } from './strapi-media-inventory.js';
 
 type TargetName = 'A' | 'B';
 
@@ -99,13 +99,10 @@ export interface SqlDemoNativePrototypeResult {
   mediaCount: number;
   sourceUrlClassification: {
     approvedRelativeCount: number;
+    verifiedStorageKeyCount: number;
     validAbsoluteCount: number;
     invalidCount: number;
-    invalidRelativeCount: number;
-    invalidAbsoluteCount: number;
-    otherInvalidCount: number;
-    firstClass: 'approved-relative' | 'valid-absolute' | 'invalid' | 'none';
-    firstInvalidShape: 'relative' | 'absolute' | 'other' | 'none';
+    firstClass: 'approved-relative' | 'verified-storage-key' | 'valid-absolute' | 'invalid' | 'none';
   };
 }
 
@@ -117,35 +114,22 @@ const APPROVED_RELATIVE_MEDIA_URLS = new Set([
 
 export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativePrototypeResult['sourceUrlClassification'] {
   let approvedRelativeCount = 0;
+  let verifiedStorageKeyCount = 0;
   let validAbsoluteCount = 0;
   let invalidCount = 0;
-  let invalidRelativeCount = 0;
-  let invalidAbsoluteCount = 0;
-  let otherInvalidCount = 0;
   let firstClass: SqlDemoNativePrototypeResult['sourceUrlClassification']['firstClass'] = 'none';
-  let firstInvalidShape: SqlDemoNativePrototypeResult['sourceUrlClassification']['firstInvalidShape'] = 'none';
   values.forEach((value, index) => {
     const kind = APPROVED_RELATIVE_MEDIA_URLS.has(value)
       ? 'approved-relative'
-      : allowedSourceUrl(value) ? 'valid-absolute' : 'invalid';
+      : allowedSqlStorageKey(value) ? 'verified-storage-key'
+        : allowedSourceUrl(value) ? 'valid-absolute' : 'invalid';
     if (index === 0) firstClass = kind;
     if (kind === 'approved-relative') approvedRelativeCount += 1;
+    else if (kind === 'verified-storage-key') verifiedStorageKeyCount += 1;
     else if (kind === 'valid-absolute') validAbsoluteCount += 1;
-    else {
-      invalidCount += 1;
-      let shape: 'relative' | 'absolute' | 'other';
-      if (value.startsWith('/')) shape = 'relative';
-      else {
-        try { shape = new URL(value).protocol ? 'absolute' : 'other'; }
-        catch { shape = 'other'; }
-      }
-      if (firstInvalidShape === 'none') firstInvalidShape = shape;
-      if (shape === 'relative') invalidRelativeCount += 1;
-      else if (shape === 'absolute') invalidAbsoluteCount += 1;
-      else otherInvalidCount += 1;
-    }
+    else invalidCount += 1;
   });
-  return { approvedRelativeCount, validAbsoluteCount, invalidCount, invalidRelativeCount, invalidAbsoluteCount, otherInvalidCount, firstClass, firstInvalidShape };
+  return { approvedRelativeCount, verifiedStorageKeyCount, validAbsoluteCount, invalidCount, firstClass };
 }
 
 export class SqlDemoNativeRehearsalError extends Error {
@@ -810,17 +794,13 @@ export async function runSqlDemoNativePrototype(
         causeCategory: 'SqlDemoMediaSourceUrlClassification', frames: [],
         signals: {
           approvedRelativeCount: sourceUrlClassification.approvedRelativeCount,
+          verifiedStorageKeyCount: sourceUrlClassification.verifiedStorageKeyCount,
           validAbsoluteCount: sourceUrlClassification.validAbsoluteCount,
           invalidCount: sourceUrlClassification.invalidCount,
-          invalidRelativeCount: sourceUrlClassification.invalidRelativeCount,
-          invalidAbsoluteCount: sourceUrlClassification.invalidAbsoluteCount,
-          otherInvalidCount: sourceUrlClassification.otherInvalidCount,
           firstApprovedRelative: Number(sourceUrlClassification.firstClass === 'approved-relative'),
+          firstVerifiedStorageKey: Number(sourceUrlClassification.firstClass === 'verified-storage-key'),
           firstValidAbsolute: Number(sourceUrlClassification.firstClass === 'valid-absolute'),
           firstInvalid: Number(sourceUrlClassification.firstClass === 'invalid'),
-          firstInvalidRelative: Number(sourceUrlClassification.firstInvalidShape === 'relative'),
-          firstInvalidAbsolute: Number(sourceUrlClassification.firstInvalidShape === 'absolute'),
-          firstInvalidOther: Number(sourceUrlClassification.firstInvalidShape === 'other'),
         },
       });
     }

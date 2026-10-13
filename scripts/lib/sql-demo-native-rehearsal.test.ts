@@ -226,9 +226,10 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
   it('classifies only aggregate-safe approved media URL shapes', () => {
     expect(classifyMediaSourceUrls([
       '/media/legacy/logo-v2.png',
+      'media/institutes/3/barral/logo.png',
       'https://legacy.example/image.png',
       'javascript:alert(1)',
-    ])).toEqual({ approvedRelativeCount: 1, validAbsoluteCount: 1, invalidCount: 1, invalidRelativeCount: 0, invalidAbsoluteCount: 1, otherInvalidCount: 0, firstClass: 'approved-relative', firstInvalidShape: 'absolute' });
+    ])).toEqual({ approvedRelativeCount: 1, verifiedStorageKeyCount: 1, validAbsoluteCount: 1, invalidCount: 1, firstClass: 'approved-relative' });
   });
 
   let dumpDirectory: string;

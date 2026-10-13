@@ -73,6 +73,7 @@ export function mergeMediaImportIdentity(
 
 function isAllowedSourceUrl(sourceUrl: string): boolean {
   if (/^\/media\/legacy\/(?:logo-v2|logo-upledger-inst|logo-barral-inst)\.png$/.test(sourceUrl)) return true;
+  if (isAllowedSqlStorageKey(sourceUrl)) return true;
   try {
     const parsed = new URL(sourceUrl);
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname) &&
@@ -80,4 +81,11 @@ function isAllowedSourceUrl(sourceUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isAllowedSqlStorageKey(value: string): boolean {
+  if (value.length > 512 || value.includes('\\') || value.includes('%') || value.includes('?') || value.includes('#')) return false;
+  const segments = value.split('/');
+  return segments.length === 5 && segments[0] === 'media' &&
+    segments.slice(1).every((segment) => /^[A-Za-z0-9._~-]+$/.test(segment) && segment !== '.' && segment !== '..');
 }
