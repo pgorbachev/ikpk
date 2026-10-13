@@ -920,14 +920,14 @@ export async function runSqlDemoNativePrototype(
         detectedMimeType: proof.detectedMimeType,
         verification: proof.verification,
       }));
-      composeSqlDemoRelease(
+      const preflightRelease = composeSqlDemoRelease(
         mapped,
         normalized.composer.acceptedSupplements,
         { images: preflightImages, documents: preflightDocuments },
         normalized.composer.ownerDecisions,
       );
       const approvedRasterIds = new Set(assets.offlineMedia.map((proof) => String(proof.sourceFileId)));
-      const contentPlans = projectSqlPublicContentForConservation(mapped, normalized.materializer);
+      const contentPlans = projectSqlPublicContentForConservation(preflightRelease as never, normalized.materializer);
       for (const plan of contentPlans) {
         if (plan.image?.sourceId != null && !approvedRasterIds.has(plan.image.sourceId)) {
           throw safeFailure('MEDIA_BINDING_FAILED', 'Mapped content references a raster outside the approved source set', `${plan.sourceTable}#${plan.sourceId ?? 'unknown'}`);
