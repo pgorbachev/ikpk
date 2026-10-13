@@ -289,6 +289,7 @@ const source: SqlPublicSource = {
     { id: 401, name: 'Synthetic SQL section A', priority: 20, content: '<p>SQL A</p>', status: 'active', createdAt, updatedAt },
   ],
   FileBindingOrganizationInfo: [{ id: 801, title: 'Synthetic PDF', priority: 1, fileId: 'pdf-1', organizationInfoId: 702, createdAt, updatedAt }],
+  InstituteAdditionalInfo: [],
   Videos: [{ id: 77, name: 'Synthetic video', link: '/synthetic/video', status: 'active', priority: 1, imageId: 'thumb-1', createdAt, updatedAt }],
 };
 
@@ -441,6 +442,26 @@ describe('SQL demo private input preparation and normalization', () => {
       organizationInfoSourceId: 702,
       title: 'Synthetic PDF',
     }));
+    expect(normalized.composer.acceptedSupplements.targetLocations).toContainEqual(expect.objectContaining({
+      sourceTable: 'FileBindingOrganizationInfo', sourceId: 801,
+      targetCollection: 'pages', targetLegacyId: expect.any(String), targetField: 'body',
+      sectionKey: 'organization-info-702', anchor: 'section-1',
+      publicDocumentPath: `/static-files/documents/${hash('2')}.pdf`,
+    }));
+  });
+
+  it('binds each additional institute section to its exact SQL parent and deterministic anchor', () => {
+    const additional = { sourceId: 902, legacy_id: '902', name: 'Synthetic additional section', description: '<p>Extra</p>', instituteId: 1 };
+    const normalized = normalize({
+      nativeSqlPublicSource: { ...source, InstituteAdditionalInfo: [{ id: 902, name: additional.name, description: additional.description, instituteId: 1, createdAt, updatedAt }] },
+      mapped: { ...mapped, entities: { ...mapped.entities, instituteAdditionalInfo: [additional] } },
+    });
+
+    expect(normalized.composer.acceptedSupplements.targetLocations).toContainEqual({
+      sourceTable: 'InstituteAdditionalInfo', sourceId: 902, targetCollection: 'institutes',
+      targetLegacyId: 'institute-1', targetField: 'description',
+      sectionKey: 'institute-additional-info-902', anchor: 'institute-section-902',
+    });
   });
 
   it.each([

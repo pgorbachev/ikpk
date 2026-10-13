@@ -185,6 +185,34 @@ async function assertFreshTargetDirectories(options: SqlDemoNativeLocalIoOptions
     [target.dataDirectory, target.uploadDirectory, target.staticFilesDirectory]));
 }
 
+async function assertResumableMediaTarget(target: SqlDemoNativeLocalIoOptions['targets']['A']): Promise<void> {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  for (const path of [target.dataDirectory, target.uploadDirectory, target.staticFilesDirectory]) {
+    const stat = await lstat(path);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (uid !== undefined && stat.uid !== uid)) {
+      throw fail('Existing prototype target storage is not a private owner-owned directory');
+    }
+  }
+  const databasePath = join(target.dataDirectory, 'data.db');
+  const database = await lstat(databasePath);
+  if (!database.isFile() || database.isSymbolicLink() || (uid !== undefined && database.uid !== uid)) {
+    throw fail('Existing prototype target database is not an owner-owned regular file');
+  }
+  if ((await readdir(target.staticFilesDirectory)).length !== 0) {
+    throw fail('Existing prototype target already contains static document output');
+  }
+  const checkTree = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      const stat = await lstat(path);
+      if (stat.isSymbolicLink() || (uid !== undefined && stat.uid !== uid)) throw fail('Existing prototype upload tree contains an unsafe entry');
+      if (stat.isDirectory()) await checkTree(path);
+      else if (!stat.isFile()) throw fail('Existing prototype upload tree contains an unsupported entry');
+    }
+  };
+  await checkTree(target.uploadDirectory);
+}
+
 async function assertPortFree(endpoint: string): Promise<void> {
   const url = loopback(endpoint);
   await new Promise<void>((resolveFree, reject) => {
@@ -391,7 +419,7 @@ async function installNativeTokenBootstrap(candidateDirectory: string, tokenPath
   const typeImport = "import type { Core } from '@strapi/strapi';\n";
   const contextType = ': { strapi: Core.Strapi }';
   const serviceType = " as { create(input: Record<string, unknown>): Promise<{ accessKey?: unknown }> }";
-  const wrapper = `${typeImport}import { writeFile } from 'node:fs/promises';\nimport nativeOriginal from '${importPath}';\n\nexport default {\n  ...nativeOriginal,\n  async bootstrap({ strapi }${contextType}) {\n    if (nativeOriginal.bootstrap) await nativeOriginal.bootstrap({ strapi });\n    const tokenFile = process.env.IKPK_NATIVE_API_TOKEN_FILE;\n    if (!tokenFile) throw new Error('Native API token handoff path is missing');\n    const tokenService = strapi.service('admin::api-token')${serviceType};\n    const created = await tokenService.create({ name: 'sql-demo-native-rehearsal', description: 'Private ephemeral native rehearsal target', type: 'full-access', kind: 'content-api', lifespan: null });\n    if (typeof created.accessKey !== 'string' || !created.accessKey) throw new Error('Native API token creation failed');\n    await writeFile(tokenFile, created.accessKey, { encoding: 'utf8', flag: 'wx', mode: 0o600 });\n  },\n};\n`;
+  const wrapper = `${typeImport}import { writeFile } from 'node:fs/promises';\nimport nativeOriginal from '${importPath}';\n\nexport default {\n  ...nativeOriginal,\n  async bootstrap({ strapi }${contextType}) {\n    if (nativeOriginal.bootstrap) await nativeOriginal.bootstrap({ strapi });\n    const tokenFile = process.env.IKPK_NATIVE_API_TOKEN_FILE;\n    const tokenName = process.env.IKPK_NATIVE_API_TOKEN_NAME;\n    if (!tokenFile || !tokenName) throw new Error('Native API token handoff configuration is missing');\n    const tokenService = strapi.service('admin::api-token')${serviceType};\n    const created = await tokenService.create({ name: tokenName, description: 'Private ephemeral native rehearsal target', type: 'full-access', kind: 'content-api', lifespan: null });\n    if (typeof created.accessKey !== 'string' || !created.accessKey) throw new Error('Native API token creation failed');\n    await writeFile(tokenFile, created.accessKey, { encoding: 'utf8', flag: 'wx', mode: 0o600 });\n  },\n};\n`;
   await writeFile(entry, wrapper, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
 }
 
@@ -434,7 +462,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
   async function preflightBeforeToken(): Promise<void> {
     await pinnedCode(config, runFile);
     await assertStoppedCluster(config.source.clusterDataDirectory, processInspector.isAlive);
-    await assertFreshTargetDirectories(config);
+    if (config.targets.A.resumeExistingMediaOnly) {
+      if (config.targets.B) throw fail('Media-only resume is limited to the single A target');
+      await assertResumableMediaTarget(config.targets.A);
+    } else {
+      await assertFreshTargetDirectories(config);
+    }
     for (const target of Object.values(config.targets)) await assertPortFree(target.baseUrl);
     await checkPrivateDirectory(config.cms.candidateRoot, true);
     await checkPrivateDirectory(config.privateArtifactsRoot, true);
@@ -507,7 +540,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await assertPortFree(targetConfig.baseUrl);
     if (input.baseUrl !== targetConfig.baseUrl || input.namespace !== targetConfig.namespace
       || input.dataDirectory !== targetConfig.dataDirectory || input.uploadDirectory !== targetConfig.uploadDirectory) throw fail('CMS target differs from the validated local target configuration');
-    await assertEmptyTargetDirectories([targetConfig.dataDirectory, targetConfig.uploadDirectory, targetConfig.staticFilesDirectory]);
+    if (targetConfig.resumeExistingMediaOnly) {
+      if (input.name !== 'A' || config.targets.B) throw fail('Media-only resume is limited to the single A target');
+      await assertResumableMediaTarget(targetConfig);
+    } else {
+      await assertEmptyTargetDirectories([targetConfig.dataDirectory, targetConfig.uploadDirectory, targetConfig.staticFilesDirectory]);
+    }
     const base = await checkPrivateDirectory(config.cms.candidateRoot, true);
     const candidateDirectory = join(base, `target-${input.name.toLowerCase()}-${process.pid}-${Date.now()}`);
     await mkdir(candidateDirectory, { recursive: false, mode: 0o700 });
@@ -568,6 +606,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
           DATABASE_CLIENT: 'sqlite', DATABASE_FILENAME: join(dataDirectory, 'data.db'),
           STRAPI_TELEMETRY_DISABLED: 'true',
           IKPK_NATIVE_API_TOKEN_FILE: join(candidateDirectory, '.tmp', 'native-api-token'),
+          IKPK_NATIVE_API_TOKEN_NAME: `sql-demo-native-${randomBytes(12).toString('hex')}`,
           ...targetSecrets,
         },
         stdio: ['ignore', stdoutLog.fd, stderrLog.fd],
@@ -724,6 +763,35 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     openOwnedTarget: openTarget,
     async stopOwnedTarget(target) { await stopTarget(target); },
     async refreshMediaInventory(target) { owned(target); return inventory(target); },
+    async prepareResumeMediaInventory(target, proofs) {
+      const state = owned(target); await verifyTargetProcess(target, state);
+      const targetConfig = config.targets[target.name];
+      if (target.name !== 'A' || !targetConfig?.resumeExistingMediaOnly || config.targets.B) throw fail('Exact media inventory validation is limited to the configured single-A resume');
+      const expected = new Map<string, string>();
+      for (const proof of proofs) {
+        const digest = 'sourceBytesAvailable' in proof ? proof.substitution.replacementSha256 : proof.sourceSha256;
+        if (!HASH.test(digest) || expected.has(proof.sourceUrl)) throw fail('Approved media source identities are invalid or duplicated');
+        expected.set(proof.sourceUrl, digest.toLowerCase());
+      }
+      const current = await inventory(target);
+      if (current.mediaById.size !== expected.size) throw fail('Persisted media count differs from the exact approved source set');
+      const seen = new Set<string>();
+      for (const file of current.mediaById.values()) {
+        const claims = sourceClaims(file);
+        const entries = Object.entries(claims);
+        if (entries.length !== 1) throw fail('Persisted media has missing or extra source claims');
+        const [sourceUrl, rawClaim] = entries[0]!;
+        const sourceSha256 = expected.get(sourceUrl);
+        const storedSha256 = current.storedHashById.get(file.id);
+        if (!sourceSha256 || seen.has(sourceUrl) || !storedSha256 || !HASH.test(storedSha256)
+          || !rawClaim || typeof rawClaim !== 'object' || Array.isArray(rawClaim)) throw fail('Persisted media identity is not in the approved source set');
+        const claim = rawClaim as { version?: unknown; sha256?: unknown; storedSha256?: unknown };
+        if (claim.version !== 1 || claim.sha256 !== sourceSha256 || claim.storedSha256 !== storedSha256) throw fail('Persisted media claim does not match approved source and independently hashed stored bytes');
+        seen.add(sourceUrl);
+      }
+      if (seen.size !== expected.size) throw fail('Persisted media source identity set is incomplete');
+      return current;
+    },
     async readRasterBytes(path) { return safePrivateRead(config.privateInputsRoot, path); },
     async uploadRaster(target, currentInventory, proof: SqlDemoOfflineAssetProof, bytes): Promise<SqlDemoNativeUpload> {
       const state = owned(target); await verifyTargetProcess(target, state);
@@ -741,6 +809,9 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         if (claim?.version !== 1 || claim.sha256 !== sourceHash || !actualStoredHash
           || claim.storedSha256 !== actualStoredHash) throw fail('Existing source URL identity does not match its verified stored bytes');
         return { id: exact.id, url: exact.url };
+      }
+      if (config.targets[target.name]?.resumeExistingMediaOnly) {
+        throw fail('Media-only resume target is missing an exact persisted source identity');
       }
       const unbound = [...prior.mediaById.values()].sort((left, right) => left.id - right.id).find((file) =>
         prior.storedHashById.get(file.id) === sourceHash && Object.keys(sourceClaims(file)).length === 0);
@@ -888,6 +959,30 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       });
       state.lastSummary = { capturedAt: new Date().toISOString(), target: target.name, codeCommit: config.cms.expectedCommit, counts, entityIds, media: media.map(({ id, url, verifiedStoredSha256, provider_metadata }) => ({ id, url, verifiedStoredSha256, sourceIdentitySha256: sha256(Buffer.from(JSON.stringify(provider_metadata ?? null))) })), documents: [...state.documents.entries()].map(([path, witness]) => ({ path, ...witness })) };
       return { collections, media };
+    },
+    async readDraftContentCounts(target) {
+      const state = owned(target); await verifyTargetProcess(target, state);
+      const counts: Record<string, number> = {};
+      for (const collection of COLLECTIONS) {
+        let page = 1; let pageCount = 1; let total = -1;
+        let seen = 0;
+        while (page <= pageCount) {
+          const response = await readPage(target, `/api/${collection}?status=draft&pagination[page]=${page}&pagination[pageSize]=100&populate=*`);
+          const p = response.meta.pagination;
+          if (p.page !== page || (total >= 0 && p.total !== total)) throw fail(`CMS ${collection} draft pagination changed during readback`);
+          total = p.total; pageCount = p.pageCount;
+          for (const raw of response.data) {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw fail(`CMS ${collection} contains an invalid draft record`);
+            const row = raw as Record<string, unknown>;
+            if (!Number.isSafeInteger(row.id) || typeof row.documentId !== 'string' || !row.documentId) throw fail(`CMS ${collection} draft record is missing its identity`);
+            seen += 1;
+          }
+          page += 1;
+        }
+        if (seen !== total) throw fail(`CMS ${collection} draft pagination omitted records`);
+        counts[collection] = seen;
+      }
+      return counts;
     },
     async capture(targets) {
       if (!sourceWitnessVerified || !verifiedSourceWitness) throw fail('Cannot capture before the pinned SQL source is verified and stopped');

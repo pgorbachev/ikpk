@@ -309,7 +309,13 @@ describe('concrete native local rehearsal adapter', () => {
     }
     const spawn = (config.runtime.spawn as ReturnType<typeof vi.fn>).mock.calls.find((call) => call[0] === config.cms.nodeExecutable);
     expect(spawn?.[1]).toEqual([expect.stringContaining('/node_modules/@strapi/strapi/bin/strapi.js'), 'start']);
-    expect((spawn?.[2] as { env?: NodeJS.ProcessEnv }).env).toMatchObject({ NODE_ENV: 'production', CI: 'true', STRAPI_TELEMETRY_DISABLED: 'true' });
+    const startEnv = (spawn?.[2] as { env?: NodeJS.ProcessEnv }).env ?? {};
+    expect(startEnv).toMatchObject({ NODE_ENV: 'production', CI: 'true', STRAPI_TELEMETRY_DISABLED: 'true' });
+    expect(startEnv.IKPK_NATIVE_API_TOKEN_NAME).toMatch(/^sql-demo-native-[a-f0-9]{24}$/);
+    const candidate = (spawn?.[2] as { cwd: string }).cwd;
+    const bootstrap = await readFile(join(candidate, 'src', 'index.ts'), 'utf8');
+    expect(bootstrap).toContain('IKPK_NATIVE_API_TOKEN_NAME');
+    expect(bootstrap).not.toContain("name: 'sql-demo-native-rehearsal'");
     expect(owned.process.pid).toBeGreaterThan(0);
   });
 
@@ -451,6 +457,64 @@ describe('concrete native local rehearsal adapter', () => {
       const url = new URL(String(input));
       if (url.pathname.startsWith('/api/') && !url.pathname.endsWith('/api/upload/files/page')) expect(url.search).toContain('populate');
     }
+  });
+
+  it('reads every draft collection page separately so a media-only resume cannot hide draft rows', async () => {
+    const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/_health') return new Response('{}', { status: 200 });
+      if (url.pathname.endsWith('/api/upload/files/page')) {
+        return new Response(JSON.stringify({ data: [], meta: { pagination: { page: 1, pageCount: 0, total: 0 } } }), { status: 200 });
+      }
+      const collection = url.pathname.replace('/api/', '');
+      const rows = url.searchParams.get('status') === 'draft' && collection === 'articles'
+        ? [{ id: 9, documentId: 'draft-article' }]
+        : [];
+      return new Response(JSON.stringify({ data: rows, meta: { pagination: { page: 1, pageCount: rows.length ? 1 : 0, total: rows.length } } }), { status: 200 });
+    });
+    const io = await makeAdapter({ runtime: { fetch } });
+    const counts = await io.readDraftContentCounts(await target(io));
+    expect(counts.articles).toBe(1);
+    expect(Object.entries(counts).filter(([, count]) => count > 0)).toEqual([['articles', 1]]);
+    const requests = fetch.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname.startsWith('/api/'));
+    expect(requests).toHaveLength(collections.length);
+    expect(requests.every((url) => url.searchParams.get('status') === 'draft')).toBe(true);
+  });
+
+  it('accepts only the exact persisted raster source set and verifies source and stored hashes independently', async () => {
+    const sourceUrl = 'media/2024/03/08/approved-source.png';
+    const storedBytes = Buffer.from('CMS-reencoded raster bytes');
+    const sourceSha256 = createHash('sha256').update('approved source bytes').digest('hex');
+    const storedSha256 = createHash('sha256').update(storedBytes).digest('hex');
+    const file = {
+      id: 71, url: '/uploads/actual-71.png', mime: 'image/png',
+      provider_metadata: { ikpk_media_import: { sources: { [sourceUrl]: { version: 1, sha256: sourceSha256, storedSha256 } } } },
+    };
+    const fetch = vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/_health') return new Response('{}', { status: 200 });
+      if (url.pathname.endsWith('/api/upload/files/page')) return new Response(JSON.stringify({ data: [file], meta: { pagination: { page: 1, pageCount: 1, total: 1 } } }), { status: 200 });
+      return new Response(storedBytes, { status: 200 });
+    });
+    const { config } = await makeConfiguration({ runtime: { fetch } });
+    (config.targets.A as typeof config.targets.A & { resumeExistingMediaOnly?: boolean }).resumeExistingMediaOnly = true;
+    delete (config.targets as { B?: unknown }).B;
+    for (const directory of [config.targets.A.dataDirectory, config.targets.A.uploadDirectory, config.targets.A.staticFilesDirectory]) await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFile(join(config.targets.A.dataDirectory, 'data.db'), 'synthetic preserved prototype database', { mode: 0o600 });
+    const { createSqlDemoNativeLocalIo } = await import('./sql-demo-native-local-io.js');
+    const io = createSqlDemoNativeLocalIo(config) as SqlDemoNativeRehearsalIo;
+    configurations.set(io as object, config);
+    const owned = await target(io);
+    const proof = {
+      sourceFileId: '71', sourceUrl, archiveRelativePath: '71.png', resolvedLocalPath: join(scratch, 'private-inputs', '71.png'),
+      sourceSha256, reachability: { kind: 'sql-header' as const },
+      verification: { status: 'verified' as const, loader: 'sql-demo-asset-loader', attestationId: 'synthetic' },
+      sourceFileType: 'image' as const, detectedMimeType: 'image/png' as const, detectedExtension: 'png' as const,
+    } satisfies SqlDemoOfflineAssetProof;
+    const inventory = await io.prepareResumeMediaInventory(owned, [proof]);
+    expect(inventory).toMatchObject({ mediaById: expect.any(Map), storedHashById: expect.any(Map) });
+    expect(storedSha256).not.toBe(sourceSha256);
+    await expect(io.prepareResumeMediaInventory(owned, [proof, { ...proof, sourceFileId: '72', sourceUrl: 'media/2024/03/08/extra.png' }])).rejects.toThrow();
   });
 
   it('captures only private hashed release and conservation witnesses, never token or SQL row content', async () => {

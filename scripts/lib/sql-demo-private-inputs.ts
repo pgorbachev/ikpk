@@ -973,6 +973,20 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     });
   }
 
+  const instituteBySourceId = new Map((mapped.entities.institutes ?? []).map((item) => [item.sourceId, item]));
+  for (const row of mapped.entities.instituteAdditionalInfo ?? []) {
+    const sourceId = numberId(row.sourceId, 'InstituteAdditionalInfo source ID');
+    const instituteId = numberId(row.instituteId, `InstituteAdditionalInfo#${sourceId} institute ID`);
+    const institute = instituteBySourceId.get(instituteId);
+    if (!institute) throw new Error(`InstituteAdditionalInfo#${sourceId} has no mapped target institute`);
+    targetLocations.push({
+      sourceTable: 'InstituteAdditionalInfo', sourceId, targetCollection: 'institutes',
+      targetLegacyId: idString(institute.legacy_id, `Institutes#${instituteId} legacy identity`),
+      targetField: 'description', sectionKey: `institute-additional-info-${sourceId}`,
+      anchor: `institute-section-${sourceId}`,
+    });
+  }
+
   for (const row of reachedDocs) {
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'document metadata source file ID');
     const proof = proofById.get(id);
@@ -986,6 +1000,20 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
       valueAt(row, 'priority') !== binding.priority || valueAt(row, 'title') !== binding.title || valueAt(row, 'section_name', 'sectionName') !== info.name) {
       throw new Error(`${id} document metadata does not match native binding and section identity`);
     }
+    const document = (mapped.entities.documents ?? []).find((item) => item.fileId === id && item.bindingSourceId === binding.id && item.organizationInfoSourceId === info.id);
+    if (!document) throw new Error(`${id} document metadata does not match one mapped SQL document`);
+    const organizationLocation = targetLocations.find((item) => item.sourceTable === 'OrganizationInfo' && item.sourceId === info.id);
+    if (!organizationLocation) throw new Error(`${id} document section has no accepted OrganizationInfo target`);
+    // The approved manifest pins the source file identity and bytes, not a target
+    // URL. Derive a stable, URL-safe destination from that exact identity.
+    const documentSha256 = digest(valueAt(proof, 'sha256'), `${id} document byte-proof SHA-256`);
+    const publicDocumentPath = `/static-files/documents/${documentSha256}.pdf`;
+    targetLocations.push({
+      sourceTable: 'FileBindingOrganizationInfo', sourceId: binding.id,
+      targetCollection: 'pages', targetLegacyId: organizationLocation.targetLegacyId,
+      targetField: 'body', sectionKey: organizationLocation.sectionKey,
+      anchor: organizationLocation.anchor, publicDocumentPath,
+    });
   }
   for (const row of reachedThumbs) {
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'thumbnail source file ID');

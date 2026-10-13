@@ -213,7 +213,7 @@ async function main(): Promise<void> {
   const io = createSqlDemoNativeLocalIo({
     source: { reader, clusterDataDirectory: clusterPath, postgresBinDirectory: pgBin, socketDirectory: socketPath, port: 55438, database: 'ikpk_source_rehearsal', user: 'ikpk_restore' },
     cms: { sourceDirectory: join(repo, 'cms'), expectedCommit: cmsCommit, candidateRoot: cmsCandidateRoot, nodeExecutable: process.execPath, cmsStartScript: 'start' },
-    targets: { A: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads, staticFilesDirectory: cmsStaticFiles } },
+    targets: { A: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads, staticFilesDirectory: cmsStaticFiles, resumeExistingMediaOnly: true } },
     privateArtifactsRoot: artifactsRoot,
     privateInputsRoot,
     resolveToken: async () => `local-native-prototype-${randomBytes(24).toString('hex')}`,
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
   const result = await runSqlDemoNativePrototype({
     reader,
     privateInputConfig: config,
-    target: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads },
+    target: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads, resumeExistingMediaOnly: true },
     snapshotDirectory,
     io,
     materializeApprovedAssets: async (manifest) => {
@@ -248,6 +248,7 @@ async function main(): Promise<void> {
     snapshotMediaCount: snapshot.content.media.length,
     cmsMediaCount: result.mediaCount,
     sourceFileIdentities: { raster: result.rasterCount, pdf: result.documentCount, total: result.rasterCount + result.documentCount },
+    targetLocationCounts: result.targetLocationCounts,
     sourceUrlClassification: result.sourceUrlClassification,
     privateArtifactsDirectory: protoRoot,
   };

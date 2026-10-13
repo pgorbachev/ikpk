@@ -24,6 +24,8 @@ export type SqlDemoNativeTargetConfig = {
   namespace: string;
   dataDirectory: string;
   uploadDirectory: string;
+  /** Continue this private prototype target only when its existing media claims are complete. */
+  resumeExistingMediaOnly?: boolean;
 };
 
 export type SqlDemoNativeSqlSourceLease = { readonly id?: string };
@@ -56,6 +58,8 @@ export interface SqlDemoNativeRehearsalIo {
   readStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoNativeOwnedTarget>;
   readPublished(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoStrapi5Readback>;
+  readDraftContentCounts(target: SqlDemoNativeOwnedTarget): Promise<Record<string, number>>;
+  prepareResumeMediaInventory(target: SqlDemoNativeOwnedTarget, proofs: readonly SqlDemoOfflineAssetProof[]): Promise<unknown>;
   capture(targets: readonly SqlDemoNativeOwnedTarget[]): Promise<void>;
   /** Live CMS snapshot; only required by the one-target prototype path. */
   captureLiveSnapshot?(target: SqlDemoNativeOwnedTarget, destination: string): Promise<void>;
@@ -97,6 +101,7 @@ export interface SqlDemoNativePrototypeResult {
   rasterCount: number;
   documentCount: number;
   mediaCount: number;
+  targetLocationCounts: { organizationInfo: number; instituteAdditionalInfo: number; documents: number };
   sourceUrlClassification: {
     approvedRelativeCount: number;
     verifiedStorageKeyCount: number;
@@ -475,7 +480,8 @@ function publicDocumentPath(
   const document = mapped.entities.documents?.find((item) => item.fileId === proof.sourceFileId);
   const location = normalized.composer.acceptedSupplements.targetLocations.find((item) =>
     item.sourceTable === 'FileBindingOrganizationInfo' && item.sourceId === document?.bindingSourceId);
-  if (!document || !location?.publicDocumentPath || document.url !== proof.sourceUrl) {
+  const expectedPath = `/static-files/documents/${proof.sourceSha256}.pdf`;
+  if (!document || !location?.publicDocumentPath || document.url !== proof.sourceUrl || location.publicDocumentPath !== expectedPath) {
     throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved PDF has no matching SQL binding and pinned public path', `Files#${proof.sourceFileId}`);
   }
   const segments = location.publicDocumentPath.split('/');
@@ -487,6 +493,59 @@ function publicDocumentPath(
     throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved PDF path is not a safe static document location', `Files#${proof.sourceFileId}`);
   }
   return location.publicDocumentPath;
+}
+
+function validateTargetLocationBindings(mapped: SqlPublicContentResult, normalized: SqlDemoNormalizedPrivateInputs): SqlDemoNativePrototypeResult['targetLocationCounts'] {
+  const locations = normalized.composer.acceptedSupplements.targetLocations;
+  const locationFor = (table: typeof locations[number]['sourceTable'], id: number) => {
+    const matches = locations.filter((item) => item.sourceTable === table && item.sourceId === id);
+    if (matches.length !== 1) throw safeFailure('MAPPING_FAILED', 'Mapped SQL identity has no unique accepted target location', `${table}#${id}`);
+    return matches[0]!;
+  };
+  for (const row of mapped.entities.organizationInfo ?? []) {
+    const location = locationFor('OrganizationInfo', row.sourceId);
+    if (location.targetCollection !== 'pages' || location.targetField !== 'body' || !location.anchor) {
+      throw safeFailure('MAPPING_FAILED', 'OrganizationInfo target location is incomplete', `OrganizationInfo#${row.sourceId}`);
+    }
+  }
+  const instituteBySourceId = new Map((mapped.entities.institutes ?? []).map((row) => [row.sourceId, row]));
+  for (const row of mapped.entities.instituteAdditionalInfo ?? []) {
+    const location = locationFor('InstituteAdditionalInfo', row.sourceId);
+    if (!Number.isSafeInteger(row.instituteId) || (row.instituteId as number) <= 0) {
+      throw safeFailure('MAPPING_FAILED', 'InstituteAdditionalInfo source parent ID is invalid', `InstituteAdditionalInfo#${row.sourceId}`);
+    }
+    const institute = instituteBySourceId.get(row.instituteId as number);
+    if (!institute || location.targetCollection !== 'institutes' || location.targetField !== 'description'
+      || location.targetLegacyId !== institute.legacy_id || location.anchor !== `institute-section-${row.sourceId}`) {
+      throw safeFailure('MAPPING_FAILED', 'InstituteAdditionalInfo target does not match its exact SQL parent', `InstituteAdditionalInfo#${row.sourceId}`);
+    }
+  }
+  for (const row of mapped.entities.documents ?? []) {
+    const location = locationFor('FileBindingOrganizationInfo', row.bindingSourceId);
+    const organization = locationFor('OrganizationInfo', row.organizationInfoSourceId);
+    const proof = normalized.loader.assetManifest.entries.find((entry) => entry.sourceFileId === row.fileId && entry.sourceFileType === 'document');
+    const expectedPath = proof ? `/static-files/documents/${proof.sha256}.pdf` : '';
+    if (location.targetCollection !== 'pages' || location.targetField !== 'body'
+      || location.targetLegacyId !== organization.targetLegacyId || location.anchor !== organization.anchor
+      || location.sectionKey !== organization.sectionKey || location.publicDocumentPath !== expectedPath) {
+      throw safeFailure('MAPPING_FAILED', 'PDF target location does not match its exact SQL file binding', `Files#${row.fileId}`);
+    }
+  }
+  const expectedCounts = [
+    ['OrganizationInfo', mapped.entities.organizationInfo?.length ?? 0],
+    ['InstituteAdditionalInfo', mapped.entities.instituteAdditionalInfo?.length ?? 0],
+    ['FileBindingOrganizationInfo', mapped.entities.documents?.length ?? 0],
+  ] as const;
+  for (const [table, count] of expectedCounts) {
+    if (locations.filter((item) => item.sourceTable === table).length !== count) {
+      throw safeFailure('MAPPING_FAILED', 'Accepted target location inventory has unexpected or unused entries', table);
+    }
+  }
+  return {
+    organizationInfo: expectedCounts[0][1],
+    instituteAdditionalInfo: expectedCounts[1][1],
+    documents: expectedCounts[2][1],
+  };
 }
 
 async function verifyPublishedPdf(
@@ -539,23 +598,28 @@ async function importTarget(
   assets: SqlDemoAssetLoaderResult,
   pdfBytes: Map<string, Uint8Array>,
   io: SqlDemoNativeRehearsalIo,
+  prevalidatedInventory?: unknown,
 ): Promise<TargetRun> {
   let inventory: unknown;
-  try {
-    inventory = await io.refreshMediaInventory(target);
-  } catch {
-    throw safeFailure('MEDIA_INVENTORY_FAILED', `Fresh media inventory could not be read for target ${name}`);
+  if (prevalidatedInventory !== undefined) inventory = prevalidatedInventory;
+  else {
+    try {
+      inventory = await io.refreshMediaInventory(target);
+    } catch {
+      throw safeFailure('MEDIA_INVENTORY_FAILED', `Fresh media inventory could not be read for target ${name}`);
+    }
   }
   const rasters = await uploadRasters(target, inventory, assets.offlineMedia, io);
   for (const document of assets.offlineDocuments) {
     const bytes = pdfBytes.get(document.sourceFileId);
     if (!bytes) throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved document bytes were not retained for publication', `Files#${document.sourceFileId}`);
+    const publicPath = publicDocumentPath(document, mapped, normalized);
     try {
-      await io.writeStaticDocument(target, publicDocumentPath(document, mapped, normalized), bytes);
-    } catch {
-      throw safeFailure('DOCUMENT_PUBLISH_FAILED', 'Approved static document could not be published', `Files#${document.sourceFileId}`);
+      await io.writeStaticDocument(target, publicPath, bytes);
+    } catch (error) {
+      throw safeFailure('DOCUMENT_PUBLISH_FAILED', 'Approved static document could not be published', `Files#${document.sourceFileId}`, safeDiagnostic(error));
     }
-    await verifyPublishedPdf(target, document, publicDocumentPath(document, mapped, normalized), io);
+    await verifyPublishedPdf(target, document, publicPath, io);
   }
   const images = assets.offlineMedia.map((proof) => {
     const uploaded = rasters.get(proof.sourceFileId);
@@ -771,6 +835,7 @@ export async function runSqlDemoNativePrototype(
     let mapped: SqlPublicContentResult;
     let normalized: SqlDemoNormalizedPrivateInputs;
     let assets: SqlDemoAssetLoaderResult;
+    let targetLocationCounts: SqlDemoNativePrototypeResult['targetLocationCounts'];
     try {
       mapped = mapSqlPublicContent(source as SqlPublicSource, mapperOptions);
       normalized = normalizeSqlDemoPrivateInputs({
@@ -779,6 +844,7 @@ export async function runSqlDemoNativePrototype(
         nativeSqlPublicSource: source as SqlPublicSource,
         mapped,
       });
+      targetLocationCounts = validateTargetLocationBindings(mapped, normalized);
       if (input.materializeApprovedAssets) await input.materializeApprovedAssets(normalized.loader.assetManifest);
       assets = await loadSqlDemoAssets({
         ...normalized.loader,
@@ -817,13 +883,52 @@ export async function runSqlDemoNativePrototype(
     }
 
     const pdfBytes = await readApprovedPdfBytes(assets, input.io);
+    // Exercise the complete public composer before CMS startup. The raster URLs are
+    // deliberately inert placeholders: this output is validation-only and is never
+    // materialized or treated as target evidence.
+    try {
+      const preflightImages = assets.offlineMedia.map((proof) =>
+        verifiedMapping(proof, `https://prototype-preflight.invalid/uploads/${proof.sourceFileId}.${proof.detectedExtension}`));
+      const preflightDocuments = assets.offlineDocuments.map((proof) => ({
+        sourceFileId: proof.sourceFileId,
+        sourceUrl: proof.sourceUrl,
+        targetPublicUrl: publicDocumentPath(proof, mapped, normalized),
+        sha256: proof.sourceSha256,
+        detectedMimeType: proof.detectedMimeType,
+        verification: proof.verification,
+      }));
+      composeSqlDemoRelease(
+        mapped,
+        normalized.composer.acceptedSupplements,
+        { images: preflightImages, documents: preflightDocuments },
+        normalized.composer.ownerDecisions,
+      );
+    } catch (error) {
+      throw safeFailure('COMPOSITION_PREFLIGHT_FAILED', 'Approved content failed full release composition before target startup', undefined, safeDiagnostic(error));
+    }
     try {
       target = await input.io.openOwnedTarget({ ...input.target, name: 'A', token });
     } catch {
       throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Owned CMS process for prototype target A could not be started');
     }
     assertOwnedTarget(target, 'A', input.target);
-    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io);
+    if (input.target.resumeExistingMediaOnly) {
+      let priorReadback: SqlDemoStrapi5Readback;
+      let draftCounts: Record<string, number>;
+      try { priorReadback = await input.io.readPublished(target); }
+      catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
+      const existingContentCount = Object.values(priorReadback.collections).reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
+      try { draftCounts = await input.io.readDraftContentCounts(target); }
+      catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
+      const existingDraftCount = Object.values(draftCounts).reduce((sum, count) => sum + count, 0);
+      if (existingContentCount !== 0 || existingDraftCount !== 0) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype target contains content rows and is not a media-only checkpoint');
+    }
+    let priorMediaInventory: unknown;
+    if (input.target.resumeExistingMediaOnly) {
+      try { priorMediaInventory = await input.io.prepareResumeMediaInventory(target, assets.offlineMedia); }
+      catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Persisted prototype media claims do not exactly match the approved raster set', undefined, safeDiagnostic(error)); }
+    }
+    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io, priorMediaInventory);
     assertSqlDemoNativeConservation(imported.release, normalized.materializer, imported.readback, imported.readback);
 
     if (!input.io.captureLiveSnapshot) throw safeFailure('LIVE_SNAPSHOT_UNAVAILABLE', 'Prototype adapter does not provide live CMS snapshot capture');
@@ -841,6 +946,7 @@ export async function runSqlDemoNativePrototype(
       rasterCount: assets.offlineMedia.length,
       documentCount: assets.offlineDocuments.length,
       mediaCount: imported.readback.media.length,
+      targetLocationCounts,
       sourceUrlClassification,
     };
   } catch (error) {

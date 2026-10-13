@@ -69,6 +69,8 @@ type SqlDemoNativeRehearsalIo = {
   readStaticDocument(target: OwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: OwnedTarget): Promise<OwnedTarget>;
   readPublished(target: OwnedTarget): Promise<SqlDemoStrapi5Readback>;
+  readDraftContentCounts(target: OwnedTarget): Promise<Record<string, number>>;
+  prepareResumeMediaInventory(target: OwnedTarget, proofs: readonly SqlDemoOfflineAssetProof[]): Promise<unknown>;
   capture(targets: readonly OwnedTarget[]): Promise<void>;
   stopOwnedSqlSource(lease: OwnedSqlSource): Promise<void>;
 };
@@ -203,6 +205,8 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
       client: { name: target.name, fresh: true, request: vi.fn(async () => undefined) },
     })),
     readPublished: vi.fn(async () => emptyReadback()),
+    readDraftContentCounts: vi.fn(async () => ({})),
+    prepareResumeMediaInventory: vi.fn(async () => ({})),
     capture: vi.fn(async () => undefined),
     stopOwnedSqlSource: vi.fn(async () => undefined),
   };
@@ -558,6 +562,8 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
   it('ships approved PDFs as verified static bytes with their pinned public path and never through raster upload', async () => {
     const input = options({ reader: { ...options().reader, dumpPath } });
     const pdfBytes = Buffer.from('%PDF-1.7\nsynthetic approved PDF\n%%EOF\n');
+    const pdfSha = createHash('sha256').update(pdfBytes).digest('hex');
+    const publicPath = `/static-files/documents/${pdfSha}.pdf`;
     const pdfPath = 'web/public/static-files/source-501.pdf';
     const sourceUrl = '/sql/source-501.pdf';
     vi.spyOn(await import('./sql-public-content.js'), 'mapSqlPublicContent').mockReturnValueOnce({
@@ -570,23 +576,23 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
       mapperOptions: { expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {} },
       loader: {} as never,
       composer: { acceptedSupplements: { targetLocations: [{
-        sourceTable: 'FileBindingOrganizationInfo', sourceId: 501, publicDocumentPath: '/static-files/source-501.pdf',
+        sourceTable: 'FileBindingOrganizationInfo', sourceId: 501, publicDocumentPath: publicPath,
       }] } } as never,
       materializer: emptyClassification,
     } as never);
     vi.spyOn(await import('./sql-demo-assets.js'), 'loadSqlDemoAssets').mockResolvedValueOnce({
       offlineMedia: [],
-      offlineDocuments: [pdfProof('pdf-501', sourceUrl, createHash('sha256').update(pdfBytes).digest('hex'), pdfPath)],
+      offlineDocuments: [pdfProof('pdf-501', sourceUrl, pdfSha, pdfPath)],
       supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
     } as never);
     vi.mocked(input.io.readPdfBytes).mockResolvedValueOnce(pdfBytes);
     vi.mocked(input.io.readStaticDocument).mockResolvedValue(pdfBytes);
     await run(input);
-    expect(input.io.writeStaticDocument).toHaveBeenCalledWith(expect.anything(), '/static-files/source-501.pdf', pdfBytes);
+    expect(input.io.writeStaticDocument).toHaveBeenCalledWith(expect.anything(), publicPath, pdfBytes);
     expect(input.io.readStaticDocument).toHaveBeenCalledTimes(3);
-    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: 'A' }), '/static-files/source-501.pdf');
-    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(2, expect.objectContaining({ name: 'B' }), '/static-files/source-501.pdf');
-    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: 'A' }), '/static-files/source-501.pdf');
+    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: 'A' }), publicPath);
+    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(2, expect.objectContaining({ name: 'B' }), publicPath);
+    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: 'A' }), publicPath);
     expect(input.io.uploadRaster).not.toHaveBeenCalled();
   });
 
@@ -594,6 +600,8 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
     const input = options({ reader: { ...options().reader, dumpPath } });
     const expectedBytes = Buffer.from('%PDF-1.7\nsynthetic approved PDF\n%%EOF\n');
     const driftedBytes = Buffer.from('%PDF-1.7\nchanged after repeat\n%%EOF\n');
+    const expectedSha = createHash('sha256').update(expectedBytes).digest('hex');
+    const publicPath = `/static-files/documents/${expectedSha}.pdf`;
     const pdfPath = 'web/public/static-files/source-501.pdf';
     const sourceUrl = '/sql/source-501.pdf';
     vi.spyOn(await import('./sql-public-content.js'), 'mapSqlPublicContent').mockReturnValueOnce({
@@ -604,13 +612,13 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
       mapperOptions: { expectedSourceHash: `sha256:${SOURCE_SHA}`, acceptedLegacyIds: {} },
       loader: {} as never,
       composer: { acceptedSupplements: { targetLocations: [{
-        sourceTable: 'FileBindingOrganizationInfo', sourceId: 501, publicDocumentPath: '/static-files/source-501.pdf',
+        sourceTable: 'FileBindingOrganizationInfo', sourceId: 501, publicDocumentPath: publicPath,
       }] } } as never,
       materializer: emptyClassification,
     } as never);
     vi.spyOn(await import('./sql-demo-assets.js'), 'loadSqlDemoAssets').mockResolvedValueOnce({
       offlineMedia: [],
-      offlineDocuments: [pdfProof('pdf-501', sourceUrl, createHash('sha256').update(expectedBytes).digest('hex'), pdfPath)],
+      offlineDocuments: [pdfProof('pdf-501', sourceUrl, expectedSha, pdfPath)],
       supplements: [], provenance: { baseline: { sqlSha256: SOURCE_SHA, archiveSha256: STORED_SHA }, assets: [], supplements: [] },
     } as never);
     vi.mocked(input.io.readPdfBytes).mockResolvedValue(expectedBytes);
@@ -621,7 +629,7 @@ describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', ()
 
     await expect(run(input)).rejects.toMatchObject({ code: 'DOCUMENT_BYTES_INVALID', identity: 'Files#pdf-501' });
     expect(input.io.readStaticDocument).toHaveBeenCalledTimes(3);
-    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: 'A' }), '/static-files/source-501.pdf');
+    expect(input.io.readStaticDocument).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: 'A' }), publicPath);
     expect(input.io.capture).not.toHaveBeenCalled();
   });
 
