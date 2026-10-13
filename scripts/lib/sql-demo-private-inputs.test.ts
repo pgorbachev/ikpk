@@ -1308,6 +1308,7 @@ describe('SQL demo private input preparation and normalization', () => {
 
   it('composes the normalized canonical Rutube decision with its security attributes', () => {
     const rutubeUrl = 'https://rutube.ru/play/embed/abcdefabcdefabcdefabcdefabcdefab';
+    const canonicalTarget = `${rutubeUrl}/`;
     const decisionFile = {
       schema_version: 1,
       scope: 'approved SQL video source reference decisions',
@@ -1320,7 +1321,7 @@ describe('SQL demo private input preparation and normalization', () => {
       records: [{
         decision: 'canonicalize_same_https_rutube_embed_id',
         link_text: 'Synthetic video',
-        safe_target_href: rutubeUrl,
+        safe_target_href: canonicalTarget,
         source_id: 900,
         source_slug: 'seminar-900',
         source_table: 'Seminars',
@@ -1374,8 +1375,8 @@ describe('SQL demo private input preparation and normalization', () => {
       const slug = `synthetic-seminar-${id}`;
       if (index < 5) {
         const embedId = String(index + 1).repeat(32);
-        const safeTarget = `https://rutube.ru/play/embed/${embedId}`;
-        const sourceUrl = `${safeTarget}?p=synthetic-${id}`;
+        const safeTarget = `https://rutube.ru/play/embed/${embedId}/`;
+        const sourceUrl = `https://rutube.ru/play/embed/${embedId}?p=synthetic-${id}`;
         return {
           id, slug, sourceUrl,
           record: {
@@ -1388,7 +1389,7 @@ describe('SQL demo private input preparation and normalization', () => {
             source_url: sourceUrl,
             target_rel: null,
           },
-          expected: `<iframe src="${safeTarget}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`,
+          expected: `<iframe src="${safeTarget}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`,
           action: 'rutube-trailing-slash',
         };
       }
@@ -1443,10 +1444,10 @@ describe('SQL demo private input preparation and normalization', () => {
     ['query-bearing target', (url: string) => `${url}?p=synthetic`],
     ['userinfo target', (url: string) => url.replace('https://', 'https://synthetic-user@')],
     ['new-host target', (url: string) => url.replace('https://rutube.ru', 'https://rutube.synthetic.invalid')],
-    ['different embed identity', (url: string) => url.replace(/[0-9a-f]{32}$/i, 'b'.repeat(32))],
+    ['different embed identity', (url: string) => url.replace(/([0-9a-f]{32})\/$/i, `${'b'.repeat(32)}/`)],
   ])('rejects a Rutube canonical decision with a %s', (_kind, changeTarget) => {
     const sourceUrl = `https://rutube.ru/play/embed/${'a'.repeat(32)}?p=synthetic-900`;
-    const safeTarget = `https://rutube.ru/play/embed/${'a'.repeat(32)}`;
+    const safeTarget = `https://rutube.ru/play/embed/${'a'.repeat(32)}/`;
     const seminarRows = [{ id: 900, slug: 'synthetic-seminar-900', sourceUrl }];
     const record = {
       decision: 'canonicalize_same_https_rutube_embed_id',

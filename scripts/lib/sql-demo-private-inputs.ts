@@ -1011,7 +1011,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
       && sourceVideoUrl.searchParams.get('p') !== ''
       && safeVideoUrl.protocol === 'https:' && safeVideoUrl.hostname === 'rutube.ru'
       && !safeVideoUrl.username && !safeVideoUrl.password && !safeVideoUrl.port && !safeVideoUrl.search && !safeVideoUrl.hash
-      && safeVideoUrl.pathname === sourceVideoUrl.pathname;
+      && safeVideoUrl.pathname === `${sourceVideoUrl.pathname}/`;
     if (action === 'rutube-trailing-slash' ? !canonicalRutube : safeHref !== sourceUrl) {
       throw new Error(`Seminars#${sourceId} video decision must preserve the exact approved URL identity`);
     }
@@ -1027,7 +1027,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     }
     if (action === 'external-link') string(valueAt(row, 'link_text', 'linkText'), `Seminars#${sourceId} video link text`);
     const expectedOutput = action === 'rutube-trailing-slash'
-      ? canonicalSqlDemoRutubeIframe(safeHref)
+      ? canonicalSqlDemoRutubeIframe(sourceUrl)
       : `<a href="${safeHref}" rel="${string(targetRel, `Seminars#${sourceId} target rel`)}">Открыть видео</a>`;
     videoReferences.push({ sourceTable: 'Seminars', sourceId, field: 'description', originalURL: sourceUrl, action, expectedOutput });
   }
