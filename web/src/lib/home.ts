@@ -166,7 +166,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         dateLabel: formatScheduleDateRange(e.startAt, e.endAt),
         dayLabel: String(start.getUTCDate()),
         monthLabel: MONTHS[start.getUTCMonth()],
-        priceLabel: e.isFree ? 'Бесплатно' : formatPrice(e.newPrice),
+        priceLabel: e.isFree === true ? 'Бесплатно' : formatPrice(e.newPrice),
         isFree: e.isFree,
         durationLabel: e.duration ? `${e.duration} ч` : '',
         teacherName: lead?.fullName?.split(',')[0].trim() || '',
