@@ -333,6 +333,28 @@ const proof = (sourceFileId: string, path: string, digest: string, sourceFileTyp
   ...extra,
 });
 
+function documentManifestConfig(bindingId: unknown, organizationInfoId: unknown) {
+  const base = JSON.parse(Buffer.from(privateDocuments()['reached-media-manifest.json'].bytes).toString('utf8')) as {
+    verified_assets: Record<string, unknown>[];
+  };
+  return config({ privateJson: privateDocuments({
+    'reached-media-manifest.json': {
+      ...base,
+      verified_assets: [...base.verified_assets, proof('pdf-1', 'docs/one.pdf', hash('2'), 'document')],
+      documents: [{
+        binding_id: bindingId,
+        organization_info_id: organizationInfoId,
+        priority: 1,
+        section_name: 'Synthetic SQL section B',
+        source_file_id: 'pdf-1',
+        target_media_id: 'synthetic-target-pdf',
+        target_status: 'active',
+        title: 'Synthetic PDF',
+      }],
+    },
+  }) });
+}
+
 function normalize(overrides: Partial<Parameters<typeof normalizeSqlDemoPrivateInputs>[0]> = {}) {
   const currentConfig = overrides.config ?? config();
   const mapperOptions = prepareSqlDemoPrivateInputs(currentConfig);
@@ -340,6 +362,51 @@ function normalize(overrides: Partial<Parameters<typeof normalizeSqlDemoPrivateI
 }
 
 describe('SQL demo private input preparation and normalization', () => {
+  it('normalizes canonical decimal-string document IDs and preserves the bound document output', () => {
+    const normalized = normalize({ config: documentManifestConfig('801', '702') });
+    const documentEntry = normalized.loader.assetManifest.entries.find((entry) => entry.sourceFileId === 'pdf-1');
+    expect(documentEntry).toMatchObject({
+      sourceFileId: 'pdf-1',
+      sourceFileType: 'document',
+      reachability: { kind: 'document-binding', bindingSourceId: 801 },
+    });
+
+    const output = mapSqlPublicContent(source, normalized.mapperOptions);
+    expect(output.entities.documents).toContainEqual(expect.objectContaining({
+      sourceId: 'pdf-1',
+      fileId: 'pdf-1',
+      bindingSourceId: 801,
+      organizationInfoSourceId: 702,
+      title: 'Synthetic PDF',
+    }));
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['leading zero', '0801'],
+    ['explicit sign', '+801'],
+    ['surrounding whitespace', ' 801 '],
+    ['fraction', '801.0'],
+    ['exponent', '8.01e2'],
+    ['unsafe integer', '9007199254740992'],
+    ['wrong native binding', '802'],
+  ])('rejects document binding IDs with %s', (_label, bindingId) => {
+    expect(() => normalize({ config: documentManifestConfig(bindingId, '702') })).toThrow();
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['leading zero', '0702'],
+    ['explicit sign', '+702'],
+    ['surrounding whitespace', ' 702 '],
+    ['fraction', '702.0'],
+    ['exponent', '7.02e2'],
+    ['unsafe integer', '9007199254740992'],
+    ['wrong native organization', '401'],
+  ])('rejects document organization IDs with %s', (_label, organizationInfoId) => {
+    expect(() => normalize({ config: documentManifestConfig('801', organizationInfoId) })).toThrow();
+  });
+
   it('normalizes institute and video playlist DTO metadata from the exact accepted source blobs', () => {
     const fixture = metadataSupplementConfig();
     const videos = fixture.playlistIds.map((sourceId) => ({
