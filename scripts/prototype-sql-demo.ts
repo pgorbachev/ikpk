@@ -143,12 +143,14 @@ async function main(): Promise<void> {
     demoWriteOrImportAuthorization?: unknown;
     productionAcceptance?: unknown;
     identityAdditions?: { sourceTable: string; sourceId: number; identityAdditionApprovedForDemo193: boolean }[];
-    ownerDecision?: { media?: { missingOriginalReplacements?: { sourceFileId: string; sourceBytesAvailable: boolean; demoApproved: boolean }[] } };
   };
   const additions = new Set((decision.identityAdditions ?? []).filter((row) => row.identityAdditionApprovedForDemo193).map((row) => `${row.sourceTable}#${row.sourceId}`));
   if (decision.demoWriteOrImportAuthorization !== true || decision.productionAcceptance !== false || additions.size !== 3 ||
       !['Seminars#361', 'Seminars#362', 'Teachers#88'].every((identity) => additions.has(identity))) throw new Error('all-active decision scope mismatch');
-  const replacements = decision.ownerDecision?.media?.missingOriginalReplacements ?? [];
+  const mediaDecision = JSON.parse(Buffer.from(privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+    ownerDecision?: { media?: { missingOriginalReplacements?: { sourceFileId: string; sourceBytesAvailable: boolean; demoApproved: boolean }[] } };
+  };
+  const replacements = mediaDecision.ownerDecision?.media?.missingOriginalReplacements ?? [];
   if (replacements.length !== 1 || replacements[0]!.sourceBytesAvailable !== false || replacements[0]!.demoApproved !== true) {
     throw new Error('pinned Barral missing-original replacement scope mismatch');
   }
