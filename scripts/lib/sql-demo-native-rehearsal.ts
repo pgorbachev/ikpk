@@ -15,6 +15,7 @@ import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-conte
 import { mapSqlPublicContent } from './sql-public-content.js';
 import type { SqlMaterializerOptions, SqlResolvedMedia, SqlStrapiRestClient } from './sql-public-materializer.js';
 import { materializeSqlPublicContent } from './sql-public-materializer.js';
+import { allowedSourceUrl } from './strapi-media-inventory.js';
 
 type TargetName = 'A' | 'B';
 
@@ -96,6 +97,35 @@ export interface SqlDemoNativePrototypeResult {
   rasterCount: number;
   documentCount: number;
   mediaCount: number;
+  sourceUrlClassification: {
+    approvedRelativeCount: number;
+    validAbsoluteCount: number;
+    invalidCount: number;
+    firstClass: 'approved-relative' | 'valid-absolute' | 'invalid' | 'none';
+  };
+}
+
+const APPROVED_RELATIVE_MEDIA_URLS = new Set([
+  '/media/legacy/logo-v2.png',
+  '/media/legacy/logo-upledger-inst.png',
+  '/media/legacy/logo-barral-inst.png',
+]);
+
+export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativePrototypeResult['sourceUrlClassification'] {
+  let approvedRelativeCount = 0;
+  let validAbsoluteCount = 0;
+  let invalidCount = 0;
+  let firstClass: SqlDemoNativePrototypeResult['sourceUrlClassification']['firstClass'] = 'none';
+  values.forEach((value, index) => {
+    const kind = APPROVED_RELATIVE_MEDIA_URLS.has(value)
+      ? 'approved-relative'
+      : allowedSourceUrl(value) ? 'valid-absolute' : 'invalid';
+    if (index === 0) firstClass = kind;
+    if (kind === 'approved-relative') approvedRelativeCount += 1;
+    else if (kind === 'valid-absolute') validAbsoluteCount += 1;
+    else invalidCount += 1;
+  });
+  return { approvedRelativeCount, validAbsoluteCount, invalidCount, firstClass };
 }
 
 export class SqlDemoNativeRehearsalError extends Error {
@@ -748,9 +778,36 @@ export async function runSqlDemoNativePrototype(
       if (input.materializeApprovedAssets) await input.materializeApprovedAssets(normalized.loader.assetManifest);
       assets = await loadSqlDemoAssets({
         ...normalized.loader,
+        materializedReplacementRoot: normalized.loader.assetRoot,
       });
     } catch (error) {
       throw mapFailure(error);
+    }
+
+    const sourceUrlClassification = classifyMediaSourceUrls(assets.offlineMedia.map((proof) => proof.sourceUrl));
+    if (sourceUrlClassification.invalidCount > 0) {
+      throw safeFailure('MEDIA_SOURCE_URL_INVALID', 'Approved media source identities failed the offline URL classification', undefined, {
+        causeCategory: 'SqlDemoMediaSourceUrlClassification', frames: [],
+        signals: {
+          approvedRelativeCount: sourceUrlClassification.approvedRelativeCount,
+          validAbsoluteCount: sourceUrlClassification.validAbsoluteCount,
+          invalidCount: sourceUrlClassification.invalidCount,
+          firstApprovedRelative: Number(sourceUrlClassification.firstClass === 'approved-relative'),
+          firstValidAbsolute: Number(sourceUrlClassification.firstClass === 'valid-absolute'),
+          firstInvalid: Number(sourceUrlClassification.firstClass === 'invalid'),
+        },
+      });
+    }
+
+    // Verify every source path and byte pin before installing or booting the target CMS.
+    for (const proof of assets.offlineMedia) {
+      let bytes: Uint8Array;
+      try { bytes = await input.io.readRasterBytes(proof.resolvedLocalPath); }
+      catch { throw safeFailure('MEDIA_SOURCE_BYTES_INVALID', 'Approved media bytes are not available from the private pinned asset root', `Files#${proof.sourceFileId}`); }
+      const expected = 'substitution' in proof && proof.substitution ? proof.substitution.replacementSha256 : proof.sourceSha256;
+      if (createHash('sha256').update(bytes).digest('hex') !== expected.toLowerCase()) {
+        throw safeFailure('MEDIA_SOURCE_BYTES_INVALID', 'Approved media bytes do not match their private source pin', `Files#${proof.sourceFileId}`);
+      }
     }
 
     const pdfBytes = await readApprovedPdfBytes(assets, input.io);
@@ -778,6 +835,7 @@ export async function runSqlDemoNativePrototype(
       rasterCount: assets.offlineMedia.length,
       documentCount: assets.offlineDocuments.length,
       mediaCount: imported.readback.media.length,
+      sourceUrlClassification,
     };
   } catch (error) {
     primaryError = error;

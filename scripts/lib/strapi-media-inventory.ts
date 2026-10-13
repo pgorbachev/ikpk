@@ -69,7 +69,7 @@ function parseFiles(data: unknown[], page: number): MediaFile[] {
   });
 }
 
-function allowedSourceUrl(value: string): boolean {
+export function allowedSourceUrl(value: string): boolean {
   if (value.length > 2048) return false;
   if (/^\/media\/legacy\/(?:logo-v2|logo-upledger-inst|logo-barral-inst)\.png$/.test(value)) return true;
   try {

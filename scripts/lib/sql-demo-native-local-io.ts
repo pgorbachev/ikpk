@@ -4,7 +4,7 @@ import { chmod, lstat, mkdir, open, readFile, readlink, readdir, realpath, renam
 import { constants as fsConstants } from 'node:fs';
 import { createConnection } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { buildStrapiMediaInventory, type StrapiMediaInventory } from './strapi-media-inventory.js';
+import { allowedSourceUrl, buildStrapiMediaInventory, type StrapiMediaInventory } from './strapi-media-inventory.js';
 import { buildUploadBody } from './upload-body.js';
 import type { SqlDemoNativeRehearsalIo, SqlDemoNativeOwnedTarget, SqlDemoNativeSqlSourceLease, SqlDemoNativeTargetConfig, SqlDemoNativeUpload } from './sql-demo-native-rehearsal.js';
 import type { SqlDemoOfflineAssetProof } from './sql-demo-assets.js';
@@ -730,13 +730,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const expected = 'sourceBytesAvailable' in proof ? proof.substitution.replacementSha256 : proof.sourceSha256;
       const mime = pngMime(bytes);
       if (!mime || mime !== proof.detectedMimeType || !HASH.test(expected) || sha256(bytes) !== expected.toLowerCase()) throw fail('Raster bytes do not match their reviewed source hash and MIME');
-      const relativeLegacyUrl = ['/media/legacy/logo-v2.png', '/media/legacy/logo-upledger-inst.png', '/media/legacy/logo-barral-inst.png'].includes(proof.sourceUrl);
-      if (!relativeLegacyUrl) {
-        let sourceURL: URL;
-        try { sourceURL = new URL(proof.sourceUrl); }
-        catch { throw failStage('SourceUrlIdentity'); }
-        if (!['http:', 'https:'].includes(sourceURL.protocol) || sourceURL.username || sourceURL.password) throw failStage('SourceUrlIdentity');
-      }
+      if (!allowedSourceUrl(proof.sourceUrl)) throw failStage('SourceUrlIdentity');
       const prior = currentInventory as StrapiMediaInventory;
       const sourceUrl = proof.sourceUrl;
       const sourceHash = expected.toLowerCase();
@@ -793,9 +787,13 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const persisted = await (target.client as { request: (method: string, path: string) => Promise<unknown> }).request('GET', `/api/upload/files/${result.id}?populate=*`) as {
         id?: unknown; url?: unknown; name?: unknown; mime?: unknown; provider_metadata?: unknown;
       };
+      const persistedClaim = sourceClaims(persisted as { provider_metadata?: unknown })[sourceUrl] as
+        { version?: unknown; sha256?: unknown; storedSha256?: unknown } | undefined;
       if (persisted.id !== result.id || typeof persisted.url !== 'string'
         || safeUrlPath(persisted.url, target.baseUrl, '/uploads/').pathname !== uploadUrl.pathname
-        || sourceClaims(persisted as { provider_metadata?: unknown })[sourceUrl] === undefined) throw failStage('PersistentMediaIdentity');
+        || persistedClaim?.version !== 1 || persistedClaim.sha256 !== sourceHash || persistedClaim.storedSha256 !== storedHash) {
+        throw failStage('PersistentMediaIdentity');
+      }
       prior.mediaById.set(result.id as number, {
         id: result.id as number, url: uploadUrl.pathname,
         ...(typeof persisted.name === 'string' ? { name: persisted.name } : {}),

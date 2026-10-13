@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSqlDemoNativeLocalIo } from './lib/sql-demo-native-local-io.js';
@@ -55,7 +55,7 @@ async function ensurePrivateDirectory(path: string): Promise<void> {
 }
 async function digestFile(path: string): Promise<string> { return sha256(await readFile(path)); }
 
-function extractManifestMembers(manifest: SqlDemoAssetManifest, replacementSourceIds: string[]): void {
+async function extractManifestMembers(manifest: SqlDemoAssetManifest, replacement: { sourceFileId: string; path: string; sha256: string; bytes: Uint8Array }): Promise<void> {
   const rows = manifest.entries.map((entry) => ({ path: entry.archiveRelativePath, sha256: entry.sha256, sourceFileId: entry.sourceFileId }));
   // The one approved Barral replacement is deliberately absent from this ZIP list:
   // its bytes come from the separately pinned Git supplement, not the missing original.
@@ -63,12 +63,15 @@ function extractManifestMembers(manifest: SqlDemoAssetManifest, replacementSourc
       manifest.entries.filter((entry) => entry.sourceFileType === 'document').length !== 56) {
     throw new Error('archive proof set was not 562 original raster plus 56 PDF; Barral replacement is separately pinned');
   }
+  if (!replacement.sourceFileId || !/^[a-f\d]{64}$/i.test(replacement.sha256) || !replacement.path || isAbsolute(replacement.path) ||
+      replacement.path.includes('\\') || replacement.path.split('/').some((part) => !part || part === '.' || part === '..') || sha256(replacement.bytes) !== replacement.sha256) {
+    throw new Error('pinned missing-original replacement is not a safe private asset');
+  }
   const python = String.raw`
 import hashlib, json, os, pathlib, stat, sys, zipfile
 archive, root = sys.argv[1], pathlib.Path(sys.argv[2]).resolve()
 payload = json.load(sys.stdin)
 rows = payload['rows']
-replacement_ids = set(payload['replacementSourceIds'])
 root.mkdir(mode=0o700, parents=True, exist_ok=True)
 seen=set(); claimed=set(); aggregate=hashlib.sha256(); total=0; missing=[]; ambiguous=0; validated=[]; written=0; reused=0
 with zipfile.ZipFile(archive) as z:
@@ -77,7 +80,7 @@ with zipfile.ZipFile(archive) as z:
   if len(roots) != 1: raise SystemExit('archive-top-level-root-not-unique')
   archive_root=next(iter(roots))
   if '/' in archive_root or '\\' in archive_root or archive_root in ('.', '..'): raise SystemExit('unsafe-archive-root')
-  expected=set()
+  expected={payload['replacement']['path']}
   for row in rows:
     name=row['path']
     p=pathlib.PurePosixPath(name)
@@ -89,11 +92,11 @@ with zipfile.ZipFile(archive) as z:
       candidates=[candidate for candidate in names if candidate.startswith(archive_root+'/') and candidate.endswith('/'+name)]
       if len(candidates) != 1:
         if candidates: ambiguous += 1
-        else: missing.append(row['sourceFileId'] in replacement_ids)
+        else: missing.append(False)
         continue
       member=candidates[0]
     if member not in names:
-      missing.append(row['sourceFileId'] in replacement_ids)
+      missing.append(False)
       continue
     if member in claimed: raise SystemExit('archive-member-reused')
     claimed.add(member)
@@ -129,12 +132,30 @@ result={'count':len(seen),'bytes':total,'identitySha256':aggregate.hexdigest(),'
 print(json.dumps(result))
 `;
   const output = execFileSync('python3', ['-c', python, archivePath, privateInputsRoot], {
-    encoding: 'utf8', input: JSON.stringify({ rows, replacementSourceIds }), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: artifactsRoot }, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'],
+    encoding: 'utf8', input: JSON.stringify({ rows, replacement }), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: artifactsRoot }, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'],
   });
   const result = JSON.parse(output) as { count: number; bytes: number; identitySha256: string; missingCount: number; missingApprovedReplacementCount: number; missingOtherCount: number; ambiguousMemberCount: number; writtenCount: number; reusedCount: number; unexpectedExistingCount: number };
   if (result.count !== 618 || result.missingCount || result.ambiguousMemberCount || result.unexpectedExistingCount || !Number.isSafeInteger(result.bytes) || !/^[a-f0-9]{64}$/.test(result.identitySha256)) {
     throw new Error(`approved archive inventory mismatch (count=${result.count}, missing=${result.missingCount}, replacementMissing=${result.missingApprovedReplacementCount}, otherMissing=${result.missingOtherCount}, ambiguous=${result.ambiguousMemberCount}, unexpectedExisting=${result.unexpectedExistingCount})`);
   }
+  const root = await realpath(privateInputsRoot);
+  const parts = replacement.path.split('/');
+  let parent = root;
+  for (const part of parts.slice(0, -1)) {
+    parent = join(parent, part);
+    try { await mkdir(parent, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    const metadata = await lstat(parent);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) throw new Error('approved replacement parent is not a private directory');
+  }
+  const destination = join(parent, parts.at(-1)!);
+  try {
+    const metadata = await lstat(destination);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || sha256(await readFile(destination)) !== replacement.sha256) throw new Error('existing approved replacement bytes mismatch');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    await writeFile(destination, replacement.bytes, { mode: 0o600, flag: 'wx' });
+  }
+  if (sha256(await readFile(destination)) !== replacement.sha256) throw new Error('materialized approved replacement hash mismatch');
 }
 
 async function main(): Promise<void> {
@@ -164,13 +185,13 @@ async function main(): Promise<void> {
   if (decision.demoWriteOrImportAuthorization !== true || decision.productionAcceptance !== false || additions.size !== 3 ||
       !['Seminars#361', 'Seminars#362', 'Teachers#88'].every((identity) => additions.has(identity))) throw new Error('all-active decision scope mismatch');
   const mediaDecision = JSON.parse(Buffer.from(privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
-    ownerDecision?: { media?: { missingOriginalReplacements?: { sourceFileId: string; sourceBytesAvailable: boolean; demoApproved: boolean }[] } };
+    ownerDecision?: { media?: { missingOriginalReplacements?: { sourceFileId: string; replacementPath: string; replacementRevision: string; replacementSha256: string; sourceBytesAvailable: boolean; demoApproved: boolean }[] } };
   };
   const replacements = mediaDecision.ownerDecision?.media?.missingOriginalReplacements ?? [];
   if (replacements.length !== 1 || replacements[0]!.sourceBytesAvailable !== false || replacements[0]!.demoApproved !== true) {
     throw new Error('pinned Barral missing-original replacement scope mismatch');
   }
-  const replacementSourceIds = replacements.map((row) => row.sourceFileId);
+  const replacement = replacements[0]!;
 
   const approved = JSON.parse(Buffer.from(privateJson['approved-supplements.json'].bytes).toString('utf8')) as { supplements: { path: string; revision: string; sha256: string; bytes: number }[] };
   if (!Array.isArray(approved.supplements) || approved.supplements.length !== 31) throw new Error('approved Git blob count mismatch');
@@ -204,7 +225,11 @@ async function main(): Promise<void> {
     target: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads },
     snapshotDirectory,
     io,
-    materializeApprovedAssets: async (manifest) => extractManifestMembers(manifest, replacementSourceIds),
+    materializeApprovedAssets: async (manifest) => {
+      const pin = supplementBlobs.filter((item) => item.path === replacement.replacementPath && item.revision === replacement.replacementRevision && item.sha256 === replacement.replacementSha256);
+      if (pin.length !== 1) throw new Error('Barral replacement does not match one approved pinned Git blob');
+      await extractManifestMembers(manifest, { sourceFileId: replacement.sourceFileId, path: replacement.replacementPath, sha256: replacement.replacementSha256, bytes: pin[0]!.bytes });
+    },
   });
   const snapshot = JSON.parse(await readFile(join(snapshotDirectory, 'snapshot.json'), 'utf8')) as { snapshotId?: unknown; fingerprint?: unknown; content?: { media?: unknown[]; types?: Record<string, unknown[]> } };
   if (typeof snapshot.snapshotId !== 'string' || typeof snapshot.fingerprint !== 'string' || !snapshot.content?.media?.length) throw new Error('live CMS snapshot identity or media store was missing');
@@ -223,6 +248,7 @@ async function main(): Promise<void> {
     snapshotMediaCount: snapshot.content.media.length,
     cmsMediaCount: result.mediaCount,
     sourceFileIdentities: { raster: result.rasterCount, pdf: result.documentCount, total: result.rasterCount + result.documentCount },
+    sourceUrlClassification: result.sourceUrlClassification,
     privateArtifactsDirectory: protoRoot,
   };
   const summaryPath = join(artifactsRoot, 'prototype-result.json');

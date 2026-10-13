@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
+import { classifyMediaSourceUrls } from './sql-demo-native-rehearsal.js';
 import { loadSqlDemoAssets } from './sql-demo-assets.js';
 import type { SqlDemoOfflineAssetProof, SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
 import type { SqlDemoStrapi5Readback } from './sql-demo-native-conservation.js';
@@ -222,6 +223,14 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
 }
 
 describe('native SQL DEMO193 rehearsal orchestration (unit-mocked contract)', () => {
+  it('classifies only aggregate-safe approved media URL shapes', () => {
+    expect(classifyMediaSourceUrls([
+      '/media/legacy/logo-v2.png',
+      'https://legacy.example/image.png',
+      'javascript:alert(1)',
+    ])).toEqual({ approvedRelativeCount: 1, validAbsoluteCount: 1, invalidCount: 1, firstClass: 'approved-relative' });
+  });
+
   let dumpDirectory: string;
   let dumpPath: string;
   let originalVips: string;

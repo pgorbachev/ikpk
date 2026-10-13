@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -609,6 +609,20 @@ describe('offline SQL asset loader contract', () => {
     }));
     expect(result.provenance.assets.find((asset) => asset.sourceFileId === replacement.sourceFileId))
       .not.toHaveProperty('sourceSha256');
+  });
+
+  it('uses a separately materialized private replacement copy when the prototype requires private reads', async () => {
+    const input = await missingOriginalReplacementInput(await root());
+    const replacement = input.approvedMissingOriginalReplacements[0]!;
+    const bytes = await readFile(join(input.supplementRoot, replacement.replacementPath));
+    await putFile(input.assetRoot, replacement.replacementPath, bytes);
+    input.materializedReplacementRoot = input.assetRoot;
+
+    const result = await loadSqlDemoAssets(input);
+    const proof = result.offlineMedia.find((asset) => asset.sourceFileId === replacement.sourceFileId)!;
+
+    expect(proof.resolvedLocalPath).toBe(await realpath(join(input.assetRoot, replacement.replacementPath)));
+    expect(await readFile(proof.resolvedLocalPath)).toEqual(bytes);
   });
 
   it.each([

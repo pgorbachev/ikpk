@@ -116,6 +116,8 @@ export interface SqlDemoAssetLoaderInput {
   selectedPublicHeaders: SqlDemoSelectedPublicHeaders;
   baseline: { sqlSha256: string; archiveSha256: string };
   assetRoot: string;
+  /** Prototype-only root containing the separately pinned replacement copied into the approved private asset set. */
+  materializedReplacementRoot?: string;
   assetManifest: SqlDemoAssetManifest;
   approvedBodyFileGrants: {
     sourceFileId: string;
@@ -577,11 +579,17 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
       item.sourcePath === path && item.revision === revision && item.sha256 === hash);
     const verified = replacements.get(path);
     if (supplement.length !== 1 || !verified || verified.sha256 !== hash) throw new Error(`Files#${decision.sourceFileId} replacement does not match one verified named supplement`);
+    const materialized = input.materializedReplacementRoot
+      ? await readVerifiedLocalFile(input.materializedReplacementRoot, path, hash, `Files#${decision.sourceFileId} materialized replacement`)
+      : undefined;
+    if (materialized && createHash('sha256').update(materialized.bytes).digest('hex') !== verified.sha256) {
+      throw new Error(`Files#${decision.sourceFileId} materialized replacement differs from the pinned supplement`);
+    }
     const reach: SqlDemoAssetReachability = { kind: 'sql-header' };
     const attestation = attestationId(file.id, file.url, path, hash, reach, headerReferences);
     offlineMedia.push({
       sourceFileType: 'image', sourceFileId: file.id, sourceUrl: file.url, archiveRelativePath: path,
-      resolvedLocalPath: verified.resolvedLocalPath, reachability: reach,
+      resolvedLocalPath: materialized?.resolvedLocalPath ?? verified.resolvedLocalPath, reachability: reach,
       verification: { status: 'verified', loader: 'sql-demo-asset-loader', attestationId: attestation },
       detectedMimeType: verified.mime, detectedExtension: verified.extension,
       sourceBytesAvailable: false,

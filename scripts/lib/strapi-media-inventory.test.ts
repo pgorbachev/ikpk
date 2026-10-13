@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildStrapiMediaHashIndex, buildStrapiMediaInventory } from './strapi-media-inventory.js';
+import { allowedSourceUrl, buildStrapiMediaHashIndex, buildStrapiMediaInventory } from './strapi-media-inventory.js';
 
 function page(data: unknown[], pageNumber: number, pageCount: number, total: number) {
   return { data, meta: { pagination: { page: pageNumber, pageCount, total } } };
 }
 
 describe('Strapi media content inventory', () => {
+  it('accepts only the exact approved relative legacy media identities alongside safe absolute URLs', () => {
+    expect(allowedSourceUrl('/media/legacy/logo-v2.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/logo-upledger-inst.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/logo-barral-inst.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/other.png')).toBe(false);
+    expect(allowedSourceUrl('//outside.example/logo.png')).toBe(false);
+    expect(allowedSourceUrl('https://user:pass@images.example/logo.png')).toBe(false);
+    expect(allowedSourceUrl('https://images.example/logo.png')).toBe(true);
+  });
+
   it('reads every page beyond the first 100 items', async () => {
     const files = Array.from({ length: 205 }, (_, index) => ({ id: index + 1, url: `/uploads/${index}.png` }));
     const getPage = vi.fn(async (requestedPage: number) => {
