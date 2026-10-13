@@ -66,12 +66,18 @@ function target(nonce: string, mediaId: number, mediaUrl: string, avatarId: numb
         row(2, 'course-groups', 'program-one', { name: 'Synthetic Program One', slug: 'program-one', description: null, image: [], order: 2, is_article_category: true, seo: { seo_title: 'Program SEO one', seo_description: 'Program summary one' }, institute: relation('institutes', 'institutes/one') }),
         row(3, 'course-groups', 'program-two', { name: 'Synthetic Program Two', slug: 'program-two', description: 'Program two description', image: [], order: 3, is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' }, institute: relation('institutes', 'institutes/one') }),
       ],
+      seminars: [],
+      'schedule-entries': [],
       teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: [{ id: avatarId, url: avatarUrl }] })],
       articles: [row(4, 'articles', 'article-one', {
         title: 'Synthetic Article', slug: 'article-one', body, published_date: '2021-03-04',
         seo: { seo_title: 'Article SEO', seo_description: 'Article summary' }, image: { id: mediaId, url: mediaUrl },
         categories: categoryOrder.map((legacyId) => relation('course-groups', legacyId)),
       })],
+      'news-items': [],
+      promotions: [],
+      'video-playlists': [],
+      pages: [],
     },
     media: [
       { id: mediaId, url: mediaUrl, provider_metadata: metadata(IMAGE_URL, SOURCE_SHA), verifiedStoredSha256: STORED_SHA },
