@@ -1,4 +1,5 @@
 import type { SqlPublicContentResult } from './sql-public-content.js';
+import { sourceUrlMatchesSqlImageIdentity } from './sql-demo-image-identity.js';
 
 const parse5Url = new URL('../../web/node_modules/parse5/dist/index.js', import.meta.url);
 const { parseFragment } = await import(parse5Url.href);
@@ -56,6 +57,9 @@ export interface SqlDemoVerifiedAssetMapping {
   sourceFileId: string;
   sourceUrl: string;
   targetPublicUrl: string;
+  /** DOM aliases proven to resolve through this exact Files ID; sourceUrl remains Files.url. */
+  sourceReferenceAliases?: string[];
+  sourceReferenceAlias?: string;
   sha256: string;
   detectedMimeType: string;
   verification: {
@@ -79,8 +83,28 @@ export interface SqlDemoVideoReferenceDecision {
   expectedOutput: string;
 }
 
+export interface SqlDemoPublicRichTextImageDecision {
+  sourceTable: 'Programs' | 'Seminars';
+  sourceId: number;
+  sourceField: 'content' | 'learningProcess';
+  sourceFileId: string;
+  sourceSha256: string;
+  sourceUrl: string;
+  decisionId: string;
+}
+
+export interface SqlDemoMissingOriginalReplacementDecision {
+  sourceFileId: string;
+  replacementPath: string;
+  replacementRevision: string;
+  replacementSha256: string;
+  sourceBytesAvailable: false;
+}
+
 export interface SqlDemoOwnerDecisions {
   approvedUnlinkedArticleImages: { sourceFileId: string; sourceUrl: string; decisionId: string }[];
+  approvedPublicRichTextImages?: SqlDemoPublicRichTextImageDecision[];
+  missingOriginalReplacements?: SqlDemoMissingOriginalReplacementDecision[];
   videoReferences: SqlDemoVideoReferenceDecision[];
 }
 
@@ -107,6 +131,8 @@ export interface SqlDemoRelease {
     videoSupplements: Pick<SqlDemoAcceptedSupplements['videoPlaylists'][number], 'sourceId' | 'sourcePath' | 'revision' | 'sha256' | 'thumbnailSourceFileId' | 'thumbnailSourceUrl' | 'thumbnailPublicUrl'>[];
     ownerDecisions: {
       approvedUnlinkedArticleImages: SqlDemoOwnerDecisions['approvedUnlinkedArticleImages'];
+      approvedPublicRichTextImages: SqlDemoPublicRichTextImageDecision[];
+      missingOriginalReplacements: SqlDemoMissingOriginalReplacementDecision[];
       videoReferences: SqlDemoVideoReferenceDecision[];
     };
   };
@@ -128,6 +154,11 @@ export function composeSqlDemoRelease(
   const requiredString = (value: unknown, identity: string, detail: string): string =>
     isNonEmptyString(value) ? value : fail(identity, detail);
   const isSha256 = (value: unknown): value is string => typeof value === 'string' && /^(?:sha256:)?[a-f\d]{64}$/i.test(value);
+  const richTextSourceField = (table: string, field: string): 'content' | 'learningProcess' => {
+    if (table === 'Programs' && (field === 'content' || field === 'description')) return 'content';
+    if (table === 'Seminars' && (field === 'learningProcess' || field === 'learning_plan')) return 'learningProcess';
+    return fail(`${table}.${field}`, 'rich-text decision does not bind one exact native-to-mapped field pair');
+  };
 
   type HtmlNode = {
     nodeName: string;
@@ -348,8 +379,22 @@ export function composeSqlDemoRelease(
   );
   for (const decision of ownerDecisions.approvedUnlinkedArticleImages) {
     const image = imageMappings.get(decision.sourceFileId);
-    if (!image || image.sourceUrl !== decision.sourceUrl || !isNonEmptyString(decision.decisionId)) {
+    if (!image || !sourceUrlMatchesSqlImageIdentity(image.sourceFileId, decision.sourceUrl, image.sourceUrl,
+      [image.sourceReferenceAlias, ...(image.sourceReferenceAliases ?? [])].filter((item): item is string => typeof item === 'string')) || !isNonEmptyString(decision.decisionId)) {
       fail(`Files#${decision.sourceFileId}`, 'owner decision does not match an exact image asset mapping');
+    }
+  }
+  const richTextDecisionByReference = uniqueBy(
+    ownerDecisions.approvedPublicRichTextImages ?? [],
+    (decision) => `${decision.sourceTable}#${decision.sourceId}.${richTextSourceField(decision.sourceTable, decision.sourceField)}\0${decision.sourceFileId}`,
+    (decision) => `${decision.sourceTable}#${decision.sourceId}.${decision.sourceField}`,
+  );
+  for (const decision of ownerDecisions.approvedPublicRichTextImages ?? []) {
+    const image = imageMappings.get(decision.sourceFileId);
+    if (!image || image.sha256 !== decision.sourceSha256 || !isNonEmptyString(decision.decisionId) ||
+      !sourceUrlMatchesSqlImageIdentity(image.sourceFileId, decision.sourceUrl, image.sourceUrl,
+        [image.sourceReferenceAlias, ...(image.sourceReferenceAliases ?? [])].filter((item): item is string => typeof item === 'string'))) {
+      fail(`Files#${decision.sourceFileId}`, 'public rich-text decision does not match an exact verified image identity');
     }
   }
 
@@ -389,39 +434,87 @@ export function composeSqlDemoRelease(
     }
   }
 
-  const transformArticleBodyImages = (html: string, sourceId: number): string => {
+  const transformImages = (
+    html: string,
+    identity: string,
+    decisionForImage: (image: SqlDemoVerifiedAssetMapping, sourceUrl: string) => boolean | void,
+    allowUnmapped = false,
+  ): { html: string; used: string[] } => {
     const fragment = parseFragment(html, { sourceCodeLocationInfo: true }) as HtmlNode;
     const replacements: { start: number; end: number; value: string }[] = [];
-    for (const imageNode of all(fragment, (node) => node.tagName === 'img')) {
-      const sourceUrl = required(attr(imageNode, 'src'), `Articles#${sourceId}`, 'image src is required for an approved offline mapping');
-      const matches = [...imageMappings.values()].filter((asset) => asset.sourceUrl === sourceUrl);
-      if (matches.length !== 1) fail(`Articles#${sourceId}`, 'image src has no unique exact verified asset mapping');
+    const used: string[] = [];
+    const activeImages: HtmlNode[] = [];
+    const collectImages = (node: HtmlNode): void => {
+      if (node.tagName === 'script' || node.tagName === 'template') return;
+      if (node.tagName === 'img') activeImages.push(node);
+      for (const child of node.childNodes ?? []) collectImages(child);
+    };
+    collectImages(fragment);
+    for (const imageNode of activeImages) {
+      const sourceUrl = required(attr(imageNode, 'src'), identity, 'image src is required for an approved offline mapping');
+      const matches = [...imageMappings.values()].filter((asset) => sourceUrlMatchesSqlImageIdentity(
+        asset.sourceFileId, sourceUrl, asset.sourceUrl,
+        [asset.sourceReferenceAlias, ...(asset.sourceReferenceAliases ?? [])].filter((item): item is string => typeof item === 'string'),
+      ));
+      if (matches.length === 0 && allowUnmapped) continue;
+      if (matches.length !== 1) fail(identity, 'image src has no unique exact verified asset mapping');
       const image = matches[0];
-      if (!image || !ownerDecisionByImageId.has(image.sourceFileId)) {
-        fail(`Files#${image?.sourceFileId ?? 'unknown'}`, 'body image requires an exact owner decision');
-      }
-      const decision = ownerDecisionByImageId.get(image.sourceFileId)!;
-      if (decision.sourceUrl !== image.sourceUrl || !isNonEmptyString(decision.decisionId)) {
-        fail(`Files#${image.sourceFileId}`, 'owner decision does not match the exact body image source URL');
-      }
-      const location = required(imageNode.sourceCodeLocation?.attrs?.src, `Articles#${sourceId}`, 'image src source boundary is unresolved');
-      bodyArticleImageIds.add(image.sourceFileId);
-      usedImageIds.add(image.sourceFileId);
+      if (!image) fail(identity, 'image src has no unique exact verified asset mapping');
+      if (decisionForImage(image, sourceUrl) === false) continue;
+      const location = required(imageNode.sourceCodeLocation?.attrs?.src, identity, 'image src source boundary is unresolved');
+      used.push(image.sourceFileId);
       replacements.push({
         start: location.startOffset,
         end: location.endOffset,
         value: `src="${escapeHtml(image.targetPublicUrl)}"`,
       });
     }
-    return replacements.sort((left, right) => right.start - left.start).reduce(
-      (result, replacement) => `${result.slice(0, replacement.start)}${replacement.value}${result.slice(replacement.end)}`,
-      html,
-    );
+    return {
+      html: replacements.sort((left, right) => right.start - left.start).reduce(
+        (result, replacement) => `${result.slice(0, replacement.start)}${replacement.value}${result.slice(replacement.end)}`,
+        html,
+      ),
+      used,
+    };
   };
-  const transformedArticleBodies = new Map(mapped.entities.articles.map((article) => [
-    article.sourceId,
-    transformArticleBodyImages(String(article.body ?? ''), article.sourceId),
-  ]));
+  const transformedArticleBodies = new Map(mapped.entities.articles.map((article) => {
+    const result = transformImages(String(article.body ?? ''), `Articles#${article.sourceId}`, (image, sourceUrl) => {
+      const decision = ownerDecisionByImageId.get(image.sourceFileId);
+      if (!decision || decision.sourceUrl !== sourceUrl || !isNonEmptyString(decision.decisionId)) {
+        fail(`Files#${image.sourceFileId}`, 'body image requires an exact owner decision for its source reference');
+      }
+      bodyArticleImageIds.add(image.sourceFileId);
+      usedImageIds.add(image.sourceFileId);
+    });
+    return [article.sourceId, result.html];
+  }));
+  const transformedPrograms = new Map<number, string>();
+  const transformedSeminars = new Map<number, string>();
+  const usedRichTextDecisionKeys = new Set<string>();
+  for (const [table, rows, field] of [
+    ['Programs', mapped.entities.programs, 'description'],
+    ['Seminars', mapped.entities.seminars, 'learning_plan'],
+  ] as const) {
+    for (const row of rows) {
+      const id = sourceIdOf(row, table);
+      const html = String(asRecord(row)[field] ?? '');
+      const result = transformImages(html, `${table}#${id}.${field}`, (image, sourceUrl) => {
+        const sourceField = table === 'Programs' ? 'content' : 'learningProcess';
+        const key = `${table}#${id}.${sourceField}\0${image.sourceFileId}`;
+        const decision = richTextDecisionByReference.get(key);
+        if (!decision) return false;
+        if (decision.sourceUrl !== sourceUrl || decision.sourceSha256 !== image.sha256) fail(`Files#${image.sourceFileId}`, 'rich-text decision does not match its exact source image');
+        usedRichTextDecisionKeys.add(key);
+        usedImageIds.add(image.sourceFileId);
+      }, true);
+      if (table === 'Programs') transformedPrograms.set(id, result.html);
+      else transformedSeminars.set(id, result.html);
+    }
+  }
+  if (usedRichTextDecisionKeys.size !== richTextDecisionByReference.size) {
+    const unused = [...richTextDecisionByReference.keys()].find((key) => !usedRichTextDecisionKeys.has(key));
+    fail(unused?.split('\0')[0] ?? 'public rich-text decisions', 'owner decision does not match an exact mapped public rich-text image');
+  }
   for (const supplement of acceptedSupplements.videoPlaylists) {
     if (!isNonEmptyString(supplement.sourcePath) || !isNonEmptyString(supplement.revision) || !isSha256(supplement.sha256)) {
       fail(`Videos#${supplement.sourceId}`, 'video supplement provenance is incomplete');
@@ -564,7 +657,9 @@ export function composeSqlDemoRelease(
     body: transformVideoIframes(required(transformedArticleBodies.get(row.sourceId), `Articles#${row.sourceId}`, 'transformed body is missing'), 'Articles', row.sourceId, 'body'),
   }));
   const seminars = mapped.entities.seminars.map((row) => ({
-    ...clone(row), description: transformVideoIframes(String(row.description ?? ''), 'Seminars', row.sourceId, 'description'),
+    ...clone(row),
+    description: transformVideoIframes(String(row.description ?? ''), 'Seminars', row.sourceId, 'description'),
+    ...(transformedSeminars.has(row.sourceId) ? { learning_plan: transformedSeminars.get(row.sourceId)! } : {}),
   }));
   const transformedOrganizations = organizations.map((row) => ({
     ...clone(row), content: transformVideoIframes(String(row.content ?? ''), 'OrganizationInfo', row.sourceId, 'content'),
@@ -711,6 +806,10 @@ export function composeSqlDemoRelease(
     return sections.length ? { ...institute, description: [String(asRecord(institute).description ?? ''), ...sections].filter(Boolean).join('\n') } : institute;
   });
   const mappedEntities = clone(mapped.entities);
+  mappedEntities.programs = mappedEntities.programs.map((row) => ({
+    ...row,
+    ...(transformedPrograms.has(row.sourceId) ? { description: transformedPrograms.get(row.sourceId)! } : {}),
+  }));
   const entities: SqlDemoRelease['entities'] = {
     ...mappedEntities,
     seminars,
@@ -733,7 +832,11 @@ export function composeSqlDemoRelease(
         sourceId, sourcePath, revision, sha256, thumbnailSourceFileId, thumbnailSourceUrl,
         thumbnailPublicUrl: thumbnailPublicUrl ?? boundVideoThumbnailUrls.get(sourceId) ?? null,
       })),
-      ownerDecisions: clone(ownerDecisions),
+      ownerDecisions: {
+        ...clone(ownerDecisions),
+        approvedPublicRichTextImages: clone(ownerDecisions.approvedPublicRichTextImages ?? []),
+        missingOriginalReplacements: clone(ownerDecisions.missingOriginalReplacements ?? []),
+      },
     },
   };
 }

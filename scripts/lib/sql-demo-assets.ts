@@ -3,13 +3,14 @@ import { readFile, realpath } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { parseFragment } from 'parse5';
 import { readVerifiedOfflineImageSource } from './import-media.js';
+import { resolveSqlImageFile } from './sql-demo-image-identity.js';
 
 type SqlHeaderImageRow = { id: number; status?: string; imageId: string | null };
 
 export interface SqlDemoAssetSource {
   sourceHash: string;
   Institutes?: SqlHeaderImageRow[];
-  Programs?: SqlHeaderImageRow[];
+  Programs?: (SqlHeaderImageRow & { content?: string | null })[];
   Teachers?: SqlHeaderImageRow[];
   Events?: SqlHeaderImageRow[];
   Files?: {
@@ -20,6 +21,7 @@ export interface SqlDemoAssetSource {
   OrganizationInfo?: { id: number; status: string }[];
   Articles?: { id: number; status: string; imageId: string | null; content: string | null }[];
   Videos?: { id: number; status: string; imageId: string | null; link: string | null }[];
+  Seminars?: { id: number; status: string; learningProcess?: string | null }[];
   News?: SqlHeaderImageRow[];
   Promotions?: SqlHeaderImageRow[];
 }
@@ -39,6 +41,7 @@ export interface SqlDemoSelectedPublicHeaders {
 export type SqlDemoAssetReachability =
   | { kind: 'sql-header' }
   | { kind: 'article-body'; articleSourceIds: number[] }
+  | { kind: 'public-rich-text'; references: { sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess' }[] }
   | { kind: 'video-thumbnail'; videoSourceId: number }
   | { kind: 'document-binding'; bindingSourceId: number }
   | { kind: 'static-supplement'; supplementName: string };
@@ -119,6 +122,17 @@ export interface SqlDemoAssetLoaderInput {
     sourceSha256: string;
     decisionId: string;
   }[];
+  approvedPublicRichTextGrants?: {
+    sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess';
+    sourceFileId: string; sourceSha256: string; decisionId: string; sourceReferenceAlias: string;
+  }[];
+  approvedMissingOriginalReplacements?: {
+    sourceFileId: string;
+    replacementPath: string;
+    replacementRevision: string;
+    replacementSha256: string;
+    sourceBytesAvailable: false;
+  }[];
   supplementRoot: string;
   supplementManifest: SqlDemoSupplementManifest;
   expectedSupplements: { codeRevision: string; manifestSha256: string };
@@ -144,11 +158,23 @@ interface SqlDemoOfflineSourceProof {
   };
 }
 
-export interface SqlDemoOfflineAssetProof extends SqlDemoOfflineSourceProof {
+interface SqlDemoOfflineRasterProof extends Omit<SqlDemoOfflineSourceProof, 'sourceSha256'> {
   sourceFileType: 'image';
   detectedMimeType: 'image/png' | 'image/jpeg' | 'image/webp';
   detectedExtension: 'png' | 'jpg' | 'webp';
 }
+
+export type SqlDemoOfflineAssetProof = (SqlDemoOfflineRasterProof & {
+  /** SHA of the original selected source bytes, when those bytes were recovered. */
+  sourceSha256: string;
+  sourceReferenceAliases?: string[];
+  substitution?: never;
+}) | (SqlDemoOfflineRasterProof & {
+  /** Original bytes were absent; replacement hash is never represented as sourceSha256. */
+  sourceBytesAvailable: false;
+  substitution: { replacementSha256: string; replacementPath: string; replacementRevision: string };
+  sourceReferenceAliases?: never;
+});
 
 export interface SqlDemoOfflineDocumentProof extends SqlDemoOfflineSourceProof {
   sourceFileType: 'document';
@@ -156,10 +182,12 @@ export interface SqlDemoOfflineDocumentProof extends SqlDemoOfflineSourceProof {
   detectedExtension: 'pdf';
 }
 
-type SqlDemoAssetProvenance = (
-  | Pick<SqlDemoOfflineAssetProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
-  | Pick<SqlDemoOfflineDocumentProof, 'sourceFileType' | 'sourceFileId' | 'archiveRelativePath' | 'sourceSha256' | 'reachability'>
-) & { selectedPublicHeaderReferences?: SqlDemoSelectedPublicHeaderReference[] };
+type SqlDemoAssetProvenance = {
+  sourceFileType: 'image' | 'document'; sourceFileId: string; archiveRelativePath: string; sourceSha256?: string;
+  reachability: SqlDemoAssetReachability; selectedPublicHeaderReferences?: SqlDemoSelectedPublicHeaderReference[];
+  sourceReferenceAliases?: string[]; substitution?: { replacementSha256: string; replacementPath: string; replacementRevision: string };
+  sourceBytesAvailable?: false;
+};
 
 export interface SqlDemoAssetLoaderResult {
   /** Verified local raster sources; no upload or CMS public URL is implied by this result. */
@@ -230,11 +258,13 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     videoIds: number[];
     bindingIds: number[];
     articleIds: number[];
+    richTextReferences: { sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess' }[];
+    sourceReferenceAliases: string[];
   }>();
   const usageFor = (fileId: string) => {
     let usage = reachability.get(fileId);
     if (!usage) {
-      usage = { headers: false, headerReferences: [], videoIds: [], bindingIds: [], articleIds: [] };
+      usage = { headers: false, headerReferences: [], videoIds: [], bindingIds: [], articleIds: [], richTextReferences: [], sourceReferenceAliases: [] };
       reachability.set(fileId, usage);
     }
     return usage;
@@ -320,14 +350,48 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
   for (const article of input.source.Articles ?? []) {
     if (article.status !== 'active' || !article.content) continue;
     for (const bodyUrl of imageSources(article.content)) {
-      const matchingFiles = filesByUrl.get(bodyUrl) ?? [];
-      if (matchingFiles.length !== 1) {
-        throw new Error(`Articles#${article.id}.content image reference does not join to one Files identity`);
-      }
-      const file = matchingFiles[0]!;
+      const file = resolveSqlImageFile(sourceFiles, bodyUrl, `Articles#${article.id}.content`);
       assertKnownFileStatus(file);
-      usageFor(file.id).articleIds.push(article.id);
+      const usage = usageFor(file.id);
+      usage.articleIds.push(article.id);
+      if (bodyUrl !== file.url) usage.sourceReferenceAliases.push(bodyUrl);
     }
+  }
+
+  const richTextGrants = input.approvedPublicRichTextGrants ?? [];
+  const richTextGrantByReference = new Map<string, (typeof richTextGrants)[number]>();
+  for (const grant of richTextGrants) {
+    const key = `${grant.sourceTable}#${grant.sourceId}.${grant.sourceField}\0${grant.sourceFileId}`;
+    if (richTextGrantByReference.has(key)) throw new Error(`Files#${grant.sourceFileId} has a duplicate public rich-text grant`);
+    assertSha256(grant.sourceSha256, `Files#${grant.sourceFileId} rich-text SHA-256`);
+    richTextGrantByReference.set(key, grant);
+  }
+  const richTextSources = [
+    ...(input.source.Programs ?? []).filter((row) => row.status === 'active').map((row) => ({
+      sourceTable: 'Programs' as const, sourceId: row.id, sourceField: 'content' as const, html: row.content ?? '',
+    })),
+    ...(input.source.Seminars ?? []).filter((row) => row.status === 'active').map((row) => ({
+      sourceTable: 'Seminars' as const, sourceId: row.id, sourceField: 'learningProcess' as const, html: row.learningProcess ?? '',
+    })),
+  ];
+  const usedRichTextGrants = new Set<string>();
+  for (const source of richTextSources) {
+    for (const sourceUrl of imageSources(source.html)) {
+      const file = resolveSqlImageFile(sourceFiles, sourceUrl, `${source.sourceTable}#${source.sourceId}.${source.sourceField}`);
+      if (file.status !== 'unlinked') continue;
+      const key = `${source.sourceTable}#${source.sourceId}.${source.sourceField}\0${file.id}`;
+      const grant = richTextGrantByReference.get(key);
+      if (!grant || grant.sourceReferenceAlias !== sourceUrl) {
+        throw new Error(`Files#${file.id} unlinked rich-text image has no exact owner grant for ${source.sourceTable}#${source.sourceId}.${source.sourceField}`);
+      }
+      const usage = usageFor(file.id);
+      usage.richTextReferences.push({ sourceTable: source.sourceTable, sourceId: source.sourceId, sourceField: source.sourceField });
+      usage.sourceReferenceAliases.push(sourceUrl);
+      usedRichTextGrants.add(key);
+    }
+  }
+  for (const key of richTextGrantByReference.keys()) {
+    if (!usedRichTextGrants.has(key)) throw new Error(`public rich-text grant ${key.replace('\0', ' ')} does not match an active SQL source image`);
   }
 
   const grantsByFileId = new Map<string, SqlDemoAssetLoaderInput['approvedBodyFileGrants'][number]>();
@@ -384,16 +448,22 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     if (entry.sourceFileType === 'image') {
       if (actualBindingIds.length > 0) throw new Error(`Files#${file.id}.fileType image cannot satisfy a document binding`);
       if (file.status === 'unlinked') {
-        if (!actualArticleIds.length || actualUsage.headers || actualVideoIds.length || actualBindingIds.length) {
-          throw new Error(`Files#${file.id}.status unlinked requires only active article body reachability`);
-        }
+        const articleBodyOnly = actualArticleIds.length > 0 && !actualUsage.headers && !actualVideoIds.length && !actualBindingIds.length && !actualUsage.richTextReferences.length;
+        const richTextOnly = actualUsage.richTextReferences.length > 0 && !actualArticleIds.length && !actualUsage.headers && !actualVideoIds.length && !actualBindingIds.length;
+        if (!articleBodyOnly && !richTextOnly) throw new Error(`Files#${file.id}.status unlinked requires exact approved article-body or public rich-text reachability`);
         const grant = grantsByFileId.get(file.id);
-        if (!grant || grant.sourceSha256 !== entry.sha256) {
-          throw new Error(`Files#${file.id} active article body image requires an exact file ID and source SHA grant`);
+        if (articleBodyOnly) {
+          if (!grant || grant.sourceSha256 !== entry.sha256) {
+            throw new Error(`Files#${file.id} active article body image requires an exact file ID and source SHA grant`);
+          }
+          grantsByFileId.delete(file.id);
         }
-        grantsByFileId.delete(file.id);
+        if (richTextOnly && !richTextGrants.some((item) => item.sourceFileId === file.id && item.sourceSha256 === entry.sha256 &&
+          actualUsage.richTextReferences.some((reference) => item.sourceTable === reference.sourceTable && item.sourceId === reference.sourceId && item.sourceField === reference.sourceField))) {
+          throw new Error(`Files#${file.id} public rich-text image requires an exact owner file, source SHA, and field grant`);
+        }
       }
-      if (!actualArticleIds.length && !actualUsage.headers && !actualVideoIds.length) {
+      if (!actualArticleIds.length && !actualUsage.headers && !actualVideoIds.length && !actualUsage.richTextReferences.length) {
         throw new Error(`Files#${file.id} image has no supported public reachability`);
       }
       if (actualVideoIds.length > 1) {
@@ -420,11 +490,12 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
         archiveRelativePath: entry.archiveRelativePath,
         resolvedLocalPath: verified.resolvedLocalPath,
         sourceSha256: verified.sourceSha256,
+        ...(actualUsage.sourceReferenceAliases.length ? { sourceReferenceAliases: [...new Set(actualUsage.sourceReferenceAliases)].sort() } : {}),
         reachability: expectedReachability,
         verification: {
           status: 'verified',
           loader: 'sql-demo-asset-loader',
-          attestationId: attestationId(file.id, file.url, entry.archiveRelativePath, verified.sourceSha256, expectedReachability, actualUsage.headerReferences),
+          attestationId: attestationId(file.id, file.url, entry.archiveRelativePath, verified.sourceSha256, expectedReachability, actualUsage.headerReferences, actualUsage.sourceReferenceAliases),
         },
         detectedMimeType: verified.mime as SqlDemoOfflineAssetProof['detectedMimeType'],
         detectedExtension: verified.mime === 'image/jpeg' ? 'jpg' : verified.mime === 'image/png' ? 'png' : 'webp',
@@ -477,8 +548,50 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     }
   }
 
+  const { supplements, replacements } = await verifySupplements(input);
+  const approvedReplacementIds = new Set<string>();
+  for (const decision of input.approvedMissingOriginalReplacements ?? []) {
+    if (!decision || typeof decision.sourceFileId !== 'string' || !decision.sourceFileId || decision.sourceBytesAvailable !== false) {
+      throw new Error('missing-original replacement decision has an invalid source identity or byte-availability claim');
+    }
+    if (approvedReplacementIds.has(decision.sourceFileId)) throw new Error(`Files#${decision.sourceFileId} has duplicate missing-original replacement decisions`);
+    approvedReplacementIds.add(decision.sourceFileId);
+    const file = filesById.get(decision.sourceFileId);
+    if (!file || file.fileType !== 'image' || file.status !== 'active' || file.privacy !== 'public') {
+      throw new Error(`Files#${decision.sourceFileId} replacement does not join to an active public native image`);
+    }
+    if (typeof file.url !== 'string' || !file.url) throw new Error(`Files#${decision.sourceFileId}.url is missing for the named replacement`);
+    const usage = reachability.get(decision.sourceFileId);
+    const headerReferences = usage?.headerReferences ?? [];
+    if (!usage?.headers || headerReferences.length !== 1 || headerReferences[0]!.sourceTable !== 'Institutes' || headerReferences[0]!.sourceId !== 3 ||
+      usage.articleIds.length || usage.videoIds.length || usage.bindingIds.length || usage.richTextReferences.length || entriesByFileId.has(decision.sourceFileId)) {
+      throw new Error(`Files#${decision.sourceFileId} replacement is not the exact selected Institutes#3 header with unavailable original bytes`);
+    }
+    const path = decision.replacementPath;
+    const revision = decision.replacementRevision;
+    const hash = decision.replacementSha256;
+    assertGitRevision(revision, `Files#${decision.sourceFileId} replacement revision`);
+    assertSha256(hash, `Files#${decision.sourceFileId} replacement SHA-256`);
+    const supplement = supplements.filter((item) => item.scope === 'missing-original-replacement' && item.replacesMissingSourceFileId === decision.sourceFileId &&
+      item.sourcePath === path && item.revision === revision && item.sha256 === hash);
+    const verified = replacements.get(path);
+    if (supplement.length !== 1 || !verified || verified.sha256 !== hash) throw new Error(`Files#${decision.sourceFileId} replacement does not match one verified named supplement`);
+    const reach: SqlDemoAssetReachability = { kind: 'sql-header' };
+    const attestation = attestationId(file.id, file.url, path, hash, reach, headerReferences);
+    offlineMedia.push({
+      sourceFileType: 'image', sourceFileId: file.id, sourceUrl: file.url, archiveRelativePath: path,
+      resolvedLocalPath: verified.resolvedLocalPath, reachability: reach,
+      verification: { status: 'verified', loader: 'sql-demo-asset-loader', attestationId: attestation },
+      detectedMimeType: verified.mime, detectedExtension: verified.extension,
+      sourceBytesAvailable: false,
+      substitution: { replacementSha256: hash, replacementPath: path, replacementRevision: revision },
+    });
+    provenanceAssets.push({ sourceFileType: 'image', sourceFileId: file.id, archiveRelativePath: path, reachability: reach,
+      selectedPublicHeaderReferences: headerReferences.map((reference) => ({ ...reference })), sourceBytesAvailable: false,
+      substitution: { replacementSha256: hash, replacementPath: path, replacementRevision: revision } });
+  }
   for (const [fileId, usage] of reachability) {
-    if (!entriesByFileId.has(fileId)) {
+    if (!entriesByFileId.has(fileId) && !approvedReplacementIds.has(fileId)) {
       const table = usage.articleIds.length ? 'Articles' : usage.videoIds.length ? 'Videos' : usage.bindingIds.length ? 'FileBindingOrganizationInfo' : 'Files';
       throw new Error(`${table} reaches Files#${fileId}, but the public asset manifest has no entry`);
     }
@@ -487,7 +600,6 @@ export async function loadSqlDemoAssets(input: SqlDemoAssetLoaderInput): Promise
     throw new Error(`body file grant for Files#${grantsByFileId.keys().next().value} does not match an unlinked public body image`);
   }
 
-  const supplements = await verifySupplements(input);
   return {
     offlineMedia,
     offlineDocuments,
@@ -548,7 +660,7 @@ function uniqueSorted(values: number[]): number[] {
 
 function assertManifestReachability(
   entry: SqlDemoAssetManifestEntry,
-  usage: { headers: boolean; videoIds: number[]; bindingIds: number[]; articleIds: number[] },
+  usage: { headers: boolean; videoIds: number[]; bindingIds: number[]; articleIds: number[]; richTextReferences: { sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess' }[] },
   articleIds: number[],
   videoIds: number[],
   bindingIds: number[],
@@ -581,6 +693,14 @@ function assertManifestReachability(
     }
     return;
   }
+  if (declared.kind === 'public-rich-text') {
+    const expected = usage.richTextReferences.map((item) => `${item.sourceTable}#${item.sourceId}.${item.sourceField}`).sort();
+    const actual = Array.isArray(declared.references)
+      ? declared.references.map((item) => `${item.sourceTable}#${item.sourceId}.${item.sourceField}`).sort()
+      : [];
+    if (expected.length && expected.length === actual.length && expected.every((value, index) => value === actual[index])) return;
+    throw new Error(`Files#${entry.sourceFileId} public rich-text reachability differs from active SQL source references`);
+  }
   if (declared.kind === 'sql-header' && usage.headers) return;
   throw new Error(`Files#${entry.sourceFileId} manifest reachability does not match active SQL relations`);
 }
@@ -590,12 +710,13 @@ function sameNumbers(left: number[], right: number[]): boolean {
 }
 
 function assetReachability(
-  usage: { headers: boolean; videoIds: number[]; bindingIds: number[]; articleIds: number[] },
+  usage: { headers: boolean; videoIds: number[]; bindingIds: number[]; articleIds: number[]; richTextReferences: { sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess' }[] },
   articleIds: number[],
   videoIds: number[],
   bindingIds: number[],
 ): SqlDemoAssetReachability {
   if (articleIds.length) return { kind: 'article-body', articleSourceIds: articleIds };
+  if (usage.richTextReferences.length) return { kind: 'public-rich-text', references: usage.richTextReferences.map((item) => ({ ...item })) };
   if (videoIds.length) return { kind: 'video-thumbnail', videoSourceId: videoIds[0]! };
   if (bindingIds.length) return { kind: 'document-binding', bindingSourceId: bindingIds[0]! };
   if (usage.headers) return { kind: 'sql-header' };
@@ -609,10 +730,12 @@ function attestationId(
   sourceSha256: string,
   reachability: SqlDemoAssetReachability,
   selectedPublicHeaderReferences: SqlDemoSelectedPublicHeaderReference[] = [],
+  sourceReferenceAliases: string[] = [],
 ): string {
   return createHash('sha256').update(JSON.stringify({
     loader: 'sql-demo-asset-loader', sourceFileId, sourceUrl, archiveRelativePath, sourceSha256, reachability,
     ...(selectedPublicHeaderReferences.length ? { selectedPublicHeaderReferences } : {}),
+    ...(sourceReferenceAliases.length ? { sourceReferenceAliases: [...new Set(sourceReferenceAliases)].sort() } : {}),
   })).digest('hex');
 }
 
@@ -624,8 +747,12 @@ function pickAssetProvenance(
     sourceFileType: proof.sourceFileType,
     sourceFileId: proof.sourceFileId,
     archiveRelativePath: proof.archiveRelativePath,
-    sourceSha256: proof.sourceSha256,
+    ...('sourceSha256' in proof ? { sourceSha256: proof.sourceSha256 } : {}),
     reachability: proof.reachability,
+    ...('sourceReferenceAliases' in proof && proof.sourceReferenceAliases?.length
+      ? { sourceReferenceAliases: [...proof.sourceReferenceAliases] }
+      : {}),
+    ...('substitution' in proof && proof.substitution ? { substitution: { ...proof.substitution }, sourceBytesAvailable: false as const } : {}),
     ...(selectedPublicHeaderReferences.length
       ? { selectedPublicHeaderReferences: selectedPublicHeaderReferences.map((reference) => ({ ...reference })) }
       : {}),
@@ -670,7 +797,10 @@ function safeVerificationError(identity: string, error: unknown): Error {
   return new Error(`${identity} ${reason}`);
 }
 
-async function verifySupplements(input: SqlDemoAssetLoaderInput): Promise<SqlDemoAssetLoaderResult['supplements']> {
+async function verifySupplements(input: SqlDemoAssetLoaderInput): Promise<{
+  supplements: SqlDemoAssetLoaderResult['supplements'];
+  replacements: Map<string, { resolvedLocalPath: string; sha256: string; mime: SqlDemoOfflineAssetProof['detectedMimeType']; extension: SqlDemoOfflineAssetProof['detectedExtension'] }>;
+}> {
   const manifest = input.supplementManifest;
   if (manifest.schemaVersion !== 1 || manifest.scope !== 'sql-demo-approved-supplements') {
     throw new Error('approved supplement manifest scope or version is invalid');
@@ -688,9 +818,9 @@ async function verifySupplements(input: SqlDemoAssetLoaderInput): Promise<SqlDem
 
   const names = new Set<string>();
   const paths = new Set<string>();
-  const sourceFileIds = new Set((input.source.Files ?? []).map((file) => file.id));
   const assets = new Set(input.assetManifest.entries.map((entry) => entry.sourceFileId));
   const results: SqlDemoAssetLoaderResult['supplements'] = [];
+  const replacements = new Map<string, { resolvedLocalPath: string; sha256: string; mime: SqlDemoOfflineAssetProof['detectedMimeType']; extension: SqlDemoOfflineAssetProof['detectedExtension'] }>();
   for (const entry of manifest.entries) {
     if (!entry || typeof entry.name !== 'string' || !entry.name.trim() || names.has(entry.name)) {
       throw new Error('supplement manifest has a missing or duplicate named entry');
@@ -702,12 +832,12 @@ async function verifySupplements(input: SqlDemoAssetLoaderInput): Promise<SqlDem
     assertSha256(entry.sha256, `supplement ${entry.name} SHA-256`);
     if (
       entry.scope === 'missing-original-replacement'
-        ? !entry.replacesMissingSourceFileId || sourceFileIds.has(entry.replacesMissingSourceFileId) || assets.has(entry.replacesMissingSourceFileId)
+        ? !entry.replacesMissingSourceFileId || assets.has(entry.replacesMissingSourceFileId)
         : entry.replacesMissingSourceFileId !== undefined
     ) {
       throw new Error(`supplement ${entry.name} replacement identity does not name a missing source file`);
     }
-    let verified: { bytes: Buffer; sourceSha256: string; resolvedLocalPath: string };
+    let verified: { bytes: Buffer; sourceSha256: string; resolvedLocalPath: string; mime?: string };
     try {
       if (entry.scope === 'public-video-thumbnail' || entry.scope === 'missing-original-replacement') {
         const raster = await readVerifiedOfflineImageSource({
@@ -736,6 +866,12 @@ async function verifySupplements(input: SqlDemoAssetLoaderInput): Promise<SqlDem
       scope: entry.scope,
       ...(entry.replacesMissingSourceFileId === undefined ? {} : { replacesMissingSourceFileId: entry.replacesMissingSourceFileId }),
     });
+    if (entry.scope === 'missing-original-replacement') {
+      const mime = verified.mime as SqlDemoOfflineAssetProof['detectedMimeType'] | undefined;
+      if (!mime) throw new Error(`supplement ${entry.name} verifier did not return image magic`);
+      replacements.set(entry.sourcePath, { resolvedLocalPath: verified.resolvedLocalPath, sha256: verified.sourceSha256, mime,
+        extension: mime === 'image/jpeg' ? 'jpg' : mime === 'image/png' ? 'png' : 'webp' });
+    }
   }
-  return results;
+  return { supplements: results, replacements };
 }

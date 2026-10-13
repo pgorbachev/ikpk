@@ -5,9 +5,11 @@ import type { SqlMaterializerOptions } from './sql-public-materializer.js';
 import type {
   SqlDemoAssetManifest,
   SqlDemoAssetManifestEntry,
+  SqlDemoSupplementEntry,
   SqlDemoSupplementManifest,
 } from './sql-demo-assets.js';
 import { computeSqlDemoSupplementManifestSha256 } from './sql-demo-assets.js';
+import { resolveSqlImageFile } from './sql-demo-image-identity.js';
 import type {
   SqlDemoAcceptedSupplements,
   SqlDemoAllowlistedAssets,
@@ -50,6 +52,13 @@ export interface SqlDemoNormalizedPrivateInputs {
     assetRoot: string;
     assetManifest: SqlDemoAssetManifest;
     approvedBodyFileGrants: { sourceFileId: string; sourceSha256: string; decisionId: string }[];
+    approvedPublicRichTextGrants: {
+      sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess';
+      sourceFileId: string; sourceSha256: string; decisionId: string; sourceReferenceAlias: string;
+    }[];
+    approvedMissingOriginalReplacements: {
+      sourceFileId: string; replacementPath: string; replacementRevision: string; replacementSha256: string; sourceBytesAvailable: false;
+    }[];
     supplementRoot: string;
     supplementManifest: SqlDemoSupplementManifest;
     expectedSupplements: { codeRevision: string; manifestSha256: string };
@@ -225,7 +234,11 @@ function validateOwnerClassification(owner: JsonObject, candidatesFile: JsonObje
     throw new Error('owner classification decision must not imply production acceptance');
   }
   for (const key of ['source', 'media', 'classification']) {
-    const decision = object(valueAt(ownerDecision, key), `owner ${key} decision`);
+    const rawDecision = valueAt(ownerDecision, key);
+    // Older accepted packets record media approval as prose. Keep that historical
+    // shape valid while allowing a versioned packet to carry a narrow DTO.
+    if (key === 'media' && typeof rawDecision === 'string' && rawDecision.trim()) continue;
+    const decision = object(rawDecision, `owner ${key} decision`);
     if (valueAt(decision, 'productionAcceptance', 'production_acceptance') !== false) throw new Error(`owner ${key} decision must not imply production acceptance`);
   }
   if (valueAt(ownerDecision, 'demoWriteOrImportAuthorization', 'demo_write_or_import_authorization') !== true) throw new Error('owner decision does not authorize the bounded demo import');
@@ -322,12 +335,15 @@ function textContent(node: ReturnType<typeof parsedHtml>): string {
 }
 function htmlImages(html: string): string[] {
   const found: string[] = [];
-  parseNodes(parsedHtml(html), (node) => {
+  const visitActive = (node: NonNullable<ReturnType<typeof parsedHtml>>): void => {
+    if (node.tagName === 'script' || node.tagName === 'template') return;
     if (node.tagName === 'img') {
       const src = attr(node, 'src');
       if (src) found.push(src);
     }
-  });
+    for (const child of node.childNodes ?? []) visitActive(child as ReturnType<typeof parsedHtml>);
+  };
+  visitActive(parsedHtml(html));
   return found;
 }
 function selectedHeaders(mapped: SqlPublicContentResult): SqlDemoSelectedPublicHeaderReference[] {
@@ -357,8 +373,23 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   const body = privateData['article-body-reached-public-unlinked-media.json'];
   const existing = privateData['content-media-manifest.json'];
   const owner = privateData['demo-owner-decisions.json'];
+  const rawOwnerDecision = object(valueAt(owner, 'ownerDecision', 'owner_decision'), 'owner decision');
   validateOwnerClassification(owner, privateData['classification-candidates.json']);
   const ownerMedia = object(valueAt(owner, 'mediaAllowlist', 'media_allowlist'), 'owner media allowlist');
+  const richTextAllowlistValue = valueAt(owner, 'richTextMediaAllowlist', 'rich_text_media_allowlist');
+  const richTextAllowlist = richTextAllowlistValue === undefined ? undefined : object(richTextAllowlistValue, 'owner rich-text media allowlist');
+  const richTextOwnerRows = richTextAllowlist
+    ? array(richTextAllowlist.entries, 'owner rich-text media grants').map((raw) => object(raw, 'owner rich-text media grant'))
+    : [];
+  if (richTextAllowlist) {
+    if (valueAt(richTextAllowlist, 'status') !== 'approved-for-demo' || valueAt(richTextAllowlist, 'allowlistOnly', 'allowlist_only') !== true ||
+      valueAt(richTextAllowlist, 'wildcard') !== false || valueAt(richTextAllowlist, 'allEntriesReachableFromNamedActiveRichTextFields', 'all_entries_reachable_from_named_active_rich_text_fields') !== true ||
+      valueAt(richTextAllowlist, 'allSourceEntriesArePublicAndUnlinked', 'all_source_entries_are_public_and_unlinked') !== true ||
+      valueAt(richTextAllowlist, 'allCrcSizeAndSha256ChecksVerified', 'all_crc_size_and_sha256_checks_verified') !== true ||
+      valueAt(richTextAllowlist, 'exactIdentityCount', 'exact_identity_count') !== richTextOwnerRows.length) {
+      throw new Error('owner rich-text media allowlist is incomplete or not approved for this exact demo scope');
+    }
+  }
   const ownerEntries = array(ownerMedia.entries, 'owner media grants').map((raw) => object(raw, 'owner media grant'));
   const ownerGrantIds = new Set<string>();
   for (const entry of ownerEntries) {
@@ -445,6 +476,40 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   }
   const refsById = new Map<string, SqlDemoSelectedPublicHeaderReference[]>();
   for (const ref of headers) refsById.set(ref.imageId, [...(refsById.get(ref.imageId) ?? []), ref]);
+  const replacementRows: JsonObject[] = [];
+  const rawMediaDecision = valueAt(rawOwnerDecision, 'media');
+  if (rawMediaDecision && typeof rawMediaDecision === 'object' && !Array.isArray(rawMediaDecision)) {
+    replacementRows.push(...array(valueAt(rawMediaDecision as JsonObject, 'missingOriginalReplacements', 'missing_original_replacements') ?? [], 'missing-original replacement decisions').map((raw) => object(raw, 'missing-original replacement decision')));
+  }
+  const replacementEntries: SqlDemoSupplementEntry[] = [];
+  const replacementSourceIds = new Set<string>();
+  const approvedSupplementRows = array(valueAt(privateData['approved-supplements.json'], 'supplements'), 'approved supplements').map((raw) => object(raw, 'approved supplement'));
+  for (const replacement of replacementRows) {
+    const sourceFileId = idString(valueAt(replacement, 'sourceFileId', 'source_file_id'), 'replacement source Files ID');
+    if (replacementSourceIds.has(sourceFileId)) throw new Error(`Files#${sourceFileId} has duplicate missing-original replacement decisions`);
+    replacementSourceIds.add(sourceFileId);
+    const replacementPath = string(valueAt(replacement, 'replacementPath', 'replacement_path'), `Files#${sourceFileId} replacement path`);
+    const replacementRevision = string(valueAt(replacement, 'replacementRevision', 'replacement_revision'), `${replacementPath} replacement revision`);
+    const replacementSha256 = digest(valueAt(replacement, 'replacementSha256', 'replacement_sha256'), `${replacementPath} replacement SHA-256`);
+    if (valueAt(replacement, 'sourceBytesAvailable', 'source_bytes_available') !== false || valueAt(replacement, 'demoApproved', 'demo_approved') !== true) {
+      throw new Error(`Files#${sourceFileId} missing-original replacement lacks explicit demo-only approval or missing-byte provenance`);
+    }
+    const file = nativeFiles.get(sourceFileId);
+    if (!file || file.fileType !== 'image' || file.status !== 'active' || file.privacy !== 'public') throw new Error(`Files#${sourceFileId} missing-original replacement does not join to an active public image`);
+    const headerRefs = refsById.get(sourceFileId) ?? [];
+    if (headerRefs.length !== 1 || headerRefs[0]!.sourceTable !== 'Institutes' || headerRefs[0]!.sourceId !== 3) {
+      throw new Error(`Files#${sourceFileId} replacement is not the exact selected Institutes#3 header`);
+    }
+    const supplement = approvedSupplementRows.find((row) => valueAt(row, 'path', 'sourcePath') === replacementPath &&
+      valueAt(row, 'revision') === replacementRevision && digest(valueAt(row, 'sha256'), `${replacementPath} approved supplement SHA-256`) === replacementSha256 &&
+      valueAt(row, 'replaces_missing_source_file_id', 'replacesMissingSourceFileId') === sourceFileId);
+    if (!supplement) throw new Error(`Files#${sourceFileId} replacement is not pinned as its named approved supplement`);
+    const blob = config.supplementBlobs.find((item) => item.path === replacementPath && item.revision === replacementRevision);
+    if (!blob || digest(blob.sha256, `${replacementPath} replacement blob SHA-256`) !== replacementSha256 || sha256(blob.bytes) !== replacementSha256) {
+      throw new Error(`Files#${sourceFileId} named replacement bytes do not match their owner-pinned SHA-256`);
+    }
+    replacementEntries.push({ name: replacementPath, scope: 'missing-original-replacement', sourcePath: replacementPath, revision: replacementRevision, sha256: replacementSha256, replacesMissingSourceFileId: sourceFileId });
+  }
   const activeSource = (id: string, expectedType: 'image' | 'document', expectedStatus: 'active' | 'unlinked') => {
     const file = nativeFiles.get(id);
     if (!file) throw new Error(`${id} has no matching native Files identity`);
@@ -453,22 +518,32 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   };
   const entries: SqlDemoAssetManifestEntry[] = [];
   const addProof = (id: string, reachability: SqlDemoAssetManifestEntry['reachability'], expectedType: 'image' | 'document' = 'image', expectedStatus: 'active' | 'unlinked' = 'active') => {
-    const proof = proofById.get(id) ?? bodyById.get(id);
+    if (reachability.kind === 'sql-header' && replacementEntries.some((entry) => entry.replacesMissingSourceFileId === id)) return undefined;
+    const selectedHeaderProof = reachability.kind === 'sql-header' && refsById.has(id) ? existingById.get(id) : undefined;
+    const proof = proofById.get(id) ?? bodyById.get(id) ?? selectedHeaderProof;
     if (!proof) throw new Error(`${id} has no matching verified byte proof`);
     const file = activeSource(id, expectedType, expectedStatus);
     const sourceFileType = valueAt(proof, 'source_file_type', 'sourceFileType');
-    if (sourceFileType !== expectedType) throw new Error(`${id} byte proof file type does not match native Files`);
+    if (sourceFileType !== expectedType && !(proof === selectedHeaderProof && sourceFileType === undefined && expectedType === 'image')) {
+      throw new Error(`${id} byte proof file type does not match native Files`);
+    }
     const path = string(valueAt(proof, 'archive_relative_path', 'archiveRelativePath'), `${id} archive path`);
     const byteCount = valueAt(proof, 'bytes');
     if (!Number.isSafeInteger(byteCount) || (byteCount as number) < 0 || valueAt(proof, 'zip_crc_verified', 'crc_verified') !== true && valueAt(proof, 'crc_verified', 'zip_crc_verified') !== true) throw new Error(`${id} byte proof or CRC verification is invalid`);
     const proofHash = digest(valueAt(proof, 'sha256'), `${id} byte proof SHA-256`);
     const privacy = valueAt(proof, 'privacy', 'source_privacy');
     const status = valueAt(proof, 'status', 'source_status');
-    if (privacy !== 'public' || status !== expectedStatus) throw new Error(`${id} byte proof status or privacy does not match native Files`);
+    if (proof === selectedHeaderProof) {
+      if (valueAt(proof, 'crc_verified', 'crcVerified') !== true || !Number.isSafeInteger(byteCount) || (byteCount as number) < 0) {
+        throw new Error(`${id} existing byte proof size or CRC verification is invalid`);
+      }
+    } else if (privacy !== 'public' || status !== expectedStatus) {
+      throw new Error(`${id} byte proof status or privacy does not match native Files`);
+    }
     const mime = valueAt(proof, 'mime_type_from_magic', 'verified_mime');
     const ext = valueAt(proof, 'source_extension', 'target_extension_from_magic');
     if (valueAt(proof, 'extension_matches_magic') !== undefined && valueAt(proof, 'extension_matches_magic') !== true) throw new Error(`${id} byte proof extension does not match detected magic`);
-    if (expectedType === 'image' && (!['image/png', 'image/jpeg', 'image/webp'].includes(String(mime)) || !['png', 'jpg', 'jpeg', 'webp'].includes(String(ext)))) throw new Error(`${id} byte proof has unsupported image magic metadata`);
+    if (expectedType === 'image' && proof !== selectedHeaderProof && (!['image/png', 'image/jpeg', 'image/webp'].includes(String(mime)) || !['png', 'jpg', 'jpeg', 'webp'].includes(String(ext)))) throw new Error(`${id} byte proof has unsupported image magic metadata`);
     if (expectedType === 'document' && (mime !== 'application/pdf' || ext !== 'pdf')) throw new Error(`${id} byte proof has unsupported document magic metadata`);
     const prior = entries.find((entry) => entry.sourceFileId === id);
     const next: SqlDemoAssetManifestEntry = {
@@ -489,22 +564,22 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   };
   for (const ref of headers) addProof(ref.imageId, { kind: 'sql-header' });
 
-  // The accepted loader currently supports active article-body references only.
-  // Rich fields such as Programs.content and Seminars.learningProcess are intentionally
-  // not promoted to header or article reachability here.
   const activeArticles = source.Articles.filter((article) => article.status === 'active');
-  const bodyRequests = new Map<string, number[]>();
+  const bodyRequests = new Map<string, { articleIds: number[]; sourceUrls: string[] }>();
   for (const article of activeArticles) {
     for (const url of htmlImages(article.content)) {
-      const matches = (source.Files ?? []).filter((file) => file.url === url);
-      if (matches.length !== 1) throw new Error(`Articles#${article.id} image source does not resolve to one native file identity`);
-      const file = matches[0]!;
-      bodyRequests.set(file.id, [...(bodyRequests.get(file.id) ?? []), article.id]);
+      const file = resolveSqlImageFile(source.Files ?? [], url, `Articles#${article.id}.content`);
+      const prior = bodyRequests.get(file.id) ?? { articleIds: [], sourceUrls: [] };
+      prior.articleIds.push(article.id);
+      prior.sourceUrls.push(url);
+      bodyRequests.set(file.id, prior);
     }
   }
+  const articleSourceUrlsById = new Map<string, string>();
   const grants: { sourceFileId: string; sourceSha256: string; decisionId: string }[] = [];
-  for (const [id, articleIds] of bodyRequests) {
+  for (const [id, request] of bodyRequests) {
     const file = nativeFiles.get(id)!;
+    articleSourceUrlsById.set(id, request.sourceUrls[0]!);
     if (file.status === 'unlinked') {
       const bodyProof = bodyRows.find((row) => valueAt(row, 'source_file_id', 'sourceFileId') === id);
       if (!bodyProof) throw new Error(`${id} requested by active article HTML is missing an exact owner allowlist grant`);
@@ -513,12 +588,91 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
       if (!decisionId) throw new Error(`${id} requested by active article HTML lacks an exact owner file and hash grant`);
       const grant: { sourceFileId: string; sourceSha256: string; decisionId: string } = { sourceFileId: id, sourceSha256: sourceHash, decisionId };
       grants.push(grant);
-      addProof(id, { kind: 'article-body', articleSourceIds: [...new Set(articleIds)] }, 'image', 'unlinked');
+      addProof(id, { kind: 'article-body', articleSourceIds: [...new Set(request.articleIds)] }, 'image', 'unlinked');
     } else if (file.status === 'active') {
-      addProof(id, { kind: 'article-body', articleSourceIds: [...new Set(articleIds)] });
+      addProof(id, { kind: 'article-body', articleSourceIds: [...new Set(request.articleIds)] });
     } else {
       throw new Error(`${id} requested by active article HTML is not active or owner-approved unlinked media`);
     }
+  }
+
+  type RichTextGrant = {
+    sourceTable: 'Programs' | 'Seminars'; sourceId: number; sourceField: 'content' | 'learningProcess';
+    sourceFileId: string; sourceSha256: string; decisionId: string; sourceReferenceAlias: string;
+  };
+  const approvedPublicRichTextGrants: RichTextGrant[] = [];
+  const richTextDecisions: SqlDemoOwnerDecisions['approvedPublicRichTextImages'] = [];
+  const richTextSources = [
+    ...source.Programs.filter((row) => row.status === 'active').map((row) => ({ table: 'Programs' as const, id: row.id, sourceField: 'content' as const, html: row.content ?? '' })),
+    ...source.Seminars.filter((row) => row.status === 'active').map((row) => ({ table: 'Seminars' as const, id: row.id, sourceField: 'learningProcess' as const, html: row.learningProcess ?? '' })),
+  ];
+  const richRefsByKey = new Map<string, { sourceUrl: string; sourceFileId: string }[]>();
+  for (const context of richTextSources) {
+    for (const sourceUrl of htmlImages(context.html)) {
+      const file = resolveSqlImageFile(source.Files ?? [], sourceUrl, `${context.table}#${context.id}.${context.sourceField}`);
+      if (file.status !== 'unlinked') continue;
+      const key = `${context.table}#${context.id}.${context.sourceField}\0${file.id}`;
+      richRefsByKey.set(key, [...(richRefsByKey.get(key) ?? []), { sourceUrl, sourceFileId: file.id }]);
+    }
+  }
+  const usedRichTextOwnerKeys = new Set<string>();
+  for (const raw of richTextOwnerRows) {
+    const table = valueAt(raw, 'sourceTable', 'source_table');
+    const sourceField = valueAt(raw, 'sourceField', 'source_field');
+    const sourceId = numberId(valueAt(raw, 'sourceId', 'source_id'), 'owner rich-text source ID');
+    if ((table !== 'Programs' || sourceField !== 'content') && (table !== 'Seminars' || sourceField !== 'learningProcess')) {
+      throw new Error(`rich-text owner decision for ${table}#${sourceId} has an unsupported source field`);
+    }
+    const sourceTable = table as RichTextGrant['sourceTable'];
+    const field = sourceField as RichTextGrant['sourceField'];
+    const fileId = idString(valueAt(raw, 'sourceFileId', 'source_file_id'), 'owner rich-text source file ID');
+    const sourceSha256 = digest(valueAt(raw, 'sourceSha256', 'source_sha256'), `Files#${fileId} rich-text owner SHA-256`);
+    const decisionId = string(valueAt(raw, 'decisionId', 'decision_id'), `Files#${fileId} rich-text owner decision`);
+    if (valueAt(raw, 'demoApproved', 'demo_approved') !== true || valueAt(raw, 'verifiedMime', 'verified_mime') !== 'image/png' ||
+      valueAt(raw, 'approvedExtension', 'approved_extension') !== 'png') {
+      throw new Error(`Files#${fileId} rich-text owner decision lacks its exact approved PNG proof`);
+    }
+    activeSource(fileId, 'image', 'unlinked');
+    const byteProof = bodyById.get(fileId);
+    if (!byteProof || digest(valueAt(byteProof, 'sha256'), `Files#${fileId} rich-text byte proof SHA-256`) !== sourceSha256 ||
+      valueAt(raw, 'sourceBytes', 'source_bytes') !== valueAt(byteProof, 'bytes') ||
+      valueAt(byteProof, 'source_file_type', 'sourceFileType') !== 'image' ||
+      valueAt(byteProof, 'source_privacy', 'privacy') !== 'public' || valueAt(byteProof, 'source_status', 'status') !== 'unlinked' ||
+      valueAt(byteProof, 'verified_mime', 'mime_type_from_magic') !== 'image/png' ||
+      valueAt(byteProof, 'target_extension_from_magic', 'source_extension') !== 'png' ||
+      valueAt(byteProof, 'crc_verified', 'zip_crc_verified') !== true || !Number.isSafeInteger(valueAt(byteProof, 'bytes'))) {
+      throw new Error(`Files#${fileId} rich-text byte proof does not match its approved exact PNG identity`);
+    }
+    const sourceRows = sourceTable === 'Programs'
+      ? source.Programs.filter((row) => row.id === sourceId && row.status === 'active')
+      : source.Seminars.filter((row) => row.id === sourceId && row.status === 'active');
+    if (sourceRows.length !== 1) throw new Error(`${sourceTable}#${sourceId} rich-text owner decision does not identify one active SQL row`);
+    const mappedRows = sourceTable === 'Programs'
+      ? mapped.entities.programs.filter((row) => row.sourceId === sourceId)
+      : mapped.entities.seminars.filter((row) => row.sourceId === sourceId);
+    if (mappedRows.length !== 1) throw new Error(`${sourceTable}#${sourceId} rich-text owner decision does not identify one mapped public row`);
+    const sourceHtml = sourceTable === 'Programs'
+      ? source.Programs.find((row) => row.id === sourceId)!.content ?? ''
+      : source.Seminars.find((row) => row.id === sourceId)!.learningProcess ?? '';
+    const mappedHtml = sourceTable === 'Programs'
+      ? String(mappedRows[0]!.description ?? '')
+      : String(mappedRows[0]!.learning_plan ?? '');
+    if (mappedHtml !== sourceHtml) throw new Error(`${sourceTable}#${sourceId}.${field} is not preserved in its exact mapped public field`);
+    const aliases = htmlImages(sourceHtml).filter((sourceUrl) => resolveSqlImageFile(source.Files ?? [], sourceUrl, `${sourceTable}#${sourceId}.${field}`).id === fileId);
+    if (!aliases.length) throw new Error(`Files#${fileId} owner decision is not reached by ${sourceTable}#${sourceId}.${field}`);
+    const key = `${sourceTable}#${sourceId}.${field}\0${fileId}`;
+    usedRichTextOwnerKeys.add(key);
+    const references: SqlDemoAssetManifestEntry['reachability'] = {
+      kind: 'public-rich-text', references: [{ sourceTable, sourceId, sourceField: field }],
+    };
+    addProof(fileId, references, 'image', 'unlinked');
+    for (const sourceUrl of new Set(aliases)) {
+      approvedPublicRichTextGrants.push({ sourceTable, sourceId, sourceField: field, sourceFileId: fileId, sourceSha256, decisionId, sourceReferenceAlias: sourceUrl });
+      richTextDecisions.push({ sourceTable, sourceId, sourceField: field, sourceFileId: fileId, sourceSha256, decisionId, sourceUrl });
+    }
+  }
+  for (const key of richRefsByKey.keys()) {
+    if (!usedRichTextOwnerKeys.has(key)) throw new Error(`unlinked SQL rich-text image ${key.replace('\0', ' ')} has no exact owner file and field approval`);
   }
 
   const videos = (source.Videos ?? []).filter((row) => row.status === 'active');
@@ -567,13 +721,13 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   // The loader's supplement scopes are executable verification contracts, not
   // labels for every descriptive approval role. Only the selected JSON page corpus
   // is in-scope here; other accepted code/data blobs remain byte-pinned above.
-  const supplementEntries = staticBlob ? [{
+  const supplementEntries: SqlDemoSupplementEntry[] = [...(staticBlob ? [{
     name: staticBlob.path,
     scope: 'public-static-page' as const,
     sourcePath: staticBlob.path,
     revision: staticBlob.revision,
     sha256: digest(staticBlob.sha256, `${staticBlob.path} supplement SHA-256`),
-  }] : [];
+  }] : []), ...replacementEntries];
   const codeRevision = string(valueAt(approved, 'application_candidate_revision', 'applicationCandidateRevision'), 'supplement manifest code revision');
   const supplementManifestPayload = { schemaVersion: 1 as const, scope: 'sql-demo-approved-supplements' as const, codeRevision, entries: supplementEntries };
   const supplementManifest: SqlDemoSupplementManifest = { ...supplementManifestPayload, sha256: computeSqlDemoSupplementManifestSha256(supplementManifestPayload) };
@@ -805,7 +959,15 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     pages, instituteMetadata, videoPlaylists, targetLocations,
   };
   const ownerDecisions: SqlDemoOwnerDecisions = {
-    approvedUnlinkedArticleImages: grants.map((grant) => ({ sourceFileId: grant.sourceFileId, sourceUrl: nativeFiles.get(grant.sourceFileId)!.url!, decisionId: grant.decisionId })),
+    approvedUnlinkedArticleImages: grants.map((grant) => ({ sourceFileId: grant.sourceFileId, sourceUrl: articleSourceUrlsById.get(grant.sourceFileId)!, decisionId: grant.decisionId })),
+    approvedPublicRichTextImages: richTextDecisions ?? [],
+    missingOriginalReplacements: replacementRows.map((row) => ({
+      sourceFileId: idString(valueAt(row, 'sourceFileId', 'source_file_id'), 'replacement source Files ID'),
+      replacementPath: string(valueAt(row, 'replacementPath', 'replacement_path'), 'replacement path'),
+      replacementRevision: string(valueAt(row, 'replacementRevision', 'replacement_revision'), 'replacement revision'),
+      replacementSha256: digest(valueAt(row, 'replacementSha256', 'replacement_sha256'), 'replacement SHA-256'),
+      sourceBytesAvailable: false,
+    })),
     videoReferences,
   };
   const allowlistedAssets: SqlDemoAllowlistedAssets = { images: [], documents: [] };
@@ -821,6 +983,8 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
         archiveSha256: digest(config.baseline.archiveSha256, 'baseline archive SHA-256'), entries,
       },
       approvedBodyFileGrants: grants,
+      approvedPublicRichTextGrants,
+      approvedMissingOriginalReplacements: ownerDecisions.missingOriginalReplacements ?? [],
       supplementRoot: config.roots.supplementRoot, supplementManifest, expectedSupplements,
     },
     composer: { acceptedSupplements, allowlistedAssets, ownerDecisions },
