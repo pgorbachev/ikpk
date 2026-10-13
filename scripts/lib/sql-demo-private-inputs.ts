@@ -988,7 +988,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   for (const raw of decisionRows) {
     const row = object(raw, 'video source decision');
     if (valueAt(row, 'source_table', 'sourceTable') !== 'Seminars') throw new Error('video source decision must bind to Seminars.description');
-    const sourceId = numberId(valueAt(row, 'source_id', 'sourceId'), 'video decision seminar ID');
+    const sourceId = manifestNumberId(valueAt(row, 'source_id', 'sourceId'), 'video decision seminar ID');
     const sourceUrl = string(valueAt(row, 'source_url', 'sourceUrl'), `Seminars#${sourceId} source URL`);
     const safeHref = string(valueAt(row, 'safe_target_href', 'safeTargetHref'), `Seminars#${sourceId} safe target`);
     const decision = string(valueAt(row, 'decision'), `Seminars#${sourceId} video decision`);
