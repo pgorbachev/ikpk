@@ -420,6 +420,71 @@ describe('composeSqlDemoRelease', () => {
     expect(release.entities.articles[0].body).not.toContain(bodyImage.sourceUrl);
   });
 
+  it('rewrites a canonical article upload alias through the exact SQL file identity and verified public URL', () => {
+    const fileId = 'a1b2c3d4-e5f6-4789-a012-3456789abcde';
+    const alias = `https://ikpk.su/api/upload/file/${fileId}`;
+    const storagePath = '/storage/article/body.png';
+    const verifiedPublicUrl = '/media/verified/article-body.png';
+    const verifiedAliasMapping = {
+      ...attestation(fileId, storagePath, verifiedPublicUrl, 'image/png', 'attest-upload-alias'),
+      sourceReferenceAlias: alias,
+    } as SqlDemoAllowlistedAssets['images'][number];
+    const input = mapped({
+      articles: [{ sourceId: 902, legacy_id: 'article-902', slug: 'synthetic-article-alias', title: 'Synthetic article', body: `<p><img src="${alias}" alt="Synthetic" /></p>`, imageId: null }],
+    });
+    const approved = {
+      ...ownerDecisions(),
+      approvedUnlinkedArticleImages: [{ sourceFileId: fileId, sourceUrl: alias, decisionId: 'approved-upload-alias' }],
+    };
+
+    const release = composeSqlDemoRelease(input, supplements(), assets({ images: [verifiedAliasMapping] }), approved);
+
+    expect(release.entities.articles[0].body).toContain(`src="${verifiedPublicUrl}"`);
+    expect(release.entities.articles[0].body).not.toContain(alias);
+    expect(release.provenance.assetMappings).toContainEqual(expect.objectContaining({
+      sourceFileId: fileId, sourceUrl: storagePath, sourceReferenceAlias: alias, targetPublicUrl: verifiedPublicUrl,
+    }));
+  });
+
+  it('rewrites only the two exact owner-approved unlinked rich-text images on their mapped public fields', () => {
+    const programFileId = 'a1b2c3d4-e5f6-4789-a012-3456789abcde';
+    const seminarFileId = 'b1c2d3e4-f5a6-4789-b012-3456789abcde';
+    const programAlias = `https://ikpk.su/api/upload/file/${programFileId}`;
+    const seminarAlias = `https://ikpk.su/api/upload/file/${seminarFileId}`;
+    const programTarget = '/media/verified/program-content.png';
+    const seminarTarget = '/media/verified/seminar-learning.png';
+    const programImage = {
+      ...attestation(programFileId, '/storage/program-content.png', programTarget, 'image/png', 'attest-program-rich'),
+      sourceReferenceAlias: programAlias,
+    } as SqlDemoAllowlistedAssets['images'][number];
+    const seminarImage = {
+      ...attestation(seminarFileId, '/storage/seminar-learning.png', seminarTarget, 'image/png', 'attest-seminar-rich'),
+      sourceReferenceAlias: seminarAlias,
+    } as SqlDemoAllowlistedAssets['images'][number];
+    const input = mapped({
+      programs: [{ sourceId: 501, legacy_id: 'program-501', slug: 'program-501', name: 'Synthetic program', description: `<p><img src="${programAlias}" alt="Program" /></p>`, imageId: null }],
+      seminars: [{ sourceId: 900, legacy_id: 'seminar-900', slug: 'seminar-900', title: 'Synthetic seminar', learning_plan: `<p><img src="${seminarAlias}" alt="Seminar" /></p>` }],
+    });
+    const approved = {
+      ...ownerDecisions(),
+      approvedPublicRichTextImages: [
+        { sourceTable: 'Programs', sourceId: 501, sourceField: 'description', sourceFileId: programFileId, sourceSha256: 'd'.repeat(64), sourceUrl: programAlias, decisionId: 'approved-program-rich' },
+        { sourceTable: 'Seminars', sourceId: 900, sourceField: 'learning_plan', sourceFileId: seminarFileId, sourceSha256: 'e'.repeat(64), sourceUrl: seminarAlias, decisionId: 'approved-seminar-rich' },
+      ],
+    } as unknown as SqlDemoOwnerDecisions;
+
+    const release = composeSqlDemoRelease(input, supplements(), assets({ images: [programImage, seminarImage] }), approved);
+
+    expect(release.entities.programs[0].description).toContain(`src="${programTarget}"`);
+    expect(release.entities.programs[0].description).not.toContain(programAlias);
+    expect(release.entities.seminars[0].learning_plan).toContain(`src="${seminarTarget}"`);
+    expect(release.entities.seminars[0].learning_plan).not.toContain(seminarAlias);
+    expect(release.provenance.assetMappings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceFileId: programFileId, targetPublicUrl: programTarget }),
+      expect.objectContaining({ sourceFileId: seminarFileId, targetPublicUrl: seminarTarget }),
+    ]));
+  });
+
   it('rejects a body-only image without an exact owner grant or allowlisted mapping', () => {
     const bodyImage = attestation('body-image', '/sql/body-only-image', '/media/offline-body-image.png', 'image/png', 'attest-body-image');
     const bodyOnlyArticle = (src: string) => mapped({

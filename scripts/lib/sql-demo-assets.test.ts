@@ -282,6 +282,54 @@ describe('offline SQL asset loader contract', () => {
     expect(result.offlineMedia[0]?.verification.status).toBe('verified');
   });
 
+  it('resolves a canonical upload alias by Files identity while preserving the native storage URL', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] } });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    const alias = 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025';
+    const storageUrl = '/storage/articles/body-image.webp';
+    input.source.Files![0]!.id = '123e4567-e89b-12d3-a456-426614174025';
+    input.source.Files![0]!.url = storageUrl;
+    const sourceFileId = input.source.Files![0]!.id;
+    input.assetManifest.entries[0]!.sourceFileId = sourceFileId;
+    input.approvedBodyFileGrants = [{
+      sourceFileId, sourceSha256: sha256(bytes), decisionId: 'synthetic-upload-alias-decision',
+    }];
+    input.source.Articles = [{
+      id: 903, status: 'active', imageId: null,
+      content: `<p><img src="${alias}" alt="synthetic" /></p>`,
+    }];
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.offlineMedia).toHaveLength(1);
+    expect(result.offlineMedia[0]).toMatchObject({ sourceFileId, sourceUrl: storageUrl, reachability: { kind: 'article-body', articleSourceIds: [903] } });
+  });
+
+  it.each([
+    ['wrong host', 'https://elsewhere.ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025'],
+    ['wrong scheme', 'http://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025'],
+    ['query', 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025?download=1'],
+    ['fragment', 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025#image'],
+    ['trailing slash', 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025/'],
+    ['userinfo', 'https://user@ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025'],
+    ['explicit port', 'https://ikpk.su:443/api/upload/file/123e4567-e89b-12d3-a456-426614174025'],
+    ['upper-case UUID', 'https://ikpk.su/api/upload/file/123E4567-E89B-12D3-A456-426614174025'],
+    ['encoded UUID', 'https://ikpk.su/api/upload/file/%31' + '23e4567-e89b-12d3-a456-426614174025'],
+  ])('rejects a non-canonical upload alias (%s)', async (_shape, alias) => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'unlinked', reachability: { kind: 'article-body', articleSourceIds: [903] } });
+    const bytes = await readFile(join(input.assetRoot, 'file-1', 'synthetic.webp'));
+    const sourceFileId = '123e4567-e89b-12d3-a456-426614174025';
+    input.source.Files![0]!.id = sourceFileId;
+    input.source.Files![0]!.url = '/storage/articles/body-image.webp';
+    input.assetManifest.entries[0]!.sourceFileId = sourceFileId;
+    input.approvedBodyFileGrants = [{ sourceFileId, sourceSha256: sha256(bytes), decisionId: 'synthetic-upload-alias-decision' }];
+    input.source.Articles = [{ id: 903, status: 'active', imageId: null, content: `<img src="${alias}">` }];
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/(alias|reference|source|Files|identity|join)/i);
+  });
+
   it.each([
     ['different file ID', (input: SqlDemoAssetLoaderInput) => { input.approvedBodyFileGrants[0]!.sourceFileId = 'other-file'; }],
     ['different source SHA', (input: SqlDemoAssetLoaderInput) => { input.approvedBodyFileGrants[0]!.sourceSha256 = 'e'.repeat(64); }],
@@ -382,6 +430,34 @@ describe('offline SQL asset loader contract', () => {
     expect(result.provenance.assets[0]).toMatchObject({
       selectedPublicHeaderReferences: [{ sourceTable: 'Articles', sourceId: 904, imageId: 'file-1' }],
     });
+  });
+
+  it('derives video-thumbnail reachability from the exact native video join when the manifest row is deduplicated as a header', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'active', reachability: { kind: 'sql-header' }, selectedHeader: false });
+    input.source.Articles = [];
+    input.source.Videos = [{ id: 77, status: 'active', imageId: 'file-1', link: '/synthetic/video-77' }];
+    input.selectedPublicHeaders.references = [{ sourceTable: 'Videos', sourceId: 77, imageId: 'file-1' }];
+
+    const result = await loadSqlDemoAssets(input);
+
+    expect(result.offlineMedia).toHaveLength(1);
+    expect(result.offlineMedia[0]).toMatchObject({
+      sourceFileId: 'file-1', reachability: { kind: 'video-thumbnail', videoSourceId: 77 },
+    });
+    expect(result.provenance.assets[0]?.selectedPublicHeaderReferences).toEqual([
+      { sourceTable: 'Videos', sourceId: 77, imageId: 'file-1' },
+    ]);
+  });
+
+  it('rejects a video thumbnail manifest identity that does not match the selected native video and file', async () => {
+    const base = await root();
+    const input = await imageInput(base, { status: 'active', reachability: { kind: 'video-thumbnail', videoSourceId: 78 }, selectedHeader: false });
+    input.source.Articles = [];
+    input.source.Videos = [{ id: 77, status: 'active', imageId: 'file-1', link: '/synthetic/video-77' }];
+    input.selectedPublicHeaders.references = [{ sourceTable: 'Videos', sourceId: 77, imageId: 'file-1' }];
+
+    await expect(loadSqlDemoAssets(input)).rejects.toThrow(/file-1.*(video|thumbnail|reachability)/i);
   });
 
   it('rejects an active asset with a sql-header manifest entry but no selected mapper header reference', async () => {

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-content.js';
+import { mapSqlPublicContent } from './sql-public-content.js';
 import {
   normalizeSqlDemoPrivateInputs,
   prepareSqlDemoPrivateInputs,
@@ -573,6 +574,277 @@ describe('SQL demo private input preparation and normalization', () => {
     expect(source.sourceHash).toBe(`sha256:${hash('a')}`);
     expect(mapped.provenance.sourceHash).toBe(`sha256:${hash('a')}`);
     expect(JSON.stringify(result.loader.selectedPublicHeaders)).not.toContain('file-unselected');
+  });
+
+  it('uses a metadata-free existing byte proof for a selected native header and omits deleted-parent history', () => {
+    const input = config({ privateJson: privateDocuments({
+      'content-media-manifest.json': {
+        schema_version: 1, scope: 'content-media', baseline_sha256: hash('a'), archive_sha256: hash('b'),
+        canonical_format: 'synthetic-canonical-v1', canonical_sha256: hash('c'),
+        entries: [
+          { legacy_file_id: 'file-1', archive_relative_path: 'media/native-file-one.png', bytes: 12, crc_verified: true, sha256: hash('5') },
+          // Historical media whose deleted parent is not in the selected active mapper result.
+          { legacy_file_id: 'historical-orphan', archive_relative_path: 'media/orphan.png', bytes: 12, crc_verified: true, sha256: hash('9') },
+        ], unresolved: [],
+      },
+      'reached-media-manifest.json': {
+        schema_version: 1, scope: 'sql-demo-public-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'),
+        existing_content_image_manifest_sha256: hash('c'), verified_assets: [], documents: [], video_thumbnails: [],
+      },
+    }) });
+    const mappedOnlyOneHeader = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        institutes: mapped.entities.institutes.slice(0, 1),
+        programs: [],
+        articles: mapped.entities.articles.map((article) => ({ ...article, body: '' })),
+      },
+    };
+    const sourceWithoutArticleBodyImages = { ...source, Articles: source.Articles.map((article) => ({ ...article, content: '' })) };
+
+    const result = normalize({ config: input, nativeSqlPublicSource: sourceWithoutArticleBodyImages, mapped: mappedOnlyOneHeader });
+    const entries = result.loader.assetManifest.entries;
+
+    expect(entries.filter((entry) => entry.sourceFileId === 'file-1')).toHaveLength(1);
+    expect(entries.find((entry) => entry.sourceFileId === 'file-1')).toMatchObject({
+      sourceFileId: 'file-1', archiveRelativePath: 'media/native-file-one.png', sha256: hash('5'),
+      sourceFileType: 'image', sourceStatus: 'active', sourcePrivacy: 'public', reachability: { kind: 'sql-header' },
+    });
+    expect(entries.map((entry) => entry.sourceFileId)).not.toContain('historical-orphan');
+  });
+
+  it('joins an overlapping selected video header and reached thumbnail once by the exact native video and file IDs', () => {
+    const input = config({ privateJson: privateDocuments({
+      'reached-media-manifest.json': {
+        schema_version: 1, scope: 'sql-demo-public-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'),
+        existing_content_image_manifest_sha256: hash('c'),
+        verified_assets: [proof('thumb-1', 'media/thumb.jpg', hash('3'), 'image')], documents: [],
+        video_thumbnails: [{ source_file_id: 'thumb-1', source_video_id: 77, source_video_name: 'Synthetic video', target_media_id: 'target-thumb' }],
+      },
+    }) });
+    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video', imageId: 'thumb-1' };
+    const mappedWithVideo = { ...mapped, entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] } };
+
+    const result = normalize({ config: input, mapped: mappedWithVideo });
+    const thumbnailEntries = result.loader.assetManifest.entries.filter((entry) => entry.sourceFileId === 'thumb-1');
+
+    expect(result.loader.selectedPublicHeaders.references).toContainEqual({ sourceTable: 'Videos', sourceId: 77, imageId: 'thumb-1' });
+    expect(thumbnailEntries).toHaveLength(1);
+    expect(thumbnailEntries[0]).toMatchObject({ sourceFileId: 'thumb-1', sha256: hash('3'), sourcePrivacy: 'public' });
+  });
+
+  it('rejects reached thumbnail metadata bound to another video or file identity', () => {
+    const video = { sourceId: 77, legacy_id: 'video-77', slug: 'video-77', title: 'Synthetic video', imageId: 'thumb-1' };
+    const mappedWithVideo = { ...mapped, entities: { ...mapped.entities, institutes: [], programs: [], videos: [video] } };
+    const changedVideo = { ...source, Videos: (source.Videos ?? []).map((row) => ({ ...row, imageId: 'file-unselected' })) };
+    const manifest = (videoId: number) => privateDocuments({
+      'reached-media-manifest.json': {
+        schema_version: 1, scope: 'sql-demo-public-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'),
+        existing_content_image_manifest_sha256: hash('c'),
+        verified_assets: [proof('thumb-1', 'media/thumb.jpg', hash('3'), 'image')], documents: [],
+        video_thumbnails: [{ source_file_id: 'thumb-1', source_video_id: videoId, source_video_name: 'Synthetic video', target_media_id: 'target-thumb' }],
+      },
+    });
+    expect(() => normalize({ config: config({ privateJson: manifest(78) }), mapped: mappedWithVideo }))
+      .toThrow(/thumb-1.*(Videos|video|thumbnail)/i);
+    expect(() => normalize({ config: config({ privateJson: manifest(77) }), nativeSqlPublicSource: changedVideo, mapped: mappedWithVideo }))
+      .toThrow(/(thumb-1|Videos#77).*(video|thumbnail|identity|imageId)/i);
+  });
+
+  it('uses a named pinned branding replacement for the selected Barral file without claiming original bytes', () => {
+    const barralFileId = 'barral-original-missing';
+    const logoPath = 'web/public/institutes/barral-logo.png';
+    const logoBytes = Buffer.from('synthetic approved Barral branding replacement');
+    const logoSha256 = sha256(logoBytes);
+    const approved = JSON.parse(Buffer.from(privateDocuments()['approved-supplements.json'].bytes).toString('utf8')) as {
+      supplements: Record<string, unknown>[];
+    };
+    approved.supplements.push({
+      path: logoPath, revision: APPLICATION_REVISION, role: 'missing-original-replacement',
+      replaces_missing_source_file_id: barralFileId, bytes: logoBytes.byteLength, sha256: logoSha256,
+    });
+    const owner = JSON.parse(Buffer.from(privateDocuments()['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+      ownerDecision: { media: Record<string, unknown> };
+    };
+    owner.ownerDecision.media.missingOriginalReplacements = [{
+      sourceFileId: barralFileId, replacementPath: logoPath, replacementRevision: APPLICATION_REVISION,
+      replacementSha256: logoSha256, sourceBytesAvailable: false, demoApproved: true,
+    }];
+    const input = config({
+      privateJson: privateDocuments({
+        'approved-supplements.json': approved,
+        'demo-owner-decisions.json': owner,
+      }),
+      supplementBlobs: [
+        { path: staticPageSupplement.path, revision: staticPageSupplement.revision, sha256: staticPageSupplement.sha256, bytes: staticPageSupplement.bytes },
+        { path: logoPath, revision: APPLICATION_REVISION, sha256: logoSha256, bytes: logoBytes },
+      ],
+    });
+    const nativeSource = {
+      ...source,
+      Institutes: source.Institutes.map((row) => row.id === 3 ? { ...row, imageId: barralFileId } : row),
+      Files: [...(source.Files ?? []), file(barralFileId, 'image', 'active', 'public', '/storage/barral/original-logo.png', 'webp')],
+    };
+    const mappedBarral = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        institutes: [mapped.entities.institutes[2]!].map((row) => ({ ...row, imageId: barralFileId })),
+        programs: [],
+      },
+    };
+
+    const result = normalize({ config: input, nativeSqlPublicSource: nativeSource, mapped: mappedBarral });
+
+    expect(result.loader.source.Files?.find((row) => row.id === barralFileId)?.url).toBe('/storage/barral/original-logo.png');
+    expect(result.loader.supplementManifest.entries).toContainEqual(expect.objectContaining({
+      name: logoPath, scope: 'missing-original-replacement', sourcePath: logoPath,
+      revision: APPLICATION_REVISION, sha256: logoSha256, replacesMissingSourceFileId: barralFileId,
+    }));
+    expect(result.loader.assetManifest.entries).not.toContainEqual(expect.objectContaining({ sourceFileId: barralFileId, sha256: hash('5') }));
+  });
+
+  it('resolves an exact article upload alias by UUID while retaining the distinct SQL storage URL', () => {
+    const fileId = 'a1b2c3d4-e5f6-4789-a012-3456789abcde';
+    const alias = `https://ikpk.su/api/upload/file/${fileId}`;
+    const storageUrl = '/storage/articles/original-body-image.png';
+    const input = config({ privateJson: privateDocuments({
+      'article-body-reached-public-unlinked-media.json': {
+        schema_version: 1, scope: 'article-body-reached-public-unlinked-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'),
+        entries: [{
+          source_file_id: fileId, archive_relative_path: 'media/body-granted.png', bytes: 12, crc_verified: true,
+          declared_extension: 'png', sha256: hash('4'), source_file_type: 'image', source_privacy: 'public', source_status: 'unlinked',
+          target_extension_from_magic: 'png', verified_mime: 'image/png', allowlist_class: 'approved body-only article media',
+          reachability: 'image reference discovered from active article HTML',
+        }],
+      },
+      'demo-owner-decisions.json': {
+        ...JSON.parse(Buffer.from(privateDocuments()['demo-owner-decisions.json'].bytes).toString('utf8')),
+        mediaAllowlist: {
+          ...JSON.parse(Buffer.from(privateDocuments()['demo-owner-decisions.json'].bytes).toString('utf8')).mediaAllowlist,
+          exactIdentityCount: 1,
+          entries: [{ sourceFileId: fileId, sourceSha256: hash('4'), decisionId: 'approved-synthetic-body-image', demoApproved: true }],
+        },
+      },
+    }) });
+    const aliasedSource = {
+      ...source,
+      Files: (source.Files ?? []).map((row) => row.id === 'body-granted'
+        ? { ...row, id: fileId, url: storageUrl }
+        : row),
+      Articles: source.Articles.map((article) => ({ ...article, content: `<p><img src="${alias}"></p>` })),
+    };
+    const aliasedMapped = {
+      ...mapped,
+      entities: { ...mapped.entities, articles: mapped.entities.articles.map((article) => ({ ...article, body: `<p><img src="${alias}"></p>` })) },
+    };
+
+    const result = normalize({ config: input, nativeSqlPublicSource: aliasedSource, mapped: aliasedMapped });
+    const entry = result.loader.assetManifest.entries.find((candidate) => candidate.sourceFileId === fileId);
+
+    expect(result.loader.source.Files?.find((row) => row.id === fileId)?.url).toBe(storageUrl);
+    expect(entry).toMatchObject({ sourceFileId: fileId, sha256: hash('4'), reachability: { kind: 'article-body', articleSourceIds: [301] } });
+    expect(result.loader.approvedBodyFileGrants).toEqual([{ sourceFileId: fileId, sourceSha256: hash('4'), decisionId: 'approved-synthetic-body-image' }]);
+    expect(result.composer.ownerDecisions.approvedUnlinkedArticleImages).toEqual([
+      { sourceFileId: fileId, sourceUrl: alias, decisionId: 'approved-synthetic-body-image' },
+    ]);
+  });
+
+  it.each([
+    ['wrong host', (id: string) => `https://elsewhere.ikpk.su/api/upload/file/${id}`],
+    ['wrong scheme', (id: string) => `http://ikpk.su/api/upload/file/${id}`],
+    ['query', (id: string) => `https://ikpk.su/api/upload/file/${id}?download=1`],
+    ['fragment', (id: string) => `https://ikpk.su/api/upload/file/${id}#image`],
+    ['trailing slash', (id: string) => `https://ikpk.su/api/upload/file/${id}/`],
+    ['userinfo', (id: string) => `https://user@ikpk.su/api/upload/file/${id}`],
+    ['explicit port', (id: string) => `https://ikpk.su:443/api/upload/file/${id}`],
+    ['upper-case UUID', (id: string) => `https://ikpk.su/api/upload/file/${id.toUpperCase()}`],
+    ['encoded UUID', (id: string) => `https://ikpk.su/api/upload/file/%61${id.slice(1)}`],
+  ])('rejects a non-canonical article upload alias (%s)', (_shape, makeAlias) => {
+    const fileId = 'a1b2c3d4-e5f6-4789-a012-3456789abcde';
+    const badAlias = makeAlias(fileId);
+    const aliasedSource = {
+      ...source,
+      Files: (source.Files ?? []).map((row) => row.id === 'body-granted' ? { ...row, id: fileId, url: '/storage/body.png' } : row),
+      Articles: source.Articles.map((article) => ({ ...article, content: `<img src="${badAlias}">` })),
+    };
+    const aliasedMapped = {
+      ...mapped,
+      entities: { ...mapped.entities, articles: mapped.entities.articles.map((article) => ({ ...article, body: `<img src="${badAlias}">` })) },
+    };
+
+    expect(() => normalize({ nativeSqlPublicSource: aliasedSource, mapped: aliasedMapped }))
+      .toThrow(/(canonical|alias|reference|resolve|identity|grant)/i);
+  });
+
+  it('joins only the two exact owner-approved public rich-text PNG identities on the mapped program and seminar fields', () => {
+    const programFileId = 'a1b2c3d4-e5f6-4789-a012-3456789abcde';
+    const seminarFileId = 'b1c2d3e4-f5a6-4789-b012-3456789abcde';
+    const programAlias = `https://ikpk.su/api/upload/file/${programFileId}`;
+    const seminarAlias = `https://ikpk.su/api/upload/file/${seminarFileId}`;
+    const richFiles = [
+      { source_file_id: programFileId, archive_relative_path: 'media/program-rich.png', bytes: 12, crc_verified: true, declared_extension: 'webp', sha256: hash('4'), source_file_type: 'image', source_privacy: 'public', source_status: 'unlinked', target_extension_from_magic: 'png', verified_mime: 'image/png', allowlist_class: 'approved program rich text', reachability: 'image reference in active Programs#501.content' },
+      { source_file_id: seminarFileId, archive_relative_path: 'media/seminar-rich.png', bytes: 12, crc_verified: true, declared_extension: 'webp', sha256: hash('5'), source_file_type: 'image', source_privacy: 'public', source_status: 'unlinked', target_extension_from_magic: 'png', verified_mime: 'image/png', allowlist_class: 'approved seminar rich text', reachability: 'image reference in active Seminars#900.learningProcess' },
+    ];
+    const baseOwner = JSON.parse(Buffer.from(privateDocuments()['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+      mediaAllowlist: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    baseOwner.richTextMediaAllowlist = {
+      status: 'approved-for-demo', scope: 'active public rich-text fields', allowlistOnly: true, wildcard: false,
+      exactIdentityCount: 2, allEntriesReachableFromNamedActiveRichTextFields: true,
+      allSourceEntriesArePublicAndUnlinked: true, allCrcSizeAndSha256ChecksVerified: true,
+      entries: [
+        { sourceFileId: programFileId, sourceSha256: hash('4'), decisionId: 'approved-program-rich-image', demoApproved: true, sourceTable: 'Programs', sourceId: 501, sourceField: 'content', verifiedMime: 'image/png', approvedExtension: 'png', sourceBytes: 12 },
+        { sourceFileId: seminarFileId, sourceSha256: hash('5'), decisionId: 'approved-seminar-rich-image', demoApproved: true, sourceTable: 'Seminars', sourceId: 900, sourceField: 'learningProcess', verifiedMime: 'image/png', approvedExtension: 'png', sourceBytes: 12 },
+      ],
+    };
+    const input = config({ privateJson: privateDocuments({
+      'article-body-reached-public-unlinked-media.json': {
+        schema_version: 1, scope: 'article-body-reached-public-unlinked-media', baseline_sql_sha256: hash('a'), archive_sha256: hash('b'), entries: richFiles,
+      },
+      'demo-owner-decisions.json': baseOwner,
+    }) });
+    const richSource: SqlPublicSource = {
+      ...source,
+      Programs: source.Programs.map((row) => ({ ...row, content: `<p><img src="${programAlias}" alt="Program" /></p>` })),
+      Seminars: source.Seminars.map((row) => ({ ...row, learningProcess: `<p><img src="${seminarAlias}" alt="Seminar" /></p>` })),
+      Articles: source.Articles.map((row) => ({ ...row, content: '' })),
+      Videos: undefined,
+      Files: [
+        ...(source.Files ?? []).filter((row) => row.id !== 'other-unlinked'),
+        file(programFileId, 'image', 'unlinked', 'public', '/storage/program-content.png', 'webp'),
+        file(seminarFileId, 'image', 'unlinked', 'public', '/storage/seminar-learning.png', 'webp'),
+      ],
+    };
+    const mappedRichSource = mapSqlPublicContent(richSource, prepareSqlDemoPrivateInputs(input));
+    const result = normalize({ config: input, nativeSqlPublicSource: richSource, mapped: mappedRichSource });
+
+    expect(mappedRichSource.entities.programs[0]).toMatchObject({ sourceId: 501, description: `<p><img src="${programAlias}" alt="Program" /></p>` });
+    expect(mappedRichSource.entities.seminars[0]).toMatchObject({ sourceId: 900, learning_plan: `<p><img src="${seminarAlias}" alt="Seminar" /></p>` });
+    expect(result.loader.assetManifest.entries.filter((entry) => [programFileId, seminarFileId].includes(entry.sourceFileId)))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceFileId: programFileId, sha256: hash('4'), sourceStatus: 'unlinked' }),
+        expect.objectContaining({ sourceFileId: seminarFileId, sha256: hash('5'), sourceStatus: 'unlinked' }),
+      ]));
+    expect(result.loader.approvedBodyFileGrants).toEqual([]);
+
+  });
+
+  it('rejects an unapproved unlinked image referenced by mapped program rich text', () => {
+    const unapprovedFileId = 'c1d2e3f4-a5b6-4789-c012-3456789abcde';
+    const alias = `https://ikpk.su/api/upload/file/${unapprovedFileId}`;
+    const unapprovedSource = {
+      ...source,
+      Programs: source.Programs.map((row) => ({ ...row, content: `<p><img src="${alias}"></p>` })),
+      Videos: undefined,
+      Files: [...(source.Files ?? []), file(unapprovedFileId, 'image', 'unlinked', 'public', '/storage/unapproved.png', 'webp')],
+    };
+    const mappedSource = mapSqlPublicContent(unapprovedSource, prepareSqlDemoPrivateInputs(config()));
+
+    expect(() => normalize({ nativeSqlPublicSource: unapprovedSource, mapped: mappedSource }))
+      .toThrow(/(unapproved|without.*(grant|decision)|no exact.*(grant|approval))/i);
   });
 
   it('rejects mapper provenance from a different SQL source before selecting asset headers', () => {
