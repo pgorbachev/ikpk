@@ -86,6 +86,13 @@ with zipfile.ZipFile(archive) as z:
     expected.add(name)
     member=name if name in names else f'{archive_root}/{name}'
     if member not in names:
+      candidates=[candidate for candidate in names if candidate.startswith(archive_root+'/') and candidate.endswith('/'+name)]
+      if len(candidates) != 1:
+        if candidates: ambiguous += 1
+        else: missing.append(row['sourceFileId'] in replacement_ids)
+        continue
+      member=candidates[0]
+    if member not in names:
       missing.append(row['sourceFileId'] in replacement_ids)
       continue
     if member in claimed: raise SystemExit('archive-member-reused')
