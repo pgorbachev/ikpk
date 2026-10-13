@@ -237,9 +237,10 @@ describe('concrete native local rehearsal adapter', () => {
     const psqlCalls = (config.runtime.execFile as ReturnType<typeof vi.fn>).mock.calls.filter((call) => String(call[0]).endsWith('/psql'));
     expect(psqlCalls).toHaveLength(2);
     const finalEnv = (psqlCalls[1]?.[2] as { env?: NodeJS.ProcessEnv } | undefined)?.env;
-    expect(finalEnv).toMatchObject({ PGOPTIONS: '-c default_transaction_read_only=on' });
+    expect(finalEnv).toMatchObject({ LANG: process.env.LANG ?? 'C', LC_ALL: process.env.LC_ALL || process.env.LANG || 'C' });
     expect(finalEnv).not.toHaveProperty(key);
-    expect(Object.keys(finalEnv ?? {}).sort()).toEqual(['HOME', 'PATH', 'PGOPTIONS']);
+    expect(finalEnv).not.toHaveProperty('PGOPTIONS');
+    expect(Object.keys(finalEnv ?? {}).sort()).toEqual(['HOME', 'LANG', 'LC_ALL', 'PATH']);
   });
 
   it('boots A and B with distinct required Strapi secrets and executes a fresh lockfile install from tracked source', async () => {

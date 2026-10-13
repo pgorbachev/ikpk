@@ -426,7 +426,12 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
     await checkPrivateDirectory(config.privateInputsRoot, true);
     await checkPrivateDirectory(join(config.privateArtifactsRoot, '.psql-home'), true);
   }
-  const sourceEnvironment = { PATH: safeEnvironment.PATH, HOME: join(config.privateArtifactsRoot, '.psql-home'), PGOPTIONS: '-c default_transaction_read_only=on' };
+  const sourceEnvironment = {
+    PATH: safeEnvironment.PATH,
+    HOME: join(config.privateArtifactsRoot, '.psql-home'),
+    LANG: process.env.LANG ?? 'C',
+    LC_ALL: process.env.LC_ALL || process.env.LANG || 'C',
+  };
   let verifiedSourceWitness: SourceTableWitness | undefined;
   let sourceWitnessVerified = false;
 
@@ -608,7 +613,7 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       let pid: number | undefined;
       let startTime: string | undefined;
       try {
-        child = childProcess(spawn, pgCtl, ['start', '-D', cluster, '-o', `-h '' -k ${config.source.socketDirectory} -p ${config.source.port} -c default_transaction_read_only=on`, '-w'], { env: sourceEnvironment, stdio: ['ignore', startStdout.fd, startStderr.fd] });
+        child = childProcess(spawn, pgCtl, ['start', '-D', cluster, '-o', `-c listen_addresses='' -c unix_socket_directories='${config.source.socketDirectory}' -c port=${config.source.port} -c default_transaction_read_only=on`, '-w'], { env: sourceEnvironment, stdio: ['ignore', startStdout.fd, startStderr.fd] });
         await waitForExit(child, 120_000);
         pid = await pidFromCluster(cluster);
         if (pid !== undefined && processInspector.isAlive(pid)) startTime = await processInspector.startTime(pid);
