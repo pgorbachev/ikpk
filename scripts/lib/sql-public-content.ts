@@ -760,7 +760,7 @@ export function mapSqlPublicContent(source: SqlPublicSource, options: SqlPublicC
       additionalText: nullableString(raw, 'Events', id, 'additionalText'), duration: nullableString(raw, 'Events', id, 'duration'),
       description: nullableString(raw, 'Events', id, 'description'),
       registrationFormLink: nullableString(raw, 'Events', id, 'registrationFormLink'),
-      isFree: row.isFree, isEventCollection: row.isEventCollection, primaryTeachers,
+      isFree: row.isFree, isEventCollection: row.isEventCollection, entry_status: 'active', primaryTeachers,
     }];
   });
 

@@ -5,6 +5,7 @@ import {
 } from './sql-public-content.js';
 import {
   materializeSqlPublicContent,
+  projectSqlPublicContentForConservation,
   type SqlResolvedMedia,
   type SqlStrapiRestClient,
 } from './sql-public-materializer.js';
@@ -176,12 +177,12 @@ class SyntheticStrapiTarget implements SqlStrapiRestClient {
 
   private assertPublishable(collection: Collection, data: Record<string, unknown>): void {
     const required: Record<Collection, string[]> = {
-      institutes: ['name', 'slug', 'description', 'order', 'seo'],
-      'course-groups': ['name', 'slug', 'institute', 'seo'],
+      institutes: ['name', 'slug', 'order'],
+      'course-groups': ['name', 'slug', 'institute'],
       teachers: ['name', 'slug', 'trait'],
-      seminars: ['name', 'slug', 'course_group', 'description', 'seo', 'documents_state'],
-      'schedule-entries': ['seminar', 'startAt', 'endAt', 'city', 'entry_status'],
-      articles: ['title', 'slug', 'body', 'seo', 'image', 'published_date', 'categories'],
+      seminars: ['name', 'slug', 'course_group', 'documents_state'],
+      'schedule-entries': ['seminar', 'startAt', 'endAt'],
+      articles: ['title', 'slug', 'image', 'published_date', 'categories'],
     };
     const missing = required[collection].filter((field) => {
       const value = data[field];
@@ -189,7 +190,7 @@ class SyntheticStrapiTarget implements SqlStrapiRestClient {
         const seo = value as { seo_title?: unknown; seo_description?: unknown } | undefined;
         return !seo?.seo_title || !seo.seo_description;
       }
-      return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+      return value === null || value === undefined || (Array.isArray(value) && value.length === 0);
     });
     if (missing.length) throw new Error(`synthetic ${collection} cannot publish without ${missing.join(', ')}`);
   }
@@ -354,6 +355,40 @@ function connectedMediaIds(value: unknown): number[] {
 }
 
 describe('materializeSqlPublicContent', () => {
+  it('preserves nullable and absent SQL fields without inventing optional CMS values', async () => {
+    const target = new SyntheticStrapiTarget('nullable-source-fields');
+    const media = new SyntheticMediaResolver();
+    const mapped = structuredClone(MAPPED);
+    mapped.entities.institutes[0]!.description = '';
+    mapped.entities.programs[0]!.description = null;
+    delete mapped.entities.programs[0]!.seo;
+    mapped.entities.seminars[0]!.description = null;
+    delete mapped.entities.seminars[0]!.seo;
+    mapped.entities.articles[0]!.body = '';
+    delete mapped.entities.articles[0]!.seo;
+    delete mapped.entities.events[0]!.name;
+    delete mapped.entities.events[0]!.city;
+    mapped.entities.news = [{ sourceId: 501, legacy_id: 'news-one', name: 'News One', description: null, date: '2024-01-01', link: null, priority: 1, imageId: null }];
+    mapped.entities.promotions = [{ sourceId: 601, legacy_id: 'promotion-one', name: 'Promotion One', description: null, date: '2024-01-01', type: 'SHOP', link: null, priority: 1, active: true, imageId: null }];
+    const projection = projectSqlPublicContentForConservation(mapped, options(target, media).classification);
+    mapped.entities.news = [];
+    mapped.entities.promotions = [];
+
+    await materializeSqlPublicContent(mapped, options(target, media));
+
+    expect(oneByLegacyId(target, 'institutes', 'institutes/one').description).toBe('');
+    expect(oneByLegacyId(target, 'course-groups', 'program-one')).not.toHaveProperty('seo');
+    expect(oneByLegacyId(target, 'seminars', 'seminar-one').description).toBeNull();
+    expect(oneByLegacyId(target, 'seminars', 'seminar-one')).not.toHaveProperty('seo');
+    expect(oneByLegacyId(target, 'articles', 'article-one').body).toBe('');
+    expect(oneByLegacyId(target, 'articles', 'article-one')).not.toHaveProperty('seo');
+    expect(oneByLegacyId(target, 'schedule-entries', '301')).not.toHaveProperty('name');
+    expect(oneByLegacyId(target, 'schedule-entries', '301')).not.toHaveProperty('city');
+    expect(oneByLegacyId(target, 'schedule-entries', '301').entry_status).toBe('active');
+    expect(projection.find((item) => item.sourceTable === 'News')?.attributes.description).toBeNull();
+    expect(projection.find((item) => item.sourceTable === 'Promotions')?.attributes.description).toBeNull();
+  });
+
   it('preserves nullable SQL program descriptions accepted by the CMS schema', async () => {
     const target = new SyntheticStrapiTarget('nullable-program-description');
     const media = new SyntheticMediaResolver();
@@ -498,10 +533,10 @@ describe('materializeSqlPublicContent', () => {
     const target = new SyntheticStrapiTarget('missing-field-target');
     const media = new SyntheticMediaResolver();
     const missingArticleBody = structuredClone(MAPPED);
-    missingArticleBody.entities.articles[0]!.body = '';
+    missingArticleBody.entities.articles[0]!.title = '';
 
     await expect(materializeSqlPublicContent(missingArticleBody, options(target, media)))
-      .rejects.toThrow(/Articles#401.*body/i);
+      .rejects.toThrow(/Articles#401.*title/i);
     expect(collection(target, 'articles').every((entry) => entry.publishedAt === null)).toBe(true);
   });
 

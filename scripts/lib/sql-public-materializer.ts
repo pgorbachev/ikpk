@@ -161,14 +161,19 @@ function requiredLegacyId(entity: RecordValue, table: SourceTable): string {
   return requiredString(entity, table, 'legacy_id');
 }
 
-function seoComponent(entity: RecordValue, table: SourceTable): RecordValue {
+function optionalSeoComponent(entity: RecordValue, table: SourceTable): RecordValue | null {
   const context = recordContext(table, entity);
   const value = entity.seo;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(context, 'seo must contain seo_title and seo_description');
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(context, 'seo must be an object or null');
   const seo = value as RecordValue;
-  if (typeof seo.seo_title !== 'string' || !seo.seo_title.trim()) return fail(context, 'seo.seo_title is required');
-  if (typeof seo.seo_description !== 'string' || !seo.seo_description.trim()) return fail(context, 'seo.seo_description is required');
-  return { seo_title: seo.seo_title, seo_description: seo.seo_description };
+  const result: RecordValue = {};
+  for (const field of ['seo_title', 'seo_description'] as const) {
+    if (seo[field] === undefined || seo[field] === null) continue;
+    if (typeof seo[field] !== 'string') return fail(context, `seo.${field} must be a string or null`);
+    if (seo[field]) result[field] = seo[field];
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 function entityPlans(
@@ -208,16 +213,17 @@ function entityPlans(
   for (const entity of mapped.entities.institutes) {
     const table: SourceTable = 'Institutes';
     const legacyId = requiredLegacyId(entity, table);
+    const seo = optionalSeoComponent(entity, table);
     plans.push({
       collection: 'institutes', sourceTable: table, entity, legacyId,
       data: {
         name: requiredString(entity, table, 'name'),
         slug: requiredString(entity, table, 'slug'),
         shortName: nullableString(entity, table, 'shortName'),
-        description: requiredString(entity, table, 'description'),
+        description: requiredString(entity, table, 'description', true),
         order: requiredInteger(entity, table, 'order'),
         legacy_id: legacyId,
-        seo: seoComponent(entity, table),
+        ...(seo ? { seo } : {}),
       },
       imageField: 'image', imageSourceId: nullableString(entity, table, 'imageId'), relations: [],
     });
@@ -225,6 +231,7 @@ function entityPlans(
   for (const entity of mapped.entities.programs) {
     const table: SourceTable = 'Programs';
     const legacyId = requiredLegacyId(entity, table);
+    const seo = optionalSeoComponent(entity, table);
     plans.push({
       collection: 'course-groups', sourceTable: table, entity, legacyId,
       data: {
@@ -236,7 +243,7 @@ function entityPlans(
         order: requiredInteger(entity, table, 'order'),
         legacy_id: legacyId,
         is_article_category: requiredBoolean(entity, table, 'is_article_category'),
-        seo: seoComponent(entity, table),
+        ...(seo ? { seo } : {}),
       },
       imageField: 'image', imageSourceId: nullableString(entity, table, 'imageId'),
       relations: [{ field: 'institute', cardinality: 'single', targets: [{ collection: 'institutes', legacyId: requiredString(entity, table, 'institute_legacy_id') }] }],
@@ -271,14 +278,15 @@ function entityPlans(
     if (!['issued', 'not-issued', 'unconfirmed'].includes(documentsState)) {
       fail(recordContext(table, entity), `documents_state has unsupported value ${documentsState}`);
     }
+    const seo = optionalSeoComponent(entity, table);
     const data: RecordValue = {
       name: requiredString(entity, table, 'name'),
       slug: requiredString(entity, table, 'slug'),
-      description: requiredString(entity, table, 'description'),
+      description: nullableString(entity, table, 'description'),
       documents_state: documentsState,
       order: requiredInteger(entity, table, 'order'),
       legacy_id: legacyId,
-      seo: seoComponent(entity, table),
+      ...(seo ? { seo } : {}),
     };
     for (const field of ['full_text', 'learning_plan', 'learning_mode', 'recommendations'] as const) {
       const value = nullableString(entity, table, field);
@@ -295,20 +303,20 @@ function entityPlans(
   for (const entity of mapped.entities.events) {
     const table: SourceTable = 'Events';
     const legacyId = requiredLegacyId(entity, table);
-    const entryStatus = requiredString(entity, table, 'entry_status');
-    if (!['active', 'cancelled', 'completed'].includes(entryStatus)) fail(recordContext(table, entity), `entry_status has unsupported value ${entryStatus}`);
+    const entryStatus = entity.entry_status === undefined ? undefined : requiredString(entity, table, 'entry_status');
+    if (entryStatus !== undefined && !['active', 'cancelled', 'completed'].includes(entryStatus)) fail(recordContext(table, entity), `entry_status has unsupported value ${entryStatus}`);
     plans.push({
       collection: 'schedule-entries', sourceTable: table, entity, legacyId,
       data: {
-        name: requiredString(entity, table, 'name'),
+        ...(entity.name === undefined ? {} : { name: nullableString(entity, table, 'name') }),
         startAt: requiredString(entity, table, 'startAt'),
         endAt: requiredString(entity, table, 'endAt'),
-        city: requiredString(entity, table, 'city'),
+        ...(entity.city === undefined ? {} : { city: nullableString(entity, table, 'city') }),
         price: requiredNumber(entity, table, 'newPrice'),
         oldPrice: nullableNumber(entity, table, 'oldPrice'),
         isFree: requiredBoolean(entity, table, 'isFree'),
         isEventCollection: requiredBoolean(entity, table, 'isEventCollection'),
-        entry_status: entryStatus,
+        ...(entryStatus === undefined ? {} : { entry_status: entryStatus }),
         registrationFormLink: nullableString(entity, table, 'registrationFormLink'),
         description: nullableString(entity, table, 'description'),
         additionalText: nullableString(entity, table, 'additionalText'),
@@ -328,15 +336,16 @@ function entityPlans(
     const imageSourceId = nullableString(entity, table, 'imageId');
     if (!imageSourceId) fail(recordContext(table, entity), 'image is required');
     const categories = articleClassification.get(requiredSourceId(entity, table))!;
+    const seo = optionalSeoComponent(entity, table);
     plans.push({
       collection: 'articles', sourceTable: table, entity, legacyId,
       data: {
         title: requiredString(entity, table, 'title'),
         slug: requiredString(entity, table, 'slug'),
-        body: requiredString(entity, table, 'body'),
+        body: requiredString(entity, table, 'body', true),
         published_date: requiredString(entity, table, 'published_date'),
         legacy_id: legacyId,
-        seo: seoComponent(entity, table),
+        ...(seo ? { seo } : {}),
       },
       imageField: 'image', imageSourceId, imageRequired: true,
       relations: [{ field: 'categories', cardinality: 'many', targets: categories.map((sourceProgramId) => {
@@ -353,7 +362,7 @@ function entityPlans(
       collection: 'news-items', sourceTable: table, entity, legacyId,
       data: {
         name: requiredString(entity, table, 'name'),
-        description: requiredString(entity, table, 'description'),
+        description: nullableString(entity, table, 'description'),
         date: requiredString(entity, table, 'date'),
         link: nullableString(entity, table, 'link'),
         priority: requiredInteger(entity, table, 'priority'),
@@ -374,7 +383,7 @@ function entityPlans(
       collection: 'promotions', sourceTable: table, entity, legacyId,
       data: {
         name: requiredString(entity, table, 'name'),
-        description: requiredString(entity, table, 'description'),
+        description: nullableString(entity, table, 'description'),
         date: requiredString(entity, table, 'date'),
         type: promotionType,
         link: nullableString(entity, table, 'link'),
@@ -394,16 +403,17 @@ function entityPlans(
     const slug = requiredString(entity, table, 'slug');
     const videos = entity.videos;
     if (videos !== null && !Array.isArray(videos)) fail(recordContext(table, entity), 'videos must be an array or null');
-    const seo = seoComponent(entity, table);
+    const seo = optionalSeoComponent(entity, table);
     plans.push({
       collection: 'video-playlists', sourceTable: table, entity, legacyId,
-      data: { name, slug, videos, legacy_id: legacyId, seo },
+      data: { name, slug, videos, legacy_id: legacyId, ...(seo ? { seo } : {}) },
       relations: [], verifyAttributes: true, populate: ['seo'],
     });
   }
   for (const entity of ('pages' in mapped.entities ? mapped.entities.pages : undefined) ?? []) {
     const table: SourceTable = 'Pages';
     const legacyId = requiredLegacyId(entity, table);
+    const seo = optionalSeoComponent(entity, table);
     plans.push({
       collection: 'pages', sourceTable: table, entity, legacyId,
       data: {
@@ -411,7 +421,7 @@ function entityPlans(
         slug: requiredString(entity, table, 'slug'),
         body: requiredString(entity, table, 'body'),
         legacy_id: legacyId,
-        seo: seoComponent(entity, table),
+        ...(seo ? { seo } : {}),
       },
       relations: [], verifyAttributes: true, populate: ['seo'],
     });
