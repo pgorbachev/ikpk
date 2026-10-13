@@ -128,6 +128,98 @@ describe('synthetic SQL public content mapper', () => {
     });
   });
 
+  it('maps every active SQL seminar from its SQL slug and current SQL parent hierarchy without a whitelist entry', () => {
+    const nativeSeminars = [
+      {
+        id: 361, status: 'active', name: 'Synthetic native seminar one', slug: 'native-seminar-one', programId: 150,
+        description: 'SQL description one', curriculum: 'SQL curriculum one', targetAudience: null,
+        learningProcess: 'SQL learning process one', certificates: null, recommendations: null,
+        priority: 31, seoTitle: 'SQL SEO one', seoDescription: 'SQL SEO description one',
+      },
+      {
+        id: 362, status: 'active', name: 'Synthetic native seminar two', slug: 'native-seminar-two', programId: 150,
+        description: 'SQL description two', curriculum: null, targetAudience: null,
+        learningProcess: null, certificates: null, recommendations: null,
+        priority: 32, seoTitle: 'SQL SEO two', seoDescription: 'SQL SEO description two',
+      },
+    ];
+    const nativeSource: SqlPublicSource = {
+      ...source,
+      Seminars: [...source.Seminars, ...nativeSeminars],
+      SeminarsTeacher: [...source.SeminarsTeacher, { seminarId: 361, teacherId: 88 }],
+      Events: [...source.Events, {
+        id: 7361, status: 'active', seminarId: 361, cityId: 2, imageId: 'file-event-7361', teacherId: null,
+        oldPrice: null, newPrice: 0, startAt: '2027-01-10', endAt: '2027-01-11', additionalText: null,
+        duration: null, description: 'SQL event description', registrationFormLink: null,
+        isFree: true, isEventCollection: false,
+      }],
+      EventsAndTeachers: [...source.EventsAndTeachers, { eventId: 7361, teacherId: 88 }],
+    };
+
+    const result = mapSqlPublicContent(nativeSource, options);
+    const programLegacyId = options.acceptedLegacyIds.Programs?.[150];
+
+    expect(result.entities.seminars.map(({ sourceId }) => sourceId)).toEqual([244, 361, 362]);
+    expect(result.entities.teachers.map(({ sourceId }) => sourceId)).toContain(88);
+    expect(result.entities.seminars.find(({ sourceId }) => sourceId === 361)).toMatchObject({
+      sourceId: 361,
+      name: 'Synthetic native seminar one',
+      slug: 'native-seminar-one',
+      legacy_id: `${programLegacyId}/native-seminar-one`,
+      course_group_legacy_id: programLegacyId,
+      learning_mode: 'SQL curriculum one',
+      learning_plan: 'SQL learning process one',
+      order: 31,
+      seo: { seo_title: 'SQL SEO one', seo_description: 'SQL SEO description one' },
+      directTeachers: ['88'],
+    });
+    expect(result.entities.seminars.find(({ sourceId }) => sourceId === 362)?.legacy_id)
+      .toBe(`${programLegacyId}/native-seminar-two`);
+    expect(result.entities.events.find(({ sourceId }) => sourceId === 7361)).toMatchObject({
+      seminar_legacy_id: `${programLegacyId}/native-seminar-one`,
+      primaryTeachers: ['88'],
+      description: 'SQL event description',
+    });
+    expect(result.provenance.exclusions).not.toContainEqual(expect.objectContaining({ table: 'Seminars', sourceId: 361 }));
+    expect(result.provenance.exclusions).toContainEqual({
+      table: 'Events', sourceId: 7002, reason: 'parent seminar 245 is not active',
+    });
+    expect(result.provenance.sourceIdentity).toContainEqual({
+      table: 'Seminars', sourceId: 361, targetSlug: 'native-seminar-one',
+      targetLegacyId: `${programLegacyId}/native-seminar-one`,
+    });
+  });
+
+  it('fails closed for malformed SQL slugs, missing active parents, and colliding derived hierarchy paths', () => {
+    const nativeSeminar = {
+      id: 361, status: 'active', name: 'Synthetic native seminar', slug: 'native-seminar', programId: 150,
+      description: null, curriculum: null, targetAudience: null, learningProcess: null,
+      certificates: null, recommendations: null, priority: 31, seoTitle: '', seoDescription: '',
+    };
+    const withSeminars = (seminars: SqlPublicSource['Seminars'], programs = source.Programs) =>
+      ({ ...source, Seminars: seminars, Programs: programs });
+    const withAcceptedNativeIdentity: SqlPublicContentOptions = {
+      ...options,
+      acceptedLegacyIds: {
+        ...options.acceptedLegacyIds,
+        Seminars: {
+          ...options.acceptedLegacyIds.Seminars,
+          361: 'institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/native-seminar',
+        },
+      },
+    };
+
+    expect(() => mapSqlPublicContent(withSeminars([...source.Seminars, { ...nativeSeminar, slug: '../wrong' }]), withAcceptedNativeIdentity))
+      .toThrow(/Seminars#361.*slug/i);
+    expect(() => mapSqlPublicContent(withSeminars([...source.Seminars, { ...nativeSeminar, programId: 151 }]), withAcceptedNativeIdentity))
+      .toThrow(/Seminars#361.*programId/i);
+    expect(() => mapSqlPublicContent(withSeminars([
+      ...source.Seminars,
+      nativeSeminar,
+      { ...nativeSeminar, id: 362 },
+    ]), withAcceptedNativeIdentity)).toThrow(/collision|duplicate|target identity/i);
+  });
+
   it('maps SQL priority to public order for programs, teachers, and seminars while keeping article priority private', () => {
     const result = run();
     const program = result.entities.programs.find((item) => item.sourceId === 150);

@@ -141,6 +141,34 @@ function syntheticVideoInputs() {
 }
 
 describe('composeSqlDemoRelease', () => {
+  it('keeps active SQL article fields authoritative when accepted corpus supplements are composed', () => {
+    const sqlArticle = {
+      sourceId: 361,
+      legacy_id: 'institute-one/program-one/native-seminar-one',
+      slug: 'native-seminar-one',
+      title: 'Synthetic SQL article title',
+      body: '<p>SQL body remains authoritative</p>',
+      imageId: null,
+      published_date: '2026-10-12T00:00:00.000Z',
+      seo: { seo_title: 'SQL title', seo_description: 'SQL description' },
+    };
+    const input = mapped({ articles: [sqlArticle] });
+    const acceptedCorpus = supplements({ pages: [
+      {
+        sourcePath: staticPagesPath, revision: 'accepted-static-corpus-r1', sha256: corpusHash,
+        page: page('synthetic-static', '<p>Accepted corpus structure</p>'),
+      },
+    ] });
+
+    const release = composeSqlDemoRelease(input, acceptedCorpus, assets(), ownerDecisions());
+
+    expect(release.entities.articles).toEqual([expect.objectContaining(sqlArticle)]);
+    expect(release.entities.pages).toEqual([expect.objectContaining({
+      slug: 'synthetic-static', body: '<p>Accepted corpus structure</p>',
+    })]);
+    expect(JSON.stringify(release.entities.articles)).not.toContain('Accepted corpus structure');
+  });
+
   it('composes existing CMS DTOs from SQL and pinned pages, retaining SQL institute body and private source locations', () => {
     const input = sqlWithOrganizationAndDocuments();
     const before = structuredClone(input);
