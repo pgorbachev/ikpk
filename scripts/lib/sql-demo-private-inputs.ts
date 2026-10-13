@@ -935,7 +935,10 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     const mappedEntity = orgEntityById.get(row.id);
     if (!mappedEntity) continue;
     const matches = pagePositions.filter((item) => item.id === String(row.id) && matchingPages.includes(item.page));
-    if (matches.length !== 1 || matches[0]!.title !== row.name) throw new Error(`OrganizationInfo#${row.id} must match one exact static-page DOM position and title`);
+    const exactTitleMatches = matches.filter((position) => position.title === row.name).length;
+    if (matches.length !== 1 || exactTitleMatches !== 1) {
+      throw new Error(`OrganizationInfo#${row.id} must match one exact static-page DOM position and title (domMatches=${matches.length}, exactTitleMatches=${exactTitleMatches})`);
+    }
     targetLocations.push({
       sourceTable: 'OrganizationInfo', sourceId: row.id, targetCollection: 'pages', targetLegacyId: matches[0]!.page.legacy_id,
       targetField: 'body', sectionKey: `organization-info-${row.id}`, anchor: `section-${matches[0]!.index + 1}`,

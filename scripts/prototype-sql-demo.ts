@@ -181,6 +181,6 @@ main().catch((error) => {
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const safeFrames = [...new Set(stack.split(/\r?\n/).map((line) => line.match(/(sql-demo-[a-z-]+\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter(Boolean))];
   const diagnostic = error instanceof SqlDemoNativeRehearsalError ? error.diagnostic : undefined;
-  process.stderr.write(`${JSON.stringify({ category: name, ...(error instanceof SqlDemoNativeRehearsalError ? { code: error.code } : {}), ...(diagnostic ? { causeCategory: diagnostic.causeCategory, causeFrames: diagnostic.frames } : {}), frames: safeFrames, message: 'details withheld' })}\n`);
+  process.stderr.write(`${JSON.stringify({ category: name, ...(error instanceof SqlDemoNativeRehearsalError ? { code: error.code } : {}), ...(diagnostic ? { causeCategory: diagnostic.causeCategory, causeFrames: diagnostic.frames, ...(diagnostic.signals ? { signals: diagnostic.signals } : {}) } : {}), frames: safeFrames, message: 'details withheld' })}\n`);
   process.exitCode = 1;
 });

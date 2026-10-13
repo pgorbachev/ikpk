@@ -101,9 +101,9 @@ export interface SqlDemoNativePrototypeResult {
 export class SqlDemoNativeRehearsalError extends Error {
   readonly code: string;
   readonly identity?: string;
-  readonly diagnostic?: { causeCategory: string; frames: string[] };
+  readonly diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> };
 
-  constructor(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[] }) {
+  constructor(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> }) {
     super(message);
     this.name = 'SqlDemoNativeRehearsalError';
     this.code = code;
@@ -128,16 +128,23 @@ type TargetRun = {
 const HASH = /^[a-f\d]{64}$/i;
 const TARGET_NAMESPACE = /^ikpk_sql_demo_native(?:_[a-z0-9]+)?$/;
 
-function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[] }): SqlDemoNativeRehearsalError {
+function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> }): SqlDemoNativeRehearsalError {
   return new SqlDemoNativeRehearsalError(code, message, identity, diagnostic);
 }
 
-function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[] } {
+function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[]; signals?: Record<string, number> } {
   const causeCategory = error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/.test(error.name) ? error.name : 'unknown-error';
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const frames = [...new Set(stack.split(/\r?\n/).map((line) =>
     line.match(/((?:sql-demo-[A-Za-z0-9-]+|sql-public-reader)\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter((frame): frame is string => Boolean(frame)))];
-  return { causeCategory, frames };
+  const organizationInfo = error instanceof Error
+    ? error.message.match(/one exact static-page DOM position and title \(domMatches=(\d+), exactTitleMatches=(\d+)\)/)
+    : null;
+  return {
+    causeCategory,
+    frames,
+    ...(organizationInfo ? { signals: { domMatches: Number(organizationInfo[1]), exactTitleMatches: Number(organizationInfo[2]) } } : {}),
+  };
 }
 
 function loopbackOrigin(target: { baseUrl: string; namespace: string }): URL {
