@@ -361,6 +361,60 @@ function normalize(overrides: Partial<Parameters<typeof normalizeSqlDemoPrivateI
   return normalizeSqlDemoPrivateInputs({ config: currentConfig, mapperOptions, nativeSqlPublicSource: source, mapped, ...overrides });
 }
 
+function configWithStaticPageBody(bodyHtml: string) {
+  const bytes = jsonBytes([{ ...pageCorpus[0]!, body_html: bodyHtml }]);
+  const pageBlob = {
+    path: staticPageSupplement.path,
+    revision: staticPageSupplement.revision,
+    sha256: sha256(bytes),
+    bytes,
+  };
+  const approved = JSON.parse(Buffer.from(privateDocuments()['approved-supplements.json'].bytes).toString('utf8')) as {
+    supplements: Record<string, unknown>[];
+  };
+  approved.supplements = approved.supplements.map((pin) => pin.path === pageBlob.path
+    ? { ...pin, sha256: pageBlob.sha256, bytes: bytes.byteLength }
+    : pin);
+  return config({
+    privateJson: privateDocuments({ 'approved-supplements.json': approved }),
+    supplementBlobs: [pageBlob],
+  });
+}
+
+function videoDecisionInput(records: Record<string, unknown>[], seminarRows: { id: number; slug: string; sourceUrl: string }[]) {
+  const nativeSeminars = seminarRows.map(({ id, slug, sourceUrl }) => ({
+    ...source.Seminars[0]!, id, slug, description: `<iframe src="${sourceUrl}"></iframe>`,
+  }));
+  const mappedSeminars = seminarRows.map(({ id, slug, sourceUrl }) => ({
+    ...mapped.entities.seminars[0]!, sourceId: id, slug, legacy_id: slug,
+    description: `<iframe src="${sourceUrl}"></iframe>`,
+  }));
+  const privateConfig = config({
+    acceptedLegacyIds: {
+      ...config().acceptedLegacyIds,
+      Seminars: Object.fromEntries(seminarRows.map(({ id, slug }) => [id, slug])),
+    },
+    privateJson: privateDocuments({
+      'video-source-reference-decisions.json': {
+        schema_version: 1,
+        scope: 'approved SQL video source reference decisions',
+        source_reference_count: records.length,
+        canonicalized_same_host_embed_count: records.filter((row) => row.decision === 'canonicalize_same_https_rutube_embed_id').length,
+        external_safe_link_count: records.filter((row) => row.decision === 'external-link').length,
+        owner_decision_date: '2026-10-12',
+        owner_decision_summary: 'Synthetic source-reference decisions',
+        target_rel: 'noopener noreferrer',
+        records,
+      },
+    }),
+  });
+  return {
+    config: privateConfig,
+    nativeSqlPublicSource: { ...source, Seminars: nativeSeminars },
+    mapped: { ...mapped, entities: { ...mapped.entities, seminars: mappedSeminars } },
+  };
+}
+
 describe('SQL demo private input preparation and normalization', () => {
   it('normalizes canonical decimal-string document IDs and preserves the bound document output', () => {
     const normalized = normalize({ config: documentManifestConfig('801', '702') });
@@ -1138,6 +1192,72 @@ describe('SQL demo private input preparation and normalization', () => {
     ]);
   });
 
+  it('recognizes exact CSS-module Radix triggers and retains the closed static section when SQL content is null', () => {
+    const body = [
+      '<ul>',
+      '<li id="702"><div data-state="closed"><button class="collapsible_trigger__abc-123_X"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button><div class="collapsible_content__panel-456"><p>Accepted section body</p></div></div></li>',
+      '<li id="555"><div data-state="closed"><button class="collapsible_trigger__blank-789"><h2 data-collapsible-title="true">Synthetic blank section</h2></button></div></li>',
+      '<li id="401"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section A</h2></button></div></li>',
+      '</ul>',
+    ].join('');
+    const nativeSource = {
+      ...source,
+      OrganizationInfo: source.OrganizationInfo.map((row) => ({ ...row, content: null })),
+    };
+    const result = normalize({ config: configWithStaticPageBody(body), nativeSqlPublicSource: nativeSource });
+
+    expect(result.composer.acceptedSupplements.pages[0]?.page.body).toBe(body);
+    expect(result.loader.source.OrganizationInfo?.every((row) => row.content === null)).toBe(true);
+    expect(result.composer.acceptedSupplements.targetLocations
+      .filter((location) => location.sourceTable === 'OrganizationInfo')
+      .map(({ sourceId, anchor }) => ({ sourceId, anchor })))
+      .toEqual([{ sourceId: 702, anchor: 'section-1' }, { sourceId: 401, anchor: 'section-3' }]);
+  });
+
+  it.each([
+    ['a class substring', 'prefix-collapsible_trigger__abc123'],
+    ['a lookalike prefix', 'not_collapsible_trigger__abc123'],
+    ['an empty CSS-module suffix', 'collapsible_trigger__'],
+  ])('does not treat %s as a Radix trigger', (_kind, triggerClass) => {
+    const body = `<ul><li id="702"><div data-state="closed"><button class="${triggerClass}"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></div></li></ul>`;
+
+    expect(() => normalize({ config: configWithStaticPageBody(body) }))
+      .toThrow(/OrganizationInfo#702 must match one exact static-page DOM position and title/);
+  });
+
+  it('rejects an OrganizationInfo positional anchor outside the accepted section list', () => {
+    const normalized = normalize();
+    const compositionInput = {
+      ...mapped,
+      entities: {
+        ...mapped.entities,
+        institutes: [], programs: [], teachers: [], events: [], articles: [], news: [], promotions: [], videos: [], seminars: [],
+        organizationInfo: mapped.entities.organizationInfo, documents: [], instituteAdditionalInfo: [],
+      },
+    };
+    const targetLocations = normalized.composer.acceptedSupplements.targetLocations
+      .filter((location) => location.sourceTable === 'OrganizationInfo')
+      .map((location) => location.sourceId === 702 ? { ...location, anchor: 'section-99' } : location);
+
+    expect(() => composeSqlDemoRelease(
+      compositionInput,
+      { ...normalized.composer.acceptedSupplements, targetLocations },
+      { images: [], documents: [] },
+      { approvedUnlinkedArticleImages: [], approvedPublicRichTextImages: [], missingOriginalReplacements: [], videoReferences: [] },
+    )).toThrow(/accepted anchor section-99 is outside the section list/);
+  });
+
+  it.each([
+    ['duplicate position identity', '<ul><li id="702"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></div></li><li id="702"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></div></li></ul>'],
+    ['a mismatched title', '<ul><li id="702"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Different title</h2></button></div></li></ul>'],
+    ['an open panel', '<ul><li id="702"><div data-state="open"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></div></li></ul>'],
+    ['a button outside the Radix div', '<ul><li id="702"><section data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></section></li></ul>'],
+    ['a nested non-Radix wrapper', '<ul><li id="702"><section><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section B</h2></button></div></section></li><li id="401"><div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">Synthetic SQL section A</h2></button></div></li></ul>'],
+  ])('rejects %s as an OrganizationInfo target', (_kind, body) => {
+    expect(() => normalize({ config: configWithStaticPageBody(body) }))
+      .toThrow(/OrganizationInfo#702 must match one exact static-page DOM position and title/);
+  });
+
   it('normalizes one pinned Seminars.description video decision while preserving the query string', () => {
     const decisionFile = {
       schema_version: 1,
@@ -1232,6 +1352,139 @@ describe('SQL demo private input preparation and normalization', () => {
       .toBe(`<iframe src="${rutubeUrl}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`);
     expect(release.entities.seminars[0]?.description)
       .toBe(`<iframe src="${rutubeUrl}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`);
+  });
+
+  it('normalizes seven approved video decisions while keeping query-bearing Rutube and VK references as links', () => {
+    const rows = Array.from({ length: 7 }, (_, index) => {
+      const id = 900 + index;
+      const slug = `synthetic-seminar-${id}`;
+      if (index < 5) {
+        const embedId = String(index + 1).repeat(32);
+        const safeTarget = `https://rutube.ru/play/embed/${embedId}`;
+        const sourceUrl = `${safeTarget}?p=synthetic-${id}`;
+        return {
+          id, slug, sourceUrl,
+          record: {
+            decision: 'canonicalize_same_https_rutube_embed_id',
+            link_text: null,
+            safe_target_href: safeTarget,
+            source_id: id,
+            source_slug: null,
+            source_table: 'Seminars',
+            source_url: sourceUrl,
+            target_rel: null,
+          },
+          expected: `<iframe src="${safeTarget}/" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`,
+          action: 'rutube-trailing-slash',
+        };
+      }
+      const sourceUrl = index === 5
+        ? `https://rutube.ru/play/embed/${'a'.repeat(32)}?p=synthetic-external-${id}`
+        : `https://vk.com/video-${id}_${id + 1}?list=synthetic-${id}`;
+      return {
+        id, slug, sourceUrl,
+        record: {
+          decision: 'external-link',
+          link_text: `Synthetic external video ${id}`,
+          safe_target_href: sourceUrl,
+          source_id: id,
+          source_slug: slug,
+          source_table: 'Seminars',
+          source_url: sourceUrl,
+          target_rel: 'noopener noreferrer',
+        },
+        expected: `<a href="${sourceUrl}" rel="noopener noreferrer">Открыть видео</a>`,
+        action: 'external-link',
+      };
+    });
+    const input = videoDecisionInput(rows.map(({ record }) => record), rows);
+    const normalized = normalize(input);
+    const decisions = normalized.composer.ownerDecisions.videoReferences;
+
+    expect(decisions).toHaveLength(7);
+    expect(decisions.map(({ sourceId, originalURL, action, expectedOutput }) => ({ sourceId, originalURL, action, expectedOutput })))
+      .toEqual(rows.map(({ id, sourceUrl, expected, action }) => ({ sourceId: id, originalURL: sourceUrl, action, expectedOutput: expected })));
+
+    const compositionInput = {
+      ...input.mapped,
+      entities: {
+        ...input.mapped.entities,
+        institutes: [], programs: [], teachers: [], events: [], articles: [], news: [], promotions: [], videos: [],
+        organizationInfo: [], documents: [], instituteAdditionalInfo: [],
+      },
+    };
+    const release = composeSqlDemoRelease(
+      compositionInput,
+      { ...normalized.composer.acceptedSupplements, targetLocations: [] },
+      { images: [], documents: [] },
+      { approvedUnlinkedArticleImages: [], approvedPublicRichTextImages: [], missingOriginalReplacements: [], videoReferences: decisions },
+    );
+    expect(release.entities.seminars.map(({ sourceId, description }) => ({ sourceId, description })))
+      .toEqual(rows.map(({ id, expected }) => ({ sourceId: id, description: expected })));
+    expect(release.entities.seminars.slice(5).every(({ description }) => !description?.includes('<iframe'))).toBe(true);
+  });
+
+  it.each([
+    ['query-bearing target', (url: string) => `${url}?p=synthetic`],
+    ['userinfo target', (url: string) => url.replace('https://', 'https://synthetic-user@')],
+    ['new-host target', (url: string) => url.replace('https://rutube.ru', 'https://rutube.synthetic.invalid')],
+    ['different embed identity', (url: string) => url.replace(/[0-9a-f]{32}$/i, 'b'.repeat(32))],
+  ])('rejects a Rutube canonical decision with a %s', (_kind, changeTarget) => {
+    const sourceUrl = `https://rutube.ru/play/embed/${'a'.repeat(32)}?p=synthetic-900`;
+    const safeTarget = `https://rutube.ru/play/embed/${'a'.repeat(32)}`;
+    const seminarRows = [{ id: 900, slug: 'synthetic-seminar-900', sourceUrl }];
+    const record = {
+      decision: 'canonicalize_same_https_rutube_embed_id',
+      link_text: null,
+      safe_target_href: changeTarget(safeTarget),
+      source_id: 900,
+      source_slug: null,
+      source_table: 'Seminars',
+      source_url: sourceUrl,
+      target_rel: null,
+    };
+
+    expect(() => normalize(videoDecisionInput([record], seminarRows))).toThrow();
+  });
+
+  it('rejects a video decision whose external source URL is not the exact URL in source HTML', () => {
+    const sourceUrl = 'https://vk.com/video-900_901?list=synthetic-original';
+    const record = {
+      decision: 'external-link',
+      link_text: 'Synthetic VK video',
+      safe_target_href: 'https://vk.com/video-900_901?list=synthetic-altered',
+      source_id: 900,
+      source_slug: 'synthetic-seminar-900',
+      source_table: 'Seminars',
+      source_url: 'https://vk.com/video-900_901?list=synthetic-altered',
+      target_rel: 'noopener noreferrer',
+    };
+
+    expect(() => normalize(videoDecisionInput([record], [{ id: 900, slug: 'synthetic-seminar-900', sourceUrl }]))).toThrow();
+  });
+
+  it('does not compose a source iframe without a matching approved decision', () => {
+    const sourceUrl = `https://rutube.ru/play/embed/${'c'.repeat(32)}?p=synthetic-unapproved`;
+    const input = videoDecisionInput([], [{ id: 900, slug: 'synthetic-seminar-900', sourceUrl }]);
+    const normalized = normalize(input);
+
+    const compositionInput = {
+      ...input.mapped,
+      entities: {
+        ...input.mapped.entities,
+        institutes: [], programs: [], teachers: [], events: [], articles: [], news: [], promotions: [], videos: [],
+        organizationInfo: [], documents: [], instituteAdditionalInfo: [],
+      },
+    };
+    expect(() => composeSqlDemoRelease(
+      compositionInput,
+      { ...normalized.composer.acceptedSupplements, targetLocations: [] },
+      { images: [], documents: [] },
+      {
+        approvedUnlinkedArticleImages: [], approvedPublicRichTextImages: [], missingOriginalReplacements: [],
+        videoReferences: normalized.composer.ownerDecisions.videoReferences,
+      },
+    )).toThrow(/unmatched iframe in description/i);
   });
 
   it('rejects document binding metadata without a matching verified byte proof', () => {
