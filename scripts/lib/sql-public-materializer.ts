@@ -741,7 +741,9 @@ export async function materializeSqlPublicContent(
   if (options.classification.status !== 'pending-confirmation') throw new Error('SQL classification must remain pending-confirmation');
 
   // Validate source-ID coverage and every required public projection before the first target write.
-  const plans = entityPlans(mapped, options.classification);
+  // Programs.description is nullable in the active CMS schema and in the accepted
+  // SQL projection. Keep the write path aligned with the conservation projection.
+  const plans = entityPlans(mapped, options.classification, true);
   const existing = await preflightPlans(plans, options.target);
   const payloads = new Map<EntityPlan, RecordValue>();
   for (const plan of plans) payloads.set(plan, await payloadFor(plan, options));

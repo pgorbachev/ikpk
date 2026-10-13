@@ -517,6 +517,25 @@ describe('concrete native local rehearsal adapter', () => {
     await expect(io.prepareResumeMediaInventory(owned, [proof, { ...proof, sourceFileId: '72', sourceUrl: 'media/2024/03/08/extra.png' }])).rejects.toThrow();
   });
 
+  it('resumes static documents only when the complete path set and bytes match approved proofs', async () => {
+    const { config } = await makeConfiguration();
+    (config.targets.A as typeof config.targets.A & { resumeExistingMediaOnly?: boolean }).resumeExistingMediaOnly = true;
+    delete (config.targets as { B?: unknown }).B;
+    await mkdir(config.targets.A.staticFilesDirectory, { recursive: true, mode: 0o700 });
+    const bytes = Buffer.from('%PDF-1.7\napproved document\n%%EOF\n');
+    const relativePath = 'documents/approved-sha.pdf';
+    await mkdir(join(config.targets.A.staticFilesDirectory, 'documents'), { recursive: true, mode: 0o700 });
+    await writeFile(join(config.targets.A.staticFilesDirectory, relativePath), bytes, { mode: 0o600 });
+    const { createSqlDemoNativeLocalIo } = await import('./sql-demo-native-local-io.js');
+    const io = createSqlDemoNativeLocalIo(config) as SqlDemoNativeRehearsalIo;
+    configurations.set(io as object, config);
+
+    await expect(io.verifyExistingStaticDocuments([{ publicPath: `/static-files/${relativePath}`, bytes }])).resolves.toBeUndefined();
+    await expect(io.verifyExistingStaticDocuments([{ publicPath: `/static-files/${relativePath}`, bytes: Buffer.from('%PDF-wrong') }])).rejects.toThrow();
+    await writeFile(join(config.targets.A.staticFilesDirectory, 'unexpected.pdf'), bytes, { mode: 0o600 });
+    await expect(io.verifyExistingStaticDocuments([{ publicPath: `/static-files/${relativePath}`, bytes }])).rejects.toThrow();
+  });
+
   it('captures only private hashed release and conservation witnesses, never token or SQL row content', async () => {
     const marker = 'synthetic-private-row-must-not-escape';
     const storedBytes = Buffer.from('synthetic stored media bytes');

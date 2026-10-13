@@ -65,6 +65,7 @@ type SqlDemoNativeRehearsalIo = {
   uploadRaster(target: OwnedTarget, inventory: unknown, proof: SqlDemoOfflineAssetProof, bytes: Uint8Array): Promise<UploadedRaster>;
   readStoredMediaBytes(target: OwnedTarget, mediaId: number): Promise<Uint8Array>;
   readPdfBytes(path: string): Promise<Uint8Array>;
+  verifyExistingStaticDocuments(documents: readonly { publicPath: string; bytes: Uint8Array }[]): Promise<void>;
   writeStaticDocument(target: OwnedTarget, publicPath: string, bytes: Uint8Array): Promise<void>;
   readStaticDocument(target: OwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: OwnedTarget): Promise<OwnedTarget>;
@@ -198,6 +199,7 @@ function options(overrides: Partial<RehearsalInput> = {}): RehearsalInput {
     uploadRaster: vi.fn(async () => ({ id: 71, url: '/uploads/actual-upload-71.webp' })),
     readStoredMediaBytes: vi.fn(async () => Buffer.from('synthetic stored bytes')),
     readPdfBytes: vi.fn(async () => Buffer.from('%PDF-1.7\nsynthetic document\n%%EOF\n')),
+    verifyExistingStaticDocuments: vi.fn(async () => undefined),
     writeStaticDocument: vi.fn(async () => undefined),
     readStaticDocument: vi.fn(async () => Buffer.from('%PDF-1.7\nsynthetic document\n%%EOF\n')),
     createFreshClient: vi.fn(async (target) => ({

@@ -198,9 +198,6 @@ async function assertResumableMediaTarget(target: SqlDemoNativeLocalIoOptions['t
   if (!database.isFile() || database.isSymbolicLink() || (uid !== undefined && database.uid !== uid)) {
     throw fail('Existing prototype target database is not an owner-owned regular file');
   }
-  if ((await readdir(target.staticFilesDirectory)).length !== 0) {
-    throw fail('Existing prototype target already contains static document output');
-  }
   const checkTree = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
@@ -211,6 +208,7 @@ async function assertResumableMediaTarget(target: SqlDemoNativeLocalIoOptions['t
     }
   };
   await checkTree(target.uploadDirectory);
+  await checkTree(target.staticFilesDirectory);
 }
 
 async function assertPortFree(endpoint: string): Promise<void> {
@@ -886,6 +884,37 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       return fetchTargetBytes(target, value.url);
     },
     async readPdfBytes(path) { return safePrivateRead(config.privateInputsRoot, path); },
+    async verifyExistingStaticDocuments(documents) {
+      const targetConfig = config.targets.A;
+      if (!targetConfig?.resumeExistingMediaOnly) throw fail('Static document resume verification is limited to the configured A continuation');
+      const expected = new Map<string, Uint8Array>();
+      for (const document of documents) {
+        const relativePath = document.publicPath.replace(/^\/static-files\//, '');
+        const decoded = relativePath.split('/').map((part) => { try { return decodeURIComponent(part); } catch { return '\0'; } });
+        if (relativePath === document.publicPath || relativePath.includes('\\') || decoded.some((part) => !part || part === '.' || part === '..' || part.includes('/') || part.includes('\\') || part.includes('\0')) || expected.has(relativePath)) {
+          throw fail('Approved static document paths are invalid or duplicated');
+        }
+        expected.set(relativePath, document.bytes);
+      }
+      const actual = new Set<string>();
+      const walk = async (directory: string, prefix = ''): Promise<void> => {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          const path = join(directory, entry.name);
+          const stat = await lstat(path);
+          if (stat.isSymbolicLink() || (typeof process.getuid === 'function' && stat.uid !== process.getuid())) throw fail('Static document tree contains an unsafe entry');
+          const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (stat.isDirectory()) await walk(path, relativePath);
+          else if (stat.isFile()) actual.add(relativePath);
+          else throw fail('Static document tree contains an unsupported entry');
+        }
+      };
+      await walk(targetConfig.staticFilesDirectory);
+      if (actual.size !== expected.size || [...expected.keys()].some((path) => !actual.has(path))) throw fail('Static document inventory does not match the approved source set');
+      for (const [relativePath, expectedBytes] of expected) {
+        const bytes = await safePrivateRead(targetConfig.staticFilesDirectory, join(targetConfig.staticFilesDirectory, ...relativePath.split('/')));
+        if (bytes.byteLength !== expectedBytes.byteLength || sha256(bytes) !== sha256(expectedBytes)) throw fail('Static document bytes do not match the approved source proof');
+      }
+    },
     async writeStaticDocument(target, publicPath, bytes) {
       const state = owned(target); await verifyTargetProcess(target, state);
       const targetConfig = config.targets[target.name];
@@ -916,7 +945,8 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       if (relativePath === publicPath || relativePath.includes('\\') || decoded.some((part) => !part || part === '.' || part === '..' || part.includes('/') || part.includes('\\') || part.includes('\0'))) throw fail('Static PDF path is invalid');
       const bytes = await safePrivateRead(targetConfig.staticFilesDirectory, join(targetConfig.staticFilesDirectory, ...relativePath.split('/')));
       const expected = owned(target).documents.get(publicPath);
-      if (!expected || expected.sha256 !== sha256(bytes) || expected.bytes !== bytes.byteLength) throw fail('Published static document bytes do not match the owned write witness');
+      if (expected && (expected.sha256 !== sha256(bytes) || expected.bytes !== bytes.byteLength)) throw fail('Published static document bytes do not match the owned write witness');
+      if (!expected && !config.targets[target.name]?.resumeExistingMediaOnly) throw fail('Published static document bytes have no owned write witness');
       return bytes;
     },
     async createFreshClient(target) {

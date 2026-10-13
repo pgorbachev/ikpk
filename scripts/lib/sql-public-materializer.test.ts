@@ -177,7 +177,7 @@ class SyntheticStrapiTarget implements SqlStrapiRestClient {
   private assertPublishable(collection: Collection, data: Record<string, unknown>): void {
     const required: Record<Collection, string[]> = {
       institutes: ['name', 'slug', 'description', 'order', 'seo'],
-      'course-groups': ['name', 'slug', 'institute', 'description', 'seo'],
+      'course-groups': ['name', 'slug', 'institute', 'seo'],
       teachers: ['name', 'slug', 'trait'],
       seminars: ['name', 'slug', 'course_group', 'description', 'seo', 'documents_state'],
       'schedule-entries': ['seminar', 'startAt', 'endAt', 'city', 'entry_status'],
@@ -354,6 +354,17 @@ function connectedMediaIds(value: unknown): number[] {
 }
 
 describe('materializeSqlPublicContent', () => {
+  it('preserves nullable SQL program descriptions accepted by the CMS schema', async () => {
+    const target = new SyntheticStrapiTarget('nullable-program-description');
+    const media = new SyntheticMediaResolver();
+    const mapped = structuredClone(MAPPED);
+    mapped.entities.programs[0]!.description = null;
+
+    await materializeSqlPublicContent(mapped, options(target, media));
+
+    expect(oneByLegacyId(target, 'course-groups', 'program-one').description).toBeNull();
+  });
+
   it('writes all mapped public fields, resolves source IDs to document IDs, and links relations after parent writes', async () => {
     const target = new SyntheticStrapiTarget('target-a');
     const media = new SyntheticMediaResolver();

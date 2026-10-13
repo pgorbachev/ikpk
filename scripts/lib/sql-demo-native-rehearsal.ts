@@ -14,7 +14,7 @@ import { readSqlPublicSource } from './sql-public-reader.js';
 import type { SqlPublicContentResult, SqlPublicSource } from './sql-public-content.js';
 import { mapSqlPublicContent } from './sql-public-content.js';
 import type { SqlMaterializerOptions, SqlResolvedMedia, SqlStrapiRestClient } from './sql-public-materializer.js';
-import { materializeSqlPublicContent } from './sql-public-materializer.js';
+import { materializeSqlPublicContent, projectSqlPublicContentForConservation } from './sql-public-materializer.js';
 import { allowedSourceUrl, allowedSqlStorageKey } from './strapi-media-inventory.js';
 
 type TargetName = 'A' | 'B';
@@ -54,6 +54,7 @@ export interface SqlDemoNativeRehearsalIo {
   uploadRaster(target: SqlDemoNativeOwnedTarget, inventory: unknown, proof: SqlDemoOfflineAssetProof, bytes: Uint8Array): Promise<SqlDemoNativeUpload>;
   readStoredMediaBytes(target: SqlDemoNativeOwnedTarget, mediaId: number): Promise<Uint8Array>;
   readPdfBytes(path: string): Promise<Uint8Array>;
+  verifyExistingStaticDocuments(documents: readonly { publicPath: string; bytes: Uint8Array }[]): Promise<void>;
   writeStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string, bytes: Uint8Array): Promise<void>;
   readStaticDocument(target: SqlDemoNativeOwnedTarget, publicPath: string): Promise<Uint8Array>;
   createFreshClient(target: SqlDemoNativeOwnedTarget): Promise<SqlDemoNativeOwnedTarget>;
@@ -140,7 +141,7 @@ export function classifyMediaSourceUrls(values: readonly string[]): SqlDemoNativ
 export class SqlDemoNativeRehearsalError extends Error {
   readonly code: string;
   readonly identity?: string;
-  readonly diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> };
+  readonly diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string };
 
   constructor(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> }) {
     super(message);
@@ -167,15 +168,17 @@ type TargetRun = {
 const HASH = /^[a-f\d]{64}$/i;
 const TARGET_NAMESPACE = /^ikpk_sql_demo_native(?:_[a-z0-9]+)?$/;
 
-function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number> }): SqlDemoNativeRehearsalError {
+function safeFailure(code: string, message: string, identity?: string, diagnostic?: { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string }): SqlDemoNativeRehearsalError {
   return new SqlDemoNativeRehearsalError(code, message, identity, diagnostic);
 }
 
-function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[]; signals?: Record<string, number> } {
+function safeDiagnostic(error: unknown): { causeCategory: string; frames: string[]; signals?: Record<string, number>; sourceIdentity?: string; field?: string } {
   const causeCategory = error instanceof Error && /^[A-Za-z][A-Za-z0-9]*$/.test(error.name) ? error.name : 'unknown-error';
   const stack = error instanceof Error ? error.stack ?? '' : '';
+  const safeContext = error instanceof Error ? error.message.match(/^([A-Za-z][A-Za-z0-9]*#\d+):/) : null;
+  const safeField = error instanceof Error ? error.message.match(/\b([A-Za-z][A-Za-z0-9_]*) (?:must be|is required|is invalid|verification changed|is missing)\b/) : null;
   const frames = [...new Set(stack.split(/\r?\n/).map((line) =>
-    line.match(/((?:sql-demo-[A-Za-z0-9-]+|sql-public-reader)\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter((frame): frame is string => Boolean(frame)))];
+    line.match(/((?:sql-demo-[A-Za-z0-9-]+|sql-public-(?:reader|materializer))\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter((frame): frame is string => Boolean(frame)))];
   const organizationInfo = error instanceof Error
     ? error.message.match(/one exact static-page DOM position and title \(domMatches=(\d+), exactTitleMatches=(\d+)\)/)
     : null;
@@ -188,6 +191,8 @@ function safeDiagnostic(error: unknown): { causeCategory: string; frames: string
   return {
     causeCategory,
     frames,
+    ...(safeContext ? { sourceIdentity: safeContext[1] } : {}),
+    ...(safeField ? { field: safeField[1] } : {}),
     ...((error as { safeHttpStatus?: unknown } | null)?.safeHttpStatus && Number.isSafeInteger((error as { safeHttpStatus: number }).safeHttpStatus)
       ? { signals: { httpStatus: (error as { safeHttpStatus: number }).safeHttpStatus } }
       : {}),
@@ -587,7 +592,11 @@ async function materializeTarget(
     },
     classification,
   };
-  await materializeSqlPublicContent(release as never, options);
+  try {
+    await materializeSqlPublicContent(release as never, options);
+  } catch (error) {
+    throw safeFailure('CONTENT_MATERIALIZATION_FAILED', 'Approved content failed CMS materialization', safeDiagnostic(error).sourceIdentity, safeDiagnostic(error));
+  }
 }
 
 async function importTarget(
@@ -599,6 +608,7 @@ async function importTarget(
   pdfBytes: Map<string, Uint8Array>,
   io: SqlDemoNativeRehearsalIo,
   prevalidatedInventory?: unknown,
+  resumeExistingStaticFiles = false,
 ): Promise<TargetRun> {
   let inventory: unknown;
   if (prevalidatedInventory !== undefined) inventory = prevalidatedInventory;
@@ -614,10 +624,12 @@ async function importTarget(
     const bytes = pdfBytes.get(document.sourceFileId);
     if (!bytes) throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved document bytes were not retained for publication', `Files#${document.sourceFileId}`);
     const publicPath = publicDocumentPath(document, mapped, normalized);
-    try {
-      await io.writeStaticDocument(target, publicPath, bytes);
-    } catch (error) {
-      throw safeFailure('DOCUMENT_PUBLISH_FAILED', 'Approved static document could not be published', `Files#${document.sourceFileId}`, safeDiagnostic(error));
+    if (!resumeExistingStaticFiles) {
+      try {
+        await io.writeStaticDocument(target, publicPath, bytes);
+      } catch (error) {
+        throw safeFailure('DOCUMENT_PUBLISH_FAILED', 'Approved static document could not be published', `Files#${document.sourceFileId}`, safeDiagnostic(error));
+      }
     }
     await verifyPublishedPdf(target, document, publicPath, io);
   }
@@ -883,6 +895,17 @@ export async function runSqlDemoNativePrototype(
     }
 
     const pdfBytes = await readApprovedPdfBytes(assets, input.io);
+    if (input.target.resumeExistingMediaOnly) {
+      try {
+        await input.io.verifyExistingStaticDocuments(assets.offlineDocuments.map((proof) => {
+          const bytes = pdfBytes.get(proof.sourceFileId);
+          if (!bytes) throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved document bytes were not retained for resume validation', `Files#${proof.sourceFileId}`);
+          return { publicPath: publicDocumentPath(proof, mapped, normalized), bytes };
+        }));
+      } catch (error) {
+        throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing static documents do not exactly match approved SQL file proofs', undefined, safeDiagnostic(error));
+      }
+    }
     // Exercise the complete public composer before CMS startup. The raster URLs are
     // deliberately inert placeholders: this output is validation-only and is never
     // materialized or treated as target evidence.
@@ -903,6 +926,13 @@ export async function runSqlDemoNativePrototype(
         { images: preflightImages, documents: preflightDocuments },
         normalized.composer.ownerDecisions,
       );
+      const approvedRasterIds = new Set(assets.offlineMedia.map((proof) => String(proof.sourceFileId)));
+      const contentPlans = projectSqlPublicContentForConservation(mapped, normalized.materializer);
+      for (const plan of contentPlans) {
+        if (plan.image?.sourceId != null && !approvedRasterIds.has(plan.image.sourceId)) {
+          throw safeFailure('MEDIA_BINDING_FAILED', 'Mapped content references a raster outside the approved source set', `${plan.sourceTable}#${plan.sourceId ?? 'unknown'}`);
+        }
+      }
     } catch (error) {
       throw safeFailure('COMPOSITION_PREFLIGHT_FAILED', 'Approved content failed full release composition before target startup', undefined, safeDiagnostic(error));
     }
@@ -928,7 +958,7 @@ export async function runSqlDemoNativePrototype(
       try { priorMediaInventory = await input.io.prepareResumeMediaInventory(target, assets.offlineMedia); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Persisted prototype media claims do not exactly match the approved raster set', undefined, safeDiagnostic(error)); }
     }
-    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io, priorMediaInventory);
+    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io, priorMediaInventory, input.target.resumeExistingMediaOnly === true);
     assertSqlDemoNativeConservation(imported.release, normalized.materializer, imported.readback, imported.readback);
 
     if (!input.io.captureLiveSnapshot) throw safeFailure('LIVE_SNAPSHOT_UNAVAILABLE', 'Prototype adapter does not provide live CMS snapshot capture');

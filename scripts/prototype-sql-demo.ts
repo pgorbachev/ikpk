@@ -262,6 +262,6 @@ main().catch((error) => {
   const stack = error instanceof Error ? error.stack ?? '' : '';
   const safeFrames = [...new Set(stack.split(/\r?\n/).map((line) => line.match(/((?:sql-demo-[a-z-]+|prototype-sql-demo)\.ts):(\d+):(\d+)/)?.slice(1).join(':')).filter(Boolean))];
   const diagnostic = error instanceof SqlDemoNativeRehearsalError ? error.diagnostic : undefined;
-  process.stderr.write(`${JSON.stringify({ category: name, ...(error instanceof SqlDemoNativeRehearsalError ? { code: error.code } : {}), ...(diagnostic ? { causeCategory: diagnostic.causeCategory, causeFrames: diagnostic.frames, ...(diagnostic.signals ? { signals: diagnostic.signals } : {}) } : {}), frames: safeFrames, message: 'details withheld' })}\n`);
+  process.stderr.write(`${JSON.stringify({ category: name, ...(error instanceof SqlDemoNativeRehearsalError ? { code: error.code, ...(error.identity && /^[A-Za-z][A-Za-z0-9]*#\d+$/.test(error.identity) ? { sourceIdentity: error.identity } : {}) } : {}), ...(diagnostic ? { causeCategory: diagnostic.causeCategory, causeFrames: diagnostic.frames, ...(diagnostic.sourceIdentity ? { sourceIdentity: diagnostic.sourceIdentity } : {}), ...(diagnostic.field && /^[A-Za-z][A-Za-z0-9_]*$/.test(diagnostic.field) ? { field: diagnostic.field } : {}), ...(diagnostic.signals ? { signals: diagnostic.signals } : {}) } : {}), frames: safeFrames, message: 'details withheld' })}\n`);
   process.exitCode = 1;
 });
