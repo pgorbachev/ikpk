@@ -61,12 +61,12 @@ function target(nonce: string, mediaId: number, mediaUrl: string, avatarId: numb
   });
   return {
     collections: {
-      institutes: [row(1, 'institutes', 'institutes/one', { name: 'Synthetic Institute', slug: 'one', shortName: null, description: 'Synthetic institute description', order: 1, seo: { seo_title: 'Institute SEO', seo_description: 'Institute summary' } })],
+      institutes: [row(1, 'institutes', 'institutes/one', { name: 'Synthetic Institute', slug: 'one', shortName: null, description: 'Synthetic institute description', image: [], order: 1, seo: { seo_title: 'Institute SEO', seo_description: 'Institute summary' } })],
       'course-groups': [
-        row(2, 'course-groups', 'program-one', { name: 'Synthetic Program One', slug: 'program-one', description: null, order: 2, is_article_category: true, seo: { seo_title: 'Program SEO one', seo_description: 'Program summary one' }, institute: relation('institutes', 'institutes/one') }),
-        row(3, 'course-groups', 'program-two', { name: 'Synthetic Program Two', slug: 'program-two', description: 'Program two description', order: 3, is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' }, institute: relation('institutes', 'institutes/one') }),
+        row(2, 'course-groups', 'program-one', { name: 'Synthetic Program One', slug: 'program-one', description: null, image: [], order: 2, is_article_category: true, seo: { seo_title: 'Program SEO one', seo_description: 'Program summary one' }, institute: relation('institutes', 'institutes/one') }),
+        row(3, 'course-groups', 'program-two', { name: 'Synthetic Program Two', slug: 'program-two', description: 'Program two description', image: [], order: 3, is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' }, institute: relation('institutes', 'institutes/one') }),
       ],
-      teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: { id: avatarId, url: avatarUrl } })],
+      teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: [{ id: avatarId, url: avatarUrl }] })],
       articles: [row(4, 'articles', 'article-one', {
         title: 'Synthetic Article', slug: 'article-one', body, published_date: '2021-03-04',
         seo: { seo_title: 'Article SEO', seo_description: 'Article summary' }, image: { id: mediaId, url: mediaUrl },
@@ -104,7 +104,10 @@ function tenCollectionFixture(): { release: SqlDemoRelease; a: SqlDemoStrapi5Rea
 describe('native SQL release conservation', () => {
   it('CORRECTIVE REVIEW accepts native teacher.photo as a multiple-media array', () => {
     const { release, a, b } = tenCollectionFixture();
-    for (const rb of [a, b]) rb.collections.teachers![0]!.photo = [rb.collections.teachers![0]!.photo];
+    for (const rb of [a, b]) {
+      const currentPhoto = rb.collections.teachers![0]!.photo as unknown[];
+      rb.collections.teachers![0]!.photo = [currentPhoto[0]];
+    }
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
   });
 
@@ -195,7 +198,7 @@ describe('native SQL release conservation', () => {
       const media = rb.media[0]!;
       (media.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources[AVATAR_URL] = { version: 1, sha256: SOURCE_SHA, storedSha256: STORED_SHA };
       (rb as {media: SqlDemoStrapi5Readback['media']}).media = [media];
-      rb.collections.teachers![0]!.photo = { id: media.id, url: media.url };
+      rb.collections.teachers![0]!.photo = [{ id: media.id, url: media.url }];
       rb.collections.articles![0]!.body = `<img src="${media.url}">`;
     }
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
@@ -253,7 +256,7 @@ describe('native SQL release conservation', () => {
       const media = rb.media[0]!;
       (media.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources[AVATAR_URL] = { version: 1, sha256: SOURCE_SHA, storedSha256: STORED_SHA };
       (rb as {media: SqlDemoStrapi5Readback['media']}).media = [media];
-      rb.collections.teachers![0]!.photo = { id: media.id, url: media.url };
+      rb.collections.teachers![0]!.photo = [{ id: media.id, url: media.url }];
     }
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
   });
