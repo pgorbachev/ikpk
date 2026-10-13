@@ -548,6 +548,92 @@ describe('SQL demo private input preparation and normalization', () => {
     expect(() => normalize({ config: extra })).toThrow(/Teachers#999.*(active|classification|coverage)/i);
   });
 
+  it('accepts descriptive owner source and classification prose without expanding machine-authorized scope', () => {
+    const owner = JSON.parse(Buffer.from(config().privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+      ownerDecision: Record<string, unknown>;
+      classifications: {
+        confidenceAndEvidenceRemainAsCandidateValues: boolean;
+        productionAcceptance: boolean;
+        people: { sourceTeacherId: number; candidateTrait: string; confidence: string; evidence: string[]; demoProvisionalApproved: boolean; candidatePrimaryApprovalUnchanged: string; productionAcceptance: boolean }[];
+        articles: { sourceArticleId: number; sourceProgramIds: number[]; confidence: string; evidence: string[]; demoProvisionalApproved: boolean; candidatePrimaryApprovalUnchanged: string; productionAcceptance: boolean }[];
+      };
+      mediaAllowlist: { exactIdentityCount: number; entries: { sourceFileId: string }[] };
+    };
+    owner.ownerDecision.source = 'Synthetic source note; prose is descriptive and carries no authorization.';
+    owner.ownerDecision.classification = 'Synthetic classification note; prose does not approve production or additional media.';
+    const input = config({ privateJson: privateDocuments({ 'demo-owner-decisions.json': owner }) });
+    const result = normalize({ config: input });
+
+    expect(result.mapperOptions.classificationCandidates).toEqual({
+      teachers: [{ sourceId: 101, trait: 'teacher' }],
+      articles: [{ sourceId: 301, sourceProgramIds: [501] }],
+    });
+    expect(result.materializer).toMatchObject({
+      status: 'pending-confirmation',
+      teachers: [{ sourceId: 101, trait: 'teacher' }],
+      articles: [{ sourceId: 301, sourceProgramIds: [501] }],
+    });
+    expect(result.composer.ownerDecisions.approvedUnlinkedArticleImages).toEqual([
+      { sourceFileId: 'body-granted', sourceUrl: '/synthetic/body-granted.png', decisionId: expect.any(String) },
+    ]);
+    expect(owner.ownerDecision.demoWriteOrImportAuthorization).toBe(true);
+    expect(owner.ownerDecision.productionAcceptance).toBe(false);
+    expect(owner.classifications.confidenceAndEvidenceRemainAsCandidateValues).toBe(true);
+    expect(owner.classifications.productionAcceptance).toBe(false);
+    expect(owner.classifications.people).toEqual([expect.objectContaining({
+      sourceTeacherId: 101, candidateTrait: 'teacher', confidence: 'high', evidence: ['synthetic evidence'],
+      demoProvisionalApproved: true, candidatePrimaryApprovalUnchanged: 'pending', productionAcceptance: false,
+    })]);
+    expect(owner.classifications.articles).toEqual([expect.objectContaining({
+      sourceArticleId: 301, sourceProgramIds: [501], confidence: 'medium', evidence: ['synthetic evidence'],
+      demoProvisionalApproved: true, candidatePrimaryApprovalUnchanged: 'pending', productionAcceptance: false,
+    })]);
+    expect(owner.mediaAllowlist.exactIdentityCount).toBe(1);
+    expect(owner.mediaAllowlist.entries.map(({ sourceFileId }) => sourceFileId)).toEqual(['body-granted']);
+  });
+
+  it('rejects malformed prose-shaped source and classification fields', () => {
+    const invalidValues: [string, unknown][] = [
+      ['empty', '   '], ['array', []], ['boolean', false],
+    ];
+    for (const key of ['source', 'classification'] as const) {
+      for (const [label, value] of invalidValues) {
+        const owner = JSON.parse(Buffer.from(config().privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+          ownerDecision: Record<string, unknown>;
+        };
+        owner.ownerDecision[key] = value;
+        const input = config({ privateJson: privateDocuments({ 'demo-owner-decisions.json': owner }) });
+        expect(() => normalize({ config: input }), `${key} ${label}`).toThrow(new RegExp(`owner ${key} decision`, 'i'));
+      }
+
+      const missingOwner = JSON.parse(Buffer.from(config().privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+        ownerDecision: Record<string, unknown>;
+      };
+      delete missingOwner.ownerDecision[key];
+      const missingInput = config({ privateJson: privateDocuments({ 'demo-owner-decisions.json': missingOwner }) });
+      expect(() => normalize({ config: missingInput }), `${key} missing`).toThrow(new RegExp(`owner ${key} decision`, 'i'));
+    }
+  });
+
+  it.each([
+    ['demo write/import authorization', 'authorization'] as const,
+    ['owner decision production acceptance', 'ownerProduction'] as const,
+    ['classification production acceptance', 'classificationProduction'] as const,
+  ])('keeps %s independent from prose-shaped source and classification fields', (_label, failure) => {
+    const owner = JSON.parse(Buffer.from(config().privateJson['demo-owner-decisions.json'].bytes).toString('utf8')) as {
+      ownerDecision: Record<string, unknown>;
+      classifications: Record<string, unknown>;
+    };
+    owner.ownerDecision.source = 'Synthetic descriptive source note.';
+    owner.ownerDecision.classification = 'Synthetic descriptive classification note.';
+    if (failure === 'authorization') owner.ownerDecision.demoWriteOrImportAuthorization = false;
+    if (failure === 'ownerProduction') owner.ownerDecision.productionAcceptance = true;
+    if (failure === 'classificationProduction') owner.classifications.productionAcceptance = true;
+    const input = config({ privateJson: privateDocuments({ 'demo-owner-decisions.json': owner }) });
+    const message = failure === 'authorization' ? /does not authorize/i : /production acceptance/i;
+    expect(() => normalize({ config: input })).toThrow(message);
+  });
+
   it('requires classification program IDs to match active source programs', () => {
     const unknownProgram = config({ privateJson: privateDocuments({
       'classification-candidates.json': {
