@@ -1124,6 +1124,25 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       state.lastSummary = { capturedAt: new Date().toISOString(), target: target.name, codeCommit: config.cms.expectedCommit, counts, entityIds, media: media.map(({ id, url, verifiedStoredSha256, provider_metadata }) => ({ id, url, verifiedStoredSha256, sourceIdentitySha256: sha256(Buffer.from(JSON.stringify(provider_metadata ?? null))) })), documents: [...state.documents.entries()].map(([path, witness]) => ({ path, ...witness })) };
       return { collections, media };
     },
+    async persistReadback(target, readback) {
+      const state = owned(target); await verifyTargetProcess(target, state);
+      const root = await checkPrivateDirectory(config.privateArtifactsRoot, true);
+      const bytes = Buffer.from(`${JSON.stringify({
+        capturedAt: new Date().toISOString(),
+        target: target.name,
+        namespace: target.namespace,
+        codeCommit: config.cms.expectedCommit,
+        collections: readback.collections,
+        media: readback.media,
+      })}\n`);
+      const digest = sha256(bytes);
+      const path = join(root, `prototype-live-readback-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomBytes(6).toString('hex')}.json`);
+      const file = await open(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+      try { await file.writeFile(bytes); await file.sync(); }
+      finally { await file.close(); }
+      await verifyTargetProcess(target, state);
+      return { path, sha256: digest, bytes: bytes.byteLength };
+    },
     async readDraftContentIdentities(target) {
       const state = owned(target); await verifyTargetProcess(target, state);
       const identities: Record<string, readonly SqlDemoNativeDraftIdentity[]> = {};

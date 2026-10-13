@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-import { classifyMediaSourceUrls, validatePrototypePublicationPlans, validatePrototypeResumeContentIdentities } from './sql-demo-native-rehearsal.js';
+import { classifyMediaSourceUrls, resumeRastersFromReadback, validatePrototypePublicationPlans, validatePrototypeResumeContentIdentities } from './sql-demo-native-rehearsal.js';
 import { loadSqlDemoAssets } from './sql-demo-assets.js';
 import type { SqlDemoOfflineAssetProof, SqlDemoOfflineDocumentProof } from './sql-demo-assets.js';
 import type { SqlDemoStrapi5Readback } from './sql-demo-native-conservation.js';
+import type { SqlDemoNativeOwnedTarget } from './sql-demo-native-rehearsal.js';
 import { prepareSqlDemoPrivateInputs } from './sql-demo-private-inputs.js';
 import type { SqlPublicReaderOptions } from './sql-public-reader.js';
 import type { SqlDemoRelease } from './sql-demo-release.js';
@@ -36,6 +37,40 @@ const TARGETS: Record<TargetName, TargetConfig> = {
   },
 };
 const prepareSqlDemoPrivateInputsActual = prepareSqlDemoPrivateInputs;
+
+describe('readback-only prototype media binding', () => {
+  it('reuses only the exact source identity and independently stored-byte claim', () => {
+    const sourceUrl = 'media/a/b/c/file.png';
+    const sourceSha = 'a'.repeat(64);
+    const storedSha = 'b'.repeat(64);
+    const proof: SqlDemoOfflineAssetProof = {
+      sourceFileId: 'file-7', sourceUrl, archiveRelativePath: 'media/a/b/c/file.png', resolvedLocalPath: '/private/source/file.png',
+      sourceSha256: sourceSha, sourceFileType: 'image', detectedMimeType: 'image/png', detectedExtension: 'png',
+      reachability: { kind: 'sql-header' }, verification: { status: 'verified', loader: 'sql-demo-asset-loader', attestationId: 'test-pin' },
+    };
+    const target: SqlDemoNativeOwnedTarget = {
+      name: 'A', baseUrl: 'http://127.0.0.1:19341', namespace: 'ikpk_sql_demo_native_proto193',
+      dataDirectory: '/private/target/sqlite', uploadDirectory: '/private/target/uploads', client: {},
+      process: { pid: 7, endpoint: 'http://127.0.0.1:19341', namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: '/private/target/sqlite', uploadDirectory: '/private/target/uploads' },
+    };
+    const readback: SqlDemoStrapi5Readback = {
+      collections: {},
+      media: [{
+        id: 22, url: '/uploads/approved.png', verifiedStoredSha256: storedSha,
+        provider_metadata: { ikpk_media_import: { sources: { [sourceUrl]: { version: 1, sha256: sourceSha, storedSha256: storedSha } } } },
+      }],
+    };
+    const reused = resumeRastersFromReadback([proof], readback, target).get('file-7');
+    expect(reused).toMatchObject({ upload: { id: 22, url: '/uploads/approved.png' }, sourceHash: sourceSha, storedHash: storedSha });
+    expect(reused?.sourceHash).not.toBe(reused?.storedHash);
+
+    const wrongClaim = structuredClone(readback);
+    const provider = wrongClaim.media[0]!.provider_metadata as { ikpk_media_import: { sources: Record<string, { sha256: string }> } };
+    provider.ikpk_media_import.sources[sourceUrl]!.sha256 = 'c'.repeat(64);
+    expect(() => resumeRastersFromReadback([proof], wrongClaim, target)).toThrow(/source and stored-byte claims/);
+    expect(() => resumeRastersFromReadback([proof], { ...readback, media: [...readback.media, ...readback.media] }, target)).toThrow(/count differs/);
+  });
+});
 
 function pinnedPublicationPlans(): SqlMaterializerProjectionRecord[] {
   return sourceEmptyFields.entries.map((entry, index) => {

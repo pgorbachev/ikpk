@@ -61,14 +61,14 @@ function target(nonce: string, mediaId: number, mediaUrl: string, avatarId: numb
   });
   return {
     collections: {
-      institutes: [row(1, 'institutes', 'institutes/one', { name: 'Synthetic Institute', slug: 'one', shortName: null, description: 'Synthetic institute description', image: [], order: 1, seo: { seo_title: 'Institute SEO', seo_description: 'Institute summary' } })],
+      institutes: [row(1, 'institutes', 'institutes/one', { name: 'Synthetic Institute', slug: 'one', shortName: null, description: 'Synthetic institute description', image: [], order: 1, seo: { seo_title: 'Institute SEO', seo_description: 'Institute summary' }, course_groups: [relation('course-groups', 'program-one'), relation('course-groups', 'program-two')] })],
       'course-groups': [
-        row(2, 'course-groups', 'program-one', { name: 'Synthetic Program One', slug: 'program-one', description: null, image: [], order: 2, is_article_category: true, seo: { seo_title: 'Program SEO one', seo_description: 'Program summary one' }, institute: relation('institutes', 'institutes/one') }),
-        row(3, 'course-groups', 'program-two', { name: 'Synthetic Program Two', slug: 'program-two', description: 'Program two description', image: [], order: 3, is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' }, institute: relation('institutes', 'institutes/one') }),
+        row(2, 'course-groups', 'program-one', { name: 'Synthetic Program One', slug: 'program-one', description: null, image: [], order: 2, is_article_category: true, seo: { seo_title: 'Program SEO one', seo_description: 'Program summary one' }, institute: relation('institutes', 'institutes/one'), seminars: [] }),
+        row(3, 'course-groups', 'program-two', { name: 'Synthetic Program Two', slug: 'program-two', description: 'Program two description', image: [], order: 3, is_article_category: true, seo: { seo_title: 'Program SEO two', seo_description: 'Program summary two' }, institute: relation('institutes', 'institutes/one'), seminars: [] }),
       ],
       seminars: [],
       'schedule-entries': [],
-      teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: [{ id: avatarId, url: avatarUrl }] })],
+      teachers: [row(5, 'teachers', '101', { name: 'Synthetic Teacher', slug: '101', trait: 'teacher', order: 4, bio: 'Synthetic biography', institute: relation('institutes', 'institutes/one'), photo: [{ id: avatarId, url: avatarUrl }], seminars: [] })],
       articles: [row(4, 'articles', 'article-one', {
         title: 'Synthetic Article', slug: 'article-one', body, published_date: '2021-03-04',
         seo: { seo_title: 'Article SEO', seo_description: 'Article summary' }, image: { id: mediaId, url: mediaUrl },
@@ -90,7 +90,7 @@ function tenCollectionFixture(): { release: SqlDemoRelease; a: SqlDemoStrapi5Rea
   const release = structuredClone(expected);
   const entities = release.entities as unknown as Record<string, Record<string, unknown>[]>;
   entities.seminars = [{ sourceId: 201, legacy_id: 'seminar-one', name: 'Seminar', slug: 'seminar-one', description: 'Description', documents_state: 'unconfirmed', order: 1, full_text: null, learning_plan: 'Plan', learning_mode: 'Mode', recommendations: 'Recommendation', course_group_legacy_id: 'program-one', directTeachers: ['101'], seo: { seo_title: 'Seminar SEO', seo_description: 'Seminar summary' } }];
-  entities.events = [{ sourceId: 301, legacy_id: '301', name: 'Event', startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', city: 'City', newPrice: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', imageId: null, seminar_legacy_id: 'seminar-one', primaryTeachers: ['101'] }];
+  entities.events = [{ sourceId: 301, legacy_id: '301', startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', newPrice: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', imageId: null, seminar_legacy_id: 'seminar-one', primaryTeachers: ['101'] }];
   entities.news = [{ sourceId: 501, legacy_id: 'news-one', name: 'News', description: 'News description', date: '2030-01-02T03:04:05.000Z', link: null, priority: 1, imageId: null }];
   entities.promotions = [{ sourceId: 601, legacy_id: 'promotion-one', name: 'Promotion', description: 'Promotion description', date: '2030-01-02T03:04:05.000Z', type: 'SHOP', link: null, priority: 1, active: true, imageId: null }];
   entities.videos = [{ sourceId: 701, legacy_id: 'video-one', name: 'Video', slug: 'video-one', videos: [{ id: 'video-id-1', title: 'Video title' }], seo: { seo_title: 'Video SEO', seo_description: 'Video summary' } }];
@@ -98,16 +98,76 @@ function tenCollectionFixture(): { release: SqlDemoRelease; a: SqlDemoStrapi5Rea
   const a = target('target-a', 41, 'https://cms-a.synthetic.invalid/uploads/image-one.webp', 42, 'https://cms-a.synthetic.invalid/uploads/teacher-one.webp', ['program-one', 'program-two']);
   const relation = (id: number, collection: string, legacyId: string) => ({ id, documentId: `target-a-${collection}-${legacyId}`, legacy_id: legacyId });
   const row = (id: number, collection: string, legacyId: string, fields: Record<string, unknown>) => ({ ...relation(id, collection, legacyId), publishedAt: '2031-01-02T00:00:00.000Z', ...fields });
-  a.collections.seminars = [row(6, 'seminars', 'seminar-one', { name: 'Seminar', slug: 'seminar-one', description: 'Description', documents_state: 'unconfirmed', order: 1, full_text: null, learning_plan: 'Plan', learning_mode: 'Mode', recommendations: 'Recommendation', seo: { seo_title: 'Seminar SEO', seo_description: 'Seminar summary' }, course_group: relation(2, 'course-groups', 'program-one'), teachers: [relation(5, 'teachers', '101')] })];
-  a.collections['schedule-entries'] = [row(7, 'schedule-entries', '301', { name: 'Event', startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', city: 'City', price: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', image: null, seminar: relation(6, 'seminars', 'seminar-one'), teachers: [relation(5, 'teachers', '101')] })];
+  a.collections.seminars = [row(6, 'seminars', 'seminar-one', { name: 'Seminar', slug: 'seminar-one', description: 'Description', documents_state: 'unconfirmed', order: 1, full_text: null, learning_plan: 'Plan', learning_mode: 'Mode', recommendations: 'Recommendation', documents: [], image: [], documents_confirmation_date: null, documents_confirmation_source: null, documents_confirmation_author: null, seo: { seo_title: 'Seminar SEO', seo_description: 'Seminar summary' }, course_group: relation(2, 'course-groups', 'program-one'), teachers: [relation(5, 'teachers', '101')] })];
+  a.collections['schedule-entries'] = [row(7, 'schedule-entries', '301', { name: null, startAt: '2030-05-10T09:00:00.000Z', endAt: '2030-05-10T16:00:00.000Z', city: null, price: 120, oldPrice: 150, isFree: false, isEventCollection: true, entry_status: 'active', registrationFormLink: null, description: null, additionalText: null, duration: '7h', image: null, seminar: relation(6, 'seminars', 'seminar-one'), teachers: [relation(5, 'teachers', '101')] })];
   a.collections['news-items'] = [row(8, 'news-items', 'news-one', { name: 'News', description: 'News description', date: '2030-01-02T03:04:05.000Z', link: null, priority: 1, image: null })];
   a.collections.promotions = [row(9, 'promotions', 'promotion-one', { name: 'Promotion', description: 'Promotion description', date: '2030-01-02T03:04:05.000Z', type: 'SHOP', link: null, priority: 1, active: true, image: null })];
   a.collections['video-playlists'] = [row(10, 'video-playlists', 'video-one', { name: 'Video', slug: 'video-one', videos: [{ id: 'video-id-1', title: 'Video title' }], seo: { seo_title: 'Video SEO', seo_description: 'Video summary' } })];
   a.collections.pages = [row(11, 'pages', 'page-one', { title: 'Page', slug: 'page-one', body: '<p>Page body</p>', seo: { seo_title: 'Page SEO', seo_description: 'Page summary' } })];
+  const seminar = a.collections.seminars[0]!;
+  const event = a.collections['schedule-entries'][0]!;
+  a.collections['course-groups']![0]!.seminars = [seminar];
+  a.collections.teachers![0]!.seminars = [seminar];
+  seminar.schedule_entries = [event];
   return { release, a, b: structuredClone(a) };
 }
 
 describe('native SQL release conservation', () => {
+  it('accepts only the four populated inverse relations when they match the approved forward relation sets', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) {
+      const groups = rb.collections['course-groups']!;
+      const seminar = rb.collections.seminars![0]!;
+      const event = rb.collections['schedule-entries']![0]!;
+      rb.collections.institutes![0]!.course_groups = groups;
+      groups.find((group) => group.legacy_id === 'program-one')!.seminars = [seminar];
+      rb.collections.teachers![0]!.seminars = [seminar];
+      seminar.schedule_entries = [event];
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    const invalidRelations = [
+      (target: SqlDemoStrapi5Readback) => { target.collections.institutes![0]!.course_groups = []; },
+      (target: SqlDemoStrapi5Readback) => { target.collections['course-groups']!.find((group) => group.legacy_id === 'program-one')!.seminars = []; },
+      (target: SqlDemoStrapi5Readback) => { target.collections.teachers![0]!.seminars = []; },
+      (target: SqlDemoStrapi5Readback) => { target.collections.seminars![0]!.schedule_entries = []; },
+      (target: SqlDemoStrapi5Readback) => { const seminar = target.collections.seminars![0]!; target.collections.teachers![0]!.seminars = [seminar, seminar]; },
+    ];
+    for (const corrupt of invalidRelations) {
+      const invalid = structuredClone(b);
+      corrupt(invalid);
+      expect(() => assertSqlDemoNativeConservation(release, classification, a, invalid)).toThrow(/inverse relation/);
+    }
+  });
+
+  it('allows only schema-null defaults for source-omitted optional SEO and event fields', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) {
+      rb.collections['schedule-entries']![0]!.name = null;
+      rb.collections['schedule-entries']![0]!.city = null;
+      rb.collections.seminars![0]!.documents = [];
+      rb.collections.seminars![0]!.documents_confirmation_date = null;
+      rb.collections.seminars![0]!.documents_confirmation_source = null;
+      rb.collections.seminars![0]!.documents_confirmation_author = null;
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+    b.collections.seminars![0]!.documents_confirmation_source = 'Unexpected';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/unexpected seminars field/);
+  });
+
+  it('allows article SEO null and an empty optional seminar image, but not a populated image', () => {
+    const { release, a, b } = tenCollectionFixture();
+    delete (release.entities.articles[0] as { seo?: unknown }).seo;
+    for (const rb of [a, b]) rb.collections.articles![0]!.seo = null;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    b.collections.articles![0]!.seo = { seo_title: 'Unexpected', seo_description: 'Unexpected' };
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/unexpected articles field/);
+    b.collections.articles![0]!.seo = null;
+    b.collections.seminars![0]!.image = [{ id: 777, url: 'https://cms-a.synthetic.invalid/uploads/unapproved.webp' }];
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/unexpected seminars field/);
+  });
+
   it('CORRECTIVE REVIEW accepts native teacher.photo as a multiple-media array', () => {
     const { release, a, b } = tenCollectionFixture();
     for (const rb of [a, b]) {
@@ -284,6 +344,7 @@ describe('native SQL release conservation', () => {
       rb.collections.articles![0]!.id = 1;
       rb.collections.teachers![0]!.id = 1;
       rb.collections['course-groups']![0]!.id = 1;
+      (rb.collections.institutes![0]!.course_groups as { id: number }[])[0]!.id = 1;
       (rb.collections.articles![0]!.categories as {id: number}[])[0]!.id = 1;
     }
     expect(() => assertSqlDemoNativeConservation(expected, classification, a, b)).not.toThrow();

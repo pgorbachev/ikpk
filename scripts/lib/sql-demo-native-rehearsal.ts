@@ -74,6 +74,8 @@ export interface SqlDemoNativeRehearsalIo {
   capture(targets: readonly SqlDemoNativeOwnedTarget[]): Promise<void>;
   /** Live CMS snapshot; only required by the one-target prototype path. */
   captureLiveSnapshot?(target: SqlDemoNativeOwnedTarget, destination: string): Promise<void>;
+  /** Persist the complete live API readback under the private artifact root before conservation. */
+  persistReadback?(target: SqlDemoNativeOwnedTarget, readback: SqlDemoStrapi5Readback): Promise<{ path: string; sha256: string; bytes: number }>;
   stopOwnedSqlSource(lease: SqlDemoNativeSqlSourceLease): Promise<void>;
 }
 
@@ -100,6 +102,8 @@ export interface SqlDemoNativePrototypeInput {
   privateInputConfig: SqlDemoPrivateInputRootConfig;
   target: SqlDemoNativeTargetConfig;
   snapshotDirectory: string;
+  /** Reconcile the already-imported, source-pinned single-A dataset without issuing writes. */
+  readbackOnly?: boolean;
   materializeApprovedAssets?: (manifest: SqlDemoNormalizedPrivateInputs['loader']['assetManifest']) => Promise<void>;
   io: SqlDemoNativeRehearsalIo;
 }
@@ -121,6 +125,7 @@ export interface SqlDemoNativePrototypeResult {
     invalidCount: number;
     firstClass: 'approved-relative' | 'verified-storage-key' | 'valid-absolute' | 'invalid' | 'none';
   };
+  readbackArtifact?: { path: string; sha256: string; bytes: number };
 }
 
 const APPROVED_RELATIVE_MEDIA_URLS = new Set([
@@ -545,6 +550,79 @@ function verifiedMapping(
     detectedMimeType: proof.detectedMimeType,
     verification: proof.verification,
   };
+}
+
+function composeExistingTargetRelease(
+  mapped: SqlPublicContentResult,
+  normalized: SqlDemoNormalizedPrivateInputs,
+  assets: SqlDemoAssetLoaderResult,
+  pdfBytes: Map<string, Uint8Array>,
+  rasters: Map<string, LoadedRaster>,
+): SqlDemoRelease {
+  const images = assets.offlineMedia.map((proof) => {
+    const uploaded = rasters.get(proof.sourceFileId);
+    if (!uploaded) throw safeFailure('MEDIA_BINDING_FAILED', 'Raster readback is missing an approved source identity', `Files#${proof.sourceFileId}`);
+    return verifiedMapping(proof, uploaded.upload.url);
+  });
+  const documents = assets.offlineDocuments.map((proof) => {
+    if (!pdfBytes.has(proof.sourceFileId)) throw safeFailure('DOCUMENT_BYTES_INVALID', 'Approved public document bytes are missing', `Files#${proof.sourceFileId}`);
+    return {
+      sourceFileId: proof.sourceFileId,
+      sourceUrl: proof.sourceUrl,
+      targetPublicUrl: publicDocumentPath(proof, mapped, normalized),
+      sha256: proof.sourceSha256,
+      detectedMimeType: proof.detectedMimeType,
+      verification: proof.verification,
+    };
+  });
+  return composeSqlDemoRelease(mapped, normalized.composer.acceptedSupplements, { images, documents }, normalized.composer.ownerDecisions);
+}
+
+export function resumeRastersFromReadback(
+  proofs: readonly SqlDemoOfflineAssetProof[],
+  readback: SqlDemoStrapi5Readback,
+  target: SqlDemoNativeOwnedTarget,
+): Map<string, LoadedRaster> {
+  const expected = new Map<string, SqlDemoOfflineAssetProof>();
+  for (const proof of proofs) {
+    if (expected.has(proof.sourceUrl)) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Approved raster source identities are duplicated');
+    expected.set(proof.sourceUrl, proof);
+  }
+  if (readback.media.length !== expected.size) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media count differs from the exact approved source set');
+  const result = new Map<string, LoadedRaster>();
+  const seenSourceUrls = new Set<string>();
+  for (const file of readback.media) {
+    const metadata = file.provider_metadata && typeof file.provider_metadata === 'object' && !Array.isArray(file.provider_metadata)
+      ? file.provider_metadata as Record<string, unknown> : {};
+    const importMetadata = metadata.ikpk_media_import && typeof metadata.ikpk_media_import === 'object' && !Array.isArray(metadata.ikpk_media_import)
+      ? metadata.ikpk_media_import as Record<string, unknown> : {};
+    const claims = importMetadata.sources && typeof importMetadata.sources === 'object' && !Array.isArray(importMetadata.sources)
+      ? importMetadata.sources as Record<string, unknown> : {};
+    const entries = Object.entries(claims);
+    if (entries.length !== 1) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media has missing or extra source claims');
+    const [sourceUrl, rawClaim] = entries[0]!;
+    const proof = expected.get(sourceUrl);
+    if (!proof || seenSourceUrls.has(sourceUrl) || !rawClaim || typeof rawClaim !== 'object' || Array.isArray(rawClaim)
+      || typeof file.verifiedStoredSha256 !== 'string' || !HASH.test(file.verifiedStoredSha256)) {
+      throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media identity is outside the exact approved source set');
+    }
+    const sourceHash = ('sourceBytesAvailable' in proof ? proof.substitution.replacementSha256 : proof.sourceSha256).toLowerCase();
+    const claim = rawClaim as { version?: unknown; sha256?: unknown; storedSha256?: unknown };
+    if (claim.version !== 1 || claim.sha256 !== sourceHash || claim.storedSha256 !== file.verifiedStoredSha256) {
+      throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media source and stored-byte claims do not match the independently read inventory', `Files#${proof.sourceFileId}`);
+    }
+    const upload = { id: file.id, url: file.url };
+    validateUpload(upload, target, proof.sourceFileId);
+    result.set(proof.sourceFileId, {
+      upload,
+      sourceHash,
+      storedHash: file.verifiedStoredSha256,
+      sourceIdentity: `Files#${proof.sourceFileId}`,
+    });
+    seenSourceUrls.add(sourceUrl);
+  }
+  if (seenSourceUrls.size !== expected.size) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media source identity set is incomplete');
+  return result;
 }
 
 async function uploadRasters(
@@ -997,6 +1075,9 @@ export async function runSqlDemoNativePrototype(
   input: SqlDemoNativePrototypeInput,
 ): Promise<SqlDemoNativePrototypeResult> {
   validateTarget(input.target);
+  if (input.readbackOnly && !input.target.resumeExistingMediaOnly) {
+    throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Readback-only continuation requires the exact single-A resume configuration');
+  }
   if (!isAbsolute(input.snapshotDirectory)) throw safeFailure('SNAPSHOT_DESTINATION_INVALID', 'Prototype snapshot destination must be an absolute private path');
   assertLoadedVipsFloor();
   let sqlSourceLease: SqlDemoNativeSqlSourceLease | undefined;
@@ -1127,22 +1208,45 @@ export async function runSqlDemoNativePrototype(
       throw safeFailure('TARGET_OWNERSHIP_UNPROVEN', 'Owned CMS process for prototype target A could not be started');
     }
     assertOwnedTarget(target, 'A', input.target);
+    let priorReadback: SqlDemoStrapi5Readback | undefined;
+    let priorDraftIdentities: Record<string, readonly SqlDemoNativeDraftIdentity[]> | undefined;
+    let readbackArtifact: { path: string; sha256: string; bytes: number } | undefined;
     if (input.target.resumeExistingMediaOnly) {
-      let priorReadback: SqlDemoStrapi5Readback;
-      let draftIdentities: Record<string, readonly SqlDemoNativeDraftIdentity[]>;
       try { priorReadback = await input.io.readPublished(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
-      try { draftIdentities = await input.io.readDraftContentIdentities(target); }
+      if (input.readbackOnly) {
+        if (!input.io.persistReadback) throw safeFailure('PUBLISHED_READBACK_FAILED', 'Private live readback persistence is unavailable');
+        try { readbackArtifact = await input.io.persistReadback(target, priorReadback); }
+        catch (error) { throw safeFailure('PUBLISHED_READBACK_FAILED', 'Complete API readback could not be persisted privately before conservation', undefined, safeDiagnostic(error)); }
+      }
+      try { priorDraftIdentities = await input.io.readDraftContentIdentities(target); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype draft inventory could not be verified before continuation', undefined, safeDiagnostic(error)); }
-      try { validatePrototypeResumeContentIdentities(priorReadback, draftIdentities, expectedDrafts); }
+      try { validatePrototypeResumeContentIdentities(priorReadback, priorDraftIdentities, expectedDrafts); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Existing prototype content identities are not an approved source-backed subset', undefined, safeDiagnostic(error)); }
     }
     let priorMediaInventory: unknown;
-    if (input.target.resumeExistingMediaOnly) {
+    if (input.target.resumeExistingMediaOnly && !input.readbackOnly) {
       try { priorMediaInventory = await input.io.prepareResumeMediaInventory(target, assets.offlineMedia); }
       catch (error) { throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Persisted prototype media claims do not exactly match the approved raster set', undefined, safeDiagnostic(error)); }
     }
-    const imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io, priorMediaInventory, input.target.resumeExistingMediaOnly === true);
+    let imported: TargetRun;
+    if (input.readbackOnly) {
+      if (!priorReadback || !priorDraftIdentities || !readbackArtifact) throw safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Readback-only continuation did not complete its single private inventory checkpoint');
+      let rasters: Map<string, LoadedRaster>;
+      try { rasters = resumeRastersFromReadback(assets.offlineMedia, priorReadback, target); }
+      catch (error) { throw error instanceof SqlDemoNativeRehearsalError ? error : safeFailure('PARTIAL_TARGET_RESUME_INVALID', 'Published media inventory is not the exact approved source set', undefined, safeDiagnostic(error)); }
+      for (const document of assets.offlineDocuments) {
+        await verifyPublishedPdf(target, document, publicDocumentPath(document, mapped, normalized), input.io);
+      }
+      const release = composeExistingTargetRelease(mapped, normalized, assets, pdfBytes, rasters);
+      imported = { release, readback: priorReadback, rasters };
+    } else {
+      imported = await importTarget('A', target, mapped, normalized, assets, pdfBytes, input.io, priorMediaInventory, input.target.resumeExistingMediaOnly === true);
+      if (input.io.persistReadback) {
+        try { readbackArtifact = await input.io.persistReadback(target, imported.readback); }
+        catch (error) { throw safeFailure('PUBLISHED_READBACK_FAILED', 'Complete API readback could not be persisted privately before conservation', undefined, safeDiagnostic(error)); }
+      }
+    }
     assertSqlDemoNativeConservation(imported.release, normalized.materializer, imported.readback, imported.readback);
 
     if (!input.io.captureLiveSnapshot) throw safeFailure('LIVE_SNAPSHOT_UNAVAILABLE', 'Prototype adapter does not provide live CMS snapshot capture');
@@ -1163,6 +1267,7 @@ export async function runSqlDemoNativePrototype(
       targetLocationCounts,
       publicationScan: publicationScan!,
       sourceUrlClassification,
+      ...(readbackArtifact ? { readbackArtifact } : {}),
     };
   } catch (error) {
     primaryError = error;

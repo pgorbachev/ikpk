@@ -42,6 +42,21 @@ const COLLECTIONS: readonly SqlDemoNativeCollection[] = [
   'institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles',
   'news-items', 'promotions', 'video-playlists', 'pages',
 ];
+const POPULATED_INVERSE_RELATIONS = [
+  { owner: 'institutes', field: 'course_groups', source: 'course-groups', forward: 'institute' },
+  { owner: 'course-groups', field: 'seminars', source: 'seminars', forward: 'course_group' },
+  { owner: 'teachers', field: 'seminars', source: 'seminars', forward: 'teachers' },
+  { owner: 'seminars', field: 'schedule_entries', source: 'schedule-entries', forward: 'seminar' },
+] as const satisfies readonly { owner: SqlDemoNativeCollection; field: string; source: SqlDemoNativeCollection; forward: string }[];
+const NULLABLE_SCHEMA_DEFAULTS: Readonly<Partial<Record<SqlDemoNativeCollection, ReadonlySet<string>>>> = {
+  institutes: new Set(['seo']),
+  'course-groups': new Set(['seo']),
+  seminars: new Set(['seo', 'documents_confirmation_date', 'documents_confirmation_source', 'documents_confirmation_author']),
+  'schedule-entries': new Set(['name', 'city']),
+  articles: new Set(['seo']),
+  'video-playlists': new Set(['seo']),
+  pages: new Set(['seo']),
+};
 const SHA256 = /^[a-f\d]{64}$/i;
 type Row = Record<string, unknown>;
 type HtmlNode = { nodeName?: string; tagName?: string; value?: string; data?: string; attrs?: { name: string; value: string }[]; childNodes?: HtmlNode[]; content?: HtmlNode };
@@ -316,6 +331,52 @@ function compareRelations(
   }
 }
 
+function comparePopulatedInverseRelations(
+  plans: readonly SqlMaterializerProjectionRecord[],
+  index: TargetIndex,
+  ownerPlan: SqlMaterializerProjectionRecord,
+  actual: Row,
+): void {
+  for (const inverse of POPULATED_INVERSE_RELATIONS) {
+    if (inverse.owner !== ownerPlan.collection) continue;
+    const expectedIds = plans.flatMap((sourcePlan) => {
+      if (sourcePlan.collection !== inverse.source) return [];
+      const forward = sourcePlan.relations.find((relation) => relation.field === inverse.forward && relation.collection === inverse.owner);
+      return forward?.legacyIds.includes(ownerPlan.legacyId) ? [sourcePlan.legacyId] : [];
+    });
+    const references = relationRows(actual[inverse.field], 'many');
+    if (!references) fail(identity(ownerPlan), `${inverse.field} inverse relation is missing or malformed`);
+    const actualIds: string[] = [];
+    for (const reference of references) {
+      if (typeof reference.legacy_id !== 'string' || typeof reference.documentId !== 'string' || !Number.isSafeInteger(reference.id)) {
+        fail(identity(ownerPlan), `${inverse.field} inverse relation has inconsistent target identity fields`);
+      }
+      const target = index.byLegacy.get(inverse.source)?.get(reference.legacy_id);
+      if (!target || target.documentId !== reference.documentId || target.id !== reference.id) {
+        fail(identity(ownerPlan), `${inverse.field} inverse relation target has inconsistent IDs`);
+      }
+      actualIds.push(reference.legacy_id);
+    }
+    if (new Set(expectedIds).size !== expectedIds.length || new Set(actualIds).size !== actualIds.length) {
+      fail(identity(ownerPlan), `${inverse.field} inverse relation contains duplicate targets`);
+    }
+    expectedIds.sort();
+    actualIds.sort();
+    if (expectedIds.length !== actualIds.length || expectedIds.some((id, position) => id !== actualIds[position])) {
+      fail(identity(ownerPlan), `${inverse.field} inverse relation differs from approved forward relations`);
+    }
+  }
+}
+
+function isAllowedSchemaNullDefault(collection: SqlDemoNativeCollection, field: string, value: unknown): boolean {
+  return value === null && (NULLABLE_SCHEMA_DEFAULTS[collection]?.has(field) ?? false);
+}
+
+function isAllowedSchemaDefault(collection: SqlDemoNativeCollection, field: string, value: unknown): boolean {
+  return isAllowedSchemaNullDefault(collection, field, value)
+    || (collection === 'seminars' && field === 'image' && Array.isArray(value) && value.length === 0);
+}
+
 function isMultipleMediaField(plan: SqlMaterializerProjectionRecord): boolean {
   return (plan.collection === 'institutes' && plan.image?.field === 'image')
     || (plan.collection === 'course-groups' && plan.image?.field === 'image')
@@ -421,8 +482,11 @@ function compareTarget(
       && field !== 'legacy_id'
       && field !== plan.image?.field
       && !(plan.collection === 'schedule-entries' && field === 'admin_label')
+      && !POPULATED_INVERSE_RELATIONS.some((inverse) => inverse.owner === plan.collection && inverse.field === field)
+      && !isAllowedSchemaDefault(plan.collection as SqlDemoNativeCollection, field, row[field])
       && !plan.relations.some((relation) => relation.field === field));
-    if (unexpectedFields.length) fail(context, `published row contains unexpected ${plan.collection} field`);
+    if (unexpectedFields.length) fail(context, `published row contains unexpected ${plan.collection} field: ${unexpectedFields.join(',')}`);
+    comparePopulatedInverseRelations(plans, targetIndex, plan, row);
     if (plan.collection === 'schedule-entries' && Object.prototype.hasOwnProperty.call(row, 'admin_label')
       && typeof row.admin_label !== 'string') fail(context, 'schedule-entries admin_label must be a string');
     for (const [field, value] of Object.entries(plan.attributes)) {

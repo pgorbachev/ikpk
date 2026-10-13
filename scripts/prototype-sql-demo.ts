@@ -30,6 +30,9 @@ const cmsData = join(protoRoot, 'sqlite');
 const cmsUploads = join(protoRoot, 'uploads');
 const cmsStaticFiles = join(protoRoot, 'static-files');
 const targetUrl = 'http://127.0.0.1:19341';
+const cliArgs = process.argv.slice(2);
+if (cliArgs.some((argument) => argument !== '--readback-only')) throw new Error('unsupported prototype operator argument');
+const readbackOnly = cliArgs.includes('--readback-only');
 const sourceConnection = { unixSocketPath: socketPath, port: 55438, database: 'ikpk_source_rehearsal', user: 'ikpk_restore' };
 const pins: Record<(typeof SQL_DEMO_PRIVATE_JSON_NAMES)[number], { path: string; sha256: string }> = {
   'approved-supplements.json': { path: `${currentEvidence}/approved-supplements.json`, sha256: 'd10182a2d80a64cc38a5b079a083eba984c789b718dee9d7aeb5f6c935763834' },
@@ -224,6 +227,7 @@ async function main(): Promise<void> {
     privateInputConfig: config,
     target: { baseUrl: targetUrl, namespace: 'ikpk_sql_demo_native_proto193', dataDirectory: cmsData, uploadDirectory: cmsUploads, resumeExistingMediaOnly: true },
     snapshotDirectory,
+    readbackOnly,
     io,
     materializeApprovedAssets: async (manifest) => {
       const pin = supplementBlobs.filter((item) => item.path === replacement.replacementPath && item.revision === replacement.replacementRevision && item.sha256 === replacement.replacementSha256);
@@ -250,11 +254,12 @@ async function main(): Promise<void> {
     sourceFileIdentities: { raster: result.rasterCount, pdf: result.documentCount, total: result.rasterCount + result.documentCount },
     targetLocationCounts: result.targetLocationCounts,
     sourceUrlClassification: result.sourceUrlClassification,
+    readbackArtifact: result.readbackArtifact,
     privateArtifactsDirectory: protoRoot,
   };
   const summaryPath = join(artifactsRoot, 'prototype-result.json');
   await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-  process.stdout.write(`${JSON.stringify({ status: summary.status, snapshotId: summary.snapshotId, cmsCounts: summary.cmsCounts, sourceFileIdentities: summary.sourceFileIdentities })}\n`);
+  process.stdout.write(`${JSON.stringify({ status: summary.status, snapshotId: summary.snapshotId, cmsCounts: summary.cmsCounts, sourceFileIdentities: summary.sourceFileIdentities, readbackArtifact: summary.readbackArtifact })}\n`);
 }
 
 main().catch((error) => {
