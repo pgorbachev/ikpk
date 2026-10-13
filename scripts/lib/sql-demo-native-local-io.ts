@@ -602,10 +602,13 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
       const cluster = config.source.clusterDataDirectory;
       const lock = await pidFromCluster(cluster);
       if (lock !== undefined) throw fail('PostgreSQL source cluster is already owned or has a stale PID');
-      const child = childProcess(spawn, pgCtl, ['start', '-D', cluster, '-o', `-h '' -k ${config.source.socketDirectory} -p ${config.source.port} -c default_transaction_read_only=on`, '-w'], { env: sourceEnvironment, stdio: ['ignore', 'ignore', 'ignore'] });
+      const startStdout = await open(join(config.privateArtifactsRoot, 'postgresql-start.stdout.log'), fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o600);
+      const startStderr = await open(join(config.privateArtifactsRoot, 'postgresql-start.stderr.log'), fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o600);
+      let child: Child;
       let pid: number | undefined;
       let startTime: string | undefined;
       try {
+        child = childProcess(spawn, pgCtl, ['start', '-D', cluster, '-o', `-h '' -k ${config.source.socketDirectory} -p ${config.source.port} -c default_transaction_read_only=on`, '-w'], { env: sourceEnvironment, stdio: ['ignore', startStdout.fd, startStderr.fd] });
         await waitForExit(child, 120_000);
         pid = await pidFromCluster(cluster);
         if (pid !== undefined && processInspector.isAlive(pid)) startTime = await processInspector.startTime(pid);
@@ -623,6 +626,11 @@ export function createSqlDemoNativeLocalIo(options: SqlDemoNativeLocalIoOptions 
         }
         if (cleanupFailed) throw fail('Owned PostgreSQL cluster could not be stopped after startup failed');
         throw error;
+      } finally {
+        await startStdout.sync().catch(() => undefined);
+        await startStderr.sync().catch(() => undefined);
+        await startStdout.close();
+        await startStderr.close();
       }
       if (pid === undefined || startTime === undefined) throw fail('PostgreSQL source process ownership could not be established');
       const lease = Object.freeze({ id: `${pid}:${startTime}`, pid }) as SourceLease;
