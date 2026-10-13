@@ -102,6 +102,124 @@ function tenCollectionFixture(): { release: SqlDemoRelease; a: SqlDemoStrapi5Rea
 }
 
 describe('native SQL release conservation', () => {
+  it('CORRECTIVE REVIEW accepts native teacher.photo as a multiple-media array', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) rb.collections.teachers![0]!.photo = [rb.collections.teachers![0]!.photo];
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('CORRECTIVE REVIEW accepts native empty multiple-media institute/course-group fields', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) {
+      rb.collections.institutes![0]!.image = [];
+      for (const row of rb.collections['course-groups']!) row.image = [];
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('CORRECTIVE REVIEW accepts a native schedule entry carrying the derived CMS admin_label', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) rb.collections['schedule-entries']![0]!.admin_label = '10 мая 2030 · City';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('CORRECTIVE REVIEW rejects a malformed derived admin_label', () => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections['schedule-entries']![0]!.admin_label = { authentication_token: 'SYNTHETIC-PRIVATE-TOKEN' };
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('CORRECTIVE REVIEW rejects additional media in a teacher.photo array', () => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections.teachers![0]!.photo = [b.collections.teachers![0]!.photo, b.collections.articles![0]!.image];
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it.each(['a', 'iframe'] as const)('CORRECTIVE REVIEW preserves %s URLs rather than treating them as body images', (tag) => {
+    const { release, a, b } = tenCollectionFixture();
+    const attr = tag === 'a' ? 'href' : 'src';
+    release.entities.articles[0]!.body = `<${tag} ${attr}="${IMAGE_URL}"></${tag}>`;
+    a.collections.articles![0]!.body = release.entities.articles[0]!.body;
+    b.collections.articles![0]!.body = `<${tag} ${attr}="${b.media[0]!.url}"></${tag}>`;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+  it('CORRECTIVE REVIEW allows a shared documentId across different collections', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) {
+      rb.collections.articles![0]!.documentId = rb.collections.institutes![0]!.documentId;
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('CORRECTIVE REVIEW rejects repeated documentId within one collection', () => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections['course-groups']![1]!.documentId = b.collections['course-groups']![0]!.documentId;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/duplicate documentId/);
+  });
+
+  it.each(['full_text', 'learning_plan', 'learning_mode', 'recommendations'] as const)('CORRECTIVE REVIEW keeps explicit null for seminar %s', (field) => {
+    const { release, a, b } = tenCollectionFixture();
+    (release.entities.seminars[0]! as unknown as Record<string, unknown>)[field] = null;
+    a.collections.seminars![0]![field] = null;
+    b.collections.seminars![0]![field] = 'Unexpected';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(new RegExp(field));
+  });
+
+  it.each(['2021-03-04T09:00:00.000Z', '2021-03-05T00:00:00.000Z', '2021-03-04T00:00:00+00:00', 'invalid'])('CORRECTIVE REVIEW rejects article time outside the strict approved DAY: %s', (value) => {
+    const { release, a, b } = tenCollectionFixture();
+    b.collections.articles![0]!.published_date = value;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/published_date/);
+  });
+
+  it('CORRECTIVE REVIEW permits explicit Strapi timestamps and SEO component identity', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) {
+      rb.collections.articles![0]!.createdAt = '2031-01-01T00:00:00.000Z';
+      rb.collections.articles![0]!.updatedAt = '2031-01-02T00:00:00.000Z';
+      (rb.collections.articles![0]!.seo as Record<string, unknown>).id = 71;
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+  it('CORRECTIVE REVIEW rejects the current canonical token injected as an actual image URL', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.entities.articles[0]!.body = `<img src="${IMAGE_URL}">`;
+    for (const rb of [a, b]) rb.collections.articles![0]!.body = '<img src="ikpk-verified-media:file-image-1">';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('CORRECTIVE REVIEW accepts a verified body image URL backed by deduplicated source claims', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.provenance.assetMappings[1]!.sha256 = SOURCE_SHA;
+    release.entities.articles[0]!.body = `<img src="${IMAGE_URL}">`;
+    for (const rb of [a, b]) {
+      const media = rb.media[0]!;
+      (media.provider_metadata as { ikpk_media_import: { sources: Record<string, unknown> } }).ikpk_media_import.sources[AVATAR_URL] = { version: 1, sha256: SOURCE_SHA, storedSha256: STORED_SHA };
+      (rb as {media: SqlDemoStrapi5Readback['media']}).media = [media];
+      rb.collections.teachers![0]!.photo = { id: media.id, url: media.url };
+      rb.collections.articles![0]!.body = `<img src="${media.url}">`;
+    }
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+  });
+
+  it('CORRECTIVE REVIEW rejects a private unknown field nested in SEO', () => {
+    const { release, a, b } = tenCollectionFixture();
+    (b.collections.articles![0]!.seo as Record<string, unknown>).authentication_token = 'SYNTHETIC-PRIVATE-TOKEN';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('CORRECTIVE REVIEW preserves template subtree content', () => {
+    const { release, a, b } = tenCollectionFixture();
+    release.entities.articles[0]!.body = '<template><p>Expected</p></template>';
+    a.collections.articles![0]!.body = '<template><p>Lost</p></template>';
+    b.collections.articles![0]!.body = '<template><p>Lost</p></template>';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('CORRECTIVE REVIEW rejects unexpected system-named fields in plain JSON video data', () => {
+    const { release, a, b } = tenCollectionFixture();
+    (b.collections['video-playlists']![0]!.videos as Record<string, unknown>[])[0]!.documentId = 'SYNTHETIC-UNEXPECTED-PUBLIC-DATA';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
   it.each(['institutes', 'course-groups', 'teachers', 'seminars', 'schedule-entries', 'articles', 'news-items', 'promotions', 'video-playlists', 'pages'] as const)('REVIEW rejects a lost record in %s', (collection) => {
     const { release, a, b } = tenCollectionFixture();
     b.collections[collection] = [];
