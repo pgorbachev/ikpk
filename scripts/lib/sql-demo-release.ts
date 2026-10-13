@@ -45,9 +45,9 @@ export interface SqlDemoAcceptedSupplements {
     legacy_id: string;
     seo?: { seo_title?: string; seo_description?: string };
     videos: unknown[] | null;
-    thumbnailSourceFileId: string;
-    thumbnailSourceUrl: string;
-    thumbnailPublicUrl: string;
+    thumbnailSourceFileId: string | null;
+    thumbnailSourceUrl: string | null;
+    thumbnailPublicUrl: string | null;
   }[];
   targetLocations: SqlDemoTargetLocation[];
 }
@@ -360,6 +360,11 @@ export function composeSqlDemoRelease(
     (entry) => String(entry.sourceId),
     (entry) => `Videos#${entry.sourceId}`,
   );
+  const videoMetadataBySourceId = uniqueBy(
+    mapped.provenance.videoMetadata,
+    (entry) => String(entry.sourceId),
+    (entry) => `Videos#${entry.sourceId}`,
+  );
   if (sqlVideosById.size !== videoSupplementsBySourceId.size) {
     const missing = [...sqlVideosById.keys()].find((id) => !videoSupplementsBySourceId.has(id));
     const extra = [...videoSupplementsBySourceId.keys()].find((id) => !sqlVideosById.has(id));
@@ -367,6 +372,7 @@ export function composeSqlDemoRelease(
   }
 
   const usedImageIds = new Set<string>();
+  const boundVideoThumbnailUrls = new Map<number, string>();
   const bodyArticleImageIds = new Set<string>();
   const imageBearingCollections: [string, unknown[]][] = [
     ['Institutes', mapped.entities.institutes], ['Programs', mapped.entities.programs], ['Teachers', mapped.entities.teachers],
@@ -420,10 +426,23 @@ export function composeSqlDemoRelease(
     if (!isNonEmptyString(supplement.sourcePath) || !isNonEmptyString(supplement.revision) || !isSha256(supplement.sha256)) {
       fail(`Videos#${supplement.sourceId}`, 'video supplement provenance is incomplete');
     }
-    const thumb = required(imageMappings.get(supplement.thumbnailSourceFileId), `Videos#${supplement.sourceId}`, `thumbnail ${supplement.thumbnailSourceFileId} has no exact image mapping`);
-    if (thumb.sourceUrl !== supplement.thumbnailSourceUrl || thumb.targetPublicUrl !== supplement.thumbnailPublicUrl) {
-      fail(`Videos#${supplement.sourceId}`, `thumbnail ${supplement.thumbnailSourceFileId} does not match accepted source and public URLs`);
+    const fields = [supplement.thumbnailSourceFileId, supplement.thumbnailSourceUrl, supplement.thumbnailPublicUrl];
+    const hasNoThumbnail = fields.every((value) => value === null);
+    const hasSourceIdentity = isNonEmptyString(supplement.thumbnailSourceFileId) && isNonEmptyString(supplement.thumbnailSourceUrl);
+    const sqlMetadata = videoMetadataBySourceId.get(String(supplement.sourceId));
+    if (sqlMetadata && ((sqlMetadata.imageId === null) !== hasNoThumbnail)) {
+      fail(`Videos#${supplement.sourceId}`, 'thumbnail presence does not match the native SQL imageId');
     }
+    if (hasNoThumbnail) continue;
+    if (!hasSourceIdentity || (supplement.thumbnailPublicUrl !== null && !isNonEmptyString(supplement.thumbnailPublicUrl))) {
+      fail(`Videos#${supplement.sourceId}`, 'thumbnail source identity and optional binder URL must be complete');
+    }
+    const thumb = required(imageMappings.get(supplement.thumbnailSourceFileId!), `Videos#${supplement.sourceId}`, `thumbnail ${supplement.thumbnailSourceFileId} has no exact image mapping`);
+    if (thumb.sourceUrl !== supplement.thumbnailSourceUrl ||
+        (supplement.thumbnailPublicUrl !== null && thumb.targetPublicUrl !== supplement.thumbnailPublicUrl)) {
+      fail(`Videos#${supplement.sourceId}`, `thumbnail ${supplement.thumbnailSourceFileId} does not match its exact source and binder URLs`);
+    }
+    boundVideoThumbnailUrls.set(supplement.sourceId, thumb.targetPublicUrl);
     usedImageIds.add(thumb.sourceFileId);
   }
 
@@ -711,7 +730,8 @@ export function composeSqlDemoRelease(
       targetLocations: clone(acceptedSupplements.targetLocations),
       assetMappings: clone([...allowlistedAssets.images, ...allowlistedAssets.documents]),
       videoSupplements: acceptedSupplements.videoPlaylists.map(({ sourceId, sourcePath, revision, sha256, thumbnailSourceFileId, thumbnailSourceUrl, thumbnailPublicUrl }) => ({
-        sourceId, sourcePath, revision, sha256, thumbnailSourceFileId, thumbnailSourceUrl, thumbnailPublicUrl,
+        sourceId, sourcePath, revision, sha256, thumbnailSourceFileId, thumbnailSourceUrl,
+        thumbnailPublicUrl: thumbnailPublicUrl ?? boundVideoThumbnailUrls.get(sourceId) ?? null,
       })),
       ownerDecisions: clone(ownerDecisions),
     },

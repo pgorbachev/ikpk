@@ -93,6 +93,10 @@ const numberId = (value: unknown, label: string): number => {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) throw new Error(`${label} must be a positive integer`);
   return value as number;
 };
+const manifestNumberId = (value: unknown, label: string): number => {
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) return numberId(Number(value), label);
+  return numberId(value, label);
+};
 const parsedHtml = (html: string): { nodeName?: string; tagName?: string; value?: string; attrs?: { name: string; value: string }[]; childNodes?: unknown[] } => parseFragment(html) as never;
 
 function verifyRawPins(config: SqlDemoPrivateInputRootConfig): void {
@@ -121,7 +125,6 @@ function parsePrivate(config: SqlDemoPrivateInputRootConfig): ParsedPrivate {
 }
 
 function verifySupplementBlobs(config: SqlDemoPrivateInputRootConfig, approved: JsonObject): void {
-  const acceptedRevision = string(valueAt(approved, 'accepted_corpus_revision', 'acceptedCorpusRevision'), 'accepted corpus revision');
   const rows = array(valueAt(approved, 'supplements'), 'approved supplements');
   const byKey = new Map<string, { revision: string; sha256: string; bytes: number }>();
   for (const raw of rows) {
@@ -147,9 +150,29 @@ function verifySupplementBlobs(config: SqlDemoPrivateInputRootConfig, approved: 
       throw new Error(`${blob.path} Git blob bytes do not match the accepted revision SHA-256 pin`);
     }
   }
-  for (const [key, pin] of byKey) {
-    if (pin.revision === acceptedRevision && !seen.has(key)) throw new Error(`${key.split('@')[0]} accepted Git blob bytes are missing`);
+  for (const key of byKey.keys()) {
+    if (!seen.has(key)) throw new Error(`${key.split('@')[0]} approved Git blob bytes are missing`);
   }
+}
+
+function selectedBlob(
+  config: SqlDemoPrivateInputRootConfig,
+  path: string,
+  revision: string,
+): { path: string; revision: string; sha256: string; bytes: Uint8Array } {
+  const matches = config.supplementBlobs.filter((blob) => blob.path === path && blob.revision === revision);
+  if (matches.length !== 1) throw new Error(`${path} at ${revision} must have exactly one approved pinned Git blob`);
+  return matches[0]!;
+}
+
+function jsonArrayFromBlob(blob: { path: string; bytes: Uint8Array }): JsonObject[] {
+  let rows: unknown[];
+  try {
+    rows = array(JSON.parse(Buffer.from(blob.bytes).toString('utf8')) as unknown, `${blob.path} rows`);
+  } catch {
+    throw new Error(`${blob.path} must contain a JSON array`);
+  }
+  return rows.map((row, index) => object(row, `${blob.path} row ${index + 1}`));
 }
 
 function classify(privateData: ParsedPrivate, source: SqlPublicSource) {
@@ -501,7 +524,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   const videos = (source.Videos ?? []).filter((row) => row.status === 'active');
   for (const row of reachedThumbs) {
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'thumbnail source file ID');
-    const videoId = numberId(valueAt(row, 'source_video_id', 'sourceVideoId'), `${id} video ID`);
+    const videoId = manifestNumberId(valueAt(row, 'source_video_id', 'sourceVideoId'), `${id} video ID`);
     const video = videos.find((item) => item.id === videoId && item.imageId === id);
     if (!video) throw new Error(`${id} thumbnail metadata does not match native Videos`);
     addProof(id, { kind: 'video-thumbnail', videoSourceId: video.id });
@@ -555,6 +578,120 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
   const supplementManifestPayload = { schemaVersion: 1 as const, scope: 'sql-demo-approved-supplements' as const, codeRevision, entries: supplementEntries };
   const supplementManifest: SqlDemoSupplementManifest = { ...supplementManifestPayload, sha256: computeSqlDemoSupplementManifestSha256(supplementManifestPayload) };
   const expectedSupplements = { codeRevision, manifestSha256: supplementManifest.sha256 };
+
+  const approvedPinPaths = new Set(array(valueAt(approved, 'supplements'), 'approved supplements').map((raw) =>
+    string(valueAt(object(raw, 'approved supplement'), 'path'), 'approved supplement path')));
+  const metadataPinPaths = [
+    'discovery/entities/institutes.json',
+    'fixtures/content-snapshot/types/institutes.json',
+    'discovery/entities/video_playlists.json',
+    'fixtures/content-snapshot/types/video_playlists.json',
+    'web/src/lib/video-mirrors.ts',
+  ];
+  const hasSelectedMetadata = metadataPinPaths.some((path) => approvedPinPaths.has(path));
+  const instituteMetadata: SqlDemoAcceptedSupplements['instituteMetadata'] = [];
+  const videoPlaylists: SqlDemoAcceptedSupplements['videoPlaylists'] = [];
+  if (hasSelectedMetadata) {
+  const instituteBlob = selectedBlob(config, 'discovery/entities/institutes.json', acceptedCorpusRevision);
+  const playlistBlob = selectedBlob(config, 'discovery/entities/video_playlists.json', acceptedCorpusRevision);
+  // Pin the selected mirror mapping at the approved application revision. Its
+  // contents do not replace SQL identity or the asset binder's target URL.
+  selectedBlob(config, 'web/src/lib/video-mirrors.ts', codeRevision);
+
+  const instituteRows = jsonArrayFromBlob(instituteBlob);
+  const institutesByLegacyId = new Map<string, JsonObject>();
+  for (const row of instituteRows) {
+    const legacyId = string(valueAt(row, 'legacy_id', 'legacyId'), `${instituteBlob.path} legacy_id`);
+    if (institutesByLegacyId.has(legacyId)) throw new Error(`${instituteBlob.path} has duplicate institute legacy identity ${legacyId}`);
+    institutesByLegacyId.set(legacyId, row);
+  }
+  instituteMetadata.push(...(mapped.entities.institutes ?? []).map((entity) => {
+    const sourceId = numberId(entity.sourceId, 'Institutes source ID');
+    const legacyId = idString(entity.legacy_id, `Institutes#${sourceId} legacy identity`);
+    const row = institutesByLegacyId.get(legacyId);
+    if (!row) throw new Error(`Institutes#${sourceId} has no exact accepted JSON metadata row`);
+    if (valueAt(row, 'slug') !== entity.slug) throw new Error(`Institutes#${sourceId} accepted slug does not match its SQL identity`);
+    institutesByLegacyId.delete(legacyId);
+    return {
+      sourceId,
+      slug: string(valueAt(row, 'slug'), `Institutes#${sourceId} accepted slug`),
+      order: numberId(valueAt(row, 'order'), `Institutes#${sourceId} accepted order`),
+      seo: {
+        seo_title: string(valueAt(row, 'seo_title', 'seoTitle'), `Institutes#${sourceId} SEO title`),
+        seo_description: string(valueAt(row, 'seo_description', 'seoDescription'), `Institutes#${sourceId} SEO description`),
+      },
+    };
+  }));
+  if (institutesByLegacyId.size) throw new Error(`${instituteBlob.path} contains metadata without a matching SQL institute identity`);
+
+  const playlistRows = jsonArrayFromBlob(playlistBlob);
+  const playlistsByLegacyId = new Map<string, JsonObject>();
+  for (const row of playlistRows) {
+    const legacyId = string(valueAt(row, 'legacy_id', 'legacyId'), `${playlistBlob.path} legacy_id`);
+    if (playlistsByLegacyId.has(legacyId)) throw new Error(`${playlistBlob.path} has duplicate playlist legacy identity ${legacyId}`);
+    playlistsByLegacyId.set(legacyId, row);
+  }
+  const sourceVideos = new Map((source.Videos ?? []).map((row) => [row.id, row]));
+  const thumbnailsByVideoId = new Map<number, JsonObject>();
+  for (const row of reachedThumbs) {
+    const videoId = manifestNumberId(valueAt(row, 'source_video_id', 'sourceVideoId'), 'video thumbnail source ID');
+    if (thumbnailsByVideoId.has(videoId)) throw new Error(`Videos#${videoId} has duplicate thumbnail byte attestations`);
+    thumbnailsByVideoId.set(videoId, row);
+  }
+  videoPlaylists.push(...(mapped.entities.videos ?? []).map((entity) => {
+    const sourceId = numberId(entity.sourceId, 'Videos source ID');
+    const legacyId = idString(entity.legacy_id, `Videos#${sourceId} legacy identity`);
+    const row = playlistsByLegacyId.get(legacyId);
+    const sql = sourceVideos.get(sourceId);
+    if (!row || !sql || sql.status !== 'active') throw new Error(`Videos#${sourceId} must match one active SQL playlist and one accepted JSON identity`);
+    const expectedLegacyId = `video/pleylist/${sourceId}`;
+    if (legacyId !== expectedLegacyId || valueAt(row, 'slug') !== String(sourceId)) {
+      throw new Error(`Videos#${sourceId} accepted slug or legacy identity does not match the approved playlist ID`);
+    }
+    const title = string(sql.name, `Videos#${sourceId} SQL name`);
+    if (valueAt(row, 'title') !== title || entity.title !== title) throw new Error(`Videos#${sourceId} accepted title does not match SQL`);
+    if (entity.slug !== String(sourceId)) throw new Error(`Videos#${sourceId} mapped slug does not match its SQL identity`);
+    playlistsByLegacyId.delete(legacyId);
+
+    let thumbnailSourceFileId: string | null = null;
+    let thumbnailSourceUrl: string | null = null;
+    if (sql.imageId !== null) {
+      const proof = thumbnailsByVideoId.get(sourceId);
+      const file = source.Files?.find((item) => item.id === sql.imageId);
+      if (!proof || valueAt(proof, 'source_file_id', 'sourceFileId') !== sql.imageId || !file?.url) {
+        throw new Error(`Videos#${sourceId} SQL imageId lacks an exact source file and byte proof`);
+      }
+      thumbnailSourceFileId = sql.imageId;
+      thumbnailSourceUrl = file.url;
+    } else if (thumbnailsByVideoId.has(sourceId)) {
+      throw new Error(`Videos#${sourceId} has thumbnail proof without a SQL imageId`);
+    }
+
+    return {
+      sourceId,
+      sourcePath: playlistBlob.path,
+      revision: playlistBlob.revision,
+      sha256: digest(playlistBlob.sha256, `${playlistBlob.path} SHA-256`),
+      slug: String(sourceId),
+      legacy_id: expectedLegacyId,
+      seo: {
+        seo_title: string(valueAt(row, 'seo_title', 'seoTitle'), `Videos#${sourceId} SEO title`),
+        seo_description: string(valueAt(row, 'seo_description', 'seoDescription'), `Videos#${sourceId} SEO description`),
+      },
+      videos: null,
+      thumbnailSourceFileId,
+      thumbnailSourceUrl,
+      // The asset binder supplies the target URL after byte verification.
+      thumbnailPublicUrl: null,
+    };
+  }));
+  if (playlistsByLegacyId.size) throw new Error(`${playlistBlob.path} contains a playlist without a matching active SQL Videos identity`);
+  for (const sourceId of thumbnailsByVideoId.keys()) {
+    if (!(mapped.entities.videos ?? []).some((video) => video.sourceId === sourceId)) {
+      throw new Error(`Videos#${sourceId} has thumbnail proof without a selected SQL playlist identity`);
+    }
+  }
+  }
 
   const orgRows = source.OrganizationInfo ?? [];
   const orgEntities = mapped.entities.organizationInfo ?? [];
@@ -624,7 +761,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
     const id = idString(valueAt(row, 'source_file_id', 'sourceFileId'), 'thumbnail source file ID');
     const proof = proofById.get(id);
     if (!proof || !entries.some((entry) => entry.sourceFileId === id && entry.reachability.kind === 'video-thumbnail')) throw new Error(`${id} video thumbnail metadata has no matching verified byte proof`);
-    const videoId = numberId(valueAt(row, 'source_video_id', 'sourceVideoId'), `${id} video ID`);
+    const videoId = manifestNumberId(valueAt(row, 'source_video_id', 'sourceVideoId'), `${id} video ID`);
     if (!videos.some((video) => video.id === videoId && video.imageId === id && video.name === valueAt(row, 'source_video_name', 'sourceVideoName'))) throw new Error(`${id} thumbnail metadata does not match native Videos`);
   }
 
@@ -665,7 +802,7 @@ function normalizePrivateInputs(config: SqlDemoPrivateInputRootConfig, source: S
       revision: acceptedCorpusRevision,
       sha256: digest(valueAt(approved, 'corpus_sha256', 'corpusSha256') ?? staticBlob?.sha256, 'accepted corpus SHA-256'),
     },
-    pages, instituteMetadata: [], videoPlaylists: [], targetLocations,
+    pages, instituteMetadata, videoPlaylists, targetLocations,
   };
   const ownerDecisions: SqlDemoOwnerDecisions = {
     approvedUnlinkedArticleImages: grants.map((grant) => ({ sourceFileId: grant.sourceFileId, sourceUrl: nativeFiles.get(grant.sourceFileId)!.url!, decisionId: grant.decisionId })),
