@@ -583,7 +583,7 @@ describe('соответствие полей объявлено данными,
     expect(run.output, 'отказ не называет исчезнувший источник').toMatch(/title/);
   });
 
-  // Сценарий: поле схемы не участвует в соответствии
+  // Сверка карты со схемой в checkout; поле ответа без решения проверяется ниже, в описании форм установленной CMS
   it('незаявленное поле схемы названо в выводе и успеха не отменяет', async () => {
     const map = await fieldMapModule();
     const { schemas, components } = await schemasOf();
@@ -768,14 +768,15 @@ describe('съём понимает формы данных установлен
   });
 
   it('медиа-список из нескольких элементов — отказ с названием поля, а не молчаливый выбор', async () => {
-    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 0 ? [media(1), media(2)] : r.photo }));
+    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 2 ? [media(1), media(2)] : r.photo }));
     const cms = await stub({ teachers: { records: two } });
     const dir = outDir();
 
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `съём прошёл при двух фото у одной записи:\n${run.output}`).not.toBe(0);
-    expect(run.output).toMatch(/teachers\.photo/);
+    // Отказ называет и поле, и запись: по нему редактор находит, что исправить.
+    expect(run.output).toMatch(/teachers\.photo.*teach-003/);
     expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
   });
 
@@ -800,6 +801,7 @@ describe('съём понимает формы данных установлен
 
     expect(run.status, `съём прошёл с неизвестным полем:\n${run.output}`).not.toBe(0);
     expect(run.output).toMatch(/teachers\.mystery/);
+    expect(run.output, 'отказ не говорит, куда добавить решение').toMatch(/FIELD_MAP.*UNMAPPED_SCHEMA_FIELDS/);
     expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
   });
 
@@ -838,15 +840,6 @@ describe('съём понимает формы данных установлен
     );
   });
 
-  it('отказ по медиа называет запись, а не только поле', async () => {
-    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 2 ? [media(1), media(2)] : r.photo }));
-    const cms = await stub({ teachers: { records: two } });
-
-    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
-
-    expect(run.status).not.toBe(0);
-    expect(run.output).toMatch(/teachers\.photo.*teach-003/);
-  });
 
   it('медиа с пустым адресом — отказ, а не пропавшее изображение', async () => {
     const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: { ...media(1), url: '' } })) } });
@@ -858,13 +851,13 @@ describe('съём понимает формы данных установлен
   });
 
   it('ключ-источник отсутствует в ответе — отказ с названием поля и записи', async () => {
-    const cms = await stub({ teachers: { records: d.teachers!.records.map(({ bio: _b, ...r }) => r) } });
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => without(r, 'bio')) } });
     const dir = outDir();
 
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `съём прошёл без ключа bio:\n${run.output}`).not.toBe(0);
-    expect(run.output).toMatch(/teachers\.bio.*teach-001/);
+    expect(run.output).toMatch(/teachers\.bio_html ← bio.*teach-001/);
     expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
   });
 
@@ -897,6 +890,15 @@ describe('съём понимает формы данных установлен
 
     expect(run.status, run.output).toBe(0);
     expect(run.output).toMatch(/seminars\.documents_state.*2/);
+  });
+
+  it('заполненный seo.noindex назван в выводе', async () => {
+    const cms = await stub({ articles: { records: d.articles!.records.map((r, i) => ({ ...r, seo: { ...(r.seo as object), noindex: i < 3 } })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).toMatch(/articles\.seo\.noindex — с данными в 3 /);
   });
 });
 
