@@ -745,7 +745,7 @@ describe('съём понимает формы данных установлен
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, `съём прошёл с неполной связью:\n${run.output}`).not.toBe(0);
-    expect(run.output).toMatch(/schedule_entries\.teachers/);
+    expect(run.output).toMatch(/schedule_entries\.teachers.*запись ev-001/);
   });
 
   it('изображение семинара из списка из одного элемента сохраняется', async () => {
@@ -819,6 +819,18 @@ describe('съём понимает формы данных установлен
 
     expect(run.status, run.output).toBe(0);
     expect(run.output).toMatch(/articles\.seo\.noindex — с данными в 3 /);
+  });
+
+  it('несколько классов отказа — одним сообщением', async () => {
+    const cms = await stub({
+      teachers: { records: d.teachers!.records.map((r) => ({ ...r, mystery: 'x' })) },
+      seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 0 ? '<p>Совет</p>' : null })) },
+    });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status).not.toBe(0);
+    expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery.*заполнены поля, которые сайт ещё не показывает: seminars\.recommendations/s);
   });
 });
 

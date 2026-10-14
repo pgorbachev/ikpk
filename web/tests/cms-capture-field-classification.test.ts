@@ -113,6 +113,16 @@ describe('ключ-источник в ответе и заполненные п
     expect(hasValue(false)).toBe(false);
     expect(hasValue(true)).toBe(true);
     expect(hasValue('<p>x</p>')).toBe(true);
+    expect(hasValue('<p>&#160;</p>')).toBe(false);
+    // Картинка, встраивание или автоссылка без текста — данные: иначе такой «план» прошёл бы молча.
+    expect(hasValue('<p><img src="/uploads/plan.png"></p>')).toBe(true);
+    expect(hasValue('<iframe src="https://example.invalid/v"></iframe>')).toBe(true);
+    expect(hasValue('<https://example.invalid/plan>')).toBe(true);
+  });
+
+  it('подполе связи тоже сверяется с ответом', () => {
+    const rec = full({ course_group: { id: 1, name: 'Программа' } });
+    expect(missingSourceFields('seminars', rec)).toEqual(['seminars.course_group_legacy_id ← course_group.legacy_id']);
   });
 });
 
