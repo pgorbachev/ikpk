@@ -6,6 +6,7 @@ import {
   SOURCE_TYPES,
   UNMAPPED_SCHEMA_FIELDS,
   filledUnshownContentFields,
+  hasValue,
   missingSourceFields,
   unknownRecordFields,
   type CmsSchema,
@@ -74,13 +75,17 @@ describe('съём знает каждое поле записи CMS', () => {
 
 describe('ключ-источник в ответе и заполненные поля, которые сайт не показывает', () => {
   const full = (over: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(FIELD_MAP.filter((e) => e.type === 'seminars').map((e) => [e.source.split('.')[0]!, null]).concat(Object.entries(over)));
+    Object.fromEntries([
+      ...FIELD_MAP.filter((e) => e.type === 'seminars').map((e): [string, unknown] => [e.source.split('.')[0]!, null]),
+      ...Object.entries(over),
+    ]);
 
   it('отсутствие ключа-источника названо, а null и пустая коллекция — нет', () => {
     expect(missingSourceFields('seminars', full({}))).toEqual([]);
     expect(missingSourceFields('seminars', full({ teachers: [] }))).toEqual([]);
-    const { teachers: _drop, ...without } = full({});
-    expect(missingSourceFields('seminars', without)).toEqual(['seminars.teachers']);
+    const withoutTeachers = full({});
+    delete withoutTeachers.teachers;
+    expect(missingSourceFields('seminars', withoutTeachers)).toEqual(['seminars.teachers ← teachers']);
   });
 
   it('заполненное поле содержимого, которое сайт не показывает, названо', () => {
@@ -94,6 +99,20 @@ describe('ключ-источник в ответе и заполненные п
 
   it('пустая строка и строка из пробелов — пустое значение', () => {
     expect(filledUnshownContentFields('seminars', { learning_mode: '', recommendations: '   ' })).toEqual([]);
+  });
+
+  it('исчезнувший вложенный ключ-источник назван обоими именами', () => {
+    const rec = full({ seo: { id: 1, seo_description: 'd' } });
+    expect(missingSourceFields('seminars', rec)).toEqual(['seminars.seo_title ← seo.seo_title']);
+    expect(missingSourceFields('seminars', full({ seo: null }))).toEqual([]);
+  });
+
+  it('пустой rich-text и false — не данные', () => {
+    expect(hasValue('<p></p>')).toBe(false);
+    expect(hasValue('<p>&nbsp;</p>')).toBe(false);
+    expect(hasValue(false)).toBe(false);
+    expect(hasValue(true)).toBe(true);
+    expect(hasValue('<p>x</p>')).toBe(true);
   });
 });
 
