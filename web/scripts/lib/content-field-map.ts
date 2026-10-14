@@ -188,17 +188,12 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
 ] as const;
 
 /**
- * Поля записей CMS, которые съём НАМЕРЕННО не переносит в снимок, — с причиной. Список
- * покрывает обе формы данных: прежнюю схему `cms/` и схему установленной CMS (4016ea47).
- * Съём отказывает на поле записи, которого нет ни в `FIELD_MAP`, ни здесь
- * (`unknownRecordFields`): новое поле без решения о нём — остановка, а не строка в логе.
- *
- * «Не используется в этом релизе» — решение, а не забытое соответствие: часть полей уже
- * заполнена в CMS (`trait`, даты новостей и акций, `documents_state`), но сайт их пока не
- * показывает. Включение любого из них в сайт — отдельная работа.
+ * Поля записей CMS, которые съём НАМЕРЕННО не переносит, — с причиной; покрывают и прежнюю схему
+ * `cms/`, и установленную CMS (4016ea47). Поле ответа вне карты и вне этого списка — отказ съёма.
  */
 const REVERSE = 'обратная сторона связи: прямая сторона уже в карте';
 const NOT_YET = 'не используется сайтом в этом релизе';
+const UNSHOWN = 'сайт ещё не показывает: заполненное поле останавливает съём';
 const OLD_SCHEMA = 'только в прежней схеме; цена и длительность берутся из проведений, статус сайт не читает';
 export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   institutes: { course_groups: REVERSE },
@@ -208,14 +203,14 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
     seminar_status: OLD_SCHEMA,
     price: OLD_SCHEMA,
     duration: OLD_SCHEMA,
-    documents: NOT_YET,
+    documents: UNSHOWN,
     documents_state: NOT_YET,
     documents_confirmation_author: NOT_YET,
     documents_confirmation_date: NOT_YET,
     documents_confirmation_source: NOT_YET,
-    learning_plan: NOT_YET,
-    learning_mode: NOT_YET,
-    recommendations: NOT_YET,
+    learning_plan: UNSHOWN,
+    learning_mode: UNSHOWN,
+    recommendations: UNSHOWN,
   },
   teachers: { seminars: REVERSE, trait: NOT_YET },
   articles: { categories: NOT_YET },
@@ -227,7 +222,7 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
 /** Служебные поля ответа Strapi 5 и компонента: не атрибуты схемы. */
 const SYSTEM_FIELDS = new Set(['id', 'documentId', 'createdAt', 'updatedAt', 'publishedAt']);
 /** Подполя компонента `shared.seo`, которые сайт пока не читает. */
-const UNMAPPED_SEO_FIELDS = new Set(['og_image', 'noindex']);
+export const UNMAPPED_SEO_FIELDS: Readonly<Record<string, string>> = { og_image: NOT_YET, noindex: NOT_YET };
 
 /**
  * Поля записи, о которых нет решения: ни в карте, ни в `UNMAPPED_SCHEMA_FIELDS`, ни служебные.
@@ -244,7 +239,7 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
     if (!roots.has(field) && !decided) unknown.push(`${type}.${field}`);
     if (field === 'seo' && value && typeof value === 'object') {
       for (const sub of Object.keys(value)) {
-        if (sub !== 'id' && !seoMapped.has(sub) && !UNMAPPED_SEO_FIELDS.has(sub)) unknown.push(`${type}.seo.${sub}`);
+        if (sub !== 'id' && !seoMapped.has(sub) && !Object.hasOwn(UNMAPPED_SEO_FIELDS, sub)) unknown.push(`${type}.seo.${sub}`);
       }
     }
   }
@@ -252,32 +247,41 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
 }
 
 /**
- * Ключи-источники карты, которых нет в записи ответа. Отсутствие ключа — отказ: источник исчез из
- * установленной CMS. `null` и пустая коллекция — законные пустые значения, ключ при них есть.
+ * Источники карты, которых нет в записи ответа, — `поле снимка ← источник`. Отсутствие ключа — отказ:
+ * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
+ * проверяется, когда родитель — объект (компонент `seo`); подполя связей проверяет запись цели.
  */
 export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
-  const roots = new Set(FIELD_MAP.filter((e) => e.type === type).map((e) => e.source.split('.')[0]!));
-  return [...roots].filter((root) => !Object.hasOwn(record, root)).map((root) => `${type}.${root}`);
+  const missing = new Map<string, string>();
+  for (const { field, source } of FIELD_MAP.filter((e) => e.type === type)) {
+    const [root, sub] = source.split('.') as [string, string | undefined];
+    const parent = record[root];
+    const gone = !Object.hasOwn(record, root) ||
+      (sub !== undefined && parent !== null && typeof parent === 'object' && !Array.isArray(parent) && !Object.hasOwn(parent, sub));
+    if (gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
+  }
+  return [...missing.values()];
 }
 
 /**
- * Поля содержимого, которые редактор заполняет в CMS, а сайт ещё не показывает. Непустое значение —
- * отказ съёма: иначе правка редактора молча не дойдёт до сайта. Служебные отметки
- * (`documents_state`, `documents_confirmation_*`) сюда не входят: у двух семинаров отметка уже стоит.
+ * Есть ли в значении данные. Пустой rich-text (`<p></p>`, `&nbsp;`) и `false` — не данные: редактор,
+ * очистивший поле, его не заполнял, а `false` — значение по умолчанию флага.
  */
-export const UNSHOWN_CONTENT_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  seminars: ['learning_plan', 'learning_mode', 'recommendations', 'documents'],
-};
-
 export function hasValue(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'string') return value.trim() !== '';
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === 'string') return value.replace(/<[^>]*>|&nbsp;/g, '').trim() !== '';
   if (Array.isArray(value)) return value.length > 0;
   return true;
 }
 
+/**
+ * Заполненные поля содержимого, которые сайт ещё не показывает (причина `UNSHOWN`): правка редактора
+ * молча не дошла бы до сайта. Служебные отметки (`documents_state`, `documents_confirmation_*`) — не
+ * `UNSHOWN`: у двух семинаров отметка уже стоит.
+ */
 export function filledUnshownContentFields(type: string, record: Record<string, unknown>): string[] {
-  return (UNSHOWN_CONTENT_FIELDS[type] ?? []).filter((f) => hasValue(record[f])).map((f) => `${type}.${f}`);
+  const fields = UNMAPPED_SCHEMA_FIELDS[type] ?? {};
+  return Object.keys(fields).filter((f) => fields[f] === UNSHOWN && hasValue(record[f])).map((f) => `${type}.${f}`);
 }
 
 /**

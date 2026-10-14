@@ -13,6 +13,7 @@ import {
   FIELD_MAP,
   SOURCE_TYPES,
   UNMAPPED_SCHEMA_FIELDS,
+  UNMAPPED_SEO_FIELDS,
   checkFieldMapAgainstSchema,
   filledUnshownContentFields,
   hasValue,
@@ -175,7 +176,7 @@ function refList(value: unknown): unknown {
 
 /**
  * Массив URL медиа — форма, которую читает сайт (`inst.images?.[0]` в компонентах главной).
- * В CMS медиа одно и лежит в `image`; в снимке рядом живут оба поля: `image` — объект с
+ * Сайт показывает одно медиа из `image` (см. `singleMedia`); в снимке рядом живут оба поля: `image` — объект с
  * идентификатором содержимого, `images` — список адресов. Совмещать их нельзя: их читают
  * разные места.
  */
@@ -198,7 +199,10 @@ function entryTeachers(value: unknown): unknown {
     if (t && typeof t.name === 'string' && (typeof id === 'string' || typeof id === 'number') && id !== '') {
       return { id, fullName: t.name };
     }
-    throw new Error(`schedule_entries.teachers: неподдерживаемая форма преподавателя ${JSON.stringify(t)?.slice(0, 120)}`);
+    throw new Error(
+      `schedule_entries.teachers: у преподавателя в связи нет legacy_id или имени — заполнить их у ` +
+        `преподавателя в CMS (${JSON.stringify(t)?.slice(0, 120)})`,
+    );
   });
 }
 
@@ -238,7 +242,7 @@ const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
 
 /** Запись в сообщениях об отказе: по ней редактор находит, что исправить. */
 function recordKey(record: Record<string, unknown>): string {
-  return String(record.legacy_id ?? record.slug ?? record.documentId ?? record.id);
+  return String(record.legacy_id || record.slug || record.documentId || record.id || '?');
 }
 
 function applyEntry(record: Record<string, unknown>, entry: FieldMapEntry, out: Record<string, unknown>): void {
@@ -447,26 +451,28 @@ async function liveCapture(): Promise<void> {
       for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
       for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
       for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
-      for (const field of Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {})) {
-        if (hasValue(record[field])) filledUnmapped.set(`${st.type}.${field}`, (filledUnmapped.get(`${st.type}.${field}`) ?? 0) + 1);
-      }
+      const seo = (record.seo ?? {}) as Record<string, unknown>;
+      const filled = [
+        ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
+        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) => hasValue(seo[f])).map((f) => `${st.type}.seo.${f}`),
+      ];
+      for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
     }
   }
-  if (unknown.size > 0) {
-    throw new Error(
-      `поля CMS без решения: ${[...unknown].sort().join(', ')} — добавить в FIELD_MAP или в ` +
-        'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts); снимок не записан',
-    );
-  }
-  if (missing.length > 0) {
-    throw new Error(`источник исчез из ответа CMS: ${missing.slice(0, 10).join(', ')}; снимок не записан`);
-  }
-  if (unshown.length > 0) {
-    throw new Error(
-      `заполнены поля, которые сайт ещё не показывает: ${unshown.slice(0, 10).join(', ')} — ` +
-        'правка не дойдёт до сайта; нужен вывод на сайте или очистка поля; снимок не записан',
-    );
-  }
+  // Все три класса — одним отказом: оператор исправляет их за один прогон, а не по очереди.
+  const first = (list: string[]): string => `${list.slice(0, 10).join(', ')}${list.length > 10 ? ` … всего ${list.length}` : ''}`;
+  const refusals = [
+    unknown.size > 0 &&
+      `поля CMS без решения: ${first([...unknown].sort())} — добавить в FIELD_MAP или в ` +
+        'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts)',
+    missing.length > 0 &&
+      `источник исчез из ответа CMS: ${first(missing)} — поле удалено или переименовано в CMS; ` +
+        'обновить FIELD_MAP',
+    unshown.length > 0 &&
+      `заполнены поля, которые сайт ещё не показывает: ${first(unshown)} — правка не дойдёт до сайта; ` +
+        'нужен вывод на сайте или очистка поля в CMS',
+  ].filter(Boolean);
+  if (refusals.length > 0) throw new Error(`${refusals.join('; ')}; снимок не записан`);
 
   const types: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
@@ -593,11 +599,13 @@ async function liveCapture(): Promise<void> {
   }
   // Непереносимые поля называются вместе с причиной и числом записей, где у них есть данные:
   // решение не переносить видно в каждом съёме, а не только в коде.
-  const named = new Set([...mapCheck.unmapped.map((i) => `${i.type}.${i.field}`), ...filledUnmapped.keys()]);
-  for (const name of [...named].sort()) {
-    const [type, field] = name.split('.') as [string, string];
-    const reason = UNMAPPED_SCHEMA_FIELDS[type]?.[field] ?? 'без решения';
-    console.log(`  поле схемы вне соответствия: ${name} — с данными в ${filledUnmapped.get(name) ?? 0} записях (${reason})`);
+  for (const [type, fields] of Object.entries(UNMAPPED_SCHEMA_FIELDS)) {
+    for (const [field, reason] of Object.entries(fields)) {
+      console.log(`  поле схемы вне соответствия: ${type}.${field} — с данными в ${filledUnmapped.get(`${type}.${field}`) ?? 0} записях (${reason})`);
+    }
+  }
+  for (const [name, count] of [...filledUnmapped].filter(([n]) => n.includes('.seo.'))) {
+    console.log(`  поле схемы вне соответствия: ${name} — с данными в ${count} записях (${UNMAPPED_SEO_FIELDS[name.split('.')[2]!]})`);
   }
 }
 
