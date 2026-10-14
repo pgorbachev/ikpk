@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "1cc12f2cae257cb97f0aa14a6c0bda9b95d3a9de",
+  "generatedFromSha": "074528c51b393007fae22bb9b7057d6d1c6b3412",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -57768,7 +57768,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/raspisanie-i-tseny",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/raspisanie-i-tseny.QgdgxAhG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/raspisanie-i-tseny.BjqSBFIs.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",

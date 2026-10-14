@@ -11,14 +11,20 @@ const visible = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 describe('formatPrice: нечисло не уходит в подпись', () => {
   it('undefined и NaN не печатаются как «не число»', () => {
-    expect(formatPrice(undefined as never)).toBe('');
-    expect(formatPrice(Number.NaN)).toBe('');
+    expect(formatPrice(undefined as never)).toBe('Стоимость уточняется');
+    expect(formatPrice(Number.NaN)).toBe('Стоимость уточняется');
   });
 
-  it('ноль остаётся «Бесплатно», конечное число — с ₽', () => {
-    expect(formatPrice(0)).toBe('Бесплатно');
+  it('ноль без явной бесплатности требует уточнения, конечная положительная цена — с ₽', () => {
+    expect(formatPrice(0)).toBe('Стоимость уточняется');
     expect(visible(formatPrice(37_500))).toBe('37 500 ₽');
   });
+
+  it.each([0, -1, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN, undefined, null])(
+    'неизвестная или недопустимая цена %s требует уточнения', (price) => {
+      expect(formatPrice(price as number)).toBe('Стоимость уточняется');
+    },
+  );
 });
 
 describe('CMS-форма записи расписания читается как цена и город', () => {

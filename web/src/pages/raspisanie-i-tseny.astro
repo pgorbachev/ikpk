@@ -133,7 +133,7 @@ const items = entries.map((entry) => {
     instituteName: entry.institute.name,
     instituteSlug,
     months: monthKeys(entry, todayDate),
-    priceLabel: entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice),
+    priceLabel: entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,
     // на демо-стенде подменяется заглушкой/тестовым порталом (см. lib/forms.ts)
