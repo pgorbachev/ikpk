@@ -240,7 +240,8 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
   const unknown: string[] = [];
   for (const [field, value] of Object.entries(record)) {
     if (SYSTEM_FIELDS.has(field)) continue;
-    if (!roots.has(field) && !UNMAPPED_SCHEMA_FIELDS[type]?.[field]) unknown.push(`${type}.${field}`);
+    const decided = Object.hasOwn(UNMAPPED_SCHEMA_FIELDS, type) && Object.hasOwn(UNMAPPED_SCHEMA_FIELDS[type]!, field);
+    if (!roots.has(field) && !decided) unknown.push(`${type}.${field}`);
     if (field === 'seo' && value && typeof value === 'object') {
       for (const sub of Object.keys(value)) {
         if (sub !== 'id' && !seoMapped.has(sub) && !UNMAPPED_SEO_FIELDS.has(sub)) unknown.push(`${type}.seo.${sub}`);
@@ -248,6 +249,35 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
     }
   }
   return unknown;
+}
+
+/**
+ * Ключи-источники карты, которых нет в записи ответа. Отсутствие ключа — отказ: источник исчез из
+ * установленной CMS. `null` и пустая коллекция — законные пустые значения, ключ при них есть.
+ */
+export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
+  const roots = new Set(FIELD_MAP.filter((e) => e.type === type).map((e) => e.source.split('.')[0]!));
+  return [...roots].filter((root) => !Object.hasOwn(record, root)).map((root) => `${type}.${root}`);
+}
+
+/**
+ * Поля содержимого, которые редактор заполняет в CMS, а сайт ещё не показывает. Непустое значение —
+ * отказ съёма: иначе правка редактора молча не дойдёт до сайта. Служебные отметки
+ * (`documents_state`, `documents_confirmation_*`) сюда не входят: у двух семинаров отметка уже стоит.
+ */
+export const UNSHOWN_CONTENT_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  seminars: ['learning_plan', 'learning_mode', 'recommendations', 'documents'],
+};
+
+export function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+export function filledUnshownContentFields(type: string, record: Record<string, unknown>): string[] {
+  return (UNSHOWN_CONTENT_FIELDS[type] ?? []).filter((f) => hasValue(record[f])).map((f) => `${type}.${f}`);
 }
 
 /**
