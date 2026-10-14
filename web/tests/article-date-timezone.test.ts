@@ -16,7 +16,7 @@ const cases = [
   ['2026-12-02', '2 декабря 2026 г.'],
 ] as const;
 
-// The article page and cards use formatDate. The accepted preview displays the
+// Article pages and seminar schedule panels use formatDate. The accepted preview displays the
 // UTC calendar day; the build host must not move it to the previous/next day.
 // Separate processes make TZ effective even when the test runner uses workers.
 describe.each([
