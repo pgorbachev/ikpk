@@ -418,6 +418,8 @@ export function formatPrice(price: number): string {
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('ru-RU', {
+    // Даты в CMS — московская полночь; без пояса день зависит от машины сборки.
+    timeZone: 'Europe/Moscow',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
