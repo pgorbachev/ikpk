@@ -7,6 +7,13 @@ const cases = [
   ['2025-02-04T21:00:00.000Z', '4 февраля 2025 г.'],
   ['2026-02-26T21:00:00.000Z', '26 февраля 2026 г.'],
   ['2025-02-05T00:00:00+03:00', '4 февраля 2025 г.'],
+  ['2025-05-25T21:00:00.000Z', '26 мая 2025 г.'],
+  ['2025-05-26T00:00:00+03:00', '26 мая 2025 г.'],
+  // At 21:00 UTC, Nicosia crosses midnight only during daylight saving time.
+  ['2025-03-29T21:00:00.000Z', '29 марта 2025 г.'],
+  ['2025-03-30T21:00:00.000Z', '31 марта 2025 г.'],
+  ['2025-10-25T21:00:00.000Z', '26 октября 2025 г.'],
+  ['2025-10-26T21:00:00.000Z', '26 октября 2025 г.'],
   ['2025-02-05', '5 февраля 2025 г.'],
   ['2026-02-27', '27 февраля 2026 г.'],
   // SeminarSchedulePanel uses the same formatter for startAt/endAt.
@@ -17,11 +24,13 @@ const cases = [
 ] as const;
 
 // Article pages and seminar schedule panels use formatDate. The accepted preview displays the
-// UTC calendar day; the build host must not move it to the previous/next day.
+// Asia/Nicosia calendar day, including its daylight saving time transitions;
+// the build host must not move it to the previous/next day.
 // Separate processes make TZ effective even when the test runner uses workers.
 describe.each([
   ['UTC', 0],
   ['Europe/Moscow', -180],
+  ['Asia/Nicosia', -120],
   ['Pacific/Kiritimati', -840],
   ['Pacific/Niue', 660],
 ] as const)('article and seminar dates on a %s build host', (timeZone, expectedOffset) => {
