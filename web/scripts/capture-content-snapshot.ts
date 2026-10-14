@@ -12,7 +12,13 @@ import { assertSnapshotContract } from './lib/content-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
+  UNMAPPED_SCHEMA_FIELDS,
+  UNMAPPED_SEO_FIELDS,
   checkFieldMapAgainstSchema,
+  filledUnshownContentFields,
+  hasValue,
+  missingSourceFields,
+  unknownRecordFields,
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
@@ -170,7 +176,7 @@ function refList(value: unknown): unknown {
 
 /**
  * Массив URL медиа — форма, которую читает сайт (`inst.images?.[0]` в компонентах главной).
- * В CMS медиа одно и лежит в `image`; в снимке рядом живут оба поля: `image` — объект с
+ * Сайт показывает одно медиа из `image` (см. `singleMedia`); в снимке рядом живут оба поля: `image` — объект с
  * идентификатором содержимого, `images` — список адресов. Совмещать их нельзя: их читают
  * разные места.
  */
@@ -179,24 +185,77 @@ function mediaUrlList(value: unknown): unknown {
   return ref?.url ? [ref.url] : undefined;
 }
 
+/**
+ * Преподаватели проведения. Прежнее JSON-поле давало `{id, fullName}` — эту форму ищет страница
+ * семинара; установленная CMS отдаёт связь с записью преподавателя, и она сводится к той же
+ * форме. Связь без `legacy_id` или имени — отказ: страница построила бы ссылку в никуда.
+ */
+function entryTeachers(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    const t = item as Record<string, unknown> | null;
+    if (t && typeof t === 'object' && 'fullName' in t) return t;
+    const id = t?.legacy_id;
+    if (t && typeof t.name === 'string' && (typeof id === 'string' || typeof id === 'number') && id !== '') {
+      return { id, fullName: t.name };
+    }
+    throw new Error(
+      `schedule_entries.teachers: у преподавателя в связи нет legacy_id или имени — заполнить их у ` +
+        `преподавателя в CMS (${JSON.stringify(t)?.slice(0, 120)})`,
+    );
+  });
+}
+
+const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList']);
+
+/**
+ * Установленная CMS отдаёт медиа списком (`multiple: true`), прежняя схема — объектом. Сайт
+ * показывает одно изображение: список из одного элемента разворачивается, из нескольких — отказ,
+ * потому что молча выбрать одно значило бы потерять остальные. Любая другая форма — тоже отказ:
+ * так 13.10.2026 пропали все фото, а съём остался зелёным.
+ */
+function singleMedia(value: unknown, where: string): unknown {
+  if (Array.isArray(value) && value.length > 1) {
+    throw new Error(`${where}: ${value.length} файла в поле, сайт показывает одно`);
+  }
+  const item = Array.isArray(value) ? (value[0] ?? null) : value;
+  if (item === null || item === undefined) return item;
+  const url = item && typeof item === 'object' ? (item as Record<string, unknown>).url : undefined;
+  if (typeof url !== 'string' || url === '') {
+    throw new Error(`${where}: неподдерживаемая форма медиа ${JSON.stringify(item)?.slice(0, 120)}`);
+  }
+  return item;
+}
+
 const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
   mediaUrl,
   mediaUrlList,
   refList,
+  entryTeachers,
   // `legacy_url` в CMS нет: выводится из `legacy_id`, тем же способом, что и
   // `scripts/refresh-catalog.ts` (`legacy_url: `/${group}/${s.slug}``) — относительный путь,
   // без домена.
   legacyUrlFromId: (value) => (typeof value === 'string' && value !== '' ? `/${value}` : undefined),
 };
 
+/** Запись в сообщениях об отказе: по ней редактор находит, что исправить. */
+function recordKey(record: Record<string, unknown>): string {
+  return String(record.legacy_id || record.slug || record.documentId || record.id || '?');
+}
+
 function applyEntry(record: Record<string, unknown>, entry: FieldMapEntry, out: Record<string, unknown>): void {
   let value = resolveSource(record, entry.source);
   if (entry.transform) {
     const fn = TRANSFORMS[entry.transform];
     if (!fn) throw new Error(`неизвестное преобразование ${entry.transform} (${entry.type}.${entry.field})`);
-    value = fn(value);
+    try {
+      if (MEDIA_TRANSFORMS.has(entry.transform)) value = singleMedia(value, `${entry.type}.${entry.source}`);
+      value = fn(value);
+    } catch (err) {
+      throw new Error(`${(err as Error).message} (запись ${recordKey(record)})`, { cause: err });
+    }
   }
   if (value !== undefined) out[entry.field] = value;
 }
@@ -344,9 +403,9 @@ async function liveCapture(): Promise<void> {
     }
   }
 
-  // Соответствие проверяется ПРОТИВ СХЕМ, а не против полученных записей: запись, где поле
-  // просто пустое, неотличима от записи, у которой источник исчез из схемы. Исчезнувший
-  // источник — отказ; поле схемы, не участвующее в соответствии, — не отказ, но и не тишина.
+  // Первая сверка — против схем в checkout: исчезнувший из схемы источник — отказ. Схема в
+  // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
+  // ответом CMS по каждой записи.
   const schemas: Record<string, CmsSchema> = {};
   for (const st of SOURCE_TYPES) {
     schemas[st.type] = JSON.parse(readFileSync(join(repoRoot, st.schema), 'utf-8')) as CmsSchema;
@@ -372,6 +431,41 @@ async function liveCapture(): Promise<void> {
       `источник исчез из схемы: поле снимка ${first.type}.${first.field} ждёт ${first.source}`,
     );
   }
+
+  // Ответ CMS сверяется с картой по каждой записи: схема в checkout может расходиться с
+  // установленной CMS, и расходятся именно они. Три отказа — поле без решения, исчезнувший
+  // ключ-источник (null и [] — не отказ) и заполненное поле содержимого, которое сайт не показывает.
+  const unknown = new Set<string>();
+  const missing: string[] = [];
+  const unshown: string[] = [];
+  const filledUnmapped = new Map<string, number>();
+  for (const st of SOURCE_TYPES) {
+    for (const record of rawByType[st.type]!) {
+      for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
+      for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
+      for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
+      const seo = (record.seo ?? {}) as Record<string, unknown>;
+      const filled = [
+        ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
+        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) => hasValue(seo[f])).map((f) => `${st.type}.seo.${f}`),
+      ];
+      for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
+    }
+  }
+  // Все три класса — одним отказом: оператор исправляет их за один прогон, а не по очереди.
+  const first = (list: string[]): string => `${list.slice(0, 10).join(', ')}${list.length > 10 ? ` … всего ${list.length}` : ''}`;
+  const refusals = [
+    unknown.size > 0 &&
+      `поля CMS без решения: ${first([...unknown].sort())} — добавить в FIELD_MAP или в ` +
+        'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts)',
+    missing.length > 0 &&
+      `источник исчез из ответа CMS: ${first(missing)} — поле удалено или переименовано в CMS; ` +
+        'обновить FIELD_MAP',
+    unshown.length > 0 &&
+      `заполнены поля, которые сайт ещё не показывает: ${first(unshown)} — правка не дойдёт до сайта; ` +
+        'нужен вывод на сайте или очистка поля в CMS',
+  ].filter(Boolean);
+  if (refusals.length > 0) throw new Error(`${refusals.join('; ')}; снимок не записан`);
 
   const types: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
@@ -515,10 +609,15 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     console.log(`  ${st.type}: ${types[st.type]!.length} записей`);
   }
-  // Незаявленное поле — это либо забытое соответствие, либо лишнее поле в схеме. Молчать о нём
-  // нельзя: обе причины стоит увидеть, но ни одна не повод остановить захват.
-  for (const item of mapCheck.unmapped) {
-    console.log(`  поле схемы вне соответствия: ${item.type}.${item.field}`);
+  // Непереносимые поля называются вместе с причиной и числом записей, где у них есть данные:
+  // решение не переносить видно в каждом съёме, а не только в коде.
+  for (const [type, fields] of Object.entries(UNMAPPED_SCHEMA_FIELDS)) {
+    for (const [field, reason] of Object.entries(fields)) {
+      console.log(`  поле схемы вне соответствия: ${type}.${field} — с данными в ${filledUnmapped.get(`${type}.${field}`) ?? 0} записях (${reason})`);
+    }
+  }
+  for (const [name, count] of [...filledUnmapped].filter(([n]) => n.includes('.seo.'))) {
+    console.log(`  поле схемы вне соответствия: ${name} — с данными в ${count} записях (${UNMAPPED_SEO_FIELDS[name.split('.')[2]!]})`);
   }
 }
 

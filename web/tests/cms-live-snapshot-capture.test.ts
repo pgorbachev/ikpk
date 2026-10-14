@@ -75,12 +75,16 @@ const base = (prefix: string, n: number, name: string): Record<string, unknown> 
   publishedAt: '2026-02-01T00:00:00.000Z',
 });
 
+/** Поле, которого у типа в схеме CMS нет, в ответе заглушки тоже не появляется. */
+const without = (record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(record).filter(([k]) => !keys.includes(k)));
+
 const ARTICLE_COUNT = 130;
 
 function article(n: number, over: Record<string, unknown> = {}): Record<string, unknown> {
   const title = `Статья ${n}`;
   return {
-    ...base('art', n, title),
+    ...without(base('art', n, title), 'name'),
     title,
     body: `<p>Тело статьи ${n}</p>`,
     image: media(n),
@@ -94,20 +98,20 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const institutes = Array.from({ length: 2 }, (_, i) =>
     ({ ...base('inst', i + 1, `Институт ${i + 1}`), shortName: `И${i + 1}`, description: '<p>Об институте</p>', image: media(i + 1), order: i, seo: seo(`Институт ${i + 1}`) }));
   const courseGroups = Array.from({ length: 3 }, (_, i) =>
-    ({ ...base('cg', i + 1, `Программа ${i + 1}`), description: '<p>О программе</p>', image: media(i + 1), institute: ref('inst', 1, 'Институт 1'), seo: seo(`Программа ${i + 1}`) }));
+    ({ ...base('cg', i + 1, `Программа ${i + 1}`), description: '<p>О программе</p>', image: media(i + 1), institute: ref('inst', 1, 'Институт 1'), order: i, seo: seo(`Программа ${i + 1}`) }));
   const teachers = Array.from({ length: 5 }, (_, i) =>
-    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', trait: i === 0 ? 'method-author' : 'teacher', institute_legacy_id: 'raw-legacy-institute', institute: ref('inst', 1, 'Институт 1') }));
+    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', order: i, trait: i === 0 ? 'method-author' : 'teacher', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
-    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', status: 'active', course_group: ref('cg', 1, 'Программа 1'), institute: ref('inst', 1, 'Институт 1'), teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
+    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', course_group: ref('cg', 1, 'Программа 1'), order: i, teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
-    ...base('ev', i + 1, `Событие ${i + 1}`),
+    ...without(base('ev', i + 1, `Событие ${i + 1}`), 'slug'),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
     endAt: `2026-09-0${i + 2}T00:00:00.000Z`,
     city: 'Санкт-Петербург',
     price: 5000,
     oldPrice: 6000,
     isFree: false,
-    status: 'active',
+    entry_status: 'active',
     registrationFormLink: 'https://example.invalid/form',
     description: '<p>Описание события</p>',
     additionalText: '<p>Дополнение</p>',
@@ -123,9 +127,9 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     teachers: { records: teachers },
     articles: { records: Array.from({ length: ARTICLE_COUNT }, (_, i) => article(i + 1)) },
     'schedule-entries': { records: scheduleEntries },
-    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('news', i + 1, `Новость ${i + 1}`), description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
-    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...base('promo', i + 1, `Акция ${i + 1}`), description: '<p>Акция</p>', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
-    pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...base('page', i + 1, `Страница ${i + 1}`), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
+    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
+    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), description: '<p>Акция</p>', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
+    pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('page', i + 1, `Страница ${i + 1}`), 'name'), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
     ...over,
   };
@@ -579,7 +583,7 @@ describe('соответствие полей объявлено данными,
     expect(run.output, 'отказ не называет исчезнувший источник').toMatch(/title/);
   });
 
-  // Сценарий: поле схемы не участвует в соответствии
+  // Сверка карты со схемой в checkout; поле ответа без решения проверяется ниже, в описании форм установленной CMS
   it('незаявленное поле схемы названо в выводе и успеха не отменяет', async () => {
     const map = await fieldMapModule();
     const { schemas, components } = await schemasOf();
@@ -720,3 +724,193 @@ describe('съём отказывается сам, когда общий сро
     expect(existsSync(join(dir, 'snapshot.json')), 'снимок не записан').toBe(true);
   });
 });
+
+// ═════════════════════════ Формы установленной CMS: медиа-списки и связь преподавателей ═══════
+
+describe('съём понимает формы данных установленной CMS', () => {
+  // Установленная CMS (4016ea47) отдаёт `photo`/`image` списком (`multiple: true`), а
+  // преподавателей проведения — связью с записью преподавателя. Съём 13.10.2026 по прежним
+  // формам дал 0 фото из 32 и преподавателей проведений, которых страница не находит.
+  const d = dataset();
+  const listed = (name: string, field: string): StubCollection => ({
+    records: d[name]!.records.map((r) => ({ ...r, [field]: [r[field]] })),
+  });
+  const relationEntries: StubCollection = {
+    records: d['schedule-entries']!.records.map((r, i) => ({
+      ...r,
+      teachers:
+        i === 0
+          ? [{ ...ref('teach', 2, 'Преподаватель 2'), id: 902, bio: '<p>Биография</p>' }]
+          : r.teachers,
+    })),
+  };
+
+  it('фото, изображения институтов и программ из списка из одного элемента сохраняются', async () => {
+    const cms = await stub({
+      teachers: listed('teachers', 'photo'),
+      institutes: listed('institutes', 'image'),
+      'course-groups': listed('course-groups', 'image'),
+    });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    const types = typesOf(readSnapshot(dir));
+    expect(types.teachers!.map((t) => t.photo)).toEqual(
+      Array.from({ length: 5 }, (_, i) => `/uploads/img-${i + 1}.webp`),
+    );
+    expect(types.institutes!.map((t) => t.images)).toEqual([['/uploads/img-1.webp'], ['/uploads/img-2.webp']]);
+    expect(types.institutes![0]!.image).toEqual({ url: '/uploads/img-1.webp', id: 'media-1' });
+    expect(types.course_groups!.map((t) => t.images)).toEqual(
+      Array.from({ length: 3 }, (_, i) => [`/uploads/img-${i + 1}.webp`]),
+    );
+  });
+
+  it('медиа-список из нескольких элементов — отказ с названием поля, а не молчаливый выбор', async () => {
+    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 2 ? [media(1), media(2)] : r.photo }));
+    const cms = await stub({ teachers: { records: two } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл при двух фото у одной записи:\n${run.output}`).not.toBe(0);
+    // Отказ называет и поле, и запись: по нему редактор находит, что исправить.
+    expect(run.output).toMatch(/teachers\.photo.*teach-003/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('преподаватель проведения из связи приходит в форме, которую ищет страница', async () => {
+    const cms = await stub({ 'schedule-entries': relationEntries });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    const entries = typesOf(readSnapshot(dir)).schedule_entries!;
+    expect(entries[0]!.teachers).toEqual([{ id: 'teach-002', fullName: 'Преподаватель 2' }]);
+    // Прежняя JSON-форма `{id, fullName}` остаётся как есть.
+    expect(entries[1]!.teachers).toEqual([{ id: 1, fullName: 'Преподаватель 1' }]);
+  });
+
+  it('поле записи без решения о нём — отказ с названием поля, снимок не пишется', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, mystery: 'x' })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с неизвестным полем:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.mystery/);
+    expect(run.output, 'отказ не говорит, куда добавить решение').toMatch(/FIELD_MAP.*UNMAPPED_SCHEMA_FIELDS/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('медиа неподдерживаемой формы — отказ, а не пропавшее фото', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: 17 })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с фото-числом:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo/);
+  });
+
+  it('преподаватель проведения без legacy_id — отказ, а не ссылка в никуда', async () => {
+    const broken: StubCollection = {
+      records: d['schedule-entries']!.records.map((r) => ({ ...r, teachers: [{ id: 5, documentId: 'x', name: 'Без идентификатора' }] })),
+    };
+    const cms = await stub({ 'schedule-entries': broken });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с неполной связью:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/schedule_entries\.teachers.*запись ev-001/);
+  });
+
+  it('изображение семинара из списка из одного элемента сохраняется', async () => {
+    const cms = await stub({ seminars: listed('seminars', 'image') });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    expect(typesOf(readSnapshot(dir)).seminars!.map((s) => s.images)).toEqual(
+      Array.from({ length: 4 }, (_, i) => [`/uploads/img-${i + 1}.webp`]),
+    );
+  });
+
+
+  it('медиа с пустым адресом — отказ, а не пропавшее изображение', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: { ...media(1), url: '' } })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo/);
+  });
+
+  it('ключ-источник отсутствует в ответе — отказ с названием поля и записи', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => without(r, 'bio')) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл без ключа bio:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.bio_html ← bio.*teach-001/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('null и пустая коллекция в ключе-источнике — не отказ', async () => {
+    const cms = await stub({
+      teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: null })) },
+      seminars: { records: d.seminars!.records.map((r) => ({ ...r, image: [], teachers: [] })) },
+    });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+  });
+
+  it('заполненные «Рекомендации» семинара — отказ с названием записи', async () => {
+    const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 1 ? '<p>Совет</p>' : null })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с заполненными рекомендациями:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/seminars\.recommendations.*sem-002/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('отметка documents_state у семинара не мешает съёму и названа в выводе', async () => {
+    const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, documents_state: i < 2 ? 'unconfirmed' : null })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).toMatch(/seminars\.documents_state.*2/);
+  });
+
+  it('заполненный seo.noindex назван в выводе', async () => {
+    const cms = await stub({ articles: { records: d.articles!.records.map((r, i) => ({ ...r, seo: { ...(r.seo as object), noindex: i < 3 } })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).toMatch(/articles\.seo\.noindex — с данными в 3 /);
+  });
+
+  it('несколько классов отказа — одним сообщением', async () => {
+    const cms = await stub({
+      teachers: { records: d.teachers!.records.map((r) => ({ ...r, mystery: 'x' })) },
+      seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 0 ? '<p>Совет</p>' : null })) },
+    });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status).not.toBe(0);
+    expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery.*заполнены поля, которые сайт ещё не показывает: seminars\.recommendations/s);
+  });
+});
+
