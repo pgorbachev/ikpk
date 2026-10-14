@@ -271,7 +271,7 @@ export function missingSourceFields(type: string, record: Record<string, unknown
 export function hasValue(value: unknown): boolean {
   if (value === null || value === undefined || value === false) return false;
   if (typeof value === 'string') {
-    return value.replace(/<(?!img|iframe|video|audio|embed|object|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
+    return value.replace(/<(?!(?:img|iframe|video|audio|embed|object)\b|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
   }
   if (Array.isArray(value)) return value.length > 0;
   return true;
