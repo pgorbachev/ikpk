@@ -249,7 +249,7 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
 /**
  * Источники карты, которых нет в записи ответа, — `поле снимка ← источник`. Отсутствие ключа — отказ:
  * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
- * проверяется, когда родитель — объект (компонент `seo`); подполя связей проверяет запись цели.
+ * проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
  */
 export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
   const missing = new Map<string, string>();
@@ -265,11 +265,14 @@ export function missingSourceFields(type: string, record: Record<string, unknown
 
 /**
  * Есть ли в значении данные. Пустой rich-text (`<p></p>`, `&nbsp;`) и `false` — не данные: редактор,
- * очистивший поле, его не заполнял, а `false` — значение по умолчанию флага.
+ * очистивший поле, его не заполнял, а `false` — значение по умолчанию флага. Картинка, встраивание и
+ * автоссылка без текста — данные: вырезаются только остальные теги.
  */
 export function hasValue(value: unknown): boolean {
   if (value === null || value === undefined || value === false) return false;
-  if (typeof value === 'string') return value.replace(/<[^>]*>|&nbsp;/g, '').trim() !== '';
+  if (typeof value === 'string') {
+    return value.replace(/<(?!img|iframe|video|audio|embed|object|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
+  }
   if (Array.isArray(value)) return value.length > 0;
   return true;
 }
