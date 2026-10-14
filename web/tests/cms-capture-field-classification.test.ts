@@ -118,6 +118,12 @@ describe('ключ-источник в ответе и заполненные п
     expect(hasValue('<p><img src="/uploads/plan.png"></p>')).toBe(true);
     expect(hasValue('<iframe src="https://example.invalid/v"></iframe>')).toBe(true);
     expect(hasValue('<https://example.invalid/plan>')).toBe(true);
+    for (const tag of ['<video src="v.mp4"></video>', '<audio src="a.mp3"></audio>', '<embed src="x">', '<object data="x"></object>', '<IMG SRC="x">']) {
+      expect(hasValue(`<p>${tag}</p>`), tag).toBe(true);
+    }
+    expect(hasValue('<p>&#xa0;</p>')).toBe(false);
+    // Граница слова: тег, лишь начинающийся с имени медиа-тега, — разметка, а не данные.
+    expect(hasValue('<objective></objective><imgx></imgx><videos></videos>')).toBe(false);
   });
 
   it('подполе связи тоже сверяется с ответом', () => {
