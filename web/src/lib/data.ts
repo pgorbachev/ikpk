@@ -419,7 +419,7 @@ export function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('ru-RU', {
     // Keep the accepted preview's calendar day independent of the build host.
-    timeZone: 'UTC',
+    timeZone: 'Asia/Nicosia',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
