@@ -5,6 +5,8 @@ import {
   FIELD_MAP,
   SOURCE_TYPES,
   UNMAPPED_SCHEMA_FIELDS,
+  filledUnshownContentFields,
+  missingSourceFields,
   unknownRecordFields,
   type CmsSchema,
 } from '../scripts/lib/content-field-map.ts';
@@ -64,4 +66,34 @@ describe('съём знает каждое поле записи CMS', () => {
     );
     expect(both).toEqual([]);
   });
+
+  it('имя поля из прототипа объекта не проходит как решение', () => {
+    expect(unknownRecordFields('teachers', { constructor: 1, toString: 2 })).toEqual(['teachers.constructor', 'teachers.toString']);
+  });
 });
+
+describe('ключ-источник в ответе и заполненные поля, которые сайт не показывает', () => {
+  const full = (over: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(FIELD_MAP.filter((e) => e.type === 'seminars').map((e) => [e.source.split('.')[0]!, null]).concat(Object.entries(over)));
+
+  it('отсутствие ключа-источника названо, а null и пустая коллекция — нет', () => {
+    expect(missingSourceFields('seminars', full({}))).toEqual([]);
+    expect(missingSourceFields('seminars', full({ teachers: [] }))).toEqual([]);
+    const { teachers: _drop, ...without } = full({});
+    expect(missingSourceFields('seminars', without)).toEqual(['seminars.teachers']);
+  });
+
+  it('заполненное поле содержимого, которое сайт не показывает, названо', () => {
+    expect(filledUnshownContentFields('seminars', { recommendations: '<p>Совет</p>', learning_plan: null, documents: [] })).toEqual(['seminars.recommendations']);
+    expect(filledUnshownContentFields('seminars', { documents: [{ id: 1, title: 'Удостоверение' }] })).toEqual(['seminars.documents']);
+  });
+
+  it('служебная отметка о документах заполненным содержимым не считается', () => {
+    expect(filledUnshownContentFields('seminars', { documents_state: 'unconfirmed', documents_confirmation_author: 'x' })).toEqual([]);
+  });
+
+  it('пустая строка и строка из пробелов — пустое значение', () => {
+    expect(filledUnshownContentFields('seminars', { learning_mode: '', recommendations: '   ' })).toEqual([]);
+  });
+});
+

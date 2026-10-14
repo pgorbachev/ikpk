@@ -825,5 +825,78 @@ describe('съём понимает формы данных установлен
     expect(run.status, `съём прошёл с неполной связью:\n${run.output}`).not.toBe(0);
     expect(run.output).toMatch(/schedule_entries\.teachers/);
   });
+
+  it('изображение семинара из списка из одного элемента сохраняется', async () => {
+    const cms = await stub({ seminars: listed('seminars', 'image') });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    expect(typesOf(readSnapshot(dir)).seminars!.map((s) => s.images)).toEqual(
+      Array.from({ length: 4 }, (_, i) => [`/uploads/img-${i + 1}.webp`]),
+    );
+  });
+
+  it('отказ по медиа называет запись, а не только поле', async () => {
+    const two = d.teachers!.records.map((r, i) => ({ ...r, photo: i === 2 ? [media(1), media(2)] : r.photo }));
+    const cms = await stub({ teachers: { records: two } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo.*teach-003/);
+  });
+
+  it('медиа с пустым адресом — отказ, а не пропавшее изображение', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: { ...media(1), url: '' } })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.photo/);
+  });
+
+  it('ключ-источник отсутствует в ответе — отказ с названием поля и записи', async () => {
+    const cms = await stub({ teachers: { records: d.teachers!.records.map(({ bio: _b, ...r }) => r) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл без ключа bio:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/teachers\.bio.*teach-001/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('null и пустая коллекция в ключе-источнике — не отказ', async () => {
+    const cms = await stub({
+      teachers: { records: d.teachers!.records.map((r) => ({ ...r, photo: null })) },
+      seminars: { records: d.seminars!.records.map((r) => ({ ...r, image: [], teachers: [] })) },
+    });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+  });
+
+  it('заполненные «Рекомендации» семинара — отказ с названием записи', async () => {
+    const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 1 ? '<p>Совет</p>' : null })) } });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `съём прошёл с заполненными рекомендациями:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/seminars\.recommendations.*sem-002/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('отметка documents_state у семинара не мешает съёму и названа в выводе', async () => {
+    const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, documents_state: i < 2 ? 'unconfirmed' : null })) } });
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).toMatch(/seminars\.documents_state.*2/);
+  });
 });
 
