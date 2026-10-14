@@ -41,6 +41,8 @@ const PANEL = '[data-seminar-schedule-panel]';
 const ITEM = '[data-seminar-schedule-card]';
 const DESCRIPTION = '.seminar-content';
 const REGISTER = '.seminar-register-link';
+/** Баннер технических работ — общая плашка над всей страницей, а не часть раскладки семинара. */
+const MAINTENANCE_NOTICE = '.maintenance-notice';
 
 /**
  * Цена варианта C на узких ширинах, зафиксированная при выборе (finding 15 мокапов).
@@ -143,6 +145,13 @@ async function openSeminar(page: Page, path: string): Promise<void> {
   const response = await page.goto(path);
   expect(response?.status(), `${path}: страница не отдалась — проверять было нечего`).toBe(200);
   await expect(page.locator(SCHEDULE), `${path}: блока расписания нет`).toBeVisible();
+}
+
+/** Фактическая высота баннера технических работ; 0, если его на странице нет. */
+async function maintenanceNoticeHeight(page: Page): Promise<number> {
+  return page
+    .locator(MAINTENANCE_NOTICE)
+    .evaluateAll((nodes) => nodes.reduce((sum, node) => sum + node.getBoundingClientRect().height, 0));
 }
 
 async function box(locator: Locator, what: string) {
@@ -592,11 +601,31 @@ for (const width of [768, 375] as const) {
         `цена названа для ${NAMED_COST_DATES} дат, а у самой заполненной страницы их ${MOST_DATES.dates}: при большем числе потолок покраснеет от данных, при меньшем станет вакуумным. Число надо переснять на текущих данных и обновить NAMED_COST`,
       ).toBe(NAMED_COST_DATES);
 
-      const description = await box(page.locator(DESCRIPTION), 'описание');
+      // Цена названа для страницы без баннера технических работ: он сдвигает всю страницу на
+      // свою высоту и к раскладке семинара не относится. Видимость кнопки на реальном первом
+      // экране — отдельная проверка (@d3-narrow-cta), баннер там не вычитается.
+      const cost = async (): Promise<number> =>
+        (await box(page.locator(DESCRIPTION), 'описание')).y - (await maintenanceNoticeHeight(page));
+
+      const asBuilt = await cost();
       expect(
-        Math.round(description.y),
-        `описание на ${Math.round(description.y)} px при названной цене ${NAMED_COST[width]} (страница ${MOST_DATES.path}, дат ${MOST_DATES.dates})`,
+        Math.round(asBuilt),
+        `описание на ${Math.round(asBuilt)} px без баннера технических работ при названной цене ${NAMED_COST[width]} (страница ${MOST_DATES.path}, дат ${MOST_DATES.dates})`,
       ).toBeLessThanOrEqual(NAMED_COST[width]);
+
+      // Оба состояния — без баннера и с баннером заметной высоты — дают ту же цену: вычитается
+      // ровно баннер, а не что-то из раскладки. Баннер вставляется в начало страницы, как на сайте.
+      await page.evaluate((selector) => document.querySelectorAll(selector).forEach((node) => node.remove()), MAINTENANCE_NOTICE);
+      const withoutNotice = await cost();
+      await page.evaluate(() => {
+        const notice = document.createElement('section');
+        notice.className = 'maintenance-notice';
+        notice.style.height = '240px';
+        document.body.prepend(notice);
+      });
+      const withTallNotice = await cost();
+      expect(Math.round(withoutNotice), 'цена без баннера отличается от цены с баннером').toBe(Math.round(asBuilt));
+      expect(Math.round(withTallNotice), 'баннер высотой 240 px изменил цену').toBe(Math.round(asBuilt));
     });
   });
 }
