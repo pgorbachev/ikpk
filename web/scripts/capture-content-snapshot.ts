@@ -12,7 +12,11 @@ import { assertSnapshotContract } from './lib/content-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
+  UNMAPPED_SCHEMA_FIELDS,
   checkFieldMapAgainstSchema,
+  filledUnshownContentFields,
+  hasValue,
+  missingSourceFields,
   unknownRecordFields,
   type CmsSchema,
   type FieldMapEntry,
@@ -212,7 +216,8 @@ function singleMedia(value: unknown, where: string): unknown {
   }
   const item = Array.isArray(value) ? (value[0] ?? null) : value;
   if (item === null || item === undefined) return item;
-  if (typeof item !== 'object' || typeof (item as Record<string, unknown>).url !== 'string') {
+  const url = item && typeof item === 'object' ? (item as Record<string, unknown>).url : undefined;
+  if (typeof url !== 'string' || url === '') {
     throw new Error(`${where}: неподдерживаемая форма медиа ${JSON.stringify(item)?.slice(0, 120)}`);
   }
   return item;
@@ -231,15 +236,22 @@ const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   legacyUrlFromId: (value) => (typeof value === 'string' && value !== '' ? `/${value}` : undefined),
 };
 
+/** Запись в сообщениях об отказе: по ней редактор находит, что исправить. */
+function recordKey(record: Record<string, unknown>): string {
+  return String(record.legacy_id ?? record.slug ?? record.documentId ?? record.id);
+}
+
 function applyEntry(record: Record<string, unknown>, entry: FieldMapEntry, out: Record<string, unknown>): void {
   let value = resolveSource(record, entry.source);
-  if (entry.transform && MEDIA_TRANSFORMS.has(entry.transform)) {
-    value = singleMedia(value, `${entry.type}.${entry.source}`);
-  }
   if (entry.transform) {
     const fn = TRANSFORMS[entry.transform];
     if (!fn) throw new Error(`неизвестное преобразование ${entry.transform} (${entry.type}.${entry.field})`);
-    value = fn(value);
+    try {
+      if (MEDIA_TRANSFORMS.has(entry.transform)) value = singleMedia(value, `${entry.type}.${entry.source}`);
+      value = fn(value);
+    } catch (err) {
+      throw new Error(`${(err as Error).message} (запись ${recordKey(record)})`, { cause: err });
+    }
   }
   if (value !== undefined) out[entry.field] = value;
 }
@@ -387,9 +399,9 @@ async function liveCapture(): Promise<void> {
     }
   }
 
-  // Соответствие проверяется ПРОТИВ СХЕМ, а не против полученных записей: запись, где поле
-  // просто пустое, неотличима от записи, у которой источник исчез из схемы. Исчезнувший
-  // источник — отказ; поле схемы, не участвующее в соответствии, — не отказ, но и не тишина.
+  // Первая сверка — против схем в checkout: исчезнувший из схемы источник — отказ. Схема в
+  // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
+  // ответом CMS по каждой записи.
   const schemas: Record<string, CmsSchema> = {};
   for (const st of SOURCE_TYPES) {
     schemas[st.type] = JSON.parse(readFileSync(join(repoRoot, st.schema), 'utf-8')) as CmsSchema;
@@ -416,18 +428,36 @@ async function liveCapture(): Promise<void> {
     );
   }
 
-  // Поле записи без решения о нём — отказ, а не тихая потеря: проверяется ответ CMS, а не схема
-  // в checkout, потому что расходятся именно они.
+  // Ответ CMS сверяется с картой по каждой записи: схема в checkout может расходиться с
+  // установленной CMS, и расходятся именно они. Три отказа — поле без решения, исчезнувший
+  // ключ-источник (null и [] — не отказ) и заполненное поле содержимого, которое сайт не показывает.
   const unknown = new Set<string>();
+  const missing: string[] = [];
+  const unshown: string[] = [];
+  const filledUnmapped = new Map<string, number>();
   for (const st of SOURCE_TYPES) {
     for (const record of rawByType[st.type]!) {
       for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
+      for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
+      for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
+      for (const field of Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {})) {
+        if (hasValue(record[field])) filledUnmapped.set(`${st.type}.${field}`, (filledUnmapped.get(`${st.type}.${field}`) ?? 0) + 1);
+      }
     }
   }
   if (unknown.size > 0) {
     throw new Error(
       `поля CMS без решения: ${[...unknown].sort().join(', ')} — добавить в FIELD_MAP или в ` +
         'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts); снимок не записан',
+    );
+  }
+  if (missing.length > 0) {
+    throw new Error(`источник исчез из ответа CMS: ${missing.slice(0, 10).join(', ')}; снимок не записан`);
+  }
+  if (unshown.length > 0) {
+    throw new Error(
+      `заполнены поля, которые сайт ещё не показывает: ${unshown.slice(0, 10).join(', ')} — ` +
+        'правка не дойдёт до сайта; нужен вывод на сайте или очистка поля; снимок не записан',
     );
   }
 
@@ -573,10 +603,13 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     console.log(`  ${st.type}: ${types[st.type]!.length} записей`);
   }
-  // Незаявленное поле — это либо забытое соответствие, либо лишнее поле в схеме. Молчать о нём
-  // нельзя: обе причины стоит увидеть, но ни одна не повод остановить захват.
-  for (const item of mapCheck.unmapped) {
-    console.log(`  поле схемы вне соответствия: ${item.type}.${item.field}`);
+  // Непереносимые поля называются вместе с причиной и числом записей, где у них есть данные:
+  // решение не переносить видно в каждом съёме, а не только в коде.
+  const named = new Set([...mapCheck.unmapped.map((i) => `${i.type}.${i.field}`), ...filledUnmapped.keys()]);
+  for (const name of [...named].sort()) {
+    const [type, field] = name.split('.') as [string, string];
+    const reason = UNMAPPED_SCHEMA_FIELDS[type]?.[field] ?? 'без решения';
+    console.log(`  поле схемы вне соответствия: ${name} — с данными в ${filledUnmapped.get(name) ?? 0} записях (${reason})`);
   }
 }
 
