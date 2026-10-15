@@ -119,7 +119,7 @@ export function createServer(config, overrides = {}) {
     const dir = folder(config, id);
     if (!existsSync(dir)) return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
     protectedPath(dir, true, true);
-    if (!existsSync(join(dir, 'request.json'))) return { id, destination: config.destination, status: 'interrupted', code: 'request-acceptance-incomplete' };
+    if (!existsSync(join(dir, 'request.json'))) return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
     const receipt = json(join(dir, 'request.json'));
     if (existsSync(join(dir, 'result.json'))) return json(join(dir, 'result.json'));
     const service = ports.service(config, id);
@@ -133,7 +133,7 @@ export function createServer(config, overrides = {}) {
     try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
       if (error.code !== 'EEXIST') throw error;
       protectedPath(dir, true, true);
-      if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'interrupted', code: 'request-acceptance-incomplete' };
+      if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
       const old = json(join(dir, 'request.json'));
       if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
       return status(request.id);

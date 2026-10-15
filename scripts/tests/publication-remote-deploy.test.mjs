@@ -160,3 +160,15 @@ test('orphaned temporary files from a crash do not block new requests or recover
   await server.submit(recover);
   assert.equal((await server.execute(recover.id)).status, 'success');
 });
+
+
+test('a receipt still being admitted is unknown, never proof that acceptance stopped', async (t) => {
+  const f = fixture(t); let complete;
+  const pinned = new Promise((resolve) => { complete = resolve; });
+  const server = createServer(f.config, { ...f.ports, resolveSource: () => pinned });
+  const accepting = server.submit(f.request);
+  assert.equal(server.status(f.request.id).status, 'unknown');
+  assert.equal((await server.submit(f.request)).status, 'unknown');
+  complete('a'.repeat(40));
+  assert.equal((await accepting).status, 'accepted');
+});
