@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-export const REPORT_POLICY_VERSION = 1;
+export const REPORT_POLICY_VERSION = 2;
+export const SOURCE_REPORT_PROFILE = 'source-default-ci-pinned';
 export const NON_TEST_CHECKS = Object.freeze(['dependency-invariants', 'cms-build']);
 const item = (suite, runner, file, files = [], projects = []) => ({ suite, runner, file, files, projects });
 export const REQUIRED_TEST_REPORTS = Object.freeze([
@@ -42,7 +43,7 @@ export const REQUIRED_TEST_REPORTS = Object.freeze([
 
 // Exact viewport-only combinations, versioned with REPORT_POLICY_VERSION. Every
 // omitted assertion needs its named passing counterpart in this same native report.
-// fixme/TD debt and missing draft/content subjects are never allowed here.
+// fixme/TD debt is never allowed here. Route/role applicability is separate below.
 export const VIEWPORT_OMISSIONS = Object.freeze([
   ...['items with a dropdown show a visible chevron', 'hovering an item with a dropdown reveals its links']
     .map((title) => ({ file: 'site.spec.ts', title, project: 'mobile', counterpartTitle: title, counterpartProject: 'desktop', reason: 'desktop-navigation-viewport' })),
@@ -57,6 +58,25 @@ export const VIEWPORT_OMISSIONS = Object.freeze([
     counterpartTitle: 'иконка отличает состояния (drawer)', counterpartProject: 'mobile', reason: 'drawer-control-viewport' },
 ]);
 
+// Only these draft routes are absent from the source ci fixture role. Their
+// omission does not establish a11y/layout coverage for the separate demo build.
+export const ROLE_OMISSIONS = Object.freeze([
+  ['a11y.spec.ts', (name) => `${name} template has no critical/serious axe violations`],
+  ['section-titles.spec.ts', (name) => `шаблон ${name}: каждый заголовок секции по центру`],
+  ['external-widgets.spec.ts', (name) => `${name}: закрытая кнопка не накрывает интерактивные элементы и текст`],
+].flatMap(([file, title]) => ['preview-b', 'preview-c', 'preview-d'].flatMap((name) => ['desktop', 'mobile'].map((project) => ({
+  file, title: title(name), project, profile: SOURCE_REPORT_PROFILE,
+  annotation: 'черновик варианта отсутствует в боевой сборке', reason: 'draft-route-absent-in-source-ci-role',
+})))));
+
+// Existing owner acceptance, not a viewport exemption or proof of mobile coverage.
+export const ACCEPTED_DEVIATIONS = Object.freeze(['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie']
+  .map((name) => ({ file: 'external-widgets.spec.ts', title: `${name}: закрытая кнопка не накрывает интерактивные элементы и текст`,
+    project: 'mobile', counterpartTitle: `${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, counterpartProject: 'desktop',
+    profile: SOURCE_REPORT_PROFILE, annotation: `TD-52: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`,
+    debt: 'TD-52', acceptedOn: '2026-08-25', deferredOn: '2026-08-29', decisionReference: 'docs/tech-debt.md (TD-52)',
+  })));
+
 export class ReleaseReportError extends Error {
   constructor(message) { super(message); this.name = 'ReleaseReportError'; this.code = 'release-test-report-invalid'; }
 }
@@ -70,8 +90,10 @@ const positive = (summary) => {
     requireThat(summary[field] === 0, `${summary.suite}: ${field} is not zero`);
   }
   requireThat(Array.isArray(summary.omissions), `${summary.suite}: omissions missing`);
-  requireThat(summary.skipped === summary.omissions.length, `${summary.suite}: unapproved skipped tests`);
-  requireThat(summary.total === summary.passed + summary.omissions.length, `${summary.suite}: inconsistent executed totals`);
+  requireThat(Array.isArray(summary.roleOmissions), `${summary.suite}: role omissions missing`);
+  requireThat(Array.isArray(summary.acceptedDeviations), `${summary.suite}: accepted deviations missing`);
+  requireThat(summary.skipped === summary.omissions.length + summary.roleOmissions.length + summary.acceptedDeviations.length, `${summary.suite}: unapproved skipped tests`);
+  requireThat(summary.total === summary.passed + summary.skipped, `${summary.suite}: inconsistent executed totals`);
 };
 
 function vitest(report, definition) {
@@ -87,7 +109,7 @@ function vitest(report, definition) {
   return { total: tests.length, passed: tests.length, omissions: [] };
 }
 
-function playwright(report, definition) {
+function playwright(report, definition, profile) {
   requireThat(Array.isArray(report.suites) && report.stats && (report.errors ?? []).length === 0, `${definition.suite}: invalid Playwright report`);
   const tests = [];
   const visit = (suite, parents = []) => {
@@ -100,27 +122,47 @@ function playwright(report, definition) {
   const passed = (test) => test.expectedStatus === 'passed' && test.status === 'expected' &&
     test.results?.length === 1 && test.results[0].status === 'passed' && (test.results[0].retry ?? 0) === 0;
   const omissions = [];
+  const roleOmissions = [];
+  const acceptedDeviations = [];
   const identities = new Set();
+  const usedOmissions = new Set();
   for (const test of tests) {
     const identity = `${test.file}\0${test.scope}\0${test.title}\0${test.projectName}`;
     requireThat(!identities.has(identity), `${definition.suite}: duplicate test identity`);
     identities.add(identity);
     if (passed(test)) continue;
+    const omissionIdentity = `${test.file}\0${test.title}\0${test.projectName}`;
+    requireThat(!usedOmissions.has(omissionIdentity), `${definition.suite}: duplicate applicability identity`);
+    usedOmissions.add(omissionIdentity);
     const omission = VIEWPORT_OMISSIONS.find((entry) => entry.file === test.file && entry.title === test.title && entry.project === test.projectName);
-    requireThat(omission && test.status === 'skipped' && test.expectedStatus === 'skipped' &&
+    const roleOmission = ROLE_OMISSIONS.find((entry) => entry.file === test.file && entry.title === test.title && entry.project === test.projectName && entry.profile === profile);
+    const deviation = ACCEPTED_DEVIATIONS.find((entry) => entry.file === test.file && entry.title === test.title && entry.project === test.projectName && entry.profile === profile);
+    requireThat((omission || roleOmission || deviation) && test.status === 'skipped' && test.expectedStatus === 'skipped' &&
       test.results?.length === 1 && test.results[0].status === 'skipped' && (test.results[0].retry ?? 0) === 0 &&
       !(test.annotations ?? []).some((entry) => entry.type === 'fixme'), `${definition.suite}: skipped/flaky/non-pass ${test.file}: ${test.title} (${test.projectName})`);
+    if (roleOmission || deviation) {
+      const applicable = roleOmission ?? deviation;
+      const annotations = (test.annotations ?? []).filter((entry) => entry.type === 'skip');
+      requireThat(annotations.length === 1 && annotations[0].description === applicable.annotation, `${definition.suite}: applicability annotation mismatch`);
+      if (deviation) {
+        requireThat(tests.some((candidate) => candidate.file === deviation.file && candidate.title === deviation.counterpartTitle &&
+          candidate.projectName === deviation.counterpartProject && passed(candidate)), `${definition.suite}: accepted deviation has no passing counterpart`);
+        acceptedDeviations.push({ ...deviation });
+      } else roleOmissions.push({ ...roleOmission });
+      continue;
+    }
     requireThat(tests.some((candidate) => candidate.file === omission.file && candidate.title === omission.counterpartTitle &&
       candidate.projectName === omission.counterpartProject && passed(candidate)), `${definition.suite}: viewport omission has no passing counterpart`);
     omissions.push({ ...omission });
   }
   const expected = report.stats.expected;
-  requireThat(report.stats.unexpected === 0 && report.stats.flaky === 0 && report.stats.skipped === omissions.length && expected === tests.length - omissions.length,
+  const skipped = omissions.length + roleOmissions.length + acceptedDeviations.length;
+  requireThat(report.stats.unexpected === 0 && report.stats.flaky === 0 && report.stats.skipped === skipped && expected === tests.length - skipped,
     `${definition.suite}: Playwright summary mismatch or failure`);
   for (const file of definition.files) for (const project of definition.projects) {
     requireThat(tests.some((test) => test.file === file && test.projectName === project && passed(test)), `${definition.suite}: missing passing file/project ${file}/${project}`);
   }
-  return { total: tests.length, passed: expected, omissions };
+  return { total: tests.length, passed: expected, omissions, roleOmissions, acceptedDeviations };
 }
 
 function tap(source, definition) {
@@ -141,22 +183,24 @@ function tap(source, definition) {
   return { total: counters.tests, passed: counters.pass, omissions: [] };
 }
 
-export function validateNativeTestReport(source, definition) {
+export function validateNativeTestReport(source, definition, { profile } = {}) {
   let counts;
   if (definition.runner === 'tap') counts = tap(source, definition);
   else {
     let report;
     try { report = JSON.parse(source); } catch { throw new ReleaseReportError(`${definition.suite}: malformed JSON report`); }
-    counts = definition.runner === 'vitest' ? vitest(report, definition) : playwright(report, definition);
+    counts = definition.runner === 'vitest' ? vitest(report, definition) : playwright(report, definition, profile);
   }
+  counts.roleOmissions ??= [];
+  counts.acceptedDeviations ??= [];
   const summary = { suite: definition.suite, runner: definition.runner,
     reportSha256: createHash('sha256').update(source).digest('hex'),
-    ...counts, failed: 0, skipped: counts.omissions.length, todo: 0, flaky: 0, retried: 0 };
+    ...counts, failed: 0, skipped: counts.omissions.length + counts.roleOmissions.length + counts.acceptedDeviations.length, todo: 0, flaky: 0, retried: 0 };
   positive(summary);
   return summary;
 }
 
-export function validateReportSummaries(summaries) {
+export function validateReportSummaries(summaries, { profile } = {}) {
   requireThat(Array.isArray(summaries) && summaries.length === REQUIRED_TEST_REPORTS.length, 'release report inventory incomplete');
   return REQUIRED_TEST_REPORTS.map((definition) => {
     const matching = summaries.filter((entry) => entry?.suite === definition.suite);
@@ -164,17 +208,25 @@ export function validateReportSummaries(summaries) {
     const summary = matching[0];
     requireThat(summary.runner === definition.runner && /^[0-9a-f]{64}$/.test(summary.reportSha256 ?? ''), `${definition.suite}: invalid report identity`);
     positive(summary);
+    const omissions = [...summary.omissions, ...summary.roleOmissions, ...summary.acceptedDeviations];
+    requireThat(new Set(omissions.map((entry) => `${entry.file}\0${entry.title}\0${entry.project}`)).size === omissions.length,
+      `${definition.suite}: duplicate applicability identity`);
     for (const omission of summary.omissions) requireThat(definition.runner === 'playwright' && definition.files.includes(omission.file) && definition.projects.includes(omission.project) &&
       VIEWPORT_OMISSIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(omission)), `${definition.suite}: unknown omission`);
-    return { ...summary, omissions: summary.omissions.map((entry) => ({ ...entry })) };
+    for (const omission of summary.roleOmissions) requireThat(definition.runner === 'playwright' && definition.files.includes(omission.file) && definition.projects.includes(omission.project) &&
+      omission.profile === profile && ROLE_OMISSIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(omission)), `${definition.suite}: unknown role omission`);
+    for (const deviation of summary.acceptedDeviations) requireThat(definition.runner === 'playwright' && definition.files.includes(deviation.file) && definition.projects.includes(deviation.project) &&
+      deviation.profile === profile && ACCEPTED_DEVIATIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(deviation)), `${definition.suite}: unaccepted deviation`);
+    return { ...summary, omissions: summary.omissions.map((entry) => ({ ...entry })), roleOmissions: summary.roleOmissions.map((entry) => ({ ...entry })),
+      acceptedDeviations: summary.acceptedDeviations.map((entry) => ({ ...entry })) };
   });
 }
 
-export function collectTestReportSummaries(directory) {
+export function collectTestReportSummaries(directory, options) {
   return validateReportSummaries(REQUIRED_TEST_REPORTS.map((definition) => {
     let source;
     try { source = readFileSync(join(directory, definition.file), 'utf8'); }
     catch { throw new ReleaseReportError(`${definition.suite}: required report missing`); }
-    return validateNativeTestReport(source, definition);
-  }));
+    return validateNativeTestReport(source, definition, options);
+  }), options);
 }

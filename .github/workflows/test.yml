@@ -135,9 +135,12 @@ jobs:
         # состоянии). Когда заказчик передаст реальный адрес, эта переменная переедет туда.
         env:
           CHAT_LOADER_SRC: 'none'
+          RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
         run: |
           npm run build
-          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json"
+          historical_args=()
+          if [ "$RELEASE_STRICT_REPORTS" = true ]; then historical_args+=(--exclude tests/parity-compare.test.ts); fi
+          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json" "${historical_args[@]}"
 
       # Демо-сборка и проверки её вывода — ВНУТРИ обязательного прогона, а не рядом.
       # Гейтом публикации является ровно то, что лежит внутри workflow Tests: отдельный

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { REQUIRED_TEST_REPORTS, VIEWPORT_OMISSIONS, NON_TEST_CHECKS, validateNativeTestReport,
+import { REQUIRED_TEST_REPORTS, VIEWPORT_OMISSIONS, ROLE_OMISSIONS, ACCEPTED_DEVIATIONS, SOURCE_REPORT_PROFILE, NON_TEST_CHECKS, validateNativeTestReport,
   validateReportSummaries, collectTestReportSummaries } from '../release-test-reports.mjs';
 import { SOURCE_SUITES } from '../release-test-policy.mjs';
 
@@ -71,6 +71,78 @@ test('only exact viewport omissions with a passing named counterpart are accepte
   }
 });
 
+test('only the 18 exact source-ci draft role omissions with the exact annotation are applicable', () => {
+  assert.equal(ROLE_OMISSIONS.length, 18);
+  for (const omission of ROLE_OMISSIONS) {
+    const definition = REQUIRED_TEST_REPORTS.find((entry) => entry.files.includes(omission.file));
+    const report = playwright(definition);
+    report.suites[0].specs.push({ file: omission.file, title: omission.title, tests: [{
+      projectName: omission.project, expectedStatus: 'skipped', status: 'skipped',
+      annotations: [{ type: 'skip', description: omission.annotation }], results: [{ status: 'skipped', retry: 0 }],
+    }] });
+    report.stats.skipped++;
+    const options = { profile: SOURCE_REPORT_PROFILE };
+    const summary = validateNativeTestReport(JSON.stringify(report), definition, options);
+    assert.deepEqual(summary.roleOmissions, [omission]);
+    assert.equal(summary.skipped, 1);
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition), /skipped/);
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, { profile: 'preview-role' }), /skipped/);
+    const skipped = report.suites[0].specs.at(-1);
+    skipped.tests[0].annotations[0].description = '404';
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /annotation/);
+    skipped.tests[0].annotations[0].description = omission.annotation;
+    skipped.tests[0].annotations[0].type = 'fixme';
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /skipped|annotation/);
+    skipped.tests[0].annotations[0].type = 'skip';
+    skipped.title = omission.title.replace('preview-b', 'home').replace('preview-c', 'preview-new').replace('preview-d', 'seminar');
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /skipped|annotation/);
+  }
+});
+
+test('the seven accepted TD-52 mobile deviations stay visible and require the desktop PASS', () => {
+  assert.equal(ACCEPTED_DEVIATIONS.length, 7);
+  const definition = REQUIRED_TEST_REPORTS.find((entry) => entry.files.includes('external-widgets.spec.ts'));
+  for (const deviation of ACCEPTED_DEVIATIONS) {
+    const report = playwright(definition);
+    const skipped = { file: deviation.file, title: deviation.title, tests: [{ projectName: 'mobile', expectedStatus: 'skipped', status: 'skipped',
+      annotations: [{ type: 'skip', description: deviation.annotation }], results: [{ status: 'skipped', retry: 0 }] }] };
+    report.suites[0].specs.push(skipped);
+    report.stats.skipped++;
+    const options = { profile: SOURCE_REPORT_PROFILE };
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /counterpart/);
+    report.suites[0].specs.push({ file: deviation.file, title: deviation.title, tests: [{
+      projectName: 'desktop', expectedStatus: 'passed', status: 'expected', results: [{ status: 'passed', retry: 0 }],
+    }] });
+    report.stats.expected++;
+    const summary = validateNativeTestReport(JSON.stringify(report), definition, options);
+    assert.deepEqual(summary.acceptedDeviations, [deviation]);
+    assert.equal(summary.acceptedDeviations[0].acceptedOn, '2026-08-25');
+    assert.equal(summary.skipped, 1);
+    const summaries = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => suite === definition.suite ? summary : ({ suite, runner, reportSha256: 'a'.repeat(64),
+      total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
+    assert.ok(validateReportSummaries(summaries, options));
+    assert.throws(() => validateReportSummaries(summaries, { profile: 'preview-role' }), /unaccepted/);
+    skipped.tests[0].annotations[0].description = 'TD-52';
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /annotation/);
+    skipped.tests[0].annotations[0].description = deviation.annotation;
+    report.suites.push({ title: 'other describe', file: deviation.file, specs: [skipped] });
+    report.stats.skipped++;
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, options), /duplicate applicability/);
+  }
+});
+
+test('TD-4 and TD-5 fixme cases have no owner acceptance exemption', () => {
+  const definition = REQUIRED_TEST_REPORTS.find((entry) => entry.file === 'playwright-a11y-head.json');
+  for (const debt of ['TD-4', 'TD-5']) {
+    const report = playwright(definition);
+    report.suites[0].specs.push({ file: 'a11y.spec.ts', title: '/: header (TopNav) does not overflow horizontally at 2x root font-size', tests: [{
+      projectName: 'desktop', expectedStatus: 'skipped', status: 'skipped', annotations: [{ type: 'fixme', description: debt }], results: [{ status: 'skipped', retry: 0 }],
+    }] });
+    report.stats.skipped++;
+    assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, { profile: SOURCE_REPORT_PROFILE }), /skipped/);
+  }
+});
+
 test('actual native Node TAP is accepted; zero/skipped/todo output is rejected', (context) => {
   const directory = mkdtempSync(join(tmpdir(), 'ikpk-report-native-'));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -96,7 +168,7 @@ test('manifest aggregation requires every report, positive counts, exact invento
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   assert.throws(() => collectTestReportSummaries(directory), /required report missing/);
   const summaries = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64),
-    total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [] }));
+    total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
   assert.equal(validateReportSummaries(summaries).length, REQUIRED_TEST_REPORTS.length);
   assert.throws(() => validateReportSummaries(summaries.slice(1)), /inventory incomplete/);
   for (const field of ['passed', 'failed', 'skipped', 'todo', 'flaky', 'retried']) {

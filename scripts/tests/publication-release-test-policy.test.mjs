@@ -6,11 +6,12 @@ import {
   releaseTestIdentity, releaseTestManifest, validateReleaseTestEvidence,
 } from '../release-test-policy.mjs';
 import { REQUIRED_TEST_REPORTS, NON_TEST_CHECKS } from '../release-test-reports.mjs';
-const reportFixtures = () => REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [] }));
+const reportFixtures = () => REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
 
 const commit = 'a'.repeat(40);
 const started = '2026-10-15T10:00:01Z';
 const env = {
+  RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned',
   GITHUB_SHA: commit, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/dev',
   GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '2',
 };
@@ -48,7 +49,7 @@ test('push manifest records native identity without inventing a destination or r
 
 test('owner excludes obsolete historical parity explicitly without treating production data as a fixture', () => {
   const manifest = releaseTestManifest(env, needs, reportFixtures());
-  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.schemaVersion, 4);
   assert.deepEqual(manifest.pendingScope, []);
   assert.deepEqual(manifest.excludedHistorical, [
     'web/tests/compare.spec.ts',
@@ -57,6 +58,7 @@ test('owner excludes obsolete historical parity explicitly without treating prod
     'web/tests/parity-audit.spec.ts',
     'web/tests/schedule-parity.spec.ts',
     'web/tests/seminar-parity.spec.ts',
+    'web/tests/parity-compare.test.ts',
   ].map((file) => ({ file, reason: 'old-site-absent', decision: 'owner-2026-10-15' })));
   assert.deepEqual(validateReleaseTestEvidence(evidence()).excludedHistorical, manifest.excludedHistorical);
 });
@@ -77,7 +79,7 @@ test('a fresh attempt of an older push run binds to this private destination and
   assert.equal(result.destinationId, 'demo-193'); assert.equal(result.requestId, 'request-unique-1');
   assert.equal(result.subject, 'source-code'); assert.deepEqual(result.pendingScope, []);
   assert.equal(result.repository, 'pgorbachev/ikpk'); assert.equal(result.workflow, RELEASE_TEST_WORKFLOW);
-  assert.equal(result.sourceRef, 'dev'); assert.equal(result.policyVersion, 3);
+  assert.equal(result.sourceRef, 'dev'); assert.equal(result.policyVersion, 4);
   assert.deepEqual(result.reports, reportFixtures());
   assert.deepEqual(result.nonTestChecks, NON_TEST_CHECKS);
   assert.deepEqual(result.suites, SOURCE_SUITES); assert.deepEqual(result.results, evidence().manifest.results);
@@ -113,6 +115,7 @@ test('rejects historical success, wrong SHA, changed policy, stale or missing na
     (proof) => { proof.manifest.reports[0].passed = 0; },
     (proof) => { proof.manifest.reports[0].skipped = 1; },
     (proof) => { proof.manifest.reportPolicyVersion = 0; },
+    (proof) => { proof.manifest.sourceProfile = 'preview-role'; },
     (proof) => { proof.manifest.pendingScope = ['unexpected-pending-suite']; },
     (proof) => { proof.manifest.schemaVersion = 1; },
     (proof) => { proof.manifest.excludedHistorical = []; },
@@ -158,6 +161,8 @@ test('workflow preserves existing Tests and all supplemental subjects without de
   const reusable = readFileSync(new URL('../../.github/workflows/test.yml', import.meta.url), 'utf8');
   assert.match(reusable, /group:.*inputs.artifact_suffix != '' && format\('release-source-\{0\}-\{1\}', github.run_id, github.run_attempt\)/);
   assert.match(reusable, /cancel-in-progress:.*inputs.artifact_suffix == ''/);
+  assert.match(reusable, /if \[ "\$RELEASE_STRICT_REPORTS" = true \]; then historical_args\+=\(--exclude tests\/parity-compare\.test\.ts\); fi/);
+  assert.match(workflow, /RELEASE_SOURCE_PROFILE: source-default-ci-pinned/);
   assert.doesNotMatch(workflow, /secrets\.|secrets: inherit|--update-snapshots|continue-on-error: true|ssh |deploy\.sh/);
   assert.equal(new Set(SOURCE_SUITES).size, SOURCE_SUITES.length);
   const snapshots = readdirSync(new URL('../../web/tests/visual-baseline.spec.ts-snapshots/', import.meta.url));

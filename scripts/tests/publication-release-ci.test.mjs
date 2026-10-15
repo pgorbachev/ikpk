@@ -73,10 +73,10 @@ test('successful fresh native attempt is downloaded and bound to this operation 
   const { execFileSync } = await import('node:child_process');
   const { writeFileSync } = await import('node:fs');
   const { REQUIRED_TEST_REPORTS } = await import('../release-test-reports.mjs');
-  const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [] }));
+  const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
   const { releaseTestManifest, REQUIRED_SOURCE_JOBS } = await import('../release-test-policy.mjs');
   const timestamp = '2026-10-15T20:00:00Z';
-  const manifest = releaseTestManifest({ GITHUB_SHA: commit, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/dev',
+  const manifest = releaseTestManifest({ RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned', GITHUB_SHA: commit, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/dev',
     GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2' }, Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map((name) => [name, { result: 'success' }])), reportFixtures);
   writeFileSync(join(receipt.directory, 'release-source-tests.json'), JSON.stringify(manifest));
   const archive = join(receipt.directory, 'proof.zip'); execFileSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: receipt.directory });

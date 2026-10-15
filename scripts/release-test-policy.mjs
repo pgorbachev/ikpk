@@ -1,10 +1,10 @@
 /** Source-code checks only. Candidate acceptance and deployment have separate evidence. */
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { REPORT_POLICY_VERSION, NON_TEST_CHECKS, collectTestReportSummaries, validateReportSummaries } from './release-test-reports.mjs';
+import { REPORT_POLICY_VERSION, SOURCE_REPORT_PROFILE, NON_TEST_CHECKS, collectTestReportSummaries, validateReportSummaries } from './release-test-reports.mjs';
 
 export const RELEASE_TEST_WORKFLOW = '.github/workflows/release-tests.yml';
-export const RELEASE_TEST_POLICY_VERSION = 3;
+export const RELEASE_TEST_POLICY_VERSION = 4;
 export const RELEASE_TEST_ARTIFACT = 'release-source-tests';
 export const releaseTestArtifactName = (attempt) => `${RELEASE_TEST_ARTIFACT}-${integer(attempt, 'run attempt')}`;
 
@@ -41,6 +41,7 @@ export const EXCLUDED_HISTORICAL = Object.freeze([
   'web/tests/parity-audit.spec.ts',
   'web/tests/schedule-parity.spec.ts',
   'web/tests/seminar-parity.spec.ts',
+  'web/tests/parity-compare.test.ts',
 ].map((file) => Object.freeze({ file, reason: 'old-site-absent', decision: 'owner-2026-10-15' })));
 export const PENDING_SCOPE = Object.freeze([]);
 
@@ -89,6 +90,7 @@ export function releaseTestIdentity(env) {
 
 export function releaseTestManifest(env, needs, reports) {
   const identity = releaseTestIdentity(env);
+  same(env.RELEASE_SOURCE_PROFILE, SOURCE_REPORT_PROFILE, 'source report profile');
   for (const name of ['identity', 'source-tests', 'supplemental', 'visual', 'provision']) {
     same(needs?.[name]?.result, 'success', `${name} result`);
   }
@@ -98,7 +100,8 @@ export function releaseTestManifest(env, needs, reports) {
     ...identity,
     suites: [...SOURCE_SUITES],
     reportPolicyVersion: REPORT_POLICY_VERSION,
-    reports: validateReportSummaries(reports),
+    sourceProfile: SOURCE_REPORT_PROFILE,
+    reports: validateReportSummaries(reports, { profile: SOURCE_REPORT_PROFILE }),
     nonTestChecks: [...NON_TEST_CHECKS],
     pendingScope: [...PENDING_SCOPE],
     excludedHistorical: EXCLUDED_HISTORICAL.map((entry) => ({ ...entry })),
@@ -158,8 +161,9 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   same(integer(manifest?.runAttempt, 'manifest attempt'), integer(run.run_attempt, 'run attempt'), 'run attempt');
   same(manifest?.suites, [...SOURCE_SUITES], 'suite inventory');
   same(manifest?.reportPolicyVersion, REPORT_POLICY_VERSION, 'report policy');
+  same(manifest?.sourceProfile, SOURCE_REPORT_PROFILE, 'source report profile');
   same(manifest?.nonTestChecks, [...NON_TEST_CHECKS], 'non-test checks');
-  const reports = validateReportSummaries(manifest?.reports);
+  const reports = validateReportSummaries(manifest?.reports, { profile: SOURCE_REPORT_PROFILE });
   same(manifest?.pendingScope, [...PENDING_SCOPE], 'pending inventory');
   same(manifest?.excludedHistorical, [...EXCLUDED_HISTORICAL], 'historical exclusion inventory');
   same(artifact?.name, releaseTestArtifactName(run.run_attempt), 'artifact name');
@@ -189,7 +193,7 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
     workflow: run.path, sourceRef: run.head_branch, runId: run.id, runAttempt: run.run_attempt, commit: expected.commit,
     requestedAt: expected.requestedAt, startedAt: run.run_started_at, conclusion: run.conclusion,
     suites: [...SOURCE_SUITES], results: { ...manifest.results },
-    reportPolicyVersion: REPORT_POLICY_VERSION, reports, nonTestChecks: [...NON_TEST_CHECKS],
+    reportPolicyVersion: REPORT_POLICY_VERSION, sourceProfile: SOURCE_REPORT_PROFILE, reports, nonTestChecks: [...NON_TEST_CHECKS],
     jobs: REQUIRED_SOURCE_JOBS.map((name) => { const job = jobs.find((entry) => entry.name === name);
       return { name, runId: job.run_id, commit: job.head_sha, startedAt: job.started_at, conclusion: job.conclusion }; }),
     destinationId: expected.destinationId, requestId: expected.requestId,
@@ -201,6 +205,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const command = process.argv[2];
   if (command === 'identity') releaseTestIdentity(process.env);
   else if (command === 'manifest' && process.argv.length === 4) {
-    writeFileSync(process.argv[3], `${JSON.stringify(releaseTestManifest(process.env, JSON.parse(process.env.RELEASE_NEEDS), collectTestReportSummaries(process.env.RELEASE_REPORTS_DIR)), null, 2)}\n`, { flag: 'wx' });
+    writeFileSync(process.argv[3], `${JSON.stringify(releaseTestManifest(process.env, JSON.parse(process.env.RELEASE_NEEDS), collectTestReportSummaries(process.env.RELEASE_REPORTS_DIR, { profile: process.env.RELEASE_SOURCE_PROFILE })), null, 2)}\n`, { flag: 'wx' });
   } else throw new Error('usage: release-test-policy.mjs identity | manifest OUTPUT');
 }

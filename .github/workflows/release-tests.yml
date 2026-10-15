@@ -1,6 +1,6 @@
 name: Release source tests
 
-# Push creates a run on dev before this workflow is registered on default main.
+# Push creates the exact branch run without default-branch registration dependencies.
 # Publication re-runs that exact run, records the new attempt in its protected
 # operation receipt, and waits. This workflow has no deployment credentials.
 # Historical compare/parity exclusions follow the owner's 2026-10-15 decision in
@@ -18,6 +18,11 @@ on:
 
 permissions:
   contents: read
+
+# The role omissions below apply only to the default ci build over the pinned
+# source fixture. Demo/stand build and payment suites keep their separate subjects.
+env:
+  RELEASE_SOURCE_PROFILE: source-default-ci-pinned
 
 run-name: Release source tests ${{ github.sha }}
 
