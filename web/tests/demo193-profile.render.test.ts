@@ -6,10 +6,12 @@ afterEach(() => {
   vi.resetModules();
 });
 
-async function useDemo193Profile(): Promise<Record<string, string>> {
+async function useDemo193Profile(): Promise<NodeJS.ProcessEnv> {
   const { resolveDemo193Environment } = await import('../scripts/demo193-profile.mjs');
   const env = resolveDemo193Environment({ DEMO_OUTPUT: '1', PAYMENT_ROLE: 'stand', DEMO_FORMS: 'customer.bitrix24site.ru' });
-  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) vi.stubEnv(key, value);
+  }
   return env;
 }
 
@@ -30,9 +32,22 @@ describe('rendered demo193 build profile', () => {
 
     const { default: BaseLayout } = await import('../src/layouts/BaseLayout.astro');
     const html = await (await AstroContainer.create({ astroConfig: { site: env.DEMO_SITE_URL } }))
-      .renderToString(BaseLayout as never, { props: { title: 'Profile', description: 'Profile' } });
+      .renderToString(BaseLayout as never, {
+        props: {
+          title: 'Profile',
+          description: 'Profile',
+          schema: { url: 'https://ikpk.su/', '@id': 'https://ikpk.su/#website', description: 'https://ikpk.su/description' },
+        },
+      });
     expect(html).toMatch(/<meta\s+name="robots"\s+content="noindex, nofollow"/);
     expect(html).toContain('https://193.124.115.99/');
+    const schemaText = html.match(/<script type="application\/ld\+json"[^>]*>(.*?)<\/script>/s)?.[1];
+    if (schemaText === undefined) throw new Error('rendered profile has no JSON-LD schema');
+    expect(JSON.parse(schemaText)).toEqual({
+      url: 'https://193.124.115.99/',
+      '@id': 'https://193.124.115.99/#website',
+      description: 'https://ikpk.su/description',
+    });
     expect(html).toContain('Демо-стенд: формы заявки отключены');
     expect(html).not.toContain('data-payment-role="stand"');
   });

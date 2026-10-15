@@ -40,8 +40,11 @@ describe('demo193 deployed build profile', () => {
   it('provides a dedicated command and leaves the established demo and production commands intact', () => {
     const scripts = JSON.parse(readFileSync(join(WEB, 'package.json'), 'utf8')).scripts;
     expect(scripts['build:demo193'], 'there is no explicit demo193 build entrypoint').toBeTypeOf('string');
-    expect(scripts['build:demo193']).toContain('demo193-profile.mjs');
-    expect(scripts['build:demo193']).toContain('dist-demo193');
+    expect(scripts['build:demo193']).toBe('node scripts/build-demo193.mjs');
+    const runner = readFileSync(join(WEB, 'scripts/build-demo193.mjs'), 'utf8');
+    expect(runner).toContain("import { resolveDemo193Environment } from './demo193-profile.mjs';");
+    expect(runner).toContain("['astro', ['build', '--outDir', 'dist-demo193']]");
+    expect(runner).toContain("['pagefind', ['--site', 'dist-demo193']]");
     expect(scripts['build:demo']).toContain('DEMO_OUTPUT=1');
     expect(scripts.build).toBe('astro build && pagefind --site dist');
   });
