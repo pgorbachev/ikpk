@@ -10,6 +10,7 @@ const Database = require('better-sqlite3');
 const HASH = /^[a-f0-9]{64}$/;
 const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operations', 'ikpk_data_migration_history']);
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
+const PERMISSION_TIMESTAMP_COLUMNS = ['created_at', 'updated_at', 'published_at'];
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
@@ -168,7 +169,7 @@ function expectedColumns(sourceColumns, table, knownTransforms) {
 }
 function normalizeAddedTableDefinition(definition, table, column) {
   if (definition.type !== 'table') return definition;
-  const quoted = `(?:"${column.name}"|\`${column.name}\`|\[${column.name}\]|${column.name})`;
+  const quoted = `(?:"${column.name}"|\`${column.name}\`|\\[${column.name}\\]|${column.name})`;
   const columnType = column.type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const normalized = definition.sql.replace(new RegExp(`,\\s*${quoted}\\s+${columnType}(?:\\s+null)?(?=\\s*,|\\s*\\)$)`, 'i'), '');
   return { ...definition, sql: normalized };
@@ -327,13 +328,14 @@ function permissionGraph(db, differences, label) {
     }
     const role = roles.get(roleIds[0].roleId);
     const baseProperties = { ...properties }; delete baseProperties.fields;
-    const permissionMetadata = Object.fromEntries(Object.entries(permission).filter(([column]) => !['id', 'document_id', 'action', 'subject', 'properties', 'conditions'].includes(column)));
+    const permissionMetadata = Object.fromEntries(Object.entries(permission).filter(([column]) => !['id', 'document_id', ...PERMISSION_TIMESTAMP_COLUMNS, 'action', 'subject', 'properties', 'conditions'].includes(column)));
     const key = json([role, permission.action, permission.subject ?? null, conditions, baseProperties, valueKey(permissionMetadata), valueKey(roleIds[0].metadata)]);
     if (descriptors.has(key)) { failGraph(`duplicate:${key}`); continue; }
     descriptors.set(key, {
       role, action: permission.action, subject: permission.subject ?? null, conditions, properties: baseProperties,
       fields: fields ? [...fields].sort() : null, id: permissionId, documentId: permission.document_id,
       linkId: roleIds[0].id, permissionOrd: roleIds[0].permissionOrd,
+      timestamps: Object.fromEntries(PERMISSION_TIMESTAMP_COLUMNS.filter((column) => Object.hasOwn(permission, column)).map((column) => [column, permission[column]])),
     });
   }
   for (const permissionId of linksByPermission.keys()) {
@@ -344,38 +346,74 @@ function permissionGraph(db, differences, label) {
   }
   return descriptors;
 }
-function comparePermissionGraphs(sourceDb, candidateDb, differences) {
+function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
   if (source.size !== candidate.size) differences.push({ table: 'admin_permissions', kind: 'logical-permission-count-mismatch' });
   const recreated = [];
   const sourcePermissionIds = new Set([...source.values()].map(({ id }) => id));
+  const sourceDocumentIds = new Set([...source.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined));
+  const sourcePermissionLinkIds = new Set([...source.values()].map(({ linkId }) => linkId));
   for (const [key, before] of source) {
     const after = candidate.get(key);
     if (!after) { differences.push({ table: 'admin_permissions', kind: 'logical-permission-removed', keySha256: sha(Buffer.from(key)) }); continue; }
     const allowed = PERMISSION_FIELD_ADDITIONS.get(`${before.role}\0${before.action}\0${before.subject}`) ?? [];
     const expectedFields = before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
     if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
-    if (json(expectedFields) !== json(before.fields)) recreated.push({ role: before.role, id: after.id, documentId: after.documentId, ordinal: after.permissionOrd, sourceOrdinal: before.permissionOrd, sourceId: before.id, sourceDocumentId: before.documentId });
-    else if (before.id !== after.id || before.documentId !== after.documentId || before.linkId !== after.linkId || valueKey(before.permissionOrd) !== valueKey(after.permissionOrd)) {
+    if (json(expectedFields) !== json(before.fields)) recreated.push({
+      role: before.role, id: after.id, documentId: after.documentId, ordinal: after.permissionOrd,
+      linkId: after.linkId, sourceId: before.id, sourceDocumentId: before.documentId,
+      timestamps: after.timestamps,
+    });
+    else if (before.id !== after.id || before.documentId !== after.documentId || before.linkId !== after.linkId
+      || json(valueKey(before.permissionOrd)) !== json(valueKey(after.permissionOrd))
+      || json(valueKey(before.timestamps)) !== json(valueKey(after.timestamps))) {
       differences.push({ table: 'admin_permissions', kind: 'unchanged-permission-storage-identity-changed', keySha256: sha(Buffer.from(key)) });
     }
   }
   for (const key of candidate.keys()) if (!source.has(key)) {
     differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
   }
-  if (recreated.length !== PERMISSION_FIELD_ADDITIONS.size) differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
+  const sourceIsCurrent = [...PERMISSION_FIELD_ADDITIONS].every(([identity, fields]) => {
+    const [role, action, subject] = identity.split('\0');
+    const row = [...source.values()].find((value) => value.role === role && value.action === action && value.subject === subject);
+    return row?.fields && fields.every((field) => row.fields.includes(field));
+  });
+  if (recreated.length !== 0 && recreated.length !== PERMISSION_FIELD_ADDITIONS.size) differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
+  if (recreated.length === 0 && !sourceIsCurrent) differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
   const candidateDocumentIds = [...candidate.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined);
   if (new Set(candidateDocumentIds).size !== candidateDocumentIds.length) differences.push({ table: 'admin_permissions', kind: 'duplicate-permission-document-id' });
+  const window = lifecycleWindow(receipt);
   for (const permission of recreated) {
     if (permission.id === permission.sourceId || permission.documentId === permission.sourceDocumentId
-      || sourcePermissionIds.has(permission.id)
+      || sourcePermissionIds.has(permission.id) || sourcePermissionLinkIds.has(permission.linkId)
+      || sourceDocumentIds.has(permission.documentId)
       || typeof permission.documentId !== 'string' || !/^[A-Za-z0-9_-]{1,255}$/.test(permission.documentId)) {
       differences.push({ table: 'admin_permissions', kind: 'invalid-recreated-permission-identity' });
     }
     const value = typeof permission.ordinal === 'bigint' ? Number(permission.ordinal) : permission.ordinal;
     if (!Number.isSafeInteger(value) || value < 0) differences.push({ table: 'admin_permissions_role_lnk', kind: 'invalid-recreated-permission-order' });
+    if (PERMISSION_TIMESTAMP_COLUMNS.some((column) => !Object.hasOwn(permission.timestamps, column))) {
+      differences.push({ table: 'admin_permissions', kind: 'missing-recreated-permission-timestamps' });
+      continue;
+    }
+    for (const column of PERMISSION_TIMESTAMP_COLUMNS) {
+      if (!Object.hasOwn(permission.timestamps, column)) continue;
+      const after = permission.timestamps[column];
+      if (after === null || after === undefined) { differences.push({ table: 'admin_permissions', kind: 'invalid-recreated-permission-timestamp' }); continue; }
+      const millis = typeof after === 'bigint' ? Number(after) : after;
+      if (!Number.isSafeInteger(millis) || millis < 0 || !window || millis < window.start || millis > window.end) {
+        differences.push({ table: 'admin_permissions', kind: 'invalid-recreated-permission-timestamp' });
+      }
+    }
+    const created = permission.timestamps.created_at;
+    const updated = permission.timestamps.updated_at;
+    const published = permission.timestamps.published_at;
+    const asMillis = (value) => typeof value === 'bigint' ? Number(value) : value;
+    if (created === null || updated === null || published === null || asMillis(created) !== asMillis(updated) || asMillis(created) > asMillis(published)) {
+      differences.push({ table: 'admin_permissions', kind: 'invalid-recreated-permission-timestamp-order' });
+    }
   }
   for (const role of new Set(recreated.map(({ role }) => role))) {
     const sourceOrdinals = [...source.values()].filter((row) => row.role === role).map(({ permissionOrd }) => permissionOrd)
@@ -386,6 +424,14 @@ function comparePermissionGraphs(sourceDb, candidateDb, differences) {
     if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
   }
   return { recreatedCount: recreated.length };
+}
+
+function lifecycleWindow(receipt) {
+  const started = receipt.lifecycle?.find(({ event }) => event === 'closed-load-started')?.at;
+  const completed = [...(receipt.lifecycle ?? [])].reverse().find(({ event }) => event === 'strapi-load-complete')?.at;
+  const start = typeof started === 'string' ? Date.parse(started) : NaN;
+  const end = typeof completed === 'string' ? Date.parse(completed) : NaN;
+  return Number.isSafeInteger(start) && Number.isSafeInteger(end) && start <= end ? { start, end } : null;
 }
 function expectedCoreStoreValue(key, sourceValue) {
   let expected;
@@ -704,7 +750,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     }
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
-    const permissionAudit = comparePermissionGraphs(source, candidate, differences);
+    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
     compareCoreStore(source, candidate, differences);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));

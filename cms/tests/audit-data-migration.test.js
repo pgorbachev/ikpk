@@ -41,6 +41,10 @@ function boundReceipt(sourceDbPath, candidateDbPath, plan) {
   return {
     sourceDbPath, candidateDbPath, planSha256: plan.planSha256, steps: [],
     source: { sourceFileFingerprint: fileFingerprint(sourceDbPath) },
+    lifecycle: [
+      { event: 'closed-load-started', at: new Date(1792101825410).toISOString() },
+      { event: 'strapi-load-complete', at: new Date(1792101926810).toISOString() },
+    ],
     candidatePostMigrationSha256: sha256(require('node:fs').readFileSync(candidateDbPath)),
     candidatePostMigrationFileFingerprint: fileFingerprint(candidateDbPath),
   };
@@ -196,8 +200,8 @@ test('new-column exception does not permit any additional target-table column', 
 function createConstrainedColumnShape(path, { candidate = false, addedCheck = false } = {}) {
   const db = new Database(path);
   db.exec(`CREATE TABLE admins (id INTEGER PRIMARY KEY);
-    CREATE TABLE promotions (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? `, \`type\` varchar(255) null${addedCheck ? " CHECK(type <> 'x')" : ''}` : ''}, CONSTRAINT promotions_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
-    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? ', \`is_event_collection\` boolean null' : ''}, CONSTRAINT schedule_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
+    CREATE TABLE promotions (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? `, "type" varchar(255) null${addedCheck ? " CHECK(type <> 'x')" : ''}` : ''}, CONSTRAINT promotions_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
+    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? ', "is_event_collection" boolean null' : ''}, CONSTRAINT schedule_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
     INSERT INTO promotions VALUES (1, 'promotion', NULL${candidate ? ', NULL' : ''});
     INSERT INTO schedule_entries VALUES (1, 'entry', NULL${candidate ? ', NULL' : ''});
     CREATE TABLE strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime);
@@ -239,7 +243,7 @@ test('serialized Strapi schema history accepts only the verified two-column rege
 function createPermissionShape(path, { candidate = false, mutate = null, mutateLinks = null } = {}) {
   const db = new Database(path);
   db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
-    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, document_id TEXT, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT);
+    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, document_id TEXT, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT, created_at INTEGER, updated_at INTEGER, published_at INTEGER);
     CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, permission_ord INTEGER);
     INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin'), (4, 'strapi-author');`);
   const descriptors = [];
@@ -258,13 +262,15 @@ function createPermissionShape(path, { candidate = false, mutate = null, mutateL
     const ordinalWithinRole = descriptors.slice(0, index).filter(({ id }) => id === initial.id).length;
     const roleCount = descriptors.filter(({ id }) => id === initial.id).length;
     const permissionOrd = candidate ? roleCount + ordinalWithinRole : ordinalWithinRole;
-    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    const timestamp = candidate ? 1792101826000 + index : 1700000000000 + index;
+    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
       permissionId, `${candidate ? 'candidate' : 'source'}-doc-${index}`, descriptor.action, descriptor.subject,
       JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions), null,
+      timestamp, timestamp, timestamp + 1,
     );
     db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId, permissionOrd);
   }
-  db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?)').run(99, 'stable-document', 'plugin::upload.read', null, '{}', '[]', '{"scope":"read"}');
+  db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(99, 'stable-document', 'plugin::upload.read', null, '{}', '[]', '{"scope":"read"}', 1700000000100, 1700000000100, 1700000000101);
   db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run(99, 99, 4, 0);
   if (candidate && mutateLinks) mutateLinks(db);
   db.close();
@@ -283,6 +289,17 @@ test('permission graph accepts exact current fields while permission and link ID
   assert.equal(report.differences.some(({ table }) => table === 'admin_permissions_role_lnk'), false,
     'permission relation storage IDs may change only when the linked role graph is unchanged');
   assert.equal(report.transformations.permissionRowsRecreated, 12, 'only the twelve reviewed fieldset changes may recreate rows');
+});
+
+test('permission audit accepts an already-current next-release no-op without recreating rows', () => {
+  const sourceDbPath = join(directory, 'permissions-noop-source.db');
+  const candidateDbPath = join(directory, 'permissions-noop-candidate.db');
+  createPermissionShape(sourceDbPath, { candidate: true });
+  createPermissionShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table }) => table === 'admin_permissions' || table === 'admin_permissions_role_lnk'), false);
+  assert.equal(report.transformations.permissionRowsRecreated, 0);
 });
 
 test('permission graph rejects unapproved fields, changed conditions, role reassignment, and dangling links', () => {
@@ -352,6 +369,35 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
   const documentPlan = emptyBoundPlan();
   const documentReport = auditMigration({ sourceDbPath: documentSourcePath, candidateDbPath: documentCandidatePath, plan: documentPlan, receipt: boundReceipt(documentSourcePath, documentCandidatePath, documentPlan) });
   assert.equal(documentReport.passed, false, 'regenerated permission document IDs must be safe and unique');
+
+  for (const [name, sql] of [
+    ['outside-window', 'UPDATE admin_permissions SET created_at = 1800000000000, updated_at = 1800000000000, published_at = 1800000000000 WHERE id = 20'],
+    ['published-before-created', 'UPDATE admin_permissions SET published_at = created_at - 1 WHERE id = 20'],
+    ['null-timestamp', 'UPDATE admin_permissions SET updated_at = NULL WHERE id = 20'],
+  ]) {
+    const timestampSourcePath = join(directory, `permissions-timestamp-${name}-source.db`);
+    const timestampCandidatePath = join(directory, `permissions-timestamp-${name}-candidate.db`);
+    createPermissionShape(timestampSourcePath);
+    createPermissionShape(timestampCandidatePath, { candidate: true });
+    const timestampDb = new Database(timestampCandidatePath);
+    timestampDb.exec(sql);
+    timestampDb.close();
+    const timestampPlan = emptyBoundPlan();
+    const timestampReport = auditMigration({ sourceDbPath: timestampSourcePath, candidateDbPath: timestampCandidatePath, plan: timestampPlan, receipt: boundReceipt(timestampSourcePath, timestampCandidatePath, timestampPlan) });
+    assert.equal(timestampReport.passed, false, `recreated permission timestamp mutation ${name} must be refused`);
+    assert.ok(timestampReport.differences.some(({ kind }) => kind.startsWith('invalid-recreated-permission-timestamp')),
+      `recreated permission timestamp mutation ${name} must be rejected by the timestamp-specific gate`);
+  }
+  const noWindowSourcePath = join(directory, 'permissions-timestamp-no-window-source.db');
+  const noWindowCandidatePath = join(directory, 'permissions-timestamp-no-window-candidate.db');
+  createPermissionShape(noWindowSourcePath);
+  createPermissionShape(noWindowCandidatePath, { candidate: true });
+  const noWindowPlan = emptyBoundPlan();
+  const noWindowReceipt = boundReceipt(noWindowSourcePath, noWindowCandidatePath, noWindowPlan);
+  delete noWindowReceipt.lifecycle;
+  const noWindowReport = auditMigration({ sourceDbPath: noWindowSourcePath, candidateDbPath: noWindowCandidatePath, plan: noWindowPlan, receipt: noWindowReceipt });
+  assert.ok(noWindowReport.differences.some(({ kind }) => kind === 'invalid-recreated-permission-timestamp'),
+    'recreated timestamps require a receipt-bound closed-load window');
 });
 
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
