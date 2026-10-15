@@ -27,6 +27,7 @@ export default await getViteConfig({
       'tests/schedule-filters.render.test.ts',
       'tests/teacher-links.render.test.ts',
       'tests/rich-content-render.test.ts',
+      'tests/maintenance-banner-toggle.render.test.ts',
     ],
   },
 })({ command: 'serve', mode: 'test' });
