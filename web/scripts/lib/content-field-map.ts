@@ -89,7 +89,9 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'course_groups', field: 'image', source: 'image', transform: 'mediaRef' },
 
-  // seminars — БЕЗ institute_legacy_id: у семинара в схеме нет отношения `institute`
+  // seminars — без `seminar_status`, `price` и `duration`: в установленной схеме CMS их нет.
+  // Цена и длительность приходят из проведений, статус сайт не читает (`data.ts`, `Seminar`).
+  // БЕЗ institute_legacy_id: у семинара в схеме нет отношения `institute`
   // (только `course_group`). Институт восстанавливается ниже по цепочке group→institute.
   { type: 'seminars', field: 'legacy_id', source: 'legacy_id' },
   { type: 'seminars', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
@@ -151,7 +153,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'schedule_entries', field: 'additionalText', source: 'additionalText' },
   { type: 'schedule_entries', field: 'duration', source: 'duration' },
   { type: 'schedule_entries', field: 'seminar', source: 'seminar' },
-  { type: 'schedule_entries', field: 'teachers', source: 'teachers' },
+  { type: 'schedule_entries', field: 'teachers', source: 'teachers', transform: 'entryTeachers' },
 
   // news
   { type: 'news', field: 'legacy_id', source: 'legacy_id' },
@@ -192,6 +194,103 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'video_playlists', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'video_playlists', field: 'seo_description', source: 'seo.seo_description' },
 ] as const;
+
+/**
+ * Поля записей CMS, которые съём НАМЕРЕННО не переносит, — с причиной; покрывают и прежнюю схему
+ * `cms/`, и установленную CMS (4016ea47). Поле ответа вне карты и вне этого списка — отказ съёма.
+ */
+const REVERSE = 'обратная сторона связи: прямая сторона уже в карте';
+const NOT_YET = 'не используется сайтом в этом релизе';
+const UNSHOWN = 'сайт ещё не показывает: заполненное поле останавливает съём';
+const OLD_SCHEMA = 'только в прежней схеме; цена и длительность берутся из проведений, статус сайт не читает';
+export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  institutes: { course_groups: REVERSE },
+  course_groups: { seminars: REVERSE, is_article_category: NOT_YET },
+  seminars: {
+    schedule_entries: REVERSE,
+    seminar_status: OLD_SCHEMA,
+    price: OLD_SCHEMA,
+    duration: OLD_SCHEMA,
+    documents: UNSHOWN,
+    documents_state: NOT_YET,
+    documents_confirmation_author: NOT_YET,
+    documents_confirmation_date: NOT_YET,
+    documents_confirmation_source: NOT_YET,
+  },
+  teachers: { seminars: REVERSE },
+  articles: { categories: NOT_YET },
+  schedule_entries: { admin_label: 'служебная подпись для редактора, на сайт не выводится' },
+  news: {},
+  promotions: {},
+};
+
+/** Служебные поля ответа Strapi 5 и компонента: не атрибуты схемы. */
+const SYSTEM_FIELDS = new Set(['id', 'documentId', 'createdAt', 'updatedAt', 'publishedAt']);
+/** Подполя компонента `shared.seo`, которые сайт пока не читает. */
+export const UNMAPPED_SEO_FIELDS: Readonly<Record<string, string>> = { og_image: NOT_YET, noindex: NOT_YET };
+
+/**
+ * Поля записи, о которых нет решения: ни в карте, ни в `UNMAPPED_SCHEMA_FIELDS`, ни служебные.
+ * Проверяются и подполя `seo` — компонент тоже меняется вместе со схемой.
+ */
+export function unknownRecordFields(type: string, record: Record<string, unknown>): string[] {
+  const mapped = FIELD_MAP.filter((e) => e.type === type).map((e) => e.source);
+  const roots = new Set(mapped.map((source) => source.split('.')[0]!));
+  const seoMapped = new Set(mapped.filter((s) => s.startsWith('seo.')).map((s) => s.slice(4)));
+  const unknown: string[] = [];
+  for (const [field, value] of Object.entries(record)) {
+    if (SYSTEM_FIELDS.has(field)) continue;
+    const decided = Object.hasOwn(UNMAPPED_SCHEMA_FIELDS, type) && Object.hasOwn(UNMAPPED_SCHEMA_FIELDS[type]!, field);
+    if (!roots.has(field) && !decided) unknown.push(`${type}.${field}`);
+    if (field === 'seo' && value && typeof value === 'object') {
+      for (const sub of Object.keys(value)) {
+        if (sub !== 'id' && !seoMapped.has(sub) && !Object.hasOwn(UNMAPPED_SEO_FIELDS, sub)) unknown.push(`${type}.seo.${sub}`);
+      }
+    }
+  }
+  return unknown;
+}
+
+/**
+ * Источники карты, которых нет в записи ответа, — `поле снимка ← источник`. Отсутствие ключа — отказ:
+ * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
+ * проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
+ */
+export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
+  const missing = new Map<string, string>();
+  for (const { field, source } of FIELD_MAP.filter((e) => e.type === type)) {
+    const [root, sub] = source.split('.') as [string, string | undefined];
+    const parent = record[root];
+    const gone = !Object.hasOwn(record, root) ||
+      (sub !== undefined && parent !== null && typeof parent === 'object' && !Array.isArray(parent) && !Object.hasOwn(parent, sub));
+    if (gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
+  }
+  return [...missing.values()];
+}
+
+/**
+ * Есть ли в значении данные. Пустой rich-text (`<p></p>`, `&nbsp;`) и `false` — не данные: редактор,
+ * очистивший поле, его не заполнял, а `false` — значение по умолчанию флага. Картинка, встраивание и
+ * автоссылка без текста — данные: вырезаются только остальные теги.
+ */
+export function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === 'string') {
+    return value.replace(/<(?!img|iframe|video|audio|embed|object|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
+  }
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+/**
+ * Заполненные поля содержимого, которые сайт ещё не показывает (причина `UNSHOWN`): правка редактора
+ * молча не дошла бы до сайта. Служебные отметки (`documents_state`, `documents_confirmation_*`) — не
+ * `UNSHOWN`: у двух семинаров отметка уже стоит.
+ */
+export function filledUnshownContentFields(type: string, record: Record<string, unknown>): string[] {
+  const fields = UNMAPPED_SCHEMA_FIELDS[type] ?? {};
+  return Object.keys(fields).filter((f) => fields[f] === UNSHOWN && hasValue(record[f])).map((f) => `${type}.${f}`);
+}
 
 /**
  * Полнота относительно КОНТРАКТА снимка (`content-contract.ts`, `REQUIRED_SNAPSHOT_FIELDS`),
