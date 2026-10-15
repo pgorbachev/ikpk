@@ -52,6 +52,27 @@ function schema(db) {
   }
   return tables;
 }
+function relationalSchema(db, table) {
+  const foreignKeys = db.prepare(`PRAGMA foreign_key_list(${quote(table)})`).all().map((row) => ({
+    table: row.table, from: row.from, to: row.to, onUpdate: row.on_update, onDelete: row.on_delete, match: row.match,
+  })).sort((a, b) => json(a).localeCompare(json(b)));
+  const indexes = db.prepare(`PRAGMA index_list(${quote(table)})`).all().map((row) => ({
+    unique: row.unique, origin: row.origin, partial: row.partial,
+    columns: db.prepare(`PRAGMA index_info(${quote(row.name)})`).all().map(({ name }) => name),
+  })).sort((a, b) => json(a).localeCompare(json(b)));
+  return { foreignKeys, indexes };
+}
+function normalizeRelationalSchema(value, table, transforms) {
+  const rename = KNOWN_RENAMES.get(table);
+  if (!rename || !transforms.nativeRename) return value;
+  const renameColumn = (name) => name === rename[0] ? rename[1] : name;
+  return {
+    foreignKeys: value.foreignKeys.map((fk) => ({ ...fk, from: renameColumn(fk.from), to: renameColumn(fk.to) }))
+      .sort((a, b) => json(a).localeCompare(json(b))),
+    indexes: value.indexes.map((index) => ({ ...index, columns: index.columns.map(renameColumn) }))
+      .sort((a, b) => json(a).localeCompare(json(b))),
+  };
+}
 function valueKey(value) {
   if (Buffer.isBuffer(value)) return { blobSha256: sha(value), bytes: value.length };
   return value;
@@ -316,10 +337,13 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       }
       for (const column of expected) {
         const found = after.find(({ name }) => name === column.name);
-        if (!found || found.type !== column.type || found.pk !== column.pk || found.notnull !== column.notnull) {
+        if (!found || found.type !== column.type || found.pk !== column.pk || found.notnull !== column.notnull || found.defaultValue !== column.defaultValue) {
           differences.push({ table, kind: 'column-definition-mismatch', column: column.name });
         }
       }
+      const beforeRelations = normalizeRelationalSchema(relationalSchema(source, table), table, transforms);
+      const afterRelations = relationalSchema(candidate, table);
+      if (json(beforeRelations) !== json(afterRelations)) differences.push({ table, kind: 'relation-schema-mismatch', sourceSha256: sha(Buffer.from(json(beforeRelations))), candidateSha256: sha(Buffer.from(json(afterRelations))) });
       if (table === 'seminars' && hasDocumentsState) {
         // This single native schema-sync addition is accepted only as the known nullable text field.
         const state = after.find(({ name }) => name === 'documents_state');
@@ -344,7 +368,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
-    return {
+    const report = {
       private: true,
       passed: differences.length === 0,
       bindings: {
@@ -365,5 +389,9 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       },
       differences,
     };
+    if (sourceFileFingerprint(sourceDbPath) !== sourceFingerprint || sourceFileFingerprint(candidateDbPath) !== candidateFingerprint) {
+      throw new Error('source or candidate SQLite files changed while preservation audit was running');
+    }
+    return report;
   } finally { source.close(); candidate.close(); }
 }
