@@ -193,6 +193,35 @@ test('new-column exception does not permit any additional target-table column', 
   assert.ok(report.differences.some(({ table, kind }) => table === 'promotions' && kind === 'column-set-mismatch'));
 });
 
+function createConstrainedColumnShape(path, { candidate = false, addedCheck = false } = {}) {
+  const db = new Database(path);
+  db.exec(`CREATE TABLE admins (id INTEGER PRIMARY KEY);
+    CREATE TABLE promotions (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? `, \`type\` varchar(255) null${addedCheck ? " CHECK(type <> 'x')" : ''}` : ''}, CONSTRAINT promotions_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
+    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NULL, author_id INTEGER${candidate ? ', \`is_event_collection\` boolean null' : ''}, CONSTRAINT schedule_author_fk FOREIGN KEY(author_id) REFERENCES admins(id) ON DELETE SET NULL);
+    INSERT INTO promotions VALUES (1, 'promotion', NULL${candidate ? ', NULL' : ''});
+    INSERT INTO schedule_entries VALUES (1, 'entry', NULL${candidate ? ', NULL' : ''});
+    CREATE TABLE strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime);
+    INSERT INTO strapi_migrations VALUES (1, '5.0.0-02-created-document-id', 1791523597813);`);
+  db.close();
+}
+
+test('normalizes only the exact nullable added-column fragment before table constraints', () => {
+  const sourceDbPath = join(directory, 'constrained-column-source.db');
+  const candidateDbPath = join(directory, 'constrained-column-candidate.db');
+  createConstrainedColumnShape(sourceDbPath);
+  createConstrainedColumnShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table, kind }) => ['promotions', 'schedule_entries'].includes(table) && kind === 'relation-schema-mismatch'), false,
+    'the exact NULL column fragment may appear before preserved table-level foreign-key constraints');
+
+  const checkedCandidatePath = join(directory, 'constrained-column-check-candidate.db');
+  createConstrainedColumnShape(checkedCandidatePath, { candidate: true, addedCheck: true });
+  const checked = auditMigration({ sourceDbPath, candidateDbPath: checkedCandidatePath, plan, receipt: boundReceipt(sourceDbPath, checkedCandidatePath, plan) });
+  assert.equal(checked.passed, false, 'an added-column CHECK constraint is not covered by the nullable-column exception');
+  assert.ok(checked.differences.some(({ table, kind }) => table === 'promotions' && kind === 'relation-schema-mismatch'));
+});
+
 test('serialized Strapi schema history accepts only the verified two-column regeneration', () => {
   const sourceDbPath = join(directory, 'schema-history-source.db');
   const candidateDbPath = join(directory, 'schema-history-candidate.db');
@@ -210,9 +239,9 @@ test('serialized Strapi schema history accepts only the verified two-column rege
 function createPermissionShape(path, { candidate = false, mutate = null, mutateLinks = null } = {}) {
   const db = new Database(path);
   db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
-    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT);
+    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, document_id TEXT, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT);
     CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, permission_ord INTEGER);
-    INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin');`);
+    INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin'), (4, 'strapi-author');`);
   const descriptors = [];
   for (const verb of ['create', 'read', 'update']) {
     for (const role of [
@@ -226,11 +255,17 @@ function createPermissionShape(path, { candidate = false, mutate = null, mutateL
     let descriptor = { ...initial, roleId: initial.id, properties: { ...initial.properties, fields: [...initial.properties.fields] } };
     if (candidate && mutate) descriptor = mutate(descriptor, index) ?? descriptor;
     const permissionId = (candidate ? 20 : 10) + index;
-    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?)').run(
-      permissionId, descriptor.action, descriptor.subject, JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions), null,
+    const ordinalWithinRole = descriptors.slice(0, index).filter(({ id }) => id === initial.id).length;
+    const roleCount = descriptors.filter(({ id }) => id === initial.id).length;
+    const permissionOrd = candidate ? roleCount + ordinalWithinRole : ordinalWithinRole;
+    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      permissionId, `${candidate ? 'candidate' : 'source'}-doc-${index}`, descriptor.action, descriptor.subject,
+      JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions), null,
     );
-    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId, index);
+    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId, permissionOrd);
   }
+  db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?)').run(99, 'stable-document', 'plugin::upload.read', null, '{}', '[]', '{"scope":"read"}');
+  db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run(99, 99, 4, 0);
   if (candidate && mutateLinks) mutateLinks(db);
   db.close();
 }
@@ -247,6 +282,7 @@ test('permission graph accepts exact current fields while permission and link ID
     'the semantic role/action/subject/condition graph is stable despite regenerated storage IDs');
   assert.equal(report.differences.some(({ table }) => table === 'admin_permissions_role_lnk'), false,
     'permission relation storage IDs may change only when the linked role graph is unchanged');
+  assert.equal(report.transformations.permissionRowsRecreated, 12, 'only the twelve reviewed fieldset changes may recreate rows');
 });
 
 test('permission graph rejects unapproved fields, changed conditions, role reassignment, and dangling links', () => {
@@ -269,7 +305,7 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
   }
   for (const [index, mutateLinks] of [
     (db) => db.prepare('DELETE FROM admin_permissions_role_lnk WHERE id = 40').run(),
-    (db) => db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (99, 20, 1, 0)').run(),
+    (db) => db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (999, 20, 1, 0)').run(),
     (db) => db.prepare('UPDATE admin_permissions_role_lnk SET permission_id = 999 WHERE id = 40').run(),
     (db) => db.prepare('UPDATE admin_permissions_role_lnk SET permission_ord = 999 WHERE id = 40').run(),
   ].entries()) {
@@ -280,8 +316,9 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
     const plan = emptyBoundPlan();
     const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
     assert.equal(report.passed, false, `link mutation ${index} must block preservation acceptance`);
-    assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')),
-      `link mutation ${index} should be rejected by logical permission comparison`);
+    assert.ok(report.differences.some(({ table, kind }) => ['admin_permissions', 'admin_permissions_role_lnk'].includes(table)
+      && (kind.startsWith('logical-permission-') || kind.startsWith('recreated-permission-'))),
+    `link mutation ${index} should be rejected by logical permission comparison`);
   }
   const sourceDbPath = join(directory, 'permissions-action-parameters-source.db');
   const candidateDbPath = join(directory, 'permissions-action-parameters-candidate.db');
@@ -293,6 +330,28 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
   const plan = emptyBoundPlan();
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
   assert.equal(report.passed, false, 'permission action_parameters are part of the preserved authorization graph');
+
+  const stableSourcePath = join(directory, 'permissions-stable-metadata-source.db');
+  const stableCandidatePath = join(directory, 'permissions-stable-metadata-candidate.db');
+  createPermissionShape(stableSourcePath);
+  createPermissionShape(stableCandidatePath, { candidate: true });
+  const stableDb = new Database(stableCandidatePath);
+  stableDb.prepare('UPDATE admin_permissions SET action_parameters = ? WHERE id = 99').run('{"scope":"changed"}');
+  stableDb.close();
+  const stablePlan = emptyBoundPlan();
+  const stableReport = auditMigration({ sourceDbPath: stableSourcePath, candidateDbPath: stableCandidatePath, plan: stablePlan, receipt: boundReceipt(stableSourcePath, stableCandidatePath, stablePlan) });
+  assert.equal(stableReport.passed, false, 'unchanged permission descriptors retain all non-ID metadata');
+
+  const documentSourcePath = join(directory, 'permissions-documentid-source.db');
+  const documentCandidatePath = join(directory, 'permissions-documentid-candidate.db');
+  createPermissionShape(documentSourcePath);
+  createPermissionShape(documentCandidatePath, { candidate: true });
+  const documentDb = new Database(documentCandidatePath);
+  documentDb.prepare('UPDATE admin_permissions SET document_id = ? WHERE id = 20').run('invalid document id');
+  documentDb.close();
+  const documentPlan = emptyBoundPlan();
+  const documentReport = auditMigration({ sourceDbPath: documentSourcePath, candidateDbPath: documentCandidatePath, plan: documentPlan, receipt: boundReceipt(documentSourcePath, documentCandidatePath, documentPlan) });
+  assert.equal(documentReport.passed, false, 'regenerated permission document IDs must be safe and unique');
 });
 
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
@@ -386,6 +445,7 @@ test('core-store table presence and schema constraints remain part of preservati
   for (const [name, mutate] of [
     ['missing', (db) => db.exec('DROP TABLE strapi_core_store_settings')],
     ['index', (db) => db.exec('CREATE INDEX unexpected_core_store_index ON strapi_core_store_settings(key)')],
+    ['metadata', (db) => db.prepare('UPDATE strapi_core_store_settings SET type = ? WHERE key = ?').run('unexpected', PROMOTION_CONFIG_KEY)],
   ]) {
     const sourceDbPath = join(directory, `core-store-schema-source-${name}.db`);
     const candidateDbPath = join(directory, `core-store-schema-candidate-${name}.db`);
