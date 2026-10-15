@@ -37,6 +37,7 @@ mkdir -p "$OUT/database/migrations"
 # План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
 mkdir -p "$OUT/scripts"
 cp scripts/run-data-migrations.mjs \
+  scripts/audit-data-migration.mjs \
   scripts/institute-method-author-classification.mjs \
   scripts/normalize-null-documents-state.mjs "$OUT/scripts/"
 

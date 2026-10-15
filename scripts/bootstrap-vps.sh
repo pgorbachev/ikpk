@@ -774,7 +774,25 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
         echo "[bootstrap] FAIL CLOSED: предыдущий релиз ${previous_target} не запускается с текущей базой." >&2
         echo "[bootstrap] Выберите проверенную совместимую пару кода и базы; автоматическое переключение кода запрещено." >&2
       fi
-      echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?}; CMS оставлена остановленной, автоматического отката кода нет." >&2
+      if ! command -v systemctl >/dev/null 2>&1; then
+        echo "[bootstrap] ERROR: systemctl недоступен; остановку CMS подтвердить нельзя, состояние службы неизвестно." >&2
+        exit 8
+      fi
+      if ! systemctl stop "$unit_name"; then
+        echo "[bootstrap] ERROR: systemctl не смог остановить CMS (${unit_name}); состояние службы неизвестно." >&2
+        exit 8
+      fi
+      if systemctl is-active --quiet "$unit_name"; then
+        echo "[bootstrap] ERROR: CMS всё ещё active после stop (${unit_name}); совместимая пара не восстановлена." >&2
+        exit 8
+      fi
+      stopped_main_pid="$(systemctl show --property=MainPID --value "$unit_name" 2>/dev/null || true)"
+      if [[ "$stopped_main_pid" != "0" ]]; then
+        echo "[bootstrap] ERROR: systemd не подтвердил MainPID=0 после остановки CMS (получено: ${stopped_main_pid:-пусто})." >&2
+        exit 8
+      fi
+      echo "[bootstrap] CMS остановлена и MainPID=0 подтверждён; старый код не запускается автоматически." >&2
+      echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?}; восстановление требует проверенной совместимой пары." >&2
       exit 7
     fi
   fi

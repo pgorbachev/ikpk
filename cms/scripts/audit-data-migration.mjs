@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(resolve(MODULE_DIR, '../package.json'));
+const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const HASH = /^[a-f0-9]{64}$/;
 const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operations', 'ikpk_data_migration_history']);
@@ -36,6 +36,7 @@ function sourceFileFingerprint(path) {
 }
 function dbOpen(path) {
   const db = new Database(path, { readonly: true, fileMustExist: true, timeout: 5000 });
+  db.defaultSafeIntegers(true);
   db.pragma('query_only = ON');
   return db;
 }
@@ -48,7 +49,7 @@ function schema(db) {
   const tables = {};
   for (const table of tableNames(db)) {
     tables[table] = db.prepare(`PRAGMA table_info(${quote(table)})`).all()
-      .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull, defaultValue: dflt_value, pk }));
+      .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull: Number(notnull), defaultValue: dflt_value, pk: Number(pk) }));
   }
   return tables;
 }
@@ -57,7 +58,7 @@ function relationalSchema(db, table) {
     table: row.table, from: row.from, to: row.to, onUpdate: row.on_update, onDelete: row.on_delete, match: row.match,
   })).sort((a, b) => json(a).localeCompare(json(b)));
   const indexes = db.prepare(`PRAGMA index_list(${quote(table)})`).all().map((row) => ({
-    unique: row.unique, origin: row.origin, partial: row.partial,
+    unique: Number(row.unique), origin: row.origin, partial: Number(row.partial),
     columns: db.prepare(`PRAGMA index_info(${quote(row.name)})`).all().map(({ name }) => name),
   })).sort((a, b) => json(a).localeCompare(json(b)));
   return { foreignKeys, indexes };
@@ -75,6 +76,7 @@ function normalizeRelationalSchema(value, table, transforms) {
 }
 function valueKey(value) {
   if (Buffer.isBuffer(value)) return { blobSha256: sha(value), bytes: value.length };
+  if (typeof value === 'bigint') return { integer: value.toString() };
   return value;
 }
 function objectDigest(row) {
@@ -91,7 +93,7 @@ function collectRows(db, table, columns) {
   });
 }
 function countByTable(db, tables) {
-  return Object.fromEntries(tables.map((table) => [table, db.prepare(`SELECT COUNT(*) AS n FROM ${quote(table)}`).get().n]));
+  return Object.fromEntries(tables.map((table) => [table, db.prepare(`SELECT COUNT(*) AS n FROM ${quote(table)}`).get().n.toString()]));
 }
 function difference(differences, table, kind, key, before, after) {
   differences.push({ table, kind, keySha256: sha(Buffer.from(json(key))), ...(before ? { sourceSha256: before.digest } : {}), ...(after ? { candidateSha256: after.digest } : {}) });
@@ -210,7 +212,10 @@ function compareExpectedRows(sourceDb, candidateDb, table, sourceColumns, candid
       const a = before.get(key); const b = after.get(key);
       if (!a) difference(differences, table, 'row-added', JSON.parse(key), null, b);
       else if (!b) difference(differences, table, 'row-removed', JSON.parse(key), a, null);
-      else if (a.digest !== b.digest) difference(differences, table, 'row-content', JSON.parse(key), a, b);
+      else if (a.digest !== b.digest) {
+        const changedFields = Object.keys(a.value).filter((field) => json(a.value[field]) !== json(b.value[field]));
+        differences.push({ table, kind: 'row-content', keySha256: sha(Buffer.from(key)), changedFields, sourceSha256: a.digest, candidateSha256: b.digest });
+      }
     }
   } else {
     const normalize = (rows) => { const map = new Map(); for (const row of rows) { const d = digest(row); map.set(d, (map.get(d) ?? 0) + 1); } return map; };
@@ -233,7 +238,7 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
   const lineage = candidateDb.prepare('SELECT * FROM ikpk_migration_lineage ORDER BY singleton').all();
   const operations = candidateDb.prepare('SELECT * FROM ikpk_migration_operations ORDER BY operation_id').all();
   const ledger = candidateDb.prepare('SELECT * FROM ikpk_data_migration_history ORDER BY step_id').all();
-  if (lineage.length !== 1 || lineage[0]?.singleton !== 1 || !HASH.test(lineage[0]?.lineage_id ?? '')
+  if (lineage.length !== 1 || Number(lineage[0]?.singleton) !== 1 || !HASH.test(lineage[0]?.lineage_id ?? '')
     || !HASH.test(lineage[0]?.source_snapshot_sha256 ?? '')
     || !HASH.test(lineage[0]?.source_schema_sha256 ?? '')) differences.push({ table: 'ikpk_migration_lineage', kind: 'lineage-binding-mismatch' });
   if (!operations.some((row) => row.operation_id === receipt.operationId

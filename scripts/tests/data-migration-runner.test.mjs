@@ -140,7 +140,10 @@ test('legacy CMS failure branch refuses code-only rollback when no matching data
 
   for (const command of ['ln', 'mv', 'systemctl']) {
     const executable = join(bin, command);
-    writeFileSync(executable, `#!/bin/sh\nprintf '%s %s\\n' '${command}' "$*" >> "$IKPK_TEST_EVENTS"\n`, 'utf8');
+    const behavior = command === 'systemctl'
+      ? `case "$1" in stop) exit 0;; is-active) exit 1;; show) printf '0\\n'; exit 0;; esac\nexit 1\n`
+      : '';
+    writeFileSync(executable, `#!/bin/sh\nprintf '%s %s\\n' '${command}' "$*" >> "$IKPK_TEST_EVENTS"\n${behavior}`, 'utf8');
     chmodSync(executable, 0o700);
   }
 

@@ -8,6 +8,7 @@ import {
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { auditMigration } from './audit-data-migration.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const CMS_ROOT = resolve(dirname(MODULE_PATH), '..');
@@ -26,7 +27,30 @@ function isWithin(parent, child) {
 }
 function abs(value, label) {
   if (typeof value !== 'string' || !isAbsolute(value) || value !== value.trim()) fail(`${label} must be an absolute path without surrounding whitespace`);
-  return resolve(value);
+  const normalized = resolve(value);
+  return join(realpathSync(dirname(normalized)), basename(normalized));
+}
+function canonicalPath(path) {
+  try { return realpathSync(path); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return resolve(realpathSync(dirname(path)), basename(path));
+  }
+}
+function assertDistinctPaths(paths) {
+  const seen = new Map();
+  const inodes = new Map();
+  for (const [label, path] of paths) {
+    const canonical = canonicalPath(path);
+    if (seen.has(canonical)) fail(`${label} aliases ${seen.get(canonical)}; source, candidate, receipt and target paths must be distinct`);
+    seen.set(canonical, label);
+    try {
+      const info = lstatSync(path);
+      const identity = `${info.dev}:${info.ino}`;
+      if (inodes.has(identity)) fail(`${label} is a hard-link alias of ${inodes.get(identity)}; paths must be distinct files`);
+      inodes.set(identity, label);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
 }
 function privateDirectory(path, label) {
   const requested = resolve(path);
@@ -96,6 +120,16 @@ function acquireTargetLock(candidatePath) {
     throw error;
   }
 }
+function acquireTargetLocks(paths) {
+  const releases = [];
+  try {
+    for (const path of [...new Set(paths)].sort()) releases.push(acquireTargetLock(path));
+  } catch (error) {
+    for (const release of releases.reverse()) release();
+    throw error;
+  }
+  return () => { for (const release of releases.reverse()) release(); };
+}
 
 function databaseClass() { return require('better-sqlite3'); }
 function openDatabase(path, { readonly = false } = {}) {
@@ -161,8 +195,14 @@ function artifactFingerprint(root) {
       if (info.isSymbolicLink()) {
         const target = require('node:fs').readlinkSync(fullPath);
         const resolved = realpathSync(fullPath);
-        if (!isWithin(root, resolved)) fail(`artifact symlink escapes its root: ${relativePath}`);
-        entries.push({ path: relativePath, type: 'symlink', target });
+        if (!isWithin(root, resolved)) {
+          const dependencyRoot = resolve(root, '../../deps');
+          const uploadsRoot = resolve(root, '../../shared/uploads');
+          const allowed = (relativePath === 'node_modules' && isWithin(dependencyRoot, resolved))
+            || (relativePath === 'public/uploads' && isWithin(uploadsRoot, resolved));
+          if (!allowed) fail(`artifact has an undeclared external symlink: ${relativePath}`);
+        }
+        entries.push({ path: relativePath, type: 'symlink', target, resolved });
       } else if (info.isDirectory()) visit(fullPath, relativePath);
       else if (info.isFile()) entries.push({ path: relativePath, type: 'file', sha256: hash(readFileSync(fullPath)) });
       else fail(`unsupported special file in CMS artifact: ${relativePath}`);
@@ -272,6 +312,14 @@ function ensureLedger(db) {
       source_schema_sha256 TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ikpk_migration_operations (
+      operation_id TEXT PRIMARY KEY,
+      lineage_id TEXT NOT NULL,
+      source_snapshot_sha256 TEXT NOT NULL,
+      source_schema_sha256 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (lineage_id) REFERENCES ${LINEAGE_TABLE}(lineage_id)
+    );
     CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
       lineage_id TEXT NOT NULL,
       operation_id TEXT NOT NULL,
@@ -289,16 +337,23 @@ function getLineage(db) {
 function initializeLineage(db, sourceSnapshotSha256, sourceSchemaSha256) {
   ensureLedger(db);
   const current = getLineage(db);
-  if (current) {
-    if (current.source_snapshot_sha256 !== sourceSnapshotSha256 || current.source_schema_sha256 !== sourceSchemaSha256) {
-      fail('candidate lineage does not match the recorded source snapshot; discard and reprepare from a pristine source');
-    }
-    return current.lineage_id;
-  }
-  const lineageId = randomUUID();
+  if (current) return current.lineage_id;
+  const lineageId = hash(Buffer.from(randomUUID()));
   db.prepare(`INSERT INTO ${LINEAGE_TABLE} (singleton,lineage_id,source_snapshot_sha256,source_schema_sha256,created_at) VALUES (1,?,?,?,?)`)
     .run(lineageId, sourceSnapshotSha256, sourceSchemaSha256, new Date().toISOString());
   return lineageId;
+}
+function bindOperationToSource(db, { operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256 }) {
+  ensureLedger(db);
+  const row = db.prepare('SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_operations WHERE operation_id=?').get(operationId);
+  if (row) {
+    if (row.lineage_id !== lineageId || row.source_snapshot_sha256 !== sourceSnapshotSha256 || row.source_schema_sha256 !== sourceSchemaSha256) {
+      fail('operation ID is already bound to a different source snapshot or lineage');
+    }
+    return;
+  }
+  db.prepare('INSERT INTO ikpk_migration_operations (operation_id,lineage_id,source_snapshot_sha256,source_schema_sha256,created_at) VALUES (?,?,?,?,?)')
+    .run(operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256, new Date().toISOString());
 }
 function completedStep(db, lineageId, step) {
   const row = db.prepare(`SELECT operation_id, payload_sha256, result_json, completed_at FROM ${LEDGER_TABLE} WHERE lineage_id = ? AND step_id = ?`).get(lineageId, step.id);
@@ -333,14 +388,30 @@ function productionLifecycle(artifactDir) {
       const task = defaultLifecycleQueue.then(() => withDatabaseFilename(candidateDbPath, async () => {
         const artifactRequire = createRequire(join(artifactDir, 'package.json'));
         const { createStrapi } = artifactRequire('@strapi/strapi');
-        const instance = createStrapi({ appDir: artifactDir });
+        const previousClient = process.env.DATABASE_CLIENT;
+        const previousUrl = process.env.DATABASE_URL;
+        process.env.DATABASE_CLIENT = 'sqlite';
+        delete process.env.DATABASE_URL;
+        let instance;
         try {
+          instance = createStrapi({ appDir: artifactDir, distDir: join(artifactDir, 'dist') });
+          const connection = instance.config?.get?.('database.connection');
+          const actualClient = connection?.client;
+          const actualFilename = connection?.connection?.filename;
+          if (actualClient !== 'sqlite' || typeof actualFilename !== 'string' || resolve(actualFilename) !== candidateDbPath) {
+            fail(`closed Strapi resolved an unsafe database target before load (client=${actualClient ?? '<unknown>'}, filename=${actualFilename ?? '<unknown>'})`);
+          }
           await instance.load();
           await onCheckpoint?.('strapi-load-complete');
           return instance;
         } catch (error) {
-          try { await instance.destroy(); } catch { /* preserve original load error */ }
+          try { await instance?.destroy(); } catch { /* preserve original load error */ }
           throw error;
+        } finally {
+          if (previousClient === undefined) delete process.env.DATABASE_CLIENT;
+          else process.env.DATABASE_CLIENT = previousClient;
+          if (previousUrl === undefined) delete process.env.DATABASE_URL;
+          else process.env.DATABASE_URL = previousUrl;
         }
       }));
       defaultLifecycleQueue = task.then(() => undefined, () => undefined);
@@ -407,6 +478,28 @@ function verifyPlanAndReceipt(plan, receipt) {
   }
 }
 
+function preservationAudit(receipt, plan) {
+  receipt.candidatePostMigrationSha256 = hash(readFileSync(receipt.candidateDbPath));
+  receipt.candidatePostMigrationFileFingerprint = sourceFileFingerprint(receipt.candidateDbPath);
+  const result = auditMigration({
+    sourceDbPath: receipt.sourceDbPath,
+    candidateDbPath: receipt.candidateDbPath,
+    plan: { ...plan, manifestPath: plan.manifestPath },
+    receipt,
+  });
+  receipt.preservation = {
+    private: true,
+    passed: result.passed,
+    sourceSchemaFingerprint: result.source?.schemaFingerprint,
+    candidateSchemaFingerprint: result.candidate?.schemaFingerprint,
+    transformationCounts: result.transformations,
+    differenceCount: result.differences?.length,
+    auditedAt: new Date().toISOString(),
+  };
+  if (!result.passed) fail(`migration preservation audit did not pass (${result.differences.map(({ table, kind, sourceSha256, candidateSha256 }) => `${table}:${kind}:${sourceSha256 ?? '-'}:${candidateSha256 ?? '-'}`).join(', ')}); candidate remains private and cannot be activated`);
+  return result;
+}
+
 /** Prepare a private, consistent SQLite candidate and execute its versioned migration plan. */
 export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, lifecycleAdapter }) {
   const sourceDbPath = abs(rawSourceDbPath, 'sourceDbPath');
@@ -418,6 +511,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   const candidateParent = privateDirectory(dirname(candidateDbPath), 'candidate parent directory');
   const receiptParent = privateDirectory(dirname(receiptPath), 'receipt parent directory');
   if (candidateParent !== dirname(candidateDbPath) || receiptParent !== dirname(receiptPath)) fail('candidate or receipt path traverses a symlinked parent');
+  assertDistinctPaths([['source database', sourceDbPath], ['candidate database', candidateDbPath], ['operation receipt', receiptPath], ['target lock', `${candidateDbPath}.migration-lock`]]);
   if (isWithin(artifactReal, receiptPath) || isWithin(artifactReal, candidateDbPath)) fail('candidate database and operation receipt must be outside the CMS artifact/Git tree');
   if (candidateDbPath === sourceDbPath) fail('candidate database must not be the source database');
   const release = resolvePlan(artifactReal);
@@ -426,6 +520,11 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   if (!releaseVersions.has(strapiVersion)) fail(`source Strapi version ${strapiVersion} is not supported by this migration plan`);
   const unlock = acquireTargetLock(candidateDbPath);
   try {
+    try {
+      const candidateInfo = lstatSync(candidateDbPath);
+      if (!candidateInfo.isFile() || candidateInfo.isSymbolicLink()) fail('existing candidate database must be a regular non-symlink file');
+      if (candidateInfo.nlink !== 1) fail('existing candidate database has additional hard links; refusing ambiguous ownership');
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const candidateExists = (() => { try { lstatSync(candidateDbPath); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; } })();
     let receipt;
     let sourceSnapshotSha256;
@@ -445,7 +544,9 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       sourceSnapshot = receipt.source;
       const state = readCandidateState(candidateDbPath);
       lineageId = state.lineage.lineage_id;
-      if (state.lineage.source_snapshot_sha256 !== sourceSnapshotSha256) fail('candidate DB lineage is inconsistent with its receipt; discard and reprepare');
+      const resumedDb = openDatabase(candidateDbPath);
+      try { bindOperationToSource(resumedDb, { operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256: sourceSnapshot.schemaFingerprint }); }
+      finally { resumedDb.close(); }
     } else {
       assertNewPath(candidateDbPath, 'candidate database');
       assertNewPath(receiptPath, 'operation receipt');
@@ -471,6 +572,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
           try {
             sourceSnapshotSha256 = hash(readFileSync(staged));
             lineageId = initializeLineage(stagedDb, sourceSnapshotSha256, sourceSnapshot.schemaFingerprint);
+            bindOperationToSource(stagedDb, { operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256: sourceSnapshot.schemaFingerprint });
           } finally { stagedDb.close(); }
           chmodSync(staged, 0o600);
           linkExclusive(staged, candidateDbPath);
@@ -557,7 +659,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     if (status.steps.some((step) => step.phase === 'after-sync' && step.status !== 'completed')) fail('not all planned data steps are recorded complete');
     receipt.phase = 'prepared';
     receipt.preparedAt = new Date().toISOString();
-    receipt.candidatePostMigrationSha256 = hash(readFileSync(candidateDbPath));
+    preservationAudit(receipt, release);
     atomicJson(receiptPath, receipt);
     return publicStatus(receipt, finalState);
   } catch (error) {
@@ -576,7 +678,7 @@ function linkExclusive(source, destination) {
   require('node:fs').linkSync(source, destination);
 }
 async function defaultRunDataStep({ step, candidateDbPath, recordCompletion }) {
-  const helperPath = resolve(dirname(step.absolutePath ?? join(CMS_ROOT, 'database/migrations/plan.json')), step.path);
+  const helperPath = step.absolutePath ?? resolve(CMS_ROOT, 'database/migrations', step.path);
   const module = await import(pathToFileURL(helperPath).href);
   if (typeof module.apply !== 'function') fail(`data helper ${step.path} does not export apply(db,{onApplied})`);
   const db = openDatabase(candidateDbPath);
@@ -640,7 +742,8 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
   const activePairPath = abs(rawActivePairPath, 'activePairPath');
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
   const sandboxRoot = verifySandbox(rawSandboxRoot, { candidateDbPath, codeRelease, activePairPath, receiptPath });
-  const unlock = acquireTargetLock(candidateDbPath);
+  assertDistinctPaths([['candidate database', candidateDbPath], ['operation receipt', receiptPath], ['active pair pointer', activePairPath], ['target lock', `${candidateDbPath}.migration-lock`]]);
+  const unlock = acquireTargetLocks([candidateDbPath, activePairPath]);
   try {
     const receipt = receiptFrom(receiptPath, operationId);
     if (receipt.phase !== 'prepared' && receipt.phase !== 'activated') fail(`operation is not ready for activation (phase ${receipt.phase})`);
@@ -648,6 +751,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
     const release = verifyCandidatePlan(receipt, codeRelease);
     const status = getMigrationStatus({ candidateDbPath, operationId, receiptPath });
     if (status.steps.some((step) => step.phase === 'after-sync' && step.status !== 'completed')) fail('activation refused: data steps are incomplete');
+    preservationAudit(receipt, release);
     assertNoOpenHandles([candidateDbPath, `${candidateDbPath}-wal`, `${candidateDbPath}-shm`]);
     const existingPath = (() => { try { return realpathSync(activePairPath); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } })();
     if (!existingPath) fail('activation requires an existing verified prior code+database cohort for safe rollback');
@@ -664,6 +768,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
       } });
     } finally { if (instance !== undefined) await adapter.destroy(instance); }
     const afterClosedLoad = sourceFileFingerprint(candidateDbPath);
+    preservationAudit(receipt, release);
     receipt.phase = 'prepared';
     const cohortRoot = join(sandboxRoot, 'cohorts');
     try { mkdirSync(cohortRoot, { mode: 0o700 }); }
@@ -686,6 +791,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
       priorDatabasePath: prior.database,
       priorPlanSha256: prior.metadata.planSha256,
       priorCohortMetadata: prior.metadata,
+      priorCohortMetadata: prior.metadata,
       planSha256: release.planSha256,
       lineageId: status.lineageId,
       candidatePostClosedLoadSha256: afterClosedLoad,
@@ -698,8 +804,12 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
       codeRelease, artifactSha256: release.artifactSha256, databasePath: candidateDbPath, databaseSha256: afterClosedLoad,
       previousCohortPath: prior.path, selectedAt: receipt.activation.activatedAt,
     }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    receipt.phase = 'activation-intent';
+    receipt.activation.phase = 'activation-intent';
+    atomicJson(receiptPath, receipt);
     atomicSymlink(operationCohort, activePairPath);
     receipt.phase = 'activated';
+    receipt.activation.phase = 'pair-selected-editors-closed';
     atomicJson(receiptPath, receipt);
     return publicStatus(receipt, readCandidateState(candidateDbPath));
   } finally { unlock(); }
@@ -710,11 +820,17 @@ export function rollbackMigration({ operationId, receiptPath: rawReceiptPath, ac
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
   const activePairPath = abs(rawActivePairPath, 'activePairPath');
   const receipt = receiptFrom(receiptPath, operationId);
+  const unlock = acquireTargetLocks([receipt.candidateDbPath, activePairPath]);
+  try {
+  const currentReceipt = receiptFrom(receiptPath, operationId);
+  if (currentReceipt.candidateDbPath !== receipt.candidateDbPath) fail('candidate path changed while waiting for the rollback lock');
   const sandboxRoot = verifySandbox(rawSandboxRoot, { activePairPath, candidateDbPath: receipt.candidateDbPath, receiptPath });
-  if (receipt.phase !== 'activated' || !receipt.activation) fail(`operation is not rollback-ready (phase ${receipt.phase})`);
+  assertDistinctPaths([['candidate database', receipt.candidateDbPath], ['operation receipt', receiptPath], ['active pair pointer', activePairPath], ['target lock', `${receipt.candidateDbPath}.migration-lock`]]);
+  if (!['activated', 'activation-intent'].includes(receipt.phase) || !receipt.activation) fail(`operation is not rollback-ready (phase ${receipt.phase})`);
   const activation = receipt.activation;
   const current = readCohort(activePairPath, sandboxRoot);
-  if (current.metadata.operationId !== operationId || current.path !== resolve(activation.cohortPath)) fail('active pair is not this operation’s verified cohort; refusing to change it');
+  const pairAlreadyPrior = current.path === resolve(activation.priorCohortPath);
+  if (!pairAlreadyPrior && (current.metadata.operationId !== operationId || current.path !== resolve(activation.cohortPath))) fail('active pair is not this operation’s verified cohort; refusing to change it');
   assertNoOpenHandles([receipt.candidateDbPath, `${receipt.candidateDbPath}-wal`, `${receipt.candidateDbPath}-shm`]);
   const candidateHash = sourceFileFingerprint(receipt.candidateDbPath);
   if (candidateHash !== activation.candidatePostClosedLoadSha256) fail('candidate database changed after activation; old backup rollback would lose later writes and is refused');
@@ -723,12 +839,13 @@ export function rollbackMigration({ operationId, receiptPath: rawReceiptPath, ac
   if (prior.code !== activation.priorCodeRelease || prior.database !== activation.priorDatabasePath || prior.metadata.planSha256 !== activation.priorPlanSha256) {
     fail('prior code+database cohort metadata changed; refusing unverified rollback');
   }
-  atomicSymlink(prior.path, activePairPath);
+  if (!pairAlreadyPrior) atomicSymlink(prior.path, activePairPath);
   receipt.phase = 'rolled-back';
-  receipt.activation.phase = 'rolled-back-before-reopen';
+  receipt.activation.phase = pairAlreadyPrior ? 'activation-intent-reconciled-before-switch' : 'rolled-back-before-reopen';
   receipt.rollback = { restoredCohortPath: prior.path, restoredCodeRelease: prior.code, restoredDatabasePath: prior.database, at: new Date().toISOString() };
   atomicJson(receiptPath, receipt);
   return receipt.rollback;
+  } finally { unlock(); }
 }
 
 function parseArgs(argv) {
