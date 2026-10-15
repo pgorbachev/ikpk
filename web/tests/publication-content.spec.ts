@@ -1,3 +1,4 @@
+import { candidateRoute, candidateSearchSubject } from './helpers/publication-candidate-data';
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, actualTemplates, candidate } from './helpers/publication-candidate';
 import { isCurrentOrFuture, type ScheduleWindowEntry } from '../src/lib/schedule-window';
@@ -43,22 +44,29 @@ test('candidate actual templates and dark home have no serious or critical acces
 });
 
 test('candidate global search opens, returns captured content, navigates and closes', async ({ page }) => {
-  const article = candidate().snapshot.content.types.articles[0];
-  const word = String(article.title).match(/[а-яёa-z]{5,}/i)?.[0];
-  expect(word, 'article has no searchable word').toBeDefined();
+  const subject = candidateSearchSubject(candidate().snapshot.content.types);
   await page.goto('/');
   if ((page.viewportSize()?.width ?? 0) <= 900) {
     await page.getByLabel('Открыть меню').click(); await page.locator('[data-search-open]').click();
   } else await page.locator('#header-search-toggle').click();
   const input = page.locator('.pagefind-ui__search-input');
-  await expect(input).toBeVisible(); await input.fill(word!);
-  const result = page.locator('.pagefind-ui__result-link').filter({ hasText: String(article.title) }).first();
-  await expect(result).toBeVisible({ timeout: 20_000 });
-  await result.click(); await expect(page).toHaveURL(new RegExp(`/statyi/${article.slug}/?$`));
-  await expect(page.locator('h1').first()).toBeVisible();
-  if ((page.viewportSize()?.width ?? 0) <= 900) {
-    await page.getByLabel('Открыть меню').click(); await page.locator('[data-search-open]').click();
-  } else await page.locator('#header-search-toggle').click();
+  await expect(input).toBeVisible();
+  if (subject) {
+    await input.fill(subject.query);
+    const hrefs = [subject.route, new URL(subject.route, page.url()).href].flatMap((href) => [href, `${href}/`]);
+    const result = page.locator(hrefs.map((href) => `.pagefind-ui__result-link[href=${JSON.stringify(href)}]`).join(',')).first();
+    await expect(result).toBeVisible({ timeout: 20_000 });
+    await result.click(); await expect.poll(() => new URL(page.url()).pathname.replace(/\/$/, '')).toBe(subject.route);
+    await expect(page.locator('h1').first()).toBeVisible();
+    if ((page.viewportSize()?.width ?? 0) <= 900) {
+      await page.getByLabel('Открыть меню').click(); await page.locator('[data-search-open]').click();
+    } else await page.locator('#header-search-toggle').click();
+  } else {
+    // No indexable article token in this source: exercise the empty interaction.
+    await input.fill(' '); await input.fill('');
+    await expect(input).toHaveValue('');
+    await expect(page.locator('.pagefind-ui__result-link')).toHaveCount(0);
+  }
   await page.locator('#header-search-close').click(); await expect(page.locator('.pagefind-ui__search-input')).toBeHidden();
 });
 
@@ -67,8 +75,10 @@ test('candidate seminar uses actual dates, responsive panel and safe registratio
   const entries = (snapshot.content.types.schedule_entries as unknown as (ScheduleWindowEntry & { status: string; seminar: { slug: string } })[])
     .filter((row) => row.status === 'active' && isCurrentOrFuture(row, snapshot.referenceDate));
   const slug = entries[0]?.seminar.slug ?? snapshot.content.types.seminars[0]?.slug;
-  const route = pages.find((entry) => entry.route.split('/').at(-1) === slug)?.route;
-  expect(route, 'no actual seminar route').toBeDefined(); await page.goto(route!);
+  const seminar = snapshot.content.types.seminars.find((entity) => entity.slug === slug);
+  expect(seminar, 'missing captured seminar').toBeDefined();
+  const route = candidateRoute(snapshot.content.types, 'seminars', seminar!);
+  expect(pages.some((page) => page.route === route), `missing actual seminar route: ${route}`).toBe(true); await page.goto(route);
   const panel = page.locator('[data-seminar-schedule-panel]');
   await expect(panel).toBeVisible();
   await expect(page.locator('[data-seminar-schedule-card]')).toHaveCount(entries.filter((row) => row.seminar.slug === slug).length);

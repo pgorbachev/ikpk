@@ -4,6 +4,7 @@ import { isAbsolute, relative } from 'node:path';
 import { readPublicationSnapshot } from '../../scripts/lib/publication-snapshot';
 import { walkHtml } from './dist-pages';
 import { attr, findAll, textOf } from './dom';
+import { candidateTemplateRoutes } from './publication-candidate-data';
 import { installThirdPartyGuard } from './third-party-guard';
 
 /** Read only the operator's captured source and the exact output being admitted. */
@@ -23,22 +24,7 @@ export function candidate() {
 }
 export function actualTemplates() {
   const { pages, snapshot } = candidate();
-  const routes = new Set(['/', '/statyi', '/raspisanie-i-tseny', '/kontakty', '/oplata', '/svedeniya-ob-obrazovatelnoy-organizatsii']);
-  for (const type of ['institutes', 'course_groups', 'seminars', 'articles', 'teachers', 'video_playlists']) {
-    const entities = snapshot.content.types[type] ?? [];
-    if (!entities.length) continue;
-    const first = pages.find(({ route }) => route.split('/').at(-1) === String(entities[0].slug));
-    expect(first, `missing representative ${type} route`).toBeDefined();
-    routes.add(first!.route);
-  }
-  // Both populated and empty seminar panels are real template states, when present.
-  for (const populated of [true, false]) {
-    const page = pages.find(({ html }) => html.includes('data-seminar-schedule-panel') && html.includes('data-seminar-schedule-card') === populated);
-    if (page) routes.add(page.route);
-  }
-  const video = pages.find(({ route }) => /^\/video\/[^/]+$/.test(route));
-  if (video) routes.add(video.route);
-  return [...routes];
+  return candidateTemplateRoutes(snapshot.content.types, pages);
 }
 export const test = base.extend({
   page: async ({ page }, use) => {
