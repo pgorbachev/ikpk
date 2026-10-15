@@ -21,6 +21,7 @@ import { projectSnapshotMarkers, type SnapshotContent } from './helpers/rich-con
 import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
 import { projectSnapshotOccurrences } from './helpers/rich-content-safety/snapshot-occurrence-projection.js';
 import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
+import { DEMO193_ORIGIN } from '../scripts/demo193-profile.mjs';
 import type { OccurrenceRule } from './helpers/rich-content-safety/hazard-scan.js';
 import type { ExecutableSlot } from './helpers/rich-content-safety/ast-sinks.js';
 import {
@@ -185,6 +186,35 @@ describe('rich-content: whole-document hazard scanner', () => {
       'iframe|src=expression:unknownSrc|title=quoted:Карта ИКПК',
       `iframe|src=${MAP_IFRAME_SRC}|title=Карта ИКПК`,
     )).toMatch(/без test-owned projection/);
+  });
+
+  it('canonical occurrence registry projects only the approved demo origin', () => {
+    const canonicalSource = 'link|href=expression:canonicalURL.href|rel=quoted:canonical';
+    const productionHref = 'https://ikpk.su/example';
+    const demoHref = `${DEMO193_ORIGIN}/example`;
+    const source = [{ slotId: 'src:canonical', identity: canonicalSource }];
+    const registry: OccurrenceRule[] = [{
+      slotId: 'src:canonical',
+      route: '/example',
+      placement: 'doc-order:0:link',
+      identity: `link|href=${productionHref}|rel=canonical`,
+      count: 1,
+      builds: ['production', 'demo'],
+    }];
+
+    expect(matchOccurrences(`<link rel="canonical" href="${productionHref}">`, '/example', registry, source,
+      { build: 'production' })).toEqual([]);
+    expect(matchOccurrences(`<link rel="canonical" href="${demoHref}">`, '/example', registry, source,
+      { build: 'demo' })).toEqual([]);
+
+    for (const href of [productionHref, 'https://example.invalid/example']) {
+      expect(matchOccurrences(`<link rel="canonical" href="${href}">`, '/example', registry, source,
+        { build: 'demo' })).not.toEqual([]);
+    }
+    expect(matchOccurrences(
+      `<link rel="canonical" href="${demoHref}"><link rel="alternate" href="https://example.invalid/extra">`,
+      '/example', registry, source, { build: 'demo' },
+    )).not.toEqual([]);
   });
 
   it('closed matrix отвергает contenteditable, data-*, incomplete iframe, checkbox, dir/lang, javascript URL и поддельные маркеры', () => {
