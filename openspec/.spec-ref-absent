@@ -49,4 +49,3 @@ openspec/changes/education-trust-and-admission-clarity/proposal.md :: 0710e4d0e1
 openspec/changes/manual-publication-only/proposal.md :: .github/workflows/deploy.yml :: deleted-deliberately
 openspec/specs/article-catalog/spec.md :: 542151bb8d5348bf2b4dd307eb6dca48edbf34c3 :: external-revision
 openspec/specs/schedule-month-filter/spec.md :: web/src/lib/schedule-supplements.ts :: deleted-deliberately
-openspec/changes/manual-publication-only/proposal.md :: 0fd858b19f7656b3bdf9f6b8099280a8a2e96c03 :: external-revision

@@ -122,3 +122,13 @@ test('installed config refuses mismatched destination/source and readable CI tok
   chmodSync(token, 0o600); writeFileSync(publisherFile, JSON.stringify({ ...publisher, deployMode: 'prod' }));
   assert.throws(() => readServerConfig(installed), /source-policy-mismatch/);
 });
+
+test('a delayed old service cannot publish after a newer admitted operation has executed', async (t) => {
+  const f = fixture(t), server = createServer(f.config, f.ports);
+  const newer = { ...f.request, id: randomUUID() };
+  await server.submit(f.request); await server.submit(newer);
+  assert.equal((await server.execute(newer.id)).status, 'success');
+  const publishers = f.events.filter((x) => x === 'publisher').length;
+  assert.equal((await server.execute(f.request.id)).status, 'refused');
+  assert.equal(f.events.filter((x) => x === 'publisher').length, publishers);
+});

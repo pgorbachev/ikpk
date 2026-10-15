@@ -130,7 +130,11 @@ export function createServer(config, overrides = {}) {
       if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
       return status(request.id);
     }
-    const receipt = { request, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: await ports.resolveSource(config) } : {}) };
+    const counterPath = join(config.state, 'sequence.json');
+    const sequence = existsSync(counterPath) ? json(counterPath).sequence + 1 : 1;
+    if (!Number.isSafeInteger(sequence) || sequence < 1) fail('request-sequence-invalid');
+    atomicJson(counterPath, { sequence });
+    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: await ports.resolveSource(config) } : {}) };
     atomicJson(join(dir, 'request.json'), receipt);
     // Do not retry a start automatically if acknowledgement is lost.
     try { ports.start(config, request.id); }
@@ -146,6 +150,10 @@ export function createServer(config, overrides = {}) {
     // flock owned by this systemd service serializes all expensive work, including CI wait.
     let result;
     try {
+      const latestPath = join(config.state, 'last-started.json');
+      const latest = existsSync(latestPath) ? json(latestPath).sequence : 0;
+      if (!Number.isSafeInteger(receipt.sequence) || receipt.sequence <= latest) fail('stale-server-request');
+      atomicJson(latestPath, { sequence: receipt.sequence, id });
       let tests;
       if (receipt.request.action === 'publish') {
         if (!/^[a-f0-9]{40}$/.test(receipt.commit ?? '')) fail('invalid-source-sha');
@@ -179,9 +187,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     let result;
     if (command === 'execute' && validId(id)) result = await server.execute(id);
     else if (command === 'status' && validId(id)) result = server.status(id);
-    else if (command === 'submit' && id === undefined) {
+    else if (['submit', 'accept'].includes(command) && id === undefined) {
       let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 2048) fail('request-too-large'); }
-      result = await server.submit(JSON.parse(input));
+      if (command === 'submit') {
+        // Serialize only receipt allocation. Heavy work uses the shared VPS lock.
+        const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept'],
+          { input, env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['pipe', 'pipe', 'ignore'] });
+        if (admission.error || !admission.stdout) fail('request-acceptance-unconfirmed');
+        result = JSON.parse(admission.stdout);
+      } else result = await server.submit(JSON.parse(input));
     } else fail('invalid-arguments');
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (['refused', 'busy', 'interrupted', 'unknown', 'not-found'].includes(result.status)) process.exitCode = 1;

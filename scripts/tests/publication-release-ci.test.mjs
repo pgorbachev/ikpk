@@ -67,3 +67,29 @@ test('API redirects are refused, never forwarded with the Actions token', async 
   const run = createReleaseCi({ token: 'x', fetch: async () => { calls++; return new Response(null, { status: 302, headers: { location: 'https://outside.invalid' } }); } });
   await assert.rejects(run(config, receipt), (e) => e.code === 'release-ci-http-error'); assert.equal(calls, 1);
 });
+
+test('successful fresh native attempt is downloaded and bound to this operation and destination', async (t) => {
+  const { config, receipt } = fixture(t);
+  const { execFileSync } = await import('node:child_process');
+  const { writeFileSync } = await import('node:fs');
+  const { releaseTestManifest, REQUIRED_SOURCE_JOBS } = await import('../release-test-policy.mjs');
+  const timestamp = '2026-10-15T20:00:00Z';
+  const manifest = releaseTestManifest({ GITHUB_SHA: commit, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/dev',
+    GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2' }, Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map((name) => [name, { result: 'success' }])));
+  writeFileSync(join(receipt.directory, 'release-source-tests.json'), JSON.stringify(manifest));
+  const archive = join(receipt.directory, 'proof.zip'); execFileSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: receipt.directory });
+  let posted = false;
+  const run = createReleaseCi({ token: 'x', now: () => timestamp, sleep: async () => {}, fetch: async (url, o) => {
+    if (url.includes('/workflows/')) return json({ total_count: 1, workflow_runs: [nativeRun] });
+    if (o.method === 'POST') { posted = true; return new Response(null, { status: 201 }); }
+    if (url.includes('/attempts/2/jobs')) return json({ total_count: REQUIRED_SOURCE_JOBS.length, jobs: REQUIRED_SOURCE_JOBS.map((name) => ({
+      name, run_id: 42, head_sha: commit, started_at: timestamp, status: 'completed', conclusion: 'success' })) });
+    if (url.includes('/artifacts?')) return json({ total_count: 1, artifacts: [{ id: 9, name: 'release-source-tests-2', expired: false,
+      created_at: timestamp, workflow_run: { id: 42, head_sha: commit }, archive_download_url: `${API}/actions/artifacts/9/zip` }] });
+    if (url.endsWith('/artifacts/9/zip')) return new Response(readFileSync(archive), { status: 200 });
+    return json({ ...nativeRun, run_attempt: posted ? 2 : 1, run_started_at: timestamp });
+  } });
+  const proof = await run(config, receipt);
+  assert.equal(proof.runAttempt, 2); assert.equal(proof.requestId, receipt.request.id); assert.equal(proof.destinationId, 'demo');
+  assert.equal(proof.subject, 'source-code'); assert.deepEqual(proof.pendingScope, []);
+});
