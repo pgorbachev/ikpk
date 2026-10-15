@@ -64,6 +64,18 @@ describe('selectHomepagePeople', () => {
     ]);
   });
 
+  it('does not let trait-less legacy people consume the teacher quota', () => {
+    const legacyPerson = { ...people[0]!, legacy_id: 'legacy-person', trait: undefined };
+    const selected = selectHomepagePeople([legacyPerson, ...people]);
+
+    expect(selected.slice(0, 4).map((person) => person.legacy_id)).toEqual([
+      'teacher-1', 'teacher-2', 'teacher-3', 'teacher-4',
+    ]);
+    expect(selected.slice(4).map((person) => person.legacy_id)).toEqual([
+      'author-1', 'author-2', 'author-3', 'author-4',
+    ]);
+  });
+
   it('fills from the longer role when the other role is short and deduplicates shared IDs', () => {
     const short = [
       { ...people[0]!, legacy_id: 'same-id' },

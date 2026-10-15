@@ -45,18 +45,20 @@ export function selectHomepagePeople(people: readonly Teacher[], limit = 8): Tea
   if (limit <= 0) return [];
 
   const withPhoto = people.filter((person) => person.photo && (person.trait === undefined || person.trait === 'teacher' || person.trait === 'method-author'));
-  // Older snapshots may not carry trait yet; preserve their former homepage treatment.
-  const teachers = withPhoto.filter((person) => person.trait !== 'method-author');
+  // Older snapshots may not carry trait yet; use those records as fill candidates.
+  const teachers = withPhoto.filter((person) => person.trait === 'teacher');
   const authors = withPhoto.filter((person) => person.trait === 'method-author');
   const selected: Teacher[] = [];
   const selectedIds = new Set<string>();
   const take = (candidates: readonly Teacher[], count: number) => {
+    let added = 0;
     for (const person of candidates) {
-      if (selected.length >= limit || selected.filter((item) => item.trait === person.trait).length >= count) continue;
+      if (selected.length >= limit || added >= count) break;
       const id = String(person.legacy_id ?? person.slug);
       if (selectedIds.has(id)) continue;
       selected.push(person);
       selectedIds.add(id);
+      added += 1;
     }
   };
 
