@@ -330,21 +330,28 @@ function compareNativeHistory(sourceDb, candidateDb, nativeSteps, differences) {
     if (nativeSteps.length) differences.push({ table: 'strapi_migrations', kind: 'native-history-missing' });
     return;
   }
-  const cols = candidateDb.prepare('PRAGMA table_info("strapi_migrations")').all().map(({ name }) => name);
-  if (json([...cols].sort()) !== json(['name', 'time'].sort())) { differences.push({ table: 'strapi_migrations', kind: 'unsupported-native-history-schema', schemaSha256: sha(Buffer.from(json(cols))) }); return; }
-  const sourceNames = tableNames(sourceDb).includes('strapi_migrations')
-    ? new Set(sourceDb.prepare('SELECT name FROM strapi_migrations').all().map(({ name }) => name)) : new Set();
-  const candidateRows = candidateDb.prepare('SELECT * FROM strapi_migrations ORDER BY name').all();
-  const additions = candidateRows.filter(({ name }) => !sourceNames.has(name));
+  const nativeColumns = (db) => db.prepare('PRAGMA table_info("strapi_migrations")').all()
+    .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull: Number(notnull), defaultValue: dflt_value, pk: Number(pk) }));
+  const expectedColumns = [
+    { name: 'id', type: 'INTEGER', notnull: 0, defaultValue: null, pk: 1 },
+    { name: 'name', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+    { name: 'time', type: 'datetime', notnull: 0, defaultValue: null, pk: 0 },
+  ];
+  const sourceHasHistory = tableNames(sourceDb).includes('strapi_migrations');
+  if (json(nativeColumns(candidateDb)) !== json(expectedColumns)
+    || (sourceHasHistory && json(nativeColumns(sourceDb)) !== json(expectedColumns))) {
+    differences.push({ table: 'strapi_migrations', kind: 'unsupported-native-history-schema', schemaSha256: sha(Buffer.from(json(nativeColumns(candidateDb)))) }); return;
+  }
+  const sourceRows = sourceHasHistory ? sourceDb.prepare('SELECT id, name, time FROM strapi_migrations ORDER BY id').all() : [];
+  const candidateRows = candidateDb.prepare('SELECT id, name, time FROM strapi_migrations ORDER BY id').all();
+  const sourceIds = new Set(sourceRows.map(({ id }) => String(id)));
+  const additions = candidateRows.filter(({ id }) => !sourceIds.has(String(id)));
   if (json(additions.map(({ name }) => name).sort()) !== json([...nativeSteps].sort())) {
     differences.push({ table: 'strapi_migrations', kind: 'native-history-addition-mismatch', addedCount: additions.length });
   }
-  if (sourceNames.size) {
-    const oldRows = sourceDb.prepare('SELECT * FROM strapi_migrations').all();
-    const byName = new Map(candidateRows.map((row) => [row.name, row]));
-    for (const row of oldRows) if (json(valueKey(row)) !== json(valueKey(byName.get(row.name)))) {
-      differences.push({ table: 'strapi_migrations', kind: 'existing-history-changed', keySha256: sha(Buffer.from(String(row.name))) });
-    }
+  const candidateById = new Map(candidateRows.map((row) => [String(row.id), row]));
+  for (const row of sourceRows) if (json(valueKey(row)) !== json(valueKey(candidateById.get(String(row.id))))) {
+    differences.push({ table: 'strapi_migrations', kind: 'existing-history-changed', keySha256: sha(Buffer.from(String(row.id))) });
   }
 }
 

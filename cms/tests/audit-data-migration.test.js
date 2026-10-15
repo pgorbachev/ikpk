@@ -99,3 +99,60 @@ test('preservation audit notices CHECK, partial-index predicate, and trigger cha
   assert.equal(report.passed, false);
   assert.ok(report.differences.some(({ table, kind }) => table === 'guarded' && kind === 'relation-schema-mismatch'));
 });
+
+function createProductionColumnShape(path, { addedColumns = false, promotionType = null, eventCollection = null } = {}) {
+  const db = new Database(path);
+  db.exec(`
+    CREATE TABLE promotions (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', type varchar(255)' : ''});
+    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', is_event_collection boolean DEFAULT false' : ''});
+    INSERT INTO promotions(id, name${addedColumns ? ', type' : ''}) VALUES (1, 'promotion'${addedColumns ? ', NULL' : ''});
+    INSERT INTO schedule_entries(id, name${addedColumns ? ', is_event_collection' : ''}) VALUES (1, 'entry'${addedColumns ? ', NULL' : ''});
+    CREATE TABLE strapi_migrations (id INTEGER PRIMARY KEY, name varchar(255), time datetime);
+    INSERT INTO strapi_migrations VALUES (1, '5.0.0-02-created-document-id', 1791523597813);
+  `);
+  if (addedColumns && (promotionType !== null || eventCollection !== null)) {
+    db.prepare('UPDATE promotions SET type = ? WHERE id = 1').run(promotionType);
+    db.prepare('UPDATE schedule_entries SET is_event_collection = ? WHERE id = 1').run(eventCollection);
+  }
+  db.close();
+}
+
+test('193 current native history and exact nullable CMS columns are accepted without changing inherited data', () => {
+  const sourceDbPath = join(directory, 'production-shape-source.db');
+  const candidateDbPath = join(directory, 'production-shape-candidate.db');
+  createProductionColumnShape(sourceDbPath);
+  createProductionColumnShape(candidateDbPath, { addedColumns: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_migrations' && kind === 'unsupported-native-history-schema'), false,
+    'Strapi 5.51.2 native history includes the inherited integer id column');
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_migrations' && kind === 'existing-history-changed'), false,
+    'native migration ids and timestamps must be preserved');
+});
+
+test('exact NULL-only promotion and schedule columns are accepted', () => {
+  const sourceDbPath = join(directory, 'production-columns-source.db');
+  const candidateDbPath = join(directory, 'production-columns-candidate.db');
+  createProductionColumnShape(sourceDbPath);
+  createProductionColumnShape(candidateDbPath, { addedColumns: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.differences.some(({ table, kind }) => ['promotions', 'schedule_entries'].includes(table) && kind === 'column-set-mismatch'), false,
+    'the two exact current content-type columns must be recognized');
+  assert.equal(report.differences.some(({ table, kind }) => ['promotions', 'schedule_entries'].includes(table) && kind === 'row-content'), false,
+    'inherited content values must remain unchanged');
+});
+
+test('193 content additions must leave pre-existing rows NULL', () => {
+  const sourceDbPath = join(directory, 'production-null-source.db');
+  const candidateDbPath = join(directory, 'production-nonnull-candidate.db');
+  createProductionColumnShape(sourceDbPath);
+  createProductionColumnShape(candidateDbPath, { addedColumns: true, promotionType: 'SHOP' });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.passed, false, 'existing rows are not backfilled from newly declared defaults');
+  assert.ok(report.differences.some(({ table }) => table === 'promotions'), 'unexpected existing promotion value must block acceptance');
+});
