@@ -50,7 +50,7 @@ export function projectSnapshotMarkers(sinks: RenderedSink[], content: SnapshotC
     assert(Array.isArray(content[key]), `snapshot content is missing ${key}`);
   }
 
-  const institutes = uniqueMap(content.institutes, (item) => item.legacy_id, 'institutes');
+  const institutes = uniqueMap(content.institutes, (item) => item.slug, 'institutes');
   const courseGroups = uniqueMap(content.course_groups, (item) => item.legacy_id, 'course_groups');
 
   const seminarPaths = content.seminars.flatMap((seminar) => {

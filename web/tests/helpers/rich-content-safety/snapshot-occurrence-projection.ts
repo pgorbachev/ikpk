@@ -113,8 +113,8 @@ export function projectSnapshotOccurrences(
   for (const institute of content.institutes) {
     assert(institute.slug, 'snapshot institute has empty slug');
     assert(institute.legacy_id, `snapshot institute ${institute.slug} has empty legacy_id`);
-    assert(!institutes.has(institute.legacy_id), `duplicate institute legacy_id ${institute.legacy_id}`);
-    institutes.set(institute.legacy_id, institute);
+    assert(!institutes.has(institute.slug), `duplicate institute slug ${institute.slug}`);
+    institutes.set(institute.slug, institute);
   }
 
   const groups = new Map<string, SnapshotContent['course_groups'][number]>();

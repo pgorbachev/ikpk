@@ -276,14 +276,14 @@ describe('rich-content: whole-document hazard scanner', () => {
     ];
     const projected = projectSnapshotMarkers(sinks, {
       institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
-      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst-id' }],
+      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst' }],
       seminars: [
         { slug: 'with-body', course_group_legacy_id: 'cg-id', description_html: '<p>Text</p>' },
         { slug: 'without-body', course_group_legacy_id: 'cg-id', description_html: '', full_text_html: '' },
       ],
       teachers: [
-        { slug: 'with-bio', institute_legacy_id: 'inst-id', bio_html: '<p>Bio</p>' },
-        { slug: 'without-bio', institute_legacy_id: 'inst-id', bio_html: '' },
+        { slug: 'with-bio', institute_legacy_id: 'inst', bio_html: '<p>Bio</p>' },
+        { slug: 'without-bio', institute_legacy_id: 'inst', bio_html: '' },
       ],
     });
     expect(projected.find((sink) => sink.id === 'article-body')?.production).toEqual({ paths: ['/statyi/fixture'], count: 1 });
@@ -305,16 +305,22 @@ describe('rich-content: whole-document hazard scanner', () => {
       institutes: [], course_groups: [], seminars: [],
       teachers: [{ slug: 'bio', institute_legacy_id: 'unknown-inst', bio_html: '<p>bio</p>' }],
     })).toThrow(/teacher-bio .* неизвестный institute/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg', slug: 'group', institute_legacy_id: 'inst-id' }],
+      seminars: [{ slug: 'mapped-by-slug', course_group_legacy_id: 'cg', description_html: '<p>body</p>' }],
+      teachers: [],
+    })).toThrow(/неизвестный institute inst-id/);
   });
 
   it('snapshot occurrence projection clones only reviewed archetypes and fails closed on missing mappings or slots', () => {
     const rules = loadFixture<{ occurrences: OccurrenceRule[] }>('output-occurrence-registry.json').occurrences;
     const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
     const content: SnapshotContent = {
-      institutes: [{ legacy_id: 'ap', slug: 'institut-apledzhera' }],
+      institutes: [{ legacy_id: 'legacy-ap', slug: 'institut-apledzhera' }],
       course_groups: [
-        { legacy_id: 'hier-seminar', slug: 'dolgoletie', institute_legacy_id: 'ap' },
-        { legacy_id: 'flat-seminar', slug: 'flat-group', institute_legacy_id: 'ap' },
+        { legacy_id: 'hier-seminar', slug: 'dolgoletie', institute_legacy_id: 'institut-apledzhera' },
+        { legacy_id: 'flat-seminar', slug: 'flat-group', institute_legacy_id: 'institut-apledzhera' },
       ],
       seminars: [
         { slug: 'kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya', course_group_legacy_id: 'hier-seminar' },
@@ -322,9 +328,9 @@ describe('rich-content: whole-document hazard scanner', () => {
         { slug: 'new-seminar', course_group_legacy_id: 'hier-seminar' },
       ],
       teachers: [
-        { slug: '63', institute_legacy_id: 'ap' },
-        { slug: '53', institute_legacy_id: 'ap' },
-        { slug: 'new-teacher', institute_legacy_id: 'ap' },
+        { slug: '63', institute_legacy_id: 'institut-apledzhera' },
+        { slug: '53', institute_legacy_id: 'institut-apledzhera' },
+        { slug: 'new-teacher', institute_legacy_id: 'institut-apledzhera' },
       ],
     };
     const projected = projectSnapshotOccurrences(rules, sourceSlots, content);
@@ -341,6 +347,14 @@ describe('rich-content: whole-document hazard scanner', () => {
       ...content,
       course_groups: content.course_groups.slice(1),
     })).toThrow(/unknown course_group/);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      course_groups: content.course_groups.map((group) => ({ ...group, institute_legacy_id: 'legacy-ap' })),
+    })).toThrow(/unknown institute legacy-ap/);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      teachers: content.teachers.map((teacher) => ({ ...teacher, institute_legacy_id: 'legacy-ap' })),
+    })).toThrow(/unknown institute legacy-ap/);
     expect(() => projectSnapshotOccurrences(rules, [], content)).toThrow(/missing reviewed source slot/);
   });
 
