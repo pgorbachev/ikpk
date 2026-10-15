@@ -12,6 +12,10 @@ const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
   ['schedule_entries', ['status', 'entry_status']],
 ]);
+const CURRENT_CONTENT_ADDITIONS = {
+  promotions: { name: 'type', type: 'varchar(255)' },
+  schedule_entries: { name: 'is_event_collection', type: 'boolean' },
+};
 const RUNNER_SCHEMAS = {
   ikpk_migration_lineage: ['singleton', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
   ikpk_migration_operations: ['operation_id', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
@@ -135,6 +139,13 @@ function expectedColumns(sourceColumns, table, knownTransforms) {
     if (rename && knownTransforms.nativeRenameTables.has(table) && column.name === rename[0]) return { ...column, name: rename[1] };
     return column;
   });
+}
+function normalizeAddedTableDefinition(definition, table, column) {
+  if (definition.type !== 'table') return definition;
+  const quoted = `(?:"${column.name}"|\`${column.name}\`|\[${column.name}\]|${column.name})`;
+  const columnType = column.type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const normalized = definition.sql.replace(new RegExp(`,\\s*${quoted}\\s+${columnType}(?=\\s*\\)$)`, 'i'), '');
+  return { ...definition, sql: normalized };
 }
 function deriveKnownTransforms(sourceDb, plan) {
   const transforms = { nativeRename: false, nativeRenameTables: new Set(), classification: null, documentsState: null, nativeSteps: [] };
@@ -391,6 +402,11 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       const before = sourceSchema[table]; const after = candidateSchema[table];
       if (!before || !after) { differences.push({ table, kind: before ? 'table-removed' : 'table-added' }); continue; }
       const expected = expectedColumns(before, table, transforms);
+      const addition = CURRENT_CONTENT_ADDITIONS[table];
+      const sourceHasAddition = addition && before.some(({ name }) => name === addition.name);
+      const candidateHasAddition = addition && after.some(({ name }) => name === addition.name);
+      const acceptedAddition = Boolean(addition && !sourceHasAddition && candidateHasAddition);
+      if (acceptedAddition) expected.push({ name: addition.name, type: addition.type, notnull: 0, defaultValue: null, pk: 0 });
       const hasDocumentsState = table === 'seminars' && transforms.documentsState && !expected.some(({ name }) => name === 'documents_state');
       if (hasDocumentsState) expected.push({ name: 'documents_state', type: 'TEXT', notnull: 0, defaultValue: null, pk: 0 });
       const expectedNames = expected.map(({ name }) => name).sort(); const actualNames = after.map(({ name }) => name).sort();
@@ -405,8 +421,16 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
         }
       }
       const beforeRelations = normalizeRelationalSchema(relationalSchema(source, table), table, transforms);
-      const afterRelations = relationalSchema(candidate, table);
+      let afterRelations = relationalSchema(candidate, table);
+      if (acceptedAddition) afterRelations = {
+        ...afterRelations,
+        definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, addition)),
+      };
       if (json(beforeRelations) !== json(afterRelations)) differences.push({ table, kind: 'relation-schema-mismatch', sourceSha256: sha(Buffer.from(json(beforeRelations))), candidateSha256: sha(Buffer.from(json(afterRelations))) });
+      if (acceptedAddition) {
+        const nonNull = candidate.prepare(`SELECT COUNT(*) AS count FROM ${quote(table)} WHERE ${quote(addition.name)} IS NOT NULL`).get().count;
+        if (nonNull !== 0n) differences.push({ table, kind: 'added-column-value-mismatch', column: addition.name, nonNullCount: nonNull.toString() });
+      }
       if (table === 'seminars' && hasDocumentsState) {
         // This single native schema-sync addition is accepted only as the known nullable text field.
         const state = after.find(({ name }) => name === 'documents_state');

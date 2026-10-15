@@ -104,7 +104,7 @@ function createProductionColumnShape(path, { addedColumns = false, promotionType
   const db = new Database(path);
   db.exec(`
     CREATE TABLE promotions (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', type varchar(255)' : ''});
-    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', is_event_collection boolean DEFAULT false' : ''});
+    CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', is_event_collection boolean' : ''});
     INSERT INTO promotions(id, name${addedColumns ? ', type' : ''}) VALUES (1, 'promotion'${addedColumns ? ', NULL' : ''});
     INSERT INTO schedule_entries(id, name${addedColumns ? ', is_event_collection' : ''}) VALUES (1, 'entry'${addedColumns ? ', NULL' : ''});
     CREATE TABLE strapi_migrations (id INTEGER PRIMARY KEY, name varchar(255), time datetime);
@@ -143,6 +143,8 @@ test('exact NULL-only promotion and schedule columns are accepted', () => {
     'the two exact current content-type columns must be recognized');
   assert.equal(report.differences.some(({ table, kind }) => ['promotions', 'schedule_entries'].includes(table) && kind === 'row-content'), false,
     'inherited content values must remain unchanged');
+  assert.equal(report.differences.some(({ table, kind }) => ['promotions', 'schedule_entries'].includes(table) && kind === 'column-definition-mismatch'), false,
+    'added columns must match the observed nullable, no-SQL-default definitions');
 });
 
 test('193 content additions must leave pre-existing rows NULL', () => {
@@ -154,5 +156,21 @@ test('193 content additions must leave pre-existing rows NULL', () => {
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
 
   assert.equal(report.passed, false, 'existing rows are not backfilled from newly declared defaults');
-  assert.ok(report.differences.some(({ table }) => table === 'promotions'), 'unexpected existing promotion value must block acceptance');
+  assert.ok(report.differences.some(({ table, kind, column }) => table === 'promotions' && kind === 'added-column-value-mismatch' && column === 'type'),
+    'the dedicated new-column gate must reject a pre-existing non-NULL value');
+});
+
+test('new-column exception does not permit any additional target-table column', () => {
+  const sourceDbPath = join(directory, 'production-extra-column-source.db');
+  const candidateDbPath = join(directory, 'production-extra-column-candidate.db');
+  createProductionColumnShape(sourceDbPath);
+  createProductionColumnShape(candidateDbPath, { addedColumns: true });
+  const db = new Database(candidateDbPath);
+  db.exec('ALTER TABLE promotions ADD COLUMN unplanned_value TEXT');
+  db.close();
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.passed, false);
+  assert.ok(report.differences.some(({ table, kind }) => table === 'promotions' && kind === 'column-set-mismatch'));
 });

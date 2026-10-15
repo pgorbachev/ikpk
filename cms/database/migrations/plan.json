@@ -69,7 +69,7 @@
       { "path": "scripts/run-data-migrations.mjs", "sha256": "dbcc8e8580899b25c1eb3b8485f587dcf06155e8cae274e319a44760a2f76ae1" },
       { "path": "database/migrations/target-schema/seminar.json", "sha256": "b8b92af156d27ccaf96d816e9b18f79b1ce9c1ee568a95145c6457d073202df8" },
       { "path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5" },
-      { "path": "scripts/audit-data-migration.mjs", "sha256": "ebf1d4a4347b467e53d1884ba0be9274bb5ca3d4e3458f96faf1b7972a17d367" },
+      { "path": "scripts/audit-data-migration.mjs", "sha256": "d0f9edb91ac64980cbaef78e4251ce156f379dd30a62b4eba722db45908c2106" },
       { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
       { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }
     ]
