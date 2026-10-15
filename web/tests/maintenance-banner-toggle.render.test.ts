@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
-import { attr, hasClass, parseDocument, textOf, walk } from './helpers/dom';
+import { attr, hasClass, parseDocument, walk } from './helpers/dom';
 
 const cases = [
   { name: 'BaseLayout', module: '../src/layouts/BaseLayout.astro' },

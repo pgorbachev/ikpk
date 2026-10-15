@@ -17,7 +17,9 @@ import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
 import Analytics from '../components/Analytics.astro';
 import ChatFacade from '../components/chat/ChatFacade.astro';
+import MaintenanceNotice from '../components/MaintenanceNotice.astro';
 import { isDemoForms } from '../lib/forms';
+import { isMaintenanceBannerEnabled } from '../lib/maintenance-banner';
 import '../styles/global.css';
 
 const {
@@ -49,6 +51,7 @@ const {
         Демо-стенд: формы заявки отключены, обращения в CRM не создаются
       </div>
     )}
+    {!isDemoForms && isMaintenanceBannerEnabled && <MaintenanceNotice />}
     <TopNav />
     {/* noindex-страницы (превью вариантов) не индексируются и внутренним
         поиском Pagefind — иначе черновик всплыл бы в результатах на проде */}
