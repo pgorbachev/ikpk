@@ -571,7 +571,6 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     try {
       const candidateInfo = lstatSync(candidateDbPath);
       if (!candidateInfo.isFile() || candidateInfo.isSymbolicLink()) fail('existing candidate database must be a regular non-symlink file');
-      if (candidateInfo.nlink !== 1) fail('existing candidate database has additional hard links; refusing ambiguous ownership');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const candidateExists = (() => { try { lstatSync(candidateDbPath); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; } })();
     let receipt;
@@ -585,9 +584,10 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       if (receipt.source.strapiVersion !== strapiVersion) fail('source Strapi version differs from the original operation receipt');
       assertNoOpenHandles([sourceDbPath, `${sourceDbPath}-wal`]);
       if (sourceFileFingerprint(sourceDbPath) !== receipt.source.sourceFileFingerprint) fail('original SQLite source changed after preparation; refusing to resume this candidate');
-      if (receipt.phase === 'strapi-load-in-progress' || receipt.phase === 'activation-load-in-progress') {
-        fail(`candidate crossed an interrupted closed Strapi load (${receipt.phase}); its state is unknown, discard and reprepare from a pristine source`);
+      if (receipt.phase === 'strapi-load-in-progress' || receipt.phase === 'activation-load-in-progress' || receipt.phase === 'snapshot-cleanup-failed') {
+        fail(`candidate crossed an interrupted or incomplete operation (${receipt.phase}); its state is unknown, discard and reprepare from a pristine source`);
       }
+      if (lstatSync(candidateDbPath).nlink !== 1) fail('existing candidate database has additional hard links; refusing ambiguous ownership');
       sourceSnapshotSha256 = receipt.source.snapshotSha256;
       sourceSnapshot = receipt.source;
       const state = readCandidateState(candidateDbPath);
@@ -612,6 +612,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         chmodSync(stageDir, 0o700);
         const staged = join(stageDir, 'candidate.db');
         let copied = false;
+        let snapshotFailure;
         try {
           await source.backup(staged);
           const afterSourceFiles = sourceFileFingerprint(sourceDbPath);
@@ -625,9 +626,39 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
           chmodSync(staged, 0o600);
           linkExclusive(staged, candidateDbPath);
           copied = true;
-        } finally {
-          try { require('node:fs').rmSync(stageDir, { recursive: true, force: true }); } catch (error) { if (!copied) throw error; }
+        } catch (error) {
+          snapshotFailure = error;
         }
+        try {
+          require('node:fs').rmSync(stageDir, { recursive: true, force: true });
+        } catch (cleanupFailure) {
+          if (snapshotFailure) {
+            throw new AggregateError([snapshotFailure, cleanupFailure], 'SQLite snapshot failed and its private staging directory could not be cleaned');
+          }
+          if (copied) {
+            const cleanupReceipt = {
+              schemaVersion: 1,
+              operationId,
+              phase: 'snapshot-cleanup-failed',
+              createdAt: new Date().toISOString(),
+              sourceDbPath,
+              candidateDbPath,
+              artifactDir: artifactReal,
+              artifactSha256: release.artifactSha256,
+              externalDependencyRoot: release.externalDependencyRoot,
+              planSha256: release.planSha256,
+              steps: release.steps.map(({ id, phase, kind, handler, path, sha256 }) => ({ id, phase, kind, handler, path, sha256 })),
+              source: { strapiVersion, engine: sourceSnapshot.engine, sqliteVersion: sourceSnapshot.sqliteVersion, userVersion: sourceSnapshot.userVersion, schemaFingerprint: sourceSnapshot.schemaFingerprint, snapshotSha256: sourceSnapshotSha256, sourceFileFingerprint: beforeSourceFiles },
+              errors: [{ phase: 'snapshot-cleanup', message: cleanupFailure.message }],
+              recovery: 'private candidate exists but temporary staging cleanup failed; do not resume, discard this candidate and reprepare from a pristine source after resolving cleanup',
+            };
+            try { atomicJson(receiptPath, cleanupReceipt); }
+            catch (receiptFailure) { throw new AggregateError([cleanupFailure, receiptFailure], 'SQLite staging cleanup failed and the failure receipt could not be recorded'); }
+            fail('private SQLite staging cleanup failed; candidate is quarantined by its receipt and must be discarded before retry');
+          }
+          throw cleanupFailure;
+        }
+        if (snapshotFailure) throw snapshotFailure;
       } finally { source.close(); }
       const sourceAfterBackup = sourceFileFingerprint(sourceDbPath);
       if (sourceAfterBackup !== beforeSourceFiles) fail('SQLite source changed after snapshot publication; candidate is unsafe and must be discarded');
@@ -776,7 +807,15 @@ function atomicSymlink(target, linkPath) {
   const temp = `${linkPath}.${process.pid}.${randomUUID()}.new`;
   symlinkSync(target, temp);
   try { renameSync(temp, linkPath); }
-  catch (error) { try { unlinkSync(temp); } catch {} throw error; }
+  catch (renameFailure) {
+    try { unlinkSync(temp); }
+    catch (cleanupFailure) {
+      if (cleanupFailure.code !== 'ENOENT') {
+        throw new AggregateError([renameFailure, cleanupFailure], 'atomic pair-link replacement failed and its temporary symlink could not be removed');
+      }
+    }
+    throw renameFailure;
+  }
 }
 function verifyCandidatePlan(receipt, codeRelease) {
   const release = resolvePlan(codeRelease);
@@ -839,7 +878,6 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
       priorCodeRelease: prior.code,
       priorDatabasePath: prior.database,
       priorPlanSha256: prior.metadata.planSha256,
-      priorCohortMetadata: prior.metadata,
       priorCohortMetadata: prior.metadata,
       planSha256: release.planSha256,
       lineageId: status.lineageId,

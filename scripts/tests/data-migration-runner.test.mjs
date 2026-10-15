@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  copyFileSync,
   mkdtempSync,
   mkdirSync,
   readlinkSync,
@@ -33,24 +34,35 @@ function tempDirectory(t, prefix) {
   return directory;
 }
 
-function runReleaseGate(t, { plannedBytes, actualBytes }) {
+function runReleaseGate(t, { plannedBytes = Buffer.alloc(0), actualBytes = Buffer.alloc(0), steps = null }) {
   const release = tempDirectory(t, 'ikpk-release-hash-gate-');
   const migrations = join(release, 'database/migrations');
+  const scripts = join(release, 'scripts');
   mkdirSync(migrations, { recursive: true });
-  writeFileSync(join(migrations, 'step.js'), actualBytes);
-  writeFileSync(join(release, 'database/.migrations-expected'), '1\n');
+  mkdirSync(scripts, { recursive: true });
+  for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
+    copyFileSync(join(repoRoot, 'cms/scripts', name), join(scripts, name));
+  }
+  const planSteps = steps ?? [{
+    id: 'fixture-step-v1',
+    phase: 'before-sync',
+    path: 'step.js',
+    sha256: sha256(plannedBytes),
+    source: { strapiVersion: '5.51.2', schema: { engine: 'sqlite', requiredTables: ['fixture'], requiredColumns: { fixture: ['id', 'value'] } } },
+    preconditions: { fixture: true },
+    postconditions: { fixture: true },
+    readback: { fixture: true },
+  }];
+  if (planSteps.length) writeFileSync(join(migrations, 'step.js'), actualBytes);
+  const integrity = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({
+    path: `scripts/${name}`,
+    sha256: sha256(readFileSync(join(scripts, name))),
+  }));
+  writeFileSync(join(release, 'database/.migrations-expected'), `${planSteps.length}\n`);
   writeFileSync(join(migrations, 'plan.json'), JSON.stringify({
     version: 1,
-    steps: [{
-      id: 'fixture-step-v1',
-      phase: 'before-sync',
-      path: 'step.js',
-      sha256: sha256(plannedBytes),
-      source: { strapiVersion: '5.51.2', schema: { engine: 'sqlite', requiredColumns: { fixture: ['id', 'value'] } } },
-      preconditions: { fixture: true },
-      postconditions: { fixture: true },
-      readback: { fixture: true },
-    }],
+    steps: planSteps,
+    integrity: { files: integrity },
   }, null, 2));
 
   const script = `set -euo pipefail\n${readFileSync(migrationGate, 'utf8')}\ncheck_release_migrations "${release}"\n`;
@@ -117,6 +129,12 @@ test('release gate rejects a substituted migration even when the declared file c
   const result = runReleaseGate(t, { plannedBytes, actualBytes });
   assert.notEqual(result.status, 0, 'same-count migration substitution passed the release gate');
   assert.match(result.stderr + result.stdout, /(sha|hash|хеш)/i, 'refusal did not identify the payload-hash mismatch');
+});
+
+test('release gate accepts a valid frozen zero-migration plan as a no-op release', (t) => {
+  const result = runReleaseGate(t, { steps: [] });
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  assert.match(result.stdout, /миграций в релизе 0, как и ожидалось/);
 });
 
 test('legacy CMS failure branch refuses code-only rollback when no matching database snapshot exists', (t) => {

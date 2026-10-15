@@ -68,7 +68,7 @@ function dbBytes(path) {
   return readFileSync(path);
 }
 
-function fixture(t, { operationId = 'op-fixture-1', payload = 'effect-v1', activationReady = false } = {}) {
+function fixture(t, { operationId = 'op-fixture-1' } = {}) {
   const root = sandbox(t);
   const sourceDbPath = join(root, 'source.db');
   const candidateDbPath = join(root, 'private', 'candidate.db');
@@ -185,6 +185,33 @@ test('file-backed prepare leaves source database and committed WAL bytes unchang
   assert.deepEqual(dbBytes(f.sourceDbPath), before, 'prepare mutated the source SQLite database');
   assert.equal(existsSync(`${f.sourceDbPath}-wal`), false, 'fixture source should have no uncheckpointed WAL');
 });
+
+test('snapshot staging cleanup failure is recorded and prevents unsafe candidate resume', async (t) => {
+  const f = fixture(t);
+  const runner = await loadRunner();
+  const fs = createRequire(join(repoRoot, 'cms/package.json'))('node:fs');
+  const originalRmSync = fs.rmSync;
+  let injected = false;
+  fs.rmSync = (path, options) => {
+    if (!injected && String(path).includes(`.ikpk-migration-${f.operationId}-`)) {
+      injected = true;
+      const error = new Error('fixture cleanup failure');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalRmSync(path, options);
+  };
+  try {
+    await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /staging cleanup failed/i);
+  } finally {
+    fs.rmSync = originalRmSync;
+  }
+  const receipt = JSON.parse(readFileSync(f.receiptPath, 'utf8'));
+  assert.equal(receipt.phase, 'snapshot-cleanup-failed');
+  assert.equal(receipt.errors[0].message, 'fixture cleanup failure');
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /interrupted or incomplete operation|snapshot-cleanup-failed|discard/i);
+});
+
 test('data migration ID and payload hash are recorded transactionally and applied only once', async (t) => {
   const f = await makePrepared(t);
   const status = await f.runner.getMigrationStatus({ candidateDbPath: f.candidateDbPath, operationId: f.operationId, receiptPath: f.receiptPath });
@@ -249,14 +276,13 @@ test('a following release blocks mutation of inherited migration result metadata
 });
 test('default data-step loader imports the verified packaged helper path', async (t) => {
   const f = fixture(t);
-  const helper = join(repoRoot, 'cms/database/migrations/data-steps/classification.mjs');
   const runner = await loadRunner();
-  const { runDataStep: _fixtureStep, ...defaultAdapter } = f.lifecycleAdapter;
+  const defaultAdapter = { loadClosed: f.lifecycleAdapter.loadClosed, destroy: f.lifecycleAdapter.destroy };
   await runner.prepareMigration({ ...prepareArgs(f), lifecycleAdapter: defaultAdapter });
 });
 
 test('external immutable dependency bytes are included in the selected cohort identity', async (t) => {
-  const f = fixture(t, { activationReady: true });
+  const f = fixture(t);
   const dependencyRoot = addExternalDependencies(f);
   writeFileSync(join(f.root, '.ikpk-rehearsal-target'), 'fixture\n');
   const runner = await loadRunner();
@@ -423,7 +449,7 @@ test('interruption with uncommitted native/sync lifecycle state refuses blind re
 });
 
 test('activation switches to a paired code+DB cohort and rollback restores the verified prior pair', async (t) => {
-  const f = await makePrepared(t, { activationReady: true });
+  const f = await makePrepared(t);
   const sandboxRoot = f.root;
   writeFileSync(join(sandboxRoot, '.ikpk-rehearsal-target'), 'fixture\n');
   const releases = join(sandboxRoot, 'releases');
@@ -451,7 +477,7 @@ test('activation switches to a paired code+DB cohort and rollback restores the v
 });
 
 test('rollback refuses after candidate database changes even if the writer has closed', async (t) => {
-  const f = await makePrepared(t, { activationReady: true });
+  const f = await makePrepared(t);
   const sandboxRoot = f.root; writeFileSync(join(sandboxRoot, '.ikpk-rehearsal-target'), 'fixture\n');
   const releases = join(sandboxRoot, 'releases'); const cohorts = join(sandboxRoot, 'cohorts');
   const oldCode = join(releases, 'old'); const newCode = f.artifactDir; const oldDb = join(sandboxRoot, 'old.db');

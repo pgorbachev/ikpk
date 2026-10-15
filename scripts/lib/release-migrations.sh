@@ -58,7 +58,7 @@ const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file))
 let plan;
 try { plan = JSON.parse(fs.readFileSync(path.join(migrationsRoot, 'plan.json'), 'utf8')); }
 catch (error) { fail(`cannot read database/migrations/plan.json: ${error.message}`); }
-if (!plan || plan.version !== 1 || !Array.isArray(plan.steps) || plan.steps.length === 0) fail('version 1 plan with non-empty ordered steps is required');
+if (!plan || plan.version !== 1 || !Array.isArray(plan.steps)) fail('version 1 plan with an ordered steps array is required');
 
 // Verify listed bytes before coverage/schema diagnostics so substitution reports the
 // concrete SHA mismatch even when the remainder of an artifact fixture is incomplete.

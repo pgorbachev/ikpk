@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { basename, dirname, resolve } from 'node:path';
+import { basename } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
-const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const HASH = /^[a-f0-9]{64}$/;
