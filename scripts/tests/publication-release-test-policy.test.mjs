@@ -5,6 +5,8 @@ import {
   PENDING_SCOPE, REQUIRED_SOURCE_JOBS, RELEASE_TEST_WORKFLOW, SOURCE_SUITES, ReleaseTestError,
   releaseTestIdentity, releaseTestManifest, validateReleaseTestEvidence,
 } from '../release-test-policy.mjs';
+import { REQUIRED_TEST_REPORTS, NON_TEST_CHECKS } from '../release-test-reports.mjs';
+const reportFixtures = () => REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner, reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [] }));
 
 const commit = 'a'.repeat(40);
 const started = '2026-10-15T10:00:01Z';
@@ -25,7 +27,7 @@ function evidence() {
       status: 'completed', conclusion: 'success', started_at: started })),
     artifact: { name: 'release-source-tests-2', expired: false, created_at: started,
       workflow_run: { id: 123, head_sha: commit } },
-    manifest: releaseTestManifest(env, needs),
+    manifest: releaseTestManifest(env, needs, reportFixtures()),
     // Protected server operation receipt; never read from a caller-provided report.
     expected: { commit, sourceRef: 'dev', runId: 123, previousAttempt: 1, runAttempt: 2,
       destinationId: 'demo-193', requestId: 'request-unique-1', requestedAt: '2026-10-15T10:00:00.100Z' },
@@ -33,7 +35,7 @@ function evidence() {
 }
 
 test('push manifest records native identity without inventing a destination or request', () => {
-  const manifest = releaseTestManifest(env, needs);
+  const manifest = releaseTestManifest(env, needs, reportFixtures());
   assert.equal(manifest.runId, 123);
   assert.equal(manifest.runAttempt, 2);
   assert.equal(manifest.commit, commit);
@@ -45,8 +47,8 @@ test('push manifest records native identity without inventing a destination or r
 });
 
 test('owner excludes obsolete historical parity explicitly without treating production data as a fixture', () => {
-  const manifest = releaseTestManifest(env, needs);
-  assert.equal(manifest.schemaVersion, 2);
+  const manifest = releaseTestManifest(env, needs, reportFixtures());
+  assert.equal(manifest.schemaVersion, 3);
   assert.deepEqual(manifest.pendingScope, []);
   assert.deepEqual(manifest.excludedHistorical, [
     'web/tests/compare.spec.ts',
@@ -64,7 +66,7 @@ test('dispatch SHA must equal the native checkout and every required job must su
   assert.throws(() => releaseTestIdentity({ ...env, GITHUB_EVENT_NAME: 'workflow_dispatch', EXPECTED_SHA: 'b'.repeat(40) }), /commit mismatch/);
   for (const name of Object.keys(needs)) {
     for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
-      assert.throws(() => releaseTestManifest(env, { ...needs, [name]: { result } }), /result mismatch/);
+      assert.throws(() => releaseTestManifest(env, { ...needs, [name]: { result } }, reportFixtures()), /result mismatch/);
     }
   }
 });
@@ -75,7 +77,9 @@ test('a fresh attempt of an older push run binds to this private destination and
   assert.equal(result.destinationId, 'demo-193'); assert.equal(result.requestId, 'request-unique-1');
   assert.equal(result.subject, 'source-code'); assert.deepEqual(result.pendingScope, []);
   assert.equal(result.repository, 'pgorbachev/ikpk'); assert.equal(result.workflow, RELEASE_TEST_WORKFLOW);
-  assert.equal(result.sourceRef, 'dev'); assert.equal(result.policyVersion, 2);
+  assert.equal(result.sourceRef, 'dev'); assert.equal(result.policyVersion, 3);
+  assert.deepEqual(result.reports, reportFixtures());
+  assert.deepEqual(result.nonTestChecks, NON_TEST_CHECKS);
   assert.deepEqual(result.suites, SOURCE_SUITES); assert.deepEqual(result.results, evidence().manifest.results);
   assert.deepEqual(result.jobs.map((job) => job.name), REQUIRED_SOURCE_JOBS);
   assert.ok(result.jobs.every((job) => job.conclusion === 'success' && job.commit === commit && job.runId === 123));
@@ -105,6 +109,10 @@ test('rejects historical success, wrong SHA, changed policy, stale or missing na
     (proof) => { proof.manifest.runAttempt = 1; },
     (proof) => { proof.manifest.commit = 'b'.repeat(40); },
     (proof) => { proof.manifest.suites.pop(); },
+    (proof) => { proof.manifest.reports.pop(); },
+    (proof) => { proof.manifest.reports[0].passed = 0; },
+    (proof) => { proof.manifest.reports[0].skipped = 1; },
+    (proof) => { proof.manifest.reportPolicyVersion = 0; },
     (proof) => { proof.manifest.pendingScope = ['unexpected-pending-suite']; },
     (proof) => { proof.manifest.schemaVersion = 1; },
     (proof) => { proof.manifest.excludedHistorical = []; },
@@ -131,7 +139,7 @@ test('rejects historical success, wrong SHA, changed policy, stale or missing na
 });
 
 test('candidate acceptance cannot be inferred from source coverage', () => {
-  const manifest = releaseTestManifest(env, needs);
+  const manifest = releaseTestManifest(env, needs, reportFixtures());
   assert.equal(manifest.subject, 'source-code');
   assert.equal(Object.hasOwn(manifest, 'ready'), false);
   assert.equal(Object.hasOwn(manifest, 'candidateAccepted'), false);
