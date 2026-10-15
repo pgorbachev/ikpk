@@ -1,0 +1,69 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createReleaseCi } from '../release-ci.mjs';
+const API = 'https://api.github.com/repos/pgorbachev/ikpk';
+const commit = 'a'.repeat(40);
+const nativeRun = { id: 42, run_attempt: 1, repository: { full_name: 'pgorbachev/ikpk' }, head_repository: { full_name: 'pgorbachev/ikpk' },
+  head_sha: commit, head_branch: 'dev', path: '.github/workflows/release-tests.yml', event: 'push', status: 'completed', conclusion: 'success' };
+function fixture(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'ikpk-release-ci-')); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  return { config: { sourceRef: 'dev' }, receipt: { commit, directory, request: { id: randomUUID(), destination: 'demo' } } };
+}
+const json = (x) => new Response(JSON.stringify(x), { status: 200 });
+test('rerun intent is durable before POST, attempt jobs endpoint is exact, superseded attempt cannot publish', async (t) => {
+  const { config, receipt } = fixture(t); const calls = [];
+  const run = createReleaseCi({ token: 'private-token', now: () => '2026-10-15T20:00:00Z', sleep: async () => {}, fetch: async (url, options) => {
+    calls.push([url, options.method]); assert.equal(options.redirect, 'manual');
+    if (url.includes('/workflows/')) return json({ total_count: 1, workflow_runs: [nativeRun] });
+    if (options.method === 'POST') {
+      const intent = JSON.parse(readFileSync(join(receipt.directory, 'ci-request.json')));
+      assert.equal(intent.requestId, receipt.request.id); assert.equal(intent.previousAttempt, 1); assert.equal(intent.runAttempt, 2);
+      return new Response(null, { status: 201 });
+    }
+    const afterPost = calls.some(([, method]) => method === 'POST');
+    return json({ ...nativeRun, run_attempt: afterPost ? 3 : 1 });
+  } });
+  await assert.rejects(run(config, receipt), (e) => e.code === 'release-ci-attempt-superseded');
+  assert.equal(calls.filter(([, method]) => method === 'POST').length, 1);
+});
+test('lost rerun acknowledgement cannot automatically trigger a second attempt', async (t) => {
+  const { config, receipt } = fixture(t); let posts = 0;
+  const run = createReleaseCi({ token: 'x', sleep: async () => {}, fetch: async (url, o) => {
+    if (url.includes('/workflows/')) return json({ total_count: 1, workflow_runs: [nativeRun] });
+    if (o.method === 'POST') { posts++; throw new Error('transport lost'); } return json(nativeRun);
+  } });
+  await assert.rejects(run(config, receipt)); await assert.rejects(run(config, receipt));
+  assert.equal(posts, 1); assert.ok(existsSync(join(receipt.directory, 'ci-request.json')));
+});
+test('wrong repository, branch, SHA or workflow refuses before rerun', async (t) => {
+  for (const override of [{ repository: { full_name: 'fork/ikpk' } }, { head_repository: { full_name: 'fork/ikpk' } },
+    { head_branch: 'main' }, { head_sha: 'b'.repeat(40) }, { path: '.github/workflows/untrusted.yml' }, { event: 'pull_request' }]) {
+    const { config, receipt } = fixture(t); let posts = 0;
+    const run = createReleaseCi({ token: 'x', fetch: async (url, o) => {
+      if (o.method === 'POST') posts++;
+      if (url.includes('/workflows/')) return json({ total_count: 1, workflow_runs: [nativeRun] });
+      return json({ ...nativeRun, ...override });
+    } });
+    await assert.rejects(run(config, receipt), (e) => e.code === 'release-ci-untrusted-run'); assert.equal(posts, 0);
+  }
+});
+test('fresh failed run or missing manifest cannot be represented as source success', async (t) => {
+  const { config, receipt } = fixture(t); let post = false;
+  const run = createReleaseCi({ token: 'x', sleep: async () => {}, fetch: async (url, o) => {
+    if (url.includes('/workflows/')) return json({ total_count: 1, workflow_runs: [nativeRun] });
+    if (o.method === 'POST') { post = true; return new Response(null, { status: 201 }); }
+    if (url.includes('/jobs')) { assert.ok(url.includes('/attempts/2/jobs')); return json({ total_count: 0, jobs: [] }); }
+    if (url.includes('/artifacts')) return json({ total_count: 0, artifacts: [] });
+    return json({ ...nativeRun, run_attempt: post ? 2 : 1, conclusion: post ? 'failure' : 'success' });
+  } });
+  await assert.rejects(run(config, receipt), (e) => e.code === 'release-ci-manifest-missing');
+});
+test('API redirects are refused, never forwarded with the Actions token', async (t) => {
+  const { config, receipt } = fixture(t); let calls = 0;
+  const run = createReleaseCi({ token: 'x', fetch: async () => { calls++; return new Response(null, { status: 302, headers: { location: 'https://outside.invalid' } }); } });
+  await assert.rejects(run(config, receipt), (e) => e.code === 'release-ci-http-error'); assert.equal(calls, 1);
+});
