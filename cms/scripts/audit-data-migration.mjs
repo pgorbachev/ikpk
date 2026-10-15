@@ -12,9 +12,9 @@ const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operati
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
 const CORE_STORE_KEYS = new Set([
-  'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None',
-  'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None',
-  'strapi_content_types_schema|None|None',
+  'plugin_content_manager_configuration_content_types::api::promotion.promotion',
+  'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
+  'strapi_content_types_schema',
 ]);
 const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
@@ -297,13 +297,13 @@ function permissionGraph(db, differences, label) {
     return null;
   }
   const roles = new Map(db.prepare('SELECT id, code FROM admin_roles').all().map(({ id, code }) => [String(id), code]));
-  const permissions = db.prepare('SELECT id, action, subject, properties, conditions FROM admin_permissions ORDER BY id').all();
-  const links = db.prepare('SELECT permission_id, role_id FROM admin_permissions_role_lnk ORDER BY permission_id, role_id').all();
+  const permissions = db.prepare('SELECT * FROM admin_permissions ORDER BY id').all();
+  const links = db.prepare('SELECT * FROM admin_permissions_role_lnk ORDER BY permission_id, role_id').all();
   const linksByPermission = new Map();
   for (const link of links) {
     const permissionId = String(link.permission_id);
     const list = linksByPermission.get(permissionId) ?? [];
-    list.push(String(link.role_id));
+    list.push({ roleId: String(link.role_id), metadata: Object.fromEntries(Object.entries(link).filter(([key]) => !['id', 'permission_id', 'role_id'].includes(key))) });
     linksByPermission.set(permissionId, list);
   }
   const descriptors = new Map();
@@ -313,7 +313,7 @@ function permissionGraph(db, differences, label) {
   for (const permission of permissions) {
     const permissionId = String(permission.id);
     const roleIds = linksByPermission.get(permissionId) ?? [];
-    if (roleIds.length !== 1 || !roles.has(roleIds[0])) { failGraph(`dangling:${permissionId}`); continue; }
+    if (roleIds.length !== 1 || !roles.has(roleIds[0].roleId)) { failGraph(`dangling:${permissionId}`); continue; }
     let properties; let conditions;
     try { properties = permission.properties ? JSON.parse(permission.properties) : {}; conditions = permission.conditions ? JSON.parse(permission.conditions) : []; }
     catch { failGraph(`invalid-json:${permissionId}`); continue; }
@@ -322,9 +322,10 @@ function permissionGraph(db, differences, label) {
     if (fields !== undefined && (!Array.isArray(fields) || fields.some((field) => typeof field !== 'string') || new Set(fields).size !== fields.length)) {
       failGraph(`invalid-fields:${permissionId}`); continue;
     }
-    const role = roles.get(roleIds[0]);
+    const role = roles.get(roleIds[0].roleId);
     const baseProperties = { ...properties }; delete baseProperties.fields;
-    const key = json([role, permission.action, permission.subject ?? null, conditions, baseProperties]);
+    const permissionMetadata = Object.fromEntries(Object.entries(permission).filter(([column]) => !['id', 'action', 'subject', 'properties', 'conditions'].includes(column)));
+    const key = json([role, permission.action, permission.subject ?? null, conditions, baseProperties, valueKey(permissionMetadata), valueKey(roleIds[0].metadata)]);
     if (descriptors.has(key)) { failGraph(`duplicate:${key}`); continue; }
     descriptors.set(key, { role, action: permission.action, subject: permission.subject ?? null, conditions, properties: baseProperties, fields: fields ? [...fields].sort() : null });
   }
@@ -356,7 +357,7 @@ function expectedCoreStoreValue(key, sourceValue) {
   let expected;
   try { expected = JSON.parse(sourceValue); } catch { return null; }
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
-  if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None') {
+  if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion') {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
       || Object.hasOwn(expected.metadatas, 'type')) return null;
     expected.layouts.edit = [...expected.layouts.edit, [{ name: 'type', size: 6 }]];
@@ -366,7 +367,7 @@ function expectedCoreStoreValue(key, sourceValue) {
     };
     return expected;
   }
-  if (key === 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None') {
+  if (key === 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry') {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
       || Object.hasOwn(expected.metadatas, 'image') || Object.hasOwn(expected.metadatas, 'isEventCollection')) return null;
     const cityIndex = expected.layouts.edit.findIndex((row) => row?.[0]?.name === 'city');
@@ -382,7 +383,7 @@ function expectedCoreStoreValue(key, sourceValue) {
     };
     return expected;
   }
-  if (key === 'strapi_content_types_schema|None|None') {
+  if (key === 'strapi_content_types_schema') {
     const definitions = [
       ['api::promotion.promotion', 'type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }],
       ['api::schedule-entry.schedule-entry', 'image', { type: 'media', multiple: false, allowedTypes: ['images'] }],
@@ -400,17 +401,24 @@ function expectedCoreStoreValue(key, sourceValue) {
   return null;
 }
 function compareCoreStore(sourceDb, candidateDb, differences) {
-  if (!tableNames(sourceDb).includes(CORE_STORE_TABLE) || !tableNames(candidateDb).includes(CORE_STORE_TABLE)) return;
+  const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
+  const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
+  if (sourceHasTable !== candidateHasTable) {
+    differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-table-presence-mismatch' });
+    return;
+  }
+  if (!sourceHasTable) return;
   const rows = (db) => db.prepare(`SELECT * FROM ${quote(CORE_STORE_TABLE)} ORDER BY key`).all();
   const sourceRows = rows(sourceDb); const candidateRows = rows(candidateDb);
   const toMap = (items, side) => {
     const map = new Map();
     for (const row of items) {
-      if (typeof row.key !== 'string' || map.has(row.key)) {
+      const identity = json([row.key, row.environment, row.tag]);
+      if (typeof row.key !== 'string' || map.has(identity)) {
         differences.push({ table: CORE_STORE_TABLE, kind: `${side}-duplicate-or-invalid-key` });
         continue;
       }
-      map.set(row.key, row);
+      map.set(identity, row);
     }
     return map;
   };
@@ -418,8 +426,8 @@ function compareCoreStore(sourceDb, candidateDb, differences) {
   if (before.size !== after.size || [...before.keys()].some((key) => !after.has(key))) {
     differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-key-set-mismatch' });
   }
-  for (const [key, sourceRow] of before) {
-    const candidateRow = after.get(key);
+  for (const [identity, sourceRow] of before) {
+    const candidateRow = after.get(identity);
     if (!candidateRow) continue;
     const sourceMetadata = { ...sourceRow }; const candidateMetadata = { ...candidateRow };
     delete sourceMetadata.value; delete candidateMetadata.value;
@@ -427,6 +435,7 @@ function compareCoreStore(sourceDb, candidateDb, differences) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-row-metadata-changed', keySha256: sha(Buffer.from(key)) });
     }
     if (sourceRow.value === candidateRow.value) continue;
+    const key = sourceRow.key;
     if (!CORE_STORE_KEYS.has(key)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
       continue;
@@ -604,7 +613,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     if (candidateIntegrity.integrityCheck.length !== 1 || candidateIntegrity.integrityCheck[0] !== 'ok' || candidateIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'candidate-integrity-failed' });
     const tableSet = new Set([...Object.keys(sourceSchema), ...Object.keys(candidateSchema)]);
     for (const table of tableSet) {
-      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations' || table === CORE_STORE_TABLE) continue;
+      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations') continue;
       const before = sourceSchema[table]; const after = candidateSchema[table];
       if (!before || !after) { differences.push({ table, kind: before ? 'table-removed' : 'table-added' }); continue; }
       const expected = expectedColumns(before, table, transforms);

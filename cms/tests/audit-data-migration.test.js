@@ -210,8 +210,8 @@ test('serialized Strapi schema history accepts only the verified two-column rege
 function createPermissionShape(path, { candidate = false, mutate = null, mutateLinks = null } = {}) {
   const db = new Database(path);
   db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
-    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT);
-    CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL);
+    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT);
+    CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, permission_ord INTEGER);
     INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin');`);
   const descriptors = [];
   for (const verb of ['create', 'read', 'update']) {
@@ -226,10 +226,10 @@ function createPermissionShape(path, { candidate = false, mutate = null, mutateL
     let descriptor = { ...initial, roleId: initial.id, properties: { ...initial.properties, fields: [...initial.properties.fields] } };
     if (candidate && mutate) descriptor = mutate(descriptor, index) ?? descriptor;
     const permissionId = (candidate ? 20 : 10) + index;
-    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?)').run(
-      permissionId, descriptor.action, descriptor.subject, JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions),
+    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?)').run(
+      permissionId, descriptor.action, descriptor.subject, JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions), null,
     );
-    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId);
+    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId, index);
   }
   if (candidate && mutateLinks) mutateLinks(db);
   db.close();
@@ -269,8 +269,9 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
   }
   for (const [index, mutateLinks] of [
     (db) => db.prepare('DELETE FROM admin_permissions_role_lnk WHERE id = 40').run(),
-    (db) => db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (99, 20, 1)').run(),
+    (db) => db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (99, 20, 1, 0)').run(),
     (db) => db.prepare('UPDATE admin_permissions_role_lnk SET permission_id = 999 WHERE id = 40').run(),
+    (db) => db.prepare('UPDATE admin_permissions_role_lnk SET permission_ord = 999 WHERE id = 40').run(),
   ].entries()) {
     const sourceDbPath = join(directory, `permissions-link-source-${index}.db`);
     const candidateDbPath = join(directory, `permissions-link-candidate-${index}.db`);
@@ -282,11 +283,21 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
     assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')),
       `link mutation ${index} should be rejected by logical permission comparison`);
   }
+  const sourceDbPath = join(directory, 'permissions-action-parameters-source.db');
+  const candidateDbPath = join(directory, 'permissions-action-parameters-candidate.db');
+  createPermissionShape(sourceDbPath);
+  createPermissionShape(candidateDbPath, { candidate: true });
+  const db = new Database(candidateDbPath);
+  db.prepare('UPDATE admin_permissions SET action_parameters = ? WHERE id = 20').run('{"scope":"changed"}');
+  db.close();
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.passed, false, 'permission action_parameters are part of the preserved authorization graph');
 });
 
-const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None';
-const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None';
-const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema|None|None';
+const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
+const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
+const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema';
 function coreStoreValues(candidate) {
   const promotion = {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
@@ -368,5 +379,24 @@ test('core-store rejects unapproved key changes, layout changes, and malformed t
     assert.equal(report.passed, false, `core-store mutation ${index} must block preservation acceptance`);
     assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
       `core-store mutation ${index} should be rejected by the bounded comparator`);
+  }
+});
+
+test('core-store table presence and schema constraints remain part of preservation acceptance', () => {
+  for (const [name, mutate] of [
+    ['missing', (db) => db.exec('DROP TABLE strapi_core_store_settings')],
+    ['index', (db) => db.exec('CREATE INDEX unexpected_core_store_index ON strapi_core_store_settings(key)')],
+  ]) {
+    const sourceDbPath = join(directory, `core-store-schema-source-${name}.db`);
+    const candidateDbPath = join(directory, `core-store-schema-candidate-${name}.db`);
+    createCoreStoreShape(sourceDbPath);
+    createCoreStoreShape(candidateDbPath, { candidate: true });
+    const db = new Database(candidateDbPath);
+    mutate(db);
+    db.close();
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `core-store ${name} drift must block acceptance`);
+    assert.ok(report.differences.some(({ table }) => table === 'strapi_core_store_settings'));
   }
 });

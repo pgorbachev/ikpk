@@ -66,10 +66,10 @@
   ],
   "integrity": {
     "files": [
-      { "path": "scripts/run-data-migrations.mjs", "sha256": "dbcc8e8580899b25c1eb3b8485f587dcf06155e8cae274e319a44760a2f76ae1" },
+      { "path": "scripts/run-data-migrations.mjs", "sha256": "8fd6b52d5626f5256f27f19b0cd6b9ef40a6b48f47a2bb87998ef489960f2886" },
       { "path": "database/migrations/target-schema/seminar.json", "sha256": "b8b92af156d27ccaf96d816e9b18f79b1ce9c1ee568a95145c6457d073202df8" },
       { "path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5" },
-      { "path": "scripts/audit-data-migration.mjs", "sha256": "0cef09797efe385466c97ab380893354ada98baa47c96582c7a86be2d08f8af4" },
+      { "path": "scripts/audit-data-migration.mjs", "sha256": "ad2e4771fc3a46c4077b60b3641dba5e00cd5f9b1138922a120655e733bad5f3" },
       { "path": "scripts/audit-schema-snapshot.mjs", "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea" },
       { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
       { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }
