@@ -62,6 +62,7 @@ const scheduleFields = [
   'name',
   'startAt',
   'endAt',
+  'image',
   'city',
   'price',
   'oldPrice',

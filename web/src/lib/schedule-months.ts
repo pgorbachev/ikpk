@@ -16,15 +16,14 @@
  * «endAt раньше startAt — значит последний день это startAt» уже реализовано там, и
  * второе его место разошлось бы с первым.
  *
- * Арифметика месяцев — на строках `YYYY-MM`, без объектов даты. Причина не в
- * экономии: объект даты вносит часовой пояс сборочной машины, тогда как ключ выведен
- * по UTC. Расхождение было бы ровно в один месяц и ровно на границе — то есть
- * проявлялось бы редко и выглядело бы как случайность. Лексикографическое сравнение
- * `YYYY-MM` совпадает с хронологическим, поэтому сортировка и выбор максимума делаются
- * прямо на строках.
+ * Арифметика месяцев остаётся строковой: время события один раз переводится в
+ * календарный день общим business-timezone helper, после чего ключ `YYYY-MM` не
+ * зависит от timezone сборочной машины. Лексикографическое сравнение `YYYY-MM`
+ * совпадает с хронологическим, поэтому сортировка и выбор максимума делаются прямо
+ * на строках.
  */
 
-import { lastDay, type ScheduleWindowEntry } from './schedule-window';
+import { calendarDay, lastDay, type ScheduleWindowEntry } from './schedule-window';
 
 /** Месяц в списке предложенных: ключ и сколько записей в нём идёт. */
 export interface MonthOption {
@@ -91,7 +90,7 @@ function nextMonth(key: string): string {
  */
 export function monthKeys(entry: ScheduleWindowEntry, today: string): string[] {
   const last = monthOf(lastDay(entry));
-  const start = entry.startAt ? monthOf(entry.startAt) : last;
+  const start = entry.startAt ? monthOf(calendarDay(entry.startAt)) : last;
   const cutoff = monthOf(today);
   if (last === '' || last < cutoff) return [];
 

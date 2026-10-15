@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { dist, walkHtml } from './helpers/dist-pages';
 import { walkFiles } from './helpers/walk';
 import {
@@ -14,6 +14,7 @@ import {
   collectMarkerInventoryErrors,
   type RenderedSink,
 } from './helpers/rich-content-safety/marker-inventory.js';
+import { projectSnapshotMarkers } from './helpers/rich-content-safety/snapshot-marker-projection.js';
 
 function pageFile(path: string): string {
   return path === '/' ? join(dist, 'index.html') : join(dist, path.replace(/^\//, ''), 'index.html');
@@ -25,9 +26,9 @@ describe('rich-content contract: whole-dist canary (production)', () => {
     const files = [...walkHtml()];
     expect(files.length, 'dist без html — vacuous green').toBeGreaterThan(10);
     const hits: string[] = [];
+    const hostileToken = Buffer.from(CANARY_HOSTILE_TOKEN);
     for (const file of files) {
-      const html = readFileSync(file, 'utf-8');
-      if (html.includes(CANARY_HOSTILE_TOKEN)) hits.push(file);
+      if (readFileSync(file).includes(hostileToken)) hits.push(file);
     }
     expect(hits, hits.join('\n')).toEqual([]);
   });
@@ -52,7 +53,14 @@ describe('rich-content contract: marker inventory (production)', () => {
       html: readFileSync(file, 'utf-8'),
     }));
     const rendered = loadFixture<{ sinks: RenderedSink[] }>('rendered-registry.json');
-    const missing = collectMarkerInventoryErrors(rendered.sinks, 'production', pages);
+    const snapshotPath = join(dirname(dist), 'dist-snapshot', 'snapshot.json');
+    expect(existsSync(snapshotPath), 'нет исходного snapshot для проверки output markers').toBe(true);
+    const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf-8')) as {
+      content?: { types?: Record<string, unknown> };
+    };
+    expect(snapshot.content?.types, 'snapshot без content.types').toBeTruthy();
+    const expected = projectSnapshotMarkers(rendered.sinks, snapshot.content!.types as Parameters<typeof projectSnapshotMarkers>[1]);
+    const missing = collectMarkerInventoryErrors(expected, 'production', pages);
     expect(missing, missing.join('\n')).toEqual([]);
   });
 });

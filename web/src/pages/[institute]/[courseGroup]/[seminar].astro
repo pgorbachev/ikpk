@@ -15,7 +15,7 @@ import {
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
-import { isCurrentOrFuture } from '../../../lib/schedule-window';
+import { calendarDay, isCurrentOrFuture } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -51,7 +51,7 @@ const schedule = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
 );
 const sortedSchedule = [...schedule].sort(
-  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+  (a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))
 );
 const allTeachers = getTeachers();
 const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`;
@@ -71,8 +71,15 @@ const scheduleRows = sortedSchedule.map((entry) => ({
     };
   }),
 }));
-const seminarBodyHtml = seminar.description_html
-  ? cleanBodyHtml(stripLegacySeminarTail(seminar.description_html), Astro.url.pathname)
+const seminarBodyParts = [
+  seminar.description_html ? stripLegacySeminarTail(seminar.description_html) : '',
+  seminar.full_text_html ?? '',
+  seminar.learning_mode ? `<h2>Как проходит обучение</h2>${seminar.learning_mode}` : '',
+  seminar.learning_plan ? `<h2>Учебный план</h2>${seminar.learning_plan}` : '',
+  seminar.recommendations ?? '',
+].filter((html) => html.trim().length > 0);
+const seminarBodyHtml = seminarBodyParts.length
+  ? cleanBodyHtml(seminarBodyParts.join('\n'), Astro.url.pathname)
   : '';
 
 // Описание для схемы: у части семинаров нет ни seo-описания, ни секций (живой
@@ -119,17 +126,17 @@ const seminarSchema =
             addressCountry: 'RU',
           },
         },
-        startDate: schedule[0].startAt,
-        endDate: schedule[0].endAt,
+        startDate: calendarDay(schedule[0].startAt),
+        endDate: calendarDay(schedule[0].endAt),
         eventStatus: 'https://schema.org/EventScheduled',
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-        offers: {
+        offers: schedule[0].isFree === true || (Number.isFinite(schedule[0].newPrice) && schedule[0].newPrice > 0) ? {
           '@type': 'Offer',
           url: seminarUrl,
-          price: schedule[0].isFree ? '0' : String(schedule[0].newPrice),
+          price: schedule[0].isFree === true ? '0' : String(schedule[0].newPrice),
           priceCurrency: 'RUB',
           availability: 'https://schema.org/InStock',
-        },
+        } : undefined,
       }
     : {
         '@context': 'https://schema.org',

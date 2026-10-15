@@ -75,6 +75,10 @@ const relRef = (prefix: string, name: string): Record<string, unknown> => ({
   legacy_id: key(prefix),
 });
 
+/** Поле, которого у типа в схеме CMS нет, в ответе заглушки тоже не появляется. */
+const without = (record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(record).filter(([k]) => !keys.includes(k)));
+
 /** Внешняя ссылка в теле статьи: предмет сценария «внешние ссылки в содержимом сохраняются». */
 export const EXTERNAL_LINK_IN_BODY = 'https://example.invalid/external-article';
 
@@ -103,6 +107,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           ...base('cg', 'Program'),
           description: '<p>about program</p>',
           image: stubMedia(2),
+          order: 0,
           institute: relRef('inst', 'Institute'),
           seo: seo('Program'),
         },
@@ -114,10 +119,14 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           ...base('sem', 'Seminar'),
           description: '<p>about seminar</p>',
           full_text: '<p>details</p>',
+          learning_mode: '<p>learning mode</p>',
+          learning_plan: '<p>learning plan</p>',
+          recommendations: '<p>recommendations</p>',
           image: stubMedia(3),
           price: 1000,
           duration: '2 days',
-          status: 'active',
+          seminar_status: 'planned',
+          order: 0,
           course_group: relRef('cg', 'Program'),
           teachers: [relRef('teach', 'Teacher')],
           seo: seo('Seminar'),
@@ -131,6 +140,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           trait: 'teacher',
           photo: stubMedia(4),
           bio: '<p>biography</p>',
+          order: 0,
           institute: relRef('inst', 'Institute'),
         },
       ],
@@ -138,7 +148,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     articles: {
       records: [
         {
-          ...base('art', 'Article'),
+          ...without(base('art', 'Article'), 'name'),
           title: 'Article',
           body: `<p>body with <a href="${EXTERNAL_LINK_IN_BODY}">external link</a></p>`,
           image: stubMedia(5),
@@ -150,15 +160,17 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     'schedule-entries': {
       records: [
         {
-          ...base('ev', 'Event'),
+          ...without(base('ev', 'Event'), 'slug'),
           startAt: '2026-09-01T00:00:00.000Z',
           endAt: '2026-09-02T00:00:00.000Z',
           city: 'Saint Petersburg',
           price: 5000,
           oldPrice: 6000,
           isFree: false,
-          status: 'active',
+          entry_status: 'active',
           registrationFormLink: 'https://example.invalid/form',
+          image: stubMedia(3),
+          isEventCollection: false,
           description: '<p>event description</p>',
           additionalText: '<p>addendum</p>',
           duration: '2 days',
@@ -170,9 +182,10 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     'news-items': {
       records: [
         {
-          ...base('news', 'News'),
+          ...without(base('news', 'News'), 'slug'),
           description: '<p>news</p>',
           image: stubMedia(6),
+          date: '2026-02-01T00:00:00.000Z',
           link: 'https://example.invalid',
           priority: 0,
         },
@@ -181,8 +194,10 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     promotions: {
       records: [
         {
-          ...base('promo', 'Promotion'),
+          ...without(base('promo', 'Promotion'), 'slug'),
           description: '<p>promotion</p>',
+          date: '2026-02-01T00:00:00.000Z',
+          type: 'INSTITUTE',
           // Тот же файл, что у новости: повторная ссылка на одно содержимое обязана дать ОДНУ
           // запись хранилища, а не две (идемпотентность по содержимому).
           image: stubMedia(6),
@@ -195,7 +210,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
     pages: {
       records: [
         {
-          ...base('page', 'Page'),
+          ...without(base('page', 'Page'), 'name'),
           title: 'Page',
           body: '<p>page body</p>',
           seo: seo('Page'),

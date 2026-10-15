@@ -14,6 +14,9 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ['tests/**/*.test.ts'],
     exclude: [
+      // Astro Container tests use the dedicated render config.
+      'tests/home-people.render.test.ts',
+      'tests/demo193-profile.render.test.ts',
       // Live publication assertions need the captured snapshot and completed artifact.
       'tests/publication/snapshot.test.ts',
       'tests/publication/build.test.ts',
@@ -80,7 +83,9 @@ export default defineConfig({
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
       'tests/teacher-links.render.test.ts',
+      'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
+      'tests/seminar-snapshot-fields.render.test.ts',
       // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
       // контейнера не укладывается в лимит хука и валит обязательный прогон.
       // Локально: npx vitest run --config vitest.provision.config.ts

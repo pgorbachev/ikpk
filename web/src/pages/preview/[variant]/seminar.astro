@@ -18,7 +18,7 @@ import {
   formatPrice, getSnapshotReferenceDate,
   teacherPageHref,
 } from '../../../lib/data';
-import { isCurrentOrFuture } from '../../../lib/schedule-window';
+import { calendarDay, isCurrentOrFuture } from '../../../lib/schedule-window';
 import { registrationHref, isDemoForms } from '../../../lib/forms';
 import {
   formatScheduleDateRange,
@@ -44,7 +44,7 @@ const today = getSnapshotReferenceDate();
 // Эталон с датой и преподавателем — один для всех трёх.
 const entry = getScheduleEntries()
   .filter((e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today) && e.teachers?.length)
-  .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
+  .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt)))[0];
 
 const seminar = allSeminars.find((s) => s.slug === entry?.seminar.slug) || allSeminars[0];
 const courseGroup = allCGs.find((c) => c.legacy_id === seminar.course_group_legacy_id)!;
@@ -54,7 +54,7 @@ const scheduleRaw = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
 );
 const sorted = [...scheduleRaw].sort(
-  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+  (a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))
 );
 
 // В шапке нужна ближайшая дата; остальной список не передаём.
@@ -67,7 +67,7 @@ const schedule = nearest
         {
           dateLabel: formatScheduleDateRange(nearest.startAt, nearest.endAt),
           cityName: nearest.city?.name || 'Уточняется',
-          priceLabel: nearest.isFree ? 'Бесплатно' : formatPrice(nearest.newPrice),
+          priceLabel: nearest.isFree === true ? 'Бесплатно' : formatPrice(nearest.newPrice),
           durationLabel: nearest.duration ? `${nearest.duration} ч` : '',
           formHref: registrationHref(nearest.registrationFormLink) || '/raspisanie-i-tseny',
           teacher: lead

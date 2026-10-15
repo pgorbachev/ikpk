@@ -29,19 +29,42 @@ export interface ScheduleWindowEntry {
   id?: number | string;
 }
 
+/**
+ * Calendar day represented by a CMS date value. SQL DATE values arrive unchanged;
+ * CMS datetime values represent Nicosia wall-clock midnight, so their public day is
+ * the Europe/Moscow calendar day (the site's established display timezone).
+ */
+export function calendarDay(value: string | undefined): string {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Treat a calendar day as UTC midnight for timezone-independent arithmetic/labels. */
+export function calendarDayDate(value: string | undefined): Date {
+  const day = calendarDay(value);
+  return day ? new Date(`${day}T00:00:00.000Z`) : new Date(Number.NaN);
+}
+
 /** Последний день события как календарная дата `YYYY-MM-DD`. */
 export function lastDay(entry: ScheduleWindowEntry): string {
-  const start = entry.startAt ?? '';
-  const end = entry.endAt ?? '';
+  const start = calendarDay(entry.startAt);
+  const end = calendarDay(entry.endAt);
   return (end > start ? end : start).slice(0, 10);
 }
 
 /**
  * Событие ещё не закончилось на дату `today` (календарная, `YYYY-MM-DD`).
  *
- * Сравниваются календарные даты, а не метки времени: `startAt` хранится с временем
- * 00:00, и сравнение полных метк выбрасывало событие из актуальных уже в первую
- * минуту дня проведения.
+ * Сравниваются календарные даты, а не метки времени: CMS хранит SQL DATE как
+ * полночь Nicosia, сериализованную в UTC, поэтому преобразование в календарный день
+ * должно идти через часовую зону сайта, а не через префикс UTC.
  */
 export function isCurrentOrFuture(entry: ScheduleWindowEntry, today: string): boolean {
   return lastDay(entry) >= today;
@@ -59,7 +82,7 @@ export function isCurrentOrFuture(entry: ScheduleWindowEntry, today: string): bo
  * запрещает фильтровать `src/` по `startAt` вне этого модуля.
  */
 export function isUpcomingStart(entry: ScheduleWindowEntry, today: string): boolean {
-  return (entry.startAt ?? '').slice(0, 10) >= today;
+  return calendarDay(entry.startAt) >= today;
 }
 
 /** Календарная дата «сегодня» для вызывающего, которому нужен реальный день. */
@@ -107,7 +130,7 @@ export function nearestUpcoming<T extends ScheduleWindowEntry>(
 }
 
 /** Первый день события как календарная дата: требование говорит о ДНЕ, а не о метке времени. */
-const firstDay = (entry: ScheduleWindowEntry): string => (entry.startAt ?? '').slice(0, 10);
+const firstDay = (entry: ScheduleWindowEntry): string => calendarDay(entry.startAt);
 
 const cityName = (entry: ScheduleWindowEntry): string => {
   const city = entry.city;

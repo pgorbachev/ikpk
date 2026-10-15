@@ -40,7 +40,8 @@ const dataset = Object.fromEntries(SOURCE_TYPES.map((type) => [type.endpoint, { 
     if (['htmlToText', 'legacyUrlFromId', 'mediaUrlList'].includes(entry.transform ?? '')) continue;
     let value = ['mediaRef', 'mediaUrl'].includes(entry.transform ?? '') ? { id: 1, url: '/uploads/fixture.png' } : record[entry.field];
     if (typeof value === 'string') value = repairFixtureLinks(value);
-    if (value !== undefined) set(raw, entry.source, value);
+    // Ответ CMS несёт каждый ключ схемы, пустой — значением null; съём отказывает на отсутствующем ключе.
+    set(raw, entry.source, value === undefined ? null : value);
   }
   return raw;
 }) }]));

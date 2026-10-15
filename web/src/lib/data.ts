@@ -169,6 +169,10 @@ export interface Seminar {
   seo_description: string;
   description_html: string;
   description_text: string;
+  full_text_html?: string | null;
+  learning_mode?: string | null;
+  learning_plan?: string | null;
+  recommendations?: string | null;
   images: string[];
   /** Преподаватели семинара из каталога (не «любой с фото у института»). */
   teachers?: SeminarTeacherRef[];
@@ -203,6 +207,19 @@ export interface Teacher {
 }
 
 export type PersonTrait = 'teacher' | 'method-author';
+
+export function personRoleLabels(trait?: PersonTrait): { title: string; breadcrumb: string; about: string } {
+  if (trait === 'method-author') {
+    return { title: 'автор методики', breadcrumb: 'Авторы методик', about: 'Об авторе методики' };
+  }
+  return { title: 'преподаватель', breadcrumb: 'Преподаватели', about: 'О преподавателе' };
+}
+
+export function institutePeopleSectionLabel(instituteSlug: string): string {
+  return instituteSlug === 'institut-apledzhera' || instituteSlug === 'institut-barralya'
+    ? 'Авторы методик'
+    : 'Преподаватели';
+}
 
 export function groupTeachersByTrait(teachers: readonly Teacher[]): Record<PersonTrait, Teacher[]> {
   return {
@@ -423,8 +440,8 @@ export function getCourseGroupForSeminar(seminar: Seminar): CourseGroup | undefi
 
 // Helper: format price
 export function formatPrice(price: number): string {
-  if (price === 0) return 'Бесплатно';
-  if (!Number.isFinite(price)) return '';
+  // Бесплатность задаётся isFree у проведения, а не нулём в поле цены.
+  if (!Number.isFinite(price) || price <= 0) return 'Стоимость уточняется';
   return new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 }
 
@@ -432,6 +449,8 @@ export function formatPrice(price: number): string {
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('ru-RU', {
+    // Даты в CMS — московская полночь; без пояса день зависит от машины сборки.
+    timeZone: 'Europe/Moscow',
     day: 'numeric',
     month: 'long',
     year: 'numeric',

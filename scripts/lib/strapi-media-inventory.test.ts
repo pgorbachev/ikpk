@@ -1,11 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildStrapiMediaHashIndex, buildStrapiMediaInventory } from './strapi-media-inventory.js';
+import { allowedSourceIdentity, allowedSourceUrl, allowedSqlStorageKey, buildStrapiMediaHashIndex, buildStrapiMediaInventory } from './strapi-media-inventory.js';
 
 function page(data: unknown[], pageNumber: number, pageCount: number, total: number) {
   return { data, meta: { pagination: { page: pageNumber, pageCount, total } } };
 }
 
 describe('Strapi media content inventory', () => {
+  it('accepts only the exact approved relative legacy media identities alongside safe absolute URLs', () => {
+    expect(allowedSourceUrl('/media/legacy/logo-v2.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/logo-upledger-inst.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/logo-barral-inst.png')).toBe(true);
+    expect(allowedSourceUrl('/media/legacy/other.png')).toBe(false);
+    expect(allowedSourceUrl('//outside.example/logo.png')).toBe(false);
+    expect(allowedSourceUrl('https://user:pass@images.example/logo.png')).toBe(false);
+    expect(allowedSourceUrl('https://images.example/logo.png')).toBe(true);
+  });
+
+  it('accepts only canonical five-segment media storage keys as source identities', () => {
+    expect(allowedSqlStorageKey('media/institutes/3/barral/logo.png')).toBe(true);
+    expect(allowedSourceIdentity('media/institutes/3/barral/logo.png')).toBe(true);
+    for (const value of [
+      '/media/institutes/3/barral/logo.png', 'media//3/barral/logo.png',
+      'media/../3/barral/logo.png', 'media/institutes/3/barral/..',
+      'media/institutes/3/barral/logo%2epng', 'media/institutes/3/barral/logo.png?x=1',
+      'media/institutes/3/barral/logo.png/extra',
+    ]) expect(allowedSqlStorageKey(value)).toBe(false);
+  });
+
   it('reads every page beyond the first 100 items', async () => {
     const files = Array.from({ length: 205 }, (_, index) => ({ id: index + 1, url: `/uploads/${index}.png` }));
     const getPage = vi.fn(async (requestedPage: number) => {
@@ -86,5 +107,24 @@ describe('Strapi media content inventory', () => {
     });
 
     expect(inventory.bySourceHash.has(sourceSha256)).toBe(false);
+  });
+
+  it('indexes a canonical SQL storage key only when stored bytes match its source claim', async () => {
+    const sourceSha256 = 'a'.repeat(64);
+    const sourceKey = 'media/institutes/3/barral/logo.png';
+    const storedBytes = Buffer.from('stored source bytes');
+    const { createHash } = await import('node:crypto');
+    const storedSha256 = createHash('sha256').update(storedBytes).digest('hex');
+    const inventory = await buildStrapiMediaInventory({
+      getPage: async () => page([{
+        id: 4,
+        url: '/uploads/barral.png',
+        provider_metadata: { ikpk_media_import: { sources: { [sourceKey]: { version: 1, sha256: sourceSha256, storedSha256 } } } },
+      }], 1, 1, 1),
+      getBytes: async () => storedBytes,
+      baseUrl: 'http://127.0.0.1:1337',
+    });
+
+    expect(inventory.bySourceHash.get(sourceSha256)).toBe(4);
   });
 });

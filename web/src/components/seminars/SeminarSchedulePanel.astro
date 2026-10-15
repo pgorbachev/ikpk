@@ -22,6 +22,7 @@
  *     названной при выборе варианта.
  */
 import { formatDate, formatPrice } from '../../lib/data';
+import { calendarDay, calendarDayDate } from '../../lib/schedule-window';
 import { registrationHref, isExternalFormHref } from '../../lib/forms';
 import { MANAGER_PHONE, MANAGER_PHONE_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
 import type { ScheduleEntry } from '../../lib/data';
@@ -48,8 +49,8 @@ function formatDurationLabel(entry: ScheduleEntry): string {
 
   const hours = Number(raw);
   const hoursLabel = `${hours} ${pluralizeRu(hours, 'час', 'часа', 'часов')}`;
-  const start = new Date(entry.startAt);
-  const end = new Date(entry.endAt);
+  const start = calendarDayDate(entry.startAt);
+  const end = calendarDayDate(entry.endAt);
   const daySpan = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
 
   if (daySpan > 1) {
@@ -101,7 +102,7 @@ function metaLine(entry: ScheduleEntry): string {
               */}
               <div class="schedule-date">
                 <span class="schedule-date-part" data-seminar-schedule-date-part>{bindEra(formatDate(entry.startAt))}</span>
-                {entry.startAt !== entry.endAt && (
+                {calendarDay(entry.startAt) !== calendarDay(entry.endAt) && (
                   <>
                     {' — '}
                     <span class="schedule-date-part" data-seminar-schedule-date-part>{bindEra(formatDate(entry.endAt))}</span>
@@ -131,7 +132,7 @@ function metaLine(entry: ScheduleEntry): string {
               )}
               <div class="schedule-foot">
                 <span class:list={['schedule-price', entry.isFree && 'schedule-price-free']}>
-                  {entry.isFree ? 'Бесплатно' : formatPrice(entry.newPrice)}
+                  {entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice)}
                 </span>
                 <a
                   class="seminar-register-link"

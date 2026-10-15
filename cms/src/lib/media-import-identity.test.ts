@@ -55,6 +55,18 @@ test('rejects malformed source hashes and unapproved source identities', () => {
   assert.throws(() => mergeMediaImportIdentity({}, '/etc/passwd', { version: 1, sha256: firstHash, storedSha256: storedHash }));
 });
 
+test('accepts only canonical five-segment SQL storage keys as source identities', () => {
+  assert.doesNotThrow(() => mergeMediaImportIdentity({}, 'media/institutes/3/barral/logo.png', {
+    version: 1, sha256: firstHash, storedSha256: storedHash,
+  }));
+  for (const key of [
+    '/media/institutes/3/barral/logo.png', 'media//3/barral/logo.png',
+    'media/../3/barral/logo.png', 'media/institutes/3/barral/..',
+    'media/institutes/3/barral/logo%2epng', 'media/institutes/3/barral/logo.png?x=1',
+    'media/institutes/3/barral/logo.png/extra',
+  ]) assert.throws(() => mergeMediaImportIdentity({}, key, { version: 1, sha256: firstHash, storedSha256: storedHash }));
+});
+
 test('bounds source URL length and identity count while preserving a same-URL update', () => {
   assert.throws(() => mergeMediaImportIdentity({}, `https://images.example.test/${'a'.repeat(2048)}`, {
     version: 1, sha256: firstHash, storedSha256: storedHash,

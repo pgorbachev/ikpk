@@ -69,7 +69,7 @@ function parseFiles(data: unknown[], page: number): MediaFile[] {
   });
 }
 
-function allowedSourceUrl(value: string): boolean {
+export function allowedSourceUrl(value: string): boolean {
   if (value.length > 2048) return false;
   if (/^\/media\/legacy\/(?:logo-v2|logo-upledger-inst|logo-barral-inst)\.png$/.test(value)) return true;
   try {
@@ -79,6 +79,18 @@ function allowedSourceUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Canonical five-segment SQL storage key; this is an identity, never a fetch URL. */
+export function allowedSqlStorageKey(value: string): boolean {
+  if (value.length > 512 || value.includes('\\') || value.includes('%') || value.includes('?') || value.includes('#')) return false;
+  const segments = value.split('/');
+  return segments.length === 5 && segments[0] === 'media' &&
+    segments.slice(1).every((segment) => /^[A-Za-z0-9._~-]+$/.test(segment) && segment !== '.' && segment !== '..');
+}
+
+export function allowedSourceIdentity(value: string): boolean {
+  return allowedSourceUrl(value) || allowedSqlStorageKey(value);
 }
 
 /** Build a content-hash index from the actual bytes in Strapi's paginated media library. */
@@ -145,7 +157,7 @@ export async function buildStrapiMediaInventory(
     const sources = (imported as Record<string, unknown>).sources;
     if (!sources || typeof sources !== 'object' || Array.isArray(sources)) continue;
     for (const [sourceUrl, identity] of Object.entries(sources as Record<string, unknown>)) {
-      if (!allowedSourceUrl(sourceUrl)) continue;
+      if (!allowedSourceIdentity(sourceUrl)) continue;
       if (!identity || typeof identity !== 'object' || Array.isArray(identity)) continue;
       const identityRecord = identity as Record<string, unknown>;
       const sourceHash = identityRecord.sha256;

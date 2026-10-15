@@ -6,13 +6,20 @@
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSnapshotContract } from './lib/content-contract.ts';
+import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
+  UNMAPPED_SCHEMA_FIELDS,
+  UNMAPPED_SEO_FIELDS,
   checkFieldMapAgainstSchema,
+  filledUnshownContentFields,
+  hasValue,
+  missingSourceFields,
+  unknownRecordFields,
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
@@ -24,6 +31,46 @@ const repoRoot = join(webRoot, '..');
 const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
+
+const DEMO193_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+const DEMO193_READBACK_SHA256 = 'c603dbe1b134e4f3bbb72fb9adad4486b5ac206d421a90c46a5ba8da23a7ff99';
+const DEMO193_CODE_COMMIT = '4e1576e507272f9793c3fbae3f2246f4fa3730b1';
+const DEMO193_NAMESPACE = 'ikpk_sql_demo_native_proto193';
+const DEMO193_SOURCE_URL = 'http://127.0.0.1:19341';
+type Demo193Readback = {
+  capturedAt: string;
+  target: string;
+  namespace: string;
+  codeCommit: string;
+  collections: Record<string, Record<string, unknown>[]>;
+  media: { url: string; verifiedStoredSha256: string }[];
+};
+
+function demo193Input(): { readback: Demo193Readback; mediaDirectory: string } | undefined {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return undefined;
+  if (args.length !== 3 || args[0] !== '--demo193-saved-readback') {
+    throw new Error('unsupported snapshot capture option');
+  }
+  const [, readbackPath, mediaDirectory] = args;
+  if (cmsUrl !== DEMO193_SOURCE_URL) throw new Error('demo193 saved-readback source origin mismatch');
+  if (!readbackPath || !mediaDirectory || !existsSync(readbackPath) || !existsSync(mediaDirectory)) {
+    throw new Error('demo193 saved-readback input is missing');
+  }
+  const bytes = readFileSync(readbackPath);
+  if (createHash('sha256').update(bytes).digest('hex') !== DEMO193_READBACK_SHA256) {
+    throw new Error('demo193 saved-readback SHA-256 mismatch');
+  }
+  const readback = JSON.parse(bytes.toString('utf8')) as Demo193Readback;
+  if (readback.target !== 'A' || readback.namespace !== DEMO193_NAMESPACE || readback.codeCommit !== DEMO193_CODE_COMMIT
+      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(readback.capturedAt)
+      || !readback.collections || !Array.isArray(readback.media) || readback.media.length !== 563) {
+    throw new Error('demo193 saved-readback capture identity mismatch');
+  }
+  return { readback, mediaDirectory };
+}
+
+const savedDemo193 = demo193Input();
 
 /**
  * Предел ожидания ОДНОГО обращения к CMS.
@@ -93,7 +140,7 @@ function copyPinned(): void {
   // оставлял на диске снимок, не прошедший проверку: следующая сборка молча брала именно его,
   // потому что `prepare-snapshot.ts` контракт не запускает вовсе.
   const snap = JSON.parse(readFileSync(source, 'utf-8')) as Snapshot;
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap);
   snap.origin = { kind: 'pinned' };
 
   mkdirSync(outDir, { recursive: true });
@@ -170,7 +217,7 @@ function refList(value: unknown): unknown {
 
 /**
  * Массив URL медиа — форма, которую читает сайт (`inst.images?.[0]` в компонентах главной).
- * В CMS медиа одно и лежит в `image`; в снимке рядом живут оба поля: `image` — объект с
+ * Сайт показывает одно медиа из `image` (см. `singleMedia`); в снимке рядом живут оба поля: `image` — объект с
  * идентификатором содержимого, `images` — список адресов. Совмещать их нельзя: их читают
  * разные места.
  */
@@ -179,24 +226,77 @@ function mediaUrlList(value: unknown): unknown {
   return ref?.url ? [ref.url] : undefined;
 }
 
+/**
+ * Преподаватели проведения. Прежнее JSON-поле давало `{id, fullName}` — эту форму ищет страница
+ * семинара; установленная CMS отдаёт связь с записью преподавателя, и она сводится к той же
+ * форме. Связь без `legacy_id` или имени — отказ: страница построила бы ссылку в никуда.
+ */
+function entryTeachers(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    const t = item as Record<string, unknown> | null;
+    if (t && typeof t === 'object' && 'fullName' in t) return t;
+    const id = t?.legacy_id;
+    if (t && typeof t.name === 'string' && (typeof id === 'string' || typeof id === 'number') && id !== '') {
+      return { id, fullName: t.name };
+    }
+    throw new Error(
+      `schedule_entries.teachers: у преподавателя в связи нет legacy_id или имени — заполнить их у ` +
+        `преподавателя в CMS (${JSON.stringify(t)?.slice(0, 120)})`,
+    );
+  });
+}
+
+const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList']);
+
+/**
+ * Установленная CMS отдаёт медиа списком (`multiple: true`), прежняя схема — объектом. Сайт
+ * показывает одно изображение: список из одного элемента разворачивается, из нескольких — отказ,
+ * потому что молча выбрать одно значило бы потерять остальные. Любая другая форма — тоже отказ:
+ * так 13.10.2026 пропали все фото, а съём остался зелёным.
+ */
+function singleMedia(value: unknown, where: string): unknown {
+  if (Array.isArray(value) && value.length > 1) {
+    throw new Error(`${where}: ${value.length} файла в поле, сайт показывает одно`);
+  }
+  const item = Array.isArray(value) ? (value[0] ?? null) : value;
+  if (item === null || item === undefined) return item;
+  const url = item && typeof item === 'object' ? (item as Record<string, unknown>).url : undefined;
+  if (typeof url !== 'string' || url === '') {
+    throw new Error(`${where}: неподдерживаемая форма медиа ${JSON.stringify(item)?.slice(0, 120)}`);
+  }
+  return item;
+}
+
 const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
   mediaUrl,
   mediaUrlList,
   refList,
+  entryTeachers,
   // `legacy_url` в CMS нет: выводится из `legacy_id`, тем же способом, что и
   // `scripts/refresh-catalog.ts` (`legacy_url: `/${group}/${s.slug}``) — относительный путь,
   // без домена.
   legacyUrlFromId: (value) => (typeof value === 'string' && value !== '' ? `/${value}` : undefined),
 };
 
+/** Запись в сообщениях об отказе: по ней редактор находит, что исправить. */
+function recordKey(record: Record<string, unknown>): string {
+  return String(record.legacy_id || record.slug || record.documentId || record.id || '?');
+}
+
 function applyEntry(record: Record<string, unknown>, entry: FieldMapEntry, out: Record<string, unknown>): void {
   let value = resolveSource(record, entry.source);
   if (entry.transform) {
     const fn = TRANSFORMS[entry.transform];
     if (!fn) throw new Error(`неизвестное преобразование ${entry.transform} (${entry.type}.${entry.field})`);
-    value = fn(value);
+    try {
+      if (MEDIA_TRANSFORMS.has(entry.transform)) value = singleMedia(value, `${entry.type}.${entry.source}`);
+      value = fn(value);
+    } catch (err) {
+      throw new Error(`${(err as Error).message} (запись ${recordKey(record)})`, { cause: err });
+    }
   }
   if (value !== undefined) out[entry.field] = value;
 }
@@ -220,6 +320,11 @@ interface StrapiPage {
 }
 
 async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[]> {
+  if (savedDemo193) {
+    const records = savedDemo193.readback.collections[endpoint];
+    if (!Array.isArray(records)) throw new Error(`demo193 saved-readback omitted ${endpoint}`);
+    return records;
+  }
   const records: Record<string, unknown>[] = [];
   let page = 1;
   for (;;) {
@@ -278,21 +383,41 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
   const refs = uploadRefsIn(types);
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
+  const savedByUrl = new Map<string, Demo193Readback['media'][number]>();
+  if (savedDemo193) {
+    for (const item of savedDemo193.readback.media) {
+      if (!item || typeof item.url !== 'string' || !/^\/[A-Za-z0-9._~!$&()*+,;=@%/-]+$/.test(item.url)
+          || !/^[a-f0-9]{64}$/.test(item.verifiedStoredSha256) || savedByUrl.has(item.url)) {
+        throw new Error('demo193 saved-readback media inventory is malformed or duplicated');
+      }
+      savedByUrl.set(item.url, item);
+    }
+  }
 
   for (const sourceRef of refs) {
     assertWithinBudget(`медиа ${sourceRef}`);
-    const url = new URL(sourceRef, cmsUrl).toString();
-    let response: Response;
-    try {
-      response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
-    } catch (err) {
-      throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+    let bytes: Uint8Array;
+    if (savedDemo193) {
+      const saved = savedByUrl.get(sourceRef);
+      if (!saved) throw new Error(`demo193 saved-readback has no verified media row for ${sourceRef}`);
+      const path = join(savedDemo193.mediaDirectory, `sha256:${saved.verifiedStoredSha256}`);
+      bytes = new Uint8Array(readFileSync(path));
+      if (createHash('sha256').update(bytes).digest('hex') !== saved.verifiedStoredSha256) {
+        throw new Error(`demo193 saved media bytes do not match the readback witness for ${sourceRef}`);
+      }
+    } else {
+      const url = new URL(sourceRef, cmsUrl).toString();
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
+      } catch (err) {
+        throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+      }
+      if (!response.ok) {
+        throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
+      }
+      bytes = new Uint8Array(await response.arrayBuffer());
     }
-    if (!response.ok) {
-      throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length === 0) {
       throw new Error(`медиа ${sourceRef}: CMS вернула пустой файл`);
     }
@@ -343,10 +468,20 @@ async function liveCapture(): Promise<void> {
       );
     }
   }
+  if (savedDemo193) {
+    const expectedCounts: Record<string, number> = {
+      institutes: 3, 'course-groups': 26, seminars: 132, teachers: 31, articles: 68,
+      'schedule-entries': 271, 'news-items': 3, promotions: 3, pages: 9, 'video-playlists': 6,
+    };
+    if (Object.keys(savedDemo193.readback.collections).length !== Object.keys(expectedCounts).length
+        || Object.entries(expectedCounts).some(([name, count]) => savedDemo193.readback.collections[name]?.length !== count)) {
+      throw new Error('demo193 saved-readback collection inventory mismatch');
+    }
+  }
 
-  // Соответствие проверяется ПРОТИВ СХЕМ, а не против полученных записей: запись, где поле
-  // просто пустое, неотличима от записи, у которой источник исчез из схемы. Исчезнувший
-  // источник — отказ; поле схемы, не участвующее в соответствии, — не отказ, но и не тишина.
+  // Первая сверка — против схем в checkout: исчезнувший из схемы источник — отказ. Схема в
+  // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
+  // ответом CMS по каждой записи.
   const schemas: Record<string, CmsSchema> = {};
   for (const st of SOURCE_TYPES) {
     schemas[st.type] = JSON.parse(readFileSync(join(repoRoot, st.schema), 'utf-8')) as CmsSchema;
@@ -372,6 +507,41 @@ async function liveCapture(): Promise<void> {
       `источник исчез из схемы: поле снимка ${first.type}.${first.field} ждёт ${first.source}`,
     );
   }
+
+  // Ответ CMS сверяется с картой по каждой записи: схема в checkout может расходиться с
+  // установленной CMS, и расходятся именно они. Три отказа — поле без решения, исчезнувший
+  // ключ-источник (null и [] — не отказ) и заполненное поле содержимого, которое сайт не показывает.
+  const unknown = new Set<string>();
+  const missing: string[] = [];
+  const unshown: string[] = [];
+  const filledUnmapped = new Map<string, number>();
+  for (const st of SOURCE_TYPES) {
+    for (const record of rawByType[st.type]!) {
+      for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
+      for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
+      for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
+      const seo = (record.seo ?? {}) as Record<string, unknown>;
+      const filled = [
+        ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
+        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) => hasValue(seo[f])).map((f) => `${st.type}.seo.${f}`),
+      ];
+      for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
+    }
+  }
+  // Все три класса — одним отказом: оператор исправляет их за один прогон, а не по очереди.
+  const first = (list: string[]): string => `${list.slice(0, 10).join(', ')}${list.length > 10 ? ` … всего ${list.length}` : ''}`;
+  const refusals = [
+    unknown.size > 0 &&
+      `поля CMS без решения: ${first([...unknown].sort())} — добавить в FIELD_MAP или в ` +
+        'UNMAPPED_SCHEMA_FIELDS (web/scripts/lib/content-field-map.ts)',
+    missing.length > 0 &&
+      `источник исчез из ответа CMS: ${first(missing)} — поле удалено или переименовано в CMS; ` +
+        'обновить FIELD_MAP',
+    unshown.length > 0 &&
+      `заполнены поля, которые сайт ещё не показывает: ${first(unshown)} — правка не дойдёт до сайта; ` +
+        'нужен вывод на сайте или очистка поля в CMS',
+  ].filter(Boolean);
+  if (refusals.length > 0) throw new Error(`${refusals.join('; ')}; снимок не записан`);
 
   const types: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
@@ -450,7 +620,9 @@ async function liveCapture(): Promise<void> {
     referenceDate,
     fingerprint,
     snapshotId: snapshotId({ fingerprint, referenceDate }),
-    origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
+    origin: savedDemo193
+      ? { kind: 'live', url: cmsUrl, capturedAt: savedDemo193.readback.capturedAt }
+      : { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
 
   // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
@@ -487,7 +659,7 @@ async function liveCapture(): Promise<void> {
 
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap, savedDemo193 ? DEMO193_SQL_SHA256 : undefined);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'snapshot.json'), JSON.stringify(snap, null, 2));
@@ -515,10 +687,15 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     console.log(`  ${st.type}: ${types[st.type]!.length} записей`);
   }
-  // Незаявленное поле — это либо забытое соответствие, либо лишнее поле в схеме. Молчать о нём
-  // нельзя: обе причины стоит увидеть, но ни одна не повод остановить захват.
-  for (const item of mapCheck.unmapped) {
-    console.log(`  поле схемы вне соответствия: ${item.type}.${item.field}`);
+  // Непереносимые поля называются вместе с причиной и числом записей, где у них есть данные:
+  // решение не переносить видно в каждом съёме, а не только в коде.
+  for (const [type, fields] of Object.entries(UNMAPPED_SCHEMA_FIELDS)) {
+    for (const [field, reason] of Object.entries(fields)) {
+      console.log(`  поле схемы вне соответствия: ${type}.${field} — с данными в ${filledUnmapped.get(`${type}.${field}`) ?? 0} записях (${reason})`);
+    }
+  }
+  for (const [name, count] of [...filledUnmapped].filter(([n]) => n.includes('.seo.'))) {
+    console.log(`  поле схемы вне соответствия: ${name} — с данными в ${count} записях (${UNMAPPED_SEO_FIELDS[name.split('.')[2]!]})`);
   }
 }
 

@@ -1,4 +1,4 @@
-import { test, expect, type Browser } from '@playwright/test';
+import { test, expect, type Browser, type ViewportSize } from '@playwright/test';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 import { SEL_AWARD_ROW } from './helpers/external-widgets';
 
@@ -59,15 +59,29 @@ interface Shot {
  * декодироваться до захвата, зависит от того, насколько занят сервер.
  *
  * Гейт, флакующий на неизменном дереве, хуже отсутствующего: он приучает перезапускать.
- * Поэтому: прокрутить страницу до низа (это и запускает ленивую загрузку), дождаться
- * тишины в сети, вернуться наверх, дождаться готовности шрифтов и КАЖДОЙ картинки.
+ * Поэтому: пройти страницу шагами по viewport (одного прыжка вниз недостаточно для всех
+ * `loading="lazy"` картинок), дождаться тишины в сети, вернуться наверх, дождаться
+ * готовности шрифтов и КАЖДОЙ картинки.
  * Ожидание тишины — тот же приём, что у прогона эталонов
  * (`web/tests/visual-baseline.spec.ts:31`, `waitForLoadState('networkidle')`).
  */
 async function settle(page: import('@playwright/test').Page): Promise<void> {
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const step = await page.evaluate(() => Math.max(1, Math.floor(window.innerHeight * 0.75)));
+  while (true) {
+    const { height, viewportHeight, currentTop } = await page.evaluate(() => ({
+      height: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      currentTop: window.scrollY,
+    }));
+    const bottom = Math.max(0, height - viewportHeight);
+    if (currentTop >= bottom) break;
+
+    const nextTop = Math.min(currentTop + step, bottom);
+    await page.evaluate((scrollTop) => window.scrollTo({ top: scrollTop, behavior: 'instant' }), nextTop);
+    if ((await page.evaluate(() => window.scrollY)) <= currentTop) break;
+  }
   await page.waitForLoadState('networkidle');
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(
@@ -81,13 +95,14 @@ async function settle(page: import('@playwright/test').Page): Promise<void> {
           })),
       ),
   );
+  await page.evaluate(() => Promise.all([...document.images].map((img) => img.decode().catch(() => undefined))));
 }
 
-async function shot(browser: Browser, path: string): Promise<Shot> {
+async function shot(browser: Browser, path: string, viewport: ViewportSize): Promise<Shot> {
   // Своя страница на каждый прогон: `page.clock.install` ставится на страницу один раз, и
   // два снимка одной и той же страницы совпали бы тривиально — предметом стала бы
   // способность браузера дважды отдать один кадр, а не детерминированность вывода.
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   try {
     await page.clock.install({ time: new Date(ONE_MOMENT) });
@@ -117,9 +132,10 @@ async function shot(browser: Browser, path: string): Promise<Shot> {
 test.describe('визуальные эталоны не зависят от ответа сторонних сервисов', () => {
   test.describe.configure({ timeout: 120_000 });
 
-  test('два прогона при одном моменте дают одни снимки', async ({ browser }) => {
-    const first = await shot(browser, TEMPLATE_MARKER.path);
-    const second = await shot(browser, TEMPLATE_MARKER.path);
+  test('два прогона при одном моменте дают одни снимки', async ({ browser }, testInfo) => {
+    const viewport = testInfo.project.use.viewport as ViewportSize;
+    const first = await shot(browser, TEMPLATE_MARKER.path, viewport);
+    const second = await shot(browser, TEMPLATE_MARKER.path, viewport);
 
     // Контроль отрендеренности — ДО сравнения: он и есть доказательство непустоты
     // предмета. Пустая страница дала бы два одинаковых снимка и зелёный вердикт.
@@ -131,7 +147,7 @@ test.describe('визуальные эталоны не зависят от от
     expect(
       first.fullHeight,
       'высота документа меньше высоты окна: похоже на страницу ошибки, а не на шаблон',
-    ).toBeGreaterThan(720);
+    ).toBeGreaterThan(viewport.height);
     expect(first.fullHeight, 'высота документа разошлась между прогонами').toBe(second.fullHeight);
 
     expect(

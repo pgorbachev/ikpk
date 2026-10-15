@@ -1,4 +1,8 @@
 import type { Snapshot } from './content-snapshot.ts';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Группа обязательных полей: достаточно любого имени из группы (design.md, change
  *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
@@ -193,4 +197,73 @@ export function assertSnapshotContract(snapshot: Snapshot): void {
     .join('; ');
   const examples = violations.slice(0, 3).map((v) => v.recordId).join(', ');
   throw new Error(`контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`);
+}
+
+/**
+ * Prototype-only acceptance for the exact article SEO holes approved for demo193.
+ * The ordinary snapshot/publication contract remains strict; callers must provide
+ * the source SQL digest, while this helper pins both that digest and the allowlist
+ * bytes. Empty CMS values are preserved in the snapshot, never filled here.
+ */
+export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourceSqlSha256: string): void {
+  const expectedSqlSha256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+  const expectedAllowlistSha256 = 'b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5';
+  if (sourceSqlSha256 !== expectedSqlSha256) throw new Error('demo193 SQL source pin mismatch');
+
+  const allowlistPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../cms/src/lib/demo193-source-empty-fields.json');
+  const allowlistBytes = readFileSync(allowlistPath);
+  if (createHash('sha256').update(allowlistBytes).digest('hex') !== expectedAllowlistSha256) {
+    throw new Error('demo193 source-empty-fields allowlist pin mismatch');
+  }
+  const allowlist = JSON.parse(allowlistBytes.toString('utf8')) as {
+    sourceSqlSha256?: unknown;
+    entries?: { type?: unknown; legacyId?: unknown; slug?: unknown; fields?: unknown }[];
+  };
+  if (allowlist.sourceSqlSha256 !== expectedSqlSha256 || !Array.isArray(allowlist.entries)) {
+    throw new Error('demo193 source-empty-fields SQL pin mismatch');
+  }
+
+  const articleEntries = allowlist.entries.filter((entry) => entry.type === 'article');
+  if (articleEntries.length !== 66) throw new Error('demo193 article SEO allowlist count mismatch');
+  const aliases: Record<string, string> = {
+    seo_title: 'page_title',
+    seo_description: 'page_description',
+  };
+  const expected = new Set<string>();
+  for (const entry of articleEntries) {
+    if (typeof entry.legacyId !== 'string' || typeof entry.slug !== 'string' || !Array.isArray(entry.fields)) {
+      throw new Error('demo193 article SEO allowlist entry is malformed');
+    }
+    if (entry.fields.length !== 2 || !entry.fields.includes('seo_title') || !entry.fields.includes('seo_description')) {
+      throw new Error(`demo193 article SEO allowlist fields mismatch for ${entry.slug}`);
+    }
+    for (const sourceField of entry.fields) {
+      const field = aliases[sourceField];
+      if (!field) throw new Error(`demo193 article SEO allowlist has unsupported field for ${entry.slug}`);
+      const record = (snapshot.content.types.articles ?? []).find(
+        (article) => article.legacy_id === entry.legacyId && article.slug === entry.slug,
+      );
+      if (!record || !isEmpty(record[field])) throw new Error(`demo193 approved empty SEO source changed for ${entry.slug}.${field}`);
+      expected.add(`articles|${entry.slug}|${field}|required-field-empty`);
+    }
+  }
+  if (expected.size !== 132) throw new Error('demo193 article SEO allowlist tuple count mismatch');
+
+  const violations = validateSnapshotContract(snapshot).violations;
+  const observedAllowed = new Set<string>();
+  const unexpected = violations.filter((violation) => {
+    const key = `${violation.type}|${violation.recordId}|${violation.field ?? ''}|${violation.rule}`;
+    if (expected.has(key) && !observedAllowed.has(key)) {
+      observedAllowed.add(key);
+      return false;
+    }
+    return true;
+  });
+  if (unexpected.length > 0 || observedAllowed.size !== expected.size) {
+    const missing = [...expected].filter((key) => !observedAllowed.has(key));
+    throw new Error(
+      `demo193 snapshot contract mismatch: unexpected ${unexpected.length}, approved holes ${observedAllowed.size}/${expected.size}` +
+        (missing.length ? `; missing approved holes: ${missing.slice(0, 3).join(', ')}` : ''),
+    );
+  }
 }

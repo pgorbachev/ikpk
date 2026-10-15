@@ -29,6 +29,13 @@
       "customField": "global::wall-clock-datetime",
       "required": false
     },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
     "city": {
       "type": "string",
       "required": false
@@ -40,6 +47,10 @@
       "type": "decimal"
     },
     "isFree": {
+      "type": "boolean",
+      "default": false
+    },
+    "isEventCollection": {
       "type": "boolean",
       "default": false
     },

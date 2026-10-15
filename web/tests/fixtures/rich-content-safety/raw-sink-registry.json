@@ -19,10 +19,10 @@
       "nodeKind": "element",
       "elementName": "script",
       "attribute": "set:html",
-      "expression": "serializeJsonLd(schema)",
+      "expression": "serializeJsonLd(scopeSchemaToSite(schema))",
       "attrKind": "expression",
-      "locator": "components/HeadMeta.astro:L66:C12:element:script:set:html",
-      "fingerprint": "components/HeadMeta.astro:L66:C12:element:script:set:html"
+      "locator": "components/HeadMeta.astro:L82:C12:element:script:set:html",
+      "fingerprint": "components/HeadMeta.astro:L82:C12:element:script:set:html"
     },
     {
       "id": "rich-content-singleton",

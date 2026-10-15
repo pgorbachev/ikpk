@@ -16,9 +16,10 @@ const TEACHERS = [
   'institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83',
 ].map((legacy_id) => ({ legacy_id, name: `Персона ${legacy_id}` }));
 const EXPECTED_METHOD_AUTHOR_IDS = new Set([
-  '80', '79', '77', '74', '71', '70', '69', '68', '67', '66', '65',
+  '80', '79', '77', '74', '71', '70', '69', '68', '67', '66', '65', '64', '63',
 ]);
 const SCHREINER_ID = '63';
+const RADZINSKAYA_ID = '64';
 const ADMIN_EDITED_ID = '85';
 const EXISTING_NULL_TRAIT_ID = '80';
 const EXISTING_MISSING_TRAIT_ID = '79';
@@ -157,8 +158,8 @@ afterAll(async () => {
 });
 
 describe('D10: trait в живом пути импорта', () => {
-  it('CREATE сохраняет разовое первичное деление 11 авторов методик и Шрайнера как преподавателя', () => {
-    expect(METHOD_AUTHOR_LEGACY_IDS.size, 'production-набор методистов должен содержать 11 ID').toBe(11);
+  it('CREATE сохраняет первичное деление с обеими принятыми коррекциями Апледжера', () => {
+    expect(METHOD_AUTHOR_LEGACY_IDS.size, 'source-набор авторов методик должен содержать 13 ID').toBe(13);
     expect([...METHOD_AUTHOR_LEGACY_IDS].sort(), 'production-набор должен точно совпадать с принятым списком')
       .toEqual([...EXPECTED_METHOD_AUTHOR_IDS].sort());
     const createdById = new Map(creates.map((request) => [request.legacyId, request.data]));
@@ -170,7 +171,8 @@ describe('D10: trait в живом пути импорта', () => {
       const expected = EXPECTED_METHOD_AUTHOR_IDS.has(id) ? 'method-author' : 'teacher';
       expect(created!.trait, `CREATE ${id} (${teacher.name}) не передал trait=${expected} в Strapi`).toBe(expected);
     }
-    expect(createdById.get(SCHREINER_ID)?.trait, 'legacy 63 — Шрайнер, он остаётся преподавателем').toBe('teacher');
+    expect(createdById.get(SCHREINER_ID)?.trait, 'legacy 63 — Шрайнер, автор методики').toBe('method-author');
+    expect(createdById.get(RADZINSKAYA_ID)?.trait, 'legacy 64 — Радзинская, автор методики').toBe('method-author');
   });
 
   it('UPDATE существующей персоны оставляет trait администратора без изменения', () => {

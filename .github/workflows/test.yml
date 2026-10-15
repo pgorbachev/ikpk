@@ -425,7 +425,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: scripts/package-lock.json
+          cache-dependency-path: |
+            scripts/package-lock.json
+            web/package-lock.json
+
+      # Some scripts tests exercise the shared web HTML sanitizer. Install its
+      # dependencies as well so those tests run with the same parse5 version as
+      # the web package on a clean runner.
+      - name: Install web dependencies used by shared-source tests
+        working-directory: .
+        run: npm ci --prefix web
 
       - name: Install dependencies
         run: npm ci
@@ -466,6 +475,7 @@ jobs:
         run: |
           base="$RUNNER_TEMP/scripts-base-worktree"
           git worktree add --detach "$base" "$BASE_SHA"
+          npm ci --prefix "$base/web"
           npm ci --prefix "$base/scripts"
           (cd "$base/scripts" && npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-base.json")
           git worktree remove --force "$base"
