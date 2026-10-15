@@ -119,6 +119,9 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           ...base('sem', 'Seminar'),
           description: '<p>about seminar</p>',
           full_text: '<p>details</p>',
+          learning_mode: '<p>learning mode</p>',
+          learning_plan: '<p>learning plan</p>',
+          recommendations: '<p>recommendations</p>',
           image: stubMedia(3),
           price: 1000,
           duration: '2 days',
@@ -166,6 +169,8 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           isFree: false,
           entry_status: 'active',
           registrationFormLink: 'https://example.invalid/form',
+          image: stubMedia(3),
+          isEventCollection: false,
           description: '<p>event description</p>',
           additionalText: '<p>addendum</p>',
           duration: '2 days',
@@ -180,6 +185,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           ...without(base('news', 'News'), 'slug'),
           description: '<p>news</p>',
           image: stubMedia(6),
+          date: '2026-02-01T00:00:00.000Z',
           link: 'https://example.invalid',
           priority: 0,
         },
@@ -190,6 +196,8 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
         {
           ...without(base('promo', 'Promotion'), 'slug'),
           description: '<p>promotion</p>',
+          date: '2026-02-01T00:00:00.000Z',
+          type: 'INSTITUTE',
           // Тот же файл, что у новости: повторная ссылка на одно содержимое обязана дать ОДНУ
           // запись хранилища, а не две (идемпотентность по содержимому).
           image: stubMedia(6),

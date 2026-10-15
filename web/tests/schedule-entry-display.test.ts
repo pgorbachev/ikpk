@@ -230,6 +230,8 @@ describe('ближайшие семинары — ещё не начавшиес
   const now = new Date(`${TODAY}T12:00:00.000Z`);
   const CST2_SEP = 377;
 
+  afterEach(() => vi.restoreAllMocks());
+
   it('форматирует SQL-дни летней и зимней Nicosia-полночи в московский календарь', () => {
     expect(formatScheduleDateRange('2024-09-22T21:00:00.000Z', '2024-09-25T21:00:00.000Z')).toBe('23–26 сен');
     expect(formatScheduleDateRange('2024-11-07T22:00:00.000Z', '2024-11-07T22:00:00.000Z')).toBe('8 ноя');
