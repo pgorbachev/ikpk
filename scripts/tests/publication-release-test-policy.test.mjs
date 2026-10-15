@@ -161,7 +161,7 @@ test('workflow preserves existing Tests and all supplemental subjects without de
   const reusable = readFileSync(new URL('../../.github/workflows/test.yml', import.meta.url), 'utf8');
   assert.match(reusable, /group:.*inputs.artifact_suffix != '' && format\('release-source-\{0\}-\{1\}', github.run_id, github.run_attempt\)/);
   assert.match(reusable, /cancel-in-progress:.*inputs.artifact_suffix == ''/);
-  assert.match(reusable, /if \[ "\$RELEASE_STRICT_REPORTS" = true \]; then historical_args\+=\(--exclude tests\/parity-compare\.test\.ts\); fi/);
+  assert.match(reusable, /if \[ "\$RELEASE_STRICT_REPORTS" = true \]; then\n\s+export PAYMENT_ROLE=ci\n\s+historical_args\+=\(--exclude tests\/parity-compare\.test\.ts\)\n\s+fi\n\s+npm run build/);
   assert.match(workflow, /RELEASE_SOURCE_PROFILE: source-default-ci-pinned/);
   assert.doesNotMatch(workflow, /secrets\.|secrets: inherit|--update-snapshots|continue-on-error: true|ssh |deploy\.sh/);
   assert.equal(new Set(SOURCE_SUITES).size, SOURCE_SUITES.length);

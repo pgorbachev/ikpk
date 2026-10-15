@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-export const REPORT_POLICY_VERSION = 2;
+export const REPORT_POLICY_VERSION = 3;
 export const SOURCE_REPORT_PROFILE = 'source-default-ci-pinned';
 export const NON_TEST_CHECKS = Object.freeze(['dependency-invariants', 'cms-build']);
 const item = (suite, runner, file, files = [], projects = []) => ({ suite, runner, file, files, projects });
@@ -77,6 +77,23 @@ export const ACCEPTED_DEVIATIONS = Object.freeze(['home', 'course', 'seminar', '
     debt: 'TD-52', acceptedOn: '2026-08-25', deferredOn: '2026-08-29', decisionReference: 'docs/tech-debt.md (TD-52)',
   })));
 
+const PAYMENT_CI_GUARDS = Object.freeze([
+  { file: 'payment-role-dist.test.ts', title: 'роль ci: ни платёжной формы, ни объявленного эндпоинта',
+    ancestors: ['5.10/6.13 объявленный адрес и число форм ожидаются ПО РОЛИ'] },
+  { file: 'payment-role-dist.test.ts', title: 'все страницы артефакта объявляют одну и ту же роль',
+    ancestors: ['5.10a артефакт объявляет роль перечислением; прежний булев признак удалён'] },
+  { file: 'payment-role-dist.test.ts', title: 'активной формы нет — страница не обещает оплату на ней и сохраняет уход на внешнюю форму',
+    ancestors: ['5.10d описание пути оплаты едет вместе с формой'] },
+]);
+export const VITEST_ROLE_OMISSIONS = Object.freeze([
+  ['3.8 / 3.8a подписи и устаревшая подводка', '3.8 подписи формы говорят про оплату, а не про заявку'],
+  ['3.8 / 3.8a подписи и устаревшая подводка', '3.8a устаревшая подводка отсутствует'],
+  ['3.12 форма в сборке скрыта, со своим признаком и адресом', 'форма есть, скрыта, признак не href, адрес — буквальное равенство боевому контуру'],
+  ['3a.2 форма в собранной странице до скриптов', 'форма скрыта, со своим признаком и адресом; признак не на ArticleFilterBar и LeadMagnet'],
+  ['3.12c описание порядка оплаты соответствует форме', 'ветвь (2) боевая сборка с формой → описание называет оплату на сайте, не сводит к заявке со звонком'],
+].map(([ancestor, title]) => ({ suite: 'web-build', file: 'payment-form-dist.test.ts', title, ancestors: [ancestor],
+  profile: SOURCE_REPORT_PROFILE, role: 'ci', reason: 'active-payment-form-absent-in-ci-role', guards: PAYMENT_CI_GUARDS })));
+
 export class ReleaseReportError extends Error {
   constructor(message) { super(message); this.name = 'ReleaseReportError'; this.code = 'release-test-report-invalid'; }
 }
@@ -96,17 +113,27 @@ const positive = (summary) => {
   requireThat(summary.total === summary.passed + summary.skipped, `${summary.suite}: inconsistent executed totals`);
 };
 
-function vitest(report, definition) {
+function vitest(report, definition, profile) {
   requireThat(report.success === true && Array.isArray(report.testResults), `${definition.suite}: invalid Vitest report`);
-  const tests = report.testResults.flatMap((file) => file.assertionResults ?? []);
+  const tests = report.testResults.flatMap((file) => (file.assertionResults ?? []).map((test) => ({ ...test, file: filename(file.name) })));
   requireThat(tests.length === report.numTotalTests && tests.length > 0, `${definition.suite}: Vitest test inventory mismatch`);
-  requireThat(report.numPassedTests === tests.length && report.numFailedTests === 0 && report.numPendingTests === 0 && (report.numTodoTests ?? 0) === 0,
-    `${definition.suite}: Vitest contains failed/skipped/todo tests`);
+  const roleOmissions = [];
   for (const test of tests) {
-    requireThat(test.status === 'passed' && (test.failureMessages ?? []).length === 0, `${definition.suite}: Vitest non-pass`);
+    requireThat((test.failureMessages ?? []).length === 0, `${definition.suite}: Vitest failure`);
     requireThat((test.retryCount ?? test.meta?.retryCount ?? 0) === 0 && (test.retryReasons ?? []).length === 0, `${definition.suite}: Vitest retry`);
+    if (test.status === 'passed') continue;
+    const omission = VITEST_ROLE_OMISSIONS.find((entry) => entry.suite === definition.suite && entry.profile === profile &&
+      entry.file === test.file && entry.title === test.title && JSON.stringify(entry.ancestors) === JSON.stringify(test.ancestorTitles));
+    requireThat(omission && ['pending', 'skipped'].includes(test.status), `${definition.suite}: Vitest unapproved non-pass`);
+    requireThat(!roleOmissions.some((entry) => entry.title === omission.title), `${definition.suite}: duplicate Vitest role omission`);
+    for (const guard of omission.guards) requireThat(tests.some((candidate) => candidate.file === guard.file && candidate.title === guard.title &&
+      JSON.stringify(candidate.ancestorTitles) === JSON.stringify(guard.ancestors) && candidate.status === 'passed'), `${definition.suite}: Vitest role omission guard missing`);
+    roleOmissions.push(structuredClone(omission));
   }
-  return { total: tests.length, passed: tests.length, omissions: [] };
+  const passed = tests.length - roleOmissions.length;
+  requireThat(report.numPassedTests === passed && report.numFailedTests === 0 && report.numPendingTests === roleOmissions.length && (report.numTodoTests ?? 0) === 0,
+    `${definition.suite}: Vitest contains failed/skipped/todo tests`);
+  return { total: tests.length, passed, omissions: [], roleOmissions };
 }
 
 function playwright(report, definition, profile) {
@@ -189,7 +216,7 @@ export function validateNativeTestReport(source, definition, { profile } = {}) {
   else {
     let report;
     try { report = JSON.parse(source); } catch { throw new ReleaseReportError(`${definition.suite}: malformed JSON report`); }
-    counts = definition.runner === 'vitest' ? vitest(report, definition) : playwright(report, definition, profile);
+    counts = definition.runner === 'vitest' ? vitest(report, definition, profile) : playwright(report, definition, profile);
   }
   counts.roleOmissions ??= [];
   counts.acceptedDeviations ??= [];
@@ -213,8 +240,11 @@ export function validateReportSummaries(summaries, { profile } = {}) {
       `${definition.suite}: duplicate applicability identity`);
     for (const omission of summary.omissions) requireThat(definition.runner === 'playwright' && definition.files.includes(omission.file) && definition.projects.includes(omission.project) &&
       VIEWPORT_OMISSIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(omission)), `${definition.suite}: unknown omission`);
-    for (const omission of summary.roleOmissions) requireThat(definition.runner === 'playwright' && definition.files.includes(omission.file) && definition.projects.includes(omission.project) &&
-      omission.profile === profile && ROLE_OMISSIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(omission)), `${definition.suite}: unknown role omission`);
+    for (const omission of summary.roleOmissions) {
+      const known = definition.runner === 'playwright' ? ROLE_OMISSIONS.filter((entry) => definition.files.includes(entry.file) && definition.projects.includes(entry.project))
+        : definition.runner === 'vitest' ? VITEST_ROLE_OMISSIONS.filter((entry) => entry.suite === definition.suite) : [];
+      requireThat(omission.profile === profile && known.some((entry) => JSON.stringify(entry) === JSON.stringify(omission)), `${definition.suite}: unknown role omission`);
+    }
     for (const deviation of summary.acceptedDeviations) requireThat(definition.runner === 'playwright' && definition.files.includes(deviation.file) && definition.projects.includes(deviation.project) &&
       deviation.profile === profile && ACCEPTED_DEVIATIONS.some((entry) => JSON.stringify(entry) === JSON.stringify(deviation)), `${definition.suite}: unaccepted deviation`);
     return { ...summary, omissions: summary.omissions.map((entry) => ({ ...entry })), roleOmissions: summary.roleOmissions.map((entry) => ({ ...entry })),

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { REQUIRED_TEST_REPORTS, VIEWPORT_OMISSIONS, ROLE_OMISSIONS, ACCEPTED_DEVIATIONS, SOURCE_REPORT_PROFILE, NON_TEST_CHECKS, validateNativeTestReport,
+import { REQUIRED_TEST_REPORTS, VIEWPORT_OMISSIONS, ROLE_OMISSIONS, VITEST_ROLE_OMISSIONS, ACCEPTED_DEVIATIONS, SOURCE_REPORT_PROFILE, NON_TEST_CHECKS, validateNativeTestReport,
   validateReportSummaries, collectTestReportSummaries } from '../release-test-reports.mjs';
 import { SOURCE_SUITES } from '../release-test-policy.mjs';
 
@@ -36,6 +36,36 @@ test('Vitest requires actual positive assertions and rejects skip/todo/failure/r
     (report) => { report.testResults[0].assertionResults[0].status = 'pending'; },
     (report) => { report.testResults[0].assertionResults[0].retryCount = 1; },
   ]) { const report = vitest(); mutate(report); assert.throws(() => validate(report, vitestDefinition)); }
+});
+
+test('only five ci payment-form Vitest omissions are named nonexecuted cases, with same-report passing role guards', () => {
+  assert.equal(VITEST_ROLE_OMISSIONS.length, 5);
+  const definition = REQUIRED_TEST_REPORTS.find((entry) => entry.suite === 'web-build');
+  const omissions = VITEST_ROLE_OMISSIONS;
+  const guards = omissions[0].guards;
+  const report = { success: true, numTotalTests: omissions.length + guards.length, numPassedTests: guards.length,
+    numFailedTests: 0, numPendingTests: omissions.length, testResults: [
+      { name: '/web/tests/payment-form-dist.test.ts', assertionResults: omissions.map((entry) => ({ title: entry.title, ancestorTitles: entry.ancestors, status: 'pending', failureMessages: [] })) },
+      { name: '/web/tests/payment-role-dist.test.ts', assertionResults: guards.map((entry) => ({ title: entry.title, ancestorTitles: entry.ancestors, status: 'passed', failureMessages: [] })) },
+    ] };
+  const options = { profile: SOURCE_REPORT_PROFILE };
+  const summary = validateNativeTestReport(JSON.stringify(report), definition, options);
+  assert.equal(summary.passed, guards.length);
+  assert.equal(summary.skipped, 5);
+  assert.deepEqual(summary.roleOmissions, omissions);
+  const summaries = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => suite === definition.suite ? summary : ({ suite, runner, reportSha256: 'a'.repeat(64),
+    total: 1, passed: 1, failed: 0, skipped: 0, todo: 0, flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
+  assert.ok(validateReportSummaries(summaries, options));
+  assert.throws(() => validateReportSummaries(summaries, { profile: 'preview-role' }), /unknown role/);
+  assert.throws(() => validateNativeTestReport(JSON.stringify(report), definition, { profile: 'preview-role' }), /unapproved/);
+  assert.throws(() => validateNativeTestReport(JSON.stringify(report), vitestDefinition, options), /unapproved/);
+  for (const mutate of [
+    (value) => { value.testResults[0].assertionResults[0].title = 'unknown payment skip'; },
+    (value) => { value.testResults[0].assertionResults[0].ancestorTitles = ['other describe']; },
+    (value) => { value.testResults[1].assertionResults.pop(); value.numTotalTests--; value.numPassedTests--; },
+    (value) => { value.testResults[1].assertionResults[0].status = 'pending'; value.numPendingTests++; value.numPassedTests--; },
+    (value) => { value.testResults[0].assertionResults.push(value.testResults[0].assertionResults[0]); value.numTotalTests++; value.numPendingTests++; },
+  ]) { const changed = structuredClone(report); mutate(changed); assert.throws(() => validateNativeTestReport(JSON.stringify(changed), definition, options)); }
 });
 
 test('Playwright fails on missing project/file, zero tests, unexpected skip/fixme/flaky/retry', () => {
