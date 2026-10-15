@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { verifyServedPublication } from './published-state.ts';
 import { contentFingerprint, snapshotId } from './content-snapshot.ts';
-import { chooseManualPublication, ciEvidenceProblem, localChecksProblem } from './publish-gate.ts';
+import { chooseManualPublication, publicationCiProblem, localChecksProblem } from './publish-gate.ts';
 import type { PublicationCheckInput } from './publication-checks.ts';
 import type { Snapshot } from './content-snapshot.ts';
 import type { CiEvidence, LocalChecks, PublicationRecord } from './publish-gate.ts';
@@ -13,6 +13,7 @@ import { PublicationReportError } from './publication-report-error.ts';
 
 export interface NewPublicationInput extends PublicationCheckInput {
   publicationId: string; releaseId: string; actor: string; origin: string;
+  sourceRef?: 'main' | 'dev'; sourceProfile?: 'demo-dev';
 }
 export interface PublishedOperation extends PublicationRecord {
   observedEntry: number; highWaterMark: number; headAtLastCheck: string;
@@ -62,7 +63,7 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     audit.code = 'ci-failed';
     const ci = await ports.readCiEvidence(input.commit);
     audit.ciExecutedTests = ci?.executedTests;
-    const ciProblem = ciEvidenceProblem(ci, input.commit);
+    const ciProblem = publicationCiProblem({ ...input, ciEvidence: ci });
     if (ciProblem) throw new Error(ciProblem);
     // Producer-owned objects must never remain aliases of durable publication evidence.
     const ciEvidence = structuredClone(ci);
@@ -129,12 +130,13 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
       headAtLastCheck: input.commit, referenceDate: snapshot.referenceDate, capturedAt: snapshot.origin.capturedAt,
       publishedAt, testRunConclusion: 'success', ciEvidence, localChecks: report,
       deployMode: input.deployMode, paymentRole: input.paymentRole,
+      ...(input.sourceRef === 'dev' ? { sourceRef: 'dev', sourceProfile: input.sourceProfile } : {}),
     };
     selectedOperation = operation;
     const decision = chooseManualPublication({ headCommit: input.commit, headAtLastCheck: input.commit,
       highWaterMark: provenance.highWaterMark, actor: input.actor, now: publishedAt, retentionDays: 0,
       freshPair: operation, verifiedPairs: state.publications, ciEvidence, localChecks: report,
-      destinationId: input.destinationId, treeDigest });
+      destinationId: input.destinationId, treeDigest, sourceRef: input.sourceRef });
     if (decision.action !== 'publish') throw new Error(decision.reason ?? 'publication refused');
     let usable = true;
     const authorize: PublicationAuthorizer = async (request) => {

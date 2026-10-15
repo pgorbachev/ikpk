@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { chooseManualPublication, ciEvidenceProblem, isPublicationRecord, localChecksProblem, ROLLBACK_GROUPS } from './publish-gate.ts';
+import { chooseManualPublication, publicationCiProblem, isPublicationRecord, localChecksProblem, ROLLBACK_GROUPS } from './publish-gate.ts';
 import type { WorkerAudit } from '../publication-audit.ts';
 import type { LocalChecks, PublicationRecord } from './publish-gate.ts';
 import type { PublicationAuthorizer } from './publication-runner.ts';
@@ -9,6 +9,7 @@ import { verifyServedPublication } from './published-state.ts';
 export interface RollbackInput {
   publicationId: string; releaseId: string; destinationId: string; actor: string;
   confirmed: boolean; reason: string; origin: string;
+  deployMode?: 'stand' | 'prod';
 }
 export interface RollbackOperation extends PublicationRecord {
   rollbackOfPublicationId: string; reason: string; rollbackChecks: LocalChecks;
@@ -50,8 +51,9 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
   const { publications } = structuredClone(await ports.state.readHistory());
   const original = publications.find((record) => isPublicationRecord(record) && record.releaseId === input.releaseId && record.destinationId === input.destinationId);
   if (!original || !isPublicationRecord(original) || !Number.isSafeInteger(original.revision) || original.revision <= 0 ||
+      (input.deployMode !== undefined && input.deployMode !== original.deployMode) ||
       original.testRunConclusion !== 'success' ||
-      ciEvidenceProblem(original.ciEvidence, original.commit) || localChecksProblem(original.localChecks, original)) {
+      publicationCiProblem(original) || localChecksProblem(original.localChecks, original)) {
     throw new Error('no verified original retained publication');
   }
   if (publications.some((record) => isPublicationRecord(record) && record.publicationId === input.publicationId)) {

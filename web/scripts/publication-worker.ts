@@ -22,6 +22,8 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
   const configPath = protectedFile(env.PUBLICATION_CONFIG);
   if (configPath !== join(dirname(launcher), 'config.json') || inside(root, launcher) || inside(root, configPath)) throw new Error('untrusted-config');
   const config = readConfig(configPath);
+  const sourceRef = config.sourceRef ?? 'main';
+  if ((env.PUBLICATION_SOURCE_REF ?? 'main') !== sourceRef) throw new Error('untrusted-source');
   if (argv[0] !== config.sshTarget || env.PUBLICATION_DESTINATION_ID !== config.destinationId || env.DEPLOY_MODE !== config.deployMode) throw new Error('publication destination mismatch');
   const scratch = mkdtempSync(join(tmpdir(), 'ikpk-publication-worker-'));
   const home = join(scratch, 'home'); mkdirSync(home);
@@ -40,10 +42,10 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         { cwd: dir, env: gitEnv, encoding: 'utf8', timeout: 120_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     } catch { throw new Error('publication source unavailable'); }
   }
-  function readMain(): string {
-    const result = git(root, 'ls-remote', '--exit-code', '--refs', '--', config.canonicalRepository, 'refs/heads/main');
-    const match = /^([a-f0-9]{40})\s+refs\/heads\/main$/.exec(result);
-    if (!match) throw new Error('canonical main unavailable');
+  function readSourceHead(): string {
+    const result = git(root, 'ls-remote', '--exit-code', '--refs', '--', config.canonicalRepository, `refs/heads/${sourceRef}`);
+    const match = new RegExp(`^([a-f0-9]{40})\\s+refs/heads/${sourceRef}$`).exec(result);
+    if (!match) throw new Error('canonical source unavailable');
     return match[1];
   }
   try {
@@ -55,9 +57,9 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
     }
     const commit = env.PUBLICATION_SOURCE_SHA;
     if (realpathSync(git(root, 'rev-parse', '--show-toplevel')) !== root ||
-        git(root, 'symbolic-ref', 'HEAD') !== 'refs/heads/main' || git(root, 'rev-parse', 'HEAD') !== commit ||
+        git(root, 'symbolic-ref', 'HEAD') !== `refs/heads/${sourceRef}` || git(root, 'rev-parse', 'HEAD') !== commit ||
         git(root, 'remote', 'get-url', 'origin') !== config.canonicalRepository ||
-        git(root, 'status', '--porcelain', '--untracked-files=all') || readMain() !== commit) throw new Error('untrusted-source');
+        git(root, 'status', '--porcelain', '--untracked-files=all') || readSourceHead() !== commit) throw new Error('untrusted-source');
     const webRoot = join(root, 'web');
     if (lstatSync(webRoot).isSymbolicLink() || !lstatSync(webRoot).isDirectory()) throw new Error('untrusted-source');
     try {
@@ -103,16 +105,17 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         } finally { usable = false; }
       }
       return await runNewPublication({ commit, destinationId: config.destinationId, deployMode: config.deployMode,
+        sourceRef, sourceProfile: config.sourceProfile,
         paymentRole: config.paymentRole, actor: config.actor, origin: config.siteUrl, publicationId: id, releaseId: id,
         treeDir: join(webRoot, 'dist'), reportPath: join(reportsDir, 'publication.json'), env: checkEnv }, {
-        readCiEvidence: (sha) => readCiEvidence({ commit: sha, token: env.GH_TOKEN }),
+        readCiEvidence: (sha) => readCiEvidence({ commit: sha, sourceRef, token: env.GH_TOKEN }),
         async runChecks(input) {
           await state.readHistory();
           const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
           const report = await runPublicationChecks(input, ports);
           return { report, snapshot: readPublicationSnapshot(snapshotDir) };
         },
-        readMain: async () => readMain(), state,
+        readMain: async () => readSourceHead(), state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
         fetch: globalThis.fetch, now: () => new Date().toISOString(),

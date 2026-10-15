@@ -30,6 +30,64 @@ export async function digestTree(rootDir, filePaths) {
 
 const inside = (parent, child) => { const rel = relative(parent, child); return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel)); };
 const refuse = (reason) => { throw new Error(reason); };
+// Installed policy: never read source/CI policy from the candidate checkout.
+export function publicationSourceRef(config) {
+  const ref = config.sourceRef ?? 'main';
+  if (ref === 'main' && config.sourceProfile === undefined) return ref;
+  if (ref === 'dev' && config.sourceProfile === 'demo-dev' && config.deployMode === 'stand' &&
+      config.paymentRole === 'ci' && /^(?!root@)[a-z_][a-z0-9_-]*@193\.124\.115\.99$/.test(config.sshTarget) &&
+      config.siteUrl === 'https://staging.ikpk.su') return ref;
+  refuse('untrusted-ref');
+}
+export const SOURCE_CI_JOBS = Object.freeze(['Capture content snapshot', 'Unit and build tests',
+  'Dependency update invariants', 'Scripts unit tests', 'Playwright smoke (desktop + mobile)']);
+/** Read only, before the credential broker or any candidate executable. */
+export async function verifySourceCi({ commit, sourceRef, token, fetch: fetcher = globalThis.fetch }) {
+  if (!/^[a-f0-9]{40}$/.test(commit) || !['main', 'dev'].includes(sourceRef)) refuse('source-ci-failed');
+  const api = 'https://api.github.com/repos/pgorbachev/ikpk';
+  async function request(url) {
+    if (!url.startsWith(`${api}/`)) refuse('source-ci-failed');
+    const response = await fetcher(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+    if (!response.ok || !response.body) refuse('source-ci-failed');
+    const reader = response.body.getReader(); let size = 0; const chunks = [];
+    try {
+      for (;;) { const { done, value } = await reader.read(); if (done) break;
+        size += value.byteLength; if (size > 16 * 1024 * 1024) refuse('source-ci-failed'); chunks.push(value); }
+    } finally { await reader.cancel(); }
+    return { response, data: JSON.parse(Buffer.concat(chunks).toString('utf8')) };
+  }
+  async function list(initial, key) {
+    let url = initial; const seen = new Set(); const items = [];
+    while (url) {
+      if (seen.has(url) || seen.size >= 100) refuse('source-ci-failed'); seen.add(url);
+      const { response, data } = await request(url);
+      if (!Array.isArray(data?.[key]) || !Number.isSafeInteger(data.total_count) || data.total_count < 0) refuse('source-ci-failed');
+      items.push(...data[key]);
+      const next = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+      if (next && (new URL(next).origin !== new URL(initial).origin || new URL(next).pathname !== new URL(initial).pathname)) refuse('source-ci-failed');
+      if (!next && items.length !== data.total_count) refuse('source-ci-failed'); url = next;
+    }
+    return items;
+  }
+  try {
+    const { data: head } = await request(`${api}/git/ref/heads/${sourceRef}`);
+    if (head.ref !== `refs/heads/${sourceRef}` || head.object?.sha !== commit) refuse('source-ci-failed');
+    const runs = await list(`${api}/actions/workflows/test.yml/runs?branch=${sourceRef}&head_sha=${commit}&per_page=100`, 'workflow_runs');
+    const run = runs.filter(candidate => candidate.head_sha === commit && candidate.head_branch === sourceRef &&
+      candidate.path === '.github/workflows/test.yml' && candidate.repository?.full_name === 'pgorbachev/ikpk' &&
+      candidate.head_repository?.full_name === 'pgorbachev/ikpk' &&
+      (candidate.event === 'push' || (sourceRef === 'main' && candidate.event === 'schedule'))).sort((a, b) => b.id - a.id)[0];
+    if (!run || !Number.isSafeInteger(run.id) || run.id <= 0 || run.status !== 'completed' || run.conclusion !== 'success') refuse('source-ci-failed');
+    const jobs = await list(`${api}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`, 'jobs');
+    for (const name of SOURCE_CI_JOBS) {
+      const matches = jobs.filter(job => job.name === name);
+      if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') refuse('source-ci-failed');
+    }
+    return { runId: run.id, commit, sourceRef };
+  } catch { refuse('source-ci-failed'); }
+}
 function cleanEnvironment() {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: tmpdir(),
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' };
@@ -123,7 +181,7 @@ function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
   return audit;
 }
 
-export async function launch(args) {
+export async function launch(args, { fetch = globalThis.fetch } = {}) {
   const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
   if (!['publish', 'rollback', 'recover', 'accept-state'].includes(args[0])) refuse('untrusted-ref');
@@ -133,7 +191,7 @@ export async function launch(args) {
     const key = args[i];
     const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] :
       accepting ? ['--config', '--observed-entry', '--fingerprint', '--confirm'] : command === 'recover' ? ['--config'] :
-        ['--config', '--source-url', '--source-ref', '--source-dir'];
+        ['--config', '--source-url', '--source-ref', '--source-dir', '--expected-sha'];
     if (!allowed.includes(key) || options.has(key)) refuse('invalid-arguments');
     if (key === '--confirm') options.set(key, true);
     else {
@@ -164,6 +222,7 @@ export async function launch(args) {
       !Array.isArray(config.credentialBroker) || !config.credentialBroker.length ||
       config.credentialBroker.some((arg) => typeof arg !== 'string') || !isAbsolute(config.credentialBroker[0])) refuse('untrusted-config');
   checks.push('destination-config');
+  const sourceRef = publicationSourceRef(config);
   if (command !== 'publish') {
     const runtime = join(dirname(installed), 'runtime');
     const entry = join(runtime, 'web/scripts/publication-operator.ts');
@@ -199,8 +258,9 @@ export async function launch(args) {
   const source = options.get('--source-url');
   if (typeof config.canonicalRepository !== 'string' || !source || source !== config.canonicalRepository || source.startsWith('-')) refuse('untrusted-source');
   checks.push('canonical-repository');
-  if (options.get('--source-ref') !== 'main') refuse('untrusted-ref');
-  checks.push('main-ref');
+  if (options.get('--source-ref') !== sourceRef) refuse('untrusted-ref');
+  if (options.has('--expected-sha') && !/^[a-f0-9]{40}$/.test(options.get('--expected-sha'))) refuse('invalid-arguments');
+  checks.push(`${sourceRef}-ref`);
   const sourceDir = options.get('--source-dir');
   if (sourceDir) {
     const root = realpathSync(sourceDir);
@@ -212,13 +272,14 @@ export async function launch(args) {
     let head;
     try {
       // An empty template and disabled hooks prevent local Git configuration from running code.
-      git(scratch, 'clone', '--template=', '--no-local', '--single-branch', '--branch', 'main', '--', source, checkout);
+      git(scratch, 'clone', '--template=', '--no-local', '--single-branch', '--branch', sourceRef, '--', source, checkout);
       head = git(checkout, 'rev-parse', 'HEAD');
       if (!/^[a-f0-9]{40}$/.test(head) ||
-          git(checkout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main' ||
-          git(checkout, 'rev-parse', '--verify', 'refs/remotes/origin/main') !== head ||
+          git(checkout, 'symbolic-ref', 'HEAD') !== `refs/heads/${sourceRef}` ||
+          git(checkout, 'rev-parse', '--verify', `refs/remotes/origin/${sourceRef}`) !== head ||
           git(checkout, 'status', '--porcelain')) refuse('source-unavailable');
     } catch { refuse('source-unavailable'); }
+    if (options.has('--expected-sha') && options.get('--expected-sha') !== head) refuse('source-sha-mismatch');
     if (sourceDir && (git(sourceDir, 'rev-parse', 'HEAD') !== head || git(sourceDir, 'remote', 'get-url', 'origin') !== source)) refuse('untrusted-source');
     if (sourceDir) {
       // Read the operator files using the trusted clone's index/config. The operator's
@@ -226,17 +287,34 @@ export async function launch(args) {
       if (git(checkout, '--work-tree', realpathSync(sourceDir), 'status', '--porcelain', '--untracked-files=all')) refuse('dirty-source');
       checks.push('operator-source-clean');
     }
-    checks.push('fresh-canonical-main');
+    checks.push(`fresh-canonical-${sourceRef}`);
     const worker = join(checkout, 'scripts/deploy-web.sh');
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
         !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
     checks.push('contained-worker');
+    let ciToken;
+    if (config.ciTokenFile !== undefined) {
+      try {
+        if (typeof config.ciTokenFile !== 'string' || !isAbsolute(config.ciTokenFile)) refuse('untrusted-config');
+        const path = protectedFile(config.ciTokenFile), stat = lstatSync(path);
+        if ((stat.mode & 0o077) || stat.uid !== process.getuid() || insideRepository(dirname(path))) refuse('untrusted-config');
+        ciToken = readFileSync(path, 'utf8').trim();
+        if (!ciToken || /\s/.test(ciToken)) refuse('untrusted-config');
+      } catch { refuse('untrusted-config'); }
+    }
+    await verifySourceCi({ commit: head, sourceRef, token: ciToken, fetch });
+    checks.push('trusted-source-ci');
+    // CI reads may take time: bind credential delivery to the same canonical head again.
+    try {
+      const remoteHead = git(scratch, 'ls-remote', '--exit-code', '--refs', '--', source, `refs/heads/${sourceRef}`);
+      if (remoteHead.split(/\s+/).join(' ') !== `${head} refs/heads/${sourceRef}`) refuse('source-sha-mismatch');
+    } catch { refuse('source-sha-mismatch'); }
     const credentials = brokerCredentials(config, configPath);
     checks.push('credential-delivery');
     const result = spawnSync('/bin/bash', [worker, config.sshTarget], { cwd: checkout,
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
         PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
-        PUBLICATION_SOURCE_SHA: head, PUBLICATION_LAUNCHER: installed },
+        PUBLICATION_SOURCE_SHA: head, PUBLICATION_SOURCE_REF: sourceRef, PUBLICATION_LAUNCHER: installed },
       encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024,
       stdio: ['ignore', 'ignore', 'ignore', 'pipe'] });
     // Repository subprocess output is not an audit log: it may contain credentials.
@@ -252,7 +330,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try { process.stdout.write(`${JSON.stringify(await launch(process.argv.slice(2)))}\n`); }
   catch (error) {
     const reasons = new Set(['hosted-publication-forbidden', 'untrusted-source', 'dirty-source', 'untrusted-ref',
-      'source-unavailable', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
+      'source-unavailable', 'source-sha-mismatch', 'source-ci-failed', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
     process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed',
       ...(error.audit ? { audit: error.audit } : {}) })}\n`);
     process.exitCode = 1;

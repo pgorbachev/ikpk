@@ -1,0 +1,91 @@
+✖ source branch defaults main; dev needs the exact installed demo profile (0.391833ms)
+✖ installed CI gate accepts exact dev push SHA and checks every required job (0.159375ms)
+✖ installed gate refuses wrong branch/SHA/event/workflow/fork and skipped or absent jobs (0.119375ms)
+✖ generic CI validator keeps main default and explicitly validates dev evidence (0.486709ms)
+✖ installed launcher rejects moved SHA and incomplete CI before calling the credential broker (714.830667ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 812.190625
+
+✖ failing tests:
+
+test at scripts/tests/publication-launcher-ci-source.test.mjs:27:1
+✖ source branch defaults main; dev needs the exact installed demo profile (0.391833ms)
+  TypeError: launcher.publicationSourceRef is not a function
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:28:25)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.start (node:internal/test_runner/test:1003:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+
+test at scripts/tests/publication-launcher-ci-source.test.mjs:34:1
+✖ installed CI gate accepts exact dev push SHA and checks every required job (0.159375ms)
+  TypeError: launcher.verifySourceCi is not a function
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:36:18)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+
+test at scripts/tests/publication-launcher-ci-source.test.mjs:40:1
+✖ installed gate refuses wrong branch/SHA/event/workflow/fork and skipped or absent jobs (0.119375ms)
+  TypeError: launcher.verifySourceCi is not a function
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:45:35)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+
+test at scripts/tests/publication-launcher-ci-source.test.mjs:55:1
+✖ generic CI validator keeps main default and explicitly validates dev evidence (0.486709ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'untrusted-ci-run'
+  - undefined
+  
+      at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:60:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'untrusted-ci-run',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at scripts/tests/publication-launcher-ci-source.test.mjs:62:1
+✖ installed launcher rejects moved SHA and incomplete CI before calling the credential broker (714.830667ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /source-sha-mismatch/. Input:
+  
+  'Error: invalid-arguments'
+  
+      at async TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:79:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: invalid-arguments
+        at refuse (file:///private/tmp/ikpk-source-ci-s6nZR2/protected/publication-launcher.mjs:32:36)
+        at Module.launch (file:///private/tmp/ikpk-source-ci-s6nZR2/protected/publication-launcher.mjs:137:53)
+        at TestContext.<anonymous> (file:///Users/pgorbachev/projects/private/ikpk-release-ci-source-20261015/scripts/tests/publication-launcher-ci-source.test.mjs:79:31)
+        at async Test.run (node:internal/test_runner/test:1113:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:788:7),
+    expected: /source-sha-mismatch/,
+    operator: 'rejects',
+    diff: 'simple'
+  }

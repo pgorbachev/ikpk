@@ -30,6 +30,7 @@ export interface PublicationRecord extends VerifiedPair {
   publicationId: string; releaseId: string; destinationId: string; treeDigest: string;
   publishedAt: string; actor: string; ciEvidence: CiEvidence; localChecks: LocalChecks;
   paymentRole: 'ci' | 'stand' | 'prod'; deployMode: 'stand' | 'prod';
+  sourceRef?: 'main' | 'dev'; sourceProfile?: 'demo-dev';
 }
 export interface CiPolicy { repository: string; workflow: string; requiredJobs: readonly string[] }
 export const PUBLICATION_CI_POLICY: CiPolicy = {
@@ -53,11 +54,12 @@ function positiveCount(value: unknown): value is number { return Number.isSafeIn
 
 /** Pure validator. Production callers use the fixed policy, never a policy read from a report. */
 export function ciEvidenceProblem(evidence: CiEvidence | undefined, commit: string,
-  policy: CiPolicy = PUBLICATION_CI_POLICY): string | undefined {
+  policy: CiPolicy = PUBLICATION_CI_POLICY, sourceRef: 'main' | 'dev' = 'main'): string | undefined {
   if (!evidence) return 'missing-ci-evidence';
   if (!nonempty(policy.repository) || !nonempty(policy.workflow) || !policy.requiredJobs.length) return 'empty-ci-policy';
   if (evidence.repository !== policy.repository || evidence.workflow !== policy.workflow ||
-    evidence.branch !== 'main' || evidence.commit !== commit || !['push', 'schedule'].includes(evidence.event)) return 'untrusted-ci-run';
+    !['main', 'dev'].includes(sourceRef) || evidence.branch !== sourceRef || evidence.commit !== commit ||
+    !(evidence.event === 'push' || (sourceRef === 'main' && evidence.event === 'schedule'))) return 'untrusted-ci-run';
   if (!positiveCount(evidence.runId) || evidence.conclusion !== 'success') return 'unsuccessful-ci-run';
   if (!positiveCount(evidence.executedTests)) return `ci-executed-tests:${evidence.executedTests ?? 0}`;
   if (!Array.isArray(evidence.jobs)) return 'missing-ci-jobs';
@@ -65,6 +67,15 @@ export function ciEvidenceProblem(evidence: CiEvidence | undefined, commit: stri
     const matching = evidence.jobs.filter((job) => job.name === name);
     if (matching.length !== 1 || matching[0].conclusion !== 'success') return `required-ci-job:${name}`;
   }
+}
+
+/** Legacy records have no source fields and continue to mean main. */
+export function publicationCiProblem(record: Pick<PublicationRecord, 'ciEvidence' | 'commit' | 'deployMode' | 'paymentRole' | 'sourceRef' | 'sourceProfile'>,
+  policy: CiPolicy = PUBLICATION_CI_POLICY): string | undefined {
+  const sourceRef = record.sourceRef ?? 'main';
+  if (sourceRef === 'dev' ? record.sourceProfile !== 'demo-dev' || record.deployMode !== 'stand' || record.paymentRole !== 'ci' :
+      sourceRef !== 'main' || record.sourceProfile !== undefined) return 'untrusted-publication-source';
+  return ciEvidenceProblem(record.ciEvidence, record.commit, policy, sourceRef);
 }
 
 export function localChecksProblem(report: LocalChecks | undefined,
@@ -140,6 +151,7 @@ export function chooseManualPublication(input: {
   highWaterMark: number; now: string; retentionDays: number; actor: string;
   freshPair?: VerifiedPair; ciEvidence?: CiEvidence; localChecks?: LocalChecks;
   destinationId?: string; treeDigest?: string; expectedCi?: CiPolicy;
+  sourceRef?: 'main' | 'dev';
   pendingDestinations?: string[];
   retainedReleases?: { releaseId: string; destinationId: string; treeDigest: string }[];
   rollback?: { snapshotId: string; releaseId?: string; confirmed: boolean; reason?: string; reasonHeadNotPublished?: string };
@@ -165,7 +177,7 @@ export function chooseManualPublication(input: {
     if (!retained) return refuse('release-beyond-retention');
     if (retained.treeDigest !== pair.treeDigest || treeDigest !== pair.treeDigest) return refuse('retained-release-digest-mismatch');
     if (pair.testRunConclusion !== 'success') return refuse('original-pair-unsuccessful');
-    const problem = ciEvidenceProblem(pair.ciEvidence, pair.commit, policy) ??
+    const problem = publicationCiProblem(pair, policy) ??
       localChecksProblem(pair.localChecks, pair) ?? localChecksProblem(input.localChecks, pair, ROLLBACK_GROUPS);
     if (problem) return refuse(problem);
     return { action: 'publish', pair, writesProvenanceEntry: false,
@@ -176,9 +188,10 @@ export function chooseManualPublication(input: {
   if (input.headCommit !== input.headAtLastCheck) return refuse('head-moved');
   const pair = input.freshPair;
   if (!pair || pair.commit !== input.headCommit || pair.testRunConclusion !== 'success') return refuse('no-fresh-verified-pair-for-head');
+  if (input.sourceRef === 'dev' && (!isPublicationRecord(pair) || publicationCiProblem(pair, policy))) return refuse('untrusted-publication-source');
   if (!positiveCount(pair.revision) || !Number.isSafeInteger(input.highWaterMark) ||
     input.highWaterMark < 0 || pair.revision < input.highWaterMark) return refuse('content-newer-than-verified-pair');
-  const problem = ciEvidenceProblem(input.ciEvidence, pair.commit, policy) ??
+  const problem = ciEvidenceProblem(input.ciEvidence, pair.commit, policy, input.sourceRef) ??
     localChecksProblem(input.localChecks, { ...pair, destinationId, treeDigest });
   if (problem) return refuse(problem);
   return { action: 'publish', pair };
