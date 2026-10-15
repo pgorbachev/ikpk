@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "2026.09.21T00.00.00.rename-status-columns",
+      "phase": "before-sync",
+      "kind": "strapi-native",
+      "path": "2026.09.21T00.00.00.rename-status-columns.js",
+      "sha256": "5f7ea6cb13aee8385d68901c42b73113cb3513bd45e802f79bc8def11c0ed215",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": { "seminars": ["status"], "schedule_entries": ["status"] }
+        }
+      },
+      "preconditions": { "columns": ["seminars.status", "schedule_entries.status"] },
+      "postconditions": { "columns": ["seminars.seminar_status", "schedule_entries.entry_status"] },
+      "readback": { "kind": "strapi-native-history-and-target-columns" }
+    },
+    {
+      "id": "institute-method-author-classification-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "classification",
+      "path": "data-steps/classification.mjs",
+      "sha256": "5a824938c8075287c33925f00b4c22f168459031ed6336a4c75812790bcc2059",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "strapi_database_schema": ["schema"],
+            "teachers": ["id", "document_id", "legacy_id", "name", "trait", "published_at"],
+            "institutes": ["id", "document_id", "legacy_id", "name", "slug"],
+            "teachers_institute_lnk": ["teacher_id", "institute_id"]
+          }
+        }
+      },
+      "preconditions": { "classification": "all 12 pinned legacy identities match the reviewed mapping" },
+      "postconditions": { "trait": "method-author for every physical version of the pinned identities" },
+      "readback": { "kind": "helper-identity-and-physical-version-readback" }
+    },
+    {
+      "id": "normalize-null-documents-state-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "normalize-documents-state",
+      "path": "data-steps/normalize-documents-state.mjs",
+      "sha256": "4be74fe36c1117035344f35fb76d5426062e4a78ada0f3002740d70e214403d0",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "seminars": ["id", "document_id", "published_at"],
+            "seminars_cmps": ["entity_id", "field"]
+          }
+        }
+      },
+      "preconditions": { "documents_state": "column exists after schema sync; null rows have no structured documents" },
+      "postconditions": { "documents_state": "eligible null values become unconfirmed; all other values are unchanged" },
+      "readback": { "kind": "helper-null-row-and-relation-readback" }
+    }
+  ],
+  "integrity": {
+    "files": [
+      { "path": "scripts/run-data-migrations.mjs", "sha256": "04f0f4cbafebb7550c533a3088db42be9ead8ae5c52cb308c04b8e5bb27ff8b4" },
+      { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
+      { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }
+    ]
+  }
+}
