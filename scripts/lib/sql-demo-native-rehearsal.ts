@@ -1085,7 +1085,7 @@ export async function runSqlDemoNativePrototype(
   let primaryError: unknown;
   let result: SqlDemoNativePrototypeResult | undefined;
   let publicationScan: SqlDemoNativePrototypeResult['publicationScan'] | undefined;
-  let expectedDrafts = new Map<string, Map<string, string | undefined>>();
+  let expectedDrafts: Map<string, Map<string, string | undefined>>;
   try {
     const mapperOptions = prepareSqlDemoPrivateInputs(input.privateInputConfig);
     let token: string;

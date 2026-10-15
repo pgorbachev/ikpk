@@ -168,11 +168,6 @@ async function run(input: RehearsalInput): Promise<unknown> {
   return runSqlDemoNativeRehearsal(input as never);
 }
 
-async function runPrototype(input: Record<string, unknown>): Promise<unknown> {
-  const { runSqlDemoNativePrototype } = await import('./sql-demo-native-rehearsal.js');
-  return runSqlDemoNativePrototype(input as never);
-}
-
 const emptyNativeSource = Object.fromEntries([
   'Articles', 'Cities', 'Events', 'EventsAndTeachers', 'FileBindingOrganizationInfo', 'Files',
   'InstituteAdditionalInfo', 'Institutes', 'News', 'OrganizationInfo', 'Programs', 'Promotions',
