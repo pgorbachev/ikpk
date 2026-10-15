@@ -138,7 +138,7 @@ function copyPinned(): void {
   // оставлял на диске снимок, не прошедший проверку: следующая сборка молча брала именно его,
   // потому что `prepare-snapshot.ts` контракт не запускает вовсе.
   const snap = JSON.parse(readFileSync(source, 'utf-8')) as Snapshot;
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap);
   snap.origin = { kind: 'pinned' };
 
   mkdirSync(outDir, { recursive: true });
