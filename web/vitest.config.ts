@@ -14,6 +14,8 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ['tests/**/*.test.ts'],
     exclude: [
+      // Astro Container tests use the dedicated render config.
+      'tests/home-people.render.test.ts',
       // Live publication assertions need the captured snapshot and completed artifact.
       'tests/publication/snapshot.test.ts',
       'tests/publication/build.test.ts',
