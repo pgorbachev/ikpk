@@ -57768,7 +57768,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/raspisanie-i-tseny",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/raspisanie-i-tseny.QgdgxAhG.css|rel=stylesheet",
+      "identity": "link|href=/_astro/raspisanie-i-tseny.BjqSBFIs.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",

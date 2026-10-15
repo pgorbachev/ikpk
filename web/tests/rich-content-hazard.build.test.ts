@@ -13,6 +13,9 @@ import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 import { openOracleHarness, type OracleHarness } from './helpers/rich-content-safety/chromium-oracle.js';
 import type { ExecutableSlot } from './helpers/rich-content-safety/ast-sinks.js';
 import { publicationOccurrences } from './publication/occurrences.js';
+import { projectSnapshotOccurrences } from './helpers/rich-content-safety/snapshot-occurrence-projection.js';
+import type { OccurrenceRule } from './helpers/rich-content-safety/hazard-scan.js';
+import type { SnapshotContent } from './helpers/rich-content-safety/snapshot-marker-projection.js';
 
 describe('rich-content contract: whole-document hazard scan (production dist)', () => {
   let harness: OracleHarness;
@@ -40,15 +43,24 @@ describe('rich-content contract: whole-document hazard scan (production dist)', 
     expect(existsSync(snapshotPath), 'нет исходного snapshot для occurrence projection').toBe(true);
     const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf-8')) as {
       origin?: { url?: string };
-      content?: { types?: { articles?: unknown } };
+      content?: { types?: { articles?: unknown; institutes?: unknown; course_groups?: unknown; seminars?: unknown; teachers?: unknown } };
     };
     expect(Array.isArray(snapshot.content?.types?.articles), 'snapshot без content.types.articles').toBe(true);
-    const occurrences = publicationOccurrences(
+    const baseOccurrences = publicationOccurrences(
       registered.occurrences,
       sourceSlots,
       snapshot.content!.types!.articles as Parameters<typeof publicationOccurrences>[2],
       process.env.PAYMENT_ROLE ?? 'ci',
       snapshot.origin?.url,
+    );
+    expect(Array.isArray(snapshot.content?.types?.institutes), 'snapshot без institutes').toBe(true);
+    expect(Array.isArray(snapshot.content?.types?.course_groups), 'snapshot без course_groups').toBe(true);
+    expect(Array.isArray(snapshot.content?.types?.seminars), 'snapshot без seminars').toBe(true);
+    expect(Array.isArray(snapshot.content?.types?.teachers), 'snapshot без teachers').toBe(true);
+    const occurrences = projectSnapshotOccurrences(
+      baseOccurrences as OccurrenceRule[],
+      sourceSlots,
+      snapshot.content?.types as SnapshotContent,
     );
     expect(occurrences.length, 'projected occurrence rules пусты').toBeGreaterThan(0);
 

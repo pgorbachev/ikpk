@@ -19,6 +19,10 @@ import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-m
 import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
 import { projectSnapshotMarkers, type SnapshotContent } from './helpers/rich-content-safety/snapshot-marker-projection.js';
 import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
+import { projectSnapshotOccurrences } from './helpers/rich-content-safety/snapshot-occurrence-projection.js';
+import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
+import type { OccurrenceRule } from './helpers/rich-content-safety/hazard-scan.js';
+import type { ExecutableSlot } from './helpers/rich-content-safety/ast-sinks.js';
 import {
   SRC_SRCSET_CASES,
   CONSTRAINED_VALUE_CASES,
@@ -271,15 +275,15 @@ describe('rich-content: whole-document hazard scanner', () => {
       { id: 'teacher-bio', production: { paths: ['/fixture-teacher'], count: 1 }, demo: { sameAsProduction: true } },
     ];
     const projected = projectSnapshotMarkers(sinks, {
-      institutes: [{ slug: 'inst' }],
-      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst' }],
+      institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst-id' }],
       seminars: [
         { slug: 'with-body', course_group_legacy_id: 'cg-id', description_html: '<p>Text</p>' },
         { slug: 'without-body', course_group_legacy_id: 'cg-id', description_html: '', full_text_html: '' },
       ],
       teachers: [
-        { slug: 'with-bio', institute_legacy_id: 'inst', bio_html: '<p>Bio</p>' },
-        { slug: 'without-bio', institute_legacy_id: 'inst', bio_html: '' },
+        { slug: 'with-bio', institute_legacy_id: 'inst-id', bio_html: '<p>Bio</p>' },
+        { slug: 'without-bio', institute_legacy_id: 'inst-id', bio_html: '' },
       ],
     });
     expect(projected.find((sink) => sink.id === 'article-body')?.production).toEqual({ paths: ['/statyi/fixture'], count: 1 });
@@ -301,6 +305,43 @@ describe('rich-content: whole-document hazard scanner', () => {
       institutes: [], course_groups: [], seminars: [],
       teachers: [{ slug: 'bio', institute_legacy_id: 'unknown-inst', bio_html: '<p>bio</p>' }],
     })).toThrow(/teacher-bio .* неизвестный institute/);
+  });
+
+  it('snapshot occurrence projection clones only reviewed archetypes and fails closed on missing mappings or slots', () => {
+    const rules = loadFixture<{ occurrences: OccurrenceRule[] }>('output-occurrence-registry.json').occurrences;
+    const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+    const content: SnapshotContent = {
+      institutes: [{ legacy_id: 'ap', slug: 'institut-apledzhera' }],
+      course_groups: [
+        { legacy_id: 'hier-seminar', slug: 'dolgoletie', institute_legacy_id: 'ap' },
+        { legacy_id: 'flat-seminar', slug: 'flat-group', institute_legacy_id: 'ap' },
+      ],
+      seminars: [
+        { slug: 'kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya', course_group_legacy_id: 'hier-seminar' },
+        { slug: 'antistressovaya-kineziologiya-2', course_group_legacy_id: 'flat-seminar' },
+        { slug: 'new-seminar', course_group_legacy_id: 'hier-seminar' },
+      ],
+      teachers: [
+        { slug: '63', institute_legacy_id: 'ap' },
+        { slug: '53', institute_legacy_id: 'ap' },
+        { slug: 'new-teacher', institute_legacy_id: 'ap' },
+      ],
+    };
+    const projected = projectSnapshotOccurrences(rules, sourceSlots, content);
+    for (const route of [
+      '/institut-apledzhera/dolgoletie/new-seminar',
+      '/seminary/new-seminar',
+      '/institut-apledzhera/prepodavatel/new-teacher',
+      '/specialisty/new-teacher',
+    ]) {
+      expect(projected.some((rule) => rule.route === route)).toBe(true);
+    }
+    expect(projected.some((rule) => rule.route.includes('/unbacked'))).toBe(false);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      course_groups: content.course_groups.slice(1),
+    })).toThrow(/unknown course_group/);
+    expect(() => projectSnapshotOccurrences(rules, [], content)).toThrow(/missing reviewed source slot/);
   });
 
   it('stripMarkedRegions не оставляет вложенный RUTUBE после внутреннего div', () => {

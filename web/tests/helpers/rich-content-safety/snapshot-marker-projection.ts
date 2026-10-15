@@ -3,7 +3,7 @@ import { stripLegacySeminarTail } from '../../../src/lib/html-cleaner.js';
 import type { RenderedSink } from './marker-inventory.js';
 
 export type SnapshotContent = {
-  institutes: { slug: string }[];
+  institutes: { legacy_id: string; slug: string }[];
   course_groups: { legacy_id: string; slug: string; institute_legacy_id: string }[];
   seminars: {
     slug: string;
@@ -50,7 +50,7 @@ export function projectSnapshotMarkers(sinks: RenderedSink[], content: SnapshotC
     assert(Array.isArray(content[key]), `snapshot content is missing ${key}`);
   }
 
-  const institutes = uniqueMap(content.institutes, (item) => item.slug, 'institutes');
+  const institutes = uniqueMap(content.institutes, (item) => item.legacy_id, 'institutes');
   const courseGroups = uniqueMap(content.course_groups, (item) => item.legacy_id, 'course_groups');
 
   const seminarPaths = content.seminars.flatMap((seminar) => {
