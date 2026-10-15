@@ -427,8 +427,8 @@ export function getCourseGroupForSeminar(seminar: Seminar): CourseGroup | undefi
 
 // Helper: format price
 export function formatPrice(price: number): string {
-  if (price === 0) return 'Бесплатно';
-  if (!Number.isFinite(price)) return '';
+  // Бесплатность задаётся isFree у проведения, а не нулём в поле цены.
+  if (!Number.isFinite(price) || price <= 0) return 'Стоимость уточняется';
   return new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 }
 
@@ -436,6 +436,8 @@ export function formatPrice(price: number): string {
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('ru-RU', {
+    // Даты в CMS — московская полночь; без пояса день зависит от машины сборки.
+    timeZone: 'Europe/Moscow',
     day: 'numeric',
     month: 'long',
     year: 'numeric',

@@ -130,13 +130,13 @@ const seminarSchema =
         endDate: schedule[0].endAt,
         eventStatus: 'https://schema.org/EventScheduled',
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-        offers: {
+        offers: schedule[0].isFree === true || (Number.isFinite(schedule[0].newPrice) && schedule[0].newPrice > 0) ? {
           '@type': 'Offer',
           url: seminarUrl,
-          price: schedule[0].isFree ? '0' : String(schedule[0].newPrice),
+          price: schedule[0].isFree === true ? '0' : String(schedule[0].newPrice),
           priceCurrency: 'RUB',
           availability: 'https://schema.org/InStock',
-        },
+        } : undefined,
       }
     : {
         '@context': 'https://schema.org',
