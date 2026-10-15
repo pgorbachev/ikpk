@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const HASH = /^[a-f0-9]{64}$/;
 const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operations', 'ikpk_data_migration_history']);
+const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
 const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
   ['schedule_entries', ['status', 'entry_status']],
@@ -16,6 +17,17 @@ const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
 };
+const PERMISSION_FIELD_ADDITIONS = new Map([
+  ['strapi-super-admin\0plugin::content-manager.explorer.create\0api::promotion.promotion', ['type']],
+  ['strapi-super-admin\0plugin::content-manager.explorer.read\0api::promotion.promotion', ['type']],
+  ['strapi-super-admin\0plugin::content-manager.explorer.update\0api::promotion.promotion', ['type']],
+  ...['strapi-editor'].flatMap((role) => ['create', 'read', 'update'].map((action) => [
+    `${role}\0plugin::content-manager.explorer.${action}\0api::schedule-entry.schedule-entry`, ['image'],
+  ])),
+  ...['content-admin', 'strapi-super-admin'].flatMap((role) => ['create', 'read', 'update'].map((action) => [
+    `${role}\0plugin::content-manager.explorer.${action}\0api::schedule-entry.schedule-entry`, ['image', 'isEventCollection'],
+  ])),
+]);
 const RUNNER_SCHEMAS = {
   ikpk_migration_lineage: ['singleton', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
   ikpk_migration_operations: ['operation_id', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
@@ -263,6 +275,69 @@ function compareInheritedRows(table, sourceRows, candidateRows, keyOf, allowedNe
     if (!sourceKeys.has(key) && !allowedNew(row)) differences.push({ table, kind: 'unexpected-history-added', keySha256: sha(Buffer.from(key)) });
   }
 }
+function permissionGraph(db, differences, label) {
+  const names = new Set(tableNames(db));
+  const needed = ['admin_roles', 'admin_permissions', 'admin_permissions_role_lnk'];
+  if (needed.some((table) => !names.has(table))) {
+    if (needed.some((table) => names.has(table))) differences.push({ table: 'admin_permissions', kind: `${label}-permission-schema-incomplete` });
+    return null;
+  }
+  const roles = new Map(db.prepare('SELECT id, code FROM admin_roles').all().map(({ id, code }) => [String(id), code]));
+  const permissions = db.prepare('SELECT id, action, subject, properties, conditions FROM admin_permissions ORDER BY id').all();
+  const links = db.prepare('SELECT permission_id, role_id FROM admin_permissions_role_lnk ORDER BY permission_id, role_id').all();
+  const linksByPermission = new Map();
+  for (const link of links) {
+    const permissionId = String(link.permission_id);
+    const list = linksByPermission.get(permissionId) ?? [];
+    list.push(String(link.role_id));
+    linksByPermission.set(permissionId, list);
+  }
+  const descriptors = new Map();
+  const failGraph = (key, kind = 'permission-graph-mismatch') => differences.push({
+    table: 'admin_permissions', kind, keySha256: sha(Buffer.from(key)),
+  });
+  for (const permission of permissions) {
+    const permissionId = String(permission.id);
+    const roleIds = linksByPermission.get(permissionId) ?? [];
+    if (roleIds.length !== 1 || !roles.has(roleIds[0])) { failGraph(`dangling:${permissionId}`); continue; }
+    let properties; let conditions;
+    try { properties = permission.properties ? JSON.parse(permission.properties) : {}; conditions = permission.conditions ? JSON.parse(permission.conditions) : []; }
+    catch { failGraph(`invalid-json:${permissionId}`); continue; }
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties) || !Array.isArray(conditions)) { failGraph(`invalid-shape:${permissionId}`); continue; }
+    const fields = properties.fields;
+    if (fields !== undefined && (!Array.isArray(fields) || fields.some((field) => typeof field !== 'string') || new Set(fields).size !== fields.length)) {
+      failGraph(`invalid-fields:${permissionId}`); continue;
+    }
+    const role = roles.get(roleIds[0]);
+    const baseProperties = { ...properties }; delete baseProperties.fields;
+    const key = json([role, permission.action, permission.subject ?? null, conditions, baseProperties]);
+    if (descriptors.has(key)) { failGraph(`duplicate:${key}`); continue; }
+    descriptors.set(key, { role, action: permission.action, subject: permission.subject ?? null, conditions, properties: baseProperties, fields: fields ? [...fields].sort() : null });
+  }
+  for (const permissionId of linksByPermission.keys()) {
+    if (!permissions.some(({ id }) => String(id) === permissionId)) failGraph(`orphan-link:${permissionId}`);
+  }
+  for (const permission of permissions) {
+    if (!linksByPermission.has(String(permission.id))) failGraph(`unlinked:${permission.id}`);
+  }
+  return descriptors;
+}
+function comparePermissionGraphs(sourceDb, candidateDb, differences) {
+  const source = permissionGraph(sourceDb, differences, 'source');
+  const candidate = permissionGraph(candidateDb, differences, 'candidate');
+  if (!source || !candidate) return;
+  if (source.size !== candidate.size) differences.push({ table: 'admin_permissions', kind: 'logical-permission-count-mismatch' });
+  for (const [key, before] of source) {
+    const after = candidate.get(key);
+    if (!after) { differences.push({ table: 'admin_permissions', kind: 'logical-permission-removed', keySha256: sha(Buffer.from(key)) }); continue; }
+    const allowed = PERMISSION_FIELD_ADDITIONS.get(`${before.role}\0${before.action}\0${before.subject}`) ?? [];
+    const expectedFields = before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
+    if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
+  }
+  for (const key of candidate.keys()) if (!source.has(key)) {
+    differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
+  }
+}
 function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, differences) {
   const candidateTables = new Set(tableNames(candidateDb));
   let missingRunnerTable = false;
@@ -344,7 +419,7 @@ function compareNativeHistory(sourceDb, candidateDb, nativeSteps, differences) {
   const nativeColumns = (db) => db.prepare('PRAGMA table_info("strapi_migrations")').all()
     .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull: Number(notnull), defaultValue: dflt_value, pk: Number(pk) }));
   const expectedColumns = [
-    { name: 'id', type: 'INTEGER', notnull: 0, defaultValue: null, pk: 1 },
+    { name: 'id', type: 'INTEGER', notnull: 1, defaultValue: null, pk: 1 },
     { name: 'name', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
     { name: 'time', type: 'datetime', notnull: 0, defaultValue: null, pk: 0 },
   ];
@@ -439,6 +514,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     }
     for (const table of Object.keys(sourceSchema)) {
       if (RUNNER_TABLES.has(table) || table === 'strapi_migrations' || !candidateSchema[table]) continue;
+      if (PERMISSION_CHANGE_TABLES.has(table)) continue;
       const before = sourceSchema[table]; const after = candidateSchema[table];
       const expectedNames = new Set(expectedColumns(before, table, transforms).map(({ name }) => name));
       const rename = KNOWN_RENAMES.get(table);
@@ -453,6 +529,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     }
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
+    comparePermissionGraphs(source, candidate, differences);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {

@@ -107,7 +107,7 @@ function createProductionColumnShape(path, { addedColumns = false, promotionType
     CREATE TABLE schedule_entries (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${addedColumns ? ', is_event_collection boolean' : ''});
     INSERT INTO promotions(id, name${addedColumns ? ', type' : ''}) VALUES (1, 'promotion'${addedColumns ? ', NULL' : ''});
     INSERT INTO schedule_entries(id, name${addedColumns ? ', is_event_collection' : ''}) VALUES (1, 'entry'${addedColumns ? ', NULL' : ''});
-    CREATE TABLE strapi_migrations (id INTEGER PRIMARY KEY, name varchar(255), time datetime);
+    CREATE TABLE strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime);
     INSERT INTO strapi_migrations VALUES (1, '5.0.0-02-created-document-id', 1791523597813);
   `);
   if (addedColumns && (promotionType !== null || eventCollection !== null)) {
@@ -173,4 +173,81 @@ test('new-column exception does not permit any additional target-table column', 
 
   assert.equal(report.passed, false);
   assert.ok(report.differences.some(({ table, kind }) => table === 'promotions' && kind === 'column-set-mismatch'));
+});
+
+function createPermissionShape(path, { candidate = false, mutate = null, mutateLinks = null } = {}) {
+  const db = new Database(path);
+  db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
+    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT);
+    CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL);
+    INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin');`);
+  const descriptors = [];
+  for (const verb of ['create', 'read', 'update']) {
+    for (const role of [
+      { id: 1, code: 'strapi-editor', subject: 'api::schedule-entry.schedule-entry', sourceFields: ['startAt'], added: ['image'] },
+      { id: 2, code: 'content-admin', subject: 'api::schedule-entry.schedule-entry', sourceFields: ['startAt'], added: ['image', 'isEventCollection'] },
+      { id: 3, code: 'strapi-super-admin', subject: 'api::schedule-entry.schedule-entry', sourceFields: ['startAt'], added: ['image', 'isEventCollection'] },
+      { id: 3, code: 'strapi-super-admin', subject: 'api::promotion.promotion', sourceFields: ['name'], added: ['type'] },
+    ]) descriptors.push({ action: `plugin::content-manager.explorer.${verb}`, ...role, conditions: [], properties: { fields: candidate ? [...role.sourceFields, ...role.added] : role.sourceFields } });
+  }
+  for (const [index, initial] of descriptors.entries()) {
+    let descriptor = { ...initial, roleId: initial.id, properties: { ...initial.properties, fields: [...initial.properties.fields] } };
+    if (candidate && mutate) descriptor = mutate(descriptor, index) ?? descriptor;
+    const permissionId = (candidate ? 20 : 10) + index;
+    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?)').run(
+      permissionId, descriptor.action, descriptor.subject, JSON.stringify(descriptor.properties), JSON.stringify(descriptor.conditions),
+    );
+    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?)').run((candidate ? 40 : 30) + index, permissionId, descriptor.roleId);
+  }
+  if (candidate && mutateLinks) mutateLinks(db);
+  db.close();
+}
+
+test('permission graph accepts exact current fields while permission and link IDs churn', () => {
+  const sourceDbPath = join(directory, 'permissions-source.db');
+  const candidateDbPath = join(directory, 'permissions-candidate.db');
+  createPermissionShape(sourceDbPath);
+  createPermissionShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')), false,
+    'the semantic role/action/subject/condition graph is stable despite regenerated storage IDs');
+  assert.equal(report.differences.some(({ table }) => table === 'admin_permissions_role_lnk'), false,
+    'permission relation storage IDs may change only when the linked role graph is unchanged');
+});
+
+test('permission graph rejects unapproved fields, changed conditions, role reassignment, and dangling links', () => {
+  const mutations = [
+    (permission, index) => index === 0 ? { ...permission, properties: { fields: ['startAt', 'image', 'price'] } } : permission,
+    (permission, index) => index === 0 ? { ...permission, conditions: [{ name: 'not-allowed' }] } : permission,
+    (permission, index) => index === 0 ? { ...permission, roleId: 99 } : permission,
+    (permission, index) => index === 0 ? { ...permission, subject: 'api::promotion.promotion' } : permission,
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const sourceDbPath = join(directory, `permissions-negative-source-${index}.db`);
+    const candidateDbPath = join(directory, `permissions-negative-candidate-${index}.db`);
+    createPermissionShape(sourceDbPath);
+    createPermissionShape(candidateDbPath, { candidate: true, mutate });
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `mutation ${index} must block preservation acceptance`);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')),
+      `mutation ${index} should be rejected by logical permission comparison`);
+  }
+  for (const [index, mutateLinks] of [
+    (db) => db.prepare('DELETE FROM admin_permissions_role_lnk WHERE id = 40').run(),
+    (db) => db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (99, 20, 1)').run(),
+    (db) => db.prepare('UPDATE admin_permissions_role_lnk SET permission_id = 999 WHERE id = 40').run(),
+  ].entries()) {
+    const sourceDbPath = join(directory, `permissions-link-source-${index}.db`);
+    const candidateDbPath = join(directory, `permissions-link-candidate-${index}.db`);
+    createPermissionShape(sourceDbPath);
+    createPermissionShape(candidateDbPath, { candidate: true, mutateLinks });
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `link mutation ${index} must block preservation acceptance`);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')),
+      `link mutation ${index} should be rejected by logical permission comparison`);
+  }
 });
