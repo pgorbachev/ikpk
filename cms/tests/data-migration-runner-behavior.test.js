@@ -77,7 +77,7 @@ function installFakeStrapi(f, { failOnLoad = false } = {}) {
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createRequire } = require('node:module');
-const Database = require('better-sqlite3');
+const Database = require(${JSON.stringify(cmsRequire.resolve('better-sqlite3'))});
 exports.createStrapi = ({ appDir }) => ({
   config: { get(name) { return name === 'database.connection' ? { client: process.env.DATABASE_CLIENT, connection: { filename: process.env.DATABASE_FILENAME } } : undefined; } },
   async load() {
