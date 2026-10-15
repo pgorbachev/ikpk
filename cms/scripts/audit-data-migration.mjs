@@ -239,6 +239,21 @@ function compareExpectedRows(sourceDb, candidateDb, table, sourceColumns, candid
     }
   }
 }
+function compareInheritedRows(table, sourceRows, candidateRows, keyOf, allowedNew, differences) {
+  const candidateByKey = new Map(candidateRows.map((row) => [keyOf(row), row]));
+  const sourceKeys = new Set();
+  for (const row of sourceRows) {
+    const key = keyOf(row); sourceKeys.add(key);
+    const copied = candidateByKey.get(key);
+    if (!copied || json(valueKey(row)) !== json(valueKey(copied))) {
+      differences.push({ table, kind: 'inherited-history-changed', keySha256: sha(Buffer.from(key)) });
+    }
+  }
+  for (const row of candidateRows) {
+    const key = keyOf(row);
+    if (!sourceKeys.has(key) && !allowedNew(row)) differences.push({ table, kind: 'unexpected-history-added', keySha256: sha(Buffer.from(key)) });
+  }
+}
 function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, differences) {
   const candidateTables = new Set(tableNames(candidateDb));
   let missingRunnerTable = false;
@@ -251,6 +266,23 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
   const lineage = candidateDb.prepare('SELECT * FROM ikpk_migration_lineage ORDER BY singleton').all();
   const operations = candidateDb.prepare('SELECT * FROM ikpk_migration_operations ORDER BY operation_id').all();
   const ledger = candidateDb.prepare('SELECT * FROM ikpk_data_migration_history ORDER BY step_id').all();
+  const sourceHas = (table) => tableNames(sourceDb).includes(table);
+  const sourceLineage = sourceHas('ikpk_migration_lineage') ? sourceDb.prepare('SELECT * FROM ikpk_migration_lineage ORDER BY singleton').all() : [];
+  const sourceOperations = sourceHas('ikpk_migration_operations') ? sourceDb.prepare('SELECT * FROM ikpk_migration_operations ORDER BY operation_id').all() : [];
+  const sourceLedger = sourceHas('ikpk_data_migration_history') ? sourceDb.prepare('SELECT * FROM ikpk_data_migration_history ORDER BY step_id').all() : [];
+  const currentOperation = operations.find((row) => row.operation_id === receipt.operationId);
+  compareInheritedRows('ikpk_migration_lineage', sourceLineage, lineage, (row) => String(row.singleton),
+    (row) => sourceLineage.length === 0 && Number(row.singleton) === 1 && row.lineage_id === currentOperation?.lineage_id
+      && HASH.test(row.lineage_id ?? '') && HASH.test(row.source_snapshot_sha256 ?? '') && HASH.test(row.source_schema_sha256 ?? ''), differences);
+  compareInheritedRows('ikpk_migration_operations', sourceOperations, operations, (row) => row.operation_id,
+    (row) => row.operation_id === receipt.operationId
+      && row.lineage_id === lineage[0]?.lineage_id
+      && row.source_snapshot_sha256 === receipt.source.snapshotSha256
+      && row.source_schema_sha256 === receipt.source.schemaFingerprint, differences);
+  const expectedStepIds = new Set(plan.steps.filter(({ kind }) => kind === 'data').map(({ id }) => id));
+  compareInheritedRows('ikpk_data_migration_history', sourceLedger, ledger, (row) => `${row.lineage_id}\0${row.step_id}`,
+    (row) => expectedStepIds.has(row.step_id) && row.operation_id === receipt.operationId
+      && plan.steps.some(({ id, sha256, kind }) => kind === 'data' && id === row.step_id && sha256 === row.payload_sha256), differences);
   if (lineage.length !== 1 || Number(lineage[0]?.singleton) !== 1 || !HASH.test(lineage[0]?.lineage_id ?? '')
     || !HASH.test(lineage[0]?.source_snapshot_sha256 ?? '')
     || !HASH.test(lineage[0]?.source_schema_sha256 ?? '')) differences.push({ table: 'ikpk_migration_lineage', kind: 'lineage-binding-mismatch' });

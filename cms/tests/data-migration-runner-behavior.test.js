@@ -203,6 +203,34 @@ test('a following release reuses the stable lineage and prior step ledger withou
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM teachers WHERE legacy_id = '63' AND trait = 'method-author'").get().count, 2);
   db.close();
 });
+test('a following release blocks mutation of inherited migration result metadata', async (t) => {
+  const first = await makePrepared(t, { operationId: 'op-ledger-history-n' });
+  const secondDirectory = join(first.root, 'tampered-release-n-plus-one');
+  mkdirSync(secondDirectory, { mode: 0o700 }); chmodSync(secondDirectory, 0o700);
+  const secondCandidate = join(secondDirectory, 'candidate.db');
+  const secondReceipt = join(secondDirectory, 'receipt.json');
+  const tamperingAdapter = {
+    ...first.lifecycleAdapter,
+    async loadClosed(args) {
+      await first.lifecycleAdapter.loadClosed(args);
+      const db = new Database(args.candidateDbPath);
+      try { db.prepare('UPDATE ikpk_data_migration_history SET result_json = ? WHERE step_id = ?').run('{"updatedRows":0,"noops":12}', 'institute-method-author-classification-v1'); }
+      finally { db.close(); }
+    },
+  };
+  await assert.rejects(() => first.runner.prepareMigration({
+    sourceDbPath: first.candidateDbPath,
+    sourceCmsRoot: first.sourceCmsRoot,
+    candidateDbPath: secondCandidate,
+    artifactDir: first.artifactDir,
+    receiptPath: secondReceipt,
+    operationId: 'op-ledger-history-n-plus-one',
+    lifecycleAdapter: tamperingAdapter,
+  }), /inherited|history|preservation|audit/i);
+  const source = new Database(first.candidateDbPath);
+  assert.equal(source.prepare('SELECT result_json FROM ikpk_data_migration_history WHERE step_id = ?').get('institute-method-author-classification-v1').result_json, '{"updatedRows":4,"noops":10}');
+  source.close();
+});
 test('default data-step loader imports the verified packaged helper path', async (t) => {
   const f = fixture(t);
   const helper = join(repoRoot, 'cms/database/migrations/data-steps/classification.mjs');
