@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPT = join(ROOT, 'scripts', 'bootstrap-vps.sh');
@@ -60,11 +61,27 @@ function remoteStream(): string {
  * проверки происхождения давало тот же код 1 — файла нет, `tr` падает, `set -e` прерывает, —
  * и проверка по коду оставалась зелёной на снятом гейте.
  */
-function runGate(opts: { migrations: string[]; expected?: string }): { code: number; err: string } {
+function runGate(opts: { migrations: string[]; expected?: string; tamper?: string }): { code: number; err: string } {
   const dir = mkdtempSync(join(tmpdir(), 'ikpk-rel-'));
   try {
-    mkdirSync(join(dir, 'database', 'migrations'), { recursive: true });
-    for (const m of opts.migrations) writeFileSync(join(dir, 'database', 'migrations', m), '');
+    const migrationsDir = join(dir, 'database', 'migrations');
+    mkdirSync(migrationsDir, { recursive: true });
+    const steps = opts.migrations.map((m) => {
+      const plannedBytes = Buffer.from(`fixture payload for ${m}\n`);
+      const actualBytes = opts.tamper === m ? Buffer.from('substituted payload\n') : plannedBytes;
+      writeFileSync(join(migrationsDir, m), actualBytes);
+      return {
+        id: `fixture-${m}`,
+        phase: 'before-sync',
+        path: m,
+        sha256: createHash('sha256').update(plannedBytes).digest('hex'),
+        source: { strapiVersion: '5.51.2', schemaFingerprint: 'a'.repeat(64) },
+        preconditions: { fixture: true },
+        postconditions: { fixture: true },
+        readback: { fixture: true },
+      };
+    });
+    writeFileSync(join(migrationsDir, 'plan.json'), JSON.stringify({ version: 1, steps }, null, 2));
     if (opts.expected !== undefined) {
       writeFileSync(join(dir, 'database', '.migrations-expected'), opts.expected);
     }
@@ -111,6 +128,12 @@ describe('доставка проверки на сервер', () => {
 describe('состав миграций в релизе', () => {
   it('пропускает релиз, где миграций столько же, сколько объявлено', () => {
     expect(runGate({ migrations: ['2026.01.01.a.js'], expected: '1\n' }).code).toBe(0);
+  });
+
+  it('отказывает при подмене файла с тем же количеством миграций', () => {
+    const r = runGate({ migrations: ['2026.01.01.a.js'], expected: '1\n', tamper: '2026.01.01.a.js' });
+    expect(r.code, 'одинаковое количество скрыло подмену содержимого').toBe(1);
+    expect(r.err, 'отказ не назвал расхождение payload hash').toMatch(/sha|hash|хеш/i);
   });
 
   it('отказывает, когда миграция не доехала', () => {
