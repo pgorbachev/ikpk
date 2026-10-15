@@ -30,6 +30,7 @@ export default await getViteConfig({
       'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
+      'tests/demo193-profile.render.test.ts',
     ],
   },
 })({ command: 'serve', mode: 'test' });
