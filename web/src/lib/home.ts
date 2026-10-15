@@ -12,7 +12,7 @@ import {
   type SeminarTeacherRef,
   type Teacher,
 } from './data.js';
-import { isCurrentOrFuture, isUpcomingStart } from './schedule-window';
+import { calendarDayDate, isCurrentOrFuture, isUpcomingStart } from './schedule-window';
 import { publicScheduleTitle } from './schedule-public-title';
 
 export interface UpcomingSeminar {
@@ -56,8 +56,8 @@ export function instituteShortBySlug(slug: string): string {
 }
 
 export function formatScheduleDateRange(startAt: string, endAt: string): string {
-  const s = new Date(startAt);
-  const e = new Date(endAt);
+  const s = calendarDayDate(startAt);
+  const e = calendarDayDate(endAt);
   const sd = s.getUTCDate();
   const ed = e.getUTCDate();
   const sm = MONTHS[s.getUTCMonth()];
@@ -156,7 +156,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         : '/raspisanie-i-tseny';
       const lead = e.teachers?.[0];
       const full = findTeacherForScheduleLead(lead, teachers);
-      const start = new Date(e.startAt);
+      const start = calendarDayDate(e.startAt);
       return {
         id: e.id,
         title: publicScheduleTitle(e),

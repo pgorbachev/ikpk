@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as data from '../src/lib/data.js';
 import { formatPrice, getScheduleEntries, normalizeScheduleEntry } from '../src/lib/data.js';
-import { getCatalogStats, getUpcomingSeminars } from '../src/lib/home.js';
+import { formatScheduleDateRange, getCatalogStats, getUpcomingSeminars } from '../src/lib/home.js';
 import { isCurrentOrFuture } from '../src/lib/schedule-window.js';
 
 /** ru-RU кладёт неразрывный пробел в «не число» и в тысячи — сравниваем видимый текст. */
@@ -228,6 +229,30 @@ describe('ближайшие семинары — ещё не начавшиес
   const TODAY = '2026-09-20';
   const now = new Date(`${TODAY}T12:00:00.000Z`);
   const CST2_SEP = 377;
+
+  it('форматирует SQL-дни летней и зимней Nicosia-полночи в московский календарь', () => {
+    expect(formatScheduleDateRange('2024-09-22T21:00:00.000Z', '2024-09-25T21:00:00.000Z')).toBe('23–26 сен');
+    expect(formatScheduleDateRange('2024-11-07T22:00:00.000Z', '2024-11-07T22:00:00.000Z')).toBe('8 ноя');
+  });
+
+  it('показывает дату ближайшего семинара по SQL-календарю', () => {
+    const row: data.ScheduleEntry = {
+      id: 9001, status: 'active', name: 'Проверка календаря',
+      seminar: { id: 9001, name: 'Проверка календаря', slug: 'proverka-kalendarya' },
+      institute: { id: 1, name: 'Институт', shortname: 'ИКПК' },
+      startAt: '2024-09-22T21:00:00.000Z', endAt: '2024-09-22T21:00:00.000Z',
+      teachers: [], image: null, isFree: false, isEventCollection: false,
+      description: null, oldPrice: 0, newPrice: 12000,
+      city: { id: 1, name: 'Москва' },
+      program: { id: 1, slug: 'programma', name: 'Программа' },
+      additionalText: '', duration: '8', registrationFormLink: '',
+    };
+    vi.spyOn(data, 'getScheduleEntries').mockReturnValue([row]);
+    vi.spyOn(data, 'getInstitutes').mockReturnValue([{ legacy_id: '1', legacy_url: '', name: 'Институт', slug: 'institut', seo_title: '', seo_description: '', description_html: '', description_text: '', images: [] }]);
+    vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2024-09-23');
+    const upcoming = getUpcomingSeminars(1, new Date('2024-09-23T12:00:00.000Z'));
+    expect(upcoming[0]?.dayLabel).toBe('23');
+  });
 
   it('опора: CST-2 17–20 сентября в снимке ещё идёт 20-го', () => {
     const started = getScheduleEntries().find((entry) => entry.id === CST2_SEP);

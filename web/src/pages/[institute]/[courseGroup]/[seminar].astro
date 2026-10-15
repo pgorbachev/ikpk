@@ -15,7 +15,7 @@ import {
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
-import { isCurrentOrFuture } from '../../../lib/schedule-window';
+import { calendarDay, isCurrentOrFuture } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -51,7 +51,7 @@ const schedule = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
 );
 const sortedSchedule = [...schedule].sort(
-  (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+  (a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))
 );
 const allTeachers = getTeachers();
 const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${seminar.slug}`;
@@ -126,8 +126,8 @@ const seminarSchema =
             addressCountry: 'RU',
           },
         },
-        startDate: schedule[0].startAt,
-        endDate: schedule[0].endAt,
+        startDate: calendarDay(schedule[0].startAt),
+        endDate: calendarDay(schedule[0].endAt),
         eventStatus: 'https://schema.org/EventScheduled',
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
         offers: schedule[0].isFree === true || (Number.isFinite(schedule[0].newPrice) && schedule[0].newPrice > 0) ? {

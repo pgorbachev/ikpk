@@ -64,6 +64,16 @@ describe('окно актуальности записи расписания', 
     it('обходится без дат', () => {
       expect(lastDay({})).toBe('');
     });
+
+    it.each([
+      ['summer', '2024-09-22T21:00:00.000Z', '2024-09-23', '2024-09-24'],
+      ['winter', '2024-11-07T22:00:00.000Z', '2024-11-08', '2024-11-09'],
+    ])('keeps the SQL calendar day for %s Nicosia midnight', (_season, instant, day, nextDay) => {
+      expect(lastDay({ startAt: instant, endAt: instant })).toBe(day);
+      expect(isCurrentOrFuture({ startAt: instant, endAt: instant }, day)).toBe(true);
+      expect(isUpcomingStart({ startAt: instant, endAt: instant }, day)).toBe(true);
+      expect(isUpcomingStart({ startAt: instant, endAt: instant }, nextDay)).toBe(false);
+    });
   });
 });
 
