@@ -25,7 +25,7 @@ it('report fixture really crosses local subprocess stdin/stdout and filesystem w
   const second = writeReportWithSubprocess(f.reportPath('browser'), browser);
   expect(second.disk).toEqual(browser);
   const tests = browser.suites.flatMap((suite) => suite.specs.flatMap((spec) => spec.tests));
-  expect(tests.filter((test) => test.projectName === 'desktop')).toHaveLength(2);
-  expect(tests.filter((test) => test.projectName === 'mobile')).toHaveLength(2);
-  expect(tests.flatMap((test) => test.results).filter((result) => result.status === 'passed')).toHaveLength(4);
+  expect(tests.filter((test) => test.projectName === 'desktop')).toHaveLength(27);
+  expect(tests.filter((test) => test.projectName === 'mobile')).toHaveLength(27);
+  expect(tests.flatMap((test) => test.results).filter((result) => result.status === 'passed')).toHaveLength(113);
 });

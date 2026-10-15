@@ -1,3 +1,4 @@
+import { candidateFiles, candidateProjects, candidateInventory, rollbackInventory } from '../../tests/helpers/publication-browser-inventory.ts';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -35,7 +36,8 @@ export interface RollbackAdapterOptions {
 }
 type CheckContext = PublicationCheckContext | RollbackCheckContext;
 
-export const PUBLICATION_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'] as const;
+export const PUBLICATION_BROWSER_ARGS = ['test', ...candidateFiles.map((file) => `tests/${file}`), 'tests/compat.spec.ts', '--config', 'playwright.publication.config.ts', ...candidateProjects.map((project) => `--project=${project}`), '--reporter=json'];
+export const ROLLBACK_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.rollback.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'];
 const safeNames = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'HOME', 'TMPDIR', 'DEMO_FORMS', 'CHAT_LOADER_SRC'] as const;
 const defaultPath = `${dirname(process.execPath)}:/usr/bin:/bin`;
 function safeEnv(source: Record<string, string | undefined>) {
@@ -64,7 +66,7 @@ function treeFiles(root: string): string[] {
   }
   walk(root); return files;
 }
-const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.xml': 'application/xml', '.txt': 'text/plain' };
+const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.xml': 'application/xml', '.txt': 'text/plain' };
 const defaultRuntime: PublicationAdapterRuntime = {
   run(command) {
     return new Promise((resolveResult, reject) => {
@@ -118,9 +120,9 @@ function vitestResult(value: unknown): CheckResult {
   if (!assertions.length) throw new PublicationReportError('incomplete Vitest evidence', 'local', 0);
   return { conclusion: 'success', executedTests: assertions.length };
 }
-function playwrightResult(value: unknown): CheckResult {
+function playwrightResult(value: unknown, expectedProjects: readonly string[], inventory: Record<string, number>): CheckResult {
   const report = object(value); const stats = object(report.stats);
-  const projects = new Set<string>(); let count = 0;
+  const projects = new Set<string>(); const completed: Record<string, number> = {}; let count = 0;
   function visit(suites: unknown[]) {
     for (const raw of suites) {
       const suite = object(raw);
@@ -129,8 +131,11 @@ function playwrightResult(value: unknown): CheckResult {
         if (spec.ok !== true) throw new Error('browser spec failed');
         for (const rawTest of array(spec.tests)) {
           const test = object(rawTest); const results = array(test.results);
-          if (!['desktop', 'mobile'].includes(String(test.projectName)) || test.expectedStatus !== 'passed' || test.status !== 'expected' ||
+          if (!expectedProjects.includes(String(test.projectName)) || test.expectedStatus !== 'passed' || test.status !== 'expected' ||
               results.length !== 1 || object(results[0]).status !== 'passed' || object(results[0]).retry !== 0) throw new Error('incomplete browser test');
+          const file = String(spec.file ?? suite.file ?? '').split('/').at(-1);
+          const key = `${file}@${test.projectName}`;
+          completed[key] = (completed[key] ?? 0) + 1;
           projects.add(String(test.projectName)); count++;
         }
       }
@@ -138,7 +143,8 @@ function playwrightResult(value: unknown): CheckResult {
     }
   }
   visit(array(report.suites));
-  if (!count || projects.size !== 2 || array(report.errors).length || stats.expected !== count ||
+  if (Object.keys(completed).length !== Object.keys(inventory).length || Object.entries(inventory).some(([key, expected]) => completed[key] !== expected)) throw new Error('incomplete browser inventory');
+  if (!count || projects.size !== expectedProjects.length || array(report.errors).length || stats.expected !== count ||
       stats.unexpected !== 0 || stats.skipped !== 0 || stats.flaky !== 0) throw new Error('incomplete browser evidence');
   return { conclusion: 'success', executedTests: count };
 }
@@ -223,13 +229,15 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
       return suite('payment-readiness', context, { PUBLICATION_PAYMENT_READY_RESPONSE_FILE: path });
     },
     checkPaymentPreflight: async (context: CheckContext) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-preflight', context); },
+    // The legacy report group browser-smoke now admits the full candidate matrix.
+    // Retained rollback deliberately executes only its separate eight-check smoke.
     async checkBrowser(context: CheckContext) {
       const env = contextEnv(context); const path = reportPath('browser');
       const preview = await runtime.startPreview({ treeDir: context.treeDir, env });
       try {
-        await run(join(webRoot, 'node_modules/.bin/playwright'), [...PUBLICATION_BROWSER_ARGS],
+        await run(join(webRoot, 'node_modules/.bin/playwright'), [...(retained ? ROLLBACK_BROWSER_ARGS : PUBLICATION_BROWSER_ARGS)],
           { ...env, PUBLICATION_BASE_URL: preview.baseUrl, PLAYWRIGHT_JSON_OUTPUT_NAME: path, PUBLICATION_BROWSER_OUTPUT: join(options.reportsDir, 'browser-output') });
-        return playwrightResult(JSON.parse(readFileSync(path, 'utf8')));
+        return playwrightResult(JSON.parse(readFileSync(path, 'utf8')), retained ? ['desktop', 'mobile'] : candidateProjects, retained ? rollbackInventory : candidateInventory);
       } finally { await preview.close(); }
     },
     digest: (treeDir: string) => digestTree(treeDir, treeFiles(treeDir)),

@@ -373,8 +373,7 @@ test.describe('подвал: цвет марок', () => {
     return out;
   }
 
-  test('контраст доминирующей заливки к фону подвала не ниже 3:1 в каждой теме', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'предмет не зависит от ширины экрана');
+  test('контраст доминирующей заливки к фону подвала не ниже 3:1 в каждой теме', async ({ page }) => {
     const { footer, column } = await openFooter(page);
 
     // Целевой размер требование определяет ПРИ МАСШТАБЕ УСТРОЙСТВА 1. Условие проверяется, а
@@ -420,8 +419,7 @@ test.describe('подвал: цвет марок', () => {
 
   test('доминирующие заливки Youtube и Rutube различаются не менее чем на объявленный порог', async ({
     page,
-  }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'предмет не зависит от ширины экрана');
+  }) => {
     const { footer, column } = await openFooter(page);
     const background = parseRgb(
       await footer.evaluate((node) => getComputedStyle(node as Element).backgroundColor),

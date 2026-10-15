@@ -97,7 +97,7 @@ describe('test:publication standalone check-only command', () => {
     ports.capture = async () => ({ snapshotDir: f.options.snapshotDir, snapshotId: readPublicationSnapshot(f.options.snapshotDir).snapshotId! });
     const report = await runPublicationChecks(f.context, ports);
     expect(report.groups.map((group) => group.name)).toEqual(PUBLICATION_GROUPS);
-    expect(report.groups.map((group) => group.executedTests)).toEqual([3, 3, 3, 4, 3]);
+    expect(report.groups.map((group) => group.executedTests)).toEqual([3, 3, 3, 113, 3]);
     expect(f.calls).toHaveLength(6); expect(f.transport).not.toHaveBeenCalled();
   });
 
@@ -106,7 +106,7 @@ describe('test:publication standalone check-only command', () => {
     const report = await f.run();
     expect(report).toMatchObject({ commit: f.context.commit, snapshotId: f.snapshot.snapshotId, destinationId: 'stand', treeDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(report.groups.map((group) => group.name)).toEqual(PUBLICATION_GROUPS);
-    expect(report.groups.map((group) => group.executedTests)).toEqual([3, 3, 3, 4, 3]);
+    expect(report.groups.map((group) => group.executedTests)).toEqual([3, 3, 3, 113, 3]);
     expect(JSON.parse(readFileSync(f.context.reportPath, 'utf8'))).toEqual(report);
     expect(f.calls.filter((call) => basename(call.file) === 'npm')).toHaveLength(1);
     expect(f.calls.map((call) => call.args.find((arg) => arg.startsWith('tests/'))).filter(Boolean)).toEqual([

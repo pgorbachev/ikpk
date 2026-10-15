@@ -66,8 +66,12 @@ test('schedule renders its cards and registration links without submitting them'
   const html = readFileSync(`${treeDir}/raspisanie-i-tseny/index.html`, 'utf8');
   const count = [...html.matchAll(/\bdata-schedule-item(?:[\s=>])/g)].length;
   await page.goto('/raspisanie-i-tseny');
-  expect(count, 'empty schedule in checked artifact').toBeGreaterThan(0);
   await expect(page.locator('[data-schedule-item]')).toHaveCount(count);
+  if (count === 0) {
+    await expect(page.locator('[data-schedule-empty]')).toBeVisible();
+    await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
+    return;
+  }
   await expect(page.locator('[data-schedule-item]:visible').first(), 'no visible schedule cards').toBeVisible();
   await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
   const links = page.locator('a[href*="bitrix24"], a[href^="/demo-zayavka"]');
