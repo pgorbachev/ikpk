@@ -58,6 +58,11 @@ const NULLABLE_SCHEMA_DEFAULTS: Readonly<Partial<Record<SqlDemoNativeCollection,
   pages: new Set(['seo']),
 };
 const SHA256 = /^[a-f\d]{64}$/i;
+// SQL Events.startAt/endAt are DATE (calendar days), while Strapi's custom datetime
+// field serializes wall-clock midnight as an instant. The current saved CMS uses
+// Asia/Nicosia wall-clock midnight; UTC is also a valid serialization for a UTC
+// demo runner. Do not consult the process timezone: the source contract is a day.
+const SQL_DATE_SERIALIZATION_ZONES = ['UTC', 'Asia/Nicosia'] as const;
 type Row = Record<string, unknown>;
 type HtmlNode = { nodeName?: string; tagName?: string; value?: string; data?: string; attrs?: { name: string; value: string }[]; childNodes?: HtmlNode[]; content?: HtmlNode };
 type CanonicalHtmlAttribute = { kind: 'raw'; value: string } | { kind: 'verified-image'; sourceFileId: string };
@@ -167,14 +172,41 @@ function sameSeo(expected: unknown, actual: unknown): boolean {
   const expectedRecord = asRecord(expected);
   const actualRecord = asRecord(actual);
   if (!expectedRecord || !actualRecord) return false;
-  const actualKeys = Object.keys(actualRecord).filter((key) => key !== 'id');
-  if (actualKeys.length !== Object.keys(expectedRecord).length) return false;
+  const actualKeys = Object.keys(actualRecord).filter((key) => key !== 'id' && key !== 'noindex');
+  const hasOnlySchemaDefaultNoindex = !Object.prototype.hasOwnProperty.call(expectedRecord, 'noindex')
+    && Object.prototype.hasOwnProperty.call(actualRecord, 'noindex')
+    && actualRecord.noindex === false;
+  if (actualKeys.length !== Object.keys(expectedRecord).length
+    || (Object.prototype.hasOwnProperty.call(actualRecord, 'noindex') && !hasOnlySchemaDefaultNoindex)) return false;
   if (Object.prototype.hasOwnProperty.call(actualRecord, 'id')
     && (!Number.isSafeInteger(actualRecord.id) || (actualRecord.id as number) <= 0)) return false;
   return compareValue(expectedRecord, Object.fromEntries(actualKeys.map((key) => [key, actualRecord[key]])));
 }
 
+function isExpectedSqlDateSerialization(expected: string, actual: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expected)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(actual)) return false;
+  const expectedMidnight = Date.parse(`${expected}T00:00:00.000Z`);
+  const timestamp = Date.parse(actual);
+  if (!Number.isFinite(expectedMidnight) || new Date(expectedMidnight).toISOString().slice(0, 10) !== expected
+    || !Number.isFinite(timestamp) || timestamp % 1000 !== 0) return false;
+
+  return SQL_DATE_SERIALIZATION_ZONES.some((timeZone) => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(timestamp);
+    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return `${values.year}-${values.month}-${values.day}` === expected
+      && values.hour === '00' && values.minute === '00' && values.second === '00';
+  });
+}
+
 function sameAttribute(field: string, expected: unknown, actual: unknown, expectedMediaByUrl: ExpectedMediaByUrl, physicalMediaByUrl: PhysicalMediaByUrl): boolean {
+  if ((field === 'startAt' || field === 'endAt') && typeof expected === 'string' && typeof actual === 'string') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expected)) return compareValue(expected, actual);
+    return isExpectedSqlDateSerialization(expected, actual);
+  }
   if (field === 'published_date' && typeof expected === 'string' && typeof actual === 'string') {
     const expectedDay = /^\d{4}-\d{2}-\d{2}$/.test(expected) ? expected : null;
     const actualMidnight = /^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.000)?Z$/.exec(actual)?.[1] ?? null;
@@ -383,6 +415,18 @@ function isMultipleMediaField(plan: SqlMaterializerProjectionRecord): boolean {
     || (plan.collection === 'teachers' && plan.image?.field === 'photo');
 }
 
+function isDerivedScheduleEntryName(
+  plan: SqlMaterializerProjectionRecord,
+  value: unknown,
+  plans: readonly SqlMaterializerProjectionRecord[],
+): boolean {
+  if (plan.collection !== 'schedule-entries' || typeof value !== 'string') return false;
+  const seminar = plan.relations.find((relation) => relation.field === 'seminar' && relation.collection === 'seminars');
+  if (!seminar || seminar.legacyIds.length !== 1) return false;
+  const sourceSeminar = plans.find((candidate) => candidate.collection === 'seminars' && candidate.legacyId === seminar.legacyIds[0]);
+  return typeof sourceSeminar?.attributes.name === 'string' && value === sourceSeminar.attributes.name;
+}
+
 function compareImage(
   plan: SqlMaterializerProjectionRecord,
   row: Row,
@@ -482,6 +526,7 @@ function compareTarget(
       && field !== 'legacy_id'
       && field !== plan.image?.field
       && !(plan.collection === 'schedule-entries' && field === 'admin_label')
+      && !(field === 'name' && isDerivedScheduleEntryName(plan, row[field], plans))
       && !POPULATED_INVERSE_RELATIONS.some((inverse) => inverse.owner === plan.collection && inverse.field === field)
       && !isAllowedSchemaDefault(plan.collection as SqlDemoNativeCollection, field, row[field])
       && !plan.relations.some((relation) => relation.field === field));

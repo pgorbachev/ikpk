@@ -192,6 +192,15 @@ describe('native SQL release conservation', () => {
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
   });
 
+  it('accepts a schedule-entry name only when it mirrors its composed seminar name', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const rb of [a, b]) rb.collections['schedule-entries']![0]!.name = 'Seminar';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    b.collections['schedule-entries']![0]!.name = 'Unexpected';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/unexpected schedule-entries field: name/);
+  });
+
   it('CORRECTIVE REVIEW rejects a malformed derived admin_label', () => {
     const { release, a, b } = tenCollectionFixture();
     b.collections['schedule-entries']![0]!.admin_label = { authentication_token: 'SYNTHETIC-PRIVATE-TOKEN' };
@@ -240,6 +249,31 @@ describe('native SQL release conservation', () => {
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/published_date/);
   });
 
+  it('matches SQL event dates to deterministic UTC or Asia/Nicosia wall-clock midnight only', () => {
+    const { release, a, b } = tenCollectionFixture();
+    (release.entities.events[0] as Record<string, unknown>).startAt = '2030-05-10';
+    (release.entities.events[0] as Record<string, unknown>).endAt = '2030-05-11';
+    a.collections['schedule-entries']![0]!.startAt = '2030-05-09T21:00:00.000Z';
+    a.collections['schedule-entries']![0]!.endAt = '2030-05-10T21:00:00.000Z';
+    b.collections['schedule-entries']![0]!.startAt = '2030-05-10T00:00:00.000Z';
+    b.collections['schedule-entries']![0]!.endAt = '2030-05-11T00:00:00.000Z';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    b.collections['schedule-entries']![0]!.startAt = '2030-05-09T22:00:00.000Z';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/startAt/);
+
+    b.collections['schedule-entries']![0]!.startAt = '2030-05-09T20:59:59.000Z';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/startAt/);
+
+    b.collections['schedule-entries']![0]!.startAt = '2030-05-08T21:00:00.000Z';
+    b.collections['schedule-entries']![0]!.endAt = '2030-05-09T21:00:00.000Z';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/startAt|endAt/);
+
+    b.collections['schedule-entries']![0]!.startAt = '2030-05-10T00:00:00+04:00';
+    b.collections['schedule-entries']![0]!.endAt = '2030-05-11T00:00:00+04:00';
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/startAt|endAt/);
+  });
+
   it('CORRECTIVE REVIEW permits explicit Strapi timestamps and SEO component identity', () => {
     const { release, a, b } = tenCollectionFixture();
     for (const rb of [a, b]) {
@@ -274,6 +308,15 @@ describe('native SQL release conservation', () => {
     const { release, a, b } = tenCollectionFixture();
     (b.collections.articles![0]!.seo as Record<string, unknown>).authentication_token = 'SYNTHETIC-PRIVATE-TOKEN';
     expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow();
+  });
+
+  it('accepts only the declared SEO noindex=false schema default when SQL omitted the field', () => {
+    const { release, a, b } = tenCollectionFixture();
+    for (const target of [a, b]) (target.collections.articles![0]!.seo as Record<string, unknown>).noindex = false;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).not.toThrow();
+
+    (b.collections.articles![0]!.seo as Record<string, unknown>).noindex = true;
+    expect(() => assertSqlDemoNativeConservation(release, classification, a, b)).toThrow(/seo/);
   });
 
   it('CORRECTIVE REVIEW preserves template subtree content', () => {
