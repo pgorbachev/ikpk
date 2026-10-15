@@ -36,6 +36,7 @@ const DEMO193_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1
 const DEMO193_READBACK_SHA256 = 'c603dbe1b134e4f3bbb72fb9adad4486b5ac206d421a90c46a5ba8da23a7ff99';
 const DEMO193_CODE_COMMIT = '4e1576e507272f9793c3fbae3f2246f4fa3730b1';
 const DEMO193_NAMESPACE = 'ikpk_sql_demo_native_proto193';
+const DEMO193_SOURCE_URL = 'http://127.0.0.1:19341';
 type Demo193Readback = {
   capturedAt: string;
   target: string;
@@ -52,6 +53,7 @@ function demo193Input(): { readback: Demo193Readback; mediaDirectory: string } |
     throw new Error('unsupported snapshot capture option');
   }
   const [, readbackPath, mediaDirectory] = args;
+  if (cmsUrl !== DEMO193_SOURCE_URL) throw new Error('demo193 saved-readback source origin mismatch');
   if (!readbackPath || !mediaDirectory || !existsSync(readbackPath) || !existsSync(mediaDirectory)) {
     throw new Error('demo193 saved-readback input is missing');
   }
