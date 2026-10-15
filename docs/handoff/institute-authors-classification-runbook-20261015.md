@@ -6,9 +6,9 @@ This is the bounded owner-approved correction within D.5 of `cms-address-switch-
 
 The owner decided that every person affiliated with the Upledger or Barral institute is an author of methods. The rule is based on the institute relationship only; nationality and language are irrelevant. IKPK people remain classified by their existing roles.
 
-The pinned source is `/private/tmp/ikpk-demo193-prototype-A-20261013/live-snapshot-final/snapshot.json`, SHA-256 `fc19240f8187b9b86ce435d1b634a67e13d9d6c9c0f7f9ec3fd2405790666a08`. It contains 31 logical people: 18 teachers and 13 method authors. Its two target institutes contain 12 people:
+The source for this correction is the production backup captured at 2026-10-14 09:45:15 UTC: SQLite `data.db`, SHA-256 `85c675ae0f7a8bb86a09e4b2a78197adfd893af08ac8952955b38c9aaaa2de7a`, with its matching `uploads.tar.gz`, SHA-256 `9d9fe689fa6269e461da2fbb731a4fb60af0dcbda31eb6cab39b8fba10b9b0b3`. The archive contains 2,166 image files; the source database has 536 media records. The production backup has 32 logical people: 21 teachers and 11 method authors. The two target institutes contain 12 people:
 
-| Institute | Legacy ID | Person | Pinned trait | Result |
+| Institute | Legacy ID | Person | Backup trait | Result |
 |---|---:|---|---|---|
 | Upledger | 63 | Шрайнер Валерий Эдуардович, MD, CST-D | teacher | method-author |
 | Upledger | 64 | Радзинская Елена Викторовна | teacher | method-author |
@@ -23,7 +23,7 @@ The pinned source is `/private/tmp/ikpk-demo193-prototype-A-20261013/live-snapsh
 | Barral | 70 | Matteo Ghiretti | method-author | no change |
 | Barral | 71 | Paolo Ricci | method-author | no change |
 
-After the two corrections the logical totals are 16 teachers and 15 method authors. The CMS source classification set used on fresh imports now also includes legacy IDs 63 and 64; existing SQL supplements 87 and 88 are outside this roster and remain unchanged. Fabio Burigana (legacy ID 80) remains a method author.
+The prepared copy changes only the traits of legacy IDs 63 and 64 from `teacher` to `method-author`; after these corrections, the expected strict-capture manifest has 32 people: 19 teachers and 13 method authors. Existing people with legacy IDs 83, 87, and 88 retain their production traits. Fabio Burigana (legacy ID 80) remains a method author. The classification set used on fresh imports includes legacy IDs 63 and 64.
 
 ## SQLite operation
 
@@ -43,4 +43,4 @@ node cms/scripts/institute-method-author-classification.mjs --db /absolute/path/
 
 Before any write the utility verifies the Strapi table shape, both institute identities by legacy ID, slug, and exact name, and the complete 12-person roster by legacy ID, exact name, and institute. It discovers document IDs from that database; it does not hardcode current CMS numeric IDs or document IDs. It verifies every physical row for each discovered logical document, including drafts and published versions, and aborts on missing, extra, ambiguous, unlinked, or differently classified rows. `BEGIN IMMEDIATE` encloses the preflight, trait-only writes, and readback. Existing authors are no-ops; a second successful run writes zero rows. A failed update rolls back earlier updates in the same transaction. The operator must keep Strapi stopped for the full command; a database lock does not protect Strapi's in-memory cache or lifecycle behavior.
 
-The pinned prototype SQLite database was used only for a read-only dry-run rehearsal. No database was changed by this implementation task. A post-apply capture must be a new artifact with its own source metadata and an explicit reference to this accepted correction; it must not replace the pinned snapshot or candidate record.
+The original prototype capture and its classification-candidate records remain immutable; the old October 10 SQL snapshot is not a source for this operation. Preparation uses a private copy of the production backup, sanitizes credentials, applies only the two accepted trait corrections, and upgrades the local schema with the two approved additive fields. The copy is loaded with the current Strapi runtime (5.51.2), then checked for schema and content conservation before a normal strict capture. No production database is modified. Any later apply requires its own explicit authorization and operation window. A post-apply capture must be a new artifact with its own source metadata and an explicit reference to this accepted correction; it must not replace the prior capture or candidate record.
