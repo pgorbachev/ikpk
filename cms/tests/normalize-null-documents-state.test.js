@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { linkSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import {
-  applyDocumentsStateNormalization,
-  planDocumentsStateNormalization,
-} from '../scripts/normalize-null-documents-state.mjs';
+import { prepareNormalizedBackup } from '../scripts/normalize-null-documents-state.mjs';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const { checkPublication } = await import('../src/lib/publication-validation.ts');
 
-function fixture({ contradiction = false } = {}) {
-  const db = new Database(':memory:');
+function fixture(t, { contradiction = false } = {}) {
+  const directory = mkdtempSync(join(tmpdir(), 'ikpk-documents-state-test-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const sourcePath = join(directory, 'source.db');
+  const db = new Database(sourcePath);
   db.exec(`
     CREATE TABLE seminars (
       id INTEGER PRIMARY KEY,
@@ -60,10 +64,15 @@ function fixture({ contradiction = false } = {}) {
       INSERT INTO seminars_cmps VALUES (60, 5, 50, 'seminar.document-record', 'documents', 0);
     ` : ''}
   `);
-  return db;
+  db.close();
+  return { directory, sourcePath, outputPath: join(directory, 'prepared.db') };
 }
 
-function seminarSnapshot(db) {
+function digest(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function snapshot(db) {
   return {
     seminars: db.prepare('SELECT * FROM seminars ORDER BY id').all(),
     components: db.prepare('SELECT * FROM seminars_cmps ORDER BY id').all(),
@@ -85,73 +94,119 @@ test('legacy null documents_state is blocked by publication validation', () => {
   assert.equal(legacy.ok, false);
 });
 
-test('plan reports only null rows with no structured documents across either physical version', () => {
-  const db = fixture();
-  try {
-    const plan = planDocumentsStateNormalization(db);
-    assert.equal(plan.blocked, false);
-    assert.deepEqual(plan.candidateRows, [
-      { rowId: 1, documentId: 'doc-null', published: false },
-      { rowId: 2, documentId: 'doc-null', published: true },
-    ]);
-    assert.deepEqual(plan.contradictions, []);
-  } finally {
-    db.close();
+test('dry-run reads a real SQLite source without creating its output', async (t) => {
+  const { sourcePath, outputPath } = fixture(t);
+  const sourceBefore = digest(sourcePath);
+  const plan = await prepareNormalizedBackup({ sourcePath, outputPath });
+
+  assert.equal(plan.mode, 'dry-run');
+  assert.equal(plan.blocked, false);
+  assert.equal(plan.nullStateRows.length, 2);
+  assert.equal(plan.logicalDocuments, 1);
+  assert.equal(plan.candidateRows.length, 2);
+  assert.deepEqual(plan.contradictions, []);
+  assert.equal(digest(sourcePath), sourceBefore);
+  assert.equal(require('node:fs').existsSync(outputPath), false);
+});
+
+test('apply copies first, changes only null states, preserves physical versions and relations, then remains idempotent', async (t) => {
+  const { sourcePath, outputPath, directory } = fixture(t);
+  const sourceBefore = digest(sourcePath);
+  const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
+  const before = snapshot(source);
+  source.close();
+
+  const first = await prepareNormalizedBackup({ sourcePath, outputPath, apply: true });
+  assert.deepEqual(first, { mode: 'apply', sourcePath, outputPath: join(realpathSync(directory), 'prepared.db'), updatedRows: 2, logicalDocuments: 1 });
+  assert.equal(digest(sourcePath), sourceBefore);
+
+  const output = new Database(outputPath, { readonly: true, fileMustExist: true });
+  const after = snapshot(output);
+  output.close();
+  assert.equal(after.seminars.length, before.seminars.length);
+  for (let index = 0; index < before.seminars.length; index += 1) {
+    const prior = before.seminars[index];
+    const next = after.seminars[index];
+    assert.deepEqual({ ...next, documents_state: prior.documents_state }, prior);
+    if (prior.document_id === 'doc-null') assert.equal(next.documents_state, 'unconfirmed');
+  }
+  assert.deepEqual(after.components, before.components);
+  assert.deepEqual(after.documentRecords, before.documentRecords);
+  assert.deepEqual(after.courseGroups, before.courseGroups);
+  assert.deepEqual(after.teachers, before.teachers);
+  assert.equal(after.seminars.find((row) => row.id === 3).documents_state, 'issued');
+  assert.equal(after.seminars.find((row) => row.id === 4).documents_state, 'not-issued');
+
+  const normalizedVerdict = checkPublication({
+    type: 'seminar',
+    record: {
+      name: 'Seminar', identifier: 'seminar', course_group: 'program', description: 'Description',
+      seo_title: 'SEO', seo_description: 'SEO description', documentsState: 'unconfirmed',
+    },
+  });
+  assert.equal(normalizedVerdict.ok, true);
+
+  const secondOutput = join(directory, 'prepared-again.db');
+  const second = await prepareNormalizedBackup({ sourcePath: outputPath, outputPath: secondOutput, apply: true });
+  assert.deepEqual(second, { mode: 'apply', sourcePath: outputPath, outputPath: join(realpathSync(directory), 'prepared-again.db'), updatedRows: 0, logicalDocuments: 0 });
+  const secondDb = new Database(secondOutput, { readonly: true, fileMustExist: true });
+  assert.deepEqual(snapshot(secondDb), after);
+  secondDb.close();
+});
+
+test('existing output is refused without changing its bytes or the source', async (t) => {
+  const { directory, sourcePath } = fixture(t);
+  const outputPath = join(directory, 'already-exists.db');
+  const bytes = Buffer.from('keep this existing file intact');
+  require('node:fs').writeFileSync(outputPath, bytes);
+  const sourceBefore = digest(sourcePath);
+  await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /output already exists/);
+  assert.deepEqual(readFileSync(outputPath), bytes);
+  assert.equal(digest(sourcePath), sourceBefore);
+});
+
+test('failed normalization removes only its exclusively created output and leaves the source intact', async (t) => {
+  const { sourcePath, outputPath } = fixture(t);
+  const sourceDb = new Database(sourcePath);
+  sourceDb.exec(`
+    CREATE TRIGGER refuse_documents_state_update
+    BEFORE UPDATE OF documents_state ON seminars
+    BEGIN SELECT RAISE(ABORT, 'synthetic write failure'); END;
+  `);
+  sourceDb.close();
+  const sourceBefore = digest(sourcePath);
+
+  await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /synthetic write failure/);
+  assert.equal(require('node:fs').existsSync(outputPath), false);
+  assert.equal(digest(sourcePath), sourceBefore);
+});
+
+test('source path, symlink, and hardlink outputs are refused without source mutation', async (t) => {
+  const { directory, sourcePath } = fixture(t);
+  const sourceBefore = digest(sourcePath);
+  const symlinkPath = join(directory, 'source-link.db');
+  const hardlinkPath = join(directory, 'source-hardlink.db');
+  symlinkSync(sourcePath, symlinkPath);
+  linkSync(sourcePath, hardlinkPath);
+
+  for (const outputPath of [sourcePath, symlinkPath, hardlinkPath]) {
+    await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /output already exists|resolves to the source/);
+    assert.equal(digest(sourcePath), sourceBefore);
   }
 });
 
-test('apply changes only documents_state, preserves draft and published rows and all relations, and is idempotent', () => {
-  const db = fixture();
-  try {
-    const before = seminarSnapshot(db);
-    const first = applyDocumentsStateNormalization(db);
-    const after = seminarSnapshot(db);
-
-    assert.deepEqual(first, { updatedRows: 2, logicalDocuments: 1 });
-    assert.equal(after.seminars.length, before.seminars.length);
-    for (let index = 0; index < before.seminars.length; index += 1) {
-      const prior = before.seminars[index];
-      const next = after.seminars[index];
-      assert.deepEqual({ ...next, documents_state: prior.documents_state }, prior);
-      if (prior.document_id === 'doc-null') assert.equal(next.documents_state, 'unconfirmed');
-    }
-    assert.deepEqual(after.components, before.components);
-    assert.deepEqual(after.documentRecords, before.documentRecords);
-    assert.deepEqual(after.courseGroups, before.courseGroups);
-    assert.deepEqual(after.teachers, before.teachers);
-    assert.equal(after.seminars.find((row) => row.id === 3).documents_state, 'issued');
-    assert.equal(after.seminars.find((row) => row.id === 4).documents_state, 'not-issued');
-
-    const normalized = checkPublication({
-      type: 'seminar',
-      record: {
-        name: 'Seminar', identifier: 'seminar', course_group: 'program', description: 'Description',
-        seo_title: 'SEO', seo_description: 'SEO description', documentsState: 'unconfirmed',
-      },
-    });
-    assert.equal(normalized.ok, true);
-    assert.deepEqual(applyDocumentsStateNormalization(db), { updatedRows: 0, logicalDocuments: 0 });
-    assert.deepEqual(seminarSnapshot(db), after);
-  } finally {
-    db.close();
-  }
-});
-
-test('a null state with structured documents is reported and blocks the whole apply transaction', () => {
-  const db = fixture({ contradiction: true });
-  try {
-    const before = seminarSnapshot(db);
-    const plan = planDocumentsStateNormalization(db);
-    assert.equal(plan.blocked, true);
-    assert.deepEqual(plan.contradictions, [{
-      documentId: 'doc-conflict',
-      seminarRowId: 5,
-      reason: 'structured documents are attached to a physical version',
-    }]);
-    assert.deepEqual(plan.candidateRows, []);
-    assert.throws(() => applyDocumentsStateNormalization(db), /structured documents/);
-    assert.deepEqual(seminarSnapshot(db), before);
-  } finally {
-    db.close();
-  }
+test('a documents-component contradiction is reported and prevents output creation', async (t) => {
+  const { sourcePath, outputPath } = fixture(t, { contradiction: true });
+  const sourceBefore = digest(sourcePath);
+  const plan = await prepareNormalizedBackup({ sourcePath, outputPath });
+  assert.equal(plan.blocked, true);
+  assert.deepEqual(plan.contradictions, [{
+    documentId: 'doc-conflict',
+    seminarRowId: 5,
+    reason: 'structured documents are attached to a physical version',
+  }]);
+  assert.deepEqual(plan.candidateRows, []);
+  await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /structured documents/);
+  assert.equal(require('node:fs').existsSync(outputPath), false);
+  assert.equal(digest(sourcePath), sourceBefore);
 });

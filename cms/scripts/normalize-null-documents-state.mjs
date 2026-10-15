@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { closeSync, fstatSync, lstatSync, openSync, realpathSync, unlinkSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REQUIRED_COLUMNS = {
@@ -80,7 +81,7 @@ export function planDocumentsStateNormalization(db) {
   };
 }
 
-export function applyDocumentsStateNormalization(db) {
+function normalizeOutputDatabase(db) {
   const transaction = db.transaction(() => {
     const plan = planDocumentsStateNormalization(db);
     if (plan.blocked) {
@@ -90,68 +91,120 @@ export function applyDocumentsStateNormalization(db) {
     let updatedRows = 0;
     for (const { rowId } of plan.candidateRows) {
       const result = update.run(rowId);
-      if (result.changes !== 1) throw new Error(`concurrent or unexpected change while normalizing seminar row ${rowId}`);
+      if (result.changes !== 1) throw new Error(`unexpected change while normalizing seminar row ${rowId}`);
       updatedRows += result.changes;
     }
-
-    const wrongReadback = plan.candidateRows.filter(({ rowId }) => {
+    for (const { rowId } of plan.candidateRows) {
       const row = db.prepare('SELECT documents_state FROM seminars WHERE id = ?').get(rowId);
-      return row?.documents_state !== 'unconfirmed';
-    });
-    if (wrongReadback.length > 0) {
-      throw new Error(`post-write readback failed for seminar rows: ${wrongReadback.map(({ rowId }) => rowId).join(', ')}`);
+      if (row?.documents_state !== 'unconfirmed') {
+        throw new Error(`post-write readback failed for seminar row ${rowId}`);
+      }
     }
     return { updatedRows, logicalDocuments: plan.logicalDocuments };
   });
   return transaction.immediate();
 }
 
+function assertNewOutputPath(sourcePath, outputPath) {
+  let sourceRealPath;
+  try {
+    sourceRealPath = realpathSync(sourcePath);
+  } catch (error) {
+    throw new Error(`cannot resolve source SQLite file: ${error.message}`);
+  }
+  const outputParent = realpathSync(dirname(outputPath));
+  const canonicalOutputPath = join(outputParent, basename(outputPath));
+  if (canonicalOutputPath === sourceRealPath) throw new Error('output path resolves to the source SQLite file');
+  try {
+    lstatSync(outputPath);
+    throw new Error(`output already exists (files, symlinks, and hardlinks are never overwritten): ${outputPath}`);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  return canonicalOutputPath;
+}
+
+function removeOwnedOutput(outputPath, identity) {
+  if (!identity) return;
+  try {
+    const current = lstatSync(outputPath);
+    if (current.isFile() && current.dev === identity.dev && current.ino === identity.ino) unlinkSync(outputPath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+/** Dry-run never creates output; apply backs up a read-only source into a new exclusive file. */
+export async function prepareNormalizedBackup({ sourcePath: rawSourcePath, outputPath: rawOutputPath, apply = false }) {
+  if (!isAbsolute(rawSourcePath) || !isAbsolute(rawOutputPath)) {
+    throw new Error('--source and --output must be absolute paths');
+  }
+  const sourcePath = resolve(rawSourcePath);
+  const requestedOutputPath = resolve(rawOutputPath);
+  const outputPath = assertNewOutputPath(sourcePath, requestedOutputPath);
+  const cmsRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const require = createRequire(`${cmsRoot}/package.json`);
+  const Database = require('better-sqlite3');
+  const source = new Database(sourcePath, { readonly: true, fileMustExist: true, timeout: 5000 });
+  let ownedIdentity;
+  try {
+    const sourcePlan = planDocumentsStateNormalization(source);
+    if (!apply) return { mode: 'dry-run', sourcePath, outputPath, ...sourcePlan };
+    if (sourcePlan.blocked) {
+      throw new Error(`normalization refused: structured documents or missing identity conflicts (${sourcePlan.contradictions.length})`);
+    }
+
+    let fd;
+    try {
+      fd = openSync(outputPath, 'wx', 0o600);
+      ownedIdentity = fstatSync(fd);
+    } catch (error) {
+      if (error.code === 'EEXIST') throw new Error(`output already exists (exclusive create refused): ${outputPath}`);
+      throw error;
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+
+    try {
+      await source.backup(outputPath);
+      const output = new Database(outputPath, { fileMustExist: true, timeout: 5000 });
+      try {
+        const result = normalizeOutputDatabase(output);
+        return { mode: 'apply', sourcePath, outputPath, ...result };
+      } finally {
+        output.close();
+      }
+    } catch (error) {
+      removeOwnedOutput(outputPath, ownedIdentity);
+      throw error;
+    }
+  } finally {
+    source.close();
+  }
+}
+
 function parseArgs(argv) {
-  const result = { dbPath: undefined, apply: false, preparedCopy: false, help: false };
+  const result = { sourcePath: undefined, outputPath: undefined, apply: false, help: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === '--db') result.dbPath = argv[++index];
+    if (arg === '--source') result.sourcePath = argv[++index];
+    else if (arg === '--output') result.outputPath = argv[++index];
     else if (arg === '--apply') result.apply = true;
-    else if (arg === '--prepared-copy') result.preparedCopy = true;
     else if (arg === '--help') result.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
-  if (!result.help && (!result.dbPath || !isAbsolute(result.dbPath))) {
-    throw new Error('--db must name an absolute SQLite file path');
-  }
-  if (result.apply !== result.preparedCopy) {
-    throw new Error('--apply requires --prepared-copy, and --prepared-copy is valid only with --apply');
-  }
+  if (!result.help && (!result.sourcePath || !result.outputPath)) throw new Error('--source and --output are required');
   return result;
 }
 
 export async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (args.help) {
-    process.stdout.write('Usage: node cms/scripts/normalize-null-documents-state.mjs --db /absolute/path/to/private-copy/data.db [--apply --prepared-copy]\n');
+    process.stdout.write('Usage: node cms/scripts/normalize-null-documents-state.mjs --source /absolute/path/to/source.db --output /absolute/path/to/new-copy.db [--apply]\n');
     return;
   }
-  const cmsRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const require = createRequire(`${cmsRoot}/package.json`);
-  const Database = require('better-sqlite3');
-  const dbPath = resolve(args.dbPath);
-  const db = new Database(dbPath, { readonly: !args.apply, fileMustExist: true, timeout: 5000 });
-  try {
-    const plan = planDocumentsStateNormalization(db);
-    if (!args.apply) {
-      process.stdout.write(`${JSON.stringify({ mode: 'dry-run', dbPath, ...plan }, null, 2)}\n`);
-      return;
-    }
-    if (plan.blocked) {
-      process.stdout.write(`${JSON.stringify({ mode: 'apply', dbPath, ...plan }, null, 2)}\n`);
-      process.exitCode = 2;
-      return;
-    }
-    const result = applyDocumentsStateNormalization(db);
-    process.stdout.write(`${JSON.stringify({ mode: 'apply', dbPath, ...result }, null, 2)}\n`);
-  } finally {
-    db.close();
-  }
+  const result = await prepareNormalizedBackup(args);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
