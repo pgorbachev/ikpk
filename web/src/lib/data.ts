@@ -208,6 +208,19 @@ export interface Teacher {
 
 export type PersonTrait = 'teacher' | 'method-author';
 
+export function personRoleLabels(trait?: PersonTrait): { title: string; breadcrumb: string; about: string } {
+  if (trait === 'method-author') {
+    return { title: 'автор методики', breadcrumb: 'Авторы методик', about: 'Об авторе методики' };
+  }
+  return { title: 'преподаватель', breadcrumb: 'Преподаватели', about: 'О преподавателе' };
+}
+
+export function institutePeopleSectionLabel(instituteSlug: string): string {
+  return instituteSlug === 'institut-apledzhera' || instituteSlug === 'institut-barralya'
+    ? 'Авторы методик'
+    : 'Преподаватели';
+}
+
 export function groupTeachersByTrait(teachers: readonly Teacher[]): Record<PersonTrait, Teacher[]> {
   return {
     teacher: teachers.filter((teacher) => teacher.trait === 'teacher'),

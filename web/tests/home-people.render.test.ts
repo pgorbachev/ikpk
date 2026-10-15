@@ -15,7 +15,7 @@ describe('homepage people section', () => {
       photo: `/teacher-${index + 1}.jpg`,
       institute_legacy_id: 'institute-a',
     }));
-    const authors = Array.from({ length: 3 }, (_, index) => ({
+    const authors = Array.from({ length: 15 }, (_, index) => ({
       legacy_id: `author-${index + 1}`,
       slug: `author-${index + 1}`,
       name: `Автор методики ${index + 1}`,
@@ -37,6 +37,9 @@ describe('homepage people section', () => {
     expect(html).toContain('Автор методики 1');
     expect(html).toContain('Преподаватель 1');
     expect(html.match(/class="teacher-card"/g)).toHaveLength(8);
+    expect(html.match(/class="teacher-card" href="\/specialisty\//g)).toHaveLength(4);
+    expect(html.match(/class="teacher-card" href="\/institute-a\/prepodavatel\//g)).toHaveLength(4);
+    expect(html.match(/class="teacher-cred[^"]*"[^>]*>Автор методики<\/span>/g)).toHaveLength(4);
     expect(html).toContain('href="/specialisty/author-1"');
   });
 });
