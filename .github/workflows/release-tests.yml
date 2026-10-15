@@ -1,0 +1,152 @@
+name: Release source tests
+
+# Push creates a run on dev before this workflow is registered on default main.
+# Publication re-runs that exact run, records the new attempt in its protected
+# operation receipt, and waits. This workflow has no deployment credentials.
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact source commit for this operation
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+run-name: Release source tests ${{ github.sha }}
+
+jobs:
+  identity:
+    name: Release identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Bind the run to the operation and exact checkout
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release-test-policy.mjs identity
+
+  source-tests:
+    name: Source tests
+    needs: identity
+    # Local reusable workflow resolves from this dispatch's commit, never from main.
+    uses: ./.github/workflows/test.yml
+    with:
+      artifact_suffix: -release-${{ github.run_attempt }}
+
+  supplemental:
+    name: Release supplemental
+    needs: identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      SNAPSHOT_SOURCE: pinned
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/fixtures/content-snapshot
+      CHAT_LOADER_SRC: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            cms/package-lock.json
+      - name: Install isolated application dependencies
+        run: |
+          npm ci --prefix web
+          npm ci --prefix cms
+      - name: Install all compatibility browsers
+        working-directory: web
+        run: npx playwright install --with-deps
+      - name: Build the pinned source fixture
+        working-directory: web
+        run: npm run build
+      - name: Run compatibility tests (all seven projects)
+        working-directory: web
+        run: npm run test:e2e:compat
+      - name: Run CMS unit tests and build
+        working-directory: cms
+        run: |
+          npm test
+          npm run build
+      - name: Run CMS to site against disposable local CMS and site
+        working-directory: cms
+        env:
+          E2E_REUSE_ADMIN_BUILD: '1'
+        run: npm run test:e2e
+
+  visual:
+    name: Release visual (macOS)
+    needs: identity
+    # The accepted images are *-darwin.png; Linux must not create new baselines.
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      SNAPSHOT_SOURCE: pinned
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/fixtures/content-snapshot
+      CHAT_LOADER_SRC: none
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run build
+      - name: Compare all existing visual baselines
+        run: npm run test:e2e:visual
+      - name: Upload visual differences
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-visual-differences-${{ github.run_attempt }}
+          path: web/test-results/
+          retention-days: 14
+
+  provision:
+    name: Release provisioning (isolated Docker)
+    needs: identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - name: Run the dedicated provisioning suite against disposable containers
+        working-directory: web
+        run: npx vitest run --config vitest.provision.config.ts
+
+  manifest:
+    name: Release test manifest
+    needs: [identity, source-tests, supplemental, visual, provision]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Record only successful native job results
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/release-test-policy.mjs manifest "$RUNNER_TEMP/release-source-tests.json"
+      - name: Retain operation-bound source evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-source-tests-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-source-tests.json
+          if-no-files-found: error
+          retention-days: 90
