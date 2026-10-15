@@ -161,7 +161,8 @@ function buildPlan(db) {
 
 export function planClassification(db) {
   const plan = buildPlan(db);
-  const { rows: _rows, ...report } = plan;
+  const report = { ...plan };
+  delete report.rows;
   return report;
 }
 

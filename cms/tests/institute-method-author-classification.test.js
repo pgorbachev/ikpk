@@ -81,7 +81,8 @@ test('apply changes only trait in every draft and published row; a second apply 
     const result = applyClassification(db);
     assert.equal(result.updatedRows, 4);
     const after = db.prepare('SELECT * FROM teachers ORDER BY id').all();
-    assert.deepEqual(after.map(({ trait, ...rest }) => rest), before.map(({ trait, ...rest }) => rest));
+    const withoutTrait = (row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'trait'));
+    assert.deepEqual(after.map(withoutTrait), before.map(withoutTrait));
     assert.deepEqual(after.slice(0, 4).map((row) => row.trait), Array(4).fill('method-author'));
     assert.equal(after.at(-1).trait, 'teacher');
     assert.deepEqual(applyClassification(db), { updatedRows: 0, noops: 12 });
