@@ -5,8 +5,10 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readlinkSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -44,7 +46,7 @@ function runReleaseGate(t, { plannedBytes, actualBytes }) {
       phase: 'before-sync',
       path: 'step.js',
       sha256: sha256(plannedBytes),
-      source: { strapiVersion: '5.51.2', schemaFingerprint: 'a'.repeat(64) },
+      source: { strapiVersion: '5.51.2', schema: { engine: 'sqlite', requiredColumns: { fixture: ['id', 'value'] } } },
       preconditions: { fixture: true },
       postconditions: { fixture: true },
       readback: { fixture: true },
@@ -71,7 +73,8 @@ test('release plan gives every immutable step a phase, payload hash, provenance,
     assert.ok(typeof step.path === 'string' && step.path.length > 0, `missing artifact path for ${step.id}`);
     assert.match(step.sha256, /^[a-f0-9]{64}$/, `missing exact payload hash for ${step.id}`);
     assert.ok(step.source && typeof step.source.strapiVersion === 'string', `missing source Strapi version for ${step.id}`);
-    assert.match(step.source.schemaFingerprint, /^[a-f0-9]{64}$/, `schema provenance must be a measured fingerprint for ${step.id}`);
+    assert.ok(step.source.schema && step.source.schema.engine === 'sqlite', `missing supported source schema constraints for ${step.id}`);
+    assert.ok(step.source.schema.requiredColumns && Object.keys(step.source.schema.requiredColumns).length > 0, `source schema constraints are empty for ${step.id}`);
     assert.ok(step.preconditions && typeof step.preconditions === 'object', `missing preconditions for ${step.id}`);
     assert.ok(step.postconditions && typeof step.postconditions === 'object', `missing postconditions for ${step.id}`);
     assert.ok(step.readback && typeof step.readback === 'object', `missing readback contract for ${step.id}`);
@@ -116,19 +119,52 @@ test('release gate rejects a substituted migration even when the declared file c
   assert.match(result.stderr + result.stdout, /(sha|hash|хеш)/i, 'refusal did not identify the payload-hash mismatch');
 });
 
-test('failed CMS startup cannot switch to old code and restart it before database-pair compatibility is proven', () => {
+test('legacy CMS failure branch refuses code-only rollback when no matching database snapshot exists', (t) => {
   const bootstrap = readFileSync(bootstrapPath, 'utf8');
-  const start = bootstrap.indexOf('if [[ -n "$previous_target" ]]');
+  const healthyStart = bootstrap.indexOf('if ((healthy)); then');
+  const start = bootstrap.indexOf('if [[ -n "$previous_target" ]]; then', healthyStart);
   assert.ok(start >= 0, 'CMS failure rollback branch is missing');
   const end = bootstrap.indexOf('echo "[bootstrap] служба системы управления не ответила', start);
   assert.ok(end > start, 'cannot isolate CMS failure rollback branch');
   const branch = bootstrap.slice(start, end);
-  const switchIndex = branch.indexOf('ln -sfn "$previous_target"');
-  const restartIndex = branch.indexOf('systemctl restart "$unit_name"');
-  assert.ok(switchIndex >= 0 && restartIndex > switchIndex, 'expected legacy rollback switch/restart sequence not found');
-  const compatibilityIndex = branch.search(/(compatible|compatibility|совместим).{0,100}(database|баз|схем)|(database|баз|схем).{0,100}(compatible|compatibility|совместим)/is);
-  assert.ok(
-    compatibilityIndex >= 0 && compatibilityIndex < switchIndex && compatibilityIndex < restartIndex,
-    'old CMS is switched on and restarted without an earlier compatible code+database pair proof',
-  );
+  const scratch = tempDirectory(t, 'ikpk-bootstrap-rollback-');
+  const oldRelease = join(scratch, 'releases/old');
+  const newRelease = join(scratch, 'releases/new');
+  const currentLink = join(scratch, 'current');
+  const bin = join(scratch, 'mock-bin');
+  const events = join(scratch, 'events.log');
+  mkdirSync(join(oldRelease, 'database'), { recursive: true });
+  mkdirSync(join(newRelease, 'database'), { recursive: true });
+  mkdirSync(bin);
+  symlinkSync(newRelease, currentLink);
+
+  for (const command of ['ln', 'mv', 'systemctl']) {
+    const executable = join(bin, command);
+    writeFileSync(executable, `#!/bin/sh\nprintf '%s %s\\n' '${command}' "$*" >> "$IKPK_TEST_EVENTS"\n`, 'utf8');
+    chmodSync(executable, 0o700);
+  }
+
+  // Execute the actual extracted failure branch. Mocking switch/restart commands records
+  // attempted external effects while keeping all paths under this test's temporary root.
+  const harness = `set -euo pipefail\n${branch}\n`;
+  const result = spawnSync('/bin/bash', ['-c', harness], {
+    encoding: 'utf8',
+    timeout: 5000,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      IKPK_TEST_EVENTS: events,
+      previous_target: oldRelease,
+      new_release: newRelease,
+      current_link: currentLink,
+      unit_name: 'ikpk-cms-fixture.service',
+      ENVIRONMENT: 'production-fixture',
+      SERVICE_ADDR: '127.0.0.1:0',
+    },
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const attempted = existsSync(events) ? readFileSync(events, 'utf8') : '';
+  assert.doesNotMatch(attempted, /^ln -sfn .*\/old /m, 'old code was switched despite missing pair restoration proof');
+  assert.doesNotMatch(attempted, /systemctl restart/, 'old CMS was started against the new database');
+  assert.equal(readlinkSync(currentLink), newRelease, 'active code pointer changed on an unpaired rollback attempt');
 });

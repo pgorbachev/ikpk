@@ -75,7 +75,7 @@ function runGate(opts: { migrations: string[]; expected?: string; tamper?: strin
         phase: 'before-sync',
         path: m,
         sha256: createHash('sha256').update(plannedBytes).digest('hex'),
-        source: { strapiVersion: '5.51.2', schemaFingerprint: 'a'.repeat(64) },
+        source: { strapiVersion: '5.51.2', schema: { engine: 'sqlite', requiredColumns: { fixture: ['id', 'value'] } } },
         preconditions: { fixture: true },
         postconditions: { fixture: true },
         readback: { fixture: true },
