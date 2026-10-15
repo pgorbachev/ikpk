@@ -61,22 +61,29 @@ function relationalSchema(db, table) {
     unique: Number(row.unique), origin: row.origin, partial: Number(row.partial),
     columns: db.prepare(`PRAGMA index_info(${quote(row.name)})`).all().map(({ name }) => name),
   })).sort((a, b) => json(a).localeCompare(json(b)));
-  return { foreignKeys, indexes };
+  const definitions = db.prepare(`SELECT type, name, sql FROM sqlite_master WHERE tbl_name = ? AND sql IS NOT NULL ORDER BY type, name`).all(table)
+    .map(({ type, name, sql }) => ({ type, name, sql }));
+  return { foreignKeys, indexes, definitions };
 }
 function normalizeRelationalSchema(value, table, transforms) {
   const rename = KNOWN_RENAMES.get(table);
-  if (!rename || !transforms.nativeRename) return value;
+  if (!rename || !transforms.nativeRenameTables.has(table)) return value;
   const renameColumn = (name) => name === rename[0] ? rename[1] : name;
   return {
     foreignKeys: value.foreignKeys.map((fk) => ({ ...fk, from: renameColumn(fk.from), to: renameColumn(fk.to) }))
       .sort((a, b) => json(a).localeCompare(json(b))),
     indexes: value.indexes.map((index) => ({ ...index, columns: index.columns.map(renameColumn) }))
       .sort((a, b) => json(a).localeCompare(json(b))),
+    definitions: value.definitions.map((item) => ({ ...item,
+      sql: item.sql.replace(new RegExp(`(["'\x60\\[]?)${rename[0]}(["'\x60\\]]?)`, 'g'), (_match, before, after) => `${before}${rename[1]}${after}`),
+    })),
   };
 }
 function valueKey(value) {
   if (Buffer.isBuffer(value)) return { blobSha256: sha(value), bytes: value.length };
   if (typeof value === 'bigint') return { integer: value.toString() };
+  if (Array.isArray(value)) return value.map(valueKey);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, valueKey(value[key])]));
   return value;
 }
 function objectDigest(row) {
@@ -127,18 +134,24 @@ function compareRows(sourceDb, candidateDb, sourceTable, candidateTable, columns
 function expectedColumns(sourceColumns, table, knownTransforms) {
   const rename = KNOWN_RENAMES.get(table);
   return sourceColumns.map((column) => {
-    if (rename && knownTransforms.nativeRename && column.name === rename[0]) return { ...column, name: rename[1] };
+    if (rename && knownTransforms.nativeRenameTables.has(table) && column.name === rename[0]) return { ...column, name: rename[1] };
     return column;
   });
 }
 function deriveKnownTransforms(sourceDb, plan) {
-  const transforms = { nativeRename: false, classification: null, documentsState: null, nativeSteps: [] };
+  const transforms = { nativeRename: false, nativeRenameTables: new Set(), classification: null, documentsState: null, nativeSteps: [] };
   for (const step of plan.steps) {
     if (step.kind === 'strapi-native' && step.id === '2026.09.21T00.00.00.rename-status-columns'
       && step.path === '2026.09.21T00.00.00.rename-status-columns.js'
       && step.sha256 === '5f7ea6cb13aee8385d68901c42b73113cb3513bd45e802f79bc8def11c0ed215') {
       transforms.nativeRename = true;
-      transforms.nativeSteps.push(basename(step.path));
+      for (const [table, [from]] of KNOWN_RENAMES) {
+        const columns = new Set(sourceDb.prepare(`PRAGMA table_info(${quote(table)})`).all().map(({ name }) => name));
+        if (columns.has(from)) transforms.nativeRenameTables.add(table);
+      }
+      const alreadyApplied = tableNames(sourceDb).includes('strapi_migrations')
+        && sourceDb.prepare('SELECT name FROM strapi_migrations').all().some(({ name }) => basename(name) === basename(step.path));
+      if (!alreadyApplied) transforms.nativeSteps.push(basename(step.path));
     } else if (step.kind === 'data' && step.handler === 'classification'
       && step.id === 'institute-method-author-classification-v1'
       && step.path === 'data-steps/classification.mjs'
@@ -179,17 +192,17 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
   const rows = collectRows(sourceDb, sourceTable, columns).map(({ keyed }) => ({ ...keyed }));
   if (sourceTable === 'teachers' && transforms.classification) {
     const ids = new Set(transforms.classification.changes.flatMap(({ rows: changed }) => changed.map(({ rowId }) => String(rowId))));
-    for (const row of rows) if (ids.has(String(row.id))) row.trait = 'method-author';
+    for (const row of rows) if (ids.has(String(row.id?.integer ?? row.id))) row.trait = 'method-author';
   }
   if (sourceTable === 'seminars' && transforms.documentsState) {
     if (!columns.some(({ name }) => name === 'documents_state')) {
       for (const row of rows) row.documents_state = null;
     }
     const ids = new Set(transforms.documentsState.candidateRows.map(({ rowId }) => String(rowId)));
-    for (const row of rows) if (ids.has(String(row.id))) row.documents_state = 'unconfirmed';
+    for (const row of rows) if (ids.has(String(row.id?.integer ?? row.id))) row.documents_state = 'unconfirmed';
   }
   const rename = KNOWN_RENAMES.get(sourceTable);
-  if (rename && transforms.nativeRename) {
+  if (rename && transforms.nativeRenameTables.has(sourceTable)) {
     for (const row of rows) { row[rename[1]] = row[rename[0]]; delete row[rename[0]]; }
   }
   return rows;
@@ -260,7 +273,15 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
       : step.handler === 'normalize-documents-state' && transforms.documentsState
         ? { updatedRows: transforms.documentsState.candidateRows.length, logicalDocuments: transforms.documentsState.logicalDocuments }
         : null;
-    if (!expectedResult || json(result) !== json(expectedResult)) differences.push({ table: 'ikpk_data_migration_history', kind: 'ledger-result-mismatch', stepId: step.id });
+    const validHistoricalResult = step.handler === 'classification'
+      ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.noops) && result.noops >= 0
+        && result.updatedRows + result.noops <= 24
+      : step.handler === 'normalize-documents-state'
+        ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.logicalDocuments) && result.logicalDocuments >= 0
+        : false;
+    if (!expectedResult || (row.operation_id === receipt.operationId ? json(result) !== json(expectedResult) : !validHistoricalResult)) {
+      differences.push({ table: 'ikpk_data_migration_history', kind: 'ledger-result-mismatch', stepId: step.id });
+    }
   }
   const sourceTables = new Set(tableNames(sourceDb));
   const candidateNames = tableNames(candidateDb);
@@ -362,7 +383,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       const rename = KNOWN_RENAMES.get(table);
       const changed = (transforms.classification && table === 'teachers')
         || (transforms.documentsState && table === 'seminars')
-        || (transforms.nativeRename && rename && before.some(({ name }) => name === rename[0]));
+        || (transforms.nativeRenameTables.has(table) && rename);
       if (changed) compareExpectedRows(source, candidate, table, before, after, transforms, differences);
       else {
         const common = before.filter(({ name }) => expectedNames.has(name));

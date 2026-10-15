@@ -179,6 +179,30 @@ test('data migration ID and payload hash are recorded transactionally and applie
   before.close();
   assert.equal(runs, 2, 'real classification helper should update both physical versions exactly once');
 });
+test('a following release reuses the stable lineage and prior step ledger without replay', async (t) => {
+  const first = await makePrepared(t, { operationId: 'op-release-n' });
+  const secondDirectory = join(first.root, 'release-n-plus-one');
+  mkdirSync(secondDirectory, { mode: 0o700 }); chmodSync(secondDirectory, 0o700);
+  const secondCandidate = join(secondDirectory, 'candidate.db');
+  const secondReceipt = join(secondDirectory, 'receipt.json');
+  const second = await first.runner.prepareMigration({
+    sourceDbPath: first.candidateDbPath,
+    sourceCmsRoot: first.sourceCmsRoot,
+    candidateDbPath: secondCandidate,
+    artifactDir: first.artifactDir,
+    receiptPath: secondReceipt,
+    operationId: 'op-release-n-plus-one',
+    lifecycleAdapter: first.lifecycleAdapter,
+  });
+  const firstStatus = await first.runner.getMigrationStatus({ candidateDbPath: first.candidateDbPath, operationId: first.operationId, receiptPath: first.receiptPath });
+  const nextStatus = await first.runner.getMigrationStatus({ candidateDbPath: secondCandidate, operationId: 'op-release-n-plus-one', receiptPath: secondReceipt });
+  assert.equal(nextStatus.lineageId, firstStatus.lineageId);
+  assert.equal(second.steps.find(({ id }) => id === 'institute-method-author-classification-v1').status, 'completed');
+  const db = new Database(secondCandidate);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM ikpk_data_migration_history').get().count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM teachers WHERE legacy_id = '63' AND trait = 'method-author'").get().count, 2);
+  db.close();
+});
 test('default data-step loader imports the verified packaged helper path', async (t) => {
   const f = fixture(t);
   const helper = join(repoRoot, 'cms/database/migrations/data-steps/classification.mjs');
@@ -208,6 +232,18 @@ test('prepare refuses source overwrite, non-private candidate, and symlink candi
   await assert.rejects(() => runner.prepareMigration({ ...prepareArgs(f), candidateDbPath: linkPath }), /symlink|symbolic|link|candidate|ссылка/i);
 });
 
+test('prepare refuses SQLite sidecar and receipt aliases before creating a candidate', async (t) => {
+  const f = fixture(t);
+  const runner = await loadRunner();
+  writeFileSync(`${f.sourceDbPath}-wal`, 'do not overwrite');
+  const sourceBytes = readFileSync(f.sourceDbPath);
+  await assert.rejects(() => runner.prepareMigration({ ...prepareArgs(f), candidateDbPath: `${f.sourceDbPath}-wal` }), /alias|distinct|source/i);
+  assert.deepEqual(readFileSync(f.sourceDbPath), sourceBytes);
+  assert.equal(readFileSync(`${f.sourceDbPath}-wal`, 'utf8'), 'do not overwrite');
+  await assert.rejects(() => runner.prepareMigration({ ...prepareArgs(f), receiptPath: `${f.candidateDbPath}-shm` }), /alias|distinct|receipt/i);
+  assert.equal(existsSync(f.candidateDbPath), false);
+});
+
 test('a competing prepare for the same destination fails while the owner holds its lock', async (t) => {
   const f = fixture(t);
   const runner = await loadRunner();
@@ -235,7 +271,16 @@ test('SIGKILL at committed checkpoint is recovered from the DB ledger without re
     const runner = await import(${JSON.stringify(pathToFileURL(runnerPath).href)});
     const args = JSON.parse(process.env.IKPK_FIXTURE_ARGS);
     const adapter = {
-      async loadClosed() { return {}; }, async destroy() {},
+      async loadClosed({ candidateDbPath }) {
+        const db = new Database(candidateDbPath);
+        try {
+          if (!db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => name === 'seminar_status')) db.exec('ALTER TABLE seminars RENAME COLUMN status TO seminar_status');
+          if (!db.prepare('PRAGMA table_info("schedule_entries")').all().some(({ name }) => name === 'entry_status')) db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
+          db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
+          db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+        } finally { db.close(); }
+        return {};
+      }, async destroy() {},
       async runDataStep({ candidateDbPath, recordCompletion, onCheckpoint }) {
         const db = new Database(candidateDbPath);
         const { applyClassification } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, 'cms/scripts/institute-method-author-classification.mjs')).href)});
@@ -323,6 +368,6 @@ test('rollback refuses after candidate database changes even if the writer has c
   writeFileSync(join(prior, 'cohort.json'), JSON.stringify({ schemaVersion: 1, planSha256: hash(readFileSync(join(oldCode, 'database/migrations/plan.json'))), artifactSha256: artifactDigest(oldCode), databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(oldCode), databasePath: realpathSync(oldDb), staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media' })); symlinkSync(prior, activePairPath);
   await f.runner.activateMigration({ candidateDbPath: f.candidateDbPath, codeRelease: newCode, activePairPath, sandboxRoot, receiptPath: f.receiptPath, operationId: f.operationId, lifecycleAdapter: f.lifecycleAdapter });
   const db = new Database(f.candidateDbPath); db.prepare('UPDATE source_items SET value = ? WHERE id = 1').run('editor-write'); db.close();
-  await assert.rejects(() => f.runner.rollbackMigration({ operationId: f.operationId, receiptPath: f.receiptPath, activePairPath, sandboxRoot }), /changed|fingerprint|rollback|restore|refus|cohort|identity|измен/i);
+  assert.throws(() => f.runner.rollbackMigration({ operationId: f.operationId, receiptPath: f.receiptPath, activePairPath, sandboxRoot }), /changed|fingerprint|rollback|restore|refus|cohort|identity|измен/i);
   assert.equal(realpathSync(join(realpathSync(activePairPath), 'code')), realpathSync(newCode), 'refused rollback must keep the active code+DB pair intact');
 });

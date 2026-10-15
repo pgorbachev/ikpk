@@ -52,6 +52,14 @@ function assertDistinctPaths(paths) {
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
 }
+function databasePathSet(label, path) {
+  return [
+    [label, path],
+    [`${label} WAL`, `${path}-wal`],
+    [`${label} shared-memory sidecar`, `${path}-shm`],
+    [`${label} migration lock`, `${path}.migration-lock`],
+  ];
+}
 function privateDirectory(path, label) {
   const requested = resolve(path);
   const requestedInfo = lstatSync(requested);
@@ -155,12 +163,20 @@ function sqliteSnapshot(db) {
   ]));
   return { engine: 'sqlite', sqliteVersion: version, userVersion, tables, columns, schemaFingerprint: sqliteSchemaFingerprint(db) };
 }
-function validateSourceSchema(snapshot, plan) {
+function validateSourceSchema(snapshot, plan, db) {
   for (const step of plan.steps) {
     if (step.source?.schema?.engine !== snapshot.engine) fail(`unsupported source engine for ${step.id}: expected ${step.source?.schema?.engine}, found ${snapshot.engine}`);
     for (const table of step.source.schema.requiredTables ?? []) {
       if (!snapshot.tables.includes(table)) fail(`source schema precondition failed for ${step.id}: table ${table} is missing`);
     }
+    const alreadyNative = step.kind === 'strapi-native'
+      && db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='strapi_migrations'").get()
+      && db.prepare('SELECT 1 FROM strapi_migrations WHERE name = ? OR name LIKE ? LIMIT 1').get(basename(step.path), `%${basename(step.path)}`)
+      && (step.postconditions?.columns ?? []).every((qualified) => {
+        const [table, column] = qualified.split('.', 2);
+        return Boolean(column) && snapshot.tables.includes(table) && snapshot.columns[table]?.includes(column);
+      });
+    if (alreadyNative) continue;
     for (const [table, columns] of Object.entries(step.source.schema.requiredColumns ?? {})) {
       if (!snapshot.tables.includes(table)) fail(`source schema precondition failed for ${step.id}: table ${table} is missing`);
       for (const column of columns) {
@@ -496,7 +512,7 @@ function preservationAudit(receipt, plan) {
     differenceCount: result.differences?.length,
     auditedAt: new Date().toISOString(),
   };
-  if (!result.passed) fail(`migration preservation audit did not pass (${result.differences.map(({ table, kind, sourceSha256, candidateSha256 }) => `${table}:${kind}:${sourceSha256 ?? '-'}:${candidateSha256 ?? '-'}`).join(', ')}); candidate remains private and cannot be activated`);
+  if (!result.passed) fail(`migration preservation audit did not pass (${result.differences.map(({ table, kind, changedFields }) => `${table}:${kind}${changedFields ? `(${changedFields.join(',')})` : ''}`).join(', ')}); candidate remains private and cannot be activated`);
   return result;
 }
 
@@ -511,7 +527,11 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   const candidateParent = privateDirectory(dirname(candidateDbPath), 'candidate parent directory');
   const receiptParent = privateDirectory(dirname(receiptPath), 'receipt parent directory');
   if (candidateParent !== dirname(candidateDbPath) || receiptParent !== dirname(receiptPath)) fail('candidate or receipt path traverses a symlinked parent');
-  assertDistinctPaths([['source database', sourceDbPath], ['candidate database', candidateDbPath], ['operation receipt', receiptPath], ['target lock', `${candidateDbPath}.migration-lock`]]);
+  assertDistinctPaths([
+    ...databasePathSet('source database', sourceDbPath),
+    ...databasePathSet('candidate database', candidateDbPath),
+    ['operation receipt', receiptPath],
+  ]);
   if (isWithin(artifactReal, receiptPath) || isWithin(artifactReal, candidateDbPath)) fail('candidate database and operation receipt must be outside the CMS artifact/Git tree');
   if (candidateDbPath === sourceDbPath) fail('candidate database must not be the source database');
   const release = resolvePlan(artifactReal);
@@ -556,7 +576,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       try {
         source.pragma('query_only = ON');
         sourceSnapshot = sqliteSnapshot(source);
-        validateSourceSchema(sourceSnapshot, release);
+        validateSourceSchema(sourceSnapshot, release, source);
         const actualVersion = readSourceStrapiVersion(sourceCmsRoot, release, sourceStrapiVersion);
         if (actualVersion !== strapiVersion) fail(`source version evidence differs: ${actualVersion} vs ${strapiVersion}`);
         const stageDir = join(candidateParent, `.ikpk-migration-${operationId}-${randomUUID()}`);
@@ -742,7 +762,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
   const activePairPath = abs(rawActivePairPath, 'activePairPath');
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
   const sandboxRoot = verifySandbox(rawSandboxRoot, { candidateDbPath, codeRelease, activePairPath, receiptPath });
-  assertDistinctPaths([['candidate database', candidateDbPath], ['operation receipt', receiptPath], ['active pair pointer', activePairPath], ['target lock', `${candidateDbPath}.migration-lock`]]);
+  assertDistinctPaths([...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], ['active pair pointer', activePairPath]]);
   const unlock = acquireTargetLocks([candidateDbPath, activePairPath]);
   try {
     const receipt = receiptFrom(receiptPath, operationId);
@@ -825,7 +845,7 @@ export function rollbackMigration({ operationId, receiptPath: rawReceiptPath, ac
   const currentReceipt = receiptFrom(receiptPath, operationId);
   if (currentReceipt.candidateDbPath !== receipt.candidateDbPath) fail('candidate path changed while waiting for the rollback lock');
   const sandboxRoot = verifySandbox(rawSandboxRoot, { activePairPath, candidateDbPath: receipt.candidateDbPath, receiptPath });
-  assertDistinctPaths([['candidate database', receipt.candidateDbPath], ['operation receipt', receiptPath], ['active pair pointer', activePairPath], ['target lock', `${receipt.candidateDbPath}.migration-lock`]]);
+  assertDistinctPaths([...databasePathSet('candidate database', receipt.candidateDbPath), ['operation receipt', receiptPath], ['active pair pointer', activePairPath]]);
   if (!['activated', 'activation-intent'].includes(receipt.phase) || !receipt.activation) fail(`operation is not rollback-ready (phase ${receipt.phase})`);
   const activation = receipt.activation;
   const current = readCohort(activePairPath, sandboxRoot);

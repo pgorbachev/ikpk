@@ -65,8 +65,8 @@
   ],
   "integrity": {
     "files": [
-      { "path": "scripts/run-data-migrations.mjs", "sha256": "e38fc170aa67126d7dbc484bbadb5858fb4b0f6e28ed8903428a59b310d123ba" },
-      { "path": "scripts/audit-data-migration.mjs", "sha256": "61aa015ca78819d7714bb8dc968bdfb57d0a6d2e3f209744d0beee6f8dff4393" },
+      { "path": "scripts/run-data-migrations.mjs", "sha256": "352e616bfc8ebee97a0517ed1898a132873c616b73b5bbf73287946c90cd48d4" },
+      { "path": "scripts/audit-data-migration.mjs", "sha256": "810460f8f4d7c6b7c92bccd99a5e39d8bd4d451c38a89f1cecc3be43b72368bd" },
       { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
       { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }
     ]
