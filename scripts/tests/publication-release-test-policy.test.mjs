@@ -17,7 +17,8 @@ const needs = Object.fromEntries(['identity', 'source-tests', 'supplemental', 'v
 
 function evidence() {
   return {
-    run: { id: 123, run_attempt: 2, head_sha: commit, event: 'push',
+    run: { id: 123, run_attempt: 2, head_sha: commit, event: 'push', head_branch: 'dev',
+      repository: { full_name: 'pgorbachev/ikpk' }, head_repository: { full_name: 'pgorbachev/ikpk' },
       path: RELEASE_TEST_WORKFLOW, status: 'completed', conclusion: 'success',
       created_at: '2026-10-14T10:00:00Z', run_started_at: started },
     jobs: REQUIRED_SOURCE_JOBS.map((name) => ({ name, run_id: 123, head_sha: commit,
@@ -26,7 +27,7 @@ function evidence() {
       workflow_run: { id: 123, head_sha: commit } },
     manifest: releaseTestManifest(env, needs),
     // Protected server operation receipt; never read from a caller-provided report.
-    expected: { commit, runId: 123, previousAttempt: 1, runAttempt: 2,
+    expected: { commit, sourceRef: 'dev', runId: 123, previousAttempt: 1, runAttempt: 2,
       destinationId: 'demo-193', requestId: 'request-unique-1', requestedAt: '2026-10-15T10:00:00.100Z' },
   };
 }
@@ -70,9 +71,15 @@ test('dispatch SHA must equal the native checkout and every required job must su
 
 test('a fresh attempt of an older push run binds to this private destination and operation', () => {
   const result = validateReleaseTestEvidence(evidence());
-  assert.deepEqual(result, { runId: 123, runAttempt: 2, commit, destinationId: 'demo-193',
-    requestId: 'request-unique-1', subject: 'source-code', pendingScope: [...PENDING_SCOPE],
-    excludedHistorical: evidence().manifest.excludedHistorical });
+  assert.equal(result.runId, 123); assert.equal(result.runAttempt, 2); assert.equal(result.commit, commit);
+  assert.equal(result.destinationId, 'demo-193'); assert.equal(result.requestId, 'request-unique-1');
+  assert.equal(result.subject, 'source-code'); assert.deepEqual(result.pendingScope, []);
+  assert.equal(result.repository, 'pgorbachev/ikpk'); assert.equal(result.workflow, RELEASE_TEST_WORKFLOW);
+  assert.equal(result.sourceRef, 'dev'); assert.equal(result.policyVersion, 2);
+  assert.deepEqual(result.suites, SOURCE_SUITES); assert.deepEqual(result.results, evidence().manifest.results);
+  assert.deepEqual(result.jobs.map((job) => job.name), REQUIRED_SOURCE_JOBS);
+  assert.ok(result.jobs.every((job) => job.conclusion === 'success' && job.commit === commit && job.runId === 123));
+  assert.deepEqual(result.excludedHistorical, evidence().manifest.excludedHistorical);
 });
 
 test('refusals expose a stable code and no native output', () => {
@@ -89,6 +96,9 @@ test('rejects historical success, wrong SHA, changed policy, stale or missing na
     (proof) => { proof.run.run_attempt = 1; },
     (proof) => { proof.run.id = 999; },
     (proof) => { proof.run.head_sha = 'b'.repeat(40); },
+    (proof) => { proof.run.repository.full_name = 'fork/ikpk'; },
+    (proof) => { proof.run.head_repository.full_name = 'fork/ikpk'; },
+    (proof) => { proof.run.head_branch = 'main'; },
     (proof) => { proof.run.path = '.github/workflows/test.yml'; },
     (proof) => { proof.run.status = 'in_progress'; },
     (proof) => { proof.run.conclusion = 'failure'; },
@@ -137,6 +147,9 @@ test('workflow preserves existing Tests and all supplemental subjects without de
     assert.ok(workflow.includes(command), command);
   }
   assert.match(workflow, /runs-on: macos-14/);
+  const reusable = readFileSync(new URL('../../.github/workflows/test.yml', import.meta.url), 'utf8');
+  assert.match(reusable, /group:.*inputs.artifact_suffix != '' && format\('release-source-\{0\}-\{1\}', github.run_id, github.run_attempt\)/);
+  assert.match(reusable, /cancel-in-progress:.*inputs.artifact_suffix == ''/);
   assert.doesNotMatch(workflow, /secrets\.|secrets: inherit|--update-snapshots|continue-on-error: true|ssh |deploy\.sh/);
   assert.equal(new Set(SOURCE_SUITES).size, SOURCE_SUITES.length);
   const snapshots = readdirSync(new URL('../../web/tests/visual-baseline.spec.ts-snapshots/', import.meta.url));

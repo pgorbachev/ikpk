@@ -25,9 +25,10 @@ permissions:
 
 concurrency:
   # Прогоны main — отдельная группа без отмены текущего (очередь на один ожидающий).
+  # Reusable release tests имеют отдельную группу на run/attempt и не отменяют standalone CI.
   # Обычные PR сохраняют tests-${{ github.ref }} с отменой.
-  group: ${{ (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'required-tests-main' || format('tests-{0}', github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'repository_dispatch' && github.event_name != 'schedule' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+  group: ${{ inputs.artifact_suffix != '' && format('release-source-{0}-{1}', github.run_id, github.run_attempt) || (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'required-tests-main' || format('tests-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.artifact_suffix == '' && github.event_name != 'repository_dispatch' && github.event_name != 'schedule' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 jobs:
   content-snapshot:

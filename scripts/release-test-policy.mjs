@@ -111,7 +111,7 @@ export function releaseTestManifest(env, needs) {
  * artifact: native artifact metadata from this run; name releaseTestArtifactName(attempt).
  * manifest: JSON downloaded from that artifact (not an operator-supplied pathname).
  * expected: protected operation context, not fields received from the CLI:
- *   {commit, runId, previousAttempt, runAttempt, requestedAt, destinationId, requestId}.
+ *   {commit, sourceRef, runId, previousAttempt, runAttempt, requestedAt, destinationId, requestId}.
  * requestedAt is the server's time just before POST re-run; runAttempt must be the
  * newly observed attempt > previousAttempt. The protected loader selects repository,
  * branch, workflow, and run, retains that receipt, and never accepts caller reports.
@@ -137,6 +137,10 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   if (integer(expected.runAttempt, 'expected attempt') <= integer(expected.previousAttempt, 'previous attempt')) {
     refuse('release-test-stale-attempt', 'release tests require a fresh attempt for this operation');
   }
+  same(run.repository?.full_name, 'pgorbachev/ikpk', 'repository');
+  same(run.head_repository?.full_name, 'pgorbachev/ikpk', 'source repository');
+  if (!['main', 'dev'].includes(expected.sourceRef)) refuse('release-test-invalid-identity', 'invalid source branch');
+  same(run.head_branch, expected.sourceRef, 'source branch');
   same(run.path, RELEASE_TEST_WORKFLOW, 'workflow');
   same(run.head_sha, expected.commit, 'commit');
   same(run.status, 'completed', 'run status');
@@ -174,7 +178,12 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
     same(job.status, 'completed', 'job status');
     same(job.conclusion, 'success', `job ${name}`);
   }
-  return { runId: run.id, runAttempt: run.run_attempt, commit: expected.commit,
+  return { policyVersion: RELEASE_TEST_POLICY_VERSION, repository: run.repository.full_name,
+    workflow: run.path, sourceRef: run.head_branch, runId: run.id, runAttempt: run.run_attempt, commit: expected.commit,
+    requestedAt: expected.requestedAt, startedAt: run.run_started_at, conclusion: run.conclusion,
+    suites: [...SOURCE_SUITES], results: { ...manifest.results },
+    jobs: REQUIRED_SOURCE_JOBS.map((name) => { const job = jobs.find((entry) => entry.name === name);
+      return { name, runId: job.run_id, commit: job.head_sha, startedAt: job.started_at, conclusion: job.conclusion }; }),
     destinationId: expected.destinationId, requestId: expected.requestId,
     subject: 'source-code', pendingScope: [...PENDING_SCOPE],
     excludedHistorical: EXCLUDED_HISTORICAL.map((entry) => ({ ...entry })) };

@@ -1,10 +1,11 @@
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { createServer, validateRequest, unitName, readServerConfig } from '../server-deploy.mjs';
+import { createServer, validateRequest, unitName, readServerConfig, publisherResult } from '../server-deploy.mjs';
 import { runClient, parseArguments, readClientConfig, sshArguments } from '../deploy.mjs';
 
 function fixture(t) {
@@ -131,4 +132,31 @@ test('a delayed old service cannot publish after a newer admitted operation has 
   const publishers = f.events.filter((x) => x === 'publisher').length;
   assert.equal((await server.execute(f.request.id)).status, 'refused');
   assert.equal(f.events.filter((x) => x === 'publisher').length, publishers);
+});
+
+
+test('the real installed launcher refusal on stderr retains its reason, and post-switch audit survives', async (t) => {
+  const native = spawnSync(process.execPath, [new URL('../publication-launcher.mjs', import.meta.url).pathname],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } });
+  assert.equal(native.status, 1);
+  assert.equal(native.stdout, '');
+  assert.equal(publisherResult(native).status, 'refused');
+  assert.equal(typeof publisherResult(native).reason, 'string');
+  const audit = { code: 'active-unindexed', activePair: { releaseId: 'retained' } };
+  const f = fixture(t), server = createServer(f.config, { ...f.ports,
+    publisher: () => publisherResult({ status: 1, stdout: '', stderr: JSON.stringify({ status: 'refused', reason: 'publication-worker-failed', audit }) }) });
+  await server.submit(f.request); await server.execute(f.request.id);
+  assert.deepEqual(server.status(f.request.id).audit, audit);
+  assert.equal(server.status(f.request.id).status, 'refused');
+});
+
+test('orphaned temporary files from a crash do not block new requests or recovery', async (t) => {
+  const f = fixture(t), server = createServer(f.config, f.ports);
+  writeFileSync(join(f.state, 'sequence.json.new'), 'partial');
+  writeFileSync(join(f.state, 'last-started.json.new'), 'partial');
+  await server.submit(f.request);
+  assert.equal((await server.execute(f.request.id)).status, 'success');
+  const recover = { id: randomUUID(), destination: 'demo', action: 'recover' };
+  await server.submit(recover);
+  assert.equal((await server.execute(recover.id)).status, 'success');
 });

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Installed outside checkouts. One durable receipt per request; systemd + flock own execution. */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,7 +54,7 @@ export function validateRequest(input, destination) {
   return Object.fromEntries(allowed.map((key) => [key, input[key]]));
 }
 function atomicJson(path, value) {
-  const temporary = `${path}.new`;
+  const temporary = `${path}.${randomUUID()}.new`;
   const fd = openSync(temporary, 'wx', 0o600);
   try { writeFileSync(fd, `${JSON.stringify(value)}\n`); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(temporary, path);
@@ -64,6 +65,16 @@ function folder(config, id) { if (!validId(id)) fail('invalid-request-id'); retu
 export const unitName = (c, id) => `ikpk-release-${c.destination}-${id}.service`;
 const safeEnv = () => ({ PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, HOME: process.env.HOME,
   XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS });
+/** The installed launcher emits refusal and post-switch audit to stderr, success to stdout. */
+export function publisherResult(run) {
+  if (run.error || run.status === null) fail('publisher-interrupted');
+  let result;
+  try { result = JSON.parse(run.status === 0 ? run.stdout : run.stderr); }
+  catch { fail('publisher-result-unavailable'); }
+  if (!plain(result) || !['success', 'refused'].includes(result.status) ||
+      (run.status === 0) !== (result.status === 'success')) fail('publisher-result-unavailable');
+  return result;
+}
 const defaultPorts = {
   now: () => new Date().toISOString(),
   resolveSource(c) {
@@ -98,11 +109,8 @@ const defaultPorts = {
     if (request.action === 'publish') args.push('--source-url', c.canonicalRepository, '--source-ref', c.sourceRef, '--expected-sha', receipt.commit);
     if (request.action === 'rollback') args.push('--release-id', request.releaseId, '--reason', request.reason, '--confirm');
     const run = spawnSync(process.execPath, args, { env: safeEnv(), encoding: 'utf8', maxBuffer: 64 * 1024,
-      timeout: c.timeoutSeconds * 1000, stdio: ['ignore', 'pipe', 'ignore'] });
-    if (run.error || run.status === null) fail('publisher-interrupted');
-    let result; try { result = JSON.parse(run.stdout); } catch { fail('publisher-result-unavailable'); }
-    if (!plain(result) || !['success', 'refused'].includes(result.status) || (run.status === 0) !== (result.status === 'success')) fail('publisher-result-unavailable');
-    return result;
+      timeout: c.timeoutSeconds * 1000, stdio: ['ignore', 'pipe', 'pipe'] });
+    return publisherResult(run);
   },
 };
 export function createServer(config, overrides = {}) {

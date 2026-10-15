@@ -72,7 +72,7 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
       if (++polls > maxPolls) fail('release-ci-wait-timeout'); await sleep(10000);
       current = await request(`${API}/actions/runs/${selected.id}`); identity(current, receipt, config.sourceRef);
     }
-    const expected = { commit: receipt.commit, runId: current.id, previousAttempt: current.run_attempt,
+    const expected = { commit: receipt.commit, sourceRef: config.sourceRef, runId: current.id, previousAttempt: current.run_attempt,
       runAttempt: current.run_attempt + 1, requestedAt: now(), destinationId: receipt.request.destination, requestId: receipt.request.id };
     // Persist BEFORE the non-idempotent POST. A lost acknowledgement never causes an automatic re-run.
     writeFileSync(join(receipt.directory, 'ci-request.json'), `${JSON.stringify(expected)}\n`, { mode: 0o600, flag: 'wx' });
