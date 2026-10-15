@@ -201,6 +201,34 @@ function sourceFileFingerprint(path) {
   }
   return jsonHash(digests);
 }
+
+export function hasExactReadOnlyMount(mountInfo, canonicalMountPath) {
+  const decode = (value) => value.replace(/\\([0-7]{3})/g, (_match, octal) => String.fromCharCode(Number.parseInt(octal, 8)));
+  const matches = [];
+  for (const line of mountInfo.split('\n')) {
+    const [mountFields] = line.split(' - ', 2);
+    if (!mountFields) continue;
+    const fields = mountFields.split(' ');
+    if (fields.length < 6) continue;
+    if (resolve(decode(fields[4])) === canonicalMountPath) matches.push(fields[5].split(',').includes('ro'));
+  }
+  return matches.length > 0 && matches[matches.length - 1] === true;
+}
+
+export function validateSealedInstallMetadata({ receipt, dependencyRoot, expectedStrapiVersion, packageLockSha256 }) {
+  if (receipt?.schemaVersion !== 1 || receipt.installCommand !== 'npm ci --omit=dev --no-audit --no-fund' || receipt.exitCode !== 0) {
+    fail('sealed dependency provenance must record the exact successful npm ci command');
+  }
+  if (receipt.dependencyRoot !== dependencyRoot) fail('sealed dependency provenance root differs from the canonical node_modules mount');
+  if (receipt.packageLockSha256 !== packageLockSha256 || !HASH.test(receipt.packageLockSha256 ?? '')) fail('sealed dependency provenance package-lock SHA-256 mismatch');
+  if (receipt.strapiVersion !== expectedStrapiVersion) fail('sealed dependency provenance Strapi version differs from the migration plan');
+  if (receipt.nodeAbi !== process.versions.modules) fail('sealed dependency provenance Node ABI differs from the running Node ABI');
+  if (typeof receipt.npmVersion !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(receipt.npmVersion)) fail('sealed dependency provenance has an invalid npm version');
+  if (typeof receipt.completionObservedAt !== 'string' || !receipt.completionObservedAt.endsWith('Z') || !Number.isFinite(Date.parse(receipt.completionObservedAt)) || new Date(receipt.completionObservedAt).toISOString() !== receipt.completionObservedAt) {
+    fail('sealed dependency provenance observation timestamp must be exact ISO UTC');
+  }
+}
+
 function artifactFingerprint(root, expectedStrapiVersion) {
   const entries = [];
   function visit(directory, prefix = '', dependencyRoot = null) {
@@ -230,6 +258,7 @@ function artifactFingerprint(root, expectedStrapiVersion) {
   }
   const dependencyLink = join(root, 'node_modules');
   let externalDependencyRoot = null;
+  let artifactIdentityKind = 'content-tree-sha256';
   if (existsSync(dependencyLink) || (() => { try { lstatSync(dependencyLink); return true; } catch { return false; } })()) {
     const dependencyInfo = lstatSync(dependencyLink);
     if (!dependencyInfo.isSymbolicLink()) fail('artifact node_modules must be an explicit symlink to the immutable dependency tree');
@@ -245,11 +274,32 @@ function artifactFingerprint(root, expectedStrapiVersion) {
     }
     const installed = readJson(join(dependencyRoot, '@strapi/strapi/package.json'), 'installed Strapi package.json');
     if (installed.version !== expectedStrapiVersion) fail(`external node_modules has @strapi/strapi ${installed.version}, expected ${expectedStrapiVersion}`);
-    entries.push({ path: 'node_modules', type: 'dependency-root', target: readlinkSync(dependencyLink), resolved: dependencyRoot });
-    visit(dependencyRoot, 'node_modules', dependencyRoot);
+    const provenancePath = join(root, '.install-provenance.json');
+    let provenanceInfo;
+    try { provenanceInfo = lstatSync(provenancePath); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (provenanceInfo) {
+      if (!provenanceInfo.isFile() || provenanceInfo.isSymbolicLink() || provenanceInfo.uid !== 0 || (provenanceInfo.mode & 0o077) !== 0) {
+        fail('sealed install provenance must be a root-owned private regular file');
+      }
+      const rootInfo = lstatSync(root);
+      if (rootInfo.uid !== 0 || (rootInfo.mode & 0o077) !== 0) fail('sealed CMS artifact root must be root-owned and private');
+      if (process.platform !== 'linux') fail('sealed dependency provenance requires Linux read-only mount verification');
+      const provenance = readJson(provenancePath, 'sealed install provenance');
+      if (dependencyStat.uid !== 0 || (dependencyStat.mode & 0o077) !== 0) fail('sealed node_modules root must be root-owned and private');
+      const lockSha256 = hash(readFileSync(join(root, 'package-lock.json')));
+      validateSealedInstallMetadata({ receipt: provenance, dependencyRoot, expectedStrapiVersion, packageLockSha256: lockSha256 });
+      const mountInfo = readFileSync('/proc/self/mountinfo', 'utf8');
+      if (!hasExactReadOnlyMount(mountInfo, dependencyRoot)) fail('sealed dependency root is not an exact read-only Linux mountpoint');
+      artifactIdentityKind = 'sealed-install-provenance';
+      entries.push({ path: 'node_modules', type: artifactIdentityKind, target: readlinkSync(dependencyLink), resolved: dependencyRoot, packageLockSha256: lockSha256, npmVersion: provenance.npmVersion, nodeAbi: provenance.nodeAbi, strapiVersion: provenance.strapiVersion, installCommand: provenance.installCommand, exitCode: provenance.exitCode, completionObservedAt: provenance.completionObservedAt });
+    } else {
+      entries.push({ path: 'node_modules', type: 'dependency-root', target: readlinkSync(dependencyLink), resolved: dependencyRoot });
+      visit(dependencyRoot, 'node_modules', dependencyRoot);
+    }
   }
   visit(root);
-  return { sha256: jsonHash(entries), externalDependencyRoot };
+  return { sha256: jsonHash(entries), externalDependencyRoot, artifactIdentityKind };
 }
 function assertNoOpenHandles(paths) {
   const probes = [];
@@ -328,7 +378,7 @@ function resolvePlan(artifactDir) {
   const strapiVersions = new Set(steps.map(({ source }) => source.strapiVersion));
   if (strapiVersions.size !== 1) fail('all migration steps must target one exact Strapi source version');
   const artifact = artifactFingerprint(root, [...strapiVersions][0]);
-  return { root, migrationsRoot, manifestPath, manifest, steps, planSha256: hash(readFileSync(manifestPath)), artifactSha256: artifact.sha256, externalDependencyRoot: artifact.externalDependencyRoot };
+  return { root, migrationsRoot, manifestPath, manifest, steps, planSha256: hash(readFileSync(manifestPath)), artifactSha256: artifact.sha256, externalDependencyRoot: artifact.externalDependencyRoot, artifactIdentityKind: artifact.artifactIdentityKind };
 }
 function awaitlessReadDir(path) {
   // Kept synchronous because this is a short, local artifact integrity check.
@@ -515,7 +565,8 @@ function validateNativeHistory(db, plan) {
 
 function verifyPlanAndReceipt(plan, receipt) {
   if (receipt.planSha256 !== plan.planSha256) fail('candidate receipt and migration plan differ; discard and reprepare');
-  if (receipt.artifactSha256 && receipt.artifactSha256 !== plan.artifactSha256) fail('CMS artifact bytes changed after preparation; discard and reprepare');
+  if (receipt.artifactSha256 && receipt.artifactSha256 !== plan.artifactSha256) fail('CMS artifact identity changed after preparation; discard and reprepare');
+  if (receipt.artifactIdentityKind !== plan.artifactIdentityKind) fail('CMS artifact identity method changed after preparation; discard and reprepare');
   if ((receipt.externalDependencyRoot ?? null) !== (plan.externalDependencyRoot ?? null)) fail('external immutable dependency root changed after preparation; discard and reprepare');
   if (JSON.stringify(receipt.steps.map(({ id, sha256 }) => [id, sha256])) !== JSON.stringify(plan.steps.map(({ id, sha256 }) => [id, sha256]))) {
     fail('candidate receipt step identities differ from the packaged plan; discard and reprepare');
@@ -645,6 +696,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
               candidateDbPath,
               artifactDir: artifactReal,
               artifactSha256: release.artifactSha256,
+              artifactIdentityKind: release.artifactIdentityKind,
               externalDependencyRoot: release.externalDependencyRoot,
               planSha256: release.planSha256,
               steps: release.steps.map(({ id, phase, kind, handler, path, sha256 }) => ({ id, phase, kind, handler, path, sha256 })),
@@ -671,6 +723,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         candidateDbPath,
         artifactDir: artifactReal,
         artifactSha256: release.artifactSha256,
+        artifactIdentityKind: release.artifactIdentityKind,
         externalDependencyRoot: release.externalDependencyRoot,
         planSha256: release.planSha256,
         steps: release.steps.map(({ id, phase, kind, handler, path, sha256 }) => ({ id, phase, kind, handler, path, sha256 })),
@@ -799,7 +852,8 @@ function readCohort(path, sandboxRoot) {
   if (resolve(metadata.codeRelease ?? '') !== code || resolve(metadata.databasePath ?? '') !== database) fail('cohort metadata does not identify its actual code and database targets');
   const codePlan = resolvePlan(code);
   if (codePlan.planSha256 !== metadata.planSha256) fail('cohort code plan does not match its recorded compatibility identity');
-  if (metadata.artifactSha256 !== codePlan.artifactSha256) fail('cohort code artifact bytes differ from its recorded identity');
+  if (metadata.artifactSha256 !== codePlan.artifactSha256) fail('cohort code artifact identity differs from its recorded identity');
+  if (metadata.artifactIdentityKind !== codePlan.artifactIdentityKind) fail('cohort artifact identity method differs from its current code');
   if (metadata.databaseSha256 !== sourceFileFingerprint(database)) fail('cohort database bytes differ from its recorded identity');
   return { path: real, metadata, code, database };
 }
@@ -888,7 +942,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
     };
     writeFileSync(join(operationCohort, 'cohort.json'), `${JSON.stringify({
       schemaVersion: 1, operationId, planSha256: release.planSha256, lineageId: status.lineageId,
-      codeRelease, artifactSha256: release.artifactSha256, databasePath: candidateDbPath, databaseSha256: afterClosedLoad,
+      codeRelease, artifactSha256: release.artifactSha256, artifactIdentityKind: release.artifactIdentityKind, databasePath: candidateDbPath, databaseSha256: afterClosedLoad,
       previousCohortPath: prior.path, selectedAt: receipt.activation.activatedAt,
     }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     receipt.phase = 'activation-intent';

@@ -11,6 +11,7 @@ import { TARGET_PEOPLE } from '../scripts/institute-method-author-classification
 
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const runnerPath = join(repoRoot, 'cms/scripts/run-data-migrations.mjs');
+const migrationPlanPath = join(repoRoot, 'cms/database/migrations/plan.json');
 const cmsRequire = createRequire(join(repoRoot, 'cms/package.json'));
 const Database = cmsRequire('better-sqlite3');
 const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -299,7 +300,7 @@ test('external immutable dependency bytes are included in the selected cohort id
   symlinkSync(f.artifactDir, join(prior, 'code'));
   symlinkSync(oldDb, join(prior, 'data.db'));
   writeFileSync(join(prior, 'cohort.json'), JSON.stringify({
-    schemaVersion: 1, planSha256: receipt.planSha256, artifactSha256: receipt.artifactSha256,
+    schemaVersion: 1, planSha256: receipt.planSha256, artifactSha256: receipt.artifactSha256, artifactIdentityKind: receipt.artifactIdentityKind,
     databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(f.artifactDir), databasePath: realpathSync(oldDb),
     staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media',
   }));
@@ -309,7 +310,7 @@ test('external immutable dependency bytes are included in the selected cohort id
     candidateDbPath: f.candidateDbPath, codeRelease: f.artifactDir, activePairPath,
     sandboxRoot: f.root, receiptPath: f.receiptPath, operationId: f.operationId,
     lifecycleAdapter: f.lifecycleAdapter,
-  }), /artifact bytes changed|cohort code artifact bytes/i);
+  }), /artifact identity changed|cohort code artifact identity/i);
   assert.equal(realpathSync(activePairPath), realpathSync(prior), 'changed dependency bytes must not switch the active pair');
 });
 
@@ -321,6 +322,15 @@ test('external dependency tree accepts npm .bin links contained by its root', as
   assert.equal(existsSync(join(f.candidateDbPath)), true);
 });
 
+test('present but invalid sealed-install receipt fails closed instead of falling back to vendor hashing', async (t) => {
+  const f = fixture(t);
+  addExternalDependencies(f);
+  writeFileSync(join(f.artifactDir, '.install-provenance.json'), JSON.stringify({ schemaVersion: 1 }), { mode: 0o600 });
+  const runner = await loadRunner();
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /sealed install provenance|root-owned and private/i);
+  assert.equal(existsSync(f.candidateDbPath), false, 'an invalid seal must not create a candidate through the full-hash fallback');
+});
+
 test('external dependency tree rejects symlinks escaping its root', async (t) => {
   const f = fixture(t);
   const dependencyRoot = addExternalDependencies(f);
@@ -329,6 +339,43 @@ test('external dependency tree rejects symlinks escaping its root', async (t) =>
   const runner = await loadRunner();
   await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /dependency symlink escapes/i);
   assert.equal(existsSync(f.candidateDbPath), false, 'unsafe dependency tree must fail before candidate creation');
+});
+
+test('sealed dependency provenance binds exact install, lock, Strapi and Node ABI', async () => {
+  const runner = await loadRunner();
+  const expectedStrapiVersion = JSON.parse(readFileSync(migrationPlanPath, 'utf8')).steps[0].source.strapiVersion;
+  const dependencyRoot = '/var/lib/private/deps/node_modules';
+  const packageLockSha256 = 'a'.repeat(64);
+  const receipt = {
+    schemaVersion: 1,
+    dependencyRoot,
+    packageLockSha256,
+    npmVersion: '10.9.8',
+    nodeAbi: process.versions.modules,
+    strapiVersion: expectedStrapiVersion,
+    installCommand: 'npm ci --omit=dev --no-audit --no-fund',
+    exitCode: 0,
+    completionObservedAt: '2026-10-16T10:00:00.000Z',
+  };
+  assert.doesNotThrow(() => runner.validateSealedInstallMetadata({ receipt, dependencyRoot, expectedStrapiVersion, packageLockSha256 }));
+  for (const [field, value, reason] of [
+    ['packageLockSha256', 'b'.repeat(64), /package-lock SHA-256 mismatch/i],
+    ['nodeAbi', 'not-current-abi', /Node ABI differs/i],
+    ['strapiVersion', '0.0.0', /Strapi version differs/i],
+    ['installCommand', 'npm install', /exact successful npm ci command/i],
+  ]) {
+    assert.throws(() => runner.validateSealedInstallMetadata({ receipt: { ...receipt, [field]: value }, dependencyRoot, expectedStrapiVersion, packageLockSha256 }), reason);
+  }
+});
+
+test('sealed dependency verification recognizes only an exact read-only mountpoint', async () => {
+  const runner = await loadRunner();
+  const target = '/var/lib/private/deps/node_modules';
+  const line = `42 25 8:1 / ${target} ro,relatime - ext4 /dev/sda1 ro\n`;
+  assert.equal(runner.hasExactReadOnlyMount(line, target), true);
+  assert.equal(runner.hasExactReadOnlyMount(line.replace('ro,relatime', 'rw,relatime'), target), false);
+  assert.equal(runner.hasExactReadOnlyMount(line, `${target}/child`), false);
+  assert.equal(runner.hasExactReadOnlyMount(`42 25 8:1 / /var/lib/private/deps\\040with\\040space/node_modules ro,relatime - ext4 /dev/sda1 ro\n`, '/var/lib/private/deps with space/node_modules'), true);
 });
 test('same migration ID with changed payload hash is refused without a second data effect', async (t) => {
   const f = await makePrepared(t);
@@ -464,7 +511,7 @@ test('activation switches to a paired code+DB cohort and rollback restores the v
   const priorCohort = join(cohorts, 'prior'); mkdirSync(priorCohort);
   symlinkSync(oldCode, join(priorCohort, 'code'));
   symlinkSync(oldDb, join(priorCohort, 'data.db'));
-  writeFileSync(join(priorCohort, 'cohort.json'), JSON.stringify({ schemaVersion: 1, planSha256: hash(readFileSync(join(oldCode, 'database/migrations/plan.json'))), artifactSha256: artifactDigest(oldCode), databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(oldCode), databasePath: realpathSync(oldDb), staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media' }));
+  writeFileSync(join(priorCohort, 'cohort.json'), JSON.stringify({ schemaVersion: 1, planSha256: hash(readFileSync(join(oldCode, 'database/migrations/plan.json'))), artifactSha256: artifactDigest(oldCode), artifactIdentityKind: 'content-tree-sha256', databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(oldCode), databasePath: realpathSync(oldDb), staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media' }));
   symlinkSync(priorCohort, activePairPath);
   await f.runner.activateMigration({ candidateDbPath: f.candidateDbPath, codeRelease: newCode, activePairPath, sandboxRoot, receiptPath: f.receiptPath, operationId: f.operationId, lifecycleAdapter: f.lifecycleAdapter });
   const activated = realpathSync(activePairPath);
@@ -485,7 +532,7 @@ test('rollback refuses after candidate database changes even if the writer has c
   mkdirSync(oldCode, { recursive: true }); mkdirSync(cohorts, { recursive: true, mode: 0o700 }); chmodSync(cohorts, 0o700); seedDb(oldDb);
   const prior = join(cohorts, 'prior'); mkdirSync(prior); symlinkSync(oldCode, join(prior, 'code')); symlinkSync(oldDb, join(prior, 'data.db'));
   cpSync(newCode, oldCode, { recursive: true });
-  writeFileSync(join(prior, 'cohort.json'), JSON.stringify({ schemaVersion: 1, planSha256: hash(readFileSync(join(oldCode, 'database/migrations/plan.json'))), artifactSha256: artifactDigest(oldCode), databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(oldCode), databasePath: realpathSync(oldDb), staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media' })); symlinkSync(prior, activePairPath);
+  writeFileSync(join(prior, 'cohort.json'), JSON.stringify({ schemaVersion: 1, planSha256: hash(readFileSync(join(oldCode, 'database/migrations/plan.json'))), artifactSha256: artifactDigest(oldCode), artifactIdentityKind: 'content-tree-sha256', databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(oldCode), databasePath: realpathSync(oldDb), staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media' })); symlinkSync(prior, activePairPath);
   await f.runner.activateMigration({ candidateDbPath: f.candidateDbPath, codeRelease: newCode, activePairPath, sandboxRoot, receiptPath: f.receiptPath, operationId: f.operationId, lifecycleAdapter: f.lifecycleAdapter });
   const db = new Database(f.candidateDbPath); db.prepare('UPDATE source_items SET value = ? WHERE id = 1').run('editor-write'); db.close();
   assert.throws(() => f.runner.rollbackMigration({ operationId: f.operationId, receiptPath: f.receiptPath, activePairPath, sandboxRoot }), /changed|fingerprint|rollback|restore|refus|cohort|identity|измен/i);
