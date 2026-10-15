@@ -37,6 +37,9 @@ mkdir -p "$OUT/database/migrations"
 # the recorded native rename predates retirement of the seminar status attribute.
 mkdir -p "$OUT/database/migrations/target-schema"
 cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/target-schema/seminar.json"
+# Compiled publication lifecycle loads this runtime data file via the release-root cwd.
+mkdir -p "$OUT/src/lib"
+cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-fields.json"
 # Операторский runner и те же узкие data helpers, что используются в их focused CLI.
 # План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
 mkdir -p "$OUT/scripts"

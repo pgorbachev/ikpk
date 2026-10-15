@@ -489,27 +489,38 @@ function recordStep(db, { operationId, lineageId, step, result }) {
 }
 
 let defaultLifecycleQueue = Promise.resolve();
-async function withDatabaseFilename(candidateDbPath, callback) {
-  const previous = process.env.DATABASE_FILENAME;
-  process.env.DATABASE_FILENAME = candidateDbPath;
-  try { return await callback(); }
-  finally {
-    if (previous === undefined) delete process.env.DATABASE_FILENAME;
-    else process.env.DATABASE_FILENAME = previous;
-  }
-}
 function productionLifecycle(artifactDir) {
   return {
     loadClosed({ candidateDbPath, onCheckpoint }) {
-      const task = defaultLifecycleQueue.then(() => withDatabaseFilename(candidateDbPath, async () => {
-        const artifactRequire = createRequire(join(artifactDir, 'package.json'));
-        const { createStrapi } = artifactRequire('@strapi/strapi');
-        const previousClient = process.env.DATABASE_CLIENT;
-        const previousUrl = process.env.DATABASE_URL;
+      const predecessor = defaultLifecycleQueue;
+      let releaseLifecycle;
+      const lifecycleHeld = new Promise((resolve) => { releaseLifecycle = resolve; });
+      const task = predecessor.then(async () => {
+        const previousCwd = process.cwd();
+        const previousEnvironment = Object.fromEntries(['DATABASE_FILENAME', 'DATABASE_CLIENT', 'DATABASE_URL'].map((key) => [key, process.env[key]]));
+        let restored = false;
+        const restoreContext = () => {
+          if (restored) return;
+          restored = true;
+          try {
+            for (const [key, value] of Object.entries(previousEnvironment)) {
+              if (value === undefined) delete process.env[key];
+              else process.env[key] = value;
+            }
+            process.chdir(previousCwd);
+          } finally { releaseLifecycle(); }
+        };
+        let handedOff = false;
+        process.chdir(artifactDir);
+        process.env.DATABASE_FILENAME = candidateDbPath;
         process.env.DATABASE_CLIENT = 'sqlite';
         delete process.env.DATABASE_URL;
+        const artifactRequire = createRequire(join(artifactDir, 'package.json'));
         let instance;
+        let destroyInstance;
+        let lifecycleHandle;
         try {
+          const { createStrapi } = artifactRequire('@strapi/strapi');
           instance = createStrapi({ appDir: artifactDir, distDir: join(artifactDir, 'dist') });
           const connection = instance.config?.get?.('database.connection');
           const actualClient = connection?.client;
@@ -518,19 +529,26 @@ function productionLifecycle(artifactDir) {
             fail(`closed Strapi resolved an unsafe database target before load (client=${actualClient ?? '<unknown>'}, filename=${actualFilename ?? '<unknown>'})`);
           }
           await instance.load();
+          destroyInstance = instance.destroy.bind(instance);
+          lifecycleHandle = { destroy: async (...args) => {
+            try { return await destroyInstance(...args); }
+            finally { restoreContext(); }
+          } };
           await onCheckpoint?.('strapi-load-complete');
-          return instance;
+          handedOff = true;
+          return lifecycleHandle;
         } catch (error) {
-          try { await instance?.destroy(); } catch { /* preserve original load error */ }
+          try {
+            if (lifecycleHandle) await lifecycleHandle.destroy();
+            else if (destroyInstance) await destroyInstance();
+            else await instance?.destroy();
+          } catch { /* preserve original load error */ }
           throw error;
         } finally {
-          if (previousClient === undefined) delete process.env.DATABASE_CLIENT;
-          else process.env.DATABASE_CLIENT = previousClient;
-          if (previousUrl === undefined) delete process.env.DATABASE_URL;
-          else process.env.DATABASE_URL = previousUrl;
+          if (!handedOff) restoreContext();
         }
-      }));
-      defaultLifecycleQueue = task.then(() => undefined, () => undefined);
+      });
+      defaultLifecycleQueue = task.then(() => lifecycleHeld, () => undefined);
       return task;
     },
     destroy(instance) { return instance.destroy(); },

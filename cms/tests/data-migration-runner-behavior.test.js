@@ -69,6 +69,47 @@ function dbBytes(path) {
   return readFileSync(path);
 }
 
+function installFakeStrapi(f, { failOnLoad = false } = {}) {
+  const dependencyRoot = addExternalDependencies(f);
+  const packageDir = join(dependencyRoot, '@strapi/strapi');
+  writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: '@strapi/strapi', version: '5.51.2', main: 'index.js' }));
+  writeFileSync(join(packageDir, 'index.js'), `
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { createRequire } = require('node:module');
+const Database = require('better-sqlite3');
+exports.createStrapi = ({ appDir }) => ({
+  config: { get(name) { return name === 'database.connection' ? { client: process.env.DATABASE_CLIENT, connection: { filename: process.env.DATABASE_FILENAME } } : undefined; } },
+  async load() {
+    assert.equal(process.cwd(), appDir);
+    assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
+    assert.equal(process.env.DATABASE_URL, undefined);
+    assert.equal(createRequire(path.join(appDir, 'src/lifecycles/publication.ts'))('../lib/demo193-source-empty-fields.json').entries instanceof Array, true);
+    ${failOnLoad ? "throw new Error('simulated closed-load failure');" : `
+    const db = new Database(process.env.DATABASE_FILENAME);
+    try {
+      const history = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='strapi_migrations'").get()
+        && db.prepare('SELECT 1 FROM strapi_migrations WHERE name = ?').get('2026.09.21T00.00.00.rename-status-columns.js');
+      if (!history) {
+        for (const [table, oldName, newName] of [['seminars', 'status', 'seminar_status'], ['schedule_entries', 'status', 'entry_status']]) {
+          const names = db.prepare('PRAGMA table_info("' + table + '")').all().map(({ name }) => name);
+          if (names.includes(oldName) && !names.includes(newName)) db.exec('ALTER TABLE "' + table + '" RENAME COLUMN "' + oldName + '" TO "' + newName + '"');
+        }
+      }
+      db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
+      db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+    } finally { db.close(); }
+    `}
+  },
+  async destroy() {
+    assert.equal(process.cwd(), appDir);
+    assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
+    assert.equal(process.env.DATABASE_URL, undefined);
+  },
+});
+`);
+}
+
 function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) {
   const root = sandbox(t);
   const sourceDbPath = join(root, 'source.db');
@@ -78,6 +119,7 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   const stepsDir = join(artifactDir, 'database', 'migrations', 'steps');
   const artifactScripts = join(artifactDir, 'scripts');
   const targetSchemaPath = join(artifactDir, 'database/migrations/target-schema/seminar.json');
+  const sourceEmptyFieldsPath = join(artifactDir, 'src/lib/demo193-source-empty-fields.json');
   const receiptPath = join(root, 'receipt.json');
   mkdirSync(dirname(candidateDbPath), { recursive: true, mode: 0o700 });
   chmodSync(dirname(candidateDbPath), 0o700);
@@ -86,6 +128,8 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   mkdirSync(artifactScripts, { recursive: true });
   mkdirSync(dirname(targetSchemaPath), { recursive: true });
   copyFileSync(join(repoRoot, 'cms/src/api/seminar/content-types/seminar/schema.json'), targetSchemaPath);
+  mkdirSync(dirname(sourceEmptyFieldsPath), { recursive: true });
+  copyFileSync(join(repoRoot, 'cms/src/lib/demo193-source-empty-fields.json'), sourceEmptyFieldsPath);
   writeFileSync(join(sourceCmsRoot, 'package.json'), JSON.stringify({ dependencies: { '@strapi/strapi': '5.51.2' } }));
   seedDb(sourceDbPath);
   {
@@ -142,6 +186,7 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   plan.steps = plan.steps.filter(({ id }) => id !== 'normalize-null-documents-state-v1');
   plan.integrity.files = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({ path: `scripts/${name}`, sha256: hash(readFileSync(join(artifactScripts, name))) }));
   plan.integrity.files.push({ path: 'database/migrations/target-schema/seminar.json', sha256: hash(readFileSync(targetSchemaPath)) });
+  plan.integrity.files.push({ path: 'src/lib/demo193-source-empty-fields.json', sha256: hash(readFileSync(sourceEmptyFieldsPath)) });
   const payloadPath = join(artifactDir, 'database/migrations/data-steps/classification.mjs');
   writeFileSync(join(artifactDir, 'database', 'migrations', 'plan.json'), JSON.stringify(plan, null, 2));
   const lifecycleAdapter = {
@@ -333,6 +378,53 @@ test('default data-step loader imports the verified packaged helper path', async
   const runner = await loadRunner();
   const defaultAdapter = { loadClosed: f.lifecycleAdapter.loadClosed, destroy: f.lifecycleAdapter.destroy };
   await runner.prepareMigration({ ...prepareArgs(f), lifecycleAdapter: defaultAdapter });
+});
+
+test('default closed Strapi lifecycle uses artifact cwd through destroy and restores process state', async (t) => {
+  const f = fixture(t, { operationId: 'op-default-lifecycle-context', statusShape: 'applied-retired' });
+  installFakeStrapi(f);
+  const previousCwd = process.cwd();
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME'].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db' });
+  try {
+    const args = prepareArgs(f);
+    delete args.lifecycleAdapter;
+    await (await loadRunner()).prepareMigration(args);
+    assert.equal(process.cwd(), previousCwd);
+    assert.equal(process.env.DATABASE_CLIENT, 'mysql');
+    assert.equal(process.env.DATABASE_URL, 'restore-me');
+    assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+  } finally {
+    process.chdir(previousCwd);
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('default closed Strapi lifecycle restores cwd and database environment after load failure', async (t) => {
+  const f = fixture(t, { operationId: 'op-default-lifecycle-failure' });
+  installFakeStrapi(f, { failOnLoad: true });
+  const previousCwd = process.cwd();
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME'].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db' });
+  try {
+    const runner = await loadRunner();
+    const args = prepareArgs(f);
+    delete args.lifecycleAdapter;
+    await assert.rejects(() => runner.prepareMigration(args), /simulated closed-load failure/);
+    assert.equal(process.cwd(), previousCwd);
+    assert.equal(process.env.DATABASE_CLIENT, 'mysql');
+    assert.equal(process.env.DATABASE_URL, 'restore-me');
+    assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+  } finally {
+    process.chdir(previousCwd);
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('external immutable dependency bytes are included in the selected cohort identity', async (t) => {

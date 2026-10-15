@@ -121,6 +121,10 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   assert.ok(existsSync(join(artifact, 'database/migrations/plan.json')), 'the artifact omitted its migration plan');
   assert.ok(existsSync(join(artifact, 'scripts/institute-method-author-classification.mjs')), 'classification helper is not deployable');
   assert.ok(existsSync(join(artifact, 'scripts/normalize-null-documents-state.mjs')), 'normalization helper is not deployable');
+  const runtimeAsset = 'src/lib/demo193-source-empty-fields.json';
+  assert.deepEqual(readFileSync(join(artifact, runtimeAsset)), readFileSync(join(repoRoot, 'cms', runtimeAsset)), 'runtime lifecycle data asset bytes differ from source');
+  const manifest = JSON.parse(readFileSync(join(artifact, 'database/migrations/plan.json'), 'utf8'));
+  assert.equal(manifest.integrity.files.find(({ path }) => path === runtimeAsset)?.sha256, sha256(readFileSync(join(artifact, runtimeAsset))), 'runtime lifecycle data asset is not hash-bound by the migration plan');
 });
 
 test('release gate rejects a substituted migration even when the declared file count still matches', (t) => {
