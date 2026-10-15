@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   MODULES,
   loadModule,
@@ -17,6 +19,30 @@ import {
 
 const captureModule = (): Promise<CaptureModule> => loadModule<CaptureModule>(MODULES.capture);
 const contractModule = (): Promise<ContractModule> => loadModule<ContractModule>(MODULES.contract);
+
+const demo193EmptySeoSnapshot = (): Snapshot => {
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '../../cms/src/lib/demo193-source-empty-fields.json'), 'utf8')) as {
+    entries: { type: string; legacyId: string; slug: string }[];
+  };
+  return {
+    referenceDate: '2026-10-15',
+    content: {
+      media: [],
+      types: {
+        articles: manifest.entries.filter((entry) => entry.type === 'article').map(({ legacyId, slug }) => ({
+          id: legacyId,
+          legacy_id: legacyId,
+          slug,
+          title: 'Title',
+          body_html: '<p>Body</p>',
+          page_title: null,
+          page_description: null,
+          image: '/media/article.jpg',
+        })),
+      },
+    },
+  };
+};
 
 const records = (n: number, prefix = 'r'): Record<string, unknown>[] =>
   Array.from({ length: n }, (_, i) => ({ id: `${prefix}-${i + 1}` }));
@@ -323,6 +349,30 @@ describe('целостность источника каталога', () => {
     const mod = await contractModule();
     const result = mod.validateSnapshotContract(catalogSnapshot([catalogArticle({ slug: 'chto-takoe-kineziologiya' })]));
     expect(result.violations).toEqual([]);
+  });
+
+  it('строгий production-контракт остаётся красным, а demo193 принимает только 132 закреплённых SEO-пустоты', async () => {
+    const mod = await contractModule();
+    const snapshot = demo193EmptySeoSnapshot();
+    expect(mod.validateSnapshotContract(snapshot).violations).toHaveLength(132);
+    expect(() => mod.assertSnapshotContract(snapshot)).toThrow(/page_title|page_description/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      snapshot,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).not.toThrow();
+  });
+
+  it('demo193 exception rejects changed identities, newly empty required content, and wrong SQL pins', async () => {
+    const mod = await contractModule();
+    const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+    const wrongIdentity = demo193EmptySeoSnapshot();
+    wrongIdentity.content.types.articles![0]!.legacy_id = 'other';
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(wrongIdentity, sqlPin)).toThrow(/unexpected|changed/);
+
+    const extraEmpty = demo193EmptySeoSnapshot();
+    extraEmpty.content.types.articles![0]!.title = '';
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(extraEmpty, sqlPin)).toThrow(/unexpected/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(demo193EmptySeoSnapshot(), '0'.repeat(64))).toThrow(/SQL source pin/);
   });
 
   // Сценарий: нарушение контракта останавливает сборку
