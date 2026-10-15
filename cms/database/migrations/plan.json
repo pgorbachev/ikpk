@@ -11,7 +11,8 @@
         "strapiVersion": "5.51.2",
         "schema": {
           "engine": "sqlite",
-          "requiredColumns": { "seminars": ["status"], "schedule_entries": ["status"] }
+          "requiredColumns": { "seminars": ["id"], "schedule_entries": ["id"] },
+          "requiredAnyColumns": { "seminars": [["status", "seminar_status"]], "schedule_entries": [["status", "entry_status"]] }
         }
       },
       "preconditions": { "columns": ["seminars.status", "schedule_entries.status"] },
@@ -65,7 +66,8 @@
   ],
   "integrity": {
     "files": [
-      { "path": "scripts/run-data-migrations.mjs", "sha256": "9d5f9f7c5c84c72044730fd1668a9f4b9904be4548f06a391ddc59833c2b32f6" },
+      { "path": "scripts/run-data-migrations.mjs", "sha256": "0b13c6edb3ebffec31d7ddcab55486bf22dce84e038365aa1630e398f4be71a8" },
+      { "path": "database/migrations/target-schema/seminar.json", "sha256": "b8b92af156d27ccaf96d816e9b18f79b1ce9c1ee568a95145c6457d073202df8" },
       { "path": "scripts/audit-data-migration.mjs", "sha256": "fcffb27f5593bc61c4cc5c44c05642662b7a948e856640ac2f2198b9c22e656d" },
       { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
       { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }

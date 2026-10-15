@@ -166,21 +166,44 @@ function sqliteSnapshot(db) {
 function validateSourceSchema(snapshot, plan, db) {
   for (const step of plan.steps) {
     if (step.source?.schema?.engine !== snapshot.engine) fail(`unsupported source engine for ${step.id}: expected ${step.source?.schema?.engine}, found ${snapshot.engine}`);
+    const nativeHistoryRecorded = step.kind === 'strapi-native'
+      && step.id === '2026.09.21T00.00.00.rename-status-columns'
+      && db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='strapi_migrations'").get()
+      && db.prepare('SELECT 1 FROM strapi_migrations WHERE name = ? LIMIT 1').get(basename(step.path));
+    if (nativeHistoryRecorded) {
+      const targetSchemaRelativePath = 'database/migrations/target-schema/seminar.json';
+      const schemaPath = join(plan.root, targetSchemaRelativePath);
+      const schemaEntry = plan.manifest.integrity.files.find(({ path }) => path === targetSchemaRelativePath);
+      if (!schemaEntry || !snapshot.tables.includes('seminars') || !snapshot.columns.seminars?.includes('id')
+        || !snapshot.tables.includes('schedule_entries') || !snapshot.columns.schedule_entries?.includes('id')
+        || !snapshot.columns.schedule_entries?.includes('entry_status')
+        || snapshot.columns.seminars?.includes('status')) {
+        fail(`recorded native migration has an unsupported source shape for ${step.id}`);
+      }
+      let targetSchema;
+      try { targetSchema = readJson(schemaPath, 'compiled seminar schema'); }
+      catch (error) { fail(`cannot verify retired seminar status in compiled target schema: ${error.message}`); }
+      if (Object.hasOwn(targetSchema.attributes ?? {}, 'status') || Object.hasOwn(targetSchema.attributes ?? {}, 'seminar_status')) {
+        fail(`recorded native migration requires seminar status to be retired in the compiled target schema for ${step.id}`);
+      }
+      continue;
+    }
     for (const table of step.source.schema.requiredTables ?? []) {
       if (!snapshot.tables.includes(table)) fail(`source schema precondition failed for ${step.id}: table ${table} is missing`);
     }
-    const alreadyNative = step.kind === 'strapi-native'
-      && db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='strapi_migrations'").get()
-      && db.prepare('SELECT 1 FROM strapi_migrations WHERE name = ? OR name LIKE ? LIMIT 1').get(basename(step.path), `%${basename(step.path)}`)
-      && (step.postconditions?.columns ?? []).every((qualified) => {
-        const [table, column] = qualified.split('.', 2);
-        return Boolean(column) && snapshot.tables.includes(table) && snapshot.columns[table]?.includes(column);
-      });
-    if (alreadyNative) continue;
     for (const [table, columns] of Object.entries(step.source.schema.requiredColumns ?? {})) {
       if (!snapshot.tables.includes(table)) fail(`source schema precondition failed for ${step.id}: table ${table} is missing`);
       for (const column of columns) {
         if (!snapshot.columns[table]?.includes(column)) fail(`source schema precondition failed for ${step.id}: column ${table}.${column} is missing`);
+      }
+    }
+    for (const [table, alternatives] of Object.entries(step.source.schema.requiredAnyColumns ?? {})) {
+      if (!snapshot.tables.includes(table)) fail(`source schema precondition failed for ${step.id}: table ${table} is missing`);
+      for (const group of alternatives) {
+        if (!Array.isArray(group) || group.length === 0 || !group.every((column) => typeof column === 'string')) fail(`invalid requiredAnyColumns group for ${step.id}.${table}`);
+        if (!group.some((column) => snapshot.columns[table]?.includes(column))) {
+          fail(`source schema precondition failed for ${step.id}: expected one of ${group.map((column) => `${table}.${column}`).join(', ')}`);
+        }
       }
     }
   }

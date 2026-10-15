@@ -33,6 +33,10 @@ cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
 # Миграции базы: Strapi ищет их в `<корень релиза>/database/migrations`, а не в `dist`.
 [[ -d database ]] && cp -R database "$OUT/"
 mkdir -p "$OUT/database/migrations"
+# The migration preflight uses this exact compiled-target schema as evidence when
+# the recorded native rename predates retirement of the seminar status attribute.
+mkdir -p "$OUT/database/migrations/target-schema"
+cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/target-schema/seminar.json"
 # Операторский runner и те же узкие data helpers, что используются в их focused CLI.
 # План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
 mkdir -p "$OUT/scripts"

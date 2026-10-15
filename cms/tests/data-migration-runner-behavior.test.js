@@ -69,7 +69,7 @@ function dbBytes(path) {
   return readFileSync(path);
 }
 
-function fixture(t, { operationId = 'op-fixture-1' } = {}) {
+function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) {
   const root = sandbox(t);
   const sourceDbPath = join(root, 'source.db');
   const candidateDbPath = join(root, 'private', 'candidate.db');
@@ -77,12 +77,15 @@ function fixture(t, { operationId = 'op-fixture-1' } = {}) {
   const artifactDir = join(root, 'artifact');
   const stepsDir = join(artifactDir, 'database', 'migrations', 'steps');
   const artifactScripts = join(artifactDir, 'scripts');
+  const targetSchemaPath = join(artifactDir, 'database/migrations/target-schema/seminar.json');
   const receiptPath = join(root, 'receipt.json');
   mkdirSync(dirname(candidateDbPath), { recursive: true, mode: 0o700 });
   chmodSync(dirname(candidateDbPath), 0o700);
   mkdirSync(sourceCmsRoot, { recursive: true });
   mkdirSync(stepsDir, { recursive: true });
   mkdirSync(artifactScripts, { recursive: true });
+  mkdirSync(dirname(targetSchemaPath), { recursive: true });
+  copyFileSync(join(repoRoot, 'cms/src/api/seminar/content-types/seminar/schema.json'), targetSchemaPath);
   writeFileSync(join(sourceCmsRoot, 'package.json'), JSON.stringify({ dependencies: { '@strapi/strapi': '5.51.2' } }));
   seedDb(sourceDbPath);
   {
@@ -110,6 +113,20 @@ function fixture(t, { operationId = 'op-fixture-1' } = {}) {
     }
     db.close();
   }
+  if (statusShape !== 'old') {
+    const db = new Database(sourceDbPath);
+    try {
+      for (const [table, oldName, newName] of [['seminars', 'status', 'seminar_status'], ['schedule_entries', 'status', 'entry_status']]) {
+        if (statusShape === 'new') db.exec(`ALTER TABLE "${table}" RENAME COLUMN "${oldName}" TO "${newName}"`);
+        else if (statusShape === 'neither' || (statusShape === 'applied-retired' && table === 'seminars')) db.exec(`ALTER TABLE "${table}" DROP COLUMN "${oldName}"`);
+      }
+      if (statusShape === 'applied-retired') {
+        db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
+        db.exec('CREATE TABLE strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
+        db.prepare('INSERT INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+      }
+    } finally { db.close(); }
+  }
   const sourceMigrations = join(repoRoot, 'cms/database/migrations');
   cpSync(sourceMigrations, join(artifactDir, 'database/migrations'), { recursive: true });
   mkdirSync(join(artifactDir, 'scripts'), { recursive: true });
@@ -124,14 +141,19 @@ function fixture(t, { operationId = 'op-fixture-1' } = {}) {
   const plan = JSON.parse(readFileSync(join(sourceMigrations, 'plan.json'), 'utf8'));
   plan.steps = plan.steps.filter(({ id }) => id !== 'normalize-null-documents-state-v1');
   plan.integrity.files = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({ path: `scripts/${name}`, sha256: hash(readFileSync(join(artifactScripts, name))) }));
+  plan.integrity.files.push({ path: 'database/migrations/target-schema/seminar.json', sha256: hash(readFileSync(targetSchemaPath)) });
   const payloadPath = join(artifactDir, 'database/migrations/data-steps/classification.mjs');
   writeFileSync(join(artifactDir, 'database', 'migrations', 'plan.json'), JSON.stringify(plan, null, 2));
   const lifecycleAdapter = {
     async loadClosed({ candidateDbPath, onCheckpoint }) {
       const db = new Database(candidateDbPath);
       try {
-        if (!db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => name === 'seminar_status')) db.exec('ALTER TABLE seminars RENAME COLUMN status TO seminar_status');
-        if (!db.prepare('PRAGMA table_info("schedule_entries")').all().some(({ name }) => name === 'entry_status')) db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
+        const recorded = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='strapi_migrations'").get()
+          && db.prepare('SELECT 1 FROM strapi_migrations WHERE name = ?').get('2026.09.21T00.00.00.rename-status-columns.js');
+        if (!recorded) {
+          if (!db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => name === 'seminar_status')) db.exec('ALTER TABLE seminars RENAME COLUMN status TO seminar_status');
+          if (!db.prepare('PRAGMA table_info("schedule_entries")').all().some(({ name }) => name === 'entry_status')) db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
+        }
         db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
         db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
       } finally { db.close(); }
@@ -185,6 +207,37 @@ test('file-backed prepare leaves source database and committed WAL bytes unchang
   await runner.prepareMigration(prepareArgs(f));
   assert.deepEqual(dbBytes(f.sourceDbPath), before, 'prepare mutated the source SQLite database');
   assert.equal(existsSync(`${f.sourceDbPath}-wal`), false, 'fixture source should have no uncheckpointed WAL');
+  const candidate = new Database(f.candidateDbPath);
+  assert.equal(candidate.prepare('SELECT seminar_status FROM seminars WHERE id = 1').get().seminar_status, 'active');
+  assert.equal(candidate.prepare('SELECT entry_status FROM schedule_entries WHERE id = 1').get().entry_status, 'cancelled');
+  candidate.close();
+});
+
+test('already-renamed source columns without native history pass preflight, retain data, and are recorded', async (t) => {
+  const prepared = await makePrepared(t, { operationId: 'op-pre-renamed-source', statusShape: 'new' });
+  const db = new Database(prepared.candidateDbPath);
+  assert.equal(db.prepare('SELECT seminar_status FROM seminars WHERE id = 1').get().seminar_status, 'active');
+  assert.equal(db.prepare('SELECT entry_status FROM schedule_entries WHERE id = 1').get().entry_status, 'cancelled');
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM strapi_migrations WHERE name = ?').get('2026.09.21T00.00.00.rename-status-columns.js').count, 1);
+  db.close();
+  assert.equal(JSON.parse(readFileSync(prepared.receiptPath, 'utf8')).preservation.passed, true);
+});
+
+test('recorded native migration accepts the retired seminar status and current schedule entry status', async (t) => {
+  const prepared = await makePrepared(t, { operationId: 'op-applied-retired-shape', statusShape: 'applied-retired' });
+  const db = new Database(prepared.candidateDbPath);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM strapi_migrations WHERE name = ?').get('2026.09.21T00.00.00.rename-status-columns.js').count, 1);
+  assert.equal(db.prepare('SELECT entry_status FROM schedule_entries WHERE id = 1').get().entry_status, 'cancelled');
+  assert.equal(db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => ['status', 'seminar_status'].includes(name)), false);
+  db.close();
+  assert.equal(JSON.parse(readFileSync(prepared.receiptPath, 'utf8')).preservation.passed, true);
+});
+
+test('source missing both supported names for either status column refuses before candidate creation', async (t) => {
+  const f = fixture(t, { operationId: 'op-missing-status-columns', statusShape: 'neither' });
+  const runner = await loadRunner();
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /expected one of seminars\.status, seminars\.seminar_status/i);
+  assert.equal(existsSync(f.candidateDbPath), false);
 });
 
 test('snapshot staging cleanup failure is recorded and prevents unsafe candidate resume', async (t) => {
