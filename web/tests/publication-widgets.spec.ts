@@ -7,12 +7,12 @@ test('candidate declared widgets load lazily, preserve geometry and use isolated
   await page.goto('/');
   const reviews = page.locator('[data-reviews-embed]');
   await expect(reviews).toHaveCount(1);
-  expect(guard.toHost('yandex.ru').filter((url) => url.includes('/maps-reviews-widget/'))).toEqual([]);
+  expect(guard.toHost('yandex.ru').filter((url) => url.startsWith('https://yandex.ru/maps-reviews-widget/'))).toEqual([]);
   await expect(reviews.locator('iframe')).toHaveCount(0);
   const before = await reviews.boundingBox();
   const siblingBefore = await reviews.evaluate((node) => { const next = node.closest('section')!.nextElementSibling!; return next.getBoundingClientRect().top + scrollY; });
   await reviews.scrollIntoViewIfNeeded(); await expect(reviews.locator('iframe')).toHaveCount(1);
-  await expect.poll(() => guard.toHost('yandex.ru').some((url) => url.includes('/maps-reviews-widget/'))).toBe(true);
+  await expect.poll(() => guard.toHost('yandex.ru').some((url) => url.startsWith('https://yandex.ru/maps-reviews-widget/'))).toBe(true);
   const after = await reviews.boundingBox();
   expect(after!.height).toBe(before!.height); expect(after!.width).toBe(before!.width);
   expect(await reviews.evaluate((node) => node.closest('section')!.nextElementSibling!.getBoundingClientRect().top + scrollY)).toBeCloseTo(siblingBefore, 0);
