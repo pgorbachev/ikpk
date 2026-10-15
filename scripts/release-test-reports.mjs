@@ -206,7 +206,7 @@ function tap(source, definition) {
   requireThat(results.length >= counters.pass, `${definition.suite}: TAP results missing`);
   // Node treats an empty test file as a successful file-level test. That is not
   // positive execution of declared cases and must not satisfy a release suite.
-  requireThat(!results.some((title) => /(?:^|[\/\\])[^\/\\]*\.(?:[cm]?js|tsx?)$/.test(title)), `${definition.suite}: TAP file passed without named cases`);
+  requireThat(!results.some((title) => /(?:^|[/\\])[^/\\]*\.(?:[cm]?js|tsx?)$/.test(title)), `${definition.suite}: TAP file passed without named cases`);
   return { total: counters.tests, passed: counters.pass, omissions: [] };
 }
 

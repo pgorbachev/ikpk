@@ -83,6 +83,15 @@ observedEntry:1,revision:1,highWaterMark:1,localExecutedTests:1,ciExecutedTests:
   writeFileSync(config, JSON.stringify({ ...demo, canonicalRepository: remote, destinationId: 'demo-dev', credentialBroker: [process.execPath, broker] }), { mode: 0o600 });
   const module = await import(pathToFileURL(entry));
   const args = ['publish','--config',config,'--source-url',remote,'--source-ref','dev','--expected-sha'];
+  // This fixture simulates the installed local launcher; keep the real hosted
+  // prohibition covered before clearing only these flags for the isolated fixture.
+  const ambient = new Map(['CI', 'GITHUB_ACTIONS'].map((key) => [key, process.env[key]]));
+  t.after(() => { for (const [key, value] of ambient) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  } });
+  process.env.CI = 'true';
+  await assert.rejects(module.launch([...args, commit], { fetch: ciFixture('dev', commit).fetch }), /hosted-publication-forbidden/);
+  for (const key of ambient.keys()) delete process.env[key];
   await assert.rejects(module.launch([...args, OTHER], { fetch: ciFixture('dev', commit).fetch }), /source-sha-mismatch/);
   for (const mutation of [{ head_branch: 'main' }, { head_sha: OTHER }, { event: 'pull_request' }, { event: 'repository_dispatch' }]) {
     const bad = ciFixture('dev', commit); Object.assign(bad.run, mutation);
