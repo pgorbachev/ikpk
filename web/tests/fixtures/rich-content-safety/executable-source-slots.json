@@ -536,6 +536,14 @@
     "identity": "style|body:c2e6851b278428bf"
   },
   {
+    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
+    "file": "components/MaintenanceNotice.astro",
+    "nodeKind": "element",
+    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
+    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
+    "identity": "style|body:0830de20854fd197"
+  },
+  {
     "slotId": "src:components/MotionScript.astro:L11:C1:script",
     "file": "components/MotionScript.astro",
     "nodeKind": "element",
@@ -808,11 +816,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L89:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L92:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L89:C1:style",
-    "fingerprint": "665b29867442b065d1abe0eccc322d8e16857a283a84a37273683fb67525d543",
+    "locator": "layouts/BaseLayout.astro:L92:C1:style",
+    "fingerprint": "4d34483231956de60436ad00c43bb487b4ddaa5ee091398e0983ca6d691f2b7c",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -824,11 +832,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L68:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L71:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L68:C1:style",
-    "fingerprint": "badf1fabf4fad440ba8cbea7942807410325240fc25161fb9580dc9efc1e2c22",
+    "locator": "layouts/TopNavLayout.astro:L71:C1:style",
+    "fingerprint": "678a25c0e997925a60f649406839edab5eee591e723d1e39c8f0c3e916dd9049",
     "identity": "style|body:309f315b55438bb4"
   },
   {

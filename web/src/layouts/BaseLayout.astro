@@ -25,7 +25,9 @@ import Footer from '../components/Footer.astro';
 import NewsletterSignup from '../components/NewsletterSignup.astro';
 import Analytics from '../components/Analytics.astro';
 import ChatFacade from '../components/chat/ChatFacade.astro';
+import MaintenanceNotice from '../components/MaintenanceNotice.astro';
 import { isDemoForms } from '../lib/forms';
+import { isMaintenanceBannerEnabled } from '../lib/maintenance-banner';
 import '../styles/global.css';
 
 const {
@@ -59,6 +61,7 @@ const {
         Демо-стенд: формы заявки отключены, обращения в CRM не создаются
       </div>
     )}
+    {!isDemoForms && isMaintenanceBannerEnabled && <MaintenanceNotice />}
     <TopNav />
     {/* data-pagefind-body: индексируется только контент — шапка/футер с
         одинаковыми ссылками на всех страницах размывали релевантность.
