@@ -36,6 +36,38 @@ export interface UpcomingSeminar {
   registrationFormLink: string;
 }
 
+/**
+ * The homepage features both roles from the shared CMS people collection.
+ * Keep CMS order within each role, balance the initial selection, then use
+ * remaining people to fill the existing card limit when one role is short.
+ */
+export function selectHomepagePeople(people: readonly Teacher[], limit = 8): Teacher[] {
+  if (limit <= 0) return [];
+
+  const withPhoto = people.filter((person) => person.photo && (person.trait === undefined || person.trait === 'teacher' || person.trait === 'method-author'));
+  // Older snapshots may not carry trait yet; preserve their former homepage treatment.
+  const teachers = withPhoto.filter((person) => person.trait !== 'method-author');
+  const authors = withPhoto.filter((person) => person.trait === 'method-author');
+  const selected: Teacher[] = [];
+  const selectedIds = new Set<string>();
+  const take = (candidates: readonly Teacher[], count: number) => {
+    for (const person of candidates) {
+      if (selected.length >= limit || selected.filter((item) => item.trait === person.trait).length >= count) continue;
+      const id = String(person.legacy_id ?? person.slug);
+      if (selectedIds.has(id)) continue;
+      selected.push(person);
+      selectedIds.add(id);
+    }
+  };
+
+  const teacherQuota = Math.ceil(limit / 2);
+  const authorQuota = Math.floor(limit / 2);
+  take(teachers, teacherQuota);
+  take(authors, authorQuota);
+  take(withPhoto, limit);
+  return selected;
+}
+
 const MONTHS = [
   'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
   'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
