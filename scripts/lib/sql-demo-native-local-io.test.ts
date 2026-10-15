@@ -489,8 +489,8 @@ describe('concrete native local rehearsal adapter', () => {
     });
     const io = await makeAdapter({ runtime: { fetch } });
     const identities = await io.readDraftContentIdentities(await target(io));
-    expect(identities.articles).toEqual([{ legacyId: 'articles-1', slug: 'article-1' }]);
-    expect(Object.entries(identities).filter(([, rows]) => rows.length > 0)).toEqual([['articles', [{ legacyId: 'articles-1', slug: 'article-1' }]]]);
+    expect(identities.articles).toEqual([{ legacyId: 'articles-1', documentId: 'draft-article', slug: 'article-1' }]);
+    expect(Object.entries(identities).filter(([, rows]) => rows.length > 0)).toEqual([['articles', [{ legacyId: 'articles-1', documentId: 'draft-article', slug: 'article-1' }]]]);
     const requests = fetch.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname.startsWith('/api/'));
     expect(requests).toHaveLength(collections.length);
     expect(requests.every((url) => url.searchParams.get('status') === 'draft')).toBe(true);
