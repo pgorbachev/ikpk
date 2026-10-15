@@ -50,10 +50,10 @@ function attr(node: Node, name: string): string | undefined {
 }
 
 function cardData(section: Node): Array<{ href: string; name: string }> {
-  return descendants(section, (node) => node.tagName === 'a' && attr(node, 'class')?.split(/\s+/).includes('teacher-card'))
+  return descendants(section, (node) => node.tagName === 'a' && Boolean(attr(node, 'class')?.split(/\s+/).includes('teacher-card')))
     .map((card) => ({
       href: attr(card, 'href') ?? '',
-      name: textContent(descendants(card, (node) => node.tagName === 'span' && attr(node, 'class')?.split(/\s+/).includes('teacher-name'))[0] ?? card).trim(),
+      name: textContent(descendants(card, (node) => node.tagName === 'span' && Boolean(attr(node, 'class')?.split(/\s+/).includes('teacher-name')))[0] ?? card).trim(),
     }));
 }
 

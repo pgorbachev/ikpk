@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getSeminars, getTeachers, getCourseGroups, pedagogicalStaff } from '../src/lib/data.js';
-import { findTeacherForSeminar, selectHomepagePeople, seminarTeacherLabel } from '../src/lib/home.js';
+import { getSeminars, getTeachers, getCourseGroups } from '../src/lib/data.js';
+import { findTeacherForSeminar, selectHomepagePeopleByRole, seminarTeacherLabel } from '../src/lib/home.js';
 
 describe('findTeacherForSeminar', () => {
   it('берёт преподавателя из seminar.teachers, а не первого с фото у института', () => {
@@ -28,7 +28,7 @@ describe('findTeacherForSeminar', () => {
   });
 });
 
-describe('selectHomepagePeople', () => {
+describe('selectHomepagePeopleByRole', () => {
   const people = [
     ...Array.from({ length: 9 }, (_, index) => ({
       legacy_id: `teacher-${index + 1}`,
@@ -52,44 +52,39 @@ describe('selectHomepagePeople', () => {
     })),
   ];
 
-  it('keeps eight cards and gives both roles an ordered share of the visible selection', () => {
-    const selected = selectHomepagePeople(people);
+  it('keeps up to eight source-ordered people in each independent role list', () => {
+    const selected = selectHomepagePeopleByRole(people);
 
-    expect(selected).toHaveLength(8);
-    expect(selected.slice(0, 4).map((person) => person.legacy_id)).toEqual([
-      'teacher-1', 'teacher-2', 'teacher-3', 'teacher-4',
-    ]);
-    expect(selected.slice(4).map((person) => person.legacy_id)).toEqual([
-      'author-1', 'author-2', 'author-3', 'author-4',
+    expect(selected.teachers.map((person) => person.legacy_id)).toEqual(
+      people.slice(0, 8).map((person) => person.legacy_id),
+    );
+    expect(selected.methodAuthors.map((person) => person.legacy_id)).toEqual(
+      people.slice(9, 17).map((person) => person.legacy_id),
+    );
+  });
+
+  it('does not let one role fill a short list from the other', () => {
+    const selected = selectHomepagePeopleByRole([...people.slice(0, 2), ...people.slice(9)]);
+
+    expect(selected.teachers.map((person) => person.legacy_id)).toEqual(['teacher-1', 'teacher-2']);
+    expect(selected.methodAuthors.map((person) => person.legacy_id)).toEqual([
+      'author-1', 'author-2', 'author-3', 'author-4', 'author-5',
     ]);
   });
 
-  it('does not let trait-less legacy people consume the teacher quota', () => {
-    const legacyPerson = { ...people[0]!, legacy_id: 'legacy-person', trait: undefined };
-    const selected = selectHomepagePeople([legacyPerson, ...people]);
-
-    expect(selected.slice(0, 4).map((person) => person.legacy_id)).toEqual([
-      'teacher-1', 'teacher-2', 'teacher-3', 'teacher-4',
+  it('deduplicates repeated identities without changing either role order', () => {
+    const repeated = [...people];
+    repeated.splice(1, 0, { ...people[0]!, name: 'Duplicate teacher' });
+    repeated.splice(repeated.length - 1, 0, { ...people[9]!, name: 'Duplicate author' });
+    const selected = selectHomepagePeopleByRole([
+      ...repeated,
     ]);
-    expect(selected.slice(4).map((person) => person.legacy_id)).toEqual([
-      'author-1', 'author-2', 'author-3', 'author-4',
-    ]);
-  });
 
-  it('fills from the longer role when the other role is short and deduplicates shared IDs', () => {
-    const short = [
-      { ...people[0]!, legacy_id: 'same-id' },
-      ...Array.from({ length: 9 }, (_, index) => ({
-        ...people[9]!,
-        legacy_id: index === 0 ? 'same-id' : `author-extra-${index}`,
-      })),
-    ];
-
-    const selected = selectHomepagePeople(short);
-
-    expect(selected).toHaveLength(8);
-    expect(new Set(selected.map((person) => person.legacy_id)).size).toBe(8);
-    expect(selected.filter((person) => person.trait === 'method-author')).toHaveLength(7);
-    expect(pedagogicalStaff(selected).every((person) => person.trait === 'teacher')).toBe(true);
+    expect(selected.teachers).toHaveLength(8);
+    expect(selected.methodAuthors).toHaveLength(5);
+    expect(new Set(selected.teachers.map((person) => person.legacy_id)).size).toBe(8);
+    expect(new Set(selected.methodAuthors.map((person) => person.legacy_id)).size).toBe(5);
+    expect(selected.teachers.at(-1)?.name).toBe('Преподаватель 8');
+    expect(selected.methodAuthors.at(-1)?.name).toBe('Автор 5');
   });
 });

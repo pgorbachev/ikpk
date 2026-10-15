@@ -36,38 +36,30 @@ export interface UpcomingSeminar {
   registrationFormLink: string;
 }
 
-/**
- * The homepage features both roles from the shared CMS people collection.
- * Keep CMS order within each role, balance the initial selection, then use
- * remaining people to fill the existing card limit when one role is short.
- */
-export function selectHomepagePeople(people: readonly Teacher[], limit = 8): Teacher[] {
-  if (limit <= 0) return [];
+/** Select each homepage role independently, preserving CMS order and identity. */
+export function selectHomepagePeopleByRole(
+  people: readonly Teacher[],
+  limit = 8,
+): { teachers: Teacher[]; methodAuthors: Teacher[] } {
+  if (limit <= 0) return { teachers: [], methodAuthors: [] };
 
-  const withPhoto = people.filter((person) => person.photo && (person.trait === undefined || person.trait === 'teacher' || person.trait === 'method-author'));
-  // Older snapshots may not carry trait yet; use those records as fill candidates.
-  const teachers = withPhoto.filter((person) => person.trait === 'teacher');
-  const authors = withPhoto.filter((person) => person.trait === 'method-author');
-  const selected: Teacher[] = [];
   const selectedIds = new Set<string>();
-  const take = (candidates: readonly Teacher[], count: number) => {
-    let added = 0;
-    for (const person of candidates) {
-      if (selected.length >= limit || added >= count) break;
+  const select = (trait: 'teacher' | 'method-author') => {
+    const selected: Teacher[] = [];
+    for (const person of people) {
+      if (person.trait !== trait || !person.photo) continue;
       const id = String(person.legacy_id ?? person.slug);
       if (selectedIds.has(id)) continue;
-      selected.push(person);
       selectedIds.add(id);
-      added += 1;
+      selected.push(person);
+      if (selected.length === limit) break;
     }
+    return selected;
   };
 
-  const teacherQuota = Math.ceil(limit / 2);
-  const authorQuota = Math.floor(limit / 2);
-  take(teachers, teacherQuota);
-  take(authors, authorQuota);
-  take(withPhoto, limit);
-  return selected;
+  const teachers = select('teacher');
+  const methodAuthors = select('method-author');
+  return { teachers, methodAuthors };
 }
 
 const MONTHS = [

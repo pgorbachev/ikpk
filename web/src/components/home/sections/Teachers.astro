@@ -1,7 +1,7 @@
 ---
 // На главной показаны обе роли из общего каталога специалистов.
 import { getTeachers, teacherPageHref } from '../../../lib/data';
-import { selectHomepagePeople } from '../../../lib/home';
+import { selectHomepagePeopleByRole } from '../../../lib/home';
 import { getAssetDimensions, srcsetFor } from '../../../lib/media';
 
 interface Props {
@@ -18,21 +18,44 @@ function credentials(full: string): string {
   return idx >= 0 ? full.slice(idx + 1).trim() : '';
 }
 
-const teachers = selectHomepagePeople(getTeachers(), limit)
+const selected = selectHomepagePeopleByRole(getTeachers(), limit);
+const toCards = (people: typeof selected.teachers, role: 'teacher' | 'method-author') => people
   .map((t) => ({
     name: shortName(t.name),
-    detail: t.trait === 'method-author' ? 'Автор методики' : credentials(t.name),
+    detail: role === 'method-author' ? 'Автор методики' : credentials(t.name),
     photo: t.photo,
-    href: t.trait === 'method-author' ? `/specialisty/${t.slug}` : teacherPageHref(t),
+    href: role === 'method-author' ? `/specialisty/${t.slug}` : teacherPageHref(t),
     dim: getAssetDimensions(t.photo),
   }));
+const teachers = toCards(selected.teachers, 'teacher');
+const authors = toCards(selected.methodAuthors, 'method-author');
 ---
 <section class="teachers section" data-reveal>
   <div class="container">
-    <h2 class="section-title">Преподаватели и авторы методик</h2>
-    <p class="section-sub">Практикующие преподаватели и авторы методик Институтов Апледжера и Барраля.</p>
+    <h2 class="section-title">Преподаватели</h2>
     <div class="teachers-grid">
       {teachers.map((t) => t.href ? (
+        <a class="teacher-card" href={t.href}>
+          <img class="teacher-photo" src={t.photo} srcset={srcsetFor(t.photo)} sizes="(max-width: 640px) 45vw, 260px" alt={t.name} width={t.dim?.width} height={t.dim?.height} loading="lazy" />
+          <span class="teacher-name">{t.name}</span>
+          {t.detail && <span class="teacher-cred">{t.detail}</span>}
+        </a>
+      ) : (
+        <div class="teacher-card">
+          <img class="teacher-photo" src={t.photo} srcset={srcsetFor(t.photo)} sizes="(max-width: 640px) 45vw, 260px" alt={t.name} width={t.dim?.width} height={t.dim?.height} loading="lazy" />
+          <span class="teacher-name">{t.name}</span>
+          {t.detail && <span class="teacher-cred">{t.detail}</span>}
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<section class="teachers section" data-reveal>
+  <div class="container">
+    <h2 class="section-title">Авторы методик</h2>
+    <div class="teachers-grid">
+      {authors.map((t) => t.href ? (
         <a class="teacher-card" href={t.href}>
           <img class="teacher-photo" src={t.photo} srcset={srcsetFor(t.photo)} sizes="(max-width: 640px) 45vw, 260px" alt={t.name} width={t.dim?.width} height={t.dim?.height} loading="lazy" />
           <span class="teacher-name">{t.name}</span>
