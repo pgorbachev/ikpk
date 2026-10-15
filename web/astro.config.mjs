@@ -6,8 +6,19 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
 const demoOutput = process.env.DEMO_OUTPUT === '1';
+const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
 const demoSite = process.env.DEMO_SITE_URL ?? 'https://193.124.115.99';
-if (demoOutput) {
+if (demoProfile && demoProfile !== 'demo193') {
+  throw new Error('DEMO_PROFILE must be the approved demo193 profile');
+}
+if (demoProfile === 'demo193') {
+  if (demoOutput || process.env.DEMO_FORMS !== 'stub' || process.env.PAYMENT_ROLE !== 'ci' ||
+      process.env.DEPLOY_MODE !== 'stand' || process.env.CHAT_LOADER_SRC !== 'none' ||
+      process.env.CHAT_OFFLINE_MESSAGE !== 'absent') {
+    throw new Error('demo193 profile has unsafe or conflicting build flags');
+  }
+}
+if (demoOutput || demoProfile === 'demo193') {
   let parsedDemoSite;
   try {
     parsedDemoSite = new URL(demoSite);
@@ -74,7 +85,7 @@ function omitStampedOfferWithoutPaymentForm() {
 const isNoindexFlatDetail = (page) => /\/(instituty|programmy|seminary|specialisty)\/[^/]+\/?$/.test(page);
 
 export default defineConfig({
-  site: demoOutput ? demoSite : 'https://ikpk.su',
+  site: demoProfile === 'demo193' || demoOutput ? demoSite : 'https://ikpk.su',
   integrations: [
     omitStampedOfferWithoutPaymentForm(),
     sitemap({
