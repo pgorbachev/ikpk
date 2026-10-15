@@ -26,6 +26,21 @@ describe('candidate route identity follows entity ownership', () => {
       .toThrow('missing representative seminars route: /shared/shared/shared');
   });
 
+  it.each([
+    { slug: 'shared' },
+    { slug: 'shared', institute_legacy_id: null },
+    { slug: 'shared', institute_legacy_id: '' },
+  ])('uses the actual flat teacher route when optional institute is absent: $institute_legacy_id', (teacher) => {
+    expect(candidateRoute(types, 'teachers', teacher)).toBe('/specialisty/shared');
+  });
+
+  it('selects the flat teacher template without mistaking a cross-type shared slug for it', () => {
+    const source = { ...types, teachers: [{ slug: 'shared' }] };
+    const actualPages = [...pages.filter((page) => page.route !== '/shared/prepodavatel/shared'), { route: '/specialisty/shared', html: '<main>Teacher</main>' }];
+    expect(candidateTemplateRoutes(source, actualPages)).toContain('/specialisty/shared');
+    expect(candidateTemplateRoutes(source, actualPages)).not.toContain('/shared/prepodavatel/shared');
+  });
+
   it('requires the actual snapshot parent join rather than a matching slug elsewhere', () => {
     expect(() => candidateRoute(types, 'seminars', { slug: 'shared', course_group_legacy_id: 'absent' })).toThrow('missing course group');
     expect(() => candidateRoute(types, 'teachers', { slug: 'shared', institute_legacy_id: 'institute-legacy' })).toThrow('missing institute');

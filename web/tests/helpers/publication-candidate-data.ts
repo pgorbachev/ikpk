@@ -17,6 +17,8 @@ export function candidateRoute(types: Types, type: CandidateEntityType, entity: 
     if (!group) throw new Error(`missing course group for seminar ${slug}`);
     return `${candidateRoute(types, 'course_groups', group)}/${slug}`;
   }
+  // An absent teacher institute is valid; only the flat page is generated then.
+  if (type === 'teachers' && (entity.institute_legacy_id == null || entity.institute_legacy_id === '')) return `/specialisty/${slug}`;
   const institute = types.institutes?.find((row) => row.slug === entity.institute_legacy_id);
   if (!institute) throw new Error(`missing institute for ${type} ${slug}`);
   return type === 'teachers' ? `/${institute.slug}/prepodavatel/${slug}` : `/${institute.slug}/${slug}`;
