@@ -96,7 +96,7 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   // Satisfy only the CMS build boundary; the real artifact script copies and validates
   // repository outputs. This avoids installing or building Strapi just to test packaging.
   const fakeNpm = join(fakeBin, 'npm');
-  writeFileSync(fakeNpm, '#!/bin/sh\nmkdir -p dist/config\nprintf "%s\\n" "module.exports = { default: ({ env }) => ({ connection: { connection: { filename: env(\\\"DATABASE_FILENAME\\\") } } }) };" > dist/config/database.js\n', 'utf8');
+  writeFileSync(fakeNpm, '#!/bin/sh\nmkdir -p dist/config\nprintf "%s\\n" "module.exports = { default: ({ env }) => ({ connection: { connection: { filename: env(\\"DATABASE_FILENAME\\") } } }) };" > dist/config/database.js\n', 'utf8');
   chmodSync(fakeNpm, 0o700);
 
   const built = spawnSync('/bin/bash', [artifactBuilder, artifact], {
