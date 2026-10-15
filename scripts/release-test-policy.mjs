@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const RELEASE_TEST_WORKFLOW = '.github/workflows/release-tests.yml';
-export const RELEASE_TEST_POLICY_VERSION = 1;
+export const RELEASE_TEST_POLICY_VERSION = 2;
 export const RELEASE_TEST_ARTIFACT = 'release-source-tests';
 export const releaseTestArtifactName = (attempt) => `${RELEASE_TEST_ARTIFACT}-${integer(attempt, 'run attempt')}`;
 
@@ -29,16 +29,19 @@ export const SOURCE_SUITES = Object.freeze([
   'visual-darwin-desktop-mobile', 'provisioning-isolated-docker',
 ]);
 
-// These files exist outside the current required gate. Listing them is deliberately
-// not a claim that their assertions ran, nor a decision to delete their coverage.
-export const PENDING_SCOPE = Object.freeze([
+// Owner decision 2026-10-15: the old site no longer exists and production data will
+// change regularly. These historical comparison suites are outside the release
+// gate. Source suites use the pinned fixture; candidate checks use its own current
+// snapshot, never today's production content as a permanent reference.
+export const EXCLUDED_HISTORICAL = Object.freeze([
   'web/tests/compare.spec.ts',
   'web/tests/course-group-parity.spec.ts',
   'web/tests/institute-parity.spec.ts',
   'web/tests/parity-audit.spec.ts',
   'web/tests/schedule-parity.spec.ts',
   'web/tests/seminar-parity.spec.ts',
-]);
+].map((file) => Object.freeze({ file, reason: 'old-site-absent', decision: 'owner-2026-10-15' })));
+export const PENDING_SCOPE = Object.freeze([]);
 
 export const REQUIRED_SOURCE_JOBS = Object.freeze([
   'Release identity',
@@ -94,6 +97,7 @@ export function releaseTestManifest(env, needs) {
     ...identity,
     suites: [...SOURCE_SUITES],
     pendingScope: [...PENDING_SCOPE],
+    excludedHistorical: EXCLUDED_HISTORICAL.map((entry) => ({ ...entry })),
     // This record intentionally cannot claim candidate acceptance or overall release readiness.
     subject: 'source-code',
     results: Object.fromEntries(Object.entries(needs).map(([key, value]) => [key, value.result])),
@@ -111,8 +115,9 @@ export function releaseTestManifest(env, needs) {
  * requestedAt is the server's time just before POST re-run; runAttempt must be the
  * newly observed attempt > previousAttempt. The protected loader selects repository,
  * branch, workflow, and run, retains that receipt, and never accepts caller reports.
- * Success is source evidence only; pendingScope and candidate acceptance still need
- * their own decisions/evidence. Failure throws ReleaseTestError with a stable code.
+ * Success is source evidence only; historical exclusions are explicit owner decisions
+ * and candidate acceptance still needs its own evidence. Failure throws
+ * ReleaseTestError with a stable code.
  */
 export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, expected }) {
   sha(expected?.commit);
@@ -145,6 +150,7 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   same(integer(manifest?.runAttempt, 'manifest attempt'), integer(run.run_attempt, 'run attempt'), 'run attempt');
   same(manifest?.suites, [...SOURCE_SUITES], 'suite inventory');
   same(manifest?.pendingScope, [...PENDING_SCOPE], 'pending inventory');
+  same(manifest?.excludedHistorical, [...EXCLUDED_HISTORICAL], 'historical exclusion inventory');
   same(artifact?.name, releaseTestArtifactName(run.run_attempt), 'artifact name');
   same(artifact?.expired, false, 'artifact retention');
   same(integer(artifact?.workflow_run?.id, 'artifact run ID'), integer(run.id, 'run ID'), 'artifact run ID');
@@ -170,7 +176,8 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   }
   return { runId: run.id, runAttempt: run.run_attempt, commit: expected.commit,
     destinationId: expected.destinationId, requestId: expected.requestId,
-    subject: 'source-code', pendingScope: [...PENDING_SCOPE] };
+    subject: 'source-code', pendingScope: [...PENDING_SCOPE],
+    excludedHistorical: EXCLUDED_HISTORICAL.map((entry) => ({ ...entry })) };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

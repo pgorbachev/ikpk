@@ -3,6 +3,9 @@ name: Release source tests
 # Push creates a run on dev before this workflow is registered on default main.
 # Publication re-runs that exact run, records the new attempt in its protected
 # operation receipt, and waits. This workflow has no deployment credentials.
+# Historical compare/parity exclusions follow the owner's 2026-10-15 decision in
+# release-test-policy.mjs. Pinned source fixtures and current candidate snapshots
+# have separate subjects; changing production content is not a visual baseline.
 on:
   push:
     branches: [dev, main]

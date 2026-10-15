@@ -43,6 +43,21 @@ test('push manifest records native identity without inventing a destination or r
   assert.throws(() => releaseTestIdentity({ ...env, GITHUB_EVENT_NAME: 'pull_request' }), /event/);
 });
 
+test('owner excludes obsolete historical parity explicitly without treating production data as a fixture', () => {
+  const manifest = releaseTestManifest(env, needs);
+  assert.equal(manifest.schemaVersion, 2);
+  assert.deepEqual(manifest.pendingScope, []);
+  assert.deepEqual(manifest.excludedHistorical, [
+    'web/tests/compare.spec.ts',
+    'web/tests/course-group-parity.spec.ts',
+    'web/tests/institute-parity.spec.ts',
+    'web/tests/parity-audit.spec.ts',
+    'web/tests/schedule-parity.spec.ts',
+    'web/tests/seminar-parity.spec.ts',
+  ].map((file) => ({ file, reason: 'old-site-absent', decision: 'owner-2026-10-15' })));
+  assert.deepEqual(validateReleaseTestEvidence(evidence()).excludedHistorical, manifest.excludedHistorical);
+});
+
 test('dispatch SHA must equal the native checkout and every required job must succeed', () => {
   assert.equal(releaseTestIdentity({ ...env, GITHUB_EVENT_NAME: 'workflow_dispatch', EXPECTED_SHA: commit }).commit, commit);
   assert.throws(() => releaseTestIdentity({ ...env, GITHUB_EVENT_NAME: 'workflow_dispatch', EXPECTED_SHA: 'b'.repeat(40) }), /commit mismatch/);
@@ -56,7 +71,8 @@ test('dispatch SHA must equal the native checkout and every required job must su
 test('a fresh attempt of an older push run binds to this private destination and operation', () => {
   const result = validateReleaseTestEvidence(evidence());
   assert.deepEqual(result, { runId: 123, runAttempt: 2, commit, destinationId: 'demo-193',
-    requestId: 'request-unique-1', subject: 'source-code', pendingScope: [...PENDING_SCOPE] });
+    requestId: 'request-unique-1', subject: 'source-code', pendingScope: [...PENDING_SCOPE],
+    excludedHistorical: evidence().manifest.excludedHistorical });
 });
 
 test('refusals expose a stable code and no native output', () => {
@@ -79,7 +95,10 @@ test('rejects historical success, wrong SHA, changed policy, stale or missing na
     (proof) => { proof.manifest.runAttempt = 1; },
     (proof) => { proof.manifest.commit = 'b'.repeat(40); },
     (proof) => { proof.manifest.suites.pop(); },
-    (proof) => { proof.manifest.pendingScope = []; },
+    (proof) => { proof.manifest.pendingScope = ['unexpected-pending-suite']; },
+    (proof) => { proof.manifest.schemaVersion = 1; },
+    (proof) => { proof.manifest.excludedHistorical = []; },
+    (proof) => { proof.manifest.excludedHistorical = [{ file: 'web/tests/compare.spec.ts', reason: 'arbitrary-omission' }]; },
     (proof) => { proof.manifest.results.supplemental = 'skipped'; },
     (proof) => { proof.artifact.workflow_run.id = 999; },
     (proof) => { proof.artifact.workflow_run.head_sha = 'b'.repeat(40); },
