@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync,
-  realpathSync, renameSync, symlinkSync, unlinkSync, writeFileSync,
+  realpathSync, readdirSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -201,31 +201,55 @@ function sourceFileFingerprint(path) {
   }
   return jsonHash(digests);
 }
-function artifactFingerprint(root) {
+function artifactFingerprint(root, expectedStrapiVersion) {
   const entries = [];
-  function visit(directory, prefix = '') {
-    for (const entry of require('node:fs').readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+  function visit(directory, prefix = '', dependencyRoot = null) {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (!dependencyRoot && directory === root && relativePath === 'node_modules') continue;
       const fullPath = join(directory, entry.name);
       const info = lstatSync(fullPath);
       if (info.isSymbolicLink()) {
-        const target = require('node:fs').readlinkSync(fullPath);
+        const target = readlinkSync(fullPath);
         const resolved = realpathSync(fullPath);
-        if (!isWithin(root, resolved)) {
-          const dependencyRoot = resolve(root, '../../deps');
+        if (dependencyRoot) {
+          if (!isWithin(dependencyRoot, resolved)) fail(`dependency symlink escapes immutable node_modules tree: ${relativePath}`);
+          entries.push({ path: relativePath, type: 'dependency-symlink', target, resolved: relative(dependencyRoot, resolved) });
+        } else if (!isWithin(root, resolved)) {
           const uploadsRoot = resolve(root, '../../shared/uploads');
-          const allowed = (relativePath === 'node_modules' && isWithin(dependencyRoot, resolved))
-            || (relativePath === 'public/uploads' && isWithin(uploadsRoot, resolved));
+          const allowed = relativePath === 'public/uploads' && isWithin(uploadsRoot, resolved);
           if (!allowed) fail(`artifact has an undeclared external symlink: ${relativePath}`);
+          entries.push({ path: relativePath, type: 'symlink', target, resolved });
+        } else {
+          entries.push({ path: relativePath, type: 'symlink', target, resolved });
         }
-        entries.push({ path: relativePath, type: 'symlink', target, resolved });
-      } else if (info.isDirectory()) visit(fullPath, relativePath);
+      } else if (info.isDirectory()) visit(fullPath, relativePath, dependencyRoot);
       else if (info.isFile()) entries.push({ path: relativePath, type: 'file', sha256: hash(readFileSync(fullPath)) });
       else fail(`unsupported special file in CMS artifact: ${relativePath}`);
     }
   }
+  const dependencyLink = join(root, 'node_modules');
+  let externalDependencyRoot = null;
+  if (existsSync(dependencyLink) || (() => { try { lstatSync(dependencyLink); return true; } catch { return false; } })()) {
+    const dependencyInfo = lstatSync(dependencyLink);
+    if (!dependencyInfo.isSymbolicLink()) fail('artifact node_modules must be an explicit symlink to the immutable dependency tree');
+    const dependencyRoot = realpathSync(dependencyLink);
+    externalDependencyRoot = dependencyRoot;
+    const dependencyStat = lstatSync(dependencyRoot);
+    if (basename(dependencyRoot) !== 'node_modules' || !dependencyStat.isDirectory() || dependencyStat.uid !== process.getuid?.() || (dependencyStat.mode & 0o022) !== 0) {
+      fail('external node_modules root must be a canonical, owned, non-writable dependency directory');
+    }
+    const lock = readJson(join(root, 'package-lock.json'), 'artifact package-lock.json');
+    if (lock.lockfileVersion < 2 || lock.packages?.['node_modules/@strapi/strapi']?.version !== expectedStrapiVersion) {
+      fail(`artifact package-lock.json does not bind @strapi/strapi ${expectedStrapiVersion}`);
+    }
+    const installed = readJson(join(dependencyRoot, '@strapi/strapi/package.json'), 'installed Strapi package.json');
+    if (installed.version !== expectedStrapiVersion) fail(`external node_modules has @strapi/strapi ${installed.version}, expected ${expectedStrapiVersion}`);
+    entries.push({ path: 'node_modules', type: 'dependency-root', target: readlinkSync(dependencyLink), resolved: dependencyRoot });
+    visit(dependencyRoot, 'node_modules', dependencyRoot);
+  }
   visit(root);
-  return jsonHash(entries);
+  return { sha256: jsonHash(entries), externalDependencyRoot };
 }
 function assertNoOpenHandles(paths) {
   const probes = [];
@@ -301,7 +325,10 @@ function resolvePlan(artifactDir) {
     const digest = hash(readFileSync(fullPath));
     if (digest !== file.sha256) fail(`integrity file SHA-256 mismatch for ${file.path}: expected ${file.sha256}, found ${digest}`);
   }
-  return { root, migrationsRoot, manifestPath, manifest, steps, planSha256: hash(readFileSync(manifestPath)), artifactSha256: artifactFingerprint(root) };
+  const strapiVersions = new Set(steps.map(({ source }) => source.strapiVersion));
+  if (strapiVersions.size !== 1) fail('all migration steps must target one exact Strapi source version');
+  const artifact = artifactFingerprint(root, [...strapiVersions][0]);
+  return { root, migrationsRoot, manifestPath, manifest, steps, planSha256: hash(readFileSync(manifestPath)), artifactSha256: artifact.sha256, externalDependencyRoot: artifact.externalDependencyRoot };
 }
 function awaitlessReadDir(path) {
   // Kept synchronous because this is a short, local artifact integrity check.
@@ -489,6 +516,7 @@ function validateNativeHistory(db, plan) {
 function verifyPlanAndReceipt(plan, receipt) {
   if (receipt.planSha256 !== plan.planSha256) fail('candidate receipt and migration plan differ; discard and reprepare');
   if (receipt.artifactSha256 && receipt.artifactSha256 !== plan.artifactSha256) fail('CMS artifact bytes changed after preparation; discard and reprepare');
+  if ((receipt.externalDependencyRoot ?? null) !== (plan.externalDependencyRoot ?? null)) fail('external immutable dependency root changed after preparation; discard and reprepare');
   if (JSON.stringify(receipt.steps.map(({ id, sha256 }) => [id, sha256])) !== JSON.stringify(plan.steps.map(({ id, sha256 }) => [id, sha256]))) {
     fail('candidate receipt step identities differ from the packaged plan; discard and reprepare');
   }
@@ -612,6 +640,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         candidateDbPath,
         artifactDir: artifactReal,
         artifactSha256: release.artifactSha256,
+        externalDependencyRoot: release.externalDependencyRoot,
         planSha256: release.planSha256,
         steps: release.steps.map(({ id, phase, kind, handler, path, sha256 }) => ({ id, phase, kind, handler, path, sha256 })),
         source: { strapiVersion, engine: sourceSnapshot.engine, sqliteVersion: sourceSnapshot.sqliteVersion, userVersion: sourceSnapshot.userVersion, schemaFingerprint: sourceSnapshot.schemaFingerprint, snapshotSha256: sourceSnapshotSha256, sourceFileFingerprint: beforeSourceFiles },

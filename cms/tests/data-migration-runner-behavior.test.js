@@ -35,6 +35,22 @@ function databaseDigest(path) {
   ]));
 }
 
+function addExternalDependencies(f) {
+  const dependencyRoot = join(f.root, 'immutable-deps', 'node_modules');
+  const strapiRoot = join(dependencyRoot, '@strapi', 'strapi');
+  mkdirSync(join(strapiRoot, 'bin'), { recursive: true });
+  mkdirSync(join(dependencyRoot, '.bin'), { recursive: true });
+  writeFileSync(join(strapiRoot, 'package.json'), JSON.stringify({ name: '@strapi/strapi', version: '5.51.2' }));
+  writeFileSync(join(strapiRoot, 'bin', 'cli.js'), 'export default true;\n');
+  symlinkSync('../@strapi/strapi/bin/cli.js', join(dependencyRoot, '.bin', 'strapi'));
+  symlinkSync(dependencyRoot, join(f.artifactDir, 'node_modules'));
+  writeFileSync(join(f.artifactDir, 'package-lock.json'), JSON.stringify({
+    name: 'ikpk-cms', lockfileVersion: 3,
+    packages: { 'node_modules/@strapi/strapi': { version: '5.51.2' } },
+  }));
+  return dependencyRoot;
+}
+
 function sandbox(t, label = 'ikpk-migration-runner-') {
   const root = mkdtempSync(join(tmpdir(), label));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -237,6 +253,56 @@ test('default data-step loader imports the verified packaged helper path', async
   const runner = await loadRunner();
   const { runDataStep: _fixtureStep, ...defaultAdapter } = f.lifecycleAdapter;
   await runner.prepareMigration({ ...prepareArgs(f), lifecycleAdapter: defaultAdapter });
+});
+
+test('external immutable dependency bytes are included in the selected cohort identity', async (t) => {
+  const f = fixture(t, { activationReady: true });
+  const dependencyRoot = addExternalDependencies(f);
+  writeFileSync(join(f.root, '.ikpk-rehearsal-target'), 'fixture\n');
+  const runner = await loadRunner();
+  await runner.prepareMigration(prepareArgs(f));
+  const receipt = JSON.parse(readFileSync(f.receiptPath, 'utf8'));
+  writeFileSync(join(dependencyRoot, '@strapi', 'strapi', 'bin', 'cli.js'), 'export default false;\n');
+
+  const activePairPath = join(f.root, 'active');
+  const cohorts = join(f.root, 'cohorts');
+  const prior = join(cohorts, 'prior');
+  const oldDb = join(f.root, 'old.db');
+  mkdirSync(prior, { recursive: true, mode: 0o700 });
+  seedDb(oldDb, { value: 'prior' });
+  symlinkSync(f.artifactDir, join(prior, 'code'));
+  symlinkSync(oldDb, join(prior, 'data.db'));
+  writeFileSync(join(prior, 'cohort.json'), JSON.stringify({
+    schemaVersion: 1, planSha256: receipt.planSha256, artifactSha256: receipt.artifactSha256,
+    databaseSha256: databaseDigest(oldDb), codeRelease: realpathSync(f.artifactDir), databasePath: realpathSync(oldDb),
+    staticRelease: 'old-static', configRef: 'old-config', mediaRef: 'old-media',
+  }));
+  symlinkSync(prior, activePairPath);
+
+  await assert.rejects(() => runner.activateMigration({
+    candidateDbPath: f.candidateDbPath, codeRelease: f.artifactDir, activePairPath,
+    sandboxRoot: f.root, receiptPath: f.receiptPath, operationId: f.operationId,
+    lifecycleAdapter: f.lifecycleAdapter,
+  }), /artifact bytes changed|cohort code artifact bytes/i);
+  assert.equal(realpathSync(activePairPath), realpathSync(prior), 'changed dependency bytes must not switch the active pair');
+});
+
+test('external dependency tree accepts npm .bin links contained by its root', async (t) => {
+  const f = fixture(t);
+  addExternalDependencies(f);
+  const runner = await loadRunner();
+  await runner.prepareMigration(prepareArgs(f));
+  assert.equal(existsSync(join(f.candidateDbPath)), true);
+});
+
+test('external dependency tree rejects symlinks escaping its root', async (t) => {
+  const f = fixture(t);
+  const dependencyRoot = addExternalDependencies(f);
+  writeFileSync(join(f.root, 'escaped-dependency.js'), 'must not be hashed as trusted dependency');
+  symlinkSync(join(f.root, 'escaped-dependency.js'), join(dependencyRoot, 'escape.js'));
+  const runner = await loadRunner();
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /dependency symlink escapes/i);
+  assert.equal(existsSync(f.candidateDbPath), false, 'unsafe dependency tree must fail before candidate creation');
 });
 test('same migration ID with changed payload hash is refused without a second data effect', async (t) => {
   const f = await makePrepared(t);
