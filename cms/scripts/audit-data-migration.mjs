@@ -3,12 +3,19 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { validateSchemaSnapshot } from './audit-schema-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const HASH = /^[a-f0-9]{64}$/;
 const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operations', 'ikpk_data_migration_history']);
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
+const CORE_STORE_TABLE = 'strapi_core_store_settings';
+const CORE_STORE_KEYS = new Set([
+  'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None',
+  'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None',
+  'strapi_content_types_schema|None|None',
+]);
 const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
   ['schedule_entries', ['status', 'entry_status']],
@@ -36,6 +43,13 @@ const RUNNER_SCHEMAS = {
 
 function sha(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function json(value) { return JSON.stringify(value); }
+function canonical(value) {
+  if (typeof value === 'bigint') return { integer: value.toString() };
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  return value;
+}
+function canonicalJson(value) { return json(canonical(value)); }
 function tableNames(db) {
   return db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .all().map(({ name }) => name);
@@ -338,6 +352,122 @@ function comparePermissionGraphs(sourceDb, candidateDb, differences) {
     differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
   }
 }
+function expectedCoreStoreValue(key, sourceValue) {
+  let expected;
+  try { expected = JSON.parse(sourceValue); } catch { return null; }
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
+  if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None') {
+    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
+      || Object.hasOwn(expected.metadatas, 'type')) return null;
+    expected.layouts.edit = [...expected.layouts.edit, [{ name: 'type', size: 6 }]];
+    expected.metadatas.type = {
+      edit: { label: 'type', description: '', placeholder: '', visible: true, editable: true },
+      list: { label: 'type', searchable: true, sortable: true },
+    };
+    return expected;
+  }
+  if (key === 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None') {
+    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
+      || Object.hasOwn(expected.metadatas, 'image') || Object.hasOwn(expected.metadatas, 'isEventCollection')) return null;
+    const cityIndex = expected.layouts.edit.findIndex((row) => row?.[0]?.name === 'city');
+    if (cityIndex < 0) return null;
+    expected.layouts.edit = [...expected.layouts.edit.slice(0, cityIndex), [{ name: 'image', size: 6 }], ...expected.layouts.edit.slice(cityIndex)];
+    expected.metadatas.image = {
+      edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true },
+      list: { label: 'Изображение', searchable: false, sortable: false },
+    };
+    expected.metadatas.isEventCollection = {
+      edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false },
+      list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true },
+    };
+    return expected;
+  }
+  if (key === 'strapi_content_types_schema|None|None') {
+    const definitions = [
+      ['api::promotion.promotion', 'type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }],
+      ['api::schedule-entry.schedule-entry', 'image', { type: 'media', multiple: false, allowedTypes: ['images'] }],
+      ['api::schedule-entry.schedule-entry', 'isEventCollection', { type: 'boolean', default: false }],
+    ];
+    for (const [uid, field, definition] of definitions) {
+      const contentType = expected[uid];
+      if (!contentType?.attributes || !contentType.__schema__?.attributes
+        || Object.hasOwn(contentType.attributes, field) || Object.hasOwn(contentType.__schema__.attributes, field)) return null;
+      contentType.attributes[field] = structuredClone(definition);
+      contentType.__schema__.attributes[field] = structuredClone(definition);
+    }
+    return expected;
+  }
+  return null;
+}
+function compareCoreStore(sourceDb, candidateDb, differences) {
+  if (!tableNames(sourceDb).includes(CORE_STORE_TABLE) || !tableNames(candidateDb).includes(CORE_STORE_TABLE)) return;
+  const rows = (db) => db.prepare(`SELECT * FROM ${quote(CORE_STORE_TABLE)} ORDER BY key`).all();
+  const sourceRows = rows(sourceDb); const candidateRows = rows(candidateDb);
+  const toMap = (items, side) => {
+    const map = new Map();
+    for (const row of items) {
+      if (typeof row.key !== 'string' || map.has(row.key)) {
+        differences.push({ table: CORE_STORE_TABLE, kind: `${side}-duplicate-or-invalid-key` });
+        continue;
+      }
+      map.set(row.key, row);
+    }
+    return map;
+  };
+  const before = toMap(sourceRows, 'source'); const after = toMap(candidateRows, 'candidate');
+  if (before.size !== after.size || [...before.keys()].some((key) => !after.has(key))) {
+    differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-key-set-mismatch' });
+  }
+  for (const [key, sourceRow] of before) {
+    const candidateRow = after.get(key);
+    if (!candidateRow) continue;
+    const sourceMetadata = { ...sourceRow }; const candidateMetadata = { ...candidateRow };
+    delete sourceMetadata.value; delete candidateMetadata.value;
+    if (canonicalJson(sourceMetadata) !== canonicalJson(candidateMetadata)) {
+      differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-row-metadata-changed', keySha256: sha(Buffer.from(key)) });
+    }
+    if (sourceRow.value === candidateRow.value) continue;
+    if (!CORE_STORE_KEYS.has(key)) {
+      differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
+      continue;
+    }
+    const expected = expectedCoreStoreValue(key, sourceRow.value);
+    let candidateValue;
+    try { candidateValue = JSON.parse(candidateRow.value); } catch { candidateValue = null; }
+    if (!expected || !candidateValue || canonicalJson(expected) !== canonicalJson(candidateValue)) {
+      differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+    }
+  }
+}
+function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differences) {
+  if (!tableNames(sourceDb).includes('strapi_database_schema') || !tableNames(candidateDb).includes('strapi_database_schema')) return false;
+  const readRows = (db) => db.prepare('SELECT * FROM strapi_database_schema ORDER BY id').all();
+  const sourceRows = readRows(sourceDb); const candidateRows = readRows(candidateDb);
+  if (json(sourceRows.map(valueKey)) === json(candidateRows.map(valueKey))) return false;
+  try {
+    for (const [side, rows] of [['source', sourceRows], ['candidate', candidateRows]]) {
+      if (rows.length !== 1 || json(Object.keys(rows[0]).sort()) !== json(['hash', 'id', 'schema', 'time'])) {
+        throw new Error(`${side} row must contain exactly id, schema, time, and hash`);
+      }
+      for (const field of ['id', 'time']) {
+        const value = rows[0][field];
+        if (!((typeof value === 'bigint' && value >= 0n) || (Number.isSafeInteger(value) && value >= 0))) throw new Error(`${side} ${field} is not a safe SQLite integer`);
+      }
+    }
+    const actualColumns = Object.fromEntries(Object.entries(candidateSchema).map(([table, columns]) => [table, columns]));
+    validateSchemaSnapshot({
+      sourceRows, candidateRows, actualColumns,
+      expectedColumns: {
+        'promotions.type': { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'schedule_entries.is_event_collection': { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
+      },
+    });
+    return true;
+  } catch {
+    differences.push({ table: 'strapi_database_schema', kind: 'schema-snapshot-mismatch' });
+    return false;
+  }
+}
 function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, differences) {
   const candidateTables = new Set(tableNames(candidateDb));
   let missingRunnerTable = false;
@@ -468,12 +598,13 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     const sourceSchema = schema(source); const candidateSchema = schema(candidate);
     const transforms = deriveKnownTransforms(source, plan);
     const differences = [];
+    const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
     const sourceIntegrity = integrity(source); const candidateIntegrity = integrity(candidate);
     if (sourceIntegrity.integrityCheck.length !== 1 || sourceIntegrity.integrityCheck[0] !== 'ok' || sourceIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'source-integrity-failed' });
     if (candidateIntegrity.integrityCheck.length !== 1 || candidateIntegrity.integrityCheck[0] !== 'ok' || candidateIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'candidate-integrity-failed' });
     const tableSet = new Set([...Object.keys(sourceSchema), ...Object.keys(candidateSchema)]);
     for (const table of tableSet) {
-      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations') continue;
+      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations' || table === CORE_STORE_TABLE) continue;
       const before = sourceSchema[table]; const after = candidateSchema[table];
       if (!before || !after) { differences.push({ table, kind: before ? 'table-removed' : 'table-added' }); continue; }
       const expected = expectedColumns(before, table, transforms);
@@ -513,7 +644,8 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       }
     }
     for (const table of Object.keys(sourceSchema)) {
-      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations' || !candidateSchema[table]) continue;
+      if (RUNNER_TABLES.has(table) || table === 'strapi_migrations' || table === CORE_STORE_TABLE
+        || (table === 'strapi_database_schema' && acceptedSchemaSnapshot) || !candidateSchema[table]) continue;
       if (PERMISSION_CHANGE_TABLES.has(table)) continue;
       const before = sourceSchema[table]; const after = candidateSchema[table];
       const expectedNames = new Set(expectedColumns(before, table, transforms).map(({ name }) => name));
@@ -530,6 +662,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
     comparePermissionGraphs(source, candidate, differences);
+    compareCoreStore(source, candidate, differences);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {

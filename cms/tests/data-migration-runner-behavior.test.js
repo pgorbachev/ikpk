@@ -96,8 +96,8 @@ exports.createStrapi = ({ appDir }) => ({
           if (names.includes(oldName) && !names.includes(newName)) db.exec('ALTER TABLE "' + table + '" RENAME COLUMN "' + oldName + '" TO "' + newName + '"');
         }
       }
-      db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
-      db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+      db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime)');
+      db.prepare('INSERT OR IGNORE INTO strapi_migrations(id,name,time) VALUES (1,?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
     } finally { db.close(); }
     `}
   },
@@ -166,8 +166,8 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
       }
       if (statusShape === 'applied-retired') {
         db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
-        db.exec('CREATE TABLE strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
-        db.prepare('INSERT INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+        db.exec('CREATE TABLE strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime)');
+        db.prepare('INSERT INTO strapi_migrations(id,name,time) VALUES (1,?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
       }
     } finally { db.close(); }
   }
@@ -175,7 +175,7 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   cpSync(sourceMigrations, join(artifactDir, 'database/migrations'), { recursive: true });
   mkdirSync(join(artifactDir, 'scripts'), { recursive: true });
   mkdirSync(join(artifactDir, 'database/migrations/data-steps'), { recursive: true });
-  for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
+  for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
     const source = join(repoRoot, 'cms/scripts', name);
     const destination = join(artifactScripts, name);
     copyFileSync(source, destination);
@@ -184,7 +184,7 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   writeFileSync(join(artifactDir, 'package.json'), JSON.stringify({ dependencies: { '@strapi/strapi': '5.51.2' } }));
   const plan = JSON.parse(readFileSync(join(sourceMigrations, 'plan.json'), 'utf8'));
   plan.steps = plan.steps.filter(({ id }) => id !== 'normalize-null-documents-state-v1');
-  plan.integrity.files = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({ path: `scripts/${name}`, sha256: hash(readFileSync(join(artifactScripts, name))) }));
+  plan.integrity.files = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({ path: `scripts/${name}`, sha256: hash(readFileSync(join(artifactScripts, name))) }));
   plan.integrity.files.push({ path: 'database/migrations/target-schema/seminar.json', sha256: hash(readFileSync(targetSchemaPath)) });
   plan.integrity.files.push({ path: 'src/lib/demo193-source-empty-fields.json', sha256: hash(readFileSync(sourceEmptyFieldsPath)) });
   const payloadPath = join(artifactDir, 'database/migrations/data-steps/classification.mjs');
@@ -199,8 +199,8 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
           if (!db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => name === 'seminar_status')) db.exec('ALTER TABLE seminars RENAME COLUMN status TO seminar_status');
           if (!db.prepare('PRAGMA table_info("schedule_entries")').all().some(({ name }) => name === 'entry_status')) db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
         }
-        db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
-        db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+        db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime)');
+        db.prepare('INSERT OR IGNORE INTO strapi_migrations(id,name,time) VALUES (1,?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
       } finally { db.close(); }
       await onCheckpoint?.('after-native-migrations');
       await onCheckpoint?.('after-schema-sync');
@@ -588,8 +588,8 @@ test('SIGKILL at committed checkpoint is recovered from the DB ledger without re
         try {
           if (!db.prepare('PRAGMA table_info("seminars")').all().some(({ name }) => name === 'seminar_status')) db.exec('ALTER TABLE seminars RENAME COLUMN status TO seminar_status');
           if (!db.prepare('PRAGMA table_info("schedule_entries")').all().some(({ name }) => name === 'entry_status')) db.exec('ALTER TABLE schedule_entries RENAME COLUMN status TO entry_status');
-          db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (name TEXT PRIMARY KEY, time INTEGER NOT NULL)');
-          db.prepare('INSERT OR IGNORE INTO strapi_migrations(name,time) VALUES (?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
+          db.exec('CREATE TABLE IF NOT EXISTS strapi_migrations (id INTEGER NOT NULL PRIMARY KEY, name varchar(255), time datetime)');
+          db.prepare('INSERT OR IGNORE INTO strapi_migrations(id,name,time) VALUES (1,?,?)').run('2026.09.21T00.00.00.rename-status-columns.js', Date.now());
         } finally { db.close(); }
         return {};
       }, async destroy() {},

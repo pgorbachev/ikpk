@@ -45,6 +45,7 @@ cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-f
 mkdir -p "$OUT/scripts"
 cp scripts/run-data-migrations.mjs \
   scripts/audit-data-migration.mjs \
+  scripts/audit-schema-snapshot.mjs \
   scripts/institute-method-author-classification.mjs \
   scripts/normalize-null-documents-state.mjs "$OUT/scripts/"
 

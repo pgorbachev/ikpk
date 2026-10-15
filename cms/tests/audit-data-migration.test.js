@@ -116,6 +116,24 @@ function createProductionColumnShape(path, { addedColumns = false, promotionType
   }
   db.close();
 }
+function addSerializedSchemaRow(path, { addedColumns = false, corruptHash = false } = {}) {
+  const sourceColumns = {
+    promotions: [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string', notNullable: true }],
+    schedule_entries: [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string', notNullable: true }],
+  };
+  const tables = Object.entries(sourceColumns).map(([name, columns]) => ({ name, columns, indexes: [], foreignKeys: [] }));
+  if (addedColumns) {
+    tables.find(({ name }) => name === 'promotions').columns.push({ name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false });
+    tables.find(({ name }) => name === 'schedule_entries').columns.push({ name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false });
+  }
+  tables.sort((a, b) => a.name.localeCompare(b.name));
+  const schema = JSON.stringify({ version: 1, tables });
+  const hash = corruptHash ? '0'.repeat(64) : sha256(Buffer.from(schema));
+  const db = new Database(path);
+  db.exec('CREATE TABLE strapi_database_schema (id INTEGER PRIMARY KEY, schema TEXT NOT NULL, time INTEGER NOT NULL, hash TEXT NOT NULL)');
+  db.prepare('INSERT INTO strapi_database_schema VALUES (?, ?, ?, ?)').run(addedColumns ? 3 : 2, schema, addedColumns ? 200 : 100, hash);
+  db.close();
+}
 
 test('193 current native history and exact nullable CMS columns are accepted without changing inherited data', () => {
   const sourceDbPath = join(directory, 'production-shape-source.db');
@@ -173,6 +191,20 @@ test('new-column exception does not permit any additional target-table column', 
 
   assert.equal(report.passed, false);
   assert.ok(report.differences.some(({ table, kind }) => table === 'promotions' && kind === 'column-set-mismatch'));
+});
+
+test('serialized Strapi schema history accepts only the verified two-column regeneration', () => {
+  const sourceDbPath = join(directory, 'schema-history-source.db');
+  const candidateDbPath = join(directory, 'schema-history-candidate.db');
+  createProductionColumnShape(sourceDbPath);
+  createProductionColumnShape(candidateDbPath, { addedColumns: true });
+  addSerializedSchemaRow(sourceDbPath);
+  addSerializedSchemaRow(candidateDbPath, { addedColumns: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_database_schema' && kind === 'schema-snapshot-mismatch'), false,
+    'Strapi hash, old schema, and exact new definitions are validated before accepting regenerated history');
 });
 
 function createPermissionShape(path, { candidate = false, mutate = null, mutateLinks = null } = {}) {
@@ -249,5 +281,92 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
     assert.equal(report.passed, false, `link mutation ${index} must block preservation acceptance`);
     assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind.startsWith('logical-permission-')),
       `link mutation ${index} should be rejected by logical permission comparison`);
+  }
+});
+
+const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion|None|None';
+const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry|None|None';
+const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema|None|None';
+function coreStoreValues(candidate) {
+  const promotion = {
+    layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
+    metadatas: { name: { edit: { label: 'name' }, list: { label: 'name' } } }, settings: { defaultSortBy: 'name' },
+  };
+  const scheduleFields = ['startAt', 'endAt', 'city', 'price', 'oldPrice', 'isFree', 'entry_status', 'registrationFormLink', 'description', 'additionalText', 'duration', 'seminar'];
+  const schedule = {
+    layouts: { edit: scheduleFields.map((name) => [{ name, size: 6 }]) },
+    metadatas: { startAt: { edit: { label: 'startAt' }, list: { label: 'startAt' } } }, settings: { defaultSortBy: 'startAt' },
+  };
+  const schema = {
+    'api::promotion.promotion': { attributes: { name: { type: 'string' } }, __schema__: { attributes: { name: { type: 'string' } } } },
+    'api::schedule-entry.schedule-entry': { attributes: { startAt: { type: 'datetime' } }, __schema__: { attributes: { startAt: { type: 'datetime' } } } },
+  };
+  if (candidate) {
+    promotion.layouts.edit.push([{ name: 'type', size: 6 }]);
+    promotion.metadatas.type = { edit: { label: 'type', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'type', searchable: true, sortable: true } };
+    schedule.layouts.edit.splice(2, 0, [{ name: 'image', size: 6 }]);
+    schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
+    schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
+    for (const uid of Object.keys(schema)) {
+      const fields = uid === 'api::promotion.promotion'
+        ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
+        : [['image', { type: 'media', multiple: false, allowedTypes: ['images'] }], ['isEventCollection', { type: 'boolean', default: false }]];
+      for (const [name, definition] of fields) {
+        schema[uid].attributes[name] = structuredClone(definition);
+        schema[uid].__schema__.attributes[name] = structuredClone(definition);
+      }
+    }
+  }
+  return new Map([
+    [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
+    [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
+    [CONTENT_SCHEMA_KEY, JSON.stringify(schema)],
+    ['unrelated-key', JSON.stringify({ preserved: true })],
+  ]);
+}
+function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
+  const values = coreStoreValues(candidate);
+  if (candidate && mutate) mutate(values);
+  const db = new Database(path);
+  db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+  const insert = db.prepare('INSERT INTO strapi_core_store_settings VALUES (?, ?, ?, ?, ?, ?)');
+  let id = 1;
+  for (const [key, value] of values) insert.run(id++, key, value, 'object', null, null);
+  db.close();
+}
+
+test('core-store accepts only the reviewed three structural content-type updates', () => {
+  const sourceDbPath = join(directory, 'core-store-source.db');
+  const candidateDbPath = join(directory, 'core-store-candidate.db');
+  createCoreStoreShape(sourceDbPath);
+  createCoreStoreShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'only exact metadata, layout, and compiled content schema additions are allowed');
+});
+
+test('core-store rejects unapproved key changes, layout changes, and malformed target field definitions', () => {
+  const mutations = [
+    (values) => values.set('unrelated-key', JSON.stringify({ preserved: false })),
+    (values) => values.set(PROMOTION_CONFIG_KEY, JSON.stringify({ ...JSON.parse(values.get(PROMOTION_CONFIG_KEY)), layouts: { edit: [] } })),
+    (values) => {
+      const schema = JSON.parse(values.get(CONTENT_SCHEMA_KEY));
+      schema['api::promotion.promotion'].attributes.type.enum = ['OTHER'];
+      values.set(CONTENT_SCHEMA_KEY, JSON.stringify(schema));
+    },
+    (values) => values.set('unexpected-new-key', '{}'),
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const sourceDbPath = join(directory, `core-store-negative-source-${index}.db`);
+    const candidateDbPath = join(directory, `core-store-negative-candidate-${index}.db`);
+    createCoreStoreShape(sourceDbPath);
+    createCoreStoreShape(candidateDbPath, { candidate: true, mutate });
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `core-store mutation ${index} must block preservation acceptance`);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+      `core-store mutation ${index} should be rejected by the bounded comparator`);
   }
 });

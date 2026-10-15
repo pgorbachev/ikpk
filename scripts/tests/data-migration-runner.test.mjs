@@ -40,7 +40,7 @@ function runReleaseGate(t, { plannedBytes = Buffer.alloc(0), actualBytes = Buffe
   const scripts = join(release, 'scripts');
   mkdirSync(migrations, { recursive: true });
   mkdirSync(scripts, { recursive: true });
-  for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
+  for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
     copyFileSync(join(repoRoot, 'cms/scripts', name), join(scripts, name));
   }
   const planSteps = steps ?? [{
@@ -54,7 +54,7 @@ function runReleaseGate(t, { plannedBytes = Buffer.alloc(0), actualBytes = Buffe
     readback: { fixture: true },
   }];
   if (planSteps.length) writeFileSync(join(migrations, 'step.js'), actualBytes);
-  const integrity = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({
+  const integrity = ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'].map((name) => ({
     path: `scripts/${name}`,
     sha256: sha256(readFileSync(join(scripts, name))),
   }));
@@ -121,10 +121,13 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   assert.ok(existsSync(join(artifact, 'database/migrations/plan.json')), 'the artifact omitted its migration plan');
   assert.ok(existsSync(join(artifact, 'scripts/institute-method-author-classification.mjs')), 'classification helper is not deployable');
   assert.ok(existsSync(join(artifact, 'scripts/normalize-null-documents-state.mjs')), 'normalization helper is not deployable');
+  assert.ok(existsSync(join(artifact, 'scripts/audit-schema-snapshot.mjs')), 'serialized schema auditor is not deployable');
   const runtimeAsset = 'src/lib/demo193-source-empty-fields.json';
   assert.deepEqual(readFileSync(join(artifact, runtimeAsset)), readFileSync(join(repoRoot, 'cms', runtimeAsset)), 'runtime lifecycle data asset bytes differ from source');
   const manifest = JSON.parse(readFileSync(join(artifact, 'database/migrations/plan.json'), 'utf8'));
   assert.equal(manifest.integrity.files.find(({ path }) => path === runtimeAsset)?.sha256, sha256(readFileSync(join(artifact, runtimeAsset))), 'runtime lifecycle data asset is not hash-bound by the migration plan');
+  const snapshotHelper = 'scripts/audit-schema-snapshot.mjs';
+  assert.equal(manifest.integrity.files.find(({ path }) => path === snapshotHelper)?.sha256, sha256(readFileSync(join(artifact, snapshotHelper))), 'serialized schema auditor bytes are not hash-bound by the migration plan');
 });
 
 test('release gate rejects a substituted migration even when the declared file count still matches', (t) => {
