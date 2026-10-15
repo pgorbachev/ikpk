@@ -533,6 +533,19 @@ test('same migration ID with changed payload hash is refused without a second da
   db.close();
 });
 
+test('a ledger row with the same migration ID and a different stored hash is refused before replay', async (t) => {
+  const f = await makePrepared(t);
+  const db = new Database(f.candidateDbPath);
+  db.prepare('UPDATE ikpk_data_migration_history SET payload_sha256 = ? WHERE step_id = ?')
+    .run('0'.repeat(64), 'institute-method-author-classification-v1');
+  const beforeEffects = db.prepare("SELECT COUNT(*) AS count FROM teachers WHERE legacy_id = '63' AND trait = 'method-author'").get().count;
+  db.close();
+  await assert.rejects(() => f.runner.prepareMigration(prepareArgs(f)), /already recorded with a different SHA-256/i);
+  const after = new Database(f.candidateDbPath);
+  assert.equal(after.prepare("SELECT COUNT(*) AS count FROM teachers WHERE legacy_id = '63' AND trait = 'method-author'").get().count, beforeEffects);
+  after.close();
+});
+
 test('prepare refuses source overwrite, non-private candidate, and symlink candidate', async (t) => {
   const f = fixture(t);
   const runner = await loadRunner();
@@ -593,17 +606,18 @@ test('SIGKILL at committed checkpoint is recovered from the DB ledger without re
         } finally { db.close(); }
         return {};
       }, async destroy() {},
-      async runDataStep({ candidateDbPath, recordCompletion, onCheckpoint }) {
+      async runDataStep({ candidateDbPath, recordCompletion }) {
         const db = new Database(candidateDbPath);
         const { applyClassification } = await import(${JSON.stringify(pathToFileURL(join(repoRoot, 'cms/scripts/institute-method-author-classification.mjs')).href)});
         try { db.transaction(() => { const result = applyClassification(db); recordCompletion(db, result); })(); }
         finally { db.close(); }
-        await onCheckpoint('data-step-committed');
-        process.stdout.write('CHECKPOINT\\n');
-        await new Promise(() => {});
       },
     };
-    await runner.prepareMigration({ ...args, lifecycleAdapter: adapter });
+    await runner.prepareMigration({ ...args, lifecycleAdapter: adapter, onCheckpoint: async (name) => {
+      if (name !== 'data-step-transaction-committed') return;
+      process.stdout.write('CHECKPOINT\\n');
+      await new Promise(() => {});
+    } });
   `;
   const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
     env: { ...process.env, IKPK_FIXTURE_ARGS: JSON.stringify(prepareArgs(f)) }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -640,6 +654,38 @@ test('interruption with uncommitted native/sync lifecycle state refuses blind re
   await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /candidate|interrupted|source|restart|refus|неопредел/i);
 });
 
+test('prepare exposes a post-commit checkpoint before reopening the candidate database', async (t) => {
+  const f = fixture(t);
+  const runner = await loadRunner();
+  let dataStepRuns = 0;
+  const adapter = {
+    ...f.lifecycleAdapter,
+    async runDataStep(args) {
+      dataStepRuns += 1;
+      return f.lifecycleAdapter.runDataStep({ ...args, onCheckpoint: undefined });
+    },
+  };
+  const checkpoints = [];
+  await assert.rejects(() => runner.prepareMigration({
+    ...prepareArgs(f),
+    lifecycleAdapter: adapter,
+    onCheckpoint: async (name, details) => {
+      checkpoints.push({ name, details });
+      if (name === 'data-step-transaction-committed') throw new Error('intentional process-stop checkpoint');
+    },
+  }), /intentional process-stop checkpoint/);
+  assert.deepEqual(checkpoints.map(({ name }) => name), ['closed-load-destroyed', 'data-step-transaction-committed']);
+  assert.equal(checkpoints[1].details.stepId, 'institute-method-author-classification-v1');
+  const db = new Database(f.candidateDbPath);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM ikpk_data_migration_history').get().count, 1, 'the runner callback must be after the committed ledger row');
+  db.close();
+  const interruptedReceipt = JSON.parse(readFileSync(f.receiptPath, 'utf8'));
+  assert.equal(interruptedReceipt.phase, 'schema-ready', 'the receipt must still precede data-step completion at this gap');
+  assert.equal(interruptedReceipt.lifecycle.some(({ event }) => event === 'data-step-committed'), false);
+  await runner.prepareMigration({ ...prepareArgs(f), lifecycleAdapter: adapter });
+  assert.equal(dataStepRuns, 1, 'retry must skip the step already committed in the candidate ledger');
+});
+
 test('activation switches to a paired code+DB cohort and rollback restores the verified prior pair', async (t) => {
   const f = await makePrepared(t);
   const sandboxRoot = f.root;
@@ -662,10 +708,35 @@ test('activation switches to a paired code+DB cohort and rollback restores the v
   const activated = realpathSync(activePairPath);
   assert.equal(realpathSync(join(activated, 'code')), realpathSync(newCode));
   assert.equal(realpathSync(join(activated, 'data.db')), realpathSync(f.candidateDbPath));
+  const activeDbDigest = databaseDigest(f.candidateDbPath);
+  const activatedReceipt = readFileSync(f.receiptPath);
+  const selectedPairBeforeReactivation = realpathSync(activePairPath);
+  await assert.rejects(() => f.runner.activateMigration({ candidateDbPath: f.candidateDbPath, codeRelease: newCode, activePairPath, sandboxRoot, receiptPath: f.receiptPath, operationId: f.operationId, lifecycleAdapter: f.lifecycleAdapter }), /not ready|phase activated|operation cohort directory/i);
+  assert.deepEqual(readFileSync(f.receiptPath), activatedReceipt, 'repeated activation must preserve the rollback-ready receipt');
+  assert.equal(databaseDigest(f.candidateDbPath), activeDbDigest, 'repeated activation must not mutate the candidate database');
+  assert.equal(realpathSync(activePairPath), selectedPairBeforeReactivation, 'repeated activation must not change the selected pair');
+  for (const phase of ['activation-intent', 'activated']) {
+    const receipt = JSON.parse(readFileSync(f.receiptPath, 'utf8'));
+    receipt.phase = phase;
+    receipt.activation.phase = phase === 'activation-intent' ? 'activation-intent' : 'pair-selected-editors-closed';
+    writeFileSync(f.receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+    const receiptBefore = readFileSync(f.receiptPath);
+    const selectedPairBefore = realpathSync(activePairPath);
+    await assert.rejects(() => f.runner.prepareMigration(prepareArgs(f)), /activation|not resumable|phase|rollback/i);
+    assert.deepEqual(readFileSync(f.receiptPath), receiptBefore, `prepare must not mutate a ${phase} receipt`);
+    assert.equal(databaseDigest(f.candidateDbPath), activeDbDigest, `prepare must not mutate candidate DB in ${phase}`);
+    assert.equal(realpathSync(activePairPath), selectedPairBefore, `prepare must not move the selected pair in ${phase}`);
+  }
   await f.runner.rollbackMigration({ operationId: f.operationId, receiptPath: f.receiptPath, activePairPath, sandboxRoot });
   const restored = realpathSync(activePairPath);
   assert.equal(realpathSync(join(restored, 'code')), realpathSync(oldCode));
   assert.equal(realpathSync(join(restored, 'data.db')), realpathSync(oldDb));
+  const rolledBackReceipt = readFileSync(f.receiptPath);
+  const restoredDbDigest = databaseDigest(f.candidateDbPath);
+  await assert.rejects(() => f.runner.prepareMigration(prepareArgs(f)), /rollback|not resumable|phase/i);
+  assert.deepEqual(readFileSync(f.receiptPath), rolledBackReceipt, 'prepare must preserve a rolled-back receipt');
+  assert.equal(databaseDigest(f.candidateDbPath), restoredDbDigest, 'prepare must not mutate candidate DB after rollback');
+  assert.equal(realpathSync(activePairPath), realpathSync(priorCohort), 'prepare must preserve the restored prior pair');
 });
 
 test('rollback refuses after candidate database changes even if the writer has closed', async (t) => {

@@ -637,12 +637,13 @@ function preservationAudit(receipt, plan) {
 }
 
 /** Prepare a private, consistent SQLite candidate and execute its versioned migration plan. */
-export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, lifecycleAdapter }) {
+export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, lifecycleAdapter, onCheckpoint }) {
   const sourceDbPath = abs(rawSourceDbPath, 'sourceDbPath');
   const candidateDbPath = abs(rawCandidateDbPath, 'candidateDbPath');
   const artifactDir = abs(rawArtifactDir, 'artifactDir');
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
   if (!STEP_ID.test(operationId ?? '')) fail('operationId must be a stable non-empty identifier');
+  if (onCheckpoint !== undefined && typeof onCheckpoint !== 'function') fail('onCheckpoint must be a function when provided');
   const artifactReal = realpathSync(artifactDir);
   const candidateParent = privateDirectory(dirname(candidateDbPath), 'candidate parent directory');
   const receiptParent = privateDirectory(dirname(receiptPath), 'receipt parent directory');
@@ -659,6 +660,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   const releaseVersions = new Set(release.steps.map(({ source }) => source.strapiVersion));
   if (!releaseVersions.has(strapiVersion)) fail(`source Strapi version ${strapiVersion} is not supported by this migration plan`);
   const unlock = acquireTargetLock(candidateDbPath);
+  let preserveReceiptOnFailure = false;
   try {
     try {
       const candidateInfo = lstatSync(candidateDbPath);
@@ -676,7 +678,12 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       if (receipt.source.strapiVersion !== strapiVersion) fail('source Strapi version differs from the original operation receipt');
       assertNoOpenHandles([sourceDbPath, `${sourceDbPath}-wal`]);
       if (sourceFileFingerprint(sourceDbPath) !== receipt.source.sourceFileFingerprint) fail('original SQLite source changed after preparation; refusing to resume this candidate');
-      if (receipt.phase === 'strapi-load-in-progress' || receipt.phase === 'activation-load-in-progress' || receipt.phase === 'snapshot-cleanup-failed') {
+      const resumablePhases = new Set(['candidate-created', 'schema-ready', 'data-steps-in-progress', 'prepared']);
+      if (!resumablePhases.has(receipt.phase)) {
+        preserveReceiptOnFailure = true;
+        if (['activation-intent', 'activated', 'rolled-back'].includes(receipt.phase)) {
+          fail(`candidate phase ${receipt.phase} is rollback-sensitive; prepare cannot resume after activation begins`);
+        }
         fail(`candidate crossed an interrupted or incomplete operation (${receipt.phase}); its state is unknown, discard and reprepare from a pristine source`);
       }
       if (lstatSync(candidateDbPath).nlink !== 1) fail('existing candidate database has additional hard links; refusing ambiguous ownership');
@@ -799,6 +806,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       receipt.phase = 'schema-ready';
       receipt.lifecycle.push({ event: 'closed-load-destroyed', at: new Date().toISOString() });
       atomicJson(receiptPath, receipt);
+      await onCheckpoint?.('closed-load-destroyed');
     }
 
     const dataSteps = release.steps.filter(({ kind }) => kind === 'data');
@@ -819,6 +827,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         },
         recordCompletion: (dbForTransaction, result) => recordStep(dbForTransaction, { operationId, lineageId, step, result }),
       });
+      await onCheckpoint?.('data-step-transaction-committed', { stepId: step.id });
       const after = openDatabase(candidateDbPath);
       try {
         const row = completedStep(after, lineageId, step);
@@ -839,7 +848,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   } catch (error) {
     try {
       const current = readJson(receiptPath, 'operation receipt');
-      if (current.operationId === operationId) {
+      if (!preserveReceiptOnFailure && current.operationId === operationId) {
         current.lastError = { message: error.message, at: new Date().toISOString() };
         atomicJson(receiptPath, current);
       }
@@ -929,7 +938,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
   const unlock = acquireTargetLocks([candidateDbPath, activePairPath]);
   try {
     const receipt = receiptFrom(receiptPath, operationId);
-    if (receipt.phase !== 'prepared' && receipt.phase !== 'activated') fail(`operation is not ready for activation (phase ${receipt.phase})`);
+    if (receipt.phase !== 'prepared') fail(`operation is not ready for activation (phase ${receipt.phase})`);
     if (resolve(receipt.candidateDbPath) !== candidateDbPath) fail('candidate path differs from receipt');
     const release = verifyCandidatePlan(receipt, codeRelease);
     const status = getMigrationStatus({ candidateDbPath, operationId, receiptPath });
