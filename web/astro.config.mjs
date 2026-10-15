@@ -5,6 +5,20 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
+const demoOutput = process.env.DEMO_OUTPUT === '1';
+const demoSite = process.env.DEMO_SITE_URL ?? 'https://193.124.115.99';
+if (demoOutput) {
+  let parsedDemoSite;
+  try {
+    parsedDemoSite = new URL(demoSite);
+  } catch {
+    throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
+  }
+  if (parsedDemoSite.origin !== 'https://193.124.115.99' || parsedDemoSite.pathname !== '/' || parsedDemoSite.search || parsedDemoSite.hash || parsedDemoSite.username || parsedDemoSite.password) {
+    throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
+  }
+}
+
 // lastmod для sitemap: из снимка контента, которым идёт сборка (не из материала переноса).
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(webRoot, '..');
@@ -60,7 +74,7 @@ function omitStampedOfferWithoutPaymentForm() {
 const isNoindexFlatDetail = (page) => /\/(instituty|programmy|seminary|specialisty)\/[^/]+\/?$/.test(page);
 
 export default defineConfig({
-  site: 'https://ikpk.su',
+  site: demoOutput ? demoSite : 'https://ikpk.su',
   integrations: [
     omitStampedOfferWithoutPaymentForm(),
     sitemap({

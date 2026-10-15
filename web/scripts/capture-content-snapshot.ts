@@ -6,9 +6,10 @@
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSnapshotContract } from './lib/content-contract.ts';
+import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
@@ -30,6 +31,44 @@ const repoRoot = join(webRoot, '..');
 const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
+
+const DEMO193_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+const DEMO193_READBACK_SHA256 = 'c603dbe1b134e4f3bbb72fb9adad4486b5ac206d421a90c46a5ba8da23a7ff99';
+const DEMO193_CODE_COMMIT = '4e1576e507272f9793c3fbae3f2246f4fa3730b1';
+const DEMO193_NAMESPACE = 'ikpk_sql_demo_native_proto193';
+type Demo193Readback = {
+  capturedAt: string;
+  target: string;
+  namespace: string;
+  codeCommit: string;
+  collections: Record<string, Record<string, unknown>[]>;
+  media: { url: string; verifiedStoredSha256: string }[];
+};
+
+function demo193Input(): { readback: Demo193Readback; mediaDirectory: string } | undefined {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return undefined;
+  if (args.length !== 3 || args[0] !== '--demo193-saved-readback') {
+    throw new Error('unsupported snapshot capture option');
+  }
+  const [, readbackPath, mediaDirectory] = args;
+  if (!readbackPath || !mediaDirectory || !existsSync(readbackPath) || !existsSync(mediaDirectory)) {
+    throw new Error('demo193 saved-readback input is missing');
+  }
+  const bytes = readFileSync(readbackPath);
+  if (createHash('sha256').update(bytes).digest('hex') !== DEMO193_READBACK_SHA256) {
+    throw new Error('demo193 saved-readback SHA-256 mismatch');
+  }
+  const readback = JSON.parse(bytes.toString('utf8')) as Demo193Readback;
+  if (readback.target !== 'A' || readback.namespace !== DEMO193_NAMESPACE || readback.codeCommit !== DEMO193_CODE_COMMIT
+      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(readback.capturedAt)
+      || !readback.collections || !Array.isArray(readback.media) || readback.media.length !== 563) {
+    throw new Error('demo193 saved-readback capture identity mismatch');
+  }
+  return { readback, mediaDirectory };
+}
+
+const savedDemo193 = demo193Input();
 
 /**
  * Предел ожидания ОДНОГО обращения к CMS.
@@ -279,6 +318,11 @@ interface StrapiPage {
 }
 
 async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[]> {
+  if (savedDemo193) {
+    const records = savedDemo193.readback.collections[endpoint];
+    if (!Array.isArray(records)) throw new Error(`demo193 saved-readback omitted ${endpoint}`);
+    return records;
+  }
   const records: Record<string, unknown>[] = [];
   let page = 1;
   for (;;) {
@@ -337,21 +381,41 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
   const refs = uploadRefsIn(types);
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
+  const savedByUrl = new Map<string, Demo193Readback['media'][number]>();
+  if (savedDemo193) {
+    for (const item of savedDemo193.readback.media) {
+      if (!item || typeof item.url !== 'string' || !/^\/[A-Za-z0-9._~!$&()*+,;=@%/-]+$/.test(item.url)
+          || !/^[a-f0-9]{64}$/.test(item.verifiedStoredSha256) || savedByUrl.has(item.url)) {
+        throw new Error('demo193 saved-readback media inventory is malformed or duplicated');
+      }
+      savedByUrl.set(item.url, item);
+    }
+  }
 
   for (const sourceRef of refs) {
     assertWithinBudget(`медиа ${sourceRef}`);
-    const url = new URL(sourceRef, cmsUrl).toString();
-    let response: Response;
-    try {
-      response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
-    } catch (err) {
-      throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+    let bytes: Uint8Array;
+    if (savedDemo193) {
+      const saved = savedByUrl.get(sourceRef);
+      if (!saved) throw new Error(`demo193 saved-readback has no verified media row for ${sourceRef}`);
+      const path = join(savedDemo193.mediaDirectory, `sha256:${saved.verifiedStoredSha256}`);
+      bytes = new Uint8Array(readFileSync(path));
+      if (createHash('sha256').update(bytes).digest('hex') !== saved.verifiedStoredSha256) {
+        throw new Error(`demo193 saved media bytes do not match the readback witness for ${sourceRef}`);
+      }
+    } else {
+      const url = new URL(sourceRef, cmsUrl).toString();
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
+      } catch (err) {
+        throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+      }
+      if (!response.ok) {
+        throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
+      }
+      bytes = new Uint8Array(await response.arrayBuffer());
     }
-    if (!response.ok) {
-      throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length === 0) {
       throw new Error(`медиа ${sourceRef}: CMS вернула пустой файл`);
     }
@@ -400,6 +464,16 @@ async function liveCapture(): Promise<void> {
         `живой захват сорвался на ${st.endpoint} (${cmsUrl}): ${(err as Error).message}`,
         { cause: err },
       );
+    }
+  }
+  if (savedDemo193) {
+    const expectedCounts: Record<string, number> = {
+      institutes: 3, 'course-groups': 26, seminars: 132, teachers: 31, articles: 68,
+      'schedule-entries': 271, 'news-items': 3, promotions: 3, pages: 9, 'video-playlists': 6,
+    };
+    if (Object.keys(savedDemo193.readback.collections).length !== Object.keys(expectedCounts).length
+        || Object.entries(expectedCounts).some(([name, count]) => savedDemo193.readback.collections[name]?.length !== count)) {
+      throw new Error('demo193 saved-readback collection inventory mismatch');
     }
   }
 
@@ -544,7 +618,9 @@ async function liveCapture(): Promise<void> {
     referenceDate,
     fingerprint,
     snapshotId: snapshotId({ fingerprint, referenceDate }),
-    origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
+    origin: savedDemo193
+      ? { kind: 'live', url: cmsUrl, capturedAt: savedDemo193.readback.capturedAt }
+      : { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
 
   // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
@@ -581,7 +657,7 @@ async function liveCapture(): Promise<void> {
 
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap, savedDemo193 ? DEMO193_SQL_SHA256 : undefined);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'snapshot.json'), JSON.stringify(snap, null, 2));

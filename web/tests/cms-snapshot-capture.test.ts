@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { assertCaptureSnapshotContract } from '../scripts/lib/capture-snapshot-contract.ts';
 import {
   MODULES,
   loadModule,
@@ -360,6 +361,16 @@ describe('целостность источника каталога', () => {
       snapshot,
       'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
     )).not.toThrow();
+  });
+
+  it('caller захвата остаётся строгим без явного SQL pin для prototype demo', () => {
+    const snapshot = demo193EmptySeoSnapshot();
+    expect(() => assertCaptureSnapshotContract(snapshot)).toThrow(/page_title|page_description/);
+    expect(() => assertCaptureSnapshotContract(
+      snapshot,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).not.toThrow();
+    expect(() => assertCaptureSnapshotContract(snapshot, '0'.repeat(64))).toThrow(/SQL source pin/);
   });
 
   it('demo193 exception rejects changed identities, newly empty required content, and wrong SQL pins', async () => {
