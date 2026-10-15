@@ -17,6 +17,7 @@ import {
 import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
 import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
+import { projectSnapshotMarkers, type SnapshotContent } from './helpers/rich-content-safety/snapshot-marker-projection.js';
 import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
 import {
   SRC_SRCSET_CASES,
@@ -261,6 +262,45 @@ describe('rich-content: whole-document hazard scanner', () => {
       { route: '/oplata', html: '<p>нет sink</p>' },
     ]);
     expect(ok).toEqual([]);
+  });
+
+  it('snapshot projection ограничена seminar-body и teacher-bio, остальные sinks остаются fixture-owned', () => {
+    const sinks = [
+      { id: 'article-body', production: { paths: ['/statyi/fixture'], count: 1 }, demo: { sameAsProduction: true } },
+      { id: 'seminar-body', production: { paths: ['/fixture-seminar'], count: 1 }, demo: { sameAsProduction: true } },
+      { id: 'teacher-bio', production: { paths: ['/fixture-teacher'], count: 1 }, demo: { sameAsProduction: true } },
+    ];
+    const projected = projectSnapshotMarkers(sinks, {
+      institutes: [{ slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst' }],
+      seminars: [
+        { slug: 'with-body', course_group_legacy_id: 'cg-id', description_html: '<p>Text</p>' },
+        { slug: 'without-body', course_group_legacy_id: 'cg-id', description_html: '', full_text_html: '' },
+      ],
+      teachers: [
+        { slug: 'with-bio', institute_legacy_id: 'inst', bio_html: '<p>Bio</p>' },
+        { slug: 'without-bio', institute_legacy_id: 'inst', bio_html: '' },
+      ],
+    });
+    expect(projected.find((sink) => sink.id === 'article-body')?.production).toEqual({ paths: ['/statyi/fixture'], count: 1 });
+    expect(projected.find((sink) => sink.id === 'seminar-body')?.production).toEqual({ paths: ['/inst/group/with-body'], count: 1 });
+    expect(projected.find((sink) => sink.id === 'teacher-bio')?.production).toEqual({ paths: ['/inst/prepodavatel/with-bio'], count: 1 });
+  });
+
+  it('snapshot marker projection fails closed when source relation maps are missing', () => {
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [], seminars: [], teachers: [],
+    } as unknown as SnapshotContent)).toThrow(/course_groups/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [],
+      course_groups: [{ legacy_id: 'unknown-cg', slug: 'group', institute_legacy_id: 'unknown-inst' }],
+      seminars: [{ slug: 'body', course_group_legacy_id: 'unknown-cg', description_html: '<p>body</p>' }],
+      teachers: [],
+    })).toThrow(/unknown institute|неизвестный institute/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [], course_groups: [], seminars: [],
+      teachers: [{ slug: 'bio', institute_legacy_id: 'unknown-inst', bio_html: '<p>bio</p>' }],
+    })).toThrow(/teacher-bio .* неизвестный institute/);
   });
 
   it('stripMarkedRegions не оставляет вложенный RUTUBE после внутреннего div', () => {
