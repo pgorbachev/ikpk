@@ -181,6 +181,7 @@ describe('семинар из админки доходит до опублик�
       APP_KEYS: 'e2e-one,e2e-two',
       ADMIN_JWT_SECRET: 'e2e-only-admin-jwt',
       API_TOKEN_SALT: 'e2e-only-api-token',
+      IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP: '1',
       TRANSFER_TOKEN_SALT: 'e2e-only-transfer-token',
       ENCRYPTION_KEY: 'e2e-only-encryption',
       DATABASE_CLIENT: 'sqlite',
