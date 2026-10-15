@@ -55,7 +55,7 @@ export function sshArguments(config, action, id) {
   if (!['submit', 'status'].includes(action) || (action === 'status' && !validId(id))) fail('invalid-remote-command');
   // OpenSSH concatenates remote arguments for a shell. Paths above allow only safe characters.
   return ['-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=yes',
-    '-o', 'ForwardAgent=no', '-o', 'ClearAllForwardings=yes', '-o', 'ConnectTimeout=20',
+    '-o', 'GlobalKnownHostsFile=/dev/null', '-o', 'ForwardAgent=no', '-o', 'ClearAllForwardings=yes', '-o', 'ConnectTimeout=20',
     '-o', `UserKnownHostsFile="${config.knownHostsFile.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`, '-i', config.identityFile, config.sshTarget,
     config.serverNode, config.serverEntry, action, ...(action === 'status' ? [id] : [])];
 }

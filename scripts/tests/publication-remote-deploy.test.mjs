@@ -89,7 +89,7 @@ test('lost client connection leaves recoverable ID and performs no blind submit 
 });
 test('SSH fixes host pin/key, disables ambient configuration and forwarding; paths cannot inject remote shell', (t) => {
   const f = clientFixture(t); const c = readClientConfig(f.home, 'demo'), args = sshArguments(c, 'submit');
-  assert.ok(args.includes('StrictHostKeyChecking=yes')); assert.ok(args.includes('ForwardAgent=no')); assert.ok(args.includes('/dev/null'));
+  assert.ok(args.includes('StrictHostKeyChecking=yes')); assert.ok(args.includes('GlobalKnownHostsFile=/dev/null')); assert.ok(args.includes('ForwardAgent=no')); assert.ok(args.includes('/dev/null'));
   assert.equal(args.at(-1), 'submit');
   const p = join(f.home, 'demo.json'); writeFileSync(p, JSON.stringify({ ...f.clientConfig, serverEntry: '/tmp/x;touch_hacked.mjs' }));
   assert.throws(() => readClientConfig(f.home, 'demo'), /untrusted-client-config/);
