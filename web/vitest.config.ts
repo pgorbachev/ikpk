@@ -81,6 +81,7 @@ export default defineConfig({
       'tests/schedule-filters.render.test.ts',
       'tests/teacher-links.render.test.ts',
       'tests/rich-content-render.test.ts',
+      'tests/maintenance-banner-toggle.render.test.ts',
       // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
       // контейнера не укладывается в лимит хука и валит обязательный прогон.
       // Локально: npx vitest run --config vitest.provision.config.ts
