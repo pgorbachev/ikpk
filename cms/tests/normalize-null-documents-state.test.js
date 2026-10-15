@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { linkSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { prepareNormalizedBackup } from '../scripts/normalize-null-documents-state.mjs';
+import { prepareNormalizedBackup, publishOutputExclusively } from '../scripts/normalize-null-documents-state.mjs';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
@@ -106,7 +106,7 @@ test('dry-run reads a real SQLite source without creating its output', async (t)
   assert.equal(plan.candidateRows.length, 2);
   assert.deepEqual(plan.contradictions, []);
   assert.equal(digest(sourcePath), sourceBefore);
-  assert.equal(require('node:fs').existsSync(outputPath), false);
+  assert.equal(existsSync(outputPath), false);
 });
 
 test('apply copies first, changes only null states, preserves physical versions and relations, then remains idempotent', async (t) => {
@@ -117,7 +117,7 @@ test('apply copies first, changes only null states, preserves physical versions 
   source.close();
 
   const first = await prepareNormalizedBackup({ sourcePath, outputPath, apply: true });
-  assert.deepEqual(first, { mode: 'apply', sourcePath, outputPath: join(realpathSync(directory), 'prepared.db'), updatedRows: 2, logicalDocuments: 1 });
+  assert.deepEqual(first, { mode: 'apply', sourcePath, outputPath, updatedRows: 2, logicalDocuments: 1 });
   assert.equal(digest(sourcePath), sourceBefore);
 
   const output = new Database(outputPath, { readonly: true, fileMustExist: true });
@@ -148,7 +148,7 @@ test('apply copies first, changes only null states, preserves physical versions 
 
   const secondOutput = join(directory, 'prepared-again.db');
   const second = await prepareNormalizedBackup({ sourcePath: outputPath, outputPath: secondOutput, apply: true });
-  assert.deepEqual(second, { mode: 'apply', sourcePath: outputPath, outputPath: join(realpathSync(directory), 'prepared-again.db'), updatedRows: 0, logicalDocuments: 0 });
+  assert.deepEqual(second, { mode: 'apply', sourcePath: outputPath, outputPath: secondOutput, updatedRows: 0, logicalDocuments: 0 });
   const secondDb = new Database(secondOutput, { readonly: true, fileMustExist: true });
   assert.deepEqual(snapshot(secondDb), after);
   secondDb.close();
@@ -158,10 +158,42 @@ test('existing output is refused without changing its bytes or the source', asyn
   const { directory, sourcePath } = fixture(t);
   const outputPath = join(directory, 'already-exists.db');
   const bytes = Buffer.from('keep this existing file intact');
-  require('node:fs').writeFileSync(outputPath, bytes);
+  writeFileSync(outputPath, bytes);
   const sourceBefore = digest(sourcePath);
   await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /output already exists/);
   assert.deepEqual(readFileSync(outputPath), bytes);
+  assert.equal(digest(sourcePath), sourceBefore);
+});
+
+test('output with trailing whitespace is refused without touching the unspaced target or source', async (t) => {
+  const { directory, sourcePath } = fixture(t);
+  const existingTarget = join(directory, 'existing.db');
+  const spacedOutput = `${existingTarget} `;
+  const bytes = Buffer.from('unspaced target must remain intact');
+  writeFileSync(existingTarget, bytes);
+  const sourceBefore = digest(sourcePath);
+
+  await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath: spacedOutput, apply: true }), /whitespace/);
+  assert.deepEqual(readFileSync(existingTarget), bytes);
+  assert.equal(existsSync(spacedOutput), false);
+  assert.equal(digest(sourcePath), sourceBefore);
+});
+
+test('exclusive publication refuses a target that appears after staging', async (t) => {
+  const { directory, sourcePath } = fixture(t);
+  const stageDirectory = join(directory, 'owned-stage');
+  mkdirSync(stageDirectory, { mode: 0o700 });
+  const stagedDatabase = join(stageDirectory, 'prepared.db');
+  const outputPath = join(directory, 'appeared-before-publish.db');
+  const stagedBytes = Buffer.from('staged SQLite bytes');
+  const outputBytes = Buffer.from('concurrent target bytes');
+  writeFileSync(stagedDatabase, stagedBytes, { mode: 0o600 });
+  writeFileSync(outputPath, outputBytes);
+  const sourceBefore = digest(sourcePath);
+
+  assert.throws(() => publishOutputExclusively(stagedDatabase, outputPath), { code: 'EEXIST' });
+  assert.deepEqual(readFileSync(outputPath), outputBytes);
+  assert.deepEqual(readFileSync(stagedDatabase), stagedBytes);
   assert.equal(digest(sourcePath), sourceBefore);
 });
 
@@ -177,7 +209,7 @@ test('failed normalization removes only its exclusively created output and leave
   const sourceBefore = digest(sourcePath);
 
   await assert.rejects(prepareNormalizedBackup({ sourcePath, outputPath, apply: true }), /synthetic write failure/);
-  assert.equal(require('node:fs').existsSync(outputPath), false);
+  assert.equal(existsSync(outputPath), false);
   assert.equal(digest(sourcePath), sourceBefore);
 });
 

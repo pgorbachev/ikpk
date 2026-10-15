@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { closeSync, fstatSync, lstatSync, openSync, realpathSync, unlinkSync } from 'node:fs';
+import { chmodSync, linkSync, lstatSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -106,6 +106,7 @@ function normalizeOutputDatabase(db) {
 }
 
 function assertNewOutputPath(sourcePath, outputPath) {
+  if (outputPath !== outputPath.trim()) throw new Error('--output must not have leading or trailing whitespace');
   let sourceRealPath;
   try {
     sourceRealPath = realpathSync(sourcePath);
@@ -121,17 +122,25 @@ function assertNewOutputPath(sourcePath, outputPath) {
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
-  return canonicalOutputPath;
+  return outputPath;
 }
 
-function removeOwnedOutput(outputPath, identity) {
-  if (!identity) return;
+function removeOwnedStage(stageDirectory, identity) {
   try {
-    const current = lstatSync(outputPath);
-    if (current.isFile() && current.dev === identity.dev && current.ino === identity.ino) unlinkSync(outputPath);
+    const current = lstatSync(stageDirectory);
+    if (!current.isDirectory() || current.dev !== identity.dev || current.ino !== identity.ino
+        || realpathSync(stageDirectory) !== stageDirectory) return false;
+    rmSync(stageDirectory, { recursive: true });
+    return true;
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (error.code === 'ENOENT') return true;
+    return false;
   }
+}
+
+/** Hard-link publication is atomic and refuses to replace any target that appeared meanwhile. */
+export function publishOutputExclusively(stagedDatabasePath, outputPath) {
+  linkSync(stagedDatabasePath, outputPath);
 }
 
 /** Dry-run never creates output; apply backs up a read-only source into a new exclusive file. */
@@ -146,7 +155,6 @@ export async function prepareNormalizedBackup({ sourcePath: rawSourcePath, outpu
   const require = createRequire(`${cmsRoot}/package.json`);
   const Database = require('better-sqlite3');
   const source = new Database(sourcePath, { readonly: true, fileMustExist: true, timeout: 5000 });
-  let ownedIdentity;
   try {
     const sourcePlan = planDocumentsStateNormalization(source);
     if (!apply) return { mode: 'dry-run', sourcePath, outputPath, ...sourcePlan };
@@ -154,30 +162,35 @@ export async function prepareNormalizedBackup({ sourcePath: rawSourcePath, outpu
       throw new Error(`normalization refused: structured documents or missing identity conflicts (${sourcePlan.contradictions.length})`);
     }
 
-    let fd;
+    const outputParent = realpathSync(dirname(outputPath));
+    const stageDirectory = mkdtempSync(join(outputParent, '.ikpk-documents-state-'));
+    chmodSync(stageDirectory, 0o700);
+    const stageIdentity = lstatSync(stageDirectory);
+    const stagedDatabasePath = join(stageDirectory, 'prepared.db');
+    let result;
+    let operationError;
     try {
-      fd = openSync(outputPath, 'wx', 0o600);
-      ownedIdentity = fstatSync(fd);
-    } catch (error) {
-      if (error.code === 'EEXIST') throw new Error(`output already exists (exclusive create refused): ${outputPath}`);
-      throw error;
-    } finally {
-      if (fd !== undefined) closeSync(fd);
-    }
-
-    try {
-      await source.backup(outputPath);
-      const output = new Database(outputPath, { fileMustExist: true, timeout: 5000 });
+      await source.backup(stagedDatabasePath);
+      const output = new Database(stagedDatabasePath, { fileMustExist: true, timeout: 5000 });
       try {
-        const result = normalizeOutputDatabase(output);
-        return { mode: 'apply', sourcePath, outputPath, ...result };
+        result = normalizeOutputDatabase(output);
       } finally {
         output.close();
       }
+      chmodSync(stagedDatabasePath, 0o600);
+      publishOutputExclusively(stagedDatabasePath, outputPath);
     } catch (error) {
-      removeOwnedOutput(outputPath, ownedIdentity);
-      throw error;
+      operationError = error;
     }
+    const cleaned = removeOwnedStage(stageDirectory, stageIdentity);
+    if (operationError) {
+      if (!cleaned) operationError.message += `; owned staging directory could not be safely removed: ${stageDirectory}`;
+      throw operationError;
+    }
+    return {
+      mode: 'apply', sourcePath, outputPath, ...result,
+      ...(!cleaned ? { stagingCleanupWarning: stageDirectory } : {}),
+    };
   } finally {
     source.close();
   }
