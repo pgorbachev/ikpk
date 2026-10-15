@@ -145,6 +145,7 @@ export function publishOutputExclusively(stagedDatabasePath, outputPath) {
 
 /** Dry-run never creates output; apply backs up a read-only source into a new exclusive file. */
 export async function prepareNormalizedBackup({ sourcePath: rawSourcePath, outputPath: rawOutputPath, apply = false }) {
+  if (rawSourcePath !== rawSourcePath.trim()) throw new Error('--source must not have leading or trailing whitespace');
   if (!isAbsolute(rawSourcePath) || !isAbsolute(rawOutputPath)) {
     throw new Error('--source and --output must be absolute paths');
   }

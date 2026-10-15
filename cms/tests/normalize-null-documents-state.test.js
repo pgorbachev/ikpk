@@ -179,6 +179,20 @@ test('output with trailing whitespace is refused without touching the unspaced t
   assert.equal(digest(sourcePath), sourceBefore);
 });
 
+test('source path with trailing whitespace is refused instead of opening its trimmed neighbor', async (t) => {
+  const { sourcePath, outputPath } = fixture(t);
+  const spacedSource = `${sourcePath} `;
+  const spacedBytes = Buffer.from('this distinct trailing-space file must not be opened as SQLite');
+  writeFileSync(spacedSource, spacedBytes);
+  const sourceBefore = digest(sourcePath);
+  const spacedBefore = digest(spacedSource);
+
+  await assert.rejects(prepareNormalizedBackup({ sourcePath: spacedSource, outputPath }), /whitespace/);
+  assert.equal(digest(sourcePath), sourceBefore);
+  assert.equal(digest(spacedSource), spacedBefore);
+  assert.equal(existsSync(outputPath), false);
+});
+
 test('exclusive publication refuses a target that appears after staging', async (t) => {
   const { directory, sourcePath } = fixture(t);
   const stageDirectory = join(directory, 'owned-stage');
