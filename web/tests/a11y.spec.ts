@@ -708,38 +708,20 @@ async function findOverflowingVisible(
 
 test.describe('Root font-size scaling (a11y text zoom)', () => {
   for (const path of ZOOM_PATHS) {
-    // Шапка (TopNav) — известный, отдельный от html{font-size} дефект: плоский
-    // flex-ряд без flex-wrap переполняется по горизонтали при увеличенном
-    // кегле на ВСЕХ проверенных страницах и viewport'ах. Разобрано и заведено
-    // как TD-4 (docs/tech-debt.md) — исправление требует изменений раскладки,
-    // которые при baseline-кегле уже меняют высоту/перенос шапки (проверено
-    // вручную), то есть выходят за рамки точечного a11y-фикса и нуждаются в
-    // мокапе по правилам проекта. Тест зафиксирован как fixme, а не удалён —
-    // проверка реальна и должна позеленеть после фикса TD-4.
     test(`${path}: header (TopNav) does not overflow horizontally at 2x root font-size`, async ({ page }) => {
-      test.fixme(true, 'TD-4: TopNav переполняется при увеличенном кегле — см. docs/tech-debt.md');
-
       const response = await page.goto(path);
       expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
       await page.evaluate(() => {
         document.documentElement.style.fontSize = '32px';
       });
 
-      const offenders = await findOverflowingVisible(page, 'header.topnav');
-      expect(offenders, `шапка переполняется по горизонтали при увеличенном кегле:\n${offenders.join('\n')}`).toEqual([]);
+      await expect.poll(
+        () => findOverflowingVisible(page, 'header.topnav'),
+        { message: 'шапка переполняется по горизонтали при увеличенном кегле' },
+      ).toEqual([]);
     });
 
-    test(`${path}: content outside the header has no new horizontal overflow at 2x root font-size`, async ({ page }, testInfo) => {
-      // Часть страниц/viewport'ов уже сейчас содержит СЕКЦИИ вне шапки, не
-      // готовые к росту кегля (не связано с дефектом html{font-size}) —
-      // заведено как TD-5. Список — не молчаливое сужение: каждая пара
-      // явно поименована и привязана к конкретному долгу.
-      const knownBroken = new Set(['/|desktop', '/|mobile', '/raspisanie-i-tseny|mobile']);
-      test.fixme(
-        knownBroken.has(`${path}|${testInfo.project.name}`),
-        'TD-5: секции вне шапки не готовы к росту кегля — см. docs/tech-debt.md'
-      );
-
+    test(`${path}: content outside the header has no new horizontal overflow at 2x root font-size`, async ({ page }) => {
       const response = await page.goto(path);
       expect(response?.status(), `${path}: страница не отдалась — измерять переполнение не на чем`).toBe(200);
       await page.evaluate(() => {
@@ -753,4 +735,52 @@ test.describe('Root font-size scaling (a11y text zoom)', () => {
       ).toEqual([]);
     });
   }
+});
+
+// Real content with a word wider than the mobile heading's available line.
+test('long seminar title does not widen the mobile page', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const path = '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya';
+  const response = await page.goto(path);
+  expect(response?.status()).toBe(200);
+  await expect(page.locator('h1.page-title')).toContainText('тестирования');
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, 'seminar title must wrap inside the viewport').toBeLessThanOrEqual(1);
+});
+
+test.describe('Text reflow across font and viewport changes', () => {
+  test('header follows text size and viewport without oscillation', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response?.status()).toBe(200);
+    const header = page.locator('header.topnav');
+    for (const width of [375, 768, 1280, 1601]) {
+      await page.setViewportSize({ width, height: 812 });
+      await expect(header).not.toHaveClass(/topnav-text-reflow/);
+      expect(await findOverflowingVisible(page, 'header.topnav')).toEqual([]);
+    }
+    for (const width of [1280, 375, 1280]) {
+      await page.setViewportSize({ width, height: 812 });
+      await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+      if (width > 900) await expect(header).toHaveClass(/topnav-text-reflow/);
+      else await expect(header).not.toHaveClass(/topnav-text-reflow/);
+      expect(await findOverflowingVisible(page, 'header.topnav')).toEqual([]);
+    }
+    await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
+    await expect(header).not.toHaveClass(/topnav-text-reflow/);
+    expect(await findOverflowingVisible(page, 'header.topnav')).toEqual([]);
+  });
+
+  test('legacy word wrapping keeps enlarged homepage and schedule inside the viewport', async ({ page }) => {
+    for (const path of ['/', '/raspisanie-i-tseny']) {
+      for (const width of [1280, 375]) {
+        await page.setViewportSize({ width, height: 812 });
+        const response = await page.goto(path);
+        expect(response?.status()).toBe(200);
+        await page.addStyleTag({ content: 'body { overflow-wrap: break-word !important; word-break: break-word !important; }' });
+        await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+        expect(await findOverflowingVisible(page, 'body', 'header.topnav')).toEqual([]);
+      }
+    }
+  });
 });
