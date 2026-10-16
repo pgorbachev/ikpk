@@ -164,6 +164,10 @@ function seal(path, gid) {
   if (gid !== undefined) chownSync(path, 0, gid);
   chmodSync(path, st.isDirectory() ? 0o550 : 0o440);
 }
+/**
+ * @param {string} bundleDirectory
+ * @param {{ requireProtected?: boolean; schemaRoot?: string }} [options]
+ */
 export function verifyBundle(bundleDirectory, { requireProtected = true, schemaRoot } = {}) {
   if (requireProtected) assertProtected(bundleDirectory);
   else assertNoSymlinks(bundleDirectory);
