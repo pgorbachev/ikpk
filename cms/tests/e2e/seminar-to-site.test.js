@@ -149,9 +149,18 @@ describe('семинар из админки доходит до опублик�
     name: 'Семинар сквозной проверки',
     slug: 'seminar-skvoznoj-proverki',
     description: '<p>Описание, набранное редактором в админке.</p>',
+    seo: {
+      seo_title: 'Семинар сквозной проверки',
+      seo_description: 'Описание семинара сквозной проверки.',
+    },
+    documents_state: 'unconfirmed',
   };
   const seminarPath = `/${institute.slug}/${group.slug}/${seminar.slug}`;
-  const uiSeminar = { name: 'Семинар из браузера' };
+  const uiSeminar = {
+    name: 'Семинар из браузера',
+    seo: { seo_title: 'Семинар из браузера', seo_description: 'Описание семинара из браузера.' },
+    documents_state: 'unconfirmed',
+  };
   // Своя группа: обложка группы — первая картинка её семинаров, и чужой семинар её бы занял.
   const uiGroup = { name: 'Курсы из браузера', slug: 'kursy-iz-brauzera' };
   let seminarDocumentId;
@@ -244,20 +253,31 @@ describe('семинар из админки доходит до опублик�
     // Каркас, который на проде уже есть и который content-admin создавать не может: институт,
     // группа курсов, преподаватель. Статья — потому что съём отказывает на пустых каркасных типах.
     const publish = (uid, data) => app.documents(uid).create({ status: 'published', data });
-    const inst = await publish('api::institute.institute', { ...institute, legacy_id: institute.slug });
-    await publish('api::course-group.course-group', {
+    const inst = await publish('api::institute.institute', {
+      ...institute,
+      legacy_id: institute.slug,
+      description: '<p>Институт для сквозной проверки.</p>',
+      seo: { seo_title: institute.name, seo_description: 'Описание института сквозной проверки.' },
+      order: 1,
+    });
+    const program = await publish('api::course-group.course-group', {
       ...group,
       legacy_id: `${institute.slug}/${group.slug}`,
       institute: inst.documentId,
+      description: '<p>Программа для сквозной проверки.</p>',
+      seo: { seo_title: group.name, seo_description: 'Описание программы сквозной проверки.' },
     });
     await publish('api::course-group.course-group', {
       ...uiGroup,
       legacy_id: `${institute.slug}/${uiGroup.slug}`,
       institute: inst.documentId,
+      description: '<p>Программа для проверки браузерной формы.</p>',
+      seo: { seo_title: uiGroup.name, seo_description: 'Описание программы из браузера.' },
     });
     await publish('api::teacher.teacher', {
       name: teacherName,
       slug: 'proverkina-anna-petrovna',
+      trait: 'teacher',
       legacy_id: 'e2e-teacher',
       institute: inst.documentId,
     });
@@ -265,7 +285,9 @@ describe('семинар из админки доходит до опублик�
       title: 'Статья сквозной проверки',
       slug: 'statya-skvoznoj-proverki',
       body: '<p>Текст.</p>',
+      published_date: '2026-10-16T00:00:00.000Z',
       image: (await uploadImage('e2e-article.jpg', '#7a8f3c')).id,
+      categories: [program.documentId],
       seo: { seo_title: 'Статья сквозной проверки', seo_description: 'Описание статьи сквозной проверки.' },
     });
   });
@@ -373,6 +395,8 @@ describe('семинар из админки доходит до опублик�
           slug: legacySlug,
           legacy_id: 'e2e-transfer-legacy-slug',
           description: '<p>Описание с прежнего сайта.</p>',
+          seo: { seo_title: 'Семинар переноса', seo_description: 'Описание семинара переноса.' },
+          documents_state: 'unconfirmed',
           course_group: groupRow.documentId,
         },
       }),
@@ -423,10 +447,13 @@ describe('семинар из админки доходит до опублик�
       };
       await pageUi.getByRole('textbox', { name: 'Название' }).fill(uiSeminar.name);
       await pick('Программа', 'браузера', uiGroup.name);
-      await pageUi.getByRole('textbox', { name: 'Продолжительность' }).fill('2 дня');
-      await pageUi.getByRole('textbox', { name: 'Цена' }).fill('39000');
+      await pick('Выдаваемые документы', 'unconfirmed', 'unconfirmed');
+      await pageUi.getByRole('button', { name: 'Ещё нет записей. Нажмите кнопку ниже, чтобы добавить.' }).nth(1).click();
+      await pageUi.getByRole('textbox', { name: 'seo_title' }).fill(uiSeminar.name);
+      await pageUi.getByRole('textbox', { name: 'seo_description' }).fill(uiSeminar.seo.seo_description);
       await pick('Преподаватели', 'Проверкина', teacherName);
-      await pageUi.getByRole('button', { name: /Нажмите, чтобы добавить ресурс/ }).click();
+      await pageUi.getByLabel('Изображение')
+        .getByRole('button', { name: /Нажмите, чтобы добавить ресурс/ }).click();
       await pageUi.getByRole('dialog').waitFor();
       // Клик по карточке открывает её редактирование, выбор — только флажок в углу.
       // Именно на этом месте застряла приёмка 07.10.
