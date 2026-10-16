@@ -38,16 +38,16 @@ export interface RollbackPorts {
 }
 export const SHA = 'a'.repeat(40);
 export const NOW = '2026-09-19T12:00:00.000Z';
-export function rollbackFixture() {
+export function rollbackFixture(destination = { destinationId: 'prod', deployMode: 'prod' as 'stand' | 'prod', origin: 'https://site.test.invalid' }) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-rollback-'));
   const treeDir = join(temp, 'retained-release'); mkdirSync(treeDir);
   writeFileSync(join(treeDir, 'index.html'), '<main>previous checked bytes</main>');
   writeFileSync(join(treeDir, 'release.json'), JSON.stringify({ commit: SHA, snapshotId: 'snapshot-old' }));
-  const identity = { commit: SHA, snapshotId: 'snapshot-old', destinationId: 'prod', treeDigest: fixtureDigest(treeDir) };
+  const identity = { commit: SHA, snapshotId: 'snapshot-old', destinationId: destination.destinationId, treeDigest: fixtureDigest(treeDir) };
   const original: PublicationRecord = {
     ...identity, publicationId: 'original-operation', releaseId: 'old-release', actor: 'original-operator',
     publishedAt: '2026-09-17T12:00:00.000Z', revision: 7, referenceDate: '2026-09-17',
-    capturedAt: '2026-09-17T11:50:00.000Z', testRunConclusion: 'success', deployMode: 'prod', paymentRole: 'ci',
+    capturedAt: '2026-09-17T11:50:00.000Z', testRunConclusion: 'success', deployMode: destination.deployMode, paymentRole: 'ci',
     ciEvidence: { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
       commit: SHA, branch: 'main', event: 'push', runId: 42, conclusion: 'success', executedTests: 51,
       jobs: PUBLICATION_CI_POLICY.requiredJobs.map((name) => ({ name, conclusion: 'success' })) },
@@ -55,11 +55,11 @@ export function rollbackFixture() {
   };
   const newer = { ...structuredClone(original), publicationId: 'newer-operation', releaseId: 'current-release', publishedAt: '2026-09-18T12:00:00.000Z' };
   const history: VerifiedPair[] = [original, newer];
-  const input: RollbackInput = { publicationId: 'rollback-operation', releaseId: original.releaseId, destinationId: 'prod',
-    actor: 'rollback-operator', confirmed: true, reason: 'Broken navigation in current release', origin: 'https://site.test.invalid' };
+  const input: RollbackInput = { publicationId: 'rollback-operation', releaseId: original.releaseId, destinationId: destination.destinationId,
+    actor: 'rollback-operator', confirmed: true, reason: 'Broken navigation in current release', origin: destination.origin };
   const report: LocalChecks = { ...identity, groups: ROLLBACK_GROUPS.map((name) => ({ name, conclusion: 'success', executedTests: 3 })) };
   const state = { locked: false, currentReleaseId: newer.releaseId, retained: true, pending: undefined as RollbackOperation | undefined,
-    retainedDestination: 'prod', retainedReleaseId: original.releaseId, report: report as LocalChecks | undefined,
+    retainedDestination: destination.destinationId, retainedReleaseId: original.releaseId, report: report as LocalChecks | undefined,
     appendFailure: false, healthStatus: 200, releaseBody: undefined as unknown, redirect: undefined as string | undefined,
     authorize: undefined as RollbackAuthorizer | undefined, checks: [] as RollbackCheckInput[], requests: [] as string[] };
   const events: { name: string; locked: boolean }[] = [];
