@@ -475,14 +475,14 @@ jobs:
       - name: Run unit tests
         run: npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-head.json"
 
-      - name: Verify manual publication transport
+      - name: Verify native server and publication processes
         env:
           RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
         run: |
           if [ "$RELEASE_STRICT_REPORTS" = true ]; then
-            node --test --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/publication-native.tap" tests/publication-*.test.mjs
+            node --test --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/publication-native.tap" tests/*.test.mjs
           else
-            node --test tests/publication-*.test.mjs
+            node --test tests/*.test.mjs
           fi
 
       - name: Classify dependency-only change for scripts test-count
