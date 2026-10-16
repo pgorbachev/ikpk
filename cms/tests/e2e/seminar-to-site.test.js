@@ -447,10 +447,13 @@ describe('семинар из админки доходит до опублик�
       };
       await pageUi.getByRole('textbox', { name: 'Название' }).fill(uiSeminar.name);
       await pick('Программа', 'браузера', uiGroup.name);
-      await pageUi.getByRole('textbox', { name: 'Продолжительность' }).fill('2 дня');
-      await pageUi.getByRole('textbox', { name: 'Цена' }).fill('39000');
+      await pick('Выдаваемые документы', 'unconfirmed', 'unconfirmed');
+      await pageUi.getByRole('button', { name: 'Ещё нет записей. Нажмите кнопку ниже, чтобы добавить.' }).nth(1).click();
+      await pageUi.getByRole('textbox', { name: 'seo_title' }).fill(uiSeminar.name);
+      await pageUi.getByRole('textbox', { name: 'seo_description' }).fill(uiSeminar.seo.seo_description);
       await pick('Преподаватели', 'Проверкина', teacherName);
-      await pageUi.getByRole('button', { name: /Нажмите, чтобы добавить ресурс/ }).click();
+      await pageUi.getByLabel('Изображение')
+        .getByRole('button', { name: /Нажмите, чтобы добавить ресурс/ }).click();
       await pageUi.getByRole('dialog').waitFor();
       // Клик по карточке открывает её редактирование, выбор — только флажок в углу.
       // Именно на этом месте застряла приёмка 07.10.
