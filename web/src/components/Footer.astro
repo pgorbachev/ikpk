@@ -4,6 +4,7 @@ import { PHONE, PHONE_HREF, MANAGER_PHONE, MANAGER_PHONE_HREF } from '../lib/nav
 import { socialMarkPresentation } from '../lib/social-marks-registry';
 import { assertMarkFilesMatchRegistry } from '../lib/social-mark-files';
 import SocialMark from './social-marks/SocialMark.astro';
+import { getSnapshotReferenceDate } from '../lib/data';
 
 assertMarkFilesMatchRegistry();
 ---
@@ -94,7 +95,7 @@ assertMarkFilesMatchRegistry();
     </div>
 
     <div class="footer-bottom">
-      <p>© {new Date().getFullYear()} ikpk.su Все права защищены.</p>
+      <p>© {getSnapshotReferenceDate().slice(0, 4)} ikpk.su Все права защищены.</p>
       {/* Документ обязателен, и на старом сайте ссылка на него была в футере
           каждой страницы. При переносе она потерялась: файл в сборку попал,
           а дойти до него было нельзя. */}
