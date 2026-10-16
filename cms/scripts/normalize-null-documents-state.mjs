@@ -81,7 +81,7 @@ export function planDocumentsStateNormalization(db) {
   };
 }
 
-function normalizeOutputDatabase(db) {
+export function applyDocumentsStateNormalization(db, { onApplied } = {}) {
   const transaction = db.transaction(() => {
     const plan = planDocumentsStateNormalization(db);
     if (plan.blocked) {
@@ -100,9 +100,15 @@ function normalizeOutputDatabase(db) {
         throw new Error(`post-write readback failed for seminar row ${rowId}`);
       }
     }
-    return { updatedRows, logicalDocuments: plan.logicalDocuments };
+    const result = { updatedRows, logicalDocuments: plan.logicalDocuments };
+    onApplied?.(db, result);
+    return result;
   });
   return transaction.immediate();
+}
+
+function normalizeOutputDatabase(db) {
+  return applyDocumentsStateNormalization(db);
 }
 
 function assertNewOutputPath(sourcePath, outputPath) {

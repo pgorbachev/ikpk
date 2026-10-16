@@ -771,41 +771,28 @@ if [[ -n "${CMS_ARTIFACT_RELEASE:-}" && -n "${CMS_ARTIFACT_DIR:-}" ]]; then
       report changed "артефакт системы управления: ${new_release} (предыдущий: ${previous_target:-нет})"
     else
       if [[ -n "$previous_target" ]]; then
-        # Служба при старте безусловно зовёт `fse.ensureDirSync(<релиз>/database/migrations)`
-        # (`@strapi/database/dist/migrations/users.js:40`), а права на запись внутри релиза
-        # у неё намеренно сняты. Измерено: на СУЩЕСТВУЮЩЕМ каталоге без права записи
-        # `ensureDirSync` не падает (только проверяет), на ОТСУТСТВУЮЩЕМ под непишущимся
-        # родителем — `EACCES: permission denied, mkdir`, и откат не поднимается вовсе.
-        #
-        # Насколько это достижимо сегодня: каталог создаётся этим же скриптом для каждого
-        # релиза с самой первой выкатки CMS, поэтому у любого предыдущего релиза, созданного
-        # им, он уже есть. Страховка нужна для состояний мимо скрипта — собранный руками
-        # каталог релиза, распаковка из старого архива, будущая смена правил уборки.
-        # Создание от root безвредно и когда каталог уже есть: `ensureDirSync` устраивает
-        # существующий путь.
-        mkdir -p "${previous_target}/database/migrations"
-        ln -sfn "$previous_target" "${current_link}.new"
-        mv -T "${current_link}.new" "$current_link"
-        command -v systemctl >/dev/null 2>&1 && systemctl restart "$unit_name" || true
-        # ПЕРЕИМЕНОВАНИЕ КОЛОНКИ ОТКАТОМ НЕ ОТМЕНЯЕТСЯ. Миграция уже отмечена
-        # выполненной в таблице `strapi_migrations`, а предыдущий релиз объявляет
-        # старые имена (`status`). Его `syncSchema` сверяет колонки по имени, не узнаёт
-        # переименования и делает `dropColumn` + `createColumn`: значения статусов
-        # обнуляются молча. Сайт фильтрует `status === 'active'`, поэтому расписание
-        # исчезает, а контракт снимка этого поля не покрывает. Автоматический откат
-        # предупреждает, но не чинит: восстановление статусов — ручная операция из
-        # резервной копии базы.
-        echo "[bootstrap] ВНИМАНИЕ: откат на ${previous_target} не отменяет переименование колонок." >&2
-        echo "[bootstrap] Если предыдущий релиз старше этого переименования, значения" >&2
-        echo "[bootstrap] seminar_status/entry_status будут обнулены его сверкой схемы." >&2
-        if [[ "${ENVIRONMENT}" == "stand" ]]; then
-          echo "[bootstrap] Стенд: содержимое регенерируемо — восстановите импортом из снимка." >&2
-        else
-          echo "[bootstrap] Содержимое НЕ регенерируемо: всё, что заведено в админке, живёт" >&2
-          echo "[bootstrap] только в базе. Восстанавливать из копии базы; см. TD-67." >&2
-        fi
+        echo "[bootstrap] FAIL CLOSED: предыдущий релиз ${previous_target} не запускается с текущей базой." >&2
+        echo "[bootstrap] Выберите проверенную совместимую пару кода и базы; автоматическое переключение кода запрещено." >&2
       fi
-      echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?} после смены артефакта — возврат на ${previous_target:-<нет предыдущей>}" >&2
+      if ! command -v systemctl >/dev/null 2>&1; then
+        echo "[bootstrap] ERROR: systemctl недоступен; остановку CMS подтвердить нельзя, состояние службы неизвестно." >&2
+        exit 8
+      fi
+      if ! systemctl stop "$unit_name"; then
+        echo "[bootstrap] ERROR: systemctl не смог остановить CMS (${unit_name}); состояние службы неизвестно." >&2
+        exit 8
+      fi
+      if systemctl is-active --quiet "$unit_name"; then
+        echo "[bootstrap] ERROR: CMS всё ещё active после stop (${unit_name}); совместимая пара не восстановлена." >&2
+        exit 8
+      fi
+      stopped_main_pid="$(systemctl show --property=MainPID --value "$unit_name" 2>/dev/null || true)"
+      if [[ "$stopped_main_pid" != "0" ]]; then
+        echo "[bootstrap] ERROR: systemd не подтвердил MainPID=0 после остановки CMS (получено: ${stopped_main_pid:-пусто})." >&2
+        exit 8
+      fi
+      echo "[bootstrap] CMS остановлена и MainPID=0 подтверждён; старый код не запускается автоматически." >&2
+      echo "[bootstrap] служба системы управления не ответила на ${SERVICE_ADDR:-?}; восстановление требует проверенной совместимой пары." >&2
       exit 7
     fi
   fi
