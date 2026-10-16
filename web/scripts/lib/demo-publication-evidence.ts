@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { DestinationConfig } from '../publication-context.ts';
 import type { PublicationRecord } from './publish-gate.ts';
@@ -21,9 +21,36 @@ export function demoEvidencePaths(config: Pick<DestinationConfig, 'captureBundle
   const root = join(config.publicationEvidenceRoot!, id);
   return { root, bundle: join(config.captureBundleRoot!, id), snapshot: join(root, 'snapshot'), reports: join(root, 'reports') };
 }
+/** Flush closed evidence files and directory entries before any release can activate. */
+function syncEvidence(root: string) {
+  function sync(path: string, descend: boolean) {
+    const before = lstatSync(path);
+    if (before.isSymbolicLink() || (!before.isDirectory() && (!before.isFile() || before.nlink !== 1))) {
+      throw new Error('evidence member must be regular and cannot be a symlink or hardlink');
+    }
+    // NONBLOCK prevents a replaced regular file becoming a blocking FIFO open.
+    const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW |
+      (before.isDirectory() ? constants.O_DIRECTORY : constants.O_NONBLOCK));
+    try {
+      const opened = fstatSync(fd);
+      if (opened.dev !== before.dev || opened.ino !== before.ino || opened.mode !== before.mode) throw new Error('evidence member changed during sync');
+      if (descend && before.isDirectory()) for (const name of readdirSync(path).sort()) sync(join(path, name), true);
+      const after = lstatSync(path);
+      if (after.dev !== opened.dev || after.ino !== opened.ino || after.mode !== opened.mode) throw new Error('evidence member changed during sync');
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
+  }
+  sync(root, true);
+  // Persist newly created operation/evidence-directory entries, up to the root.
+  for (let parent = dirname(root); ; parent = dirname(parent)) {
+    sync(parent, false);
+    if (parent === '/') break;
+  }
+}
 export function saveDemoOperation(root: string, operation: PublicationRecord) {
   mkdirSync(root, { recursive: true, mode: 0o700 });
-  writeFileSync(join(root, 'operation.json'), `${JSON.stringify(operation, null, 2)}\n`, { flag: 'wx', mode: 0o600, flush: true });
+  writeFileSync(join(root, 'operation.json'), `${JSON.stringify(operation, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  syncEvidence(root);
 }
 /** Recovery consumes only the sealed original bundle and the exact saved operation. No recapture. */
 export async function verifyDemoRecoveryEvidence(config: DestinationConfig, operation: PublicationRecord) {

@@ -13,3 +13,20 @@ This is local implementation evidence, not a server publication or production ac
 - Rollback fixture was strengthened to supply the capture proof required by the approved record contract; missing proof now has an explicit rejection test.
 
 Capture helper implementation is a separate delivery (`c5c91b60838473dc9d2b9c4ecdfb834a2ae56e5e`), cherry-picked only for local integration. Source/schema/media compatibility and real DEMO operations still require independent reviews and the separately authorized acceptance sequence. No server operation, push, merge, or PR comment was performed by this implementation session.
+
+## Independent-review follow-up: evidence durability before activation
+
+The reviewers found that `flush: true` covered only `operation.json`; snapshot,
+media, reports and their directory entries could still be lost after power loss.
+`saveDemoOperation` now fsyncs every regular file and each directory bottom-up,
+then the parent directory chain, after writing the final operation. Symlinks,
+hardlinks, special files and replaced inode/type fail closed; every descriptor
+closes even if fsync fails. The sealed root capture bundle is not traversed or modified.
+
+RED: the seven initial durability tests all failed on core commit
+`c5ab39428794d6c3956d554f4ca56af86cb91a98`. GREEN: eight durability tests plus
+existing DEMO evidence/policy regressions pass, 54/54. Tests perform real local
+open/fsync/close calls and inject failure for media, report and parent directory;
+new publication stops before transport, and rollback-report failure leaves the
+current release active. This verifies the fsync boundary and control flow, not a
+physical power-loss/reboot rehearsal.
