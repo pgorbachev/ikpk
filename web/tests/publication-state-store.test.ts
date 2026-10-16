@@ -57,6 +57,13 @@ const record = (id = 'publication-1'): PublicationRecord => {
 };
 
 describe('DEMO publication-snapshot persistence does not rewrite journal history', () => {
+  it('refuses a DEMO record with no capture proof before touching the state remote', async () => {
+    const { revision: _revision, ...identity } = record('demo-missing-proof'); void _revision;
+    const publication = { ...identity, recordKind: 'publication-snapshot', sourcePolicy: 'demo-publication-only', sourceAge: 'untracked' };
+    const api = createPublicationStateStore({ remote: '/unavailable/never-contact-this-remote', workDir: '/unavailable/never-create-this-directory' });
+    await expect(api.appendPublication(publication as unknown as PublicationRecord)).rejects.toThrow('invalid publication evidence');
+  });
+
   it('appends and idempotently recovers the same discriminated pair while preserving three events HWM 3 and two legacy pairs', async () => {
     const f = await fixture();
     const legacy = [record('stand-1'), record('stand-2')];

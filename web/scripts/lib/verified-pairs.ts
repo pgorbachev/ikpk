@@ -41,7 +41,7 @@ function pairKey(pair: VerifiedPair): string {
 
 /** Какая пара «новее» для одного ключа commit+snapshotId (и при слиянии индексов). */
 export function newerVerifiedPair(left: VerifiedPair, right: VerifiedPair): VerifiedPair {
-  if (left.revision !== right.revision) return left.revision > right.revision ? left : right;
+  if (left.revision !== right.revision) return (left.revision ?? 0) > (right.revision ?? 0) ? left : right;
   if (left.referenceDate !== right.referenceDate) {
     return left.referenceDate >= right.referenceDate ? left : right;
   }

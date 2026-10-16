@@ -12,7 +12,8 @@ export interface SnapshotMedia {
  * смыслов в одном поле сломало бы его молча.
  */
 export interface SnapshotOrigin {
-  kind: 'live' | 'pinned';
+  kind: 'live' | 'pinned' | 'server-db';
+  sourceId?: 'demo193-cms';
   /** Адрес системы управления — только для живого. */
   url?: string;
   /** Время снятия, ISO — только для живого. */
@@ -24,19 +25,28 @@ export interface SnapshotContent {
   media: SnapshotMedia[];
 }
 
-export interface Snapshot {
+export interface DemoCaptureProof {
+  version: 1; method: 'quiesced-sqlite-backup'; sourceId: 'demo193-cms'; captureId: string;
+  schemaDigest: string; databaseDigest: string; mediaManifestDigest: string; bundleDigest: string;
+}
+interface SnapshotFields {
   content: SnapshotContent;
   referenceDate: string;
   pinned?: boolean;
   fingerprint?: string;
   snapshotId?: string;
-  origin?: SnapshotOrigin;
-  provenance?: {
-    observedEntry: number;
-    revision: number | null;
-    highWaterMark: number;
-  };
 }
+export interface JournalSnapshot extends SnapshotFields {
+  sourcePolicy?: never; sourceAge?: never; captureProof?: never;
+  origin?: SnapshotOrigin;
+  provenance?: { observedEntry: number; revision: number | null; highWaterMark: number };
+}
+export interface DemoPublicationSnapshot extends SnapshotFields {
+  sourcePolicy: 'demo-publication-only'; sourceAge: 'untracked'; captureProof: DemoCaptureProof;
+  origin: SnapshotOrigin & { kind: 'server-db'; sourceId: 'demo193-cms'; capturedAt: string };
+  provenance?: never;
+}
+export type Snapshot = JournalSnapshot | DemoPublicationSnapshot;
 
 /** Часовой пояс опорной даты живого снимка — задан явно, не наследуется от машины. */
 export const REFERENCE_TIMEZONE = 'Europe/Moscow';

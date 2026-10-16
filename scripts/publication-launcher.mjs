@@ -32,6 +32,9 @@ const inside = (parent, child) => { const rel = relative(parent, child); return 
 const refuse = (reason) => { throw new Error(reason); };
 // Installed policy: never read source/CI policy from the candidate checkout.
 export function publicationSourceRef(config) {
+  if (config.sourcePolicy !== undefined && (config.sourcePolicy !== 'demo-publication-only' ||
+      config.deployMode !== 'stand' || config.paymentRole !== 'ci' || config.siteUrl !== 'https://staging.ikpk.su' ||
+      !/^(?!root@)[a-z_][a-z0-9_-]*@193\.124\.115\.99$/.test(config.sshTarget))) refuse('untrusted-source-policy');
   const ref = config.sourceRef ?? 'main';
   if (ref === 'main' && config.sourceProfile === undefined) return ref;
   if (ref === 'dev' && config.sourceProfile === 'demo-dev' && config.deployMode === 'stand' &&
@@ -125,7 +128,7 @@ function brokerCredentials(config, configPath) {
 }
 
 // Kept in the installed, dependency-free launcher: repository code cannot extend this schema.
-function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
+export function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput, sourcePolicy) {
   const rollback = releaseId !== undefined;
   if (typeof bytes !== 'string' || !bytes.length || Buffer.byteLength(bytes) > 16 * 1024) refuse('invalid-worker-audit');
   let audit;
@@ -133,6 +136,10 @@ function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
   const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
   const matches = (value, pattern) => typeof value === 'string' && pattern.test(value);
   const integer = (value) => Number.isSafeInteger(value) && value >= 0;
+  const demo = sourcePolicy === 'demo-publication-only' && audit?.sourcePolicy === 'demo-publication-only' && audit?.sourceAge === 'untracked';
+  if (demo && ['revision', 'observedEntry', 'highWaterMark', 'latestEntry'].some(key => Object.hasOwn(audit, key))) refuse('invalid-worker-audit');
+  const demoFields = demo ? { sourcePolicy: value => value === 'demo-publication-only', sourceAge: value => value === 'untracked' } : {};
+  if (!rollback && !operatorInput && exitStatus === 0 && sourcePolicy === 'demo-publication-only' && !demo) refuse('invalid-worker-audit');
   if (operatorInput) {
     const accepting = operatorInput.command === 'accept-state';
     const fields = { version: (value) => value === 1, status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
@@ -146,7 +153,7 @@ function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
       commit: (value) => matches(value, /^[a-f0-9]{40}$/), snapshotId: (value) => matches(value, /^snap:[a-f0-9]{64}$/),
       releaseId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
       treeDigest: (value) => matches(value, /^[a-f0-9]{64}$/), publicationId: (value) => matches(value, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
-      revision: (value) => integer(value) && value > 0, localExecutedTests: (value) => integer(value) && value > 0,
+      ...(demo ? demoFields : { revision: (value) => integer(value) && value > 0 }), localExecutedTests: (value) => integer(value) && value > 0,
       ciExecutedTests: (value) => integer(value) && value > 0,
     });
     if (!object(audit) || Object.keys(fields).some((key) => !Object.hasOwn(audit, key)) ||
@@ -154,6 +161,7 @@ function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
     return audit;
   }
   const fields = {
+    ...demoFields,
     version: (value) => value === 1,
     status: (value) => value === (exitStatus === 0 ? 'success' : 'refused'),
     code: (value) => exitStatus === 0 ? value === (rollback ? 'rolled-back' : 'published') :
@@ -174,7 +182,7 @@ function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput) {
   if (!object(audit) || !['version', 'status', 'code', ...(!rollback || exitStatus === 0 ? ['commit'] : [])].every((key) => Object.hasOwn(audit, key)) ||
       Object.entries(audit).some(([key, value]) => !Object.hasOwn(fields, key) || !fields[key](value))) refuse('invalid-worker-audit');
   if (exitStatus === 0 && (!['snapshotId', 'treeDigest', 'publicationId', ...(rollback ? ['releaseId'] : [])].every((key) => Object.hasOwn(audit, key)) ||
-      !['revision', 'localExecutedTests', 'ciExecutedTests', ...(!rollback ? ['observedEntry', 'highWaterMark'] : [])].every((key) => audit[key] > 0))) refuse('invalid-worker-audit');
+      !['localExecutedTests', 'ciExecutedTests', ...(!demo ? ['revision', ...(!rollback ? ['observedEntry', 'highWaterMark'] : [])] : [])].every((key) => audit[key] > 0))) refuse('invalid-worker-audit');
   if ((audit.code === 'active-unindexed') !== Object.hasOwn(audit, 'activePair') ||
       (Object.hasOwn(audit, 'check') && audit.code !== 'checks-failed') ||
       (rollback && audit.activePair && (audit.activePair.releaseId !== releaseId || audit.activePair.commit !== audit.commit || audit.activePair.snapshotId !== audit.snapshotId))) refuse('invalid-worker-audit');
@@ -250,7 +258,7 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
       encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024, stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
     });
     if (result.error || result.status === null) refuse('publication-worker-failed');
-    const audit = workerAudit(result.output[3], undefined, result.status, releaseId, rollback ? undefined : { command, observedEntry });
+    const audit = workerAudit(result.output[3], undefined, result.status, releaseId, rollback ? undefined : { command, observedEntry }, config.sourcePolicy);
     if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
     checks.push('publication-worker');
     return { status: 'success', executedChecks: checks.length, checks, commit: audit.commit, destinationId: config.destinationId, audit };
@@ -319,7 +327,7 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
       stdio: ['ignore', 'ignore', 'ignore', 'pipe'] });
     // Repository subprocess output is not an audit log: it may contain credentials.
     if (result.error || result.status === null) refuse('publication-worker-failed');
-    const audit = workerAudit(result.output[3], head, result.status);
+    const audit = workerAudit(result.output[3], head, result.status, undefined, undefined, config.sourcePolicy);
     if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
     checks.push('publication-worker');
     return { status: 'success', executedChecks: checks.length, checks, commit: head, destinationId: config.destinationId, audit };
@@ -330,7 +338,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try { process.stdout.write(`${JSON.stringify(await launch(process.argv.slice(2)))}\n`); }
   catch (error) {
     const reasons = new Set(['hosted-publication-forbidden', 'untrusted-source', 'dirty-source', 'untrusted-ref',
-      'source-unavailable', 'source-sha-mismatch', 'source-ci-failed', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
+      'untrusted-source-policy', 'source-unavailable', 'source-sha-mismatch', 'source-ci-failed', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
     process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed',
       ...(error.audit ? { audit: error.audit } : {}) })}\n`);
     process.exitCode = 1;

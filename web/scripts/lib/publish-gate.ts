@@ -1,3 +1,5 @@
+import type { DemoCaptureProof } from './content-snapshot.ts';
+
 export type PublicationAction = 'publish' | 'cancel-stale' | 'require-confirmation' | 'refuse';
 
 export interface PublicationDecision {
@@ -7,13 +9,43 @@ export interface PublicationDecision {
   runScheduledForLatestEntry?: boolean;
 }
 
-export interface VerifiedPair {
+interface PairIdentity {
   commit: string;
   snapshotId: string;
-  revision: number;
   referenceDate: string;
   capturedAt: string;
   testRunConclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'missing';
+}
+
+export interface JournalPair extends PairIdentity {
+  recordKind?: undefined; sourcePolicy?: undefined; sourceAge?: undefined; captureProof?: undefined;
+  revision: number;
+}
+export interface PublicationSnapshotPair extends PairIdentity {
+  recordKind: 'publication-snapshot'; sourcePolicy: 'demo-publication-only'; sourceAge: 'untracked';
+  captureProof: DemoCaptureProof; revision?: never; observedEntry?: never; highWaterMark?: never;
+}
+export type VerifiedPair = JournalPair | PublicationSnapshotPair;
+
+export function isDemoPublication(pair: { sourcePolicy?: unknown; recordKind?: unknown }): pair is PublicationSnapshotPair {
+  return pair.sourcePolicy === 'demo-publication-only' && pair.recordKind === 'publication-snapshot';
+}
+export function demoMetadataProblem(value: object): string | undefined {
+  const record = value as PublicationSnapshotPair;
+  if (!isDemoPublication(record) || record.sourceAge !== 'untracked' ||
+      ['revision', 'observedEntry', 'highWaterMark', 'provenance'].some((key) => key in record)) return 'invalid-demo-publication-metadata';
+}
+export function validCaptureProof(value: unknown, captureId?: string): value is DemoCaptureProof {
+  if (!value || typeof value !== 'object') return false;
+  const proof = value as DemoCaptureProof;
+  return proof.version === 1 && proof.method === 'quiesced-sqlite-backup' && proof.sourceId === 'demo193-cms' &&
+    typeof proof.captureId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(proof.captureId) &&
+    (captureId === undefined || proof.captureId === captureId) &&
+    [proof.schemaDigest, proof.databaseDigest, proof.mediaManifestDigest, proof.bundleDigest].every((v) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v));
+}
+export function publicationAgeProblem(record: VerifiedPair): string | undefined {
+  if (isDemoPublication(record)) return demoMetadataProblem(record) ?? (validCaptureProof(record.captureProof) ? undefined : 'invalid-capture-proof');
+  if (record.sourcePolicy !== undefined || record.recordKind !== undefined || record.sourceAge !== undefined || record.captureProof !== undefined || !positiveCount(record.revision)) return 'invalid-journal-revision';
 }
 
 export type CheckConclusion = VerifiedPair['testRunConclusion'];
@@ -26,7 +58,7 @@ export interface LocalChecks {
   commit: string; snapshotId: string; destinationId: string; treeDigest: string;
   groups: { name: string; conclusion: CheckConclusion; executedTests: number }[];
 }
-export interface PublicationRecord extends VerifiedPair {
+export type PublicationRecord = VerifiedPair & {
   publicationId: string; releaseId: string; destinationId: string; treeDigest: string;
   publishedAt: string; actor: string; ciEvidence: CiEvidence; localChecks: LocalChecks;
   paymentRole: 'ci' | 'stand' | 'prod'; deployMode: 'stand' | 'prod';
@@ -70,8 +102,9 @@ export function ciEvidenceProblem(evidence: CiEvidence | undefined, commit: stri
 }
 
 /** Legacy records have no source fields and continue to mean main. */
-export function publicationCiProblem(record: Pick<PublicationRecord, 'ciEvidence' | 'commit' | 'deployMode' | 'paymentRole' | 'sourceRef' | 'sourceProfile'>,
+export function publicationCiProblem(record: Pick<PublicationRecord, 'ciEvidence' | 'commit' | 'deployMode' | 'paymentRole' | 'sourceRef' | 'sourceProfile' | 'sourcePolicy'>,
   policy: CiPolicy = PUBLICATION_CI_POLICY): string | undefined {
+  if (record.sourcePolicy !== undefined && (record.sourcePolicy !== 'demo-publication-only' || record.deployMode !== 'stand' || record.paymentRole !== 'ci')) return 'untrusted-publication-source';
   const sourceRef = record.sourceRef ?? 'main';
   if (sourceRef === 'dev' ? record.sourceProfile !== 'demo-dev' || record.deployMode !== 'stand' || record.paymentRole !== 'ci' :
       sourceRef !== 'main' || record.sourceProfile !== undefined) return 'untrusted-publication-source';
@@ -151,7 +184,7 @@ export function chooseManualPublication(input: {
   highWaterMark: number; now: string; retentionDays: number; actor: string;
   freshPair?: VerifiedPair; ciEvidence?: CiEvidence; localChecks?: LocalChecks;
   destinationId?: string; treeDigest?: string; expectedCi?: CiPolicy;
-  sourceRef?: 'main' | 'dev';
+  sourceRef?: 'main' | 'dev'; sourcePolicy?: 'demo-publication-only';
   pendingDestinations?: string[];
   retainedReleases?: { releaseId: string; destinationId: string; treeDigest: string }[];
   rollback?: { snapshotId: string; releaseId?: string; confirmed: boolean; reason?: string; reasonHeadNotPublished?: string };
@@ -189,8 +222,11 @@ export function chooseManualPublication(input: {
   const pair = input.freshPair;
   if (!pair || pair.commit !== input.headCommit || pair.testRunConclusion !== 'success') return refuse('no-fresh-verified-pair-for-head');
   if (input.sourceRef === 'dev' && (!isPublicationRecord(pair) || publicationCiProblem(pair, policy))) return refuse('untrusted-publication-source');
-  if (!positiveCount(pair.revision) || !Number.isSafeInteger(input.highWaterMark) ||
-    input.highWaterMark < 0 || pair.revision < input.highWaterMark) return refuse('content-newer-than-verified-pair');
+  if (input.sourcePolicy === 'demo-publication-only') {
+    const metadata = demoMetadataProblem(pair);
+    if (metadata || !isPublicationRecord(pair) || pair.deployMode !== 'stand' || pair.paymentRole !== 'ci') return refuse(metadata ?? 'invalid-demo-destination');
+  } else if (pair.sourcePolicy !== undefined || !positiveCount(pair.revision) || !Number.isSafeInteger(input.highWaterMark) ||
+    input.highWaterMark < 0 || pair.revision! < input.highWaterMark) return refuse('content-newer-than-verified-pair');
   const problem = ciEvidenceProblem(input.ciEvidence, pair.commit, policy, input.sourceRef) ??
     localChecksProblem(input.localChecks, { ...pair, destinationId, treeDigest });
   if (problem) return refuse(problem);

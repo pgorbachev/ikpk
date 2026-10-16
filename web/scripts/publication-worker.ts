@@ -81,13 +81,18 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
       const { digestTree } = await import('../../scripts/publication-launcher.mjs');
       const workDir = join(scratch, 'state');
       const state = createPublicationStateStore({ remote: config.canonicalRepository, workDir, gitEnv });
-      const snapshotDir = join(scratch, 'snapshot'); mkdirSync(snapshotDir);
-      const reportsDir = join(scratch, 'reports');
+      const demo = config.sourcePolicy === 'demo-publication-only';
+      const id = demo ? randomUUID() : `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
+      const { demoEvidencePaths, saveDemoOperation, verifyDemoRecoveryEvidence } = await import('./lib/demo-publication-evidence.ts');
+      const durable = demo ? demoEvidencePaths(config, id) : undefined;
+      if (durable && (inside(root, durable.root) || inside(root, durable.bundle))) throw new Error('private evidence inside source checkout');
+      if (durable) mkdirSync(durable.root, { mode: 0o700 });
+      const snapshotDir = durable?.snapshot ?? join(scratch, 'snapshot'); mkdirSync(snapshotDir, { mode: 0o700 });
+      const reportsDir = durable?.reports ?? join(scratch, 'reports');
       const checkEnv = { PATH: safeEnv.PATH, CHAT_LOADER_SRC: config.chatLoaderSrc,
         ...(config.deployMode === 'stand' ? { DEMO_FORMS: config.demoForms ?? 'stub' } : {}) };
       const captureEnv = { ...safeEnv, ...Object.fromEntries(['CMS_URL', 'CMS_TOKEN', 'STRAPI_URL', 'STRAPI_API_TOKEN']
         .filter((name) => env[name] !== undefined).map((name) => [name, env[name]])) };
-      const id = `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
       const [user, host] = config.sshTarget.split('@');
       const transportConfig = { host, user, root: config.webRoot, destinationId: config.destinationId,
         knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases };
@@ -105,16 +110,18 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         } finally { usable = false; }
       }
       return await runNewPublication({ commit, destinationId: config.destinationId, deployMode: config.deployMode,
-        sourceRef, sourceProfile: config.sourceProfile,
+        sourceRef, sourceProfile: config.sourceProfile, sourcePolicy: config.sourcePolicy,
         paymentRole: config.paymentRole, actor: config.actor, origin: config.siteUrl, publicationId: id, releaseId: id,
         treeDir: join(webRoot, 'dist'), reportPath: join(reportsDir, 'publication.json'), env: checkEnv }, {
         readCiEvidence: (sha) => readCiEvidence({ commit: sha, sourceRef, token: env.GH_TOKEN }),
         async runChecks(input) {
           await state.readHistory();
-          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
+          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir,
+            sourcePolicy: config.sourcePolicy, publicationId: id, captureBundle: durable?.bundle, siteUrl: config.siteUrl, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
           const report = await runPublicationChecks(input, ports);
-          return { report, snapshot: readPublicationSnapshot(snapshotDir) };
+          return { report, snapshot: readPublicationSnapshot(snapshotDir, config.sourcePolicy) };
         },
+        preserveEvidence: async (operation) => { if (durable) { saveDemoOperation(durable.root, operation); await verifyDemoRecoveryEvidence(config, operation); } },
         readMain: async () => readSourceHead(), state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),

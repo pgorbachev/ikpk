@@ -7,17 +7,15 @@ import type { Snapshot } from './content-snapshot.ts';
 import type { CiEvidence, LocalChecks, PublicationRecord } from './publish-gate.ts';
 import type { PublicationStateStore } from './publication-state-store.ts';
 import type { WorkerAudit } from '../publication-worker.ts';
-import { PUBLICATION_GROUPS } from './publish-gate.ts';
+import { validCaptureProof, PUBLICATION_GROUPS } from './publish-gate.ts';
 import { PublicationProvenanceMismatchError } from './publication-state-store.ts';
 import { PublicationReportError } from './publication-report-error.ts';
 
 export interface NewPublicationInput extends PublicationCheckInput {
   publicationId: string; releaseId: string; actor: string; origin: string;
-  sourceRef?: 'main' | 'dev'; sourceProfile?: 'demo-dev';
+  sourceRef?: 'main' | 'dev'; sourceProfile?: 'demo-dev'; sourcePolicy?: 'demo-publication-only';
 }
-export interface PublishedOperation extends PublicationRecord {
-  observedEntry: number; highWaterMark: number; headAtLastCheck: string;
-}
+export type PublishedOperation = PublicationRecord & { headAtLastCheck: string; observedEntry?: number; highWaterMark?: number };
 export interface PublicationProof {
   destinationId: string; treeDigest: string; commit: string; snapshotId: string; releaseId?: string;
 }
@@ -47,6 +45,7 @@ export interface NewPublicationPorts {
   createTransport(input: { authorize: PublicationAuthorizer }): NewPublicationTransport;
   fetch: typeof globalThis.fetch;
   now(): string;
+  preserveEvidence?(operation: PublishedOperation): Promise<void>;
 }
 
 /** Called only by the installed worker with fixed real ports; no operator callbacks/reports. */
@@ -57,6 +56,9 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     if (!/^[a-f0-9]{40}$/.test(input.commit) || !input.actor?.trim() || !input.destinationId?.trim() ||
         ![input.publicationId, input.releaseId].every((id) => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) ||
         !['stand', 'prod'].includes(input.deployMode) || !['ci', 'stand', 'prod'].includes(input.paymentRole)) throw new Error('invalid publication input');
+    const demo = input.sourcePolicy === 'demo-publication-only';
+    if (demo) Object.assign(audit, { sourcePolicy: input.sourcePolicy, sourceAge: 'untracked' });
+    if (input.sourcePolicy !== undefined && (!demo || input.deployMode !== 'stand' || input.paymentRole !== 'ci' || input.origin !== 'https://staging.ikpk.su')) throw new Error('invalid demo destination');
     const origin = new URL(input.origin);
     if (!['https:', 'http:'].includes(origin.protocol) || origin.username || origin.password ||
         origin.pathname !== '/' || origin.search || origin.hash) throw new Error('invalid publication origin');
@@ -76,7 +78,10 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
       audit.localExecutedTests = report.groups.reduce((sum, group) => sum + group.executedTests, 0);
     }
     audit.snapshotId = snapshot?.snapshotId;
-    if (!snapshot || snapshot.origin?.kind !== 'live' || !snapshot.origin.url || !snapshot.origin.capturedAt ||
+    if (!snapshot || snapshot.pinned || (demo ? snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
+        snapshot.sourcePolicy !== 'demo-publication-only' || snapshot.sourceAge !== 'untracked' ||
+        ['provenance', 'revision', 'observedEntry', 'highWaterMark'].some((key) => key in snapshot) ||
+        !validCaptureProof(snapshot.captureProof, input.publicationId) : snapshot.origin?.kind !== 'live' || !snapshot.origin.url || snapshot.sourcePolicy !== undefined || snapshot.sourceAge !== undefined || snapshot.captureProof !== undefined) || !snapshot.origin?.capturedAt ||
         !Number.isFinite(Date.parse(snapshot.origin.capturedAt)) || !snapshot.fingerprint ||
         contentFingerprint(snapshot.content) !== snapshot.fingerprint ||
         snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate }) !== snapshot.snapshotId) {
@@ -85,9 +90,9 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     const provenance = snapshot.provenance;
     Object.assign(audit, { observedEntry: provenance?.observedEntry, revision: provenance?.revision, highWaterMark: provenance?.highWaterMark });
     const capturedProvenance = `observedEntry=${provenance?.observedEntry ?? 'missing'} revision=${provenance?.revision ?? 'missing'}`;
-    if (!provenance || ![provenance.observedEntry, provenance.revision, provenance.highWaterMark]
+    if (!demo && (!provenance || ![provenance.observedEntry, provenance.revision, provenance.highWaterMark]
       .every((value) => Number.isSafeInteger(value) && Number(value) > 0) ||
-      provenance.revision! < provenance.highWaterMark) {
+      provenance.revision! < provenance.highWaterMark)) {
       audit.code = 'provenance-changed';
       throw new Error(`snapshot provenance requires accepted current state: ${capturedProvenance} highWaterMark=${provenance?.highWaterMark ?? 'missing'}`);
     }
@@ -105,6 +110,7 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
       throw new Error(reportProblem);
     }
     async function checkState() {
+      if (demo) return { publications: [] }; // DEMO has no journal observation; append still uses the existing state branch.
       const state = await ports.state.read(snapshot.fingerprint!).catch((error: unknown) => {
         if (error instanceof PublicationProvenanceMismatchError) {
           Object.assign(audit, { code: 'provenance-changed', latestEntry: error.latestEntry, highWaterMark: error.highWaterMark });
@@ -126,7 +132,8 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     if (!Number.isFinite(Date.parse(publishedAt))) throw new Error('invalid publication timestamp');
     const operation: PublishedOperation = {
       ...identity, publicationId: input.publicationId, releaseId: input.releaseId, actor: input.actor,
-      revision: provenance.revision!, observedEntry: provenance.observedEntry, highWaterMark: provenance.highWaterMark,
+      ...(demo ? { recordKind: 'publication-snapshot' as const, sourcePolicy: 'demo-publication-only' as const, sourceAge: 'untracked' as const, captureProof: snapshot.captureProof! } :
+        { revision: provenance!.revision!, observedEntry: provenance!.observedEntry, highWaterMark: provenance!.highWaterMark }),
       headAtLastCheck: input.commit, referenceDate: snapshot.referenceDate, capturedAt: snapshot.origin.capturedAt,
       publishedAt, testRunConclusion: 'success', ciEvidence, localChecks: report,
       deployMode: input.deployMode, paymentRole: input.paymentRole,
@@ -134,10 +141,11 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     };
     selectedOperation = operation;
     const decision = chooseManualPublication({ headCommit: input.commit, headAtLastCheck: input.commit,
-      highWaterMark: provenance.highWaterMark, actor: input.actor, now: publishedAt, retentionDays: 0,
+      highWaterMark: provenance?.highWaterMark ?? 0, sourcePolicy: input.sourcePolicy, actor: input.actor, now: publishedAt, retentionDays: 0,
       freshPair: operation, verifiedPairs: state.publications, ciEvidence, localChecks: report,
       destinationId: input.destinationId, treeDigest, sourceRef: input.sourceRef });
     if (decision.action !== 'publish') throw new Error(decision.reason ?? 'publication refused');
+    await ports.preserveEvidence?.(structuredClone(operation));
     let usable = true;
     const authorize: PublicationAuthorizer = async (request) => {
       if (!usable || request.destinationId !== operation.destinationId) throw new Error('publication authorization destination mismatch');

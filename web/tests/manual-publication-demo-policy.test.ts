@@ -52,13 +52,26 @@ describe('DEMO runner consumes the trusted immutable capture', () => {
     expect(events).not.toContain('state'); expect(existsSync(f.pendingPath)).toBe(false);
   });
 
-  it.each(['missing-proof', 'foreign-capture', 'foreign-source', 'journal-provenance'] as const)('rejects %s before transport', async (fault) => {
+  it.each(['missing-proof', 'foreign-capture', 'foreign-source', 'journal-provenance', 'journal-number', 'pinned'] as const)('rejects %s before transport', async (fault) => {
     const f = demoRunnerFixture();
     if (fault === 'missing-proof') Reflect.deleteProperty(f.snapshot, 'captureProof');
-    if (fault === 'foreign-capture') Reflect.get(f.snapshot, 'captureProof').captureId = 'other-publication';
-    if (fault === 'foreign-source') Reflect.get(f.snapshot, 'captureProof').sourceId = 'other-cms';
+    if (fault === 'foreign-capture') Reflect.set(f.snapshot.captureProof!, 'captureId', 'other-publication');
+    if (fault === 'foreign-source') Reflect.set(f.snapshot.captureProof!, 'sourceId', 'other-cms');
+    if (fault === 'journal-number') Object.assign(f.snapshot, { revision: 4 });
+    if (fault === 'pinned') f.snapshot.pinned = true;
     if (fault === 'journal-provenance') f.snapshot.provenance = { observedEntry: 4, revision: 4, highWaterMark: 4 };
     await expect(runNewPublication(f.input, f.ports)).rejects.toThrow();
+    expect(f.state.connections).toBe(0); expect(f.current()).toBe('old'); expect(f.index).toEqual([]);
+  });
+
+  it('saves the exact checked operation before any transport and blocks if durable evidence cannot be saved', async () => {
+    const f = demoRunnerFixture();
+    f.ports.preserveEvidence = async (operation) => {
+      expect(operation).toMatchObject({ sourcePolicy: POLICY, sourceAge: 'untracked', captureProof: f.snapshot.captureProof });
+      expect(f.state.connections).toBe(0);
+      throw new Error('evidence disk unavailable');
+    };
+    await expect(runNewPublication(f.input, f.ports)).rejects.toThrow('evidence disk unavailable');
     expect(f.state.connections).toBe(0); expect(f.current()).toBe('old'); expect(f.index).toEqual([]);
   });
 
@@ -83,10 +96,20 @@ describe('DEMO runner consumes the trusted immutable capture', () => {
 });
 
 describe('confirmed DEMO rollback keeps retained bytes and historical proof', () => {
-  it('reuses a retained publication snapshot without requiring a fabricated journal revision', async () => {
+  it('refuses a retained DEMO record with missing capture proof before transport', async () => {
     const f = rollbackFixture({ destinationId: 'stand', deployMode: 'stand', origin: 'https://staging.ikpk.su' }); cleanups.push(f.clean);
     delete (f.original as Partial<typeof f.original>).revision;
     Object.assign(f.original, { recordKind: 'publication-snapshot', sourcePolicy: POLICY, sourceAge: 'untracked' });
+    await expect(runPublicationRollback(f.input, f.ports)).rejects.toThrow('no verified original');
+    expect(f.appended).toEqual([]);
+  });
+
+  it('reuses a retained publication snapshot without requiring a fabricated journal revision', async () => {
+    const f = rollbackFixture({ destinationId: 'stand', deployMode: 'stand', origin: 'https://staging.ikpk.su' }); cleanups.push(f.clean);
+    delete (f.original as Partial<typeof f.original>).revision;
+    Object.assign(f.original, { recordKind: 'publication-snapshot', sourcePolicy: POLICY, sourceAge: 'untracked',
+      captureProof: { version: 1, method: 'quiesced-sqlite-backup', sourceId: 'demo193-cms', captureId: f.original.publicationId,
+        schemaDigest: '1'.repeat(64), databaseDigest: '2'.repeat(64), mediaManifestDigest: '3'.repeat(64), bundleDigest: '4'.repeat(64) } });
     const history = structuredClone(f.history);
     const result = await runPublicationRollback(f.input, f.ports);
     expect(result).toMatchObject({ rollbackOfPublicationId: f.original.publicationId, recordKind: 'publication-snapshot',
@@ -122,7 +145,7 @@ describe('protected DEMO source policy', () => {
     if (fault === 'host') f.config.sshTarget = 'deploy@192.0.2.7';
     if (fault === 'origin') f.config.siteUrl = 'https://other.example.invalid';
     if (fault === 'mode') f.config.deployMode = 'prod';
-    if (fault === 'unknown-policy') f.config.sourcePolicy = 'demo-if-journal-missing';
+    if (fault === 'unknown-policy') Reflect.set(f.config, 'sourcePolicy', 'demo-if-journal-missing');
     if (fault === 'payment-stand' || fault === 'payment-prod') {
       f.config.paymentRole = fault === 'payment-stand' ? 'stand' : 'prod';
       // Valid payment configuration proves this is the DEMO policy refusal.

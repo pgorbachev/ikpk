@@ -13,7 +13,7 @@ export interface RollbackInput {
   publicationId: string; releaseId: string; destinationId: string; actor: string;
   confirmed: boolean; reason: string; origin: string;
 }
-export interface RollbackOperation extends PublicationRecord {
+export type RollbackOperation = PublicationRecord & {
   rollbackOfPublicationId: string; reason: string; rollbackChecks: LocalChecks;
 }
 export interface RollbackCheckInput {

@@ -27,6 +27,7 @@ export interface PublicationAdapterRuntime {
 export interface PublicationAdapterOptions {
   webRoot: string; snapshotDir: string; reportsDir: string; ledgerDir: string;
   captureEnv: Record<string, string | undefined>;
+  sourcePolicy?: 'demo-publication-only'; publicationId?: string; captureBundle?: string; siteUrl?: string;
   payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 
@@ -161,6 +162,11 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
     if (canonical(context.treeDir) !== canonical(output) || (!retained && (!('snapshotDir' in context) || canonical(context.snapshotDir) !== canonical(options.snapshotDir)))) throw new Error('foreign publication tree or snapshot');
     const env: Record<string, string | undefined> = { ...safeEnv(context.env),
       ...(retained ? { PUBLICATION_RETAINED_TREE: '1' } : { CONTENT_SNAPSHOT_DIR: options.snapshotDir, PUBLICATION_LEDGER_DIR: options.ledgerDir }),
+      ...(!retained && options.sourcePolicy === 'demo-publication-only' ? {
+        PUBLICATION_SOURCE_POLICY: options.sourcePolicy, PUBLICATION_CAPTURE_BUNDLE: options.captureBundle,
+        PUBLICATION_CAPTURE_ID: options.publicationId,
+        DEMO_PROFILE: 'demo193', DEMO_SITE_URL: options.siteUrl, CHAT_OFFLINE_MESSAGE: 'absent',
+      } : {}),
       DEPLOY_MODE: context.deployMode, PAYMENT_ROLE: context.paymentRole, PUBLICATION_TREE_DIR: output,
       PUBLICATION_DESTINATION_ID: context.destinationId,
       PUBLICATION_COMMIT: context.commit, PUBLICATION_SNAPSHOT_ID: context.snapshotId,
@@ -191,6 +197,19 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
   return {
     async capture() {
       if (retained) throw new Error('retained checks cannot capture');
+      if (options.sourcePolicy === 'demo-publication-only') {
+        if (!options.publicationId || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(options.publicationId) ||
+            !options.captureBundle || options.siteUrl !== 'https://staging.ikpk.su') throw new Error('missing protected DEMO capture configuration');
+        await run('/usr/bin/sudo', ['-n', '/usr/local/sbin/ikpk-demo-capture-request', options.publicationId], safeEnv(options.captureEnv));
+        const { verifyBundle } = await import('../../../scripts/lib/server-capture-bundle.mjs');
+        const bundle = await verifyBundle(options.captureBundle, { schemaRoot: join(webRoot, '../cms/src') });
+        if (bundle.proof.captureId !== options.publicationId) throw new Error('foreign capture operation');
+        await run(join(webRoot, 'node_modules/.bin/tsx'), ['scripts/capture-content-snapshot.ts', '--server-capture', options.captureBundle],
+          { ...safeEnv(options.captureEnv), CONTENT_SNAPSHOT_DIR: options.snapshotDir });
+        const snapshot = readPublicationSnapshot(options.snapshotDir, options.sourcePolicy);
+        if (snapshot.captureProof?.captureId !== options.publicationId) throw new Error('foreign snapshot operation');
+        return { snapshotId: snapshot.snapshotId!, snapshotDir: options.snapshotDir };
+      }
       const source = options.captureEnv.CMS_URL ?? options.captureEnv.STRAPI_URL;
       if (!source) throw new Error('live CMS URL required');
       const env = { ...safeEnv(options.captureEnv), ...Object.fromEntries(['CMS_URL', 'STRAPI_URL', 'CMS_TOKEN', 'STRAPI_API_TOKEN'].filter((name) => options.captureEnv[name] !== undefined).map((name) => [name, options.captureEnv[name]])), CONTENT_SNAPSHOT_DIR: options.snapshotDir };
