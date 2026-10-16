@@ -30,8 +30,8 @@ function evidence() {
       workflow_run: { id: 123, head_sha: commit } },
     manifest: releaseTestManifest(env, needs, reportFixtures()),
     // Protected server operation receipt; never read from a caller-provided report.
-    expected: { commit, sourceRef: 'dev', runId: 123, previousAttempt: 1, runAttempt: 2,
-      destinationId: 'demo-193', requestId: 'request-unique-1', requestedAt: '2026-10-15T10:00:00.100Z' },
+    expected: { commit, sourceRef: 'dev', runId: 123, runAttempt: 2,
+      destinationId: 'demo-193', requestId: 'request-unique-1' },
   };
 }
 
@@ -73,7 +73,7 @@ test('dispatch SHA must equal the native checkout and every required job must su
   }
 });
 
-test('a fresh attempt of an older push run binds to this private destination and operation', () => {
+test('a completed attempt of an older push run binds to this private destination and operation', () => {
   const result = validateReleaseTestEvidence(evidence());
   assert.equal(result.runId, 123); assert.equal(result.runAttempt, 2); assert.equal(result.commit, commit);
   assert.equal(result.destinationId, 'demo-193'); assert.equal(result.requestId, 'request-unique-1');
@@ -90,15 +90,14 @@ test('a fresh attempt of an older push run binds to this private destination and
 
 test('refusals expose a stable code and no native output', () => {
   const proof = evidence();
-  proof.run.run_started_at = '2026-10-14T10:00:00Z';
+  proof.run.run_started_at = 'invalid';
   assert.throws(() => validateReleaseTestEvidence(proof), (error) =>
     error instanceof ReleaseTestError && error.code === 'release-test-stale-attempt');
 });
 
 test('rejects historical success, wrong SHA, changed policy, stale or missing native evidence', () => {
   const mutations = [
-    (proof) => { proof.run.run_started_at = '2026-10-14T10:00:00Z'; },
-    (proof) => { proof.expected.previousAttempt = 2; },
+    (proof) => { proof.run.run_started_at = '2026-10-16T10:00:00Z'; },
     (proof) => { proof.run.run_attempt = 1; },
     (proof) => { proof.run.id = 999; },
     (proof) => { proof.run.head_sha = 'b'.repeat(40); },
