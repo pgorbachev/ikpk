@@ -295,8 +295,8 @@ test('Linux root-operation flock survives launcher loss and excludes recovery un
   const launcher = spawn(process.execPath, ['--input-type=module', '-e', `import { execFileSync } from 'node:child_process'; execFileSync(${JSON.stringify(capture.command)}, ${JSON.stringify(capture.args)}, {stdio:'inherit'});`], { env, stdio: 'ignore' });
   const launcherExited = once(launcher, 'exit');
   let operationPid; let recovery;
-  t.after(() => { launcher.kill('SIGKILL'); recovery?.kill('SIGKILL'); if (operationPid) { try { process.kill(operationPid, 'SIGKILL'); } catch {} } });
-  const waitFor = async (path) => { for (let i = 0; i < 500; i++) { try { return readFileSync(path, 'utf8'); } catch {} await delay(10); } throw new Error(`mutex fixture timeout: ${path}`); };
+  t.after(() => { launcher.kill('SIGKILL'); recovery?.kill('SIGKILL'); if (operationPid) { try { process.kill(operationPid, 'SIGKILL'); } catch { /* The child may already have exited before teardown. */ } } });
+  const waitFor = async (path) => { for (let i = 0; i < 500; i++) { try { return readFileSync(path, 'utf8'); } catch { /* The fixture writes this marker asynchronously. */ } await delay(10); } throw new Error(`mutex fixture timeout: ${path}`); };
   operationPid = Number(await waitFor(join(f.root, 'capture.entered')));
   launcher.kill('SIGKILL'); await launcherExited;
   const next = invocation(['recover-leases']);

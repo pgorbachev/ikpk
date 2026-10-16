@@ -1,6 +1,6 @@
 /** Root helper core. Caller owns the existing global publication/migration flock. */
 import { createHash } from 'node:crypto';
-import { closeSync, openSync, fsyncSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, existsSync, realpathSync, renameSync, unlinkSync, chmodSync, chownSync } from 'node:fs';
+import { closeSync, openSync, fsyncSync, readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync, existsSync, renameSync, unlinkSync, chmodSync, chownSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import * as sqlite from 'node:sqlite';
 const { DatabaseSync, backup } = sqlite;
