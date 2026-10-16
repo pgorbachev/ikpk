@@ -118,10 +118,11 @@ export function releaseTestManifest(env, needs, reports) {
  * artifact: native artifact metadata from this run; name releaseTestArtifactName(attempt).
  * manifest: JSON downloaded from that artifact (not an operator-supplied pathname).
  * expected: protected operation context, not fields received from the CLI:
- *   {commit, sourceRef, runId, previousAttempt, runAttempt, requestedAt, destinationId, requestId}.
- * requestedAt is the server's time just before POST re-run; runAttempt must be the
- * newly observed attempt > previousAttempt. The protected loader selects repository,
- * branch, workflow, and run, retains that receipt, and never accepts caller reports.
+ *   {commit, sourceRef, runId, runAttempt, destinationId, requestId}.
+ * The attempt is the exact native attempt selected for this SHA. Job and artifact
+ * timestamps must belong to that attempt; evidence need not postdate this operation.
+ * The protected loader selects repository, branch, workflow, and run, retains that
+ * receipt, and never accepts caller reports.
  * Success is source evidence only; historical exclusions are explicit owner decisions
  * and candidate acceptance still needs its own evidence. Failure throws
  * ReleaseTestError with a stable code.
@@ -130,20 +131,11 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   sha(expected?.commit);
   id(expected?.destinationId, 'destination');
   id(expected?.requestId, 'request');
-  const requestedAt = Date.parse(expected?.requestedAt);
   const startedAt = Date.parse(run?.run_started_at);
-  // GitHub timestamps have second precision. Attempt identity is exact; floor the
-  // local dispatch timestamp rather than inventing subsecond native precision.
-  const earliest = Math.floor(requestedAt / 1000) * 1000;
-  if (!Number.isFinite(requestedAt) || !Number.isFinite(startedAt) || startedAt < earliest) {
-    refuse('release-test-stale-attempt', 'release tests run predates this operation');
-  }
+  if (!Number.isFinite(startedAt)) refuse('release-test-stale-attempt', 'release tests attempt start is missing');
   if (!['workflow_dispatch', 'push'].includes(run.event)) refuse('release-test-invalid-identity', 'invalid release test event');
   same(integer(run.id, 'run ID'), integer(expected.runId, 'expected run ID'), 'selected run');
   same(integer(run.run_attempt, 'run attempt'), integer(expected.runAttempt, 'expected attempt'), 'selected attempt');
-  if (integer(expected.runAttempt, 'expected attempt') <= integer(expected.previousAttempt, 'previous attempt')) {
-    refuse('release-test-stale-attempt', 'release tests require a fresh attempt for this operation');
-  }
   same(run.repository?.full_name, 'pgorbachev/ikpk', 'repository');
   same(run.head_repository?.full_name, 'pgorbachev/ikpk', 'source repository');
   if (!['main', 'dev'].includes(expected.sourceRef)) refuse('release-test-invalid-identity', 'invalid source branch');
@@ -170,8 +162,8 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
   same(artifact?.expired, false, 'artifact retention');
   same(integer(artifact?.workflow_run?.id, 'artifact run ID'), integer(run.id, 'run ID'), 'artifact run ID');
   same(artifact?.workflow_run?.head_sha, expected.commit, 'artifact commit');
-  if (!Number.isFinite(Date.parse(artifact?.created_at)) || Date.parse(artifact.created_at) < earliest) {
-    refuse('release-test-stale-artifact', 'release tests artifact predates this operation');
+  if (!Number.isFinite(Date.parse(artifact?.created_at)) || Date.parse(artifact.created_at) < startedAt) {
+    refuse('release-test-stale-artifact', 'release tests artifact predates this attempt');
   }
   for (const name of ['identity', 'source-tests', 'supplemental', 'visual', 'provision']) {
     same(manifest?.results?.[name], 'success', `${name} result`);
@@ -183,15 +175,15 @@ export function validateReleaseTestEvidence({ run, jobs, artifact, manifest, exp
     const job = matching[0];
     same(integer(job.run_id, 'job run ID'), integer(run.id, 'run ID'), 'job run ID');
     same(job.head_sha, expected.commit, 'job commit');
-    if (!Number.isFinite(Date.parse(job.started_at)) || Date.parse(job.started_at) < earliest) {
-      refuse('release-test-stale-attempt', `release tests job predates this operation: ${name}`);
+    if (!Number.isFinite(Date.parse(job.started_at)) || Date.parse(job.started_at) < startedAt) {
+      refuse('release-test-stale-attempt', `release tests job predates this attempt: ${name}`);
     }
     same(job.status, 'completed', 'job status');
     same(job.conclusion, 'success', `job ${name}`);
   }
   return { policyVersion: RELEASE_TEST_POLICY_VERSION, repository: run.repository.full_name,
     workflow: run.path, sourceRef: run.head_branch, runId: run.id, runAttempt: run.run_attempt, commit: expected.commit,
-    requestedAt: expected.requestedAt, startedAt: run.run_started_at, conclusion: run.conclusion,
+    startedAt: run.run_started_at, conclusion: run.conclusion,
     suites: [...SOURCE_SUITES], results: { ...manifest.results },
     reportPolicyVersion: REPORT_POLICY_VERSION, sourceProfile: SOURCE_REPORT_PROFILE, reports, nonTestChecks: [...NON_TEST_CHECKS],
     jobs: REQUIRED_SOURCE_JOBS.map((name) => { const job = jobs.find((entry) => entry.name === name);
