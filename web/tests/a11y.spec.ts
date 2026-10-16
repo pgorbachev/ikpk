@@ -750,20 +750,40 @@ test('long seminar title does not widen the mobile page', async ({ page }) => {
 });
 
 test.describe('Text reflow across font and viewport changes', () => {
+  for (const width of [1920, 2560]) {
+    test(`${width}px desktop header fits 200% text inside its capped bar`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 812 });
+      const response = await page.goto('/');
+      expect(response?.status()).toBe(200);
+      await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+      await expect.poll(() => findOverflowingVisible(page, 'header.topnav')).toEqual([]);
+    });
+  }
+
   test('header follows text size and viewport without oscillation', async ({ page }) => {
     const response = await page.goto('/');
     expect(response?.status()).toBe(200);
     const header = page.locator('header.topnav');
-    for (const width of [375, 768, 1280, 1601]) {
+    for (const width of [375, 768, 1280, 1601, 1920, 2560]) {
       await page.setViewportSize({ width, height: 812 });
       await expect(header).not.toHaveClass(/topnav-text-reflow/);
       expect(await findOverflowingVisible(page, 'header.topnav')).toEqual([]);
     }
-    for (const width of [1280, 375, 1280]) {
+    for (const width of [1280, 375, 1280, 1601, 1920, 2560, 1920, 1601]) {
       await page.setViewportSize({ width, height: 812 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
       if (width > 900) await expect(header).toHaveClass(/topnav-text-reflow/);
       else await expect(header).not.toHaveClass(/topnav-text-reflow/);
+      const states = await header.evaluate((element) => new Promise<boolean[]>((resolve) => {
+        const samples: boolean[] = [];
+        const sample = () => {
+          samples.push(element.classList.contains('topnav-text-reflow'));
+          if (samples.length === 3) resolve(samples);
+          else requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      }));
+      expect(states).toEqual([width > 900, width > 900, width > 900]);
       expect(await findOverflowingVisible(page, 'header.topnav')).toEqual([]);
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });

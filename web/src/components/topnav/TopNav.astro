@@ -112,14 +112,16 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 <script>
   (() => {
     const header = document.querySelector<HTMLElement>('header.topnav');
-    if (header) {
+    const bar = header?.querySelector<HTMLElement>('.topnav-bar');
+    if (header && bar) {
       const reflow = () => {
         const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        header.classList.toggle('topnav-text-reflow', window.innerWidth > 900 && header.clientWidth <= 56.25 * rootSize);
+        header.classList.toggle('topnav-text-reflow', window.innerWidth > 900 && bar.clientWidth <= 56.25 * rootSize);
       };
-      // Observe width AND height: a root-font change grows the header even when
-      // the viewport does not resize. The condition never depends on row count.
-      new ResizeObserver(reflow).observe(header);
+      // The bar is capped at 1240px even on wider viewports. Observe height too:
+      // a root-font change grows it while its width remains fixed. The condition
+      // never depends on the resulting row count.
+      new ResizeObserver(reflow).observe(bar);
       reflow();
     }
     const d = document.querySelector<HTMLDetailsElement>('details.topnav-mobile');
