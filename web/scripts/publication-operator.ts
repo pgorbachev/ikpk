@@ -82,6 +82,7 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
       const { createPublicationStateStore } = await import('./lib/publication-state-store.ts');
       const state = createPublicationStateStore({ remote: config.canonicalRepository, workDir: join(scratch, 'state'), gitEnv });
       if (input.command === 'accept-state') {
+        if (config.sourcePolicy === 'demo-publication-only') throw new Error('DEMO has no journal state to accept');
         const result = await state.acceptState({ expectedObservedEntry: input.expectedObservedEntry,
           fingerprint: input.fingerprint, actor: config.actor });
         return { code: 'state-accepted', observedEntry: input.expectedObservedEntry, revision: result.entry.number };
@@ -92,7 +93,7 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
         knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases };
       if (input.command === 'recover') {
         const { verifyServedPublication } = await import('./lib/published-state.ts');
-        const { isPublicationRecord, ciEvidenceProblem, localChecksProblem, rollbackEvidenceProblem } = await import('./lib/publish-gate.ts');
+        const { publicationAgeProblem, isPublicationRecord, publicationCiProblem, localChecksProblem, rollbackEvidenceProblem } = await import('./lib/publish-gate.ts');
         let usable = true, operation: PublicationRecord | undefined, recorded = false;
         const authorize = async (request: { action: string; destinationId: string; operation?: PublicationRecord }) => {
           if (!usable || request.destinationId !== config.destinationId) throw new Error('recovery authorization destination mismatch');
@@ -103,10 +104,14 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
               candidate.deployMode !== config.deployMode || !/^[a-f0-9]{40}$/.test(candidate.commit) ||
               !/^snap:[a-f0-9]{64}$/.test(candidate.snapshotId) || !/^[a-f0-9]{64}$/.test(candidate.treeDigest) ||
               ![candidate.publicationId, candidate.releaseId].every((id) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) ||
-              !Number.isSafeInteger(candidate.revision) || candidate.revision <= 0 || candidate.testRunConclusion !== 'success' ||
-              ciEvidenceProblem(candidate.ciEvidence, candidate.commit) || localChecksProblem(candidate.localChecks, candidate) ||
+              publicationAgeProblem(candidate) || candidate.testRunConclusion !== 'success' ||
+              publicationCiProblem(candidate) || localChecksProblem(candidate.localChecks, candidate) ||
               rollbackEvidenceProblem(candidate)) throw new Error('invalid recovery evidence');
           if (operation && !isDeepStrictEqual(candidate, operation)) throw new Error('recovery authorization operation mismatch');
+          if (candidate.sourcePolicy === 'demo-publication-only') {
+            const { verifyDemoRecoveryEvidence } = await import('./lib/demo-publication-evidence.ts');
+            await verifyDemoRecoveryEvidence(config, candidate);
+          }
           operation ??= structuredClone(candidate);
           return { destinationId: operation.destinationId, commit: operation.commit, snapshotId: operation.snapshotId, treeDigest: operation.treeDigest };
         };
@@ -131,9 +136,14 @@ export async function runPublicationOperator({ argv, env, cwd }: OperatorInput) 
       const { createRollbackCheckPorts } = await import('./lib/publication-check-adapters.ts');
       const { runRollbackChecks } = await import('./lib/publication-rollback-checks.ts');
       const { digestTree } = await import('../../scripts/publication-launcher.mjs');
-      const reportsDir = join(scratch, 'reports');
       const publicationId = `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
-      return await runPublicationRollback({ ...input, publicationId, destinationId: config.destinationId, actor: config.actor, origin: config.siteUrl }, {
+      const { demoEvidencePaths, saveDemoOperation, verifyDemoRecoveryEvidence } = await import('./lib/demo-publication-evidence.ts');
+      const durable = config.sourcePolicy === 'demo-publication-only' ? demoEvidencePaths(config, publicationId) : undefined;
+      if (durable) mkdirSync(durable.root, { mode: 0o700 });
+      const reportsDir = durable?.reports ?? join(scratch, 'reports');
+      return await runPublicationRollback({ ...input, publicationId, destinationId: config.destinationId, deployMode: config.deployMode,
+        actor: config.actor, origin: config.siteUrl }, {
+        preserveEvidence: async (operation) => { if (durable) { saveDemoOperation(durable.root, operation); if (operation.sourcePolicy === 'demo-publication-only') await verifyDemoRecoveryEvidence(config, operation); } },
         state, digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
         async runChecks(checkInput, readiness) {

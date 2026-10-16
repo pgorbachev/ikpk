@@ -16,6 +16,7 @@ export default defineConfig({
     exclude: [
       // Astro Container tests use the dedicated render config.
       'tests/home-people.render.test.ts',
+      'tests/footer-snapshot-clock.render.test.ts',
       'tests/demo193-profile.render.test.ts',
       // Live publication assertions need the captured snapshot and completed artifact.
       'tests/publication/snapshot.test.ts',

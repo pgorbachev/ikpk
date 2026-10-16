@@ -12,9 +12,9 @@ export const REPORT_NAMES = ['web-unit-head.json', 'web-render-head.json', 'web-
 export const API = 'https://api.github.com/repos/pgorbachev/ikpk';
 export const CANARY = 'test-only-arbitrary-credential-canary';
 
-export function ciFixture() {
+export function ciFixture(branch: 'main' | 'dev' = 'main') {
   const run = {
-    id: 801, head_sha: SHA, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success',
+    id: 801, head_sha: SHA, head_branch: branch, event: 'push', status: 'completed', conclusion: 'success',
     path: '.github/workflows/test.yml', repository: { full_name: 'pgorbachev/ikpk' },
     head_repository: { full_name: 'pgorbachev/ikpk' },
   };
@@ -43,7 +43,7 @@ export function ciFixture() {
     const page = Number(url.searchParams.get('page') ?? '1');
     let value: unknown;
     let pageCount = 1;
-    if (url.pathname === '/repos/pgorbachev/ikpk/git/ref/heads/main') value = { ref: 'refs/heads/main', object: { sha: state.main } };
+    if (url.pathname === `/repos/pgorbachev/ikpk/git/ref/heads/${branch}`) value = { ref: `refs/heads/${branch}`, object: { sha: state.main } };
     else if (/\/actions\/workflows\/[^/]+\/runs$/.test(url.pathname)) {
       value = { total_count: state.runPages.flat().length, workflow_runs: state.runPages[page - 1] ?? [] };
       pageCount = state.runPages.length;

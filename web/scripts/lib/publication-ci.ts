@@ -11,6 +11,7 @@ export interface CiArtifact {
 }
 export interface ReadCiEvidenceOptions {
   commit: string; token?: string; fetch?: typeof globalThis.fetch;
+  sourceRef?: 'main' | 'dev';
   readReports?: (artifact: CiArtifact, context: { fetch: typeof globalThis.fetch; token?: string }) => Promise<Record<string, unknown>>;
 }
 interface WorkflowRun {
@@ -65,6 +66,8 @@ async function downloadReports(artifact: CiArtifact, context: { fetch: typeof gl
 /** Read-only GitHub API. Policy and endpoints are fixed, never selected by an operator report. */
 export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<CiEvidence> {
   if (!/^[a-f0-9]{40}$/.test(options.commit)) throw new Error('invalid-main-sha');
+  const sourceRef = options.sourceRef ?? 'main';
+  if (!['main', 'dev'].includes(sourceRef)) throw new Error('untrusted-source-ref');
   const fetcher = options.fetch ?? globalThis.fetch;
   async function request(url: string): Promise<{ response: Response; data: Record<string, unknown> }> {
     if (!url.startsWith(`${API}/`)) throw new Error('untrusted-ci-endpoint');
@@ -88,12 +91,13 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
     }
     return result;
   }
-  const { data: main } = await request(`${API}/git/ref/heads/main`);
-  if (main.ref !== 'refs/heads/main' || (main.object as { sha?: string } | undefined)?.sha !== options.commit) throw new Error('head-moved');
-  const runs = await list<WorkflowRun>(`${API}/actions/workflows/test.yml/runs?branch=main&head_sha=${options.commit}&per_page=100`, 'workflow_runs');
-  const run = runs.filter((candidate) => candidate.head_sha === options.commit && candidate.head_branch === 'main' &&
+  const { data: main } = await request(`${API}/git/ref/heads/${sourceRef}`);
+  if (main.ref !== `refs/heads/${sourceRef}` || (main.object as { sha?: string } | undefined)?.sha !== options.commit) throw new Error('head-moved');
+  const runs = await list<WorkflowRun>(`${API}/actions/workflows/test.yml/runs?branch=${sourceRef}&head_sha=${options.commit}&per_page=100`, 'workflow_runs');
+  const run = runs.filter((candidate) => candidate.head_sha === options.commit && candidate.head_branch === sourceRef &&
     candidate.path === PUBLICATION_CI_POLICY.workflow && candidate.repository?.full_name === PUBLICATION_CI_POLICY.repository &&
-    candidate.head_repository?.full_name === PUBLICATION_CI_POLICY.repository && ['push', 'schedule'].includes(candidate.event))
+    candidate.head_repository?.full_name === PUBLICATION_CI_POLICY.repository &&
+    (candidate.event === 'push' || (sourceRef === 'main' && candidate.event === 'schedule')))
     .sort((a, b) => b.id - a.id)[0];
   if (!run || !Number.isSafeInteger(run.id) || run.id <= 0 || run.status !== 'completed' || run.conclusion !== 'success') throw new Error('no-successful-mandatory-main-run');
   const jobs = await list<Job>(`${API}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`, 'jobs');
@@ -118,10 +122,10 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
   }
   if (emptyReport) throw new PublicationReportError(`ci-report-count:${emptyReport}:0`, 'ci', count);
   const evidence: CiEvidence = { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
-    branch: 'main', commit: options.commit, runId: run.id, event: run.event, conclusion: 'success', executedTests: count,
+    branch: sourceRef, commit: options.commit, runId: run.id, event: run.event, conclusion: 'success', executedTests: count,
     jobs: jobs.filter((job) => PUBLICATION_CI_POLICY.requiredJobs.includes(job.name)).map(({ name }) => ({ name, conclusion: 'success' })),
   };
-  const problem = ciEvidenceProblem(evidence, options.commit);
+  const problem = ciEvidenceProblem(evidence, options.commit, PUBLICATION_CI_POLICY, sourceRef);
   if (problem) throw new Error(problem);
   return evidence;
 }

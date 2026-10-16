@@ -3,9 +3,12 @@ import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
 export interface DestinationConfig {
+  sourcePolicy?: 'demo-publication-only';
+  captureBundleRoot?: string; publicationEvidenceRoot?: string;
   canonicalRepository: string; sshTarget: string; destinationId: string; deployMode: 'stand' | 'prod';
   paymentRole: 'ci' | 'stand' | 'prod'; siteUrl: string; actor: string; webRoot: string;
   knownHostsFile: string; keepReleases: number; chatLoaderSrc: string; demoForms?: string;
+  sourceRef?: 'main' | 'dev'; sourceProfile?: 'demo-dev';
   payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 export const inside = (root: string, path: string) => {
@@ -43,6 +46,13 @@ export function readConfig(path: string): DestinationConfig {
         (remote.protocol !== 'ssh:' && remote.username)) throw new Error('untrusted-config');
   }
   if (config.deployMode === 'prod' && config.demoForms === 'stub') throw new Error('untrusted-config');
+  const sourceRef = config.sourceRef ?? 'main';
+  if (sourceRef === 'dev' ? config.sourceProfile !== 'demo-dev' || config.deployMode !== 'stand' || config.paymentRole !== 'ci' ||
+      !/^(?!root@)[a-z_][a-z0-9_-]*@193\.124\.115\.99$/.test(config.sshTarget) || config.siteUrl !== 'https://staging.ikpk.su' :
+      sourceRef !== 'main' || config.sourceProfile !== undefined) throw new Error('untrusted-config');
+  if (config.sourcePolicy !== undefined && (config.sourcePolicy !== 'demo-publication-only' ||
+      config.deployMode !== 'stand' || config.paymentRole !== 'ci' || config.siteUrl !== 'https://staging.ikpk.su' ||
+      !/^(?!root@)[a-z_][a-z0-9_-]*@193\.124\.115\.99$/.test(config.sshTarget))) throw new Error('untrusted-config');
   publicUrl(config.siteUrl, true);
   if (config.chatLoaderSrc !== 'none') publicUrl(config.chatLoaderSrc);
   protectedFile(config.knownHostsFile);

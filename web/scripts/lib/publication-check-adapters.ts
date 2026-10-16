@@ -1,3 +1,4 @@
+import { candidateFiles, candidateProjects, candidateInventory, rollbackInventory } from '../../tests/helpers/publication-browser-inventory.ts';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -26,6 +27,7 @@ export interface PublicationAdapterRuntime {
 export interface PublicationAdapterOptions {
   webRoot: string; snapshotDir: string; reportsDir: string; ledgerDir: string;
   captureEnv: Record<string, string | undefined>;
+  sourcePolicy?: 'demo-publication-only'; publicationId?: string; captureBundle?: string; siteUrl?: string;
   payment?: { endpoint: string; mode: 'test' | 'prod'; shopId: string; siteOrigin: string };
 }
 
@@ -35,7 +37,8 @@ export interface RollbackAdapterOptions {
 }
 type CheckContext = PublicationCheckContext | RollbackCheckContext;
 
-export const PUBLICATION_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'] as const;
+export const PUBLICATION_BROWSER_ARGS = ['test', ...candidateFiles.map((file) => `tests/${file}`), 'tests/compat.spec.ts', '--config', 'playwright.publication.config.ts', ...candidateProjects.map((project) => `--project=${project}`), '--reporter=json'];
+export const ROLLBACK_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.rollback.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'];
 const safeNames = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'HOME', 'TMPDIR', 'DEMO_FORMS', 'CHAT_LOADER_SRC'] as const;
 const defaultPath = `${dirname(process.execPath)}:/usr/bin:/bin`;
 function safeEnv(source: Record<string, string | undefined>) {
@@ -64,7 +67,7 @@ function treeFiles(root: string): string[] {
   }
   walk(root); return files;
 }
-const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.xml': 'application/xml', '.txt': 'text/plain' };
+const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.xml': 'application/xml', '.txt': 'text/plain' };
 const defaultRuntime: PublicationAdapterRuntime = {
   run(command) {
     return new Promise((resolveResult, reject) => {
@@ -118,9 +121,9 @@ function vitestResult(value: unknown): CheckResult {
   if (!assertions.length) throw new PublicationReportError('incomplete Vitest evidence', 'local', 0);
   return { conclusion: 'success', executedTests: assertions.length };
 }
-function playwrightResult(value: unknown): CheckResult {
+function playwrightResult(value: unknown, expectedProjects: readonly string[], inventory: Record<string, number>): CheckResult {
   const report = object(value); const stats = object(report.stats);
-  const projects = new Set<string>(); let count = 0;
+  const projects = new Set<string>(); const completed: Record<string, number> = {}; let count = 0;
   function visit(suites: unknown[]) {
     for (const raw of suites) {
       const suite = object(raw);
@@ -129,8 +132,11 @@ function playwrightResult(value: unknown): CheckResult {
         if (spec.ok !== true) throw new Error('browser spec failed');
         for (const rawTest of array(spec.tests)) {
           const test = object(rawTest); const results = array(test.results);
-          if (!['desktop', 'mobile'].includes(String(test.projectName)) || test.expectedStatus !== 'passed' || test.status !== 'expected' ||
+          if (!expectedProjects.includes(String(test.projectName)) || test.expectedStatus !== 'passed' || test.status !== 'expected' ||
               results.length !== 1 || object(results[0]).status !== 'passed' || object(results[0]).retry !== 0) throw new Error('incomplete browser test');
+          const file = String(spec.file ?? suite.file ?? '').split('/').at(-1);
+          const key = `${file}@${test.projectName}`;
+          completed[key] = (completed[key] ?? 0) + 1;
           projects.add(String(test.projectName)); count++;
         }
       }
@@ -138,7 +144,8 @@ function playwrightResult(value: unknown): CheckResult {
     }
   }
   visit(array(report.suites));
-  if (!count || projects.size !== 2 || array(report.errors).length || stats.expected !== count ||
+  if (Object.keys(completed).length !== Object.keys(inventory).length || Object.entries(inventory).some(([key, expected]) => completed[key] !== expected)) throw new Error('incomplete browser inventory');
+  if (!count || projects.size !== expectedProjects.length || array(report.errors).length || stats.expected !== count ||
       stats.unexpected !== 0 || stats.skipped !== 0 || stats.flaky !== 0) throw new Error('incomplete browser evidence');
   return { conclusion: 'success', executedTests: count };
 }
@@ -155,6 +162,11 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
     if (canonical(context.treeDir) !== canonical(output) || (!retained && (!('snapshotDir' in context) || canonical(context.snapshotDir) !== canonical(options.snapshotDir)))) throw new Error('foreign publication tree or snapshot');
     const env: Record<string, string | undefined> = { ...safeEnv(context.env),
       ...(retained ? { PUBLICATION_RETAINED_TREE: '1' } : { CONTENT_SNAPSHOT_DIR: options.snapshotDir, PUBLICATION_LEDGER_DIR: options.ledgerDir }),
+      ...(!retained && options.sourcePolicy === 'demo-publication-only' ? {
+        PUBLICATION_SOURCE_POLICY: options.sourcePolicy, PUBLICATION_CAPTURE_BUNDLE: options.captureBundle,
+        PUBLICATION_CAPTURE_ID: options.publicationId,
+        DEMO_PROFILE: 'demo193', DEMO_SITE_URL: options.siteUrl, CHAT_OFFLINE_MESSAGE: 'absent',
+      } : {}),
       DEPLOY_MODE: context.deployMode, PAYMENT_ROLE: context.paymentRole, PUBLICATION_TREE_DIR: output,
       PUBLICATION_DESTINATION_ID: context.destinationId,
       PUBLICATION_COMMIT: context.commit, PUBLICATION_SNAPSHOT_ID: context.snapshotId,
@@ -185,6 +197,19 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
   return {
     async capture() {
       if (retained) throw new Error('retained checks cannot capture');
+      if (options.sourcePolicy === 'demo-publication-only') {
+        if (!options.publicationId || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(options.publicationId) ||
+            !options.captureBundle || options.siteUrl !== 'https://staging.ikpk.su') throw new Error('missing protected DEMO capture configuration');
+        await run('/usr/bin/sudo', ['-n', '/usr/local/sbin/ikpk-demo-capture-request', options.publicationId], safeEnv(options.captureEnv));
+        const { verifyBundle } = await import('../../../scripts/lib/server-capture-bundle.mjs');
+        const bundle = await verifyBundle(options.captureBundle, { schemaRoot: join(webRoot, '../cms/src') });
+        if (bundle.proof.captureId !== options.publicationId) throw new Error('foreign capture operation');
+        await run(join(webRoot, 'node_modules/.bin/tsx'), ['scripts/capture-content-snapshot.ts', '--server-capture', options.captureBundle],
+          { ...safeEnv(options.captureEnv), CONTENT_SNAPSHOT_DIR: options.snapshotDir });
+        const snapshot = readPublicationSnapshot(options.snapshotDir, options.sourcePolicy);
+        if (snapshot.captureProof?.captureId !== options.publicationId) throw new Error('foreign snapshot operation');
+        return { snapshotId: snapshot.snapshotId!, snapshotDir: options.snapshotDir };
+      }
       const source = options.captureEnv.CMS_URL ?? options.captureEnv.STRAPI_URL;
       if (!source) throw new Error('live CMS URL required');
       const env = { ...safeEnv(options.captureEnv), ...Object.fromEntries(['CMS_URL', 'STRAPI_URL', 'CMS_TOKEN', 'STRAPI_API_TOKEN'].filter((name) => options.captureEnv[name] !== undefined).map((name) => [name, options.captureEnv[name]])), CONTENT_SNAPSHOT_DIR: options.snapshotDir };
@@ -223,13 +248,15 @@ function createCheckPorts(options: PublicationAdapterOptions | RollbackAdapterOp
       return suite('payment-readiness', context, { PUBLICATION_PAYMENT_READY_RESPONSE_FILE: path });
     },
     checkPaymentPreflight: async (context: CheckContext) => { if (context.paymentRole === 'ci') throw new Error('ci must not contact payment API'); return suite('payment-preflight', context); },
+    // The legacy report group browser-smoke now admits the full candidate matrix.
+    // Retained rollback deliberately executes only its separate eight-check smoke.
     async checkBrowser(context: CheckContext) {
       const env = contextEnv(context); const path = reportPath('browser');
       const preview = await runtime.startPreview({ treeDir: context.treeDir, env });
       try {
-        await run(join(webRoot, 'node_modules/.bin/playwright'), [...PUBLICATION_BROWSER_ARGS],
+        await run(join(webRoot, 'node_modules/.bin/playwright'), [...(retained ? ROLLBACK_BROWSER_ARGS : PUBLICATION_BROWSER_ARGS)],
           { ...env, PUBLICATION_BASE_URL: preview.baseUrl, PLAYWRIGHT_JSON_OUTPUT_NAME: path, PUBLICATION_BROWSER_OUTPUT: join(options.reportsDir, 'browser-output') });
-        return playwrightResult(JSON.parse(readFileSync(path, 'utf8')));
+        return playwrightResult(JSON.parse(readFileSync(path, 'utf8')), retained ? ['desktop', 'mobile'] : candidateProjects, retained ? rollbackInventory : candidateInventory);
       } finally { await preview.close(); }
     },
     digest: (treeDir: string) => digestTree(treeDir, treeFiles(treeDir)),

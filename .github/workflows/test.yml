@@ -1,10 +1,23 @@
 name: Tests
 
 on:
+  workflow_call:
+    inputs:
+      artifact_suffix:
+        description: Preserve separate artifacts for each release workflow attempt
+        type: string
+        required: false
+        default: ''
+      strict_reports:
+        description: Retain native reports for strict release-only aggregation
+        type: boolean
+        required: false
+        default: false
   pull_request:
   push:
     branches:
       - main
+      - dev
   # Проверки по изменению контента; события не публикуют сайт.
   repository_dispatch:
     types: [cms-content-changed]
@@ -17,9 +30,10 @@ permissions:
 
 concurrency:
   # Прогоны main — отдельная группа без отмены текущего (очередь на один ожидающий).
+  # Reusable release tests имеют отдельную группу на run/attempt и не отменяют standalone CI.
   # Обычные PR сохраняют tests-${{ github.ref }} с отменой.
-  group: ${{ (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'required-tests-main' || format('tests-{0}', github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'repository_dispatch' && github.event_name != 'schedule' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+  group: ${{ inputs.artifact_suffix != '' && format('release-source-{0}-{1}', github.run_id, github.run_attempt) || (github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'required-tests-main' || format('tests-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.artifact_suffix == '' && github.event_name != 'repository_dispatch' && github.event_name != 'schedule' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 jobs:
   content-snapshot:
@@ -53,7 +67,7 @@ jobs:
       - name: Upload content snapshot
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: content-snapshot
+          name: content-snapshot${{ inputs.artifact_suffix }}
           path: ${{ github.workspace }}/content-snapshot
           retention-days: 14
 
@@ -86,7 +100,7 @@ jobs:
       - name: Download content snapshot
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: content-snapshot
+          name: content-snapshot${{ inputs.artifact_suffix }}
           path: ${{ github.workspace }}/content-snapshot
 
 
@@ -121,9 +135,15 @@ jobs:
         # состоянии). Когда заказчик передаст реальный адрес, эта переменная переедет туда.
         env:
           CHAT_LOADER_SRC: 'none'
+          RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
         run: |
+          historical_args=()
+          if [ "$RELEASE_STRICT_REPORTS" = true ]; then
+            export PAYMENT_ROLE=ci
+            historical_args+=(--exclude tests/parity-compare.test.ts)
+          fi
           npm run build
-          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json"
+          npx vitest run --config vitest.build.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-build-head.json" "${historical_args[@]}"
 
       # Демо-сборка и проверки её вывода — ВНУТРИ обязательного прогона, а не рядом.
       # Гейтом публикации является ровно то, что лежит внутри workflow Tests: отдельный
@@ -235,7 +255,7 @@ jobs:
       - name: Save executed test counts for local publication gate
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: publication-ci-counts
+          name: publication-ci-counts${{ inputs.artifact_suffix }}
           path: |
             ${{ runner.temp }}/web-unit-head.json
             ${{ runner.temp }}/web-render-head.json
@@ -246,10 +266,23 @@ jobs:
       - name: Upload demo site
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: web-dist-demo
+          name: web-dist-demo${{ inputs.artifact_suffix }}
           path: web/dist-demo
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retain native release reports (unit)
+        if: always() && inputs.strict_reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-raw-unit-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/web-unit-head.json
+            ${{ runner.temp }}/web-render-head.json
+            ${{ runner.temp }}/web-build-head.json
+            ${{ runner.temp }}/web-demo-head.json
+          if-no-files-found: error
+          retention-days: 90
 
   dependency-invariants:
     name: Dependency update invariants
@@ -442,8 +475,15 @@ jobs:
       - name: Run unit tests
         run: npx vitest run --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/scripts-unit-head.json"
 
-      - name: Verify manual publication transport
-        run: node --test tests/publication-*.test.mjs
+      - name: Verify native server and publication processes
+        env:
+          RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
+        run: |
+          if [ "$RELEASE_STRICT_REPORTS" = true ]; then
+            node --test --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/publication-native.tap" tests/*.test.mjs
+          else
+            node --test tests/*.test.mjs
+          fi
 
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope
@@ -498,6 +538,17 @@ jobs:
             --head-report "$RUNNER_TEMP/scripts-unit-head.json" \
             "${changed_args[@]}" "${base_args[@]}" "${eligible_args[@]}"
 
+      - name: Retain native release reports (scripts)
+        if: always() && inputs.strict_reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-raw-scripts-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/scripts-unit-head.json
+            ${{ runner.temp }}/publication-native.tap
+          if-no-files-found: error
+          retention-days: 90
+
   e2e-smoke:
     name: Playwright smoke (desktop + mobile)
     runs-on: ubuntu-latest
@@ -524,7 +575,7 @@ jobs:
       - name: Download content snapshot
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: content-snapshot
+          name: content-snapshot${{ inputs.artifact_suffix }}
           path: ${{ github.workspace }}/content-snapshot
 
 
@@ -567,11 +618,17 @@ jobs:
       - name: Download preview-role site
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: web-dist-demo
+          name: web-dist-demo${{ inputs.artifact_suffix }}
           path: web/dist-demo
 
       - name: Run payment form e2e (preview role)
-        run: npm run test:e2e:payment-preview
+        env:
+          RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-payment-preview-head.json
+        run: |
+          report_args=()
+          if [ "$RELEASE_STRICT_REPORTS" = true ]; then report_args+=(--reporter=json); fi
+          npm run test:e2e:payment-preview -- "${report_args[@]}"
 
       # Артефакт роли `stand` собирается здесь, а не скачивается: джоб unit-and-build его не
       # собирает, а набор без артефакта своей роли — это «проверять нечего», выданное за
@@ -587,7 +644,13 @@ jobs:
       # контракту нет вовсе. Состав набора задаёт `testMatch` конфигурации, а не перечень
       # файлов в этой команде.
       - name: Run payment e2e (stand role)
-        run: npm run test:e2e:payment-stand
+        env:
+          RELEASE_STRICT_REPORTS: ${{ inputs.strict_reports }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-payment-stand-head.json
+        run: |
+          report_args=()
+          if [ "$RELEASE_STRICT_REPORTS" = true ]; then report_args+=(--reporter=json); fi
+          npm run test:e2e:payment-stand -- "${report_args[@]}"
 
       # Внешние виджеты. Отдельным шагом и в ЭТОМ workflow: публикацию останавливает
       # только `Tests`, а проверка, положенная в файл, который не запускает ни один
@@ -612,6 +675,8 @@ jobs:
       # Вставка сделана НИЖЕ всех строк, на которые ссылаются артефакты (максимум — 470),
       # чтобы не сдвинуть их номера и не покрасить обязательный гейт ссылок.
       - name: Run section title alignment tests
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-section-head.json
         run: npm run test:e2e:section-titles
 
       # Фильтр расписания по месяцу. Отдельным шагом и в ЭТОМ workflow: публикацию
@@ -635,7 +700,7 @@ jobs:
       #
       # Вызывается сам vitest, а не `npm run test:stand`: тот собирает заново.
       - name: Run stand build tests (dist-stand checks)
-        run: npx vitest run --config vitest.stand.config.ts --reporter=default
+        run: npx vitest run --config vitest.stand.config.ts --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-stand-head.json"
 
       # Подача внешних аккаунтов в подвале: доступное имя, размер цели, индикатор фокуса,
       # контраст марки в каждой теме и число дорожек сетки на трёх полосах ширины.
@@ -649,6 +714,8 @@ jobs:
       # Место — в конце, по той же причине, что у шага выше: пока подача не реализована, эта
       # проверка красная, и раньше существующих шагов она скрывала бы их результат.
       - name: Run footer social icons e2e
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-footer-head.json
         run: npm run test:e2e:footer-social
 
       - name: Classify dependency-only change for browser test-count
@@ -726,6 +793,26 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: playwright-smoke-report
+          name: playwright-smoke-report${{ inputs.artifact_suffix }}
           path: web/playwright-report/
           retention-days: 7
+
+      - name: Retain native release reports (browser)
+        if: always() && inputs.strict_reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-raw-browser-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/web-stand-head.json
+            ${{ runner.temp }}/playwright-smoke-head.json
+            ${{ runner.temp }}/playwright-a11y-head.json
+            ${{ runner.temp }}/playwright-catalog-head.json
+            ${{ runner.temp }}/playwright-seminar-head.json
+            ${{ runner.temp }}/playwright-payment-preview-head.json
+            ${{ runner.temp }}/playwright-payment-stand-head.json
+            ${{ runner.temp }}/playwright-widgets-head.json
+            ${{ runner.temp }}/playwright-section-head.json
+            ${{ runner.temp }}/playwright-schedule-head.json
+            ${{ runner.temp }}/playwright-footer-head.json
+          if-no-files-found: error
+          retention-days: 90

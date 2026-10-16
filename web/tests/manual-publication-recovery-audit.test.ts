@@ -24,3 +24,9 @@ it('state acceptance emits only the explicitly observed entry and resulting revi
   expect(createWorkerAudit({ operation: { ...pair, code: 'state-accepted', observedEntry: 6, localChecks, ciEvidence } }))
     .toEqual({ version: 1, status: 'success', code: 'state-accepted', observedEntry: 6, revision: 7 });
 });
+it('DEMO recovery exposes untracked age without a manufactured journal revision', () => {
+  const { revision: _revision, ...identity } = pair; void _revision;
+  expect(createWorkerAudit({ operation: { ...identity, code: 'recovered', localChecks, ciEvidence,
+    sourcePolicy: 'demo-publication-only', sourceAge: 'untracked' } })).toEqual({ version: 1, status: 'success',
+    code: 'recovered', ...identity, sourcePolicy: 'demo-publication-only', sourceAge: 'untracked', localExecutedTests: 9, ciExecutedTests: 51 });
+});

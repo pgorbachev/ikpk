@@ -43,7 +43,8 @@ const ONE_MOMENT = '2026-08-21T11:00:00+03:00';
 const TEMPLATE_MARKER = { path: '/', selector: 'h1' };
 
 interface Shot {
-  readonly image: Buffer;
+  readonly image: Buffer | null;
+  readonly geometry: { selector: string; x: number; y: number; width: number; height: number }[];
   readonly markerText: string;
   readonly fullHeight: number;
 }
@@ -66,6 +67,10 @@ interface Shot {
  * (`web/tests/visual-baseline.spec.ts:31`, `waitForLoadState('networkidle')`).
  */
 async function settle(page: import('@playwright/test').Page): Promise<void> {
+  // Fast scripted scrolling can miss a lazy-image rendering frame, especially with
+  // the installed clock. Load the actual image bytes before comparing screenshots;
+  // lazy widget behavior has its own candidate scenario. This changes no geometry.
+  await page.evaluate(() => { for (const image of document.images) image.loading = 'eager'; });
   const step = await page.evaluate(() => Math.max(1, Math.floor(window.innerHeight * 0.75)));
   while (true) {
     const { height, viewportHeight, currentTop } = await page.evaluate(() => ({
@@ -88,21 +93,21 @@ async function settle(page: import('@playwright/test').Page): Promise<void> {
     () =>
       Promise.all(
         [...document.images]
-          .filter((img) => !img.complete)
+          .filter((img) => img.getClientRects().length > 0 && !img.complete)
           .map((img) => new Promise((done) => {
             img.addEventListener('load', done, { once: true });
             img.addEventListener('error', done, { once: true });
           })),
       ),
   );
-  await page.evaluate(() => Promise.all([...document.images].map((img) => img.decode().catch(() => undefined))));
+  await page.evaluate(() => Promise.all([...document.images].filter((img) => img.getClientRects().length > 0).map((img) => img.decode().catch(() => undefined))));
 }
 
-async function shot(browser: Browser, path: string, viewport: ViewportSize): Promise<Shot> {
+async function shot(browser: Browser, path: string, viewport: ViewportSize, baseURL: string): Promise<Shot> {
   // Своя страница на каждый прогон: `page.clock.install` ставится на страницу один раз, и
   // два снимка одной и той же страницы совпали бы тривиально — предметом стала бы
   // способность браузера дважды отдать один кадр, а не детерминированность вывода.
-  const context = await browser.newContext({ viewport });
+  const context = await browser.newContext({ viewport, baseURL });
   const page = await context.newPage();
   try {
     await page.clock.install({ time: new Date(ONE_MOMENT) });
@@ -115,7 +120,16 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
     await expect(marker, `${path}: маркера шаблона нет — страница не отрендерена`).toBeVisible();
     const markerText = ((await marker.textContent()) ?? '').trim();
     const fullHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-    const image = await page.screenshot({
+    const geometry = await page.evaluate(() => {
+      const selectors = ['header.topnav', 'main', 'footer', '.section-title', '[data-reviews-embed]', '[data-award-row]', '.program-card', '.teacher-card', '.article-card'];
+      return selectors.flatMap((selector) => [...document.querySelectorAll(selector)].map((node) => {
+        const box = node.getBoundingClientRect();
+        return { selector, x: box.x + scrollX, y: box.y + scrollY, width: box.width, height: box.height };
+      }));
+    });
+    // Source visual tests retain PNG comparison. The publication candidate repeats
+    // geometry on its single artifact; no fixture PNG or second build is involved.
+    const image = process.env.PUBLICATION_TREE_DIR ? null : await page.screenshot({
       fullPage: true,
       animations: 'disabled',
       // Единственный датозависимый фрагмент этой возможности исключается явно и здесь
@@ -123,7 +137,7 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
       // другого требования.
       mask: [page.locator(`[${SEL_AWARD_ROW}]`)],
     });
-    return { image, markerText, fullHeight };
+    return { image, geometry, markerText, fullHeight };
   } finally {
     await context.close();
   }
@@ -132,10 +146,10 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
 test.describe('визуальные эталоны не зависят от ответа сторонних сервисов', () => {
   test.describe.configure({ timeout: 120_000 });
 
-  test('два прогона при одном моменте дают одни снимки', async ({ browser }, testInfo) => {
+  test('два прогона при одном моменте дают одни снимки', async ({ browser, baseURL }, testInfo) => {
     const viewport = testInfo.project.use.viewport as ViewportSize;
-    const first = await shot(browser, TEMPLATE_MARKER.path, viewport);
-    const second = await shot(browser, TEMPLATE_MARKER.path, viewport);
+    const first = await shot(browser, TEMPLATE_MARKER.path, viewport, baseURL!);
+    const second = await shot(browser, TEMPLATE_MARKER.path, viewport, baseURL!);
 
     // Контроль отрендеренности — ДО сравнения: он и есть доказательство непустоты
     // предмета. Пустая страница дала бы два одинаковых снимка и зелёный вердикт.
@@ -150,8 +164,13 @@ test.describe('визуальные эталоны не зависят от от
     ).toBeGreaterThan(viewport.height);
     expect(first.fullHeight, 'высота документа разошлась между прогонами').toBe(second.fullHeight);
 
+    if (process.env.PUBLICATION_TREE_DIR) {
+      expect(first.geometry.length, 'no candidate geometry exercised').toBeGreaterThan(4);
+      expect(second.geometry, 'two candidate contexts produced different geometry').toEqual(first.geometry);
+      return;
+    }
     expect(
-      second.image.equals(first.image),
+      second.image!.equals(first.image!),
       'два снимка при ОДНОМ И ТОМ ЖЕ подставленном моменте и подставных ответах сторонних ' +
         'сервисов различаются на неизменном дереве: значит облик зависит от чего-то, что ' +
         'проверка не привела к известному состоянию',

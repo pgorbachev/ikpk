@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
 import { REPO_ROOT, requiredTestWorkflows, loadWorkflows, stripShellComments } from './helpers/workflows';
 
@@ -34,6 +35,7 @@ const TRANSFER = /(?:^|[\s;&|(/])(?:rsync|scp|sftp|ssh)(?:\s|$)|(?:deploy-web|pu
 const PUBLICATION_STATE = /\bpublication-cli\.(?:ts|js)\s+(?:reconcile|record-pair|merge-pairs)\b|\bpublication:(?:reconcile|record-pair|merge-pairs)\b/;
 type ReadSource = (file: string) => string | undefined;
 const readSource: ReadSource = (file) => existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+const readWorkflowSource: ReadSource = (file) => existsSync(file) && realpathSync(file) === file ? readSource(file) : undefined;
 function commands(text: string, cwd: string, read: ReadSource, seen = new Set<string>()): string[] {
   const clean = stripShellComments(text), out = [clean];
   for (const match of clean.matchAll(/\bnpm\s+(?:run\s+)?([\w:-]+)/g)) {
@@ -58,8 +60,8 @@ function commands(text: string, cwd: string, read: ReadSource, seen = new Set<st
 function findings(sources: Source[], read: ReadSource = readSource): string[] {
   if (!sources.length) throw new Error('no workflow configurations');
   const out: string[] = [];
-  const visit = (value: unknown, path: string, cwd: string, tests: boolean): void => {
-    if (Array.isArray(value)) { value.forEach((item, i) => visit(item, `${path}[${i}]`, cwd, tests)); return; }
+  const visit = (value: unknown, path: string, cwd: string, tests: boolean, chain: Set<string>, jobLevel = false): void => {
+    if (Array.isArray(value)) { value.forEach((item, i) => visit(item, `${path}[${i}]`, cwd, tests, chain)); return; }
     if (typeof value !== 'object' || value === null) return;
     const node = record(value);
     const defaults = record(record(node.defaults).run)['working-directory'];
@@ -74,7 +76,35 @@ function findings(sources: Source[], read: ReadSource = readSource): string[] {
       }
       if (key === 'environment' && (item === 'github-pages' || record(item).name === 'github-pages')) out.push(`${at}: Pages environment`);
       if (key === 'concurrency' && (item === 'pages' || record(item).group === 'pages')) out.push(`${at}: Pages concurrency`);
-      if (key === 'uses' && typeof item === 'string' && !NON_PUBLISHING_ACTIONS.has(item.split('@')[0])) out.push(`${at}: unreviewed action ${item}`);
+      if (key === 'uses' && typeof item === 'string') {
+        if (item.startsWith('./')) {
+          // Only job-level reusable workflows, never a blanket local action exemption.
+          // Canonical filenames exclude traversal, nested directories, refs and expressions.
+          if (!jobLevel || !/^\.\/\.github\/workflows\/[\w-]+\.ya?ml$/.test(item)) {
+            out.push(`${at}: invalid local reusable workflow ${item}`);
+          } else {
+            const target = resolve(REPO_ROOT, item);
+            if (chain.has(target)) out.push(`${at}: reusable workflow cycle ${item}`);
+            else {
+              // Reject workflow symlinks rather than following an alias outside
+              // this checkout (virtual fixture readers have no filesystem).
+              const text = read === readSource ? readWorkflowSource(target) : read(target);
+              if (text === undefined) out.push(`${at}: unreadable reusable workflow ${item}`);
+              else {
+                let referenced: Source | undefined;
+                try { [referenced] = parseWorkflows([{ file: item, text }]); }
+                catch { out.push(`${at}: invalid reusable workflow ${item}`); }
+                if (referenced) {
+                  const event = referenced.doc.on;
+                  if (!(event === 'workflow_call' || (Array.isArray(event) && event.includes('workflow_call')) || Object.hasOwn(record(event), 'workflow_call')))
+                    out.push(`${at}: reusable workflow has no workflow_call ${item}`);
+                  visit(referenced.doc, `${at} -> ${item}`, REPO_ROOT, tests || referenced.doc.name === 'Tests', new Set([...chain, target]));
+                }
+              }
+            }
+          }
+        } else if (!NON_PUBLISHING_ACTIONS.has(item.split('@')[0])) out.push(`${at}: unreviewed action ${item}`);
+      }
       if (key === 'secrets' && item === 'inherit') out.push(`${at}: unbounded inherited credentials`);
       if (key === 'publication-record' && tests) out.push(`${at}: publication job in Tests`);
       if ((key === 'run' || key === 'script') && typeof item === 'string') {
@@ -89,10 +119,13 @@ function findings(sources: Source[], read: ReadSource = readSource): string[] {
       if (typeof item === 'string')
         for (const secret of item.matchAll(/secrets(?:\.([A-Za-z_][\w]*)|\[['"]([^'"]+)['"]\])/g))
           if (!NON_DEPLOY_SECRETS.has(secret[1] ?? secret[2])) out.push(`${at}: unreviewed secret ${secret[1] ?? secret[2]}`);
-      visit(item, at, workingDir, tests);
+      if (key === 'jobs') {
+        for (const [name, job] of Object.entries(record(item))) visit(job, `${at}.${name}`, workingDir, tests, chain, true);
+      } else visit(item, at, workingDir, tests, chain);
     }
   };
-  for (const { file, doc } of sources) visit(doc, file, REPO_ROOT, doc.name === 'Tests');
+  for (const { file, doc } of sources)
+    visit(doc, file, REPO_ROOT, doc.name === 'Tests', new Set([resolve(REPO_ROOT, '.github/workflows', file)]));
   return out;
 }
 function fixture(extra: Document = {}): Source[] {
@@ -126,6 +159,60 @@ describe('manual publication: hosted configuration', () => {
   });
 });
 describe('hosted configuration gate: targeted negative fixtures', () => {
+  const localCall = (target = './.github/workflows/check.yml'): Source[] => fixture({ jobs: { check: { uses: target } } });
+  const reusable = (extra: Document = {}): string => JSON.stringify({
+    name: 'Reusable checks', on: { workflow_call: {} }, permissions: { contents: 'read' },
+    jobs: { check: { steps: [{ run: 'npm test', 'working-directory': 'web' }] } }, ...extra,
+  });
+  it('audits nested local reusable workflows, including inherited Tests restrictions', () => {
+    const files = new Map([
+      [join(REPO_ROOT, '.github/workflows/check.yml'), reusable({ jobs: { next: { uses: './.github/workflows/nested.yml' } } })],
+      [join(REPO_ROOT, '.github/workflows/nested.yml'), reusable()],
+    ]);
+    expect(findings(localCall(), (file) => files.get(file))).toEqual([]);
+    for (const bad of [
+      { permissions: { contents: 'write' } },
+      { permissions: { pages: 'write' } },
+      { jobs: { send: { steps: [{ run: 'rsync web/dist host:/releases/' }] } } },
+      { jobs: { state: { steps: [{ run: 'npm run publication:reconcile' }] } } },
+      { jobs: { action: { steps: [{ uses: 'example/publish@main' }] } } },
+      { jobs: { secret: { secrets: 'inherit', uses: 'example/publish/.github/workflows/release.yml@main' } } },
+    ]) {
+      files.set(join(REPO_ROOT, '.github/workflows/nested.yml'), reusable(bad));
+      expect(findings(localCall(), (file) => files.get(file))).not.toEqual([]);
+    }
+  });
+  it.each([
+    './.github/workflows/../../outside.yml', './.github/workflows/nested/../../../outside.yml',
+    './.github/workflows/check.yml@main', './.github/workflows/${{ inputs.file }}.yml', './local-action',
+  ])('rejects noncanonical local workflow path %s before reading', (target) => {
+    let reads = 0;
+    expect(findings(localCall(target), () => { reads++; return reusable(); })).not.toEqual([]);
+    expect(reads).toBe(0);
+  });
+  it('rejects local step actions, missing/invalid callees and missing workflow_call', () => {
+    expect(findings(fixture({ jobs: { check: { steps: [{ uses: './.github/workflows/check.yml' }] } } }), () => reusable())).not.toEqual([]);
+    for (const text of [undefined, 'jobs: [', '# empty', reusable({ on: { push: {} } })])
+      expect(findings(localCall(), () => text)).not.toEqual([]);
+  });
+  it('rejects workflow symlink aliases with the real filesystem reader', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'workflow-symlink-'));
+    const target = join(scratch, 'workflow.yml');
+    try {
+      symlinkSync(join(REPO_ROOT, '.github/workflows/test.yml'), target);
+      expect(readSource(target)).toContain('workflow_call:');
+      expect(readWorkflowSource(target)).toBeUndefined();
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  });
+  it('rejects direct and indirect reusable workflow cycles', () => {
+    expect(findings(localCall('./.github/workflows/test.yml'), () => reusable())).toContain(
+      'test.yml.jobs.check.uses: reusable workflow cycle ./.github/workflows/test.yml');
+    const files = new Map([
+      [join(REPO_ROOT, '.github/workflows/check.yml'), reusable({ jobs: { next: { uses: './.github/workflows/nested.yml' } } })],
+      [join(REPO_ROOT, '.github/workflows/nested.yml'), reusable({ jobs: { next: { uses: './.github/workflows/check.yml' } } })],
+    ]);
+    expect(findings(localCall(), (file) => files.get(file)).some((message) => message.includes('workflow cycle'))).toBe(true);
+  });
   it('rejects absent, invalid and semantically empty configurations', () => {
     expect(() => parseWorkflows([])).toThrow('no workflow');
     expect(() => parseWorkflows([{ file: 'broken.yml', text: 'jobs: [' }])).toThrow();

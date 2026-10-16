@@ -144,11 +144,11 @@
     "identity": "style|body:a46d6650aafc400b"
   },
   {
-    "slotId": "src:components/Footer.astro:L108:C1:style",
+    "slotId": "src:components/Footer.astro:L109:C1:style",
     "file": "components/Footer.astro",
     "nodeKind": "element",
-    "locator": "components/Footer.astro:L108:C1:style",
-    "fingerprint": "6ee1fd0d30da0686c3f63125f1dfa25bc012a2910babac9d4f6b7527541b98e3",
+    "locator": "components/Footer.astro:L109:C1:style",
+    "fingerprint": "8f9ffaf42c91443389d9f47ead011c4157955eddab0d3638a68bb94fc10dc84f",
     "identity": "style|body:4d309e4536d94a02"
   },
   {
@@ -252,8 +252,8 @@
     "file": "components/home/sections/CtaBand.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/CtaBand.astro:L21:C1:style",
-    "fingerprint": "8da04e2272ea7717c7c71d10e0e92908c54d429060f15d422c8550bc4983dcd5",
-    "identity": "style|body:156d5bc8760e4106"
+    "fingerprint": "d50f713388d435196be38a6fbf2d49d9f8da8d0e3b69af1b185b63e0444a77ab",
+    "identity": "style|body:9d749eaa0da5128b"
   },
   {
     "slotId": "src:components/home/sections/CtaEditorial.astro:L15:C1:style",
@@ -704,35 +704,35 @@
     "identity": "style|is:global=empty:|body:def58a97cd57778e"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L111:C1:script",
+    "slotId": "src:components/topnav/TopNav.astro:L112:C1:script",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L111:C1:script",
-    "fingerprint": "7c853c2a1fba04d26d11cdb05e86e129bd56f4e13c4b3674ca5a6b21d9956ca3",
-    "identity": "script|body:6dbed8a11dc1048e"
+    "locator": "components/topnav/TopNav.astro:L112:C1:script",
+    "fingerprint": "d9e9de96c076b6e44f3dd7974d320a130521ca4a5670e49ef09585572f7f0dbe",
+    "identity": "script|body:82fd8074dd0f6ec4"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L127:C1:style",
+    "slotId": "src:components/topnav/TopNav.astro:L141:C1:style",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L127:C1:style",
-    "fingerprint": "ddb64d3d681438d16fa84b65c3fb684665060f232d0d7ff2fe84ddb0bdfe6fa0",
-    "identity": "style|body:ba94c15092980111"
+    "locator": "components/topnav/TopNav.astro:L141:C1:style",
+    "fingerprint": "785a92041cce22f3a2a1c87ab4ad63b6931ca88455c5e69a5bdc2ca178c2d167",
+    "identity": "style|body:fd07c7b79124aacc"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L46:C17:svg",
+    "slotId": "src:components/topnav/TopNav.astro:L47:C17:svg",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L46:C17:svg",
-    "fingerprint": "65b75f1bc7c916ee817a98060207987b4215ca569c9e39f3ee9d233611e4c99e",
+    "locator": "components/topnav/TopNav.astro:L47:C17:svg",
+    "fingerprint": "389c54fbaec22f0ada1be4c905eb991e3b0cddd62ecd8c769f95965b5b607949",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:chev|viewBox=quoted:0 0 12 12"
   },
   {
-    "slotId": "src:components/topnav/TopNav.astro:L93:C15:svg",
+    "slotId": "src:components/topnav/TopNav.astro:L94:C15:svg",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
-    "locator": "components/topnav/TopNav.astro:L93:C15:svg",
-    "fingerprint": "546846126ad83d183c72db6b35c71163eddb4c6ebd0dea2ad28d4df0eb97c158",
+    "locator": "components/topnav/TopNav.astro:L94:C15:svg",
+    "fingerprint": "00469c939555da7d9835ede6fa705c4533b1be52fa439a62926d828ad118f79a",
     "identity": "svg|aria-hidden=quoted:true|fill=quoted:none|height=quoted:18|stroke-width=quoted:1.6|stroke=quoted:currentColor|viewBox=quoted:0 0 24 24|width=quoted:18"
   },
   {

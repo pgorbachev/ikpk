@@ -6,6 +6,7 @@ import {
   getSeminars,
   getCourseGroups,
   getArticles,
+  getSnapshotReferenceDate,
   formatPrice,
   teacherPageHref,
   type ScheduleEntry,
@@ -132,7 +133,7 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
  * dates — текущие и будущие по последнему дню (`isCurrentOrFuture`).
  * cities — населённые пункты без «Онлайн».
  */
-export function getCatalogStats(now: Date = new Date()) {
+export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())) {
   const today = now.toISOString().slice(0, 10);
   const schedule = getScheduleEntries().filter(
     (e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today)
@@ -164,7 +165,7 @@ export function getCatalogStats(now: Date = new Date()) {
  * к началу которого ещё можно приехать. Идущие события остаются на странице
  * расписания (`isCurrentOrFuture`).
  */
-export function getUpcomingSeminars(limit = 3, now: Date = new Date()): UpcomingSeminar[] {
+export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotReferenceDate())): UpcomingSeminar[] {
   const instituteByName = new Map(getInstitutes().map((i) => [i.name, i.slug]));
   const teachers = getTeachers();
   const today = now.toISOString().slice(0, 10);

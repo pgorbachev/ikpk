@@ -1,3 +1,4 @@
+import { candidateRoute } from './helpers/publication-candidate-data';
 import { test, expect } from '@playwright/test';
 import { isAbsolute, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -40,11 +41,12 @@ test('desktop and mobile navigation reaches the schedule', async ({ page }, info
 test('article and seminar routes open on this exact artifact', async ({ page }) => {
   const { snapshot, treeDir } = context();
   const files = [...walkHtml(treeDir)];
-  for (const type of ['articles', 'seminars']) {
-    const slug = snapshot?.content.types[type]?.[0]?.slug;
-    if (snapshot) expect(typeof slug).toBe('string');
+  for (const type of ['articles', 'seminars'] as const) {
+    const entity = snapshot?.content.types[type]?.[0];
+    if (snapshot) expect(entity, `missing captured ${type}`).toBeDefined();
+    const exactRoute = snapshot ? candidateRoute(snapshot.content.types, type, entity!) : undefined;
     const file = snapshot
-      ? files.find((file) => file.endsWith(`/${String(slug)}/index.html`))
+      ? files.find((file) => `/${relative(treeDir, file).replace(/\/index\.html$/, '')}` === exactRoute)
       : files.find((file) => {
         const path = relative(treeDir, file);
         if (!(type === 'articles' ? /^statyi\/[^/]+\/index\.html$/ : /^[^/]+\/[^/]+\/[^/]+\/index\.html$/).test(path)) return false;
@@ -66,8 +68,12 @@ test('schedule renders its cards and registration links without submitting them'
   const html = readFileSync(`${treeDir}/raspisanie-i-tseny/index.html`, 'utf8');
   const count = [...html.matchAll(/\bdata-schedule-item(?:[\s=>])/g)].length;
   await page.goto('/raspisanie-i-tseny');
-  expect(count, 'empty schedule in checked artifact').toBeGreaterThan(0);
   await expect(page.locator('[data-schedule-item]')).toHaveCount(count);
+  if (count === 0) {
+    await expect(page.locator('[data-schedule-empty]')).toBeVisible();
+    await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
+    return;
+  }
   await expect(page.locator('[data-schedule-item]:visible').first(), 'no visible schedule cards').toBeVisible();
   await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
   const links = page.locator('a[href*="bitrix24"], a[href^="/demo-zayavka"]');

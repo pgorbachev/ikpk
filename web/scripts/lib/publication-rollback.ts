@@ -1,5 +1,6 @@
+import { publicationAgeProblem } from './publish-gate.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { chooseManualPublication, ciEvidenceProblem, isPublicationRecord, localChecksProblem, ROLLBACK_GROUPS } from './publish-gate.ts';
+import { chooseManualPublication, publicationCiProblem, isPublicationRecord, localChecksProblem, ROLLBACK_GROUPS } from './publish-gate.ts';
 import type { WorkerAudit } from '../publication-audit.ts';
 import type { LocalChecks, PublicationRecord } from './publish-gate.ts';
 import type { PublicationAuthorizer } from './publication-runner.ts';
@@ -9,8 +10,9 @@ import { verifyServedPublication } from './published-state.ts';
 export interface RollbackInput {
   publicationId: string; releaseId: string; destinationId: string; actor: string;
   confirmed: boolean; reason: string; origin: string;
+  deployMode?: 'stand' | 'prod';
 }
-export interface RollbackOperation extends PublicationRecord {
+export type RollbackOperation = PublicationRecord & {
   rollbackOfPublicationId: string; reason: string; rollbackChecks: LocalChecks;
 }
 export interface RollbackCheckInput {
@@ -36,6 +38,7 @@ export interface RollbackPorts {
   };
   fetch: typeof globalThis.fetch;
   now(): string;
+  preserveEvidence?(operation: RollbackOperation): Promise<void>;
 }
 
 /** Installed code only: this path neither loads main nor reads CMS or old Actions runs. */
@@ -49,9 +52,10 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
       origin.pathname !== '/' || origin.search || origin.hash) throw new Error('invalid rollback origin');
   const { publications } = structuredClone(await ports.state.readHistory());
   const original = publications.find((record) => isPublicationRecord(record) && record.releaseId === input.releaseId && record.destinationId === input.destinationId);
-  if (!original || !isPublicationRecord(original) || !Number.isSafeInteger(original.revision) || original.revision <= 0 ||
+  if (!original || !isPublicationRecord(original) || publicationAgeProblem(original) ||
+      (input.deployMode !== undefined && input.deployMode !== original.deployMode) ||
       original.testRunConclusion !== 'success' ||
-      ciEvidenceProblem(original.ciEvidence, original.commit) || localChecksProblem(original.localChecks, original)) {
+      publicationCiProblem(original) || localChecksProblem(original.localChecks, original)) {
     throw new Error('no verified original retained publication');
   }
   if (publications.some((record) => isPublicationRecord(record) && record.publicationId === input.publicationId)) {
@@ -59,6 +63,7 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
   }
   const audit: WorkerAudit = { version: 1, status: 'refused', code: 'rollback-failed', commit: original.commit,
     releaseId: original.releaseId, snapshotId: original.snapshotId, treeDigest: original.treeDigest,
+    ...(original.sourcePolicy === 'demo-publication-only' ? { sourcePolicy: original.sourcePolicy, sourceAge: original.sourceAge } : {}),
     publicationId: input.publicationId, revision: original.revision, ciExecutedTests: original.ciEvidence.executedTests };
   let checking = false;
   let usable = true;
@@ -107,6 +112,7 @@ export async function runPublicationRollback(input: RollbackInput, ports: Rollba
       if (decision.action !== 'publish') throw new Error(decision.reason ?? 'rollback refused');
       operation = { ...original, publicationId: input.publicationId, actor: input.actor, publishedAt,
         rollbackOfPublicationId: original.publicationId, reason: input.reason, rollbackChecks: checks };
+      await ports.preserveEvidence?.(structuredClone(operation));
       await session.rollback({ redirectsPath: 'deploy/nginx-redirects.conf', releaseId: input.releaseId, expectedDigest: original.treeDigest, operation: structuredClone(operation),
         async recordIndex(active) {
           if (!isDeepStrictEqual(active, operation)) throw new Error('active rollback operation mismatch');

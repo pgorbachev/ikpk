@@ -88,8 +88,17 @@ const materializedDir = join(webRoot, '.snapshot', 'media-originals');
 rmSync(materializedDir, { recursive: true, force: true });
 const prepared = JSON.parse(readFileSync(join(webRoot, '.snapshot', 'snapshot.json'), 'utf-8')) as {
   content?: { media?: { ref: string; contentId: string }[] };
+  sourcePolicy?: string;
+  origin?: { kind?: string };
 };
-const cmsMedia = (prepared.content?.media ?? []).filter((item) => item.ref.startsWith('/media/uploads/'));
+// Historical /media files from the trusted server bundle need the same derivatives as native
+// uploads. Feed their immutable captured bytes into the existing generator, including PDFs.
+if (prepared.origin?.kind === 'server-db' && prepared.sourcePolicy !== 'demo-publication-only') {
+  throw new Error('prepare-snapshot: server media source policy mismatch');
+}
+const cmsMedia = (prepared.content?.media ?? []).filter((item) =>
+  prepared.origin?.kind === 'server-db' || item.ref.startsWith('/media/uploads/'));
+
 if (cmsMedia.length > 0) {
   // Хранилище берётся из уже перенесённого `.snapshot/media`, а не из каталога-источника:
   // во втором прогоне (сборочный джоб) источником служит артефакт, и путь совпадает; в

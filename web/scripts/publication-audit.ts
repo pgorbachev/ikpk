@@ -3,6 +3,7 @@ export interface WorkerAudit {
   version: 1; status: 'success' | 'refused';
   code: 'recovered' | 'recovery-noop' | 'recovery-cancelled' | 'state-accepted' | 'recovery-failed' | 'accept-state-failed' | 'published' | 'rolled-back' | 'rollback-failed' | 'publication-failed' | 'checks-failed' | 'ci-failed' | 'provenance-changed' | 'active-unindexed' | 'main-changed';
   commit?: string; releaseId?: string; snapshotId?: string; treeDigest?: string; publicationId?: string;
+  sourcePolicy?: 'demo-publication-only'; sourceAge?: 'untracked';
   observedEntry?: number; revision?: number; latestEntry?: number; highWaterMark?: number;
   localExecutedTests?: number; ciExecutedTests?: number; check?: string;
   activePair?: { commit: string; snapshotId: string; releaseId: string };
@@ -29,6 +30,9 @@ export function createWorkerAudit({ operation, error }: { operation?: unknown; e
     treeDigest: /^[a-f0-9]{64}$/, publicationId: /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/,
     ...(audit.code === 'rolled-back' || audit.code === 'recovered' || operation === undefined ? { releaseId: /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/ } : {}) })) {
     if (typeof source[field] === 'string' && pattern.test(source[field])) Object.assign(audit, { [field]: source[field] });
+  }
+  if (source.sourcePolicy === 'demo-publication-only' && source.sourceAge === 'untracked') {
+    audit.sourcePolicy = source.sourcePolicy; audit.sourceAge = source.sourceAge;
   }
   for (const field of audit.code === 'recovered' ? ['revision'] : ['observedEntry', 'revision', 'latestEntry', 'highWaterMark', 'localExecutedTests', 'ciExecutedTests']) {
     if (count(source[field])) Object.assign(audit, { [field]: source[field] });

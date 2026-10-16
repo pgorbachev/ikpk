@@ -1,3 +1,4 @@
+import { candidateInventory, rollbackInventory } from './publication-browser-inventory';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,18 +22,16 @@ export function vitestReport(count = 3) {
     })) }],
   };
 }
-export function browserReport() {
-  return {
-    errors: [], stats: { expected: 4, unexpected: 0, flaky: 0, skipped: 0 },
-    suites: [{ title: 'live publication smoke', specs: [
-      { title: 'main/navigation', ok: true, tests: ['desktop', 'mobile'].map((projectName) => ({
-        projectName, expectedStatus: 'passed', status: 'expected', results: [{ status: 'passed', retry: 0 }],
-      })) },
-      { title: 'schedule/registration', ok: true, tests: ['desktop', 'mobile'].map((projectName) => ({
-        projectName, expectedStatus: 'passed', status: 'expected', results: [{ status: 'passed', retry: 0 }],
-      })) },
-    ] }],
-  };
+export function browserReport(retained = false) {
+  const inventory = retained ? rollbackInventory : candidateInventory;
+  const specs = Object.entries(inventory).flatMap(([key, count]) => {
+    const [file, projectName] = key.split('@');
+    return Array.from({ length: count }, (_, index) => ({ file, title: `${file} ${index}`, ok: true, tests: [{
+      projectName, expectedStatus: 'passed', status: 'expected', results: [{ status: 'passed', retry: 0 }],
+    }] }));
+  });
+  return { errors: [], stats: { expected: specs.length, unexpected: 0, flaky: 0, skipped: 0 },
+    suites: [{ title: retained ? 'retained smoke' : 'full candidate', specs }] };
 }
 
 export async function adapterFixture() {
