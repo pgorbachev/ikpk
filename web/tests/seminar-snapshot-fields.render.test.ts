@@ -19,7 +19,7 @@ const renderSeminarPage = async (): Promise<string> => {
     getSeminars: () => [],
     getScheduleEntries: () => [],
     getTeachers: () => [],
-    getSnapshotReferenceDate: () => new Date('2026-10-12T00:00:00.000Z'),
+    getSnapshotReferenceDate: () => '2026-10-12',
   }));
 
   const routePath = join(
