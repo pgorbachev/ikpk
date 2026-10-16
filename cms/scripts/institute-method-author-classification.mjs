@@ -166,7 +166,7 @@ export function planClassification(db) {
   return report;
 }
 
-export function applyClassification(db) {
+export function applyClassification(db, { onApplied } = {}) {
   const transaction = db.transaction(() => {
     const plan = buildPlan(db);
     const update = db.prepare("UPDATE teachers SET trait = 'method-author' WHERE id = ? AND trait = 'teacher'");
@@ -180,7 +180,9 @@ export function applyClassification(db) {
     if (after.changes.length !== 0 || after.noops.length !== TARGET_PEOPLE.length) {
       throw new Error('post-write readback failed; rolling back transaction');
     }
-    return { updatedRows, noops: plan.noops.length };
+    const result = { updatedRows, noops: plan.noops.length };
+    onApplied?.(db, result);
+    return result;
   });
   return transaction.immediate();
 }
