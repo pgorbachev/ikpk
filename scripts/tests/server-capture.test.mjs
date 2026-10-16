@@ -219,3 +219,94 @@ test('sealed manifest binds readback identities and detects later byte replaceme
   chmodSync(readback, 0o600); writeFileSync(readback, '{}'); chmodSync(readback, 0o440);
   assert.throws(() => verifyBundle(result.bundleDirectory, { requireProtected: false }), /readback digest mismatch/);
 });
+
+test('new capture automatically recovers a reboot orphan before deciding which writers were active', async (t) => {
+  const f = fixture(t); f.services.stop('ikpk-cms.service'); f.calls.length = 0;
+  writeFileSync(join(f.config.leaseRoot, 'pub-before-reboot.json'), JSON.stringify({ version: 1, captureId: 'pub-before-reboot', activeUnits: ['ikpk-cms.service'] }));
+  const { runCaptureOperation } = await import('../server-capture.mjs');
+  await runCaptureOperation(f.config, 'capture', 'pub-after-reboot', { services: f.services });
+  assert.deepEqual(f.calls, ['start:ikpk-cms.service', 'stop:ikpk-cms.service', 'start:ikpk-cms.service']);
+  assert.throws(() => readFileSync(join(f.config.leaseRoot, 'pub-before-reboot.json')), /ENOENT/);
+});
+
+test('boot recover-leases restores disabled writers from durable leases without source DB availability', async (t) => {
+  const f = fixture(t); f.services.stop('ikpk-cms.service'); f.calls.length = 0;
+  writeFileSync(join(f.config.leaseRoot, 'pub-reboot.json'), JSON.stringify({ version: 1, captureId: 'pub-reboot', activeUnits: ['ikpk-cms.service'] }));
+  // A partial pre-stop write must not poison future recovery or claim a writer was stopped.
+  writeFileSync(join(f.config.leaseRoot, 'pub-never-stopped.pending'), '{');
+  rmSync(f.database);
+  const { runCaptureOperation } = await import('../server-capture.mjs');
+  await runCaptureOperation(f.config, 'recover-leases', undefined, { services: f.services });
+  assert.deepEqual(f.calls, ['start:ikpk-cms.service']);
+  assert.equal(f.services.isActive('ikpk-cms.service'), true);
+});
+
+test('pre-capture orphan recovery failure blocks any new writer stop and capture lease', async (t) => {
+  const f = fixture(t); f.services.stop('ikpk-cms.service'); f.calls.length = 0;
+  writeFileSync(join(f.config.leaseRoot, 'pub-orphan.json'), JSON.stringify({ version: 1, captureId: 'pub-orphan', activeUnits: ['ikpk-cms.service'] }));
+  const { runCaptureOperation } = await import('../server-capture.mjs');
+  await assert.rejects(runCaptureOperation(f.config, 'capture', 'pub-blocked', { services: { ...f.services, start: () => { throw new Error('cannot restart'); } } }), /lease recovery failed/);
+  assert.deepEqual(f.calls, []);
+  assert.throws(() => readFileSync(join(f.config.leaseRoot, 'pub-blocked.json')), /ENOENT/);
+});
+
+test('root lock invocation uses a separate fixed lock and rejects argument expansion', async (t) => {
+  const f = fixture(t); const { captureLockInvocation } = await import('../server-capture.mjs');
+  const invocation = captureLockInvocation(f.config, ['recover-leases']);
+  assert.equal(invocation.command, '/usr/bin/flock');
+  assert.deepEqual(invocation.args.slice(0, 5), ['--exclusive', '--wait', '300', '--no-fork', join(f.config.leaseRoot, '.operation.lock')]);
+  assert.deepEqual(invocation.args.slice(-2), ['--under-lock', 'recover-leases']);
+  assert.throws(() => captureLockInvocation(f.config, ['recover-leases', 'extra']), /usage/);
+  assert.throws(() => captureLockInvocation(f.config, ['capture', '../escape']), /invalid capture ID/);
+  assert.throws(() => captureLockInvocation(f.config, ['--under-lock', 'recover-leases']), /cannot nest/);
+});
+
+test('a partial pre-stop lease does not block retry, and stop sees only a complete published lease', async (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.config.leaseRoot, 'pub-pending.pending'), '{');
+  const { runCaptureOperation } = await import('../server-capture.mjs');
+  await runCaptureOperation(f.config, 'capture', 'pub-pending', { services: { ...f.services, stop: (unit) => {
+    const lease = JSON.parse(readFileSync(join(f.config.leaseRoot, 'pub-pending.json'), 'utf8'));
+    assert.deepEqual(lease.activeUnits, ['ikpk-cms.service']);
+    assert.throws(() => readFileSync(join(f.config.leaseRoot, 'pub-pending.pending')), /ENOENT/);
+    f.services.stop(unit);
+  } } });
+});
+
+test('Linux root-operation flock survives launcher loss and excludes recovery until live capture exits', { skip: process.platform !== 'linux', timeout: 10_000 }, async (t) => {
+  const f = fixture(t);
+  const { spawn } = await import('node:child_process');
+  const { once } = await import('node:events');
+  const { setTimeout: delay } = await import('node:timers/promises');
+  const { captureLockInvocation } = await import('../server-capture.mjs');
+  const helper = join(f.root, 'mutex-operation.mjs');
+  writeFileSync(helper, `
+    import { writeFileSync, existsSync } from 'node:fs';
+    import { join } from 'node:path';
+    import { setTimeout } from 'node:timers/promises';
+    const action = process.argv[3], root = process.env.CAPTURE_MUTEX_TEST_ROOT;
+    writeFileSync(join(root, action + '.entered'), String(process.pid));
+    if (action === 'capture') while (!existsSync(join(root, 'release'))) await setTimeout(10);
+  `);
+  const invocation = (args) => { const result = captureLockInvocation(f.config, args); result.args[6] = helper; return result; };
+  const capture = invocation(['capture', 'pub-mutex']);
+  const env = { ...process.env, CAPTURE_MUTEX_TEST_ROOT: f.root };
+  // Only the operation implementation is replaced; production flock flags, path and launch shape are real.
+  const launcher = spawn(process.execPath, ['--input-type=module', '-e', `import { execFileSync } from 'node:child_process'; execFileSync(${JSON.stringify(capture.command)}, ${JSON.stringify(capture.args)}, {stdio:'inherit'});`], { env, stdio: 'ignore' });
+  const launcherExited = once(launcher, 'exit');
+  let operationPid; let recovery;
+  t.after(() => { launcher.kill('SIGKILL'); recovery?.kill('SIGKILL'); if (operationPid) { try { process.kill(operationPid, 'SIGKILL'); } catch {} } });
+  const waitFor = async (path) => { for (let i = 0; i < 500; i++) { try { return readFileSync(path, 'utf8'); } catch {} await delay(10); } throw new Error(`mutex fixture timeout: ${path}`); };
+  operationPid = Number(await waitFor(join(f.root, 'capture.entered')));
+  launcher.kill('SIGKILL'); await launcherExited;
+  const next = invocation(['recover-leases']);
+  recovery = spawn(next.command, next.args, { env, stdio: 'ignore' });
+  const recovered = once(recovery, 'exit');
+  await delay(150);
+  assert.throws(() => readFileSync(join(f.root, 'recover-leases.entered')), /ENOENT/);
+  writeFileSync(join(f.root, 'release'), 'release');
+  const [code] = await recovered;
+  assert.equal(code, 0);
+  assert.ok(Number(await waitFor(join(f.root, 'recover-leases.entered'))) > 0);
+  operationPid = undefined;
+});

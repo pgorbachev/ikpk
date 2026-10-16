@@ -61,6 +61,19 @@ function durableWrite(path, value) {
   try { writeFileSync(fd, value); fsyncSync(fd); } finally { closeSync(fd); }
   syncDirectory(dirname(path));
 }
+function durableLease(path, value) {
+  const temporary = path.replace(/\.json$/, '.pending');
+  if (existsSync(path)) throw new Error('capture lease already exists');
+  // Under the root operation mutex, an unpublished temporary can only predate this attempt.
+  if (existsSync(temporary)) {
+    assertNoSymlinks(temporary);
+    if (!lstatSync(temporary).isFile() || lstatSync(temporary).nlink !== 1) throw new Error('invalid pending lease');
+    unlinkSync(temporary);
+  }
+  durableWrite(temporary, value);
+  renameSync(temporary, path);
+  syncDirectory(dirname(path));
+}
 function syncDirectory(path) { const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
 function tree(root) {
   const entries = [];
@@ -107,6 +120,16 @@ export function recoverWriters(config, id, { services = serviceControl } = {}) {
   if (errors.length) throw new AggregateError(errors, 'CMS writer recovery failed');
   unlinkSync(path); syncDirectory(config.leaseRoot);
 }
+/** Caller holds the separate root operation mutex; never sweep concurrently with capture. */
+export function recoverLeases(config, { services = serviceControl } = {}) {
+  assertConfig(config, { checkPaths: false });
+  assertNoSymlinks(config.leaseRoot);
+  const errors = [];
+  for (const name of readdirSync(config.leaseRoot).filter((name) => name.endsWith('.json')).sort()) {
+    try { recoverWriters(config, name.slice(0, -5), { services }); } catch (error) { errors.push(error); }
+  }
+  if (errors.length) throw new AggregateError(errors, 'unfinished capture lease recovery failed');
+}
 export async function captureBundle(config, id, { services = serviceControl } = {}) {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 16) || typeof backup !== 'function') throw new Error('server capture requires Node >=22.16 with node:sqlite backup');
@@ -116,7 +139,7 @@ export async function captureBundle(config, id, { services = serviceControl } = 
   if (existsSync(destination) || existsSync(temporary)) throw new Error('capture bundle already exists; refuse overwrite');
   const lease = join(config.leaseRoot, `${id}.json`);
   const activeUnits = config.writerUnits.filter((unit) => services.isActive(unit));
-  durableWrite(lease, json({ version: 1, captureId: id, activeUnits }));
+  durableLease(lease, json({ version: 1, captureId: id, activeUnits }));
   let result;
   try {
     for (const unit of activeUnits) services.stop(unit);
