@@ -100,13 +100,15 @@ test('retry returns same operation; admitted source proof is pinned before servi
   assert.equal(receipt.request.sourceSha, f.request.sourceSha);
   assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
 });
-test('admitted source evidence is published without server-side CI and execution is one-shot', async (t) => {
+test('admitted source proof is durable but CMS execution stays guarded before lifecycle integration', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
-  await server.submit(f.request, f.cms.archiveBytes); await server.execute(f.request.id);
-  assert.deepEqual(f.events.slice(1), ['publisher']);
-  assert.equal(server.status(f.request.id).status, 'success');
-  await assert.rejects(server.execute(f.request.id), /invalid-execution/);
-  assert.equal(f.events.filter((s) => s === 'publisher').length, 1);
+  await server.submit(f.request, f.cms.archiveBytes);
+  const operation = join(f.state, f.request.id), receipt = JSON.parse(readFileSync(join(operation, 'request.json'), 'utf8'));
+  assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
+  assert.equal((await server.execute(f.request.id)).code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(operation, 'execution.json')), false);
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 test('source identity mismatch is refused before service start', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
@@ -523,30 +525,33 @@ test('installed server config has no GitHub CI token dependency', (t) => {
   assert.throws(() => readServerConfig(installed), /source-policy-mismatch/);
 });
 
-test('a delayed old service cannot publish after a newer admitted operation has executed', async (t) => {
+test('CMS activation guard refuses old and new publish executions before sequence state or publisher', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
   const newer = { ...f.request, id: randomUUID() };
   await server.submit(f.request, f.cms.archiveBytes); await server.submit(newer, f.cms.archiveBytes);
-  assert.equal((await server.execute(newer.id)).status, 'success');
-  const publishers = f.events.filter((x) => x === 'publisher').length;
-  assert.equal((await server.execute(f.request.id)).status, 'refused');
-  assert.equal(f.events.filter((x) => x === 'publisher').length, publishers);
+  assert.deepEqual(await server.execute(newer.id), { id: newer.id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated' });
+  assert.deepEqual(await server.execute(f.request.id), { id: f.request.id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated' });
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false);
+  for (const id of [newer.id, f.request.id]) assert.equal(existsSync(join(f.state, id, 'execution.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 
 
-test('the real installed launcher refusal on stderr retains its reason, and post-switch audit survives', async (t) => {
+test('launcher refusal parsing stays covered while CMS publication is guarded before launch', async (t) => {
   const native = spawnSync(process.execPath, [new URL('../publication-launcher.mjs', import.meta.url).pathname],
     { encoding: 'utf8', env: { PATH: process.env.PATH } });
   assert.equal(native.status, 1);
   assert.equal(native.stdout, '');
   assert.equal(publisherResult(native).status, 'refused');
   assert.equal(typeof publisherResult(native).reason, 'string');
-  const audit = { code: 'active-unindexed', activePair: { releaseId: 'retained' } };
-  const f = fixture(t), server = createServer(f.config, { ...f.ports,
-    publisher: () => publisherResult({ status: 1, stdout: '', stderr: JSON.stringify({ status: 'refused', reason: 'publication-worker-failed', audit }) }) });
-  await server.submit(f.request, f.cms.archiveBytes); await server.execute(f.request.id);
-  assert.deepEqual(server.status(f.request.id).audit, audit);
-  assert.equal(server.status(f.request.id).status, 'refused');
+  const f = fixture(t), server = createServer(f.config, f.ports);
+  await server.submit(f.request, f.cms.archiveBytes);
+  const result = await server.execute(f.request.id);
+  assert.equal(result.code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(f.state, f.request.id, 'execution.json')), false);
+  assert.equal(existsSync(join(f.state, f.request.id, 'tests.json')), false);
+  assert.equal(existsSync(join(f.root, 'publisher-launcher.mjs')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 
 test('orphaned temporary files from a crash do not block new requests or recovery', async (t) => {
@@ -554,10 +559,15 @@ test('orphaned temporary files from a crash do not block new requests or recover
   writeFileSync(join(f.state, 'sequence.json.new'), 'partial');
   writeFileSync(join(f.state, 'last-started.json.new'), 'partial');
   await server.submit(f.request, f.cms.archiveBytes);
-  assert.equal((await server.execute(f.request.id)).status, 'success');
+  assert.equal((await server.execute(f.request.id)).code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false, 'CMS refusal leaves sequence admission untouched');
+  assert.equal(existsSync(join(f.state, f.request.id, 'execution.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
   const recover = { id: randomUUID(), destination: 'demo', action: 'recover' };
   await server.submit(recover);
   assert.equal((await server.execute(recover.id)).status, 'success');
+  assert.equal(JSON.parse(readFileSync(join(f.state, 'last-started.json'), 'utf8')).id, recover.id,
+    'non-CMS recovery still uses the generic execution path');
 });
 
 
@@ -573,7 +583,7 @@ test('the admitted proof is durable before SSH starts and is not resolved by the
   assert.equal(f.events.length, 1);
 });
 
-test('default server publisher hands its validated proof to the installed launcher by private file', async (t) => {
+test('default server publisher remains uninvoked for CMS until activation is integrated', async (t) => {
   const f = fixture(t), launcher = join(f.root, 'publisher-launcher.mjs'), launcherConfig = join(f.root, 'publisher-config.json');
   const marker = join(f.root, 'launcher-handoff.json');
   writeFileSync(launcher, `import{readFileSync,writeFileSync}from'node:fs';
@@ -585,9 +595,10 @@ process.stdout.write(JSON.stringify({status:'success',code:'published'}));`, { m
   const { publisher, ...ports } = f.ports;
   const server = createServer(config, { ...ports, start() {} });
   await server.submit(f.request, f.cms.archiveBytes);
-  await server.execute(f.request.id);
-  const handoff = JSON.parse(readFileSync(marker, 'utf8'));
-  assert.ok(handoff.args.includes('--source-proof-file'), 'installed publisher must receive proof via bounded file channel');
-  assert.equal(handoff.proofPath, join(f.state, f.request.id, 'tests.json'));
-  assert.deepEqual(handoff.proof, f.request.sourceCiEvidence);
+  const result = await server.execute(f.request.id);
+  assert.equal(result.code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(marker), false, 'installed publisher launcher is not called');
+  assert.equal(existsSync(join(f.state, f.request.id, 'tests.json')), false);
+  const receipt = JSON.parse(readFileSync(join(f.state, f.request.id, 'request.json'), 'utf8'));
+  assert.deepEqual(readFileSync(receipt.cmsArchivePath), f.cms.archiveBytes);
 });
