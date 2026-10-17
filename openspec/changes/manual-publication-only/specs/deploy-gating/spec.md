@@ -1129,8 +1129,10 @@ to the exact current `main` commit admitted by source CI. The local operator ent
 create this tag without force before it submits a production request that can cause server-side
 publication effects. If the tag already exists and resolves to the same commit, the entrypoint
 SHALL reuse it; if it resolves elsewhere or cannot be verified, the entrypoint SHALL refuse and
-SHALL NOT move or delete it. Tag creation/reservation alone SHALL NOT mean that the site was
-published.
+SHALL NOT move or delete it. If tag-read or tag-create permission is unavailable, or a create
+reply is ambiguous, the entrypoint SHALL perform a readback; it SHALL proceed only when that
+readback proves the exact tag-to-SHA mapping. An unavailable or mismatching readback SHALL refuse
+before SSH submission. Tag creation/reservation alone SHALL NOT mean that the site was published.
 
 Each successful publication SHALL produce its own operation receipt only after activation and
 serving verification. That receipt SHALL include the source tag, full source SHA, request ID,
@@ -1156,6 +1158,18 @@ tag with a new request ID and a different CMS snapshot. The tag SHALL identify s
 - **WHEN** `prod-src-<full-SHA>` exists but does not resolve to that SHA
 - **THEN** the entrypoint refuses without moving or deleting the existing tag and sends no production request
 
+#### Scenario: tag cannot be verified or operator lacks required permission
+
+- **WHEN** the entrypoint cannot read the tag, or lacks permission to reserve an absent tag
+- **THEN** it refuses before SSH submission
+- **AND** it does not change or delete any existing tag
+
+#### Scenario: ambiguous tag-create reply is resolved by readback
+
+- **WHEN** tag creation returns an ambiguous result
+- **THEN** the entrypoint reads the tag again and proceeds only if it resolves to the exact admitted SHA
+- **AND** a mismatch or unavailable readback refuses before SSH submission without force-update or deletion
+
 #### Scenario: DEMO source does not receive a production tag
 
 - **WHEN** the destination is DEMO and the admitted source is the exact allowed `dev` SHA
@@ -1165,15 +1179,24 @@ tag with a new request ID and a different CMS snapshot. The tag SHALL identify s
 
 Before candidate execution, the deployment SHALL receive a CMS application artifact produced by
 the same canonical `release-tests.yml` run and attempt admitted for the requested ref/SHA. The
-artifact SHALL include source ref/SHA, run ID/attempt, CMS lockfile digest, Node/npm identity,
-and archive digest; it SHALL exclude `node_modules`. Its size SHALL be bounded by a separately
-measured and versioned limit. It SHALL travel as a distinct bounded archive stream/sidecar through
-the restricted SSH transport, not inside the small CI-evidence JSON request. The server SHALL
-verify identity, digests, archive paths, and size before extraction or candidate execution, and
-SHALL reject absolute paths, traversal, symlinks, unexpected files, and missing required build
-output. It SHALL assemble the CMS release from the admitted build output without rerunning
-`npm run build` on the server. The Astro site SHALL continue to build against the server's
-current CMS/DB snapshot and media.
+artifact SHALL include an internal manifest with source ref/SHA, run ID/attempt, CMS lockfile
+digest, Node/npm identity, and a complete file inventory with per-file digests; it SHALL exclude
+`node_modules`. The GitHub ZIP digest SHALL live only in the external native artifact metadata and
+control/evidence, never inside the ZIP whose digest it identifies. Its size SHALL be bounded by a
+separately measured and versioned limit. The archive SHALL travel in the same restricted SSH stdin
+invocation as a length-framed control request, not as a second worker request or inside the small
+CI-evidence JSON. The server SHALL receive the complete control and archive into private,
+request-scoped staging, verify frame lengths/no trailing bytes, request identity, outer ZIP digest,
+internal manifest, archive paths, and size, and durably admit the canonical request before it
+starts or queues a worker. No worker or candidate code SHALL run on a partial or unvalidated
+archive. Incomplete receives SHALL remain private, non-executable evidence; retries before durable
+admission MAY create another receive attempt under the same request ID. After admission, the same
+request ID SHALL be idempotent only for equal canonical control and recalculated digests; different
+content SHALL be refused. The server SHALL reject absolute paths, traversal, symlinks, unexpected
+files, and missing required build output. It SHALL assemble the CMS release from the admitted
+build output without rerunning `npm run build` on the server. The Astro site SHALL continue to
+build against the server's current CMS/DB snapshot and media. This follow-up artifact transport
+does not block the minimal local `gh` source-CI admission and production-tag test handoff.
 
 #### Scenario: exact admitted CMS artifact is assembled without recompiling
 

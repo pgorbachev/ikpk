@@ -126,21 +126,32 @@ GitHub artifact metadata. Это подтверждает запас для evid
 CMS artifact в этом run не существует, поэтому его cap устанавливается только после измерения
 нового CI payload.
 
-Лимиты 4 MiB и 8 MiB относятся только к небольшому CI-evidence ZIP и control request. Полный
-CMS build artifact передаётся отдельным ограниченным потоком/sidecar в том же restricted SSH
-контуре; его размер ограничивается отдельным versioned пределом, подтверждённым на полном
-`release-tests.yml` run. Текущий серверный stdin limit 2 KiB, allowlist полей publish request,
-flock/admission, durable retry equality и клиентская сериализация должны быть согласованно
-обновлены; архив нельзя добавлять строкой в JSON. Приёмка проверяет digest до записи/распаковки,
-точное связывание sidecar с request ID и SHA, предел размера, защиту от `..`/absolute paths и
-symlink entries, отказ при отсутствующих/лишних путях, и сохранение flock/retry semantics.
+Лимит 4 MiB относится только к небольшому CI-evidence ZIP. Контрольный JSON ограничен 8 MiB,
+CMS archive имеет отдельный измеренный/versioned предел. Один restricted SSH stdin несёт атомарно
+сформированный кадр из двух unsigned 64-bit big-endian lengths, за которыми следуют control JSON и
+CMS archive в raw bytes (не base64 и не отдельный worker request). Server принимает оба полных
+кадра в private request-scoped staging, проверяет declared lengths,
+отсутствие trailing bytes, control identity, CMS outer GitHub ZIP digest и внутренний inventory;
+только после полной проверки и durable фиксации canonical request он передаёт запрос worker под
+существующей admission/flock. Worker никогда не запускается на частично принятых или ещё не
+проверенных байтах. Неполный приём остаётся в private staging как неисполняемое свидетельство;
+автоматическая очистка/удаление прежних operational artifacts не входит в протокол. До durable
+admission повтор с тем же request ID допускается как новая receive attempt; после admission тот
+же ID принимается только при равенстве canonical control и обоих рассчитанных digest, а отличное
+содержимое отвергается. Outer GitHub ZIP digest передаётся только во внешнем control/evidence:
+он не включается в CMS archive, иначе хеш был бы самоссылочным. Текущий stdin limit 2 KiB,
+allowlist, framing, canonicalization/retry equality и клиентская сериализация должны быть
+согласованно обновлены. Архив проверяется до распаковки на размер, безопасные пути, symlink,
+точный inventory и обязательный output; существующие flock/admission semantics сохраняются.
 
 ### 1b. CMS build из полного source CI переиспользуется на сервере
 
 `release-tests.yml` уже строит CMS и повторно использует этот admin build для CMS-to-site E2E,
 но сейчас сохраняет лишь TAP отчёты. После успешных CMS unit/build и изолированного E2E тот же
-run/attempt должен сохранить CMS release artifact без `node_modules`, с исходным SHA/ref/run/
-attempt, digest `cms/package-lock.json`, Node/npm identity и digest архива. Локальный `gh`
+run/attempt должен сохранить CMS release artifact без `node_modules`. Внутренний manifest
+содержит source SHA/ref/run/attempt, digest `cms/package-lock.json`, Node/npm identity и точный
+inventory файлов с digest каждого файла. GitHub ZIP digest остаётся только во внешнем native
+artifact metadata/evidence/control request; сервер пересчитывает его при приёме архива. Локальный `gh`
 загружает именно artifact текущего admitted run/attempt. Сервер проверяет manifest, native
 artifact metadata, SHA/lock/runtime и архив, затем вызывает assemble-only режим
 `build-cms-artifact.sh` на уже собранном `cms/dist`; `dist/build/index.html` обязателен.
