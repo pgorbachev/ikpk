@@ -101,15 +101,17 @@ function clientFixture(t, destination = 'demo') {
   return { ...f, home, clientConfig: config, stateHome: join(f.root, 'client') };
 }
 test('client saves and announces ID before SSH; status polling does not create a second request', async (t) => {
-  const f = clientFixture(t); const id = randomUUID(); const calls = [];
-  const result = await runClient(['demo', '--request-id', id], { configHome: f.home, stateHome: f.stateHome, sleep: async () => {},
+  const f = clientFixture(t); const id = randomUUID(), sha = 'a'.repeat(40); const calls = [];
+  const result = await runClient(['demo', '--sha', sha, '--request-id', id], { configHome: f.home, stateHome: f.stateHome, sleep: async () => {},
     announce(r) { assert.equal(r.id, id); assert.ok(existsSync(r.receipt)); calls.push('saved'); },
+    admitSource: async (source) => { assert.deepEqual(source, { destination: 'demo', sourceRef: 'dev', sha }); return sourceEvidence('dev', sha); },
     call(_, action, request) { assert.equal(request.id, id); calls.push(action); return { id, destination: 'demo', status: action === 'submit' ? 'accepted' : 'success' }; } });
   assert.equal(result.status, 'success'); assert.deepEqual(calls, ['saved', 'submit', 'status']);
 });
 test('lost client connection leaves recoverable ID and performs no blind submit retry', async (t) => {
-  const f = clientFixture(t); let calls = 0;
-  await assert.rejects(runClient(['demo'], { configHome: f.home, stateHome: f.stateHome, announce() {}, call() { calls++; throw new Error('connection lost'); } }), /connection lost/);
+  const f = clientFixture(t); let calls = 0; const sha = 'a'.repeat(40);
+  await assert.rejects(runClient(['demo', '--sha', sha], { configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => sourceEvidence('dev', sha), call() { calls++; throw new Error('connection lost'); } }), /connection lost/);
   assert.equal(calls, 1); assert.equal(readdirSync(join(f.stateHome, 'demo')).length, 1);
 });
 test('SSH fixes host pin/key, disables ambient configuration and forwarding; paths cannot inject remote shell', (t) => {
