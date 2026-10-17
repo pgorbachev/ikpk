@@ -342,6 +342,28 @@ test('accepted archive is staged in a private server-owned file and the worker s
   assert.equal(f.events.includes('publisher'), false, 'staging does not execute archive contents during admission');
 });
 
+test('execute refuses CMS receipt before marking execution until the activation adapter is integrated', async (t) => {
+  const f = serverFixture(t), bytes = cmsArchive(t), id = randomUUID();
+  const request = { ...validServerRequest(id, bytes), sourceCiEvidence: validSourceProof() };
+  assert.equal((await f.server.submit(request, bytes)).status, 'accepted');
+  const operation = join(f.state, id), receiptPath = join(operation, 'request.json');
+  const receiptBytes = readFileSync(receiptPath), receipt = JSON.parse(receiptBytes);
+  const archivePath = receipt.cmsArchivePath;
+  assert.ok(archivePath);
+  assert.deepEqual(readFileSync(archivePath), bytes);
+  f.events.length = 0;
+
+  const result = await f.server.execute(id);
+  assert.equal(result.status, 'refused');
+  assert.equal(result.code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(operation, 'execution.json')), false, 'refusal precedes one-shot execution marker');
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false, 'refusal precedes publication sequence mutation');
+  assert.equal(existsSync(join(operation, 'tests.json')), false, 'proof is not handed to a publisher before activation exists');
+  assert.equal(f.events.includes('publisher'), false, 'publisher is never invoked');
+  assert.deepEqual(readFileSync(receiptPath), receiptBytes, 'accepted receipt remains byte-for-byte intact');
+  assert.deepEqual(readFileSync(archivePath), bytes, 'staged CMS archive remains byte-for-byte intact');
+});
+
 test('the production gateway frame reader waits for EOF, then admits those exact bytes under an injected worker', async (t) => {
   const f = serverFixture(t), bytes = cmsArchive(t), request = {
     ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof(),
