@@ -78,8 +78,8 @@ export function validateRequest(input, destination) {
   if (!plain(input) || !validId(input.id) || input.destination !== destination || !['publish', 'recover', 'rollback'].includes(input.action)) fail('invalid-request');
   const allowed = ['id', 'destination', 'action', ...(input.action === 'publish' ? ['sourceSha', 'sourceCiEvidence', ...(destination === 'prod' ? ['sourceTag'] : [])] : []), ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
   if (Object.keys(input).some((k) => !allowed.includes(k))) fail('invalid-request');
+  if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
   if (input.action === 'publish') {
-    if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
     const evidence = input.sourceCiEvidence, ref = destination === 'prod' ? 'main' : 'dev';
     if (!/^[0-9a-f]{40}$/.test(input.sourceSha ?? '') || !plain(evidence) || evidence.commit !== input.sourceSha || evidence.sourceRef !== ref) fail('source-evidence-identity-mismatch');
     if (Object.keys(evidence).sort().join(',') !== 'artifactDigest,artifactZipBase64,commit,repository,runAttempt,runId,sourceRef,workflow' ||
@@ -94,7 +94,6 @@ export function validateRequest(input, destination) {
     if (destination === 'prod' && input.sourceTag !== `prod-src-${input.sourceSha}`) fail('invalid-source-tag');
     if (destination === 'demo' && Object.hasOwn(input, 'sourceTag')) fail('invalid-source-tag');
   }
-  if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
   if (input.action === 'rollback' && (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.releaseId ?? '') ||
       typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length > 500)) fail('invalid-request');
   const request = Object.fromEntries(allowed.map((key) => [key, input[key]]));
