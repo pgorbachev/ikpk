@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { sourceCiFixtureScript } from '../../scripts/tests/helpers/publication-ci-fixture.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -20,6 +21,26 @@ const cleanEnv = () => ({ PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR
   GIT_COMMITTER_NAME: 'Publication fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' });
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: cleanEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function write(path: string, content: string) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); }
+
+function sourceProof(f: { root: string; sha: string }) {
+  const operation = join(f.root, 'operations', '00000000-0000-4000-8000-000000000001');
+  const artifacts = join(f.root, 'source-ci-artifact');
+  const archive = join(f.root, 'source-ci-artifact.zip');
+  const file = join(operation, 'tests.json');
+  mkdirSync(operation, { recursive: true, mode: 0o700 }); chmodSync(join(f.root, 'operations'), 0o700);
+  mkdirSync(artifacts, { mode: 0o700 });
+  const manifest = { workflow: '.github/workflows/release-tests.yml', commit: f.sha,
+    runId: 1, runAttempt: 1, subject: 'source-code', event: 'push' };
+  write(join(artifacts, 'release-source-tests.json'), JSON.stringify(manifest));
+  execFileSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: artifacts });
+  const archiveBytes = readFileSync(archive);
+  writeFileSync(file, JSON.stringify({ repository: 'pgorbachev/ikpk', workflow: manifest.workflow,
+    sourceRef: 'main', commit: f.sha, runId: manifest.runId, runAttempt: manifest.runAttempt,
+    artifactDigest: `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}`,
+    artifactZipBase64: archiveBytes.toString('base64') }), { mode: 0o600 });
+  chmodSync(operation, 0o700);
+  return file;
+}
 
 type Fixture = ReturnType<typeof fixture>;
 function fixture() {
@@ -71,7 +92,8 @@ function launch(f: Fixture, options: { url?: string; ref?: string; sourceDir?: s
   const ciBootstrap = join(f.root, 'ci-fixture.mjs');
   write(ciBootstrap, sourceCiFixtureScript(f.sha));
   const args = ['--import', ciBootstrap, f.installed, 'publish', '--config', options.config ?? f.config,
-    '--source-url', options.url ?? f.remote, '--source-ref', options.ref ?? 'main'];
+    '--source-url', options.url ?? f.remote, '--source-ref', options.ref ?? 'main',
+    '--source-proof-file', sourceProof(f)];
   if (options.sourceDir) args.push('--source-dir', options.sourceDir);
   return spawnSync(process.execPath, args, { cwd: options.cwd ?? f.root, env: cleanEnv(), encoding: 'utf8', timeout: 15_000 });
 }
