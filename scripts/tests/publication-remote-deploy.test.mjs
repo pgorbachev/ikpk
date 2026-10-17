@@ -40,7 +40,7 @@ function serverCmsArchive(root, evidence, sha) {
     const path = join(root, 'cms-fixture', name); mkdirSync(join(path, '..'), { recursive: true }); writeFileSync(path, contents);
   }
   const manifest = { schemaVersion: 1,
-    source: { sha, ref: evidence.sourceRef, runId: evidence.runId, runAttempt: evidence.runAttempt },
+    source: { sha, ref: `refs/heads/${evidence.sourceRef}`, runId: evidence.runId, runAttempt: evidence.runAttempt },
     packageLockSha256: createHash('sha256').update(payload['package-lock.json']).digest('hex'),
     runtime: { nodeVersion: 'v22.16.0', nodeMajor: 22, nodeAbi: '127', npmVersion: '10.8.2' },
     files: Object.entries(payload).sort(([a], [b]) => a.localeCompare(b)).map(([path, contents]) => ({
