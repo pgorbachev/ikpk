@@ -406,6 +406,7 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
   const result = await runClient(['prod', '--sha', sha], {
     configHome: f.home, stateHome: f.stateHome, announce() {},
     admitSource: async () => sourceEvidence('main', sha),
+    resolveSourceRef: async () => sha,
     tagOps: {
       resolve(name) { assert.equal(name, tag); events.push('read'); return ++lookups === 1 ? null : sha; },
       create(name, target) { assert.equal(name, tag); assert.equal(target, sha); events.push('create'); throw new Error('tag creation reply lost'); },
