@@ -108,7 +108,8 @@ export function validateCmsArtifact({ request, archiveBytes, policy, runtime }) 
   if (!manifestBytes) fail('manifest-missing');
   let manifest;
   try { manifest = JSON.parse(manifestBytes.toString('utf8')); } catch { fail('invalid-manifest'); }
-  const expectedSource = { sha: request.sourceSha, ref: evidence.sourceRef, runId: evidence.runId, runAttempt: evidence.runAttempt };
+  if (!['main', 'dev'].includes(evidence.sourceRef)) fail('unsupported-source-ref');
+  const expectedSource = { sha: request.sourceSha, ref: `refs/heads/${evidence.sourceRef}`, runId: evidence.runId, runAttempt: evidence.runAttempt };
   if (!manifest || manifest.schemaVersion !== 1 || JSON.stringify(manifest.source) !== JSON.stringify(expectedSource) ||
       !manifest.runtime || !Number.isSafeInteger(manifest.runtime.nodeMajor) || !/^\d+$/.test(manifest.runtime.nodeAbi ?? '') ||
       !/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(manifest.runtime.nodeVersion ?? '') ||
@@ -130,12 +131,12 @@ export function validateCmsArtifact({ request, archiveBytes, policy, runtime }) 
   }
   const lock = files.get('package-lock.json');
   if (!lock || sha256(lock) !== manifest.packageLockSha256) fail('lockfile-mismatch');
-  const expectedMigrationsText = files.get('database/migrations/.migrations-expected')?.toString('utf8');
+  const expectedMigrationsText = files.get('database/.migrations-expected')?.toString('utf8');
   const migrationFiles = [...files.keys()].filter((path) => path.startsWith('database/migrations/') && /\.(?:js|sql)$/.test(path));
   if (!/^(?:0|[1-9][0-9]*)\n$/.test(expectedMigrationsText ?? '') ||
       migrationFiles.length !== Number(expectedMigrationsText.trim())) fail('migration-inventory-mismatch');
   for (const path of ['dist/build/index.html', 'dist/src/index.js', 'dist/config/database.js', 'package.json', 'package-lock.json', 'tsconfig.json',
-    'database/migrations/.migrations-expected', 'database/migrations/target-schema/seminar.json',
+    'database/.migrations-expected', 'database/migrations/target-schema/seminar.json',
     'scripts/run-data-migrations.mjs', 'scripts/audit-data-migration.mjs', 'scripts/audit-schema-snapshot.mjs',
     'scripts/institute-method-author-classification.mjs', 'scripts/normalize-null-documents-state.mjs',
     'src/lib/demo193-source-empty-fields.json']) {

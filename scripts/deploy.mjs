@@ -146,7 +146,6 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
       validateCmsArtifactMetadata(prepared?.metadata, evidence, request.sha, prepared?.archiveBytes);
       if (JSON.stringify(prepared.metadata) !== JSON.stringify(submitted.cmsArtifact)) fail('cms-artifact-metadata-changed');
       archiveBytes = prepared.archiveBytes;
-      cmsArtifactMetadata = prepared.metadata;
       if (request.destination === 'prod') {
         await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
         if (await tagOps.resolve(submitted.sourceTag) !== request.sha) fail('source-tag-conflict');
