@@ -4,46 +4,67 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer, validateRequest, unitName, readServerConfig, publisherResult } from '../server-deploy.mjs';
 import { runClient, parseArguments, readClientConfig, sshArguments } from '../deploy.mjs';
+import { releaseTestManifest } from '../release-test-policy.mjs';
+import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 
-const minimalCiArtifactZip = 'UEsDBBQAAAAAADtIUV3j+nkRHwAAAB8AAAANAAAAbWFuaWZlc3QuanNvbnsic2NoZW1hVmVyc2lvbiI6MSwiZmlsZXMiOltdfQpQSwECFAMUAAAAAAA7SFFd4/p5ER8AAAAfAAAADQAAAAAAAAAAAAAAgAEAAAAAbWFuaWZlc3QuanNvblBLBQYAAAAAAQABADsAAABKAAAAAAA=';
-const minimalCiArtifactDigest = 'sha256:b083f6a3ffd573c667dd1bb5103a17575de9f5043850b2d7d55bddc37eeb4ccb';
+const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner,
+  reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0,
+  flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
+function sourceEvidence(sourceRef, commit) {
+  const directory = mkdtempSync(join(tmpdir(), 'ikpk-publish-proof-'));
+  try {
+    const manifest = releaseTestManifest({ RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned', GITHUB_SHA: commit,
+      GITHUB_EVENT_NAME: 'push', GITHUB_REF: `refs/heads/${sourceRef}`, GITHUB_RUN_ID: '38940517004', GITHUB_RUN_ATTEMPT: '1' },
+    Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map((name) => [name, { result: 'success' }])), reportFixtures);
+    writeFileSync(join(directory, 'release-source-tests.json'), JSON.stringify(manifest));
+    const archive = join(directory, 'proof.zip');
+    spawnSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: directory });
+    const bytes = readFileSync(archive);
+    return { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml', sourceRef, commit,
+      runId: 38940517004, runAttempt: 1, artifactDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      artifactZipBase64: bytes.toString('base64') };
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-remote-deploy-')); t.after(() => rmSync(root, { recursive: true, force: true }));
   const state = join(root, 'operations'); mkdirSync(state, { mode: 0o700 });
   const config = { state, destination: 'demo', sourceRef: 'dev' }; const events = [];
+  const commit = 'a'.repeat(40);
   const ports = {
     now: () => '2026-10-15T20:00:00.000Z',
-    resolveSource: () => 'a'.repeat(40), start: (_, id) => events.push(`start:${id}`),
-    service: () => ({ state: 'active' }), fullTests: async (_, r) => { events.push('tests'); return { commit: r.commit }; },
+    resolveSource() { throw new Error('server-must-not-query-source-control'); }, start: (_, id) => events.push(`start:${id}`),
+    service: () => ({ state: 'active' }), fullTests() { throw new Error('server-must-not-run-or-rerun-source-ci'); },
     publisher: () => { events.push('publisher'); return { status: 'success', audit: { code: 'published' } }; },
   };
-  return { root, state, config, ports, events, request: { id: randomUUID(), destination: 'demo', action: 'publish' } };
+  return { root, state, config, ports, events, request: { id: randomUUID(), destination: 'demo', action: 'publish',
+    sourceSha: commit, sourceCiEvidence: sourceEvidence('dev', commit) } };
 }
-test('retry returns same operation; source pinned once before service; parameters cannot change', async (t) => {
-  const f = fixture(t); let captures = 0; const server = createServer(f.config, { ...f.ports, resolveSource() { captures++; return 'a'.repeat(40); } });
+test('retry returns same operation; admitted source proof is pinned before service; parameters cannot change', async (t) => {
+  const f = fixture(t); let lookups = 0; const server = createServer(f.config, { ...f.ports, resolveSource() { lookups++; throw new Error('unexpected-source-lookup'); } });
   assert.equal((await server.submit(f.request)).status, 'accepted');
   assert.equal((await server.submit(f.request)).status, 'running');
-  assert.equal(captures, 1); assert.equal(f.events.length, 1);
+  assert.equal(lookups, 0); assert.equal(f.events.length, 1);
   await assert.rejects(server.submit({ ...f.request, action: 'recover' }), /request-id-conflict/);
-  assert.equal(JSON.parse(readFileSync(join(f.state, f.request.id, 'request.json'))).commit, 'a'.repeat(40));
+  const receipt = JSON.parse(readFileSync(join(f.state, f.request.id, 'request.json')));
+  assert.equal(receipt.request.sourceSha, f.request.sourceSha);
+  assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
 });
-test('full tests complete before publisher; result is durable and execution is one-shot', async (t) => {
+test('admitted source evidence is published without server-side CI and execution is one-shot', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
   await server.submit(f.request); await server.execute(f.request.id);
-  assert.deepEqual(f.events.slice(1), ['tests', 'publisher']);
+  assert.deepEqual(f.events.slice(1), ['publisher']);
   assert.equal(server.status(f.request.id).status, 'success');
   await assert.rejects(server.execute(f.request.id), /invalid-execution/);
   assert.equal(f.events.filter((s) => s === 'publisher').length, 1);
 });
-test('full test failure never calls publisher and cannot be retried by re-executing same receipt', async (t) => {
-  const f = fixture(t), server = createServer(f.config, { ...f.ports, fullTests() { throw new Error('skipped required suite'); } });
-  await server.submit(f.request); assert.equal((await server.execute(f.request.id)).status, 'refused');
-  assert.ok(!f.events.includes('publisher')); assert.equal(server.status(f.request.id).status, 'refused');
-  await assert.rejects(server.execute(f.request.id));
+test('source identity mismatch is refused before service start', async (t) => {
+  const f = fixture(t), server = createServer(f.config, f.ports);
+  await assert.rejects(server.submit({ ...f.request, sourceSha: 'b'.repeat(40) }), /source.*(sha|commit)|evidence/i);
+  assert.equal(f.events.length, 0);
 });
 test('lost start reply never resubmits; vanished service is interrupted, never published', async (t) => {
   const f = fixture(t); let starts = 0;
@@ -110,14 +131,11 @@ test('command parser requires explicit destination and a reason for rollback', (
 
 test('server request retries compare source evidence semantically and reject changed evidence', async (t) => {
   const f = fixture(t), commit = 'a'.repeat(40);
-  const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
-    sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1,
-    artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip };
+  const evidence = sourceEvidence('dev', commit);
   const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence };
-  const server = createServer(f.config, { ...f.ports, resolveSource: () => commit });
+  const server = createServer(f.config, f.ports);
   assert.equal((await server.submit(request)).status, 'accepted');
-  const reordered = { sourceCiEvidence: { artifactZipBase64: evidence.artifactZipBase64, artifactDigest: evidence.artifactDigest, runAttempt: 1, runId: evidence.runId,
-    commit, sourceRef: 'dev', workflow: evidence.workflow, repository: evidence.repository },
+  const reordered = { sourceCiEvidence: Object.fromEntries(Object.entries(evidence).reverse()),
     action: 'publish', sourceSha: commit, destination: 'demo', id: request.id };
   assert.equal((await server.submit(reordered)).status, 'running');
   await assert.rejects(server.submit({ ...reordered, sourceCiEvidence: { ...reordered.sourceCiEvidence, runAttempt: 2 } }), /request-id-conflict/);
@@ -166,9 +184,7 @@ test('explicit full source SHA is admitted before SSH and its bounded proof is b
 
 test('production reserves an exact source tag before SSH and reuses it on a later operation', async (t) => {
   const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), tag = `prod-src-${sha}`;
-  const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
-    sourceRef: 'main', commit: sha, runId: 38940517004, runAttempt: 1,
-    artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip };
+  const evidence = sourceEvidence('main', sha);
   const events = [], tags = new Map();
   const reserveOps = {
     resolve(name) { events.push(`resolve:${name}`); return tags.get(name) ?? null; },
@@ -199,9 +215,7 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
     const f = clientFixture(t, 'prod'); let submits = 0, creates = 0;
     await assert.rejects(runClient(['prod', '--sha', sha], {
       configHome: f.home, stateHome: f.stateHome, announce() {},
-      admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return {
-        repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml', sourceRef: 'main', commit: sha,
-        runId: 38940517004, runAttempt: 1, artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip }; },
+      admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return sourceEvidence('main', sha); },
       tagOps: {
         resolve: () => mode === 'tag-conflict' ? 'e'.repeat(40) : null,
         create: () => { creates++; return sha; },
@@ -214,7 +228,7 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
   const f = clientFixture(t, 'prod'), events = []; let lookups = 0, submits = 0;
   const result = await runClient(['prod', '--sha', sha], {
     configHome: f.home, stateHome: f.stateHome, announce() {},
-    admitSource: async () => ({ ref: 'main', sha }),
+    admitSource: async () => sourceEvidence('main', sha),
     tagOps: {
       resolve(name) { assert.equal(name, tag); events.push('read'); return ++lookups === 1 ? null : sha; },
       create(name, target) { assert.equal(name, tag); assert.equal(target, sha); events.push('create'); throw new Error('tag creation reply lost'); },
@@ -285,13 +299,14 @@ test('orphaned temporary files from a crash do not block new requests or recover
 });
 
 
-test('a receipt still being admitted is unknown, never proof that acceptance stopped', async (t) => {
-  const f = fixture(t); let complete;
-  const pinned = new Promise((resolve) => { complete = resolve; });
-  const server = createServer(f.config, { ...f.ports, resolveSource: () => pinned });
-  const accepting = server.submit(f.request);
-  assert.equal(server.status(f.request.id).status, 'unknown');
-  assert.equal((await server.submit(f.request)).status, 'unknown');
-  complete('a'.repeat(40));
-  assert.equal((await accepting).status, 'accepted');
+test('the admitted proof is durable before SSH starts and is not resolved by the server', async (t) => {
+  const f = fixture(t);
+  const server = createServer(f.config, { ...f.ports, start(_, id) {
+    const receipt = JSON.parse(readFileSync(join(f.state, id, 'request.json'), 'utf8'));
+    assert.equal(receipt.request.sourceSha, f.request.sourceSha);
+    assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
+    f.events.push(`start:${id}`);
+  } });
+  assert.equal((await server.submit(f.request)).status, 'accepted');
+  assert.equal(f.events.length, 1);
 });
