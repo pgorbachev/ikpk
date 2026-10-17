@@ -108,11 +108,13 @@ test('command parser requires explicit destination and a reason for rollback', (
 test('server request retries compare source evidence semantically and reject changed evidence', async (t) => {
   const f = fixture(t), commit = 'a'.repeat(40);
   const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
-    sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1, artifactDigest: 'sha256:' + 'b'.repeat(64) };
+    sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1,
+    artifactDigest: 'sha256:b083f6a3ffd573c667dd1bb5103a17575de9f5043850b2d7d55bddc37eeb4ccb',
+    artifactZipBase64: 'UEsDBBQAAAAAADtIUV3j+nkRHwAAAB8AAAANAAAAbWFuaWZlc3QuanNvbnsic2NoZW1hVmVyc2lvbiI6MSwiZmlsZXMiOltdfQpQSwECFAMUAAAAAAA7SFFd4/p5ER8AAAAfAAAADQAAAAAAAAAAAAAAgAEAAAAAbWFuaWZlc3QuanNvblBLBQYAAAAAAQABADsAAABKAAAAAAA=' };
   const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence };
   const server = createServer(f.config, { ...f.ports, resolveSource: () => commit });
   assert.equal((await server.submit(request)).status, 'accepted');
-  const reordered = { sourceCiEvidence: { artifactDigest: evidence.artifactDigest, runAttempt: 1, runId: evidence.runId,
+  const reordered = { sourceCiEvidence: { artifactZipBase64: evidence.artifactZipBase64, artifactDigest: evidence.artifactDigest, runAttempt: 1, runId: evidence.runId,
     commit, sourceRef: 'dev', workflow: evidence.workflow, repository: evidence.repository },
     action: 'publish', sourceSha: commit, destination: 'demo', id: request.id };
   assert.equal((await server.submit(reordered)).status, 'running');
