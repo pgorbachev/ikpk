@@ -1209,6 +1209,12 @@ admitted build output without rerunning `npm run build` on the server. The Astro
 to build against the server's current CMS/DB snapshot and media. This follow-up artifact transport
 does not block the minimal local `gh` source-CI admission and production-tag test handoff.
 
+The local CMS artifact producer SHALL reserve only a fresh output directory whose canonical path
+does not overlap the source checkout. It SHALL resolve the existing parent directory before
+checking the path, so `..` and symlinked-parent aliases cannot write into or replace source files.
+It SHALL refuse an existing output path without modifying it, and SHALL perform path admission
+before running the CMS build or creating files.
+
 #### Scenario: exact admitted CMS artifact is assembled without recompiling
 
 - **WHEN** local `gh` retrieves the non-expired CMS artifact for the admitted run/attempt and its
@@ -1216,6 +1222,23 @@ does not block the minimal local `gh` source-CI admission and production-tag tes
 - **THEN** the server assembles the CMS release from the artifact's existing `cms/dist`
 - **AND** `dist/build/index.html` is present
 - **AND** server-side `npm run build` is not invoked
+
+#### Scenario: local CMS artifact output is fresh and outside the source checkout
+
+- **WHEN** the producer is invoked with an output path that aliases the checkout through a
+  relative path, `..`, or a symlinked parent, or with an already existing output directory
+- **THEN** it refuses before running the CMS build or modifying any source or output bytes
+- **AND** a new output directory outside the checkout is created without removing prior artifacts
+
+#### Scenario: ordinary code release preserves CMS data written after migration
+
+- **WHEN** an initial release has applied its schema migration, an operator writes new CMS data,
+  and a later code-only SHA is released without a schema change
+- **THEN** the later release builds against the current CMS database and media
+- **AND** the pending migration list is empty while applied ledger history and its applied-step
+  count remain unchanged, so no migration is reapplied
+- **AND** no older database is restored or imported
+- **AND** the newly written CMS data remains available after activation
 
 #### Scenario: CMS artifact is missing or belongs to another source attempt
 
