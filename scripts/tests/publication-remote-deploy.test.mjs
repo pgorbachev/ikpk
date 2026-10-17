@@ -122,7 +122,7 @@ test('SSH fixes host pin/key, disables ambient configuration and forwarding; pat
   assert.throws(() => readClientConfig(f.home, 'demo'), /untrusted-client-config/);
 });
 test('command parser requires explicit destination and a reason for rollback', () => {
-  assert.equal(parseArguments(['prod']).action, 'publish');
+  assert.throws(() => parseArguments(['prod']), /sha|source|arguments/i);
   for (const bad of [[], ['prod', '--source-ref', 'dev'], ['demo', 'status', '../bad'], ['demo', 'rollback', 'old']]) assert.throws(() => parseArguments(bad));
   const sha = 'f'.repeat(40);
   assert.equal(parseArguments(['prod', '--sha', sha]).sha, sha);
