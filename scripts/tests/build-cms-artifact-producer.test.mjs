@@ -112,6 +112,25 @@ test('explicit prebuilt mode assembles the already tested CMS output without reb
   assert.match(built.stdout, /миграций в релизе .* как и ожидалось/i, 'existing migration validator did not accept the assembled output');
 });
 
+test('prebuilt artifact excludes E2E-generated public uploads but retains the runtime directory and static public assets', (t) => {
+  const f = projectFixture(t), output = join(f.scratch, 'release-cms');
+  const uploads = join(f.project, 'cms/public/uploads');
+  mkdirSync(uploads, { recursive: true });
+  writeFileSync(join(uploads, 'e2e-generated-media.png'), Buffer.from('disposable E2E upload'));
+
+  const built = runBuilder(f, ['--prebuilt', output], identity);
+  assert.equal(built.status, 0, `${built.stdout}\n${built.stderr}`);
+  const packagedUploads = join(output, 'public/uploads');
+  assert.ok(existsSync(packagedUploads), 'runtime uploads directory must remain available to CMS');
+  assert.deepEqual(readdirSync(packagedUploads), ['.gitkeep'], 'runtime uploads must remain empty apart from its directory placeholder');
+  assert.equal(existsSync(join(output, 'public/uploads/e2e-generated-media.png')), false);
+  assert.equal(readFileSync(join(output, 'public/robots.txt'), 'utf8'),
+    readFileSync(join(f.project, 'cms/public/robots.txt'), 'utf8'), 'ordinary static public assets must still be packaged');
+  const manifest = JSON.parse(readFileSync(join(output, 'cms-artifact-manifest.json'), 'utf8'));
+  assert.equal(manifest.files.some(({ path }) => path === 'public/uploads/e2e-generated-media.png'), false,
+    'manifest must not claim excluded E2E media');
+});
+
 test('prebuilt mode refuses missing admin or compiled server output without invoking npm build', (t) => {
   for (const missingPath of ['dist/build/index.html', 'dist/src/index.js']) {
     const f = projectFixture(t), output = join(f.scratch, 'release-cms');
