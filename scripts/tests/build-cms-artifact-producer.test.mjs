@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +129,61 @@ test('prebuilt artifact excludes E2E-generated public uploads but retains the ru
   const manifest = JSON.parse(readFileSync(join(output, 'cms-artifact-manifest.json'), 'utf8'));
   assert.equal(manifest.files.some(({ path }) => path === 'public/uploads/e2e-generated-media.png'), false,
     'manifest must not claim excluded E2E media');
+});
+
+test('default builder refuses ./cms output before compiling or deleting source files', (t) => {
+  const f = projectFixture(t), sourceFile = join(f.project, 'cms/package.json');
+  const sourceBytes = readFileSync(sourceFile);
+  const result = runBuilder(f, ['./cms']);
+  assert.notEqual(result.status, 0, 'output overlapping the CMS source tree must be refused');
+  assert.ok(existsSync(sourceFile), 'refusal must leave the CMS source tree intact');
+  assert.deepEqual(readFileSync(sourceFile), sourceBytes, 'refusal changed a source file');
+  const invocations = existsSync(f.npmLog) ? readFileSync(f.npmLog, 'utf8') : '';
+  assert.doesNotMatch(invocations, /^run build$/m, 'unsafe output must be refused before running the compiler');
+});
+
+test('default builder refuses an output reached through a symlinked parent before changing source', (t) => {
+  const f = projectFixture(t), sourceFile = join(f.project, 'cms/package.json');
+  const sourceBytes = readFileSync(sourceFile), alias = join(f.scratch, 'project-alias');
+  symlinkSync(f.project, alias);
+  const result = runBuilder(f, [join(alias, 'cms')]);
+  assert.notEqual(result.status, 0, 'symlinked output overlapping the CMS source tree must be refused');
+  assert.ok(existsSync(sourceFile), 'refusal must leave the symlink target source tree intact');
+  assert.deepEqual(readFileSync(sourceFile), sourceBytes, 'refusal changed a source file through a symlinked parent');
+  const invocations = existsSync(f.npmLog) ? readFileSync(f.npmLog, 'utf8') : '';
+  assert.doesNotMatch(invocations, /^run build$/m, 'unsafe symlink alias must be refused before compiling');
+});
+
+test('default builder refuses an existing output without removing its sentinel', (t) => {
+  const f = projectFixture(t), output = join(f.scratch, 'existing-output'), sentinel = join(f.scratch, 'existing-output/sentinel.txt');
+  mkdirSync(output);
+  writeFileSync(sentinel, 'preserve this output\n');
+  const result = runBuilder(f, [output]);
+  assert.ok(existsSync(sentinel), 'builder deleted an existing output instead of refusing it');
+  assert.equal(readFileSync(sentinel, 'utf8'), 'preserve this output\n', 'builder modified existing output bytes');
+  assert.notEqual(result.status, 0, 'existing output must be refused');
+});
+
+test('prebuilt builder refuses an existing output without removing its sentinel', (t) => {
+  const f = projectFixture(t), output = join(f.scratch, 'existing-prebuilt-output'), sentinel = join(f.scratch, 'existing-prebuilt-output/sentinel.txt');
+  mkdirSync(output);
+  writeFileSync(sentinel, 'preserve this prebuilt output\n');
+  const result = runBuilder(f, ['--prebuilt', output], identity);
+  assert.notEqual(result.status, 0, 'prebuilt output must be refused when it already exists');
+  assert.equal(readFileSync(sentinel, 'utf8'), 'preserve this prebuilt output\n', 'prebuilt refusal changed existing output bytes');
+  const invocations = existsSync(f.npmLog) ? readFileSync(f.npmLog, 'utf8') : '';
+  assert.doesNotMatch(invocations, /^run build$/m, 'prebuilt refusal must not invoke the compiler');
+});
+
+test('default builder refuses a parent-path alias before running build', (t) => {
+  const f = projectFixture(t), sourceFile = join(f.project, 'cms/package.json');
+  const sourceBytes = readFileSync(sourceFile);
+  const result = runBuilder(f, ['cms/..']);
+  assert.notEqual(result.status, 0, 'output aliasing the project root must be refused');
+  assert.ok(existsSync(sourceFile), 'project-root refusal must preserve source files');
+  assert.deepEqual(readFileSync(sourceFile), sourceBytes, 'project-root refusal changed source bytes');
+  const invocations = existsSync(f.npmLog) ? readFileSync(f.npmLog, 'utf8') : '';
+  assert.doesNotMatch(invocations, /^run build$/m, 'project-root alias must be refused before build');
 });
 
 test('prebuilt mode refuses missing admin or compiled server output without invoking npm build', (t) => {
