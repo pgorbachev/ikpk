@@ -8,6 +8,9 @@ import { randomUUID } from 'node:crypto';
 import { createServer, validateRequest, unitName, readServerConfig, publisherResult } from '../server-deploy.mjs';
 import { runClient, parseArguments, readClientConfig, sshArguments } from '../deploy.mjs';
 
+const minimalCiArtifactZip = 'UEsDBBQAAAAAADtIUV3j+nkRHwAAAB8AAAANAAAAbWFuaWZlc3QuanNvbnsic2NoZW1hVmVyc2lvbiI6MSwiZmlsZXMiOltdfQpQSwECFAMUAAAAAAA7SFFd4/p5ER8AAAAfAAAADQAAAAAAAAAAAAAAgAEAAAAAbWFuaWZlc3QuanNvblBLBQYAAAAAAQABADsAAABKAAAAAAA=';
+const minimalCiArtifactDigest = 'sha256:b083f6a3ffd573c667dd1bb5103a17575de9f5043850b2d7d55bddc37eeb4ccb';
+
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-remote-deploy-')); t.after(() => rmSync(root, { recursive: true, force: true }));
   const state = join(root, 'operations'); mkdirSync(state, { mode: 0o700 });
@@ -109,8 +112,7 @@ test('server request retries compare source evidence semantically and reject cha
   const f = fixture(t), commit = 'a'.repeat(40);
   const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
     sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1,
-    artifactDigest: 'sha256:b083f6a3ffd573c667dd1bb5103a17575de9f5043850b2d7d55bddc37eeb4ccb',
-    artifactZipBase64: 'UEsDBBQAAAAAADtIUV3j+nkRHwAAAB8AAAANAAAAbWFuaWZlc3QuanNvbnsic2NoZW1hVmVyc2lvbiI6MSwiZmlsZXMiOltdfQpQSwECFAMUAAAAAAA7SFFd4/p5ER8AAAAfAAAADQAAAAAAAAAAAAAAgAEAAAAAbWFuaWZlc3QuanNvblBLBQYAAAAAAQABADsAAABKAAAAAAA=' };
+    artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip };
   const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence };
   const server = createServer(f.config, { ...f.ports, resolveSource: () => commit });
   assert.equal((await server.submit(request)).status, 'accepted');
@@ -145,7 +147,9 @@ test('a publish request without explicit source admission cannot reach SSH', asy
 test('explicit full source SHA is admitted before SSH and its bounded proof is bound to the request', async (t) => {
   const f = clientFixture(t, 'demo'), sha = 'a'.repeat(40), id = randomUUID();
   const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
-    ref: 'dev', sha, runId: 38940517004, runAttempt: 1, artifactSha256: 'b'.repeat(64), archiveBase64: 'UEs=' };
+    sourceRef: 'dev', commit: sha, runId: 38940517004, runAttempt: 1,
+    artifactDigest: 'sha256:b083f6a3ffd573c667dd1bb5103a17575de9f5043850b2d7d55bddc37eeb4ccb',
+    artifactZipBase64: 'UEsDBBQAAAAAADtIUV3j+nkRHwAAAB8AAAANAAAAbWFuaWZlc3QuanNvbnsic2NoZW1hVmVyc2lvbiI6MSwiZmlsZXMiOltdfQpQSwECFAMUAAAAAAA7SFFd4/p5ER8AAAAfAAAADQAAAAAAAAAAAAAAgAEAAAAAbWFuaWZlc3QuanNvblBLBQYAAAAAAQABADsAAABKAAAAAAA=' };
   const events = [];
   const result = await runClient(['demo', '--sha', sha, '--request-id', id], {
     configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {},
@@ -162,7 +166,9 @@ test('explicit full source SHA is admitted before SSH and its bounded proof is b
 
 test('production reserves an exact source tag before SSH and reuses it on a later operation', async (t) => {
   const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), tag = `prod-src-${sha}`;
-  const evidence = { ref: 'main', sha, runId: 38940517004, runAttempt: 1 };
+  const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
+    sourceRef: 'main', commit: sha, runId: 38940517004, runAttempt: 1,
+    artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip };
   const events = [], tags = new Map();
   const reserveOps = {
     resolve(name) { events.push(`resolve:${name}`); return tags.get(name) ?? null; },
@@ -193,7 +199,9 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
     const f = clientFixture(t, 'prod'); let submits = 0, creates = 0;
     await assert.rejects(runClient(['prod', '--sha', sha], {
       configHome: f.home, stateHome: f.stateHome, announce() {},
-      admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return { ref: 'main', sha }; },
+      admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return {
+        repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml', sourceRef: 'main', commit: sha,
+        runId: 38940517004, runAttempt: 1, artifactDigest: minimalCiArtifactDigest, artifactZipBase64: minimalCiArtifactZip }; },
       tagOps: {
         resolve: () => mode === 'tag-conflict' ? 'e'.repeat(40) : null,
         create: () => { creates++; return sha; },
