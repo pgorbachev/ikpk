@@ -563,7 +563,9 @@ test('same UUID and same archive bytes replay status without a second start; cha
     ...validServerRequest(id, bytes), sourceCiEvidence: validSourceProof(),
   };
   assert.equal((await f.server.submit(request, bytes)).status, 'accepted');
-  assert.equal((await f.server.submit(request, bytes)).status, 'running');
+  assert.deepEqual(await f.server.submit(request, bytes), {
+    id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated',
+  });
   assert.equal(f.events.filter((value) => value === `start:${id}`).length, 1);
   const other = Buffer.from(bytes); other[other.length - 1] ^= 1;
   await assert.rejects(f.server.submit(request, other), /request-id-conflict/);
