@@ -8,12 +8,13 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { constants as bufferConstants } from 'node:buffer';
 import { validateCmsArtifact } from './cms-artifact.mjs';
-import { EXCLUDED_HISTORICAL, PENDING_SCOPE, RELEASE_TEST_POLICY_VERSION, RELEASE_TEST_WORKFLOW, SOURCE_SUITES } from './release-test-policy.mjs';
+import { EXCLUDED_HISTORICAL, RELEASE_TEST_POLICY_VERSION, RELEASE_TEST_WORKFLOW, SOURCE_SUITES } from './release-test-policy.mjs';
 import { NON_TEST_CHECKS, REPORT_POLICY_VERSION, SOURCE_REPORT_PROFILE, validateReportSummaries } from './release-test-reports.mjs';
 
 export const validId = (id) => typeof id === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
 const fail = (message) => { throw new Error(message); };
 const plain = (x) => x && typeof x === 'object' && !Array.isArray(x);
+const SAFE_FRAME_REFUSAL = /^cms-(?:frame-(?:too-large|truncated|trailing-data|invalid-control|policy-unconfigured)|artifact-(?:policy-unconfigured|disk-reserve-insufficient)|incomplete-stage-pending)$/;
 function validateManifest(zip, evidence, sha) {
   const dir = mkdtempSync(join(tmpdir(), 'ikpk-source-proof-'));
   try {
@@ -361,8 +362,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     else if (command === 'submit' && id === undefined) {
       // Acquire the shared destination admission lock before consuming any body bytes.
       const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept-frame'],
-        { env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['inherit', 'pipe', 'ignore'] });
-      if (admission.error || !admission.stdout) fail('request-acceptance-unconfirmed');
+        { env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['inherit', 'pipe', 'pipe'] });
+      if (admission.error) fail('request-acceptance-unconfirmed');
+      if (admission.status !== 0 || !admission.stdout) {
+        let refusal;
+        try { refusal = JSON.parse(admission.stderr ?? ''); } catch { refusal = undefined; }
+        if (plain(refusal) && Object.keys(refusal).sort().join(',') === 'code,status' &&
+            refusal.status === 'refused' && typeof refusal.code === 'string' && SAFE_FRAME_REFUSAL.test(refusal.code)) fail(refusal.code);
+        fail('request-acceptance-unconfirmed');
+      }
       result = JSON.parse(admission.stdout);
     } else if (command === 'accept-frame' && id === undefined) {
       if (existsSync(join(c.state, '.incoming'))) fail('cms-incomplete-stage-pending');
@@ -373,7 +381,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (['refused', 'busy', 'interrupted', 'unknown', 'not-found'].includes(result.status)) process.exitCode = 1;
   } catch (error) {
-    const reason = typeof error?.message === 'string' && /^cms-(?:frame-(?:too-large|truncated|trailing-data|invalid-control|policy-unconfigured)|artifact-(?:policy-unconfigured|disk-reserve-insufficient)|incomplete-stage-pending)$/.test(error.message)
+    const reason = typeof error?.message === 'string' && SAFE_FRAME_REFUSAL.test(error.message)
       ? error.message : 'server-request-failed';
     process.stderr.write(`${JSON.stringify({ status: 'refused', code: reason })}\n`); process.exitCode = 1;
   }

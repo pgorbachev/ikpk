@@ -176,7 +176,7 @@ export function workerAudit(bytes, commit, exitStatus, releaseId, operatorInput,
   return audit;
 }
 
-export async function launch(args, { fetch = globalThis.fetch } = {}) {
+export async function launch(args) {
   const checks = [];
   if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') refuse('hosted-publication-forbidden');
   if (!['publish', 'rollback', 'recover', 'accept-state'].includes(args[0])) refuse('untrusted-ref');

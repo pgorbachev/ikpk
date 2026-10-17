@@ -359,7 +359,7 @@ test('a persisted production request ID and SHA reuse admitted evidence without 
 });
 
 test('saved production retries check status first and keep polling after main advances', async (t) => {
-  const sha = '7'.repeat(40), id = randomUUID(), evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
+  const sha = '7'.repeat(40), id = randomUUID(), evidence = sourceEvidence('main', sha);
   const f = clientFixture(t, 'prod'); let admissions = 0, refReads = 0, tagCreates = 0, submits = 0;
   const first = await runClient(['prod', '--sha', sha, '--request-id', id], {
     configHome: f.home, stateHome: f.stateHome, announce() {},
@@ -593,7 +593,8 @@ writeFileSync(${JSON.stringify(marker)},JSON.stringify({args,proofPath,proof:pro
 process.stdout.write(JSON.stringify({status:'success',code:'published'}));`, { mode: 0o700 });
   writeFileSync(launcherConfig, '{}', { mode: 0o600 });
   const config = { ...f.config, launcher, launcherConfig, canonicalRepository: 'https://github.com/pgorbachev/ikpk.git', timeoutSeconds: 60 };
-  const { publisher, ...ports } = f.ports;
+  const ports = { ...f.ports };
+  delete ports.publisher;
   const server = createServer(config, { ...ports, start() {} });
   await server.submit(f.request, f.cms.archiveBytes);
   const result = await server.execute(f.request.id);
