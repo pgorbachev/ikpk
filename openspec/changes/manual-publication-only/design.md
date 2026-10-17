@@ -120,7 +120,7 @@ report fields и связь с request ID и назначением. Он отд
 token отсутствует в server config, server process, SSH arguments, evidence и candidate
 environment; server не обращается к GitHub API.
 
-Сверка размера на `origin/dev@91bbd36b52d1f367c8b42ce557111dff9b909804`: успешный run
+Сверка размера на `dev@91bbd36b52d1f367c8b42ce557111dff9b909804`: успешный run
 `38940517004`, attempt 1, хранит artifact `release-source-tests-1` размером 4,256 байт по
 GitHub artifact metadata. Это подтверждает запас для evidence manifest на выбранной голове;
 CMS artifact в этом run не существует, поэтому его cap устанавливается только после измерения
@@ -387,7 +387,7 @@ Merge при этом не замерзает: `Deploy to GitHub Pages` не в�
 
 Проверку происхождения нельзя поручить коду из целевого дерева: текущая публикационная
 оболочка определяет корень по собственному расположению и подключает библиотеку проверок из
-того же checkout (`scripts/deploy-web.sh@ba8cb6eefcc470d4ef0612b6fcdbbb5e84ce7edc:25`). Если
+того же checkout (`scripts/deploy-web.sh@ba8cb6eefcc470d4ef0612b6fcdbbb5e84ce7edc:25`, `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`). Если
 оператор запускает tooling из проверенного checkout и отдельно задаёт точный target ref/SHA,
 проверка не зависит от файлов целевого SHA. До admission целевой checkout не создаётся и его
 код не исполняется, поэтому кандидат не может подменить локальную проверку или прочитать
@@ -452,7 +452,7 @@ Production-назначение нового пути ещё не установ
 переезда на другую площадку, но не требует первой выкладки новой командой до удаления
 неиспользуемого workflow.
 
-1. Начать реализацию от свежего интеграционного `origin/dev`; production source policy при этом
+1. Начать реализацию от свежего интеграционного `dev`; production source policy при этом
    остаётся exact current `main`, DEMO — exact current `dev`. Проверить применение обеих дельт и
    предусловия отдельно; `server-provisioning` не ждёт архива этого change. Писатель CMS и
    права/защищённая установка launcher готовятся
