@@ -564,7 +564,7 @@ test('same UUID and same archive bytes replay status without a second start; cha
   };
   assert.equal((await f.server.submit(request, bytes)).status, 'accepted');
   assert.deepEqual(await f.server.submit(request, bytes), {
-    id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated',
+    id, destination: 'demo', status: 'running', code: 'inspect-pending-before-retry',
   });
   assert.equal(f.events.filter((value) => value === `start:${id}`).length, 1);
   const other = Buffer.from(bytes); other[other.length - 1] ^= 1;
