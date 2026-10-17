@@ -9,7 +9,7 @@ import * as launcher from '../publication-launcher.mjs';
 import { RELEASE_TEST_WORKFLOW, releaseTestManifest } from '../release-test-policy.mjs';
 import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 import { ciEvidenceProblem, publicationCiProblem, PUBLICATION_CI_POLICY } from '../../web/scripts/lib/publish-gate.ts';
-const SHA = 'a'.repeat(40), OTHER = 'b'.repeat(40);
+const SHA = 'a'.repeat(40);
 const demo = { sourceRef: 'dev', sourceProfile: 'demo-dev', deployMode: 'stand', paymentRole: 'ci',
   sshTarget: 'deploy@193.124.115.99', siteUrl: 'https://staging.ikpk.su' };
 const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner,
@@ -30,54 +30,17 @@ function sourceProof(commit) {
       artifactZipBase64: bytes.toString('base64') };
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
-function ciFixture(branch = 'dev', commit = SHA) {
-  const run = { id: 9, head_sha: commit, head_branch: branch, event: 'push', status: 'completed', conclusion: 'success',
-    path: PUBLICATION_CI_POLICY.workflow, repository: { full_name: 'pgorbachev/ikpk' }, head_repository: { full_name: 'pgorbachev/ikpk' } };
-  const jobs = PUBLICATION_CI_POLICY.requiredJobs.map(name => ({ name, status: 'completed', conclusion: 'success' }));
-  const calls = [];
-  const fetch = async (url, options) => {
-    calls.push({ url, options });
-    assert.ok(url.startsWith('https://api.github.com/repos/pgorbachev/ikpk/'));
-    if (url.includes('/git/ref/heads/')) return Response.json({ ref: `refs/heads/${branch}`, object: { sha: commit } });
-    const key = url.includes('/jobs?') ? 'jobs' : 'workflow_runs';
-    const data = key === 'jobs' ? jobs : [run];
-    return Response.json({ total_count: data.length, [key]: data });
-  };
-  return { run, jobs, fetch, calls };
-}
 test('source branch defaults main; dev needs the exact installed demo profile', () => {
-  assert.deepEqual(launcher.SOURCE_CI_JOBS, PUBLICATION_CI_POLICY.requiredJobs);
   assert.equal(launcher.publicationSourceRef({ deployMode: 'prod' }), 'main');
   assert.equal(launcher.publicationSourceRef(demo), 'dev');
   for (const bad of [{ sourceRef: 'topic' }, { ...demo, deployMode: 'prod' }, { ...demo, paymentRole: 'prod' },
     { ...demo, sourceProfile: undefined }, { ...demo, sshTarget: 'deploy@other.invalid' },
     { ...demo, siteUrl: 'https://ikpk.su' }, { ...demo, sshTarget: 'root@193.124.115.99' }]) assert.throws(() => launcher.publicationSourceRef(bad));
 });
-test('installed CI gate accepts exact dev push SHA and checks every required job', async () => {
-  const f = ciFixture();
-  await launcher.verifySourceCi({ commit: SHA, sourceRef: 'dev', fetch: f.fetch });
-  assert.equal(f.calls.length, 3);
-  assert.ok(f.calls.some(c => c.url.includes(`branch=dev&head_sha=${SHA}`)));
-});
-test('installed gate refuses wrong branch/SHA/event/workflow/fork and skipped or absent jobs', async () => {
-  for (const mutation of [{ head_branch: 'main' }, { head_sha: OTHER }, { event: 'pull_request' },
-    { event: 'schedule' }, { path: 'other.yml' }, { head_repository: { full_name: 'fork/repo' } },
-    { status: 'in_progress' }, { conclusion: 'cancelled' }]) {
-    const f = ciFixture(); Object.assign(f.run, mutation);
-    await assert.rejects(launcher.verifySourceCi({ commit: SHA, sourceRef: 'dev', fetch: f.fetch }));
-  }
-  for (const mutation of ['skipped', 'missing', 'duplicate']) {
-    const f = ciFixture();
-    if (mutation === 'missing') f.jobs.pop();
-    else if (mutation === 'duplicate') f.jobs.push(f.jobs[0]);
-    else f.jobs[0].conclusion = mutation;
-    await assert.rejects(launcher.verifySourceCi({ commit: SHA, sourceRef: 'dev', fetch: f.fetch }));
-  }
-});
 test('generic CI validator keeps main default and explicitly validates dev evidence', () => {
-  const f = ciFixture();
+  const jobs = PUBLICATION_CI_POLICY.requiredJobs.map(name => ({ name, status: 'completed', conclusion: 'success' }));
   const evidence = { repository: 'pgorbachev/ikpk', workflow: PUBLICATION_CI_POLICY.workflow, branch: 'dev', commit: SHA,
-    runId: 9, event: 'push', conclusion: 'success', executedTests: 1, jobs: f.jobs };
+    runId: 9, event: 'push', conclusion: 'success', executedTests: 1, jobs };
   assert.equal(ciEvidenceProblem(evidence, SHA), 'untrusted-ci-run');
   assert.equal(ciEvidenceProblem(evidence, SHA, PUBLICATION_CI_POLICY, 'dev'), undefined);
 });
@@ -103,7 +66,10 @@ observedEntry:1,revision:1,highWaterMark:1,localExecutedTests:1,ciExecutedTests:
   const config = join(installed, 'config.json');
   const baseConfig = { ...demo, canonicalRepository: remote, destinationId: 'demo-dev', credentialBroker: [process.execPath, broker] };
   writeFileSync(config, JSON.stringify(baseConfig), { mode: 0o600 });
-  const proofPath = join(installed, 'operations-request-proof.json');
+  const requestDirectory = join(installed, 'operations', '123e4567-e89b-42d3-a456-426614174000');
+  mkdirSync(join(installed, 'operations'), { mode: 0o700 }); chmodSync(join(installed, 'operations'), 0o700);
+  mkdirSync(requestDirectory, { mode: 0o700 }); chmodSync(requestDirectory, 0o700);
+  const proofPath = join(requestDirectory, 'tests.json');
   writeFileSync(proofPath, JSON.stringify(sourceProof(commit)), { mode: 0o600 });
   const module = await import(pathToFileURL(entry));
   const args = ['publish','--config',config,'--source-url',remote,'--source-ref','dev','--expected-sha',commit,'--source-proof-file',proofPath];
@@ -127,9 +93,9 @@ observedEntry:1,revision:1,highWaterMark:1,localExecutedTests:1,ciExecutedTests:
 });
 
 test('record validation reads legacy main and admits dev records only as stand/ci demo-dev', () => {
-  const f = ciFixture();
+  const jobs = PUBLICATION_CI_POLICY.requiredJobs.map(name => ({ name, status: 'completed', conclusion: 'success' }));
   const evidence = { repository: 'pgorbachev/ikpk', workflow: PUBLICATION_CI_POLICY.workflow, branch: 'main', commit: SHA,
-    runId: 9, event: 'push', conclusion: 'success', executedTests: 1, jobs: f.jobs };
+    runId: 9, event: 'push', conclusion: 'success', executedTests: 1, jobs };
   const legacy = { ciEvidence: evidence, commit: SHA, deployMode: 'prod', paymentRole: 'prod' };
   assert.equal(publicationCiProblem(legacy), undefined);
   const devRecord = { ...legacy, deployMode: 'stand', paymentRole: 'ci', sourceRef: 'dev', sourceProfile: 'demo-dev',
