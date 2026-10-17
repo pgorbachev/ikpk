@@ -87,6 +87,11 @@ function copyPayload(sourceName, destinationName = sourceName) {
     filter(candidate) {
       const relative = path.relative(cmsRoot, candidate).split(path.sep);
       if (relative.includes('node_modules')) return false;
+      // Uploaded media belongs to the server's live CMS/DB state, not this CI
+      // build. Keep only the empty directory placeholder; E2E may write covers
+      // into cms/public/uploads after the reusable admin build has completed.
+      if (relative[0] === 'public' && relative[1] === 'uploads' &&
+          relative.length > 2 && !(relative.length === 3 && relative[2] === '.gitkeep')) return false;
       let info;
       try { info = fs.lstatSync(candidate); } catch { fail(`нет обязательного файла ${path.relative(cmsRoot, candidate)}`); }
       if (info.isSymbolicLink()) fail(`symlink запрещён: ${path.relative(cmsRoot, candidate)}`);
