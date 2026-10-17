@@ -132,7 +132,10 @@ export function validateCmsArtifact({ request, archiveBytes, policy, runtime }) 
   const lock = files.get('package-lock.json');
   if (!lock || sha256(lock) !== manifest.packageLockSha256) fail('lockfile-mismatch');
   const expectedMigrationsText = files.get('database/.migrations-expected')?.toString('utf8');
-  const migrationFiles = [...files.keys()].filter((path) => path.startsWith('database/migrations/') && /\.(?:js|sql)$/.test(path));
+  const migrationFiles = [...files.keys()].filter((path) => {
+    const relative = path.slice('database/migrations/'.length);
+    return path.startsWith('database/migrations/') && !relative.includes('/') && /\.(?:js|sql)$/.test(path);
+  });
   if (!/^(?:0|[1-9][0-9]*)\n$/.test(expectedMigrationsText ?? '') ||
       migrationFiles.length !== Number(expectedMigrationsText.trim())) fail('migration-inventory-mismatch');
   for (const path of ['dist/build/index.html', 'dist/src/index.js', 'dist/config/database.js', 'package.json', 'package-lock.json', 'tsconfig.json',
