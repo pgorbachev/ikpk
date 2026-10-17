@@ -1,7 +1,7 @@
 /** Installed trusted adapter: validate canonical source CI for this exact SHA. */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { RELEASE_TEST_WORKFLOW, releaseTestArtifactName, validateReleaseTestEvidence } from './release-test-policy.mjs';
 
@@ -14,7 +14,7 @@ async function bytes(response, limit) {
   return Buffer.concat(chunks);
 }
 export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  maxPolls = 1080 } = {}) {
+  maxPolls = 1080, resolveSourceRef } = {}) {
   if (typeof token !== 'string' || !token.trim() || /[\r\n]/.test(token)) fail('release-ci-token-missing');
   async function request(path) {
     if (typeof path !== 'string' || !path.startsWith(`${API}/`)) fail('release-ci-untrusted-url');
@@ -22,6 +22,16 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
       'X-GitHub-Api-Version': '2022-11-28' }, redirect: 'manual', signal: AbortSignal.timeout(30000) });
     if (!response.ok) fail('release-ci-http-error');
     return JSON.parse((await bytes(response, 4 * 1024 * 1024)).toString('utf8'));
+  }
+  async function protectedRef(sourceRef) {
+    const value = resolveSourceRef
+      ? await resolveSourceRef({ sourceRef })
+      : await request(`${API}/git/ref/heads/${sourceRef}`).then((ref) => {
+        if (ref.ref !== `refs/heads/${sourceRef}` || !/^[0-9a-f]{40}$/.test(ref.object?.sha ?? '')) fail('release-ci-source-ref-unverifiable');
+        return ref.object.sha;
+      });
+    if (!/^[0-9a-f]{40}$/.test(value ?? '')) fail('release-ci-source-ref-unverifiable');
+    return value;
   }
   async function list(path, key) {
     const found = [];
@@ -57,9 +67,9 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
       const digest = `sha256:${createHash('sha256').update(buffer).digest('hex')}`;
       if (artifact.digest !== digest) fail('release-ci-artifact-digest-mismatch');
       const archive = join(scratch, 'artifact.zip'); writeFileSync(archive, buffer, { mode: 0o600, flag: 'wx' });
-      const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384 }).trim().split('\n');
+      const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384, timeout: 10000 }).trim().split('\n');
       if (names.length !== 1 || names[0] !== 'release-source-tests.json') fail('release-ci-untrusted-artifact');
-      return JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536 }));
+      return { manifest: JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536, timeout: 10000 })), buffer };
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }
   return async function run(config, receipt) {
@@ -85,17 +95,23 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
     const artifacts = await list(`${API}/actions/runs/${expected.runId}/artifacts`, 'artifacts');
     const named = artifacts.filter((a) => a.name === releaseTestArtifactName(expected.runAttempt));
     if (named.length !== 1) fail('release-ci-manifest-missing');
-    const evidence = validateReleaseTestEvidence({ run: current, jobs, artifact: named[0], manifest: await manifest(named[0], receipt.directory), expected });
+    const downloaded = await manifest(named[0], receipt.directory);
+    const evidence = validateReleaseTestEvidence({ run: current, jobs, artifact: named[0], manifest: downloaded.manifest, expected });
     if (evidence.pendingScope.length) fail('release-ci-scope-not-approved');
     const finalRun = await request(`${API}/actions/runs/${expected.runId}`);
     identity(finalRun, receipt, config.sourceRef);
     if (finalRun.run_attempt !== expected.runAttempt || finalRun.status !== 'completed' || finalRun.conclusion !== 'success') {
       fail('release-ci-attempt-changed');
     }
-    return evidence;
+    let currentRef;
+    try { currentRef = await protectedRef(config.sourceRef); } catch { fail('release-ci-source-ref-unverifiable'); }
+    if (currentRef !== receipt.commit) fail('release-ci-source-ref-changed');
+    return { ...evidence, artifactDigest: named[0].digest, artifactZipBase64: downloaded.buffer.toString('base64') };
   };
 }
 export async function runReleaseCi(config, receipt) {
-  const token = readFileSync(config.releaseCiTokenFile, 'utf8').trim();
+  let token;
+  try { token = execFileSync('gh', ['auth', 'token', '--hostname', 'github.com'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+  catch { fail('release-ci-gh-auth-unavailable'); }
   return createReleaseCi({ token })(config, receipt);
 }

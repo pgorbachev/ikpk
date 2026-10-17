@@ -2,9 +2,9 @@
 /** Install outside every checkout, together with a protected destination config. */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync, mkdtempSync, rmSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** SHA256 of sorted [path length, path, byte length, bytes] tuples. No symlinks. */
@@ -30,6 +30,7 @@ export async function digestTree(rootDir, filePaths) {
 
 const inside = (parent, child) => { const rel = relative(parent, child); return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel)); };
 const refuse = (reason) => { throw new Error(reason); };
+const sourceProofKeys = ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'];
 // Installed policy: never read source/CI policy from the candidate checkout.
 export function publicationSourceRef(config) {
   if (config.sourcePolicy !== undefined && (config.sourcePolicy !== 'demo-publication-only' ||
@@ -41,55 +42,6 @@ export function publicationSourceRef(config) {
       config.paymentRole === 'ci' && /^(?!root@)[a-z_][a-z0-9_-]*@193\.124\.115\.99$/.test(config.sshTarget) &&
       config.siteUrl === 'https://staging.ikpk.su') return ref;
   refuse('untrusted-ref');
-}
-export const SOURCE_CI_JOBS = Object.freeze(['Capture content snapshot', 'Unit and build tests',
-  'Dependency update invariants', 'Scripts unit tests', 'Playwright smoke (desktop + mobile)']);
-/** Read only, before the credential broker or any candidate executable. */
-export async function verifySourceCi({ commit, sourceRef, token, fetch: fetcher = globalThis.fetch }) {
-  if (!/^[a-f0-9]{40}$/.test(commit) || !['main', 'dev'].includes(sourceRef)) refuse('source-ci-failed');
-  const api = 'https://api.github.com/repos/pgorbachev/ikpk';
-  async function request(url) {
-    if (!url.startsWith(`${api}/`)) refuse('source-ci-failed');
-    const response = await fetcher(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
-      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-    if (!response.ok || !response.body) refuse('source-ci-failed');
-    const reader = response.body.getReader(); let size = 0; const chunks = [];
-    try {
-      for (;;) { const { done, value } = await reader.read(); if (done) break;
-        size += value.byteLength; if (size > 16 * 1024 * 1024) refuse('source-ci-failed'); chunks.push(value); }
-    } finally { await reader.cancel(); }
-    return { response, data: JSON.parse(Buffer.concat(chunks).toString('utf8')) };
-  }
-  async function list(initial, key) {
-    let url = initial; const seen = new Set(); const items = [];
-    while (url) {
-      if (seen.has(url) || seen.size >= 100) refuse('source-ci-failed'); seen.add(url);
-      const { response, data } = await request(url);
-      if (!Array.isArray(data?.[key]) || !Number.isSafeInteger(data.total_count) || data.total_count < 0) refuse('source-ci-failed');
-      items.push(...data[key]);
-      const next = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
-      if (next && (new URL(next).origin !== new URL(initial).origin || new URL(next).pathname !== new URL(initial).pathname)) refuse('source-ci-failed');
-      if (!next && items.length !== data.total_count) refuse('source-ci-failed'); url = next;
-    }
-    return items;
-  }
-  try {
-    const { data: head } = await request(`${api}/git/ref/heads/${sourceRef}`);
-    if (head.ref !== `refs/heads/${sourceRef}` || head.object?.sha !== commit) refuse('source-ci-failed');
-    const runs = await list(`${api}/actions/workflows/test.yml/runs?branch=${sourceRef}&head_sha=${commit}&per_page=100`, 'workflow_runs');
-    const run = runs.filter(candidate => candidate.head_sha === commit && candidate.head_branch === sourceRef &&
-      candidate.path === '.github/workflows/test.yml' && candidate.repository?.full_name === 'pgorbachev/ikpk' &&
-      candidate.head_repository?.full_name === 'pgorbachev/ikpk' &&
-      (candidate.event === 'push' || (sourceRef === 'main' && candidate.event === 'schedule'))).sort((a, b) => b.id - a.id)[0];
-    if (!run || !Number.isSafeInteger(run.id) || run.id <= 0 || run.status !== 'completed' || run.conclusion !== 'success') refuse('source-ci-failed');
-    const jobs = await list(`${api}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`, 'jobs');
-    for (const name of SOURCE_CI_JOBS) {
-      const matches = jobs.filter(job => job.name === name);
-      if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') refuse('source-ci-failed');
-    }
-    return { runId: run.id, commit, sourceRef };
-  } catch { refuse('source-ci-failed'); }
 }
 function cleanEnvironment() {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: tmpdir(),
@@ -112,6 +64,41 @@ function protectedFile(path) {
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o022)) refuse('untrusted-config');
   return realpathSync(path);
+}
+function verifyAdmittedSourceProof(path, expectedCommit, expectedRef) {
+  try {
+    const resolved = protectedFile(resolve(path)), stat = lstatSync(resolved);
+    if ((stat.mode & 0o077) || stat.uid !== process.getuid() || stat.size > 8 * 1024 * 1024) refuse('source-ci-proof-untrusted');
+    const operationDir = dirname(resolved), operationsDir = dirname(operationDir);
+    if (basename(resolved) !== 'tests.json' || basename(operationsDir) !== 'operations' ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(basename(operationDir))) refuse('source-ci-proof-untrusted');
+    for (const directory of [operationsDir, operationDir]) {
+      const directoryStat = lstatSync(directory);
+      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink() || (directoryStat.mode & 0o077) || directoryStat.uid !== process.getuid()) refuse('source-ci-proof-untrusted');
+    }
+    const proof = JSON.parse(readFileSync(resolved, 'utf8'));
+    if (!proof || typeof proof !== 'object' || Array.isArray(proof) ||
+        Object.keys(proof).sort().join(',') !== [...sourceProofKeys].sort().join(',') ||
+        proof.repository !== 'pgorbachev/ikpk' || proof.workflow !== '.github/workflows/release-tests.yml' ||
+        proof.sourceRef !== expectedRef || proof.commit !== expectedCommit ||
+        !Number.isSafeInteger(proof.runId) || proof.runId < 1 || !Number.isSafeInteger(proof.runAttempt) || proof.runAttempt < 1 ||
+        typeof proof.artifactDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(proof.artifactDigest) ||
+        typeof proof.artifactZipBase64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(proof.artifactZipBase64)) refuse('source-ci-proof-untrusted');
+    const archiveBytes = Buffer.from(proof.artifactZipBase64, 'base64');
+    if (archiveBytes.length > 4 * 1024 * 1024 || archiveBytes.toString('base64') !== proof.artifactZipBase64 ||
+        `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}` !== proof.artifactDigest) refuse('source-ci-proof-untrusted');
+    const scratch = mkdtempSync(join(tmpdir(), 'ikpk-source-proof-'));
+    try {
+      const archive = join(scratch, 'proof.zip'); writeFileSync(archive, archiveBytes, { mode: 0o600, flag: 'wx' });
+      const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384, timeout: 10000 }).trim().split('\n');
+      if (names.length !== 1 || names[0] !== 'release-source-tests.json') refuse('source-ci-proof-untrusted');
+      const manifest = JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536, timeout: 10000 }));
+      if (manifest.workflow !== proof.workflow || manifest.commit !== expectedCommit || manifest.runId !== proof.runId ||
+          manifest.runAttempt !== proof.runAttempt || manifest.subject !== 'source-code' ||
+          !['push', 'workflow_dispatch'].includes(manifest.event)) refuse('source-ci-proof-untrusted');
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+    return { runId: proof.runId, runAttempt: proof.runAttempt };
+  } catch { refuse('source-ci-proof-untrusted'); }
 }
 function insideRepository(path) { try { git(path, 'rev-parse', '--absolute-git-dir'); return true; } catch { return false; } }
 
@@ -199,7 +186,7 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
     const key = args[i];
     const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] :
       accepting ? ['--config', '--observed-entry', '--fingerprint', '--confirm'] : command === 'recover' ? ['--config'] :
-        ['--config', '--source-url', '--source-ref', '--source-dir', '--expected-sha'];
+        ['--config', '--source-url', '--source-ref', '--source-dir', '--expected-sha', '--source-proof-file'];
     if (!allowed.includes(key) || options.has(key)) refuse('invalid-arguments');
     if (key === '--confirm') options.set(key, true);
     else {
@@ -211,6 +198,7 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.get('--release-id') ?? '') ||
       !options.get('--reason')?.trim())) refuse('invalid-arguments');
   if (command === 'recover' && !options.has('--config')) refuse('invalid-arguments');
+  if (command === 'publish' && !options.has('--source-proof-file')) refuse('invalid-arguments');
   const observedEntry = Number(options.get('--observed-entry'));
   if (accepting && (!options.has('--config') || !options.has('--confirm') ||
       !/^[1-9][0-9]*$/.test(options.get('--observed-entry') ?? '') || !Number.isSafeInteger(observedEntry) ||
@@ -223,6 +211,7 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
     if (configPath !== join(dirname(installed), 'config.json') ||
         insideRepository(dirname(configPath)) || insideRepository(dirname(installed))) refuse('untrusted-config');
     config = JSON.parse(readFileSync(configPath, 'utf8'));
+    if (Object.hasOwn(config, 'ciTokenFile')) refuse('untrusted-config');
   } catch { refuse('untrusted-config'); }
   checks.push('protected-config');
   if (!['stand', 'prod'].includes(config.deployMode) || typeof config.destinationId !== 'string' || !config.destinationId ||
@@ -300,17 +289,9 @@ export async function launch(args, { fetch = globalThis.fetch } = {}) {
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
         !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
     checks.push('contained-worker');
-    let ciToken;
-    if (config.ciTokenFile !== undefined) {
-      try {
-        if (typeof config.ciTokenFile !== 'string' || !isAbsolute(config.ciTokenFile)) refuse('untrusted-config');
-        const path = protectedFile(config.ciTokenFile), stat = lstatSync(path);
-        if ((stat.mode & 0o077) || stat.uid !== process.getuid() || insideRepository(dirname(path))) refuse('untrusted-config');
-        ciToken = readFileSync(path, 'utf8').trim();
-        if (!ciToken || /\s/.test(ciToken)) refuse('untrusted-config');
-      } catch { refuse('untrusted-config'); }
-    }
-    await verifySourceCi({ commit: head, sourceRef, token: ciToken, fetch });
+    const proofFile = options.get('--source-proof-file');
+    if (typeof proofFile !== 'string' || !isAbsolute(proofFile)) refuse('source-ci-proof-untrusted');
+    verifyAdmittedSourceProof(proofFile, head, sourceRef);
     checks.push('trusted-source-ci');
     // CI reads may take time: bind credential delivery to the same canonical head again.
     try {
