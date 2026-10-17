@@ -107,6 +107,7 @@ jobs:
         with:
           name: release-cms-artifact-${{ github.run_attempt }}
           path: ${{ runner.temp }}/cms-release-artifact/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 90
 

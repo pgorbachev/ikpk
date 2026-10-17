@@ -27,11 +27,35 @@ if [[ "${1:-}" == "--prebuilt" ]]; then
   shift
 fi
 OUT="${1:?укажите каталог для артефакта}"
-if [[ "$OUT" != /* ]]; then OUT="$PWD/$OUT"; fi
-if [[ "$OUT" == / || "$OUT" == "$REPO_ROOT" || "$OUT" == "$CMS_ROOT" ]]; then
-  echo "[artifact] небезопасный каталог вывода: $OUT" >&2
-  exit 1
-fi
+OUT="$(node - "$OUT" "$REPO_ROOT" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const [input, repoRootInput] = process.argv.slice(2);
+const fail = (message) => { console.error(`[artifact] ${message}`); process.exit(1); };
+if (/[\r\n\0]/.test(input)) fail('небезопасные символы в пути вывода');
+const requested = path.resolve(process.cwd(), input);
+try {
+  fs.lstatSync(requested);
+  fail(`каталог вывода уже существует: ${requested}`);
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+let parent;
+try { parent = fs.realpathSync(path.dirname(requested)); }
+catch { fail(`родительский каталог вывода должен существовать: ${path.dirname(requested)}`); }
+if (!fs.statSync(parent).isDirectory()) fail('родительский путь вывода не является каталогом');
+const output = path.join(parent, path.basename(requested));
+const repoRoot = fs.realpathSync(repoRootInput);
+const contains = (root, candidate) => {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+};
+if (contains(repoRoot, output) || contains(output, repoRoot)) {
+  fail(`вывод пересекается с исходным checkout: ${output}`);
+}
+process.stdout.write(output);
+NODE
+)"
 
 if (( PREBUILT )); then
   if [[ ! "${CMS_SOURCE_SHA:-}" =~ ^[a-f0-9]{40}$ ||
@@ -57,19 +81,17 @@ NODE
     echo "[artifact] нет обязательного cms/dist/src/index.js" >&2
     exit 1
   fi
-  if [[ -e "$OUT" ]]; then
-    echo "[artifact] каталог вывода уже существует: $OUT" >&2
-    exit 1
-  fi
 fi
+
+# Reserve a fresh output directory before compiling. Existing targets are never
+# overwritten or removed, and path admission above runs before the build.
+mkdir "$OUT"
 
 if (( ! PREBUILT )); then
   cd "$CMS_ROOT"
   npm run build
 fi
 
-if (( ! PREBUILT )); then rm -rf "$OUT"; fi
-mkdir -p "$OUT"
 # Copy only the runtime payload and reject links/special files. Nested node_modules are
 # intentionally omitted from every copied tree; the server assembles against its own runtime.
 node - "$CMS_ROOT" "$OUT" <<'NODE'
