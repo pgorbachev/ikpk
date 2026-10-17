@@ -66,13 +66,14 @@ test('rollback and recover use explicit requests and do not depend on a new sour
   await server.submit(r); await server.execute(r.id);
   assert.deepEqual(f.events.slice(1), ['publisher']);
 });
-function clientFixture(t) {
+function clientFixture(t, destination = 'demo') {
   const f = fixture(t); const home = join(f.root, 'config'); mkdirSync(home, { mode: 0o700 });
   const identityFile = join(home, 'key'), knownHostsFile = join(home, 'known_hosts');
   writeFileSync(identityFile, 'key', { mode: 0o600 }); writeFileSync(knownHostsFile, 'pin', { mode: 0o600 });
-  const config = { version: 1, destination: 'demo', sshTarget: 'deploy@193.124.115.99', identityFile, knownHostsFile,
+  const config = { version: 1, destination, sourceRef: destination === 'prod' ? 'main' : 'dev',
+    sshTarget: 'deploy@193.124.115.99', identityFile, knownHostsFile,
     serverEntry: '/opt/ikpk/demo/server-deploy.mjs', serverNode: '/usr/bin/node' };
-  writeFileSync(join(home, 'demo.json'), JSON.stringify(config), { mode: 0o600 });
+  writeFileSync(join(home, `${destination}.json`), JSON.stringify(config), { mode: 0o600 });
   return { ...f, home, clientConfig: config, stateHome: join(f.root, 'client') };
 }
 test('client saves and announces ID before SSH; status polling does not create a second request', async (t) => {
@@ -99,6 +100,119 @@ test('SSH fixes host pin/key, disables ambient configuration and forwarding; pat
 test('command parser requires explicit destination and a reason for rollback', () => {
   assert.equal(parseArguments(['prod']).action, 'publish');
   for (const bad of [[], ['prod', '--source-ref', 'dev'], ['demo', 'status', '../bad'], ['demo', 'rollback', 'old']]) assert.throws(() => parseArguments(bad));
+  const sha = 'f'.repeat(40);
+  assert.equal(parseArguments(['prod', '--sha', sha]).sha, sha);
+  assert.throws(() => parseArguments(['prod', '--sha', 'f'.repeat(39)]), /invalid|sha|arguments/i);
+});
+
+test('server request retries compare source evidence semantically and reject changed evidence', async (t) => {
+  const f = fixture(t), commit = 'a'.repeat(40);
+  const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
+    sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1, artifactDigest: 'sha256:' + 'b'.repeat(64) };
+  const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence };
+  const server = createServer(f.config, { ...f.ports, resolveSource: () => commit });
+  assert.equal((await server.submit(request)).status, 'accepted');
+  const reordered = { sourceCiEvidence: { artifactDigest: evidence.artifactDigest, runAttempt: 1, runId: evidence.runId,
+    commit, sourceRef: 'dev', workflow: evidence.workflow, repository: evidence.repository },
+    action: 'publish', sourceSha: commit, destination: 'demo', id: request.id };
+  assert.equal((await server.submit(reordered)).status, 'running');
+  await assert.rejects(server.submit({ ...reordered, sourceCiEvidence: { ...reordered.sourceCiEvidence, runAttempt: 2 } }), /request-id-conflict/);
+  assert.equal(f.events.filter((event) => event.startsWith('start:')).length, 1);
+});
+
+test('server rejects a CI evidence ZIP above 4 MiB before forwarding the request', () => {
+  const commit = 'b'.repeat(40);
+  const oversized = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit,
+    sourceCiEvidence: { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
+      sourceRef: 'dev', commit, runId: 38940517004, runAttempt: 1, artifactDigest: `sha256:${'c'.repeat(64)}`,
+      artifactZipBase64: Buffer.alloc(4 * 1024 * 1024 + 1).toString('base64') } };
+  assert.throws(() => validateRequest(oversized, 'demo'), /too.large|size|limit/i);
+});
+
+test('a publish request without explicit source admission cannot reach SSH', async (t) => {
+  const f = clientFixture(t); let submits = 0;
+  let failure;
+  try {
+    await runClient(['demo'], { configHome: f.home, stateHome: f.stateHome, announce() {},
+      call(_config, action) { if (action === 'submit') submits++; return { id: randomUUID(), destination: 'demo', status: 'success' }; } });
+  } catch (error) { failure = error; }
+  assert.equal(submits, 0, 'the current no-SHA path must not submit an unadmitted request');
+  assert.ok(failure, 'publish without a target SHA must be refused');
+});
+
+test('explicit full source SHA is admitted before SSH and its bounded proof is bound to the request', async (t) => {
+  const f = clientFixture(t, 'demo'), sha = 'a'.repeat(40), id = randomUUID();
+  const evidence = { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml',
+    ref: 'dev', sha, runId: 38940517004, runAttempt: 1, artifactSha256: 'b'.repeat(64), archiveBase64: 'UEs=' };
+  const events = [];
+  const result = await runClient(['demo', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {},
+    admitSource: async (source) => { events.push('admit'); assert.deepEqual(source, { destination: 'demo', sourceRef: 'dev', sha }); return evidence; },
+    call(_config, action, request) {
+      events.push(action);
+      assert.equal(action, 'submit'); assert.equal(request.sourceSha, sha);
+      assert.deepEqual(request.sourceCiEvidence, evidence); assert.equal(Object.hasOwn(request, 'sourceTag'), false);
+      return { id, destination: 'demo', status: 'success' };
+    },
+  });
+  assert.equal(result.status, 'success'); assert.deepEqual(events, ['admit', 'submit']);
+});
+
+test('production reserves an exact source tag before SSH and reuses it on a later operation', async (t) => {
+  const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), tag = `prod-src-${sha}`;
+  const evidence = { ref: 'main', sha, runId: 38940517004, runAttempt: 1 };
+  const events = [], tags = new Map();
+  const reserveOps = {
+    resolve(name) { events.push(`resolve:${name}`); return tags.get(name) ?? null; },
+    create(name, target) { events.push(`create:${name}:${target}`); tags.set(name, target); },
+  };
+  for (const id of [randomUUID(), randomUUID()]) {
+    const result = await runClient(['prod', '--sha', sha, '--request-id', id], {
+      configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps: reserveOps,
+      admitSource: async (source) => { events.push('admit'); assert.deepEqual(source, { destination: 'prod', sourceRef: 'main', sha }); return evidence; },
+      call(_config, action, request) {
+        events.push(action); assert.equal(action, 'submit');
+        assert.equal(request.sourceTag, tag); assert.equal(request.sourceSha, sha);
+        assert.equal(request.sourceCiEvidence, evidence);
+        return { id, destination: 'prod', status: 'success' };
+      },
+    });
+    assert.equal(result.status, 'success');
+  }
+  assert.deepEqual(events, [
+    'admit', `resolve:${tag}`, `create:${tag}:${sha}`, `submit`,
+    'admit', `resolve:${tag}`, 'submit',
+  ]);
+});
+
+test('source or tag refusal never submits a production request; ambiguous tag creation is resolved by readback', async (t) => {
+  const sha = 'd'.repeat(40), tag = `prod-src-${sha}`;
+  for (const mode of ['source-refused', 'tag-conflict']) {
+    const f = clientFixture(t, 'prod'); let submits = 0, creates = 0;
+    await assert.rejects(runClient(['prod', '--sha', sha], {
+      configHome: f.home, stateHome: f.stateHome, announce() {},
+      admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return { ref: 'main', sha }; },
+      tagOps: {
+        resolve: () => mode === 'tag-conflict' ? 'e'.repeat(40) : null,
+        create: () => { creates++; return sha; },
+      },
+      call(_config, action) { if (action === 'submit') submits++; return { status: 'success' }; },
+    }));
+    assert.equal(submits, 0, mode); assert.equal(creates, 0, mode);
+  }
+
+  const f = clientFixture(t, 'prod'), events = []; let lookups = 0, submits = 0;
+  const result = await runClient(['prod', '--sha', sha], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => ({ ref: 'main', sha }),
+    tagOps: {
+      resolve(name) { assert.equal(name, tag); events.push('read'); return ++lookups === 1 ? null : sha; },
+      create(name, target) { assert.equal(name, tag); assert.equal(target, sha); events.push('create'); throw new Error('tag creation reply lost'); },
+    },
+    call(_config, action, request) { assert.equal(request.sourceTag, tag); submits++; return { id: request.id, destination: 'prod', status: 'refused' }; },
+  });
+  assert.equal(result.status, 'refused'); assert.equal(submits, 1);
+  assert.deepEqual(events, ['read', 'create', 'read']);
 });
 
 test('manager unavailability is unknown rather than proof that an operation stopped', async (t) => {
@@ -107,20 +221,19 @@ test('manager unavailability is unknown rather than proof that an operation stop
   await server.submit(f.request); assert.equal(server.status(f.request.id).status, 'unknown');
 });
 
-test('installed config refuses mismatched destination/source and readable CI tokens', (t) => {
+test('installed server config has no GitHub CI token dependency', (t) => {
   const f = fixture(t), installed = join(f.root, 'server-deploy.mjs'), launcher = join(f.root, 'publication-launcher.mjs');
   writeFileSync(installed, '', { mode: 0o700 }); writeFileSync(launcher, '', { mode: 0o700 });
-  const token = join(f.root, 'token'), lock = join(f.root, 'build.lock');
-  writeFileSync(token, 'test-token', { mode: 0o600 }); writeFileSync(lock, '', { mode: 0o600 });
+  const lock = join(f.root, 'build.lock'); writeFileSync(lock, '', { mode: 0o600 });
   const publisher = { sourceRef: 'dev', deployMode: 'stand', canonicalRepository: 'https://github.com/pgorbachev/ikpk.git' };
   const publisherFile = join(f.root, 'config.json'); writeFileSync(publisherFile, JSON.stringify(publisher), { mode: 0o600 });
   const c = { version: 1, destination: 'demo', sourceRef: 'dev', repository: 'pgorbachev/ikpk', timeoutSeconds: 3600,
-    launcher, releaseCiTokenFile: token, buildLockFile: lock };
+    launcher, buildLockFile: lock };
   const configFile = join(f.root, 'server.json'); writeFileSync(configFile, JSON.stringify(c), { mode: 0o600 });
-  assert.equal(readServerConfig(installed).sourceRef, 'dev');
+  const loaded = readServerConfig(installed);
+  assert.equal(loaded.sourceRef, 'dev'); assert.equal(Object.hasOwn(loaded, 'releaseCiTokenFile'), false);
   writeFileSync(configFile, JSON.stringify({ ...c, destination: 'prod' })); assert.throws(() => readServerConfig(installed));
-  writeFileSync(configFile, JSON.stringify(c)); chmodSync(token, 0o644); assert.throws(() => readServerConfig(installed), /untrusted-installation/);
-  chmodSync(token, 0o600); writeFileSync(publisherFile, JSON.stringify({ ...publisher, deployMode: 'prod' }));
+  writeFileSync(configFile, JSON.stringify(c)); writeFileSync(publisherFile, JSON.stringify({ ...publisher, deployMode: 'prod' }));
   assert.throws(() => readServerConfig(installed), /source-policy-mismatch/);
 });
 
