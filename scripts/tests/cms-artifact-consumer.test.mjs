@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, readdirSync, rmSync, symlinkSync, copyFileSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { runClient } from '../deploy.mjs';
-import { createServer } from '../server-deploy.mjs';
+import { createServer, readServerConfig } from '../server-deploy.mjs';
 import { releaseTestManifest } from '../release-test-policy.mjs';
 import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 
@@ -18,6 +18,8 @@ const sha = 'a'.repeat(40);
 const runId = 42;
 const runAttempt = 3;
 const sourceRef = 'dev';
+const TEST_CMS_POLICY = Object.freeze({ maxArchiveBytes: 1024 * 1024, maxExpandedBytes: 8 * 1024 * 1024,
+  freeSpaceReserveBytes: 1024 * 1024, nodeMajor: 22, nodeAbi: '127' });
 const sourceProof = Buffer.from('fixture source proof zip');
 const digest = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const controlProof = {
@@ -41,12 +43,18 @@ function cmsArchive(t, { source = { sha, ref: sourceRef, runId, runAttempt }, fi
   const payload = files ?? {
     'dist/build/index.html': '<html>admin</html>',
     'dist/src/index.js': 'export default {};',
+    'dist/config/database.js': 'export default {};',
     'package.json': '{"name":"cms"}',
     'package-lock.json': '{"lockfileVersion":3}',
     'tsconfig.json': '{}',
     'database/migrations/.migrations-expected': '0\n',
     'database/migrations/target-schema/seminar.json': '{}',
     'scripts/run-data-migrations.mjs': 'export {};',
+    'scripts/audit-data-migration.mjs': 'export {};',
+    'scripts/audit-schema-snapshot.mjs': 'export {};',
+    'scripts/institute-method-author-classification.mjs': 'export {};',
+    'scripts/normalize-null-documents-state.mjs': 'export {};',
+    'src/lib/demo193-source-empty-fields.json': '{}',
   };
   for (const [path, contents] of Object.entries(payload)) {
     const full = join(root, path); mkdirSync(join(full, '..'), { recursive: true }); writeFileSync(full, contents);
@@ -57,8 +65,7 @@ function cmsArchive(t, { source = { sha, ref: sourceRef, runId, runAttempt }, fi
   const manifest = {
     schemaVersion: 1, source,
     packageLockSha256: createHash('sha256').update(lock).digest('hex'),
-    runtime: { nodeVersion: process.version, nodeMajor: Number(process.versions.node.split('.')[0]),
-      nodeAbi: process.versions.modules, npmVersion: '10.8.2' },
+    runtime: { nodeVersion: 'v22.16.0', nodeMajor: 22, nodeAbi: '127', npmVersion: '10.8.2' },
     files: filesManifest,
   };
   manifestMutator?.(manifest);
@@ -97,10 +104,31 @@ function validSourceProof() {
 function serverFixture(t) {
   const { root } = fixture(t), state = join(root, 'operations'); mkdirSync(state, { mode: 0o700 });
   const events = [];
-  const config = { state, destination: 'demo', sourceRef };
+  const config = { state, destination: 'demo', sourceRef, cmsArtifactPolicy: TEST_CMS_POLICY };
   const ports = { now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => events.push(`start:${id}`),
     service: () => ({ state: 'active' }), publisher: () => { events.push('publisher'); return { status: 'success' }; } };
   return { root, state, events, config, server: createServer(config, ports) };
+}
+
+function installedServerFixture(root, { cmsArtifactPolicy = TEST_CMS_POLICY } = {}) {
+  const actualRoot = realpathSync(root), serverDir = join(actualRoot, 'installed-server');
+  mkdirSync(serverDir, { mode: 0o700 });
+  const scriptsUrl = new URL('../', import.meta.url);
+  for (const name of ['server-deploy.mjs', 'release-test-policy.mjs', 'release-test-reports.mjs', 'cms-artifact.mjs']) {
+    const source = new URL(name, scriptsUrl);
+    if (existsSync(source)) copyFileSync(source, join(serverDir, name));
+  }
+  const installed = realpathSync(join(serverDir, 'server-deploy.mjs')); chmodSync(installed, 0o700);
+  const launcher = join(serverDir, 'publication-launcher.mjs'), launcherConfig = join(serverDir, 'config.json');
+  const lock = join(actualRoot, 'build.lock');
+  writeFileSync(launcher, '', { mode: 0o700 }); writeFileSync(lock, '', { mode: 0o600 });
+  writeFileSync(launcherConfig, JSON.stringify({ sourceRef: 'dev', deployMode: 'stand',
+    canonicalRepository: 'https://github.com/pgorbachev/ikpk.git' }), { mode: 0o600 });
+  const config = { version: 1, destination: 'demo', sourceRef: 'dev', repository: 'pgorbachev/ikpk',
+    timeoutSeconds: 3600, launcher, buildLockFile: lock,
+    ...(cmsArtifactPolicy === undefined ? {} : { cmsArtifactPolicy }) };
+  writeFileSync(join(serverDir, 'server.json'), JSON.stringify(config), { mode: 0o600 });
+  return { serverDir, installed, config };
 }
 
 test('publish binds the full CMS ZIP to the exact admitted CI run and sends one binary frame', async (t) => {
@@ -197,6 +225,53 @@ test('server checks CMS source, runtime lock, inventory, and required entries be
   }
 });
 
+test('installed server refuses to enable CMS uploads when measured archive caps and target runtime are absent', (t) => {
+  const f = fixture(t), { installed } = installedServerFixture(f.root, { cmsArtifactPolicy: undefined });
+  assert.throws(() => readServerConfig(installed), /cms-artifact-policy-unconfigured/);
+});
+
+test('CMS disk reserve is checked before any private stage or accepted request is written', async (t) => {
+  const f = serverFixture(t), bytes = cmsArchive(t), request = {
+    ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof(),
+  };
+  let reserveCheck;
+  const server = createServer(f.config, {
+    now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => f.events.push(`start:${id}`),
+    service: () => ({ state: 'active' }), publisher: () => ({ status: 'success' }),
+    checkCmsDiskReserve(config, declaredBytes, reserveBytes) {
+      reserveCheck = { config, declaredBytes, reserveBytes };
+      throw new Error('cms-artifact-disk-reserve-insufficient');
+    },
+  });
+  await assert.rejects(server.submit(request, bytes), /cms-artifact-disk-reserve-insufficient/);
+  assert.deepEqual(reserveCheck, { config: f.config, declaredBytes: bytes.length,
+    reserveBytes: TEST_CMS_POLICY.freeSpaceReserveBytes });
+  assert.deepEqual(readdirSync(f.state), [], 'reserve rejection precedes all operation, receipt, counter, and archive writes');
+  assert.deepEqual(f.events, [], 'reserve rejection cannot start a worker');
+});
+
+test('failed CMS disk materialization preserves the partial private stage and blocks another UUID', async (t) => {
+  const f = serverFixture(t), bytes = cmsArchive(t), request = {
+    ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof(),
+  };
+  const server = createServer(f.config, {
+    now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => f.events.push(`start:${id}`),
+    service: () => ({ state: 'active' }), publisher: () => ({ status: 'success' }),
+    stageCmsArchive(path, archiveBytes) {
+      writeFileSync(path, archiveBytes.subarray(0, 12), { mode: 0o600, flag: 'wx' });
+      throw new Error('synthetic-stage-failure');
+    },
+  });
+  await assert.rejects(server.submit(request, bytes), /synthetic-stage-failure/);
+  const incoming = join(f.state, '.incoming');
+  assert.deepEqual(readdirSync(incoming).sort(), ['cms-artifact.zip', 'request.json']);
+  assert.deepEqual(readFileSync(join(incoming, 'cms-artifact.zip')), bytes.subarray(0, 12));
+  assert.equal(statSync(join(incoming, 'cms-artifact.zip')).mode & 0o777, 0o600);
+  await assert.rejects(server.submit({ ...request, id: randomUUID() }, bytes), /cms-incomplete-stage-pending/);
+  assert.deepEqual(readFileSync(join(incoming, 'cms-artifact.zip')), bytes.subarray(0, 12), 'later UUID cannot overwrite or clean the orphan stage');
+  assert.deepEqual(f.events, [], 'a failed or blocked materialization never invokes a worker');
+});
+
 test('server rejects traversal, symlink, unexpected dependencies, and missing Strapi admin output', async (t) => {
   const variants = [
     { files: { 'node_modules/x.js': 'x' } },
@@ -268,19 +343,7 @@ test('the production gateway frame reader waits for EOF, then admits those exact
 test('the gateway reader rejects truncated and over-limit frames before calling admission', async () => {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-gateway-cli-'));
   try {
-    const actualTemp = realpathSync(temp);
-    const serverDir = join(actualTemp, 'server'); mkdirSync(serverDir, { mode: 0o700 });
-    const sourceScripts = new URL('../', import.meta.url);
-    for (const name of ['server-deploy.mjs', 'release-test-policy.mjs', 'release-test-reports.mjs']) {
-      copyFileSync(new URL(name, sourceScripts), join(serverDir, name));
-    }
-    const installed = realpathSync(join(serverDir, 'server-deploy.mjs')); chmodSync(installed, 0o700);
-    const launcher = join(serverDir, 'publication-launcher.mjs'), launcherConfig = join(serverDir, 'config.json');
-    const lock = join(temp, 'build.lock'); writeFileSync(launcher, '', { mode: 0o700 }); writeFileSync(lock, '', { mode: 0o600 });
-    writeFileSync(launcherConfig, JSON.stringify({ sourceRef: 'dev', deployMode: 'stand',
-      canonicalRepository: 'https://github.com/pgorbachev/ikpk.git' }), { mode: 0o600 });
-    writeFileSync(join(serverDir, 'server.json'), JSON.stringify({ version: 1, destination: 'demo', sourceRef: 'dev',
-      repository: 'pgorbachev/ikpk', timeoutSeconds: 3600, launcher, buildLockFile: lock }), { mode: 0o600 });
+    const { installed, serverDir } = installedServerFixture(temp);
     const overLimitFrame = Buffer.alloc(16);
     overLimitFrame.writeBigUInt64BE(8n * 1024n * 1024n + 1n, 0);
     const cli = spawnSync(process.execPath, [installed, 'gateway'], {
@@ -288,7 +351,14 @@ test('the gateway reader rejects truncated and over-limit frames before calling 
       env: { ...process.env, SSH_ORIGINAL_COMMAND: `${process.execPath} ${installed} submit` },
     });
     assert.equal(cli.status, 1, `the actual CLI gateway refuses an over-limit declared frame (stdout=${cli.stdout}, stderr=${cli.stderr})`);
+    assert.match(cli.stderr, /cms-frame-too-large/, 'CLI preserves the bounded decoder refusal code');
     assert.deepEqual(readdirSync(join(serverDir, 'operations')), [], 'oversized frame never creates an operation or starts a worker');
+    const truncated = spawnSync(process.execPath, [installed, 'gateway'], {
+      input: Buffer.from([0]), encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, SSH_ORIGINAL_COMMAND: `${process.execPath} ${installed} submit` },
+    });
+    assert.equal(truncated.status, 1);
+    assert.match(truncated.stderr, /cms-frame-truncated/, 'EOF during header has a specific refusal code');
   } finally { rmSync(temp, { recursive: true, force: true }); }
 
   const { readSubmitFrame } = await import('../server-deploy.mjs');
@@ -297,6 +367,38 @@ test('the gateway reader rejects truncated and over-limit frames before calling 
     { maxControlBytes: 8, maxArchiveBytes: 3 }), /frame|truncated|size|length/i);
   const tooLarge = Buffer.alloc(16); tooLarge.writeBigUInt64BE(9n, 0); tooLarge.writeBigUInt64BE(0n, 8);
   await assert.rejects(readSubmitFrame(Readable.from([tooLarge]), { maxControlBytes: 8, maxArchiveBytes: 3 }), /frame|size|length/i);
+});
+
+test('Linux gateway acquires the shared flock before consuming a frame and serializes receivers', { skip: process.platform !== 'linux' }, async (t) => {
+  const temp = mkdtempSync(join(tmpdir(), 'ikpk-gateway-flock-'));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const { installed } = installedServerFixture(temp);
+  const env = { ...process.env, SSH_ORIGINAL_COMMAND: `${process.execPath} ${installed} submit` };
+  const first = spawn(process.execPath, [installed, 'gateway'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+  let firstOut = '', firstErr = '', secondOut = '', secondErr = '';
+  first.stdout.setEncoding('utf8').on('data', (chunk) => { firstOut += chunk; });
+  first.stderr.setEncoding('utf8').on('data', (chunk) => { firstErr += chunk; });
+  const firstDone = new Promise((resolve) => first.on('close', (code) => resolve(code)));
+  t.after(() => { if (!first.killed) first.kill('SIGKILL'); });
+  first.stdin.write(Buffer.from([0]));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const second = spawn(process.execPath, [installed, 'gateway'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+  second.stdout.setEncoding('utf8').on('data', (chunk) => { secondOut += chunk; });
+  second.stderr.setEncoding('utf8').on('data', (chunk) => { secondErr += chunk; });
+  const secondDone = new Promise((resolve) => second.on('close', (code) => resolve(code)));
+  t.after(() => { if (!second.killed) second.kill('SIGKILL'); });
+  second.stdin.end(Buffer.alloc(16));
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(second.exitCode, null, 'second request waits while the first owns the receive lock');
+  first.stdin.end();
+  const [firstCode, secondCode] = await Promise.all([firstDone, secondDone]);
+  assert.equal(firstCode, 1);
+  assert.match(firstErr, /cms-frame-truncated/);
+  assert.equal(secondCode, 1);
+  assert.match(secondErr, /cms-frame-too-large|cms-frame-invalid-control|server-request-failed/);
+  assert.equal(firstOut, '');
+  assert.equal(secondOut, '');
+  assert.deepEqual(readdirSync(join(temp, 'operations')), [], 'incomplete receives create no operation or worker');
 });
 
 test('same UUID and same archive bytes replay status without a second start; changed bytes conflict', async (t) => {
