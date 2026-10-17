@@ -101,12 +101,13 @@ function validSourceProof() {
   return { ...controlProof, artifactDigest: digest(bytes), artifactZipBase64: bytes.toString('base64') };
 }
 
-function serverFixture(t) {
+function serverFixture(t, { cmsArtifactPolicy = TEST_CMS_POLICY } = {}) {
   const { root } = fixture(t), state = join(root, 'operations'); mkdirSync(state, { mode: 0o700 });
   const events = [];
-  const config = { state, destination: 'demo', sourceRef, cmsArtifactPolicy: TEST_CMS_POLICY };
+  const config = { state, destination: 'demo', sourceRef, ...(cmsArtifactPolicy ? { cmsArtifactPolicy } : {}) };
   const ports = { now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => events.push(`start:${id}`),
-    service: () => ({ state: 'active' }), publisher: () => { events.push('publisher'); return { status: 'success' }; } };
+    service: () => ({ state: 'active' }), cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }),
+    publisher: () => { events.push('publisher'); return { status: 'success' }; } };
   return { root, state, events, config, server: createServer(config, ports) };
 }
 
@@ -126,7 +127,7 @@ function installedServerFixture(root, { cmsArtifactPolicy = TEST_CMS_POLICY } = 
     canonicalRepository: 'https://github.com/pgorbachev/ikpk.git' }), { mode: 0o600 });
   const config = { version: 1, destination: 'demo', sourceRef: 'dev', repository: 'pgorbachev/ikpk',
     timeoutSeconds: 3600, launcher, buildLockFile: lock,
-    ...(cmsArtifactPolicy === undefined ? {} : { cmsArtifactPolicy }) };
+    ...(cmsArtifactPolicy === null ? {} : { cmsArtifactPolicy }) };
   writeFileSync(join(serverDir, 'server.json'), JSON.stringify(config), { mode: 0o600 });
   return { serverDir, installed, config };
 }
@@ -160,8 +161,8 @@ test('publish binds the full CMS ZIP to the exact admitted CI run and sends one 
     'raw CMS payload bytes are never persisted in client JSON');
 });
 
-function clientConfig(root) {
-  const home = join(root, 'config'); mkdirSync(home, { mode: 0o700 });
+function clientConfig(root, suffix = 'default') {
+  const home = join(root, `config-${suffix}`); mkdirSync(home, { mode: 0o700 });
   const identityFile = join(home, 'key'), knownHostsFile = join(home, 'known_hosts');
   writeFileSync(identityFile, 'key', { mode: 0o600 }); writeFileSync(knownHostsFile, 'pin', { mode: 0o600 });
   writeFileSync(join(home, 'demo.json'), JSON.stringify({ version: 1, destination: 'demo', sourceRef,
@@ -183,6 +184,7 @@ test('publish refuses before any SSH call when there is no matching CMS artifact
 
 test('CMS selection refuses an expired, stale-attempt, wrong-SHA, or wrong-size native artifact', async (t) => {
   const f = fixture(t), bytes = cmsArchive(t); let submits = 0;
+  let index = 0;
   for (const metadata of [
     artifactMetadata(bytes, { expired: true }),
     artifactMetadata(bytes, { name: 'release-cms-artifact-2' }),
@@ -191,7 +193,7 @@ test('CMS selection refuses an expired, stale-attempt, wrong-SHA, or wrong-size 
     artifactMetadata(bytes, { size_in_bytes: bytes.length + 1 }),
   ]) {
     await assert.rejects(runClient(['demo', '--sha', sha], {
-      configHome: clientConfig(f.root), stateHome: join(f.root, `client-${randomUUID()}`),
+      configHome: clientConfig(f.root, String(index++)), stateHome: join(f.root, `client-${randomUUID()}`),
       admitSource: async () => controlProof,
       prepareCmsArtifact: async () => ({ metadata, archiveBytes: bytes }),
       call() { submits++; return { status: 'success' }; }, announce() {},
@@ -225,9 +227,17 @@ test('server checks CMS source, runtime lock, inventory, and required entries be
   }
 });
 
-test('installed server refuses to enable CMS uploads when measured archive caps and target runtime are absent', (t) => {
-  const f = fixture(t), { installed } = installedServerFixture(f.root, { cmsArtifactPolicy: undefined });
-  assert.throws(() => readServerConfig(installed), /cms-artifact-policy-unconfigured/);
+test('unconfigured CMS archive policy keeps recovery/status available and refuses publish', async (t) => {
+  const f = fixture(t), { installed } = installedServerFixture(f.root, { cmsArtifactPolicy: null });
+  const installedConfig = readServerConfig(installed);
+  assert.equal(installedConfig.cmsArtifactPolicy, undefined);
+  const direct = serverFixture(t, { cmsArtifactPolicy: null });
+  assert.equal(direct.server.status(randomUUID()).status, 'not-found');
+  await assert.rejects(direct.server.submit({ ...validServerRequest(randomUUID(), Buffer.from('archive')), sourceCiEvidence: validSourceProof() }, Buffer.from('archive')),
+    /cms-artifact-policy-unconfigured/);
+  const rollback = { id: randomUUID(), destination: 'demo', action: 'rollback', releaseId: 'retained', reason: 'approved recovery' };
+  assert.equal((await direct.server.submit(rollback)).status, 'accepted');
+  assert.deepEqual(direct.events, [`start:${rollback.id}`]);
 });
 
 test('CMS disk reserve is checked before any private stage or accepted request is written', async (t) => {
@@ -237,7 +247,7 @@ test('CMS disk reserve is checked before any private stage or accepted request i
   let reserveCheck;
   const server = createServer(f.config, {
     now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => f.events.push(`start:${id}`),
-    service: () => ({ state: 'active' }), publisher: () => ({ status: 'success' }),
+    service: () => ({ state: 'active' }), cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }), publisher: () => ({ status: 'success' }),
     checkCmsDiskReserve(config, declaredBytes, reserveBytes) {
       reserveCheck = { config, declaredBytes, reserveBytes };
       throw new Error('cms-artifact-disk-reserve-insufficient');
@@ -256,7 +266,7 @@ test('failed CMS disk materialization preserves the partial private stage and bl
   };
   const server = createServer(f.config, {
     now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => f.events.push(`start:${id}`),
-    service: () => ({ state: 'active' }), publisher: () => ({ status: 'success' }),
+    service: () => ({ state: 'active' }), cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }), publisher: () => ({ status: 'success' }),
     stageCmsArchive(path, archiveBytes) {
       writeFileSync(path, archiveBytes.subarray(0, 12), { mode: 0o600, flag: 'wx' });
       throw new Error('synthetic-stage-failure');
@@ -340,22 +350,20 @@ test('the production gateway frame reader waits for EOF, then admits those exact
   assert.deepEqual(f.events, [`start:${request.id}`]);
 });
 
-test('the gateway reader rejects truncated and over-limit frames before calling admission', async () => {
+test('the installed frame reader reports bounded oversize and truncation errors before admission', async () => {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-gateway-cli-'));
   try {
     const { installed, serverDir } = installedServerFixture(temp);
     const overLimitFrame = Buffer.alloc(16);
     overLimitFrame.writeBigUInt64BE(8n * 1024n * 1024n + 1n, 0);
-    const cli = spawnSync(process.execPath, [installed, 'gateway'], {
+    const cli = spawnSync(process.execPath, [installed, 'accept-frame'], {
       input: overLimitFrame, encoding: 'utf8', timeout: 10000,
-      env: { ...process.env, SSH_ORIGINAL_COMMAND: `${process.execPath} ${installed} submit` },
     });
-    assert.equal(cli.status, 1, `the actual CLI gateway refuses an over-limit declared frame (stdout=${cli.stdout}, stderr=${cli.stderr})`);
-    assert.match(cli.stderr, /cms-frame-too-large/, 'CLI preserves the bounded decoder refusal code');
+    assert.equal(cli.status, 1, `the installed accept-frame command refuses an over-limit declared frame (stdout=${cli.stdout}, stderr=${cli.stderr})`);
+    assert.match(cli.stderr, /cms-frame-too-large/, 'CLI exposes the bounded decoder refusal code');
     assert.deepEqual(readdirSync(join(serverDir, 'operations')), [], 'oversized frame never creates an operation or starts a worker');
-    const truncated = spawnSync(process.execPath, [installed, 'gateway'], {
+    const truncated = spawnSync(process.execPath, [installed, 'accept-frame'], {
       input: Buffer.from([0]), encoding: 'utf8', timeout: 10000,
-      env: { ...process.env, SSH_ORIGINAL_COMMAND: `${process.execPath} ${installed} submit` },
     });
     assert.equal(truncated.status, 1);
     assert.match(truncated.stderr, /cms-frame-truncated/, 'EOF during header has a specific refusal code');
