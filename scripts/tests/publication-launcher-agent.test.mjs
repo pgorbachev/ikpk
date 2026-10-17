@@ -89,7 +89,10 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
 
   const commit = git(repo, 'rev-parse', 'HEAD');
-  const proofPath = join(temp, 'source-proof.json'); writeFileSync(proofPath, JSON.stringify(sourceProof(commit, temp)), { mode: 0o600 });
+  const operations = join(dirname(installed), 'operations'); mkdirSync(operations, { mode: 0o700 }); chmodSync(operations, 0o700);
+  const requestDirectory = join(operations, '123e4567-e89b-42d3-a456-426614174000');
+  mkdirSync(requestDirectory, { mode: 0o700 }); chmodSync(requestDirectory, 0o700);
+  const proofPath = join(requestDirectory, 'tests.json'); writeFileSync(proofPath, JSON.stringify(sourceProof(commit, temp)), { mode: 0o600 });
   const fetchDeny = join(temp, 'fetch-deny.mjs'); write(fetchDeny, `globalThis.fetch=async()=>{throw new Error('unexpected GitHub request')};\n`);
   const result = await run(['--import', fetchDeny, installed, 'publish', '--config', configPath, '--source-url', remote,
     '--source-ref', 'main', '--expected-sha', commit, '--source-proof-file', proofPath], { cwd: temp, env: cleanEnv() });
