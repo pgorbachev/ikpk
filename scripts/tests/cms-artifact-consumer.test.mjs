@@ -227,6 +227,28 @@ test('server checks CMS source, runtime lock, inventory, and required entries be
   }
 });
 
+test('CMS manifest accepts only the exact producer refs for the two supported source branches', async (t) => {
+  const { validateCmsArtifact } = await import('../cms-artifact.mjs');
+  for (const [sourceRef, nativeRef] of [['main', 'refs/heads/main'], ['dev', 'refs/heads/dev']]) {
+    const evidence = { ...controlProof, sourceRef };
+    const bytes = cmsArchive(t, { source: { sha, ref: nativeRef, runId, runAttempt } });
+    const request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: evidence };
+    assert.doesNotThrow(() => validateCmsArtifact({ request, archiveBytes: bytes,
+      policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }), `${nativeRef} must bind exactly to ${sourceRef}`);
+  }
+  for (const [sourceRef, untrustedRef] of [
+    ['dev', 'refs/heads/feature/cms'], ['main', 'refs/tags/v1.0.0'], ['dev', 'dev'],
+    ['main', 'refs/heads/Main'], ['dev', 'refs/pull/42/merge'],
+  ]) {
+    const evidence = { ...controlProof, sourceRef };
+    const bytes = cmsArchive(t, { source: { sha, ref: untrustedRef, runId, runAttempt } });
+    const request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: evidence };
+    assert.throws(() => validateCmsArtifact({ request, archiveBytes: bytes,
+      policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }), /cms|source|ref|manifest/i,
+    `${untrustedRef} must not normalize into supported source ${sourceRef}`);
+  }
+});
+
 test('unconfigured CMS archive policy keeps recovery/status available and refuses publish', async (t) => {
   const f = fixture(t), { installed } = installedServerFixture(f.root, { cmsArtifactPolicy: null });
   const installedConfig = readServerConfig(installed);
