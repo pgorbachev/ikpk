@@ -275,6 +275,30 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
   assert.deepEqual(events, ['read', 'create', 'read']);
 });
 
+test('unverifiable tag permissions and ambiguous create without exact readback fail before SSH', async (t) => {
+  const sha = 'e'.repeat(40), tag = `prod-src-${sha}`;
+  const cases = [
+    { name: 'initial read unavailable', resolve(_name, reads) { reads.count++; throw new Error('tag permissions unavailable'); }, creates: 0 },
+    { name: 'readback unavailable', resolve(_name, reads) { reads.count++; if (reads.count === 1) return null; throw new Error('tag readback unavailable'); }, creates: 1 },
+    { name: 'readback absent', resolve(_name, reads) { reads.count++; return null; }, creates: 1 },
+    { name: 'readback mismatch', resolve(_name, reads) { reads.count++; return reads.count === 1 ? null : 'f'.repeat(40); }, creates: 1 },
+  ];
+  for (const scenario of cases) {
+    const f = clientFixture(t, 'prod'), reads = { count: 0 }; let creates = 0, submits = 0;
+    await assert.rejects(runClient(['prod', '--sha', sha], {
+      configHome: f.home, stateHome: f.stateHome, announce() {},
+      admitSource: async () => sourceEvidence('main', sha),
+      tagOps: {
+        resolve(name) { assert.equal(name, tag); return scenario.resolve(name, reads); },
+        create(name, target) { assert.equal(name, tag); assert.equal(target, sha); creates++; throw new Error('create acknowledgement lost'); },
+      },
+      call(_config, action) { if (action === 'submit') submits++; return { status: 'success' }; },
+    }), undefined, scenario.name);
+    assert.equal(creates, scenario.creates, `${scenario.name}: create count`);
+    assert.equal(submits, 0, `${scenario.name}: must not submit after unverified tag state`);
+  }
+});
+
 test('manager unavailability is unknown rather than proof that an operation stopped', async (t) => {
   const f = fixture(t), server = createServer(f.config, { ...f.ports, service: () => ({ state: 'unknown' }) });
   assert.equal(server.status(f.request.id).status, 'not-found');
@@ -292,6 +316,10 @@ test('installed server config has no GitHub CI token dependency', (t) => {
   const configFile = join(f.root, 'server.json'); writeFileSync(configFile, JSON.stringify(c), { mode: 0o600 });
   const loaded = readServerConfig(installed);
   assert.equal(loaded.sourceRef, 'dev'); assert.equal(Object.hasOwn(loaded, 'releaseCiTokenFile'), false);
+  writeFileSync(configFile, JSON.stringify({ ...c, releaseCiTokenFile: join(f.root, 'must-not-read-gh-token') }));
+  assert.throws(() => readServerConfig(installed), /untrusted-server-config|legacy.*token/i,
+    'legacy GitHub token config must be rejected as an unknown config field before its path is inspected');
+  writeFileSync(configFile, JSON.stringify(c));
   writeFileSync(configFile, JSON.stringify({ ...c, destination: 'prod' })); assert.throws(() => readServerConfig(installed));
   writeFileSync(configFile, JSON.stringify(c)); writeFileSync(publisherFile, JSON.stringify({ ...publisher, deployMode: 'prod' }));
   assert.throws(() => readServerConfig(installed), /source-policy-mismatch/);
