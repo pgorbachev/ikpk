@@ -519,8 +519,11 @@ test('core-store allows only a canonical upload-metrics weekly schedule refresh'
   const plan = emptyBoundPlan();
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
 
-  assert.equal(report.passed, true, 'a valid generated cron refresh with unchanged metrics siblings should pass');
-  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false);
+  assert.deepEqual(report.differences.map(({ table, kind }) => [table, kind]).sort(([left], [right]) => left.localeCompare(right)), [
+    ['ikpk_data_migration_history', 'required-runner-table-missing'],
+    ['ikpk_migration_lineage', 'required-runner-table-missing'],
+    ['ikpk_migration_operations', 'required-runner-table-missing'],
+  ], 'a valid generated cron refresh should add no findings beyond the three runner tables omitted by this fixture');
 });
 
 test('core-store keeps upload-metrics refresh exceptions bounded to schedule-only cron changes', () => {
