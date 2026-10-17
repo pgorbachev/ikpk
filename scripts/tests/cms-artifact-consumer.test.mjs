@@ -555,7 +555,11 @@ test('Linux gateway acquires the shared flock before consuming a frame and seria
   assert.match(secondErr, /cms-frame-too-large|cms-frame-invalid-control|server-request-failed/);
   assert.equal(firstOut, '');
   assert.equal(secondOut, '');
-  assert.deepEqual(readdirSync(join(temp, 'operations')), [], 'incomplete receives create no operation or worker');
+  let operationEntries;
+  try { operationEntries = readdirSync(join(temp, 'operations')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  assert.ok(operationEntries === undefined || operationEntries.length === 0,
+    'incomplete receives create no operation or worker; state may remain absent or empty');
 });
 
 test('same UUID and same archive bytes replay status without a second start; changed bytes conflict', async (t) => {
