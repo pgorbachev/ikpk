@@ -216,7 +216,7 @@ test('a persisted production request ID and SHA reuse admitted evidence without 
   const evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
   let admissions = 0, tagReads = 0, tagCreates = 0, submits = 0;
   const tagOps = {
-    resolve(name) { assert.equal(name, tag); tagReads++; return tag; },
+    resolve(name) { assert.equal(name, tag); tagReads++; return sha; },
     create() { tagCreates++; throw new Error('matching tag must be reused'); },
   };
   const common = { configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps,
