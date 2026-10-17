@@ -13,18 +13,18 @@ import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner,
   reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0,
   flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
-function sourceEvidence(sourceRef, commit) {
+function sourceEvidence(sourceRef, commit, runId = 38940517004) {
   const directory = mkdtempSync(join(tmpdir(), 'ikpk-publish-proof-'));
   try {
     const manifest = releaseTestManifest({ RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned', GITHUB_SHA: commit,
-      GITHUB_EVENT_NAME: 'push', GITHUB_REF: `refs/heads/${sourceRef}`, GITHUB_RUN_ID: '38940517004', GITHUB_RUN_ATTEMPT: '1' },
+      GITHUB_EVENT_NAME: 'push', GITHUB_REF: `refs/heads/${sourceRef}`, GITHUB_RUN_ID: String(runId), GITHUB_RUN_ATTEMPT: '1' },
     Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map((name) => [name, { result: 'success' }])), reportFixtures);
     writeFileSync(join(directory, 'release-source-tests.json'), JSON.stringify(manifest));
     const archive = join(directory, 'proof.zip');
     spawnSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: directory });
     const bytes = readFileSync(archive);
     return { repository: 'pgorbachev/ikpk', workflow: '.github/workflows/release-tests.yml', sourceRef, commit,
-      runId: 38940517004, runAttempt: 1, artifactDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      runId, runAttempt: 1, artifactDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
       artifactZipBase64: bytes.toString('base64') };
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
@@ -211,6 +211,44 @@ test('production reserves an exact source tag before SSH and reuses it on a late
   ]);
 });
 
+test('production requires the protected ref to match after CI and immediately before tag or SSH', async (t) => {
+  const sha = '9'.repeat(40), tag = `prod-src-${sha}`;
+  const results = [];
+  for (const scenario of [
+    { name: 'main advanced', resolve: async () => '8'.repeat(40) },
+    { name: 'main unverifiable', resolve: async () => { throw new Error('ref API unavailable'); } },
+  ]) {
+    const f = clientFixture(t, 'prod'); let refReads = 0, creates = 0, submits = 0;
+    let reason = null;
+    try { await runClient(['prod', '--sha', sha], {
+      configHome: f.home, stateHome: f.stateHome, announce() {},
+      admitSource: async () => sourceEvidence('main', sha),
+      resolveSourceRef: async (identity) => { refReads++; assert.deepEqual(identity, { destination: 'prod', sourceRef: 'main' }); return scenario.resolve(); },
+      tagOps: {
+        resolve(name) { assert.equal(name, tag); return null; },
+        create(name, target) { assert.equal(name, tag); assert.equal(target, sha); creates++; },
+      },
+      call(_config, action) { if (action === 'submit') submits++; return { id: randomUUID(), destination: 'prod', status: 'success' }; },
+    }); } catch (error) { reason = error.message; }
+    results.push({ name: scenario.name, reason, refReads, creates, submits });
+  }
+  assert.deepEqual(results, [
+    { name: 'main advanced', reason: 'source-ref-changed', refReads: 1, creates: 0, submits: 0 },
+    { name: 'main unverifiable', reason: 'source-ref-unverifiable', refReads: 1, creates: 0, submits: 0 },
+  ]);
+
+  const f = clientFixture(t, 'prod'), events = [];
+  const result = await runClient(['prod', '--sha', sha], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => { events.push('ci'); return sourceEvidence('main', sha); },
+    resolveSourceRef: async () => { events.push('ref'); return sha; },
+    tagOps: { resolve() { events.push('tag-read'); return null; }, create() { events.push('tag-create'); } },
+    call(_config, action) { if (action === 'submit') events.push('ssh-submit'); return { id: randomUUID(), destination: 'prod', status: 'success' }; },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(events, ['ci', 'ref', 'tag-read', 'tag-create', 'ssh-submit']);
+});
+
 test('a persisted production request ID and SHA reuse admitted evidence without repeat admission or tag mutation', async (t) => {
   const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), changedSha = 'd'.repeat(40), id = randomUUID();
   const evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
@@ -243,6 +281,91 @@ test('a persisted production request ID and SHA reuse admitted evidence without 
     call(_config, action) { if (action === 'submit') changedSubmits++; return { id, destination: 'prod', status: 'success' }; },
   }), /request-id-conflict/);
   assert.equal(changedSubmits, 0); assert.equal(changedAdmissions, 0); assert.equal(changedTagReads, 0);
+});
+
+test('saved production retries check status first and keep polling after main advances', async (t) => {
+  const sha = '7'.repeat(40), id = randomUUID(), evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
+  const f = clientFixture(t, 'prod'); let admissions = 0, refReads = 0, tagCreates = 0, submits = 0;
+  const first = await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => { admissions++; return evidence; },
+    resolveSourceRef: async () => { refReads++; return sha; },
+    tagOps: { resolve() { return sha; }, create() { tagCreates++; } },
+    call(_config, action) { if (action === 'submit') { submits++; return { id, destination: 'prod', status: 'success' }; } },
+  });
+  assert.equal(first.status, 'success');
+
+  const events = [];
+  const retried = await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {},
+    admitSource: async () => { admissions++; events.push('admit'); return evidence; },
+    resolveSourceRef: async () => { refReads++; events.push('ref'); return '6'.repeat(40); },
+    tagOps: { resolve() { events.push('tag-read'); return sha; }, create() { tagCreates++; } },
+    call(_config, action, request) {
+      events.push(action);
+      assert.equal(request.id, id);
+      if (action === 'status') return { id, destination: 'prod', status: events.filter((event) => event === 'status').length === 1 ? 'accepted' : 'success' };
+      submits++; return { id, destination: 'prod', status: 'success' };
+    },
+  });
+  assert.equal(retried.status, 'success');
+  assert.deepEqual(events, ['status', 'status']);
+  assert.equal(admissions, 1); assert.equal(refReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 1);
+});
+
+test('saved production retry on not-found revalidates equal evidence and current ref before resubmit', async (t) => {
+  const sha = '7'.repeat(40), id = randomUUID(), evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
+  const f = clientFixture(t, 'prod'); let admissions = 0, refReads = 0, tagCreates = 0, submits = 0;
+  await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => { admissions++; return evidence; },
+    resolveSourceRef: async () => { refReads++; return sha; },
+    tagOps: { resolve() { return sha; }, create() {} },
+    call(_config, action) { if (action === 'submit') { submits++; return { id, destination: 'prod', status: 'success' }; } },
+  });
+  const events = [];
+  const absent = await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => { admissions++; events.push('revalidate-ci'); return evidence; },
+    resolveSourceRef: async () => { refReads++; events.push('revalidate-ref'); return sha; },
+    tagOps: { resolve() { events.push('revalidate-tag'); return sha; }, create() { tagCreates++; } },
+    call(_config, action, request) {
+      events.push(action);
+      if (action === 'status') return { id, destination: 'prod', status: 'not-found' };
+      submits++; assert.deepEqual(request.sourceCiEvidence, evidence); assert.equal(request.sourceTag, tag);
+      return { id, destination: 'prod', status: 'success' };
+    },
+  });
+  assert.equal(absent.status, 'success');
+  assert.deepEqual(events, ['status', 'revalidate-ci', 'revalidate-ref', 'revalidate-tag', 'submit']);
+  assert.equal(admissions, 2); assert.equal(refReads, 2); assert.equal(tagCreates, 0); assert.equal(submits, 2);
+});
+
+test('saved production retry refuses not-found when newly admitted CI evidence differs', async (t) => {
+  const sha = '7'.repeat(40), id = randomUUID(), evidence = sourceEvidence('main', sha), changed = sourceEvidence('main', sha, 38940517005);
+  const f = clientFixture(t, 'prod'); let creates = 0, submits = 0, statusCalls = 0;
+  await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => evidence, resolveSourceRef: async () => sha,
+    tagOps: { resolve() { return sha; }, create() { creates++; } },
+    call(_config, action) { if (action === 'submit') { submits++; return { id, destination: 'prod', status: 'success' }; } },
+  });
+  const events = [];
+  let reason = null;
+  try { await runClient(['prod', '--sha', sha, '--request-id', id], {
+    configHome: f.home, stateHome: f.stateHome, announce() {},
+    admitSource: async () => { events.push('ci'); return changed; },
+    resolveSourceRef: async () => { events.push('ref'); return sha; },
+    tagOps: { resolve() { events.push('tag'); return sha; }, create() { creates++; } },
+    call(_config, action) {
+      events.push(action);
+      if (action === 'status') { statusCalls++; return { id, destination: 'prod', status: 'not-found' }; }
+      submits++; return { id, destination: 'prod', status: 'success' };
+    },
+  }); } catch (error) { reason = error.message; }
+  assert.equal(reason, 'source-ci-evidence-changed');
+  assert.deepEqual(events, ['status', 'ci', 'ref']);
+  assert.equal(statusCalls, 1); assert.equal(creates, 0); assert.equal(submits, 1, 'the retry must not submit changed proof');
 });
 
 test('source or tag refusal never submits a production request; ambiguous tag creation is resolved by readback', async (t) => {
