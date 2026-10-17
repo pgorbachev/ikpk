@@ -81,65 +81,6 @@ test('generic CI validator keeps main default and explicitly validates dev evide
   assert.equal(ciEvidenceProblem(evidence, SHA), 'untrusted-ci-run');
   assert.equal(ciEvidenceProblem(evidence, SHA, PUBLICATION_CI_POLICY, 'dev'), undefined);
 });
-test('installed launcher rejects moved SHA and incomplete CI before calling the credential broker', async t => {
-  const root = mkdtempSync('/tmp/ikpk-source-ci-'); t.after(() => rmSync(root, { recursive: true, force: true }));
-  const author = join(root, 'author'), remote = join(root, 'canonical.git'), installed = join(root, 'protected');
-  mkdirSync(author); mkdirSync(installed);
-  const env = { ...process.env, GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
-  const git = (dir, ...args) => execFileSync('/usr/bin/git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['ignore','pipe','pipe'] }).trim();
-  git(root, 'init', '--bare', '--initial-branch=dev', remote); git(author, 'init', '--initial-branch=dev');
-  mkdirSync(join(author, 'scripts'));
-  writeFileSync(join(author, 'scripts/deploy-web.sh'), `#!/bin/sh\nexec '${process.execPath}' scripts/worker.mjs\n`);
-  writeFileSync(join(author, 'scripts/worker.mjs'), `import {writeFileSync} from 'node:fs';
-if(process.env.GH_TOKEN)process.exit(91);
-writeFileSync(3,JSON.stringify({version:1,status:'success',code:'published',commit:process.env.PUBLICATION_SOURCE_SHA,
-snapshotId:'snap:'+'a'.repeat(64),treeDigest:'b'.repeat(64),publicationId:'fixture-publish',
-observedEntry:1,revision:1,highWaterMark:1,localExecutedTests:1,ciExecutedTests:1}));`);
-  git(author, 'add', '.'); git(author, 'commit', '-m', 'fixture'); git(author, 'push', remote, 'dev');
-  const commit = git(author, 'rev-parse', 'HEAD');
-  const entry = join(installed, 'publication-launcher.mjs'); copyFileSync(new URL('../publication-launcher.mjs', import.meta.url), entry); chmodSync(entry, 0o700);
-  const marker = join(root, 'broker-called'), broker = join(installed, 'broker.mjs');
-  writeFileSync(broker, `import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(marker)},JSON.stringify({ciToken:process.env.GH_TOKEN??null}));console.log('{"env":{}}');`);
-  const config = join(installed, 'config.json');
-  writeFileSync(config, JSON.stringify({ ...demo, canonicalRepository: remote, destinationId: 'demo-dev', credentialBroker: [process.execPath, broker] }), { mode: 0o600 });
-  const module = await import(pathToFileURL(entry));
-  const args = ['publish','--config',config,'--source-url',remote,'--source-ref','dev','--expected-sha'];
-  // This fixture simulates the installed local launcher; keep the real hosted
-  // prohibition covered before clearing only these flags for the isolated fixture.
-  const ambient = new Map(['CI', 'GITHUB_ACTIONS'].map((key) => [key, process.env[key]]));
-  t.after(() => { for (const [key, value] of ambient) {
-    if (value === undefined) delete process.env[key]; else process.env[key] = value;
-  } });
-  process.env.CI = 'true';
-  await assert.rejects(module.launch([...args, commit], { fetch: ciFixture('dev', commit).fetch }), /hosted-publication-forbidden/);
-  for (const key of ambient.keys()) delete process.env[key];
-  await assert.rejects(module.launch([...args, OTHER], { fetch: ciFixture('dev', commit).fetch }), /source-sha-mismatch/);
-  for (const mutation of [{ head_branch: 'main' }, { head_sha: OTHER }, { event: 'pull_request' }, { event: 'repository_dispatch' }]) {
-    const bad = ciFixture('dev', commit); Object.assign(bad.run, mutation);
-    await assert.rejects(module.launch([...args, commit], { fetch: bad.fetch }), /ci/);
-    assert.equal(existsSync(marker), false);
-  }
-  for (const fault of ['skipped', 'missing', 'duplicate']) {
-    const bad = ciFixture('dev', commit);
-    if (fault === 'missing') bad.jobs.pop(); else if (fault === 'duplicate') bad.jobs.push(bad.jobs[0]);
-    else bad.jobs[0].conclusion = fault;
-    await assert.rejects(module.launch([...args, commit], { fetch: bad.fetch }), /ci/);
-    assert.equal(existsSync(marker), false);
-  }
-  const tokenFile = join(installed, 'ci-token'); const token = 'fixture-read-only-ci-token';
-  writeFileSync(tokenFile, token, { mode: 0o644 });
-  const withToken = { ...demo, canonicalRepository: remote, destinationId: 'demo-dev', credentialBroker: [process.execPath, broker], ciTokenFile: tokenFile };
-  writeFileSync(config, JSON.stringify(withToken));
-  await assert.rejects(module.launch([...args, commit], { fetch: ciFixture('dev', commit).fetch }), /untrusted-config/);
-  assert.equal(existsSync(marker), false);
-  chmodSync(tokenFile, 0o600);
-  const good = ciFixture('dev', commit);
-  const result = await module.launch([...args, commit], { fetch: good.fetch });
-  assert.equal(result.status, 'success');
-  assert.ok(good.calls.every(call => call.options.headers.Authorization === `Bearer ${token}`));
-  assert.equal(JSON.parse(readFileSync(marker, 'utf8')).ciToken, null);
-});
-
 test('installed publisher consumes bounded admitted proof offline and rejects legacy CI token config', async t => {
   const root = mkdtempSync('/tmp/ikpk-source-proof-handoff-'); t.after(() => rmSync(root, { recursive: true, force: true }));
   const author = join(root, 'author'), remote = join(root, 'canonical.git'), installed = join(root, 'protected');

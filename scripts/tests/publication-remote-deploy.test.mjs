@@ -268,13 +268,13 @@ test('production requires the protected ref to match after CI and immediately be
 test('a persisted production request ID and SHA reuse admitted evidence without repeat admission or tag mutation', async (t) => {
   const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), changedSha = 'd'.repeat(40), id = randomUUID();
   const evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
-  let admissions = 0, tagReads = 0, tagCreates = 0, submits = 0, statusCalls = 0;
+  let admissions = 0, refReads = 0, tagReads = 0, tagCreates = 0, submits = 0, statusCalls = 0;
   const tagOps = {
     resolve(name) { assert.equal(name, tag); tagReads++; return sha; },
     create() { tagCreates++; throw new Error('matching tag must be reused'); },
   };
   const common = { configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps,
-    resolveSourceRef: async () => sha,
+    resolveSourceRef: async () => { refReads++; return sha; },
     admitSource: async () => { admissions++; return evidence; },
     call(_config, action, request) {
       if (action === 'status') { statusCalls++; return { id, destination: 'prod', status: 'success' }; }
@@ -290,7 +290,7 @@ test('a persisted production request ID and SHA reuse admitted evidence without 
     admitSource: async () => { admissions++; throw new Error('existing request must reuse saved proof'); },
     tagOps: { resolve() { tagReads++; throw new Error('existing request must not touch tag operations'); }, create() { tagCreates++; } },
   });
-  assert.equal(admissions, 1); assert.equal(tagReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 1); assert.equal(statusCalls, 1);
+  assert.equal(admissions, 1); assert.equal(refReads, 2); assert.equal(tagReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 1); assert.equal(statusCalls, 1);
 
   let changedSubmits = 0, changedAdmissions = 0, changedTagReads = 0;
   await assert.rejects(runClient(['prod', '--sha', changedSha, '--request-id', id], { ...common,
@@ -355,8 +355,8 @@ test('saved production retry on not-found revalidates equal evidence and current
     },
   });
   assert.equal(absent.status, 'success');
-  assert.deepEqual(events, ['status', 'revalidate-ci', 'revalidate-ref', 'revalidate-tag', 'submit']);
-  assert.equal(admissions, 2); assert.equal(refReads, 2); assert.equal(tagCreates, 0); assert.equal(submits, 2);
+  assert.deepEqual(events, ['status', 'revalidate-ci', 'revalidate-ref', 'revalidate-tag', 'revalidate-ref', 'submit']);
+  assert.equal(admissions, 2); assert.equal(refReads, 4); assert.equal(tagCreates, 0); assert.equal(submits, 2);
 });
 
 test('saved production retry refuses not-found when newly admitted CI evidence differs', async (t) => {
@@ -382,7 +382,7 @@ test('saved production retry refuses not-found when newly admitted CI evidence d
     },
   }); } catch (error) { reason = error.message; }
   assert.equal(reason, 'source-ci-evidence-changed');
-  assert.deepEqual(events, ['status', 'ci', 'ref']);
+  assert.deepEqual(events, ['status', 'ci']);
   assert.equal(statusCalls, 1); assert.equal(creates, 0); assert.equal(submits, 1, 'the retry must not submit changed proof');
 });
 
