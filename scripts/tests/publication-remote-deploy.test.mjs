@@ -393,6 +393,7 @@ test('source or tag refusal never submits a production request; ambiguous tag cr
     await assert.rejects(runClient(['prod', '--sha', sha], {
       configHome: f.home, stateHome: f.stateHome, announce() {},
       admitSource: async () => { if (mode === 'source-refused') throw new Error('source-ci-refused'); return sourceEvidence('main', sha); },
+      resolveSourceRef: async () => sha,
       tagOps: {
         resolve: () => mode === 'tag-conflict' ? 'e'.repeat(40) : null,
         create: () => { creates++; return sha; },
@@ -430,6 +431,7 @@ test('unverifiable tag permissions and ambiguous create without exact readback f
     await assert.rejects(runClient(['prod', '--sha', sha], {
       configHome: f.home, stateHome: f.stateHome, announce() {},
       admitSource: async () => sourceEvidence('main', sha),
+      resolveSourceRef: async () => sha,
       tagOps: {
         resolve(name) { assert.equal(name, tag); return scenario.resolve(name, reads); },
         create(name, target) { assert.equal(name, tag); assert.equal(target, sha); creates++; throw new Error('create acknowledgement lost'); },
