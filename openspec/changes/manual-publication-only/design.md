@@ -136,7 +136,8 @@ CMS archive в raw bytes (не base64 и не отдельный worker request)
 только после полной проверки и durable фиксации canonical request он передаёт запрос worker под
 существующей admission/flock. Worker никогда не запускается на частично принятых или ещё не
 проверенных байтах. Размер archive cap SHALL быть выставлен по измеренному CMS ZIP полного
-успешного CI run и зафиксирован версией; до такого измерения CMS путь закрыт. Единственный receive
+успешного CI run и зафиксирован версией; producer-only CI upload разрешён для измерения, а
+server-side consumer и transport остаются закрыты до фиксации cap. Единственный receive
 slot ограничивает совокупный incomplete ingress на destination суммой максимального 8 MiB control
 и этого измеренного archive cap. До создания/записи staging сервер под существующей
 сериализацией admission проверяет заявленные frame sizes и `statfs` для этих bounded bytes плюс
