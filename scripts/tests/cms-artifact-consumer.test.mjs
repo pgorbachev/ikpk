@@ -451,6 +451,54 @@ test('retry checks status before downloading and revalidates the same run artifa
   assert.equal(prepared, 2, 'the exact canonical run artifact is downloaded and digest checked again only after not-found');
 });
 
+test('native CMS artifact lookup pins run attempt, metadata digest, bounded ZIP bytes, and allowed redirect without auth leakage', async () => {
+  const { downloadCmsArtifactForEvidence } = await import('../release-ci.mjs');
+  assert.equal(typeof downloadCmsArtifactForEvidence, 'function');
+  const archiveBytes = Buffer.from('synthetic native artifact zip body');
+  const nativeRun = (attempt = runAttempt) => ({ repository: { full_name: 'pgorbachev/ikpk' },
+    head_repository: { full_name: 'pgorbachev/ikpk' }, path: '.github/workflows/release-tests.yml',
+    head_sha: sha, head_branch: sourceRef, run_attempt: attempt, status: 'completed', conclusion: 'success', event: 'push' });
+  const jsonResponse = (value) => ({ ok: true, status: 200, body: Readable.from([Buffer.from(JSON.stringify(value))]), headers: { get: () => null } });
+  function fetchFixture({ finalAttempt = runAttempt, artifactDigest = digest(archiveBytes), artifactSize = archiveBytes.length,
+    redirect = 'https://native.blob.core.windows.net/cms.zip' } = {}) {
+    const calls = []; let runRequests = 0;
+    const fetch = async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith(`/actions/runs/${runId}`)) return jsonResponse(nativeRun(runRequests++ === 0 ? runAttempt : finalAttempt));
+      if (url.includes(`/actions/runs/${runId}/artifacts?`)) return jsonResponse({ total_count: 1, artifacts: [{
+        id: 501, name: `release-cms-artifact-${runAttempt}`, digest: artifactDigest, size_in_bytes: artifactSize,
+        expired: false, workflow_run: { id: runId, head_sha: sha },
+      }] });
+      if (url.endsWith('/actions/artifacts/501/zip')) return { ok: false, status: 302, headers: { get: (name) => name === 'location' ? redirect : null } };
+      if (url === redirect) return { ok: true, status: 200, body: Readable.from([archiveBytes]), headers: { get: () => null } };
+      throw new Error(`unexpected mocked request ${url}`);
+    };
+    return { fetch, calls };
+  }
+
+  const fixture = fetchFixture();
+  const result = await downloadCmsArtifactForEvidence(controlProof, { token: 'fixture-token', fetch: fixture.fetch, maxArchiveBytes: 1024 });
+  assert.deepEqual(result.archiveBytes, archiveBytes);
+  assert.deepEqual(result.metadata, { id: 501, name: `release-cms-artifact-${runAttempt}`, digest: digest(archiveBytes),
+    size_in_bytes: archiveBytes.length, expired: false, workflow_run: { id: runId, head_sha: sha }, runAttempt });
+  assert.equal(fixture.calls.length, 5, 'initial run, unique artifact listing, API download, allowlisted redirect, final run recheck');
+  assert.ok(fixture.calls.every(({ options }) => options.redirect === 'manual' || options.redirect === 'error'));
+  assert.equal(fixture.calls[0].url, `https://api.github.com/repos/pgorbachev/ikpk/actions/runs/${runId}`);
+  assert.equal(fixture.calls[0].options.headers.Authorization, 'Bearer fixture-token');
+  assert.equal(fixture.calls[3].url, 'https://native.blob.core.windows.net/cms.zip');
+  assert.equal(Object.hasOwn(fixture.calls[3].options, 'headers'), false, 'redirected artifact host receives no GitHub authorization header');
+
+  const stale = fetchFixture({ finalAttempt: runAttempt + 1 });
+  await assert.rejects(downloadCmsArtifactForEvidence(controlProof, { token: 'fixture-token', fetch: stale.fetch, maxArchiveBytes: 1024 }), /cms-artifact-attempt-changed/);
+  const digestMismatch = fetchFixture({ artifactDigest: digest(Buffer.from('different')) });
+  await assert.rejects(downloadCmsArtifactForEvidence(controlProof, { token: 'fixture-token', fetch: digestMismatch.fetch, maxArchiveBytes: 1024 }), /cms-artifact-digest-mismatch/);
+  const oversized = fetchFixture({ artifactSize: 1025 });
+  await assert.rejects(downloadCmsArtifactForEvidence(controlProof, { token: 'fixture-token', fetch: oversized.fetch, maxArchiveBytes: 1024 }), /cms-artifact-native-metadata-mismatch/);
+  assert.equal(oversized.calls.some(({ url }) => url.endsWith('/zip')), false, 'over-cap metadata is rejected before downloading bytes');
+  const untrustedRedirect = fetchFixture({ redirect: 'https://attacker.example/cms.zip' });
+  await assert.rejects(downloadCmsArtifactForEvidence(controlProof, { token: 'fixture-token', fetch: untrustedRedirect.fetch, maxArchiveBytes: 1024 }), /release-ci-untrusted-artifact-redirect/);
+});
+
 test('rollback and status requests need no CMS archive frame', async (t) => {
   const f = serverFixture(t), id = randomUUID();
   const status = f.server.status(id);
