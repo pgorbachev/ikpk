@@ -1189,14 +1189,23 @@ CI-evidence JSON. The server SHALL receive the complete control and archive into
 request-scoped staging, verify frame lengths/no trailing bytes, request identity, outer ZIP digest,
 internal manifest, archive paths, and size, and durably admit the canonical request before it
 starts or queues a worker. No worker or candidate code SHALL run on a partial or unvalidated
-archive. Incomplete receives SHALL remain private, non-executable evidence; retries before durable
-admission MAY create another receive attempt under the same request ID. After admission, the same
-request ID SHALL be idempotent only for equal canonical control and recalculated digests; different
-content SHALL be refused. The server SHALL reject absolute paths, traversal, symlinks, unexpected
-files, and missing required build output. It SHALL assemble the CMS release from the admitted
-build output without rerunning `npm run build` on the server. The Astro site SHALL continue to
-build against the server's current CMS/DB snapshot and media. This follow-up artifact transport
-does not block the minimal local `gh` source-CI admission and production-tag test handoff.
+archive. There SHALL be only one private CMS receive slot per destination, keyed by operation UUID;
+its aggregate bytes SHALL be bounded by the 8 MiB control limit plus the CMS archive cap measured
+from a successful full CI artifact and pinned in policy before enablement. Before creating/writing
+the slot, the server SHALL validate both declared frame lengths against these bounds and check the
+projected receive against the same operational free-space reserve/floor used for publication
+staging. It SHALL preserve that reserve while writing each block and refuse before writing a block
+that would exceed the cap or reserve. Incomplete receives SHALL remain private, non-executable, and
+visible through status/readback; the operation UUID is consumed and another upload under it SHALL
+be refused. A new UUID SHALL NOT bypass the occupied single slot. Releasing an incomplete slot
+requires a separate explicitly authorized operator cleanup; the server SHALL NOT automatically
+delete partial or previous operational artifacts. After admission, the same request ID SHALL be
+idempotent only for equal canonical control and recalculated digests; different content SHALL be
+refused. The server SHALL reject absolute paths, traversal, symlinks, unexpected files, and missing
+required build output. It SHALL assemble the CMS release from the admitted build output without
+rerunning `npm run build` on the server. The Astro site SHALL continue to build against the server's
+current CMS/DB snapshot and media. This follow-up artifact transport does not block the minimal
+local `gh` source-CI admission and production-tag test handoff.
 
 #### Scenario: exact admitted CMS artifact is assembled without recompiling
 
@@ -1217,3 +1226,17 @@ does not block the minimal local `gh` source-CI admission and production-tag tes
 - **WHEN** the transferred archive exceeds its configured limit, has a digest mismatch, or
   contains traversal, absolute, symlink, unexpected, or missing required entries
 - **THEN** the server refuses before extraction into a release directory and before activation
+
+#### Scenario: declared frame exceeds the finite receive slot or reserve
+
+- **WHEN** the declared control/archive length exceeds policy or the complete receive would cross
+  the existing publication free-space reserve
+- **THEN** the server refuses before creating or writing the receive slot
+- **AND** it starts no worker and preserves existing operational data
+
+#### Scenario: incomplete receive consumes the sole slot
+
+- **WHEN** the SSH stream ends before both complete frames arrive
+- **THEN** the server retains the partial bytes privately as non-executable status evidence
+- **AND** it refuses another upload with that UUID and refuses a different UUID while the slot is occupied
+- **AND** only separate explicitly authorized operator cleanup can release the slot

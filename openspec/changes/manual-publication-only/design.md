@@ -130,15 +130,26 @@ CMS artifact в этом run не существует, поэтому его ca
 CMS archive имеет отдельный измеренный/versioned предел. Один restricted SSH stdin несёт атомарно
 сформированный кадр из двух unsigned 64-bit big-endian lengths, за которыми следуют control JSON и
 CMS archive в raw bytes (не base64 и не отдельный worker request). Server принимает оба полных
-кадра в private request-scoped staging, проверяет declared lengths,
+кадра в единственный private receive slot назначения, закреплённый за operation UUID, проверяет declared lengths,
 отсутствие trailing bytes, control identity, CMS outer GitHub ZIP digest и внутренний inventory;
 только после полной проверки и durable фиксации canonical request он передаёт запрос worker под
 существующей admission/flock. Worker никогда не запускается на частично принятых или ещё не
-проверенных байтах. Неполный приём остаётся в private staging как неисполняемое свидетельство;
-автоматическая очистка/удаление прежних operational artifacts не входит в протокол. До durable
-admission повтор с тем же request ID допускается как новая receive attempt; после admission тот
-же ID принимается только при равенстве canonical control и обоих рассчитанных digest, а отличное
-содержимое отвергается. Outer GitHub ZIP digest передаётся только во внешнем control/evidence:
+проверенных байтах. Размер archive cap SHALL быть выставлен по измеренному CMS ZIP полного
+успешного CI run и зафиксирован версией; до такого измерения CMS путь закрыт. Единственный receive
+slot ограничивает совокупный приём на destination суммой максимального 8 MiB control и этого
+измеренного archive cap. До создания/записи staging сервер под существующей сериализацией admission
+проверяет заявленные frame sizes и доступное место на диске с тем же operational reserve/floor,
+что применяется для остальных publication staging; каждый следующий записываемый блок сохраняет
+этот reserve. Превышение frame/aggregate bound или недостаток места даёт отказ до записи
+соответствующего блока и без удаления старых данных.
+
+Неполный приём остаётся в private staging как неисполняемое свидетельство и навсегда занимает
+receive slot до отдельного явно разрешённого операторского разрешения/очистки. Status/readback
+показывает incomplete, повтор upload с тем же UUID отвергается, а новый UUID сам по себе не
+обходит занятый единственный slot. Автоматическая очистка/удаление прежних operational artifacts
+не входит в протокол. После полного приёма и durable admission тот же ID идемпотентен только при
+равенстве canonical control и обоих рассчитанных digest; отличное содержимое отвергается. Outer
+GitHub ZIP digest передаётся только во внешнем control/evidence:
 он не включается в CMS archive, иначе хеш был бы самоссылочным. Текущий stdin limit 2 KiB,
 allowlist, framing, canonicalization/retry equality и клиентская сериализация должны быть
 согласованно обновлены. Архив проверяется до распаковки на размер, безопасные пути, symlink,
