@@ -93,6 +93,24 @@ jobs:
           NODE_OPTIONS: --test-reporter=tap --test-reporter-destination=${{ runner.temp }}/cms-e2e.tap
         run: npm run test:e2e
 
+      - name: Assemble CMS release artifact from the tested build
+        env:
+          CMS_SOURCE_SHA: ${{ github.sha }}
+          CMS_SOURCE_REF: ${{ github.ref }}
+          CMS_RUN_ID: ${{ github.run_id }}
+          CMS_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: scripts/build-cms-artifact.sh --prebuilt "${{ runner.temp }}/cms-release-artifact"
+
+      - name: Upload CMS release artifact
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-cms-artifact-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cms-release-artifact/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Retain native release reports (supplemental)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

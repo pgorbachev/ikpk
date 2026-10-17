@@ -37,6 +37,7 @@
 * :: 2ccee7b131cf5512672686271f8647dea50af683 :: external-revision
 * :: 2dfd574c9d518106f41e85283177a36212d500f8 :: external-revision
 * :: 3d10129265f183e2b746a5823012f42a0c115f73 :: external-revision
+* :: 91bbd36b52d1f367c8b42ce557111dff9b909804 :: external-revision
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :: will-create
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create
