@@ -282,6 +282,30 @@ test('failed CMS disk materialization preserves the partial private stage and bl
   assert.deepEqual(f.events, [], 'a failed or blocked materialization never invokes a worker');
 });
 
+test('unmarked durable .incoming stage is visible as incomplete and blocks another publish UUID', async (t) => {
+  const f = serverFixture(t), incoming = join(f.state, '.incoming'), id = randomUUID();
+  mkdirSync(incoming, { mode: 0o700 });
+  const status = f.server.status(id);
+  assert.deepEqual(status, { id, destination: 'demo', status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' });
+  const bytes = cmsArchive(t), next = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
+  await assert.rejects(f.server.submit(next, bytes), /cms-incomplete-stage-pending/);
+  assert.deepEqual(readdirSync(incoming), [], 'status and blocked publish leave an unmarked durable stage untouched');
+  assert.deepEqual(f.events, [], 'an incomplete stage never starts a worker');
+});
+
+test('corrupt .incoming request marker remains diagnosable and blocks another publish UUID', async (t) => {
+  const f = serverFixture(t), incoming = join(f.state, '.incoming'), id = randomUUID();
+  mkdirSync(incoming, { mode: 0o700 });
+  const marker = join(incoming, 'request.json'), markerBytes = Buffer.from('{corrupt durable marker');
+  writeFileSync(marker, markerBytes, { mode: 0o600 });
+  const status = f.server.status(id);
+  assert.deepEqual(status, { id, destination: 'demo', status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' });
+  const bytes = cmsArchive(t), next = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
+  await assert.rejects(f.server.submit(next, bytes), /cms-incomplete-stage-pending/);
+  assert.deepEqual(readFileSync(marker), markerBytes, 'diagnosis never rewrites or removes an unreadable marker');
+  assert.deepEqual(f.events, [], 'an invalid marker never starts a worker');
+});
+
 test('server rejects traversal, symlink, unexpected dependencies, and missing Strapi admin output', async (t) => {
   const variants = [
     { files: { 'node_modules/x.js': 'x' } },
