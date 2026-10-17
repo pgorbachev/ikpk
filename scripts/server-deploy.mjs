@@ -301,6 +301,9 @@ export function createServer(config, overrides = {}) {
     const dir = folder(config, id); protectedPath(dir, true, true); const receipt = json(join(dir, 'request.json'));
     validateRequest(receipt.request, config.destination);
     if (receipt.request.id !== id || existsSync(join(dir, 'result.json'))) fail('invalid-execution');
+    if (receipt.request.action === 'publish' && (receipt.request.cmsArtifact || receipt.cmsArchivePath)) {
+      return { id, destination: config.destination, status: 'refused', code: 'cms-activation-adapter-not-integrated' };
+    }
     // The same receipt can never be executed twice, even after an uncertain failure.
     writeFileSync(join(dir, 'execution.json'), JSON.stringify({ startedAt: ports.now() }), { mode: 0o600, flag: 'wx' });
     // flock owned by this systemd service serializes all expensive work, including CI wait.
