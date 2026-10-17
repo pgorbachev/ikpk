@@ -37,7 +37,8 @@ function fixture(t) {
   return { root };
 }
 
-function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, runAttempt }, files, manifestMutator } = {}) {
+function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, runAttempt }, files,
+  migrationMarkerPath = 'database/.migrations-expected', manifestMutator } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-cms-zip-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const payload = files ?? {
@@ -47,7 +48,8 @@ function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, 
     'package.json': '{"name":"cms"}',
     'package-lock.json': '{"lockfileVersion":3}',
     'tsconfig.json': '{}',
-    'database/migrations/.migrations-expected': '0\n',
+    [migrationMarkerPath]: '1\n',
+    'database/migrations/0001-fixture.sql': '-- fixture migration\n',
     'database/migrations/target-schema/seminar.json': '{}',
     'scripts/run-data-migrations.mjs': 'export {};',
     'scripts/audit-data-migration.mjs': 'export {};',
@@ -247,6 +249,21 @@ test('CMS manifest accepts only the exact producer refs for the two supported so
       policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }), /cms|source|ref|manifest/i,
     `${untrustedRef} must not normalize into supported source ${sourceRef}`);
   }
+});
+
+test('CMS validator accepts the producer canonical database migration marker with exact count', async (t) => {
+  const { validateCmsArtifact } = await import('../cms-artifact.mjs');
+  const bytes = cmsArchive(t), request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
+  assert.doesNotThrow(() => validateCmsArtifact({ request, archiveBytes: bytes,
+    policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }));
+});
+
+test('CMS validator rejects the misplaced nested migration marker', async (t) => {
+  const { validateCmsArtifact } = await import('../cms-artifact.mjs');
+  const bytes = cmsArchive(t, { migrationMarkerPath: 'database/migrations/.migrations-expected' });
+  const request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
+  assert.throws(() => validateCmsArtifact({ request, archiveBytes: bytes,
+    policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }), /cms|migration|inventory/i);
 });
 
 test('unconfigured CMS archive policy keeps recovery/status available and refuses publish', async (t) => {
