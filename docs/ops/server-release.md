@@ -11,7 +11,7 @@
 ./deploy.sh prod --sha FULL_40_CHARACTER_SHA
 ```
 
-Оператор запускает deploy.sh из доверенного проверенного checkout/tooling. Целевой SHA задаётся отдельно; скрипт до admission не checkout-ит и не исполняет целевой код. Локальный GitHub CLI (`gh`) аутентифицирован в каноническом аккаунте и только читает точный последний eligible run, его jobs и ZIP artifact для указанного SHA/ref. Demo принимает dev, prod — main. Для prod перед SSH резервируется неизменяемый `prod-src-<полный SHA>` tag; совпадающий tag переиспользуется. Ноутбук закрепляет SSH-ключ, сохраняет и показывает request ID до отправки. Сервер без GitHub token проверяет связанность source identity, SHA, manifest и digest, затем отдельно строит кандидат на сервере. Команда ждёт итог, но разрыв SSH не прекращает принятую systemd-операцию.
+Оператор запускает deploy.sh из доверенного проверенного checkout/tooling. Целевой SHA задаётся отдельно; скрипт до admission не checkout-ит и не исполняет целевой код. Локальный GitHub CLI (`gh`) аутентифицирован в каноническом аккаунте и только читает точный последний eligible run, его jobs и ZIP artifact для указанного SHA/ref. Demo принимает dev, prod — main. Для prod перед SSH создаётся без force tag `prod-src-<полный SHA>`; совпадающий tag переиспользуется, а этот deployment path не перемещает и не удаляет теги. Это обычный GitHub ref: защита от других repository writers требует отдельного tag ruleset. Ноутбук закрепляет SSH-ключ, сохраняет и показывает request ID до отправки. Сервер без GitHub token проверяет связанность source identity, SHA, manifest и digest, затем отдельно строит кандидат на сервере. Команда ждёт итог, но разрыв SSH не прекращает принятую systemd-операцию.
 
 ```sh
 ./deploy.sh demo status REQUEST_UUID
