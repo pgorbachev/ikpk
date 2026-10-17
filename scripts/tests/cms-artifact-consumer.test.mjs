@@ -38,7 +38,7 @@ function fixture(t) {
 }
 
 function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, runAttempt }, files,
-  migrationMarkerPath = 'database/.migrations-expected', manifestMutator } = {}) {
+  migrationMarkerPath = 'database/.migrations-expected', nestedMigrationFiles = [], manifestMutator } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-cms-zip-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const payload = files ?? {
@@ -58,6 +58,7 @@ function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, 
     'scripts/normalize-null-documents-state.mjs': 'export {};',
     'src/lib/demo193-source-empty-fields.json': '{}',
   };
+  for (const [path, contents] of nestedMigrationFiles) payload[path] = contents;
   for (const [path, contents] of Object.entries(payload)) {
     const full = join(root, path); mkdirSync(join(full, '..'), { recursive: true }); writeFileSync(full, contents);
   }
@@ -256,6 +257,18 @@ test('CMS validator accepts the producer canonical database migration marker wit
   const bytes = cmsArchive(t), request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
   assert.doesNotThrow(() => validateCmsArtifact({ request, archiveBytes: bytes,
     policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }));
+});
+
+test('CMS migration marker counts only direct JavaScript and SQL migration children', async (t) => {
+  const { validateCmsArtifact } = await import('../cms-artifact.mjs');
+  const bytes = cmsArchive(t, { nestedMigrationFiles: [
+    ['database/migrations/helpers/nested-helper.js', 'export {};'],
+    ['database/migrations/helpers/nested-fixture.sql', '-- nested helper, not a top-level migration\n'],
+  ] });
+  const request = { ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof() };
+  assert.doesNotThrow(() => validateCmsArtifact({ request, archiveBytes: bytes,
+    policy: TEST_CMS_POLICY, runtime: { nodeMajor: 22, nodeAbi: '127' } }),
+  'the producer writes the expected count from direct readdir children, excluding nested helpers');
 });
 
 test('CMS validator rejects the misplaced nested migration marker', async (t) => {
