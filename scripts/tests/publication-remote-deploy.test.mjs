@@ -186,7 +186,7 @@ test('server request retries compare source evidence semantically and reject cha
   const server = createServer(f.config, f.ports);
   assert.equal((await server.submit(request, f.cms.archiveBytes)).status, 'accepted');
   const reordered = { sourceCiEvidence: Object.fromEntries(Object.entries(evidence).reverse()),
-    action: 'publish', sourceSha: commit, destination: 'demo', id: request.id };
+    action: 'publish', sourceSha: commit, destination: 'demo', id: request.id, cmsArtifact: f.cms.metadata };
   assert.equal((await server.submit(reordered, f.cms.archiveBytes)).status, 'running');
   await assert.rejects(server.submit({ ...reordered, sourceCiEvidence: { ...reordered.sourceCiEvidence, runAttempt: 2 } }, f.cms.archiveBytes), /request-id-conflict/);
   assert.equal(f.events.filter((event) => event.startsWith('start:')).length, 1);
