@@ -2,10 +2,12 @@
 /** Installed outside checkouts. One durable receipt per request; systemd + flock own execution. */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
-import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync, mkdtempSync, rmSync } from 'node:fs';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync, mkdtempSync, rmSync, statfsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { constants as bufferConstants } from 'node:buffer';
+import { validateCmsArtifact } from './cms-artifact.mjs';
 import { EXCLUDED_HISTORICAL, PENDING_SCOPE, RELEASE_TEST_POLICY_VERSION, RELEASE_TEST_WORKFLOW, SOURCE_SUITES } from './release-test-policy.mjs';
 import { NON_TEST_CHECKS, REPORT_POLICY_VERSION, SOURCE_REPORT_PROFILE, validateReportSummaries } from './release-test-reports.mjs';
 
@@ -69,14 +71,20 @@ export function readServerConfig(installed) {
   if (typeof c.buildLockFile !== 'string' || !isAbsolute(c.buildLockFile)) fail('untrusted-build-lock');
   const lock = lstatSync(c.buildLockFile);
   if (!lock.isFile() || lock.isSymbolicLink() || (lock.mode & 0o002)) fail('untrusted-build-lock');
+  const cmsPolicy = c.cmsArtifactPolicy;
+  const cmsPolicyValid = plain(cmsPolicy) && Number.isSafeInteger(cmsPolicy.maxArchiveBytes) && cmsPolicy.maxArchiveBytes >= 1 &&
+      cmsPolicy.maxArchiveBytes <= bufferConstants.MAX_LENGTH - 8 * 1024 * 1024 - 16 &&
+      Number.isSafeInteger(cmsPolicy.maxExpandedBytes) && cmsPolicy.maxExpandedBytes >= 1 &&
+      Number.isSafeInteger(cmsPolicy.freeSpaceReserveBytes) && cmsPolicy.freeSpaceReserveBytes >= 1 &&
+      Number.isSafeInteger(cmsPolicy.nodeMajor) && typeof cmsPolicy.nodeAbi === 'string' && /^\d+$/.test(cmsPolicy.nodeAbi);
   const state = join(root, 'operations');
   if (!existsSync(state)) mkdirSync(state, { mode: 0o700 });
   protectedPath(state, true, true);
-  return { ...c, installed, root, state, canonicalRepository: publisher.canonicalRepository };
+  return { ...c, cmsArtifactPolicy: cmsPolicyValid ? cmsPolicy : undefined, installed, root, state, canonicalRepository: publisher.canonicalRepository };
 }
 export function validateRequest(input, destination) {
   if (!plain(input) || !validId(input.id) || input.destination !== destination || !['publish', 'recover', 'rollback'].includes(input.action)) fail('invalid-request');
-  const allowed = ['id', 'destination', 'action', ...(input.action === 'publish' ? ['sourceSha', 'sourceCiEvidence', ...(destination === 'prod' ? ['sourceTag'] : [])] : []), ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
+  const allowed = ['id', 'destination', 'action', ...(input.action === 'publish' ? ['sourceSha', 'sourceCiEvidence', 'cmsArtifact', ...(destination === 'prod' ? ['sourceTag'] : [])] : []), ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
   if (Object.keys(input).some((k) => !allowed.includes(k))) fail('invalid-request');
   if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
   if (input.action === 'publish') {
@@ -93,6 +101,14 @@ export function validateRequest(input, destination) {
     validateManifest(zip, evidence, input.sourceSha);
     if (destination === 'prod' && input.sourceTag !== `prod-src-${input.sourceSha}`) fail('invalid-source-tag');
     if (destination === 'demo' && Object.hasOwn(input, 'sourceTag')) fail('invalid-source-tag');
+    const artifact = input.cmsArtifact;
+    if (!plain(artifact) || !Number.isSafeInteger(artifact.id) || artifact.id < 1 ||
+        Object.keys(artifact).sort().join(',') !== 'digest,expired,id,name,runAttempt,size_in_bytes,workflow_run' ||
+        !plain(artifact.workflow_run) || Object.keys(artifact.workflow_run).sort().join(',') !== 'head_sha,id' ||
+        artifact.name !== `release-cms-artifact-${evidence.runAttempt}` || artifact.expired !== false ||
+        artifact.runAttempt !== evidence.runAttempt || artifact.workflow_run?.id !== evidence.runId ||
+        artifact.workflow_run?.head_sha !== input.sourceSha || !Number.isSafeInteger(artifact.size_in_bytes) ||
+        !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '')) fail('invalid-cms-artifact-metadata');
   }
   if (input.action === 'rollback' && (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.releaseId ?? '') ||
       typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length > 500)) fail('invalid-request');
@@ -123,9 +139,52 @@ export function publisherResult(run) {
       (run.status === 0) !== (result.status === 'success')) fail('publisher-result-unavailable');
   return result;
 }
+export async function readSubmitFrame(stream, { maxControlBytes, maxArchiveBytes }) {
+  if (!Number.isSafeInteger(maxControlBytes) || maxControlBytes < 2 || !Number.isSafeInteger(maxArchiveBytes) || maxArchiveBytes < 0 ||
+      maxControlBytes + maxArchiveBytes + 16 > bufferConstants.MAX_LENGTH) fail('cms-frame-policy-unconfigured');
+  const header = Buffer.alloc(16); let headerBytes = 0, frame, expected, offset = 0;
+  for await (const chunk of stream) {
+    const part = Buffer.from(chunk); let cursor = 0;
+    if (!frame) {
+      const take = Math.min(16 - headerBytes, part.length);
+      part.copy(header, headerBytes, 0, take); headerBytes += take; cursor += take;
+      if (headerBytes < 16) continue;
+      const c = header.readBigUInt64BE(0), a = header.readBigUInt64BE(8);
+      if (c < 2n || c > BigInt(maxControlBytes)) fail('cms-frame-too-large');
+      if (maxArchiveBytes === 0 && a > 0n) fail('cms-artifact-policy-unconfigured');
+      if (a > BigInt(maxArchiveBytes)) fail('cms-frame-too-large');
+      expected = 16 + Number(c) + Number(a); frame = Buffer.allocUnsafe(expected); header.copy(frame); offset = 16;
+    }
+    const remaining = part.length - cursor;
+    if (offset + remaining > expected) fail('cms-frame-trailing-data');
+    part.copy(frame, offset, cursor); offset += remaining;
+  }
+  if (!frame || offset !== expected) fail('cms-frame-truncated');
+  const controlLength = Number(frame.readBigUInt64BE(0));
+  const controlBytes = frame.subarray(16, 16 + controlLength);
+  let controlText; try { controlText = new TextDecoder('utf-8', { fatal: true }).decode(controlBytes); } catch { fail('cms-frame-invalid-control'); }
+  let request; try { request = JSON.parse(controlText); } catch { fail('cms-frame-invalid-control'); }
+  if (!plain(request) || Buffer.byteLength(JSON.stringify(request)) !== controlLength) fail('cms-frame-invalid-control');
+  return { request, archiveBytes: frame.subarray(16 + controlLength) };
+}
 const defaultPorts = {
   now: () => new Date().toISOString(),
+  cmsRuntime: () => ({ nodeMajor: Number(process.versions.node.split('.')[0]), nodeAbi: process.versions.modules }),
+  stageCmsArchive(path, archiveBytes) {
+    const fd = openSync(path, 'wx', 0o600);
+    try { writeFileSync(fd, archiveBytes); fsyncSync(fd); } finally { closeSync(fd); }
+  },
+  checkCmsDiskReserve(c, declaredBytes, reserveBytes) {
+    const space = statfsSync(c.state, { bigint: true });
+    if (!Number.isSafeInteger(declaredBytes) || !Number.isSafeInteger(reserveBytes) ||
+        space.bavail * space.bsize < BigInt(declaredBytes) + BigInt(reserveBytes)) fail('cms-artifact-disk-reserve-insufficient');
+  },
   start(c, id) {
+    const receiptPath = join(c.state, id, 'request.json');
+    if (existsSync(receiptPath)) {
+      const receipt = json(receiptPath);
+      if (receipt.request?.action === 'publish' && receipt.cmsArchivePath) fail('cms-activation-adapter-not-integrated');
+    }
     const run = spawnSync('/usr/bin/systemd-run', ['--user', '--quiet', `--unit=${unitName(c, id)}`,
       '--property=Type=exec', '--property=UMask=0077', '--property=KillMode=control-group', `--property=RuntimeMaxSec=${c.timeoutSeconds}`,
       '--', '/usr/bin/flock', '--exclusive', '--nonblock', '--conflict-exit-code', '75', c.buildLockFile,
@@ -156,7 +215,16 @@ export function createServer(config, overrides = {}) {
   const ports = { ...defaultPorts, ...overrides };
   function status(id) {
     const dir = folder(config, id);
-    if (!existsSync(dir)) return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
+    if (!existsSync(dir)) {
+      const incoming = join(config.state, '.incoming'), partial = join(incoming, 'request.json');
+      if (existsSync(partial)) {
+        const pending = json(partial);
+        if (pending.request?.id === id && pending.request.destination === config.destination) {
+          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+        }
+      }
+      return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
+    }
     protectedPath(dir, true, true);
     if (!existsSync(join(dir, 'request.json'))) return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
     const receipt = json(join(dir, 'request.json'));
@@ -167,7 +235,7 @@ export function createServer(config, overrides = {}) {
     if (service.state === 'failed' && service.exitCode === 75) { state = 'busy'; code = 'another-release-running'; }
     return { id, destination: receipt.request.destination, status: state, code };
   }
-  async function submit(input) {
+  async function submit(input, archiveBytes) {
     if (plain(input) && validId(input.id) && input.destination === config.destination) {
       const existingDir = folder(config, input.id);
       if (existsSync(existingDir)) {
@@ -175,29 +243,52 @@ export function createServer(config, overrides = {}) {
         if (!existsSync(join(existingDir, 'request.json'))) return { id: input.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
         let request;
         try { request = validateRequest(input, config.destination); } catch { fail('request-id-conflict'); }
+        if (request.action === 'publish') {
+          try { validateCmsArtifact({ request, archiveBytes, policy: config.cmsArtifactPolicy, runtime: ports.cmsRuntime() }); } catch { fail('request-id-conflict'); }
+        }
         const old = json(join(existingDir, 'request.json'));
         if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
         return status(request.id);
       }
     }
-    const request = validateRequest(input, config.destination); const dir = folder(config, request.id);
-    try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      protectedPath(dir, true, true);
-      if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
-      const old = json(join(dir, 'request.json'));
-      if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
-      return status(request.id);
+    const request = validateRequest(input, config.destination);
+    if (request.action === 'publish') {
+      validateCmsArtifact({ request, archiveBytes, policy: config.cmsArtifactPolicy, runtime: ports.cmsRuntime() });
+      if (typeof ports.checkCmsDiskReserve === 'function') ports.checkCmsDiskReserve(config, archiveBytes.length, config.cmsArtifactPolicy.freeSpaceReserveBytes);
+    }
+    const dir = folder(config, request.id), incoming = join(config.state, '.incoming');
+    if (request.action === 'publish' && existsSync(incoming)) fail('cms-incomplete-stage-pending');
+    if (request.action !== 'publish') {
+      try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        protectedPath(dir, true, true);
+        if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+        const old = json(join(dir, 'request.json'));
+        if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
+        return status(request.id);
+      }
     }
     const counterPath = join(config.state, 'sequence.json');
     const sequence = existsSync(counterPath) ? json(counterPath).sequence + 1 : 1;
     if (!Number.isSafeInteger(sequence) || sequence < 1) fail('request-sequence-invalid');
+    let cmsArchivePath;
+    if (request.action === 'publish') { mkdirSync(incoming, { mode: 0o700 }); cmsArchivePath = join(dir, 'cms-artifact.zip'); }
+    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: request.sourceSha, cmsArchivePath } : {}) };
+    if (request.action === 'publish') atomicJson(join(incoming, 'request.json'), receipt);
+    else atomicJson(join(dir, 'request.json'), receipt);
+    if (request.action === 'publish') {
+      ports.stageCmsArchive(join(incoming, 'cms-artifact.zip'), archiveBytes);
+      const stageDirectory = openSync(incoming, 'r'); try { fsyncSync(stageDirectory); } finally { closeSync(stageDirectory); }
+    }
     atomicJson(counterPath, { sequence });
-    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: request.sourceSha } : {}) };
-    atomicJson(join(dir, 'request.json'), receipt);
+    if (request.action === 'publish') {
+      renameSync(incoming, dir);
+      const parent = openSync(config.state, 'r'); try { fsyncSync(parent); } finally { closeSync(parent); }
+    }
     // Do not retry a start automatically if acknowledgement is lost.
     try { ports.start(config, request.id); }
-    catch { return { id: request.id, destination: config.destination, status: 'interrupted', code: 'service-start-unconfirmed' }; }
+    catch (error) { return { id: request.id, destination: config.destination, status: 'interrupted',
+      code: error.message === 'cms-activation-adapter-not-integrated' ? error.message : 'service-start-unconfirmed' }; }
     return { id: request.id, destination: config.destination, status: 'accepted' };
   }
   async function execute(id) {
@@ -245,19 +336,23 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     let result;
     if (command === 'execute' && validId(id)) result = await server.execute(id);
     else if (command === 'status' && validId(id)) result = server.status(id);
-    else if (['submit', 'accept'].includes(command) && id === undefined) {
-      const chunks = []; let size = 0;
-      for await (const chunk of process.stdin) { size += chunk.length; if (size > 8 * 1024 * 1024) fail('request-too-large'); chunks.push(chunk); }
-      const input = Buffer.concat(chunks).toString('utf8');
-      if (command === 'submit') {
-        // Serialize only receipt allocation. Heavy work uses the shared VPS lock.
-        const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept'],
-          { input, env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['pipe', 'pipe', 'ignore'] });
-        if (admission.error || !admission.stdout) fail('request-acceptance-unconfirmed');
-        result = JSON.parse(admission.stdout);
-      } else result = await server.submit(JSON.parse(input));
+    else if (command === 'submit' && id === undefined) {
+      // Acquire the shared destination admission lock before consuming any body bytes.
+      const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept-frame'],
+        { env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['inherit', 'pipe', 'ignore'] });
+      if (admission.error || !admission.stdout) fail('request-acceptance-unconfirmed');
+      result = JSON.parse(admission.stdout);
+    } else if (command === 'accept-frame' && id === undefined) {
+      if (existsSync(join(c.state, '.incoming'))) fail('cms-incomplete-stage-pending');
+      const { request, archiveBytes } = await readSubmitFrame(process.stdin, {
+        maxControlBytes: 8 * 1024 * 1024, maxArchiveBytes: c.cmsArtifactPolicy?.maxArchiveBytes ?? 0 });
+      result = await server.submit(request, archiveBytes);
     } else fail('invalid-arguments');
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (['refused', 'busy', 'interrupted', 'unknown', 'not-found'].includes(result.status)) process.exitCode = 1;
-  } catch { process.stderr.write('{"status":"refused","code":"server-request-failed"}\n'); process.exitCode = 1; }
+  } catch (error) {
+    const reason = typeof error?.message === 'string' && /^cms-(?:frame-(?:too-large|truncated|trailing-data|invalid-control|policy-unconfigured)|artifact-(?:policy-unconfigured|disk-reserve-insufficient)|incomplete-stage-pending)$/.test(error.message)
+      ? error.message : 'server-request-failed';
+    process.stderr.write(`${JSON.stringify({ status: 'refused', code: reason })}\n`); process.exitCode = 1;
+  }
 }
