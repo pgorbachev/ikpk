@@ -1,14 +1,45 @@
 #!/usr/bin/env node
 /** Installed outside checkouts. One durable receipt per request; systemd + flock own execution. */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync, mkdtempSync, rmSync, statfsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { constants as bufferConstants } from 'node:buffer';
+import { validateCmsArtifact } from './cms-artifact.mjs';
+import { EXCLUDED_HISTORICAL, RELEASE_TEST_POLICY_VERSION, RELEASE_TEST_WORKFLOW, SOURCE_SUITES } from './release-test-policy.mjs';
+import { NON_TEST_CHECKS, REPORT_POLICY_VERSION, SOURCE_REPORT_PROFILE, validateReportSummaries } from './release-test-reports.mjs';
 
 export const validId = (id) => typeof id === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
 const fail = (message) => { throw new Error(message); };
 const plain = (x) => x && typeof x === 'object' && !Array.isArray(x);
+const SAFE_FRAME_REFUSAL = /^cms-(?:frame-(?:too-large|truncated|trailing-data|invalid-control|policy-unconfigured)|artifact-(?:policy-unconfigured|disk-reserve-insufficient)|incomplete-stage-pending)$/;
+function validateManifest(zip, evidence, sha) {
+  const dir = mkdtempSync(join(tmpdir(), 'ikpk-source-proof-'));
+  try {
+    const archive = join(dir, 'proof.zip'); writeFileSync(archive, zip, { mode: 0o600, flag: 'wx' });
+    const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384, timeout: 10000 }).trim().split('\n');
+    if (names.length !== 1 || names[0] !== 'release-source-tests.json') fail('invalid-source-manifest');
+    const manifest = JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536, timeout: 10000 }));
+    const ref = evidence.sourceRef;
+    if (manifest.schemaVersion !== RELEASE_TEST_POLICY_VERSION || manifest.workflow !== RELEASE_TEST_WORKFLOW ||
+        manifest.commit !== sha || manifest.runId !== evidence.runId || manifest.runAttempt !== evidence.runAttempt ||
+        manifest.subject !== 'source-code' || !['push', 'workflow_dispatch'].includes(manifest.event) ||
+        (manifest.event === 'push' && !['main', 'dev'].includes(ref)) || manifest.suites?.join('\0') !== SOURCE_SUITES.join('\0') ||
+        manifest.reportPolicyVersion !== REPORT_POLICY_VERSION || manifest.sourceProfile !== SOURCE_REPORT_PROFILE ||
+        manifest.pendingScope?.length !== 0 || JSON.stringify(manifest.nonTestChecks) !== JSON.stringify(NON_TEST_CHECKS) ||
+        JSON.stringify(manifest.excludedHistorical) !== JSON.stringify(EXCLUDED_HISTORICAL) ||
+        !plain(manifest.results) || Object.keys(manifest.results).sort().join('\0') !== ['identity', 'source-tests', 'supplemental', 'visual', 'provision'].sort().join('\0') ||
+        ['identity', 'source-tests', 'supplemental', 'visual', 'provision'].some((name) => manifest.results[name] !== 'success')) {
+      fail('invalid-source-manifest');
+    }
+    validateReportSummaries(manifest.reports, { profile: SOURCE_REPORT_PROFILE });
+  } catch (error) {
+    if (error.code === 'invalid-source-manifest') throw error;
+    fail('invalid-source-manifest');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
 export function protectedPath(path, directory = false, privateFile = false) {
   if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) fail('untrusted-installation');
   const stat = lstatSync(path);
@@ -27,11 +58,13 @@ export function readServerConfig(installed) {
   const path = protectedPath(join(root, 'server.json'));
   const c = JSON.parse(readFileSync(path, 'utf8'));
   if (!plain(c) || c.version !== 1 || !['demo', 'prod'].includes(c.destination) ||
+      Object.hasOwn(c, 'releaseCiTokenFile') ||
       !['main', 'dev'].includes(c.sourceRef) || (c.destination === 'prod' && c.sourceRef !== 'main') ||
       c.repository !== 'pgorbachev/ikpk' || !Number.isSafeInteger(c.timeoutSeconds) || c.timeoutSeconds < 60 || c.timeoutSeconds > 14400) fail('untrusted-server-config');
   c.launcher = protectedPath(c.launcher); c.launcherConfig = protectedPath(join(dirname(c.launcher), 'config.json'));
   outsideRepository(dirname(c.launcher));
   const publisher = JSON.parse(readFileSync(c.launcherConfig, 'utf8'));
+  if (Object.hasOwn(publisher, 'ciTokenFile')) fail('untrusted-server-config');
   if (publisher.sourceRef !== undefined && publisher.sourceRef !== c.sourceRef) fail('source-policy-mismatch');
   if ((publisher.sourceRef ?? 'main') !== c.sourceRef || publisher.canonicalRepository !== 'https://github.com/pgorbachev/ikpk.git' ||
       (c.destination === 'prod' ? publisher.deployMode !== 'prod' : publisher.deployMode !== 'stand')) fail('source-policy-mismatch');
@@ -39,19 +72,51 @@ export function readServerConfig(installed) {
   if (typeof c.buildLockFile !== 'string' || !isAbsolute(c.buildLockFile)) fail('untrusted-build-lock');
   const lock = lstatSync(c.buildLockFile);
   if (!lock.isFile() || lock.isSymbolicLink() || (lock.mode & 0o002)) fail('untrusted-build-lock');
-  c.releaseCiTokenFile = protectedPath(c.releaseCiTokenFile, false, true);
+  const cmsPolicy = c.cmsArtifactPolicy;
+  const cmsPolicyValid = plain(cmsPolicy) && Number.isSafeInteger(cmsPolicy.maxArchiveBytes) && cmsPolicy.maxArchiveBytes >= 1 &&
+      cmsPolicy.maxArchiveBytes <= bufferConstants.MAX_LENGTH - 8 * 1024 * 1024 - 16 &&
+      Number.isSafeInteger(cmsPolicy.maxExpandedBytes) && cmsPolicy.maxExpandedBytes >= 1 &&
+      Number.isSafeInteger(cmsPolicy.freeSpaceReserveBytes) && cmsPolicy.freeSpaceReserveBytes >= 1 &&
+      Number.isSafeInteger(cmsPolicy.nodeMajor) && typeof cmsPolicy.nodeAbi === 'string' && /^\d+$/.test(cmsPolicy.nodeAbi);
   const state = join(root, 'operations');
   if (!existsSync(state)) mkdirSync(state, { mode: 0o700 });
   protectedPath(state, true, true);
-  return { ...c, installed, root, state, canonicalRepository: publisher.canonicalRepository };
+  return { ...c, cmsArtifactPolicy: cmsPolicyValid ? cmsPolicy : undefined, installed, root, state, canonicalRepository: publisher.canonicalRepository };
 }
 export function validateRequest(input, destination) {
   if (!plain(input) || !validId(input.id) || input.destination !== destination || !['publish', 'recover', 'rollback'].includes(input.action)) fail('invalid-request');
-  const allowed = ['id', 'destination', 'action', ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
+  const allowed = ['id', 'destination', 'action', ...(input.action === 'publish' ? ['sourceSha', 'sourceCiEvidence', 'cmsArtifact', ...(destination === 'prod' ? ['sourceTag'] : [])] : []), ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
   if (Object.keys(input).some((k) => !allowed.includes(k))) fail('invalid-request');
+  if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
+  if (input.action === 'publish') {
+    const evidence = input.sourceCiEvidence, ref = destination === 'prod' ? 'main' : 'dev';
+    if (!/^[0-9a-f]{40}$/.test(input.sourceSha ?? '') || !plain(evidence) || evidence.commit !== input.sourceSha || evidence.sourceRef !== ref) fail('source-evidence-identity-mismatch');
+    if (Object.keys(evidence).sort().join(',') !== 'artifactDigest,artifactZipBase64,commit,repository,runAttempt,runId,sourceRef,workflow' ||
+        evidence.repository !== 'pgorbachev/ikpk' || evidence.workflow !== '.github/workflows/release-tests.yml' ||
+        !Number.isSafeInteger(evidence.runId) || evidence.runId < 1 || !Number.isSafeInteger(evidence.runAttempt) || evidence.runAttempt < 1 ||
+        typeof evidence.artifactDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(evidence.artifactDigest) ||
+        typeof evidence.artifactZipBase64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(evidence.artifactZipBase64)) fail('invalid-source-evidence');
+    const zip = Buffer.from(evidence.artifactZipBase64, 'base64');
+    if (zip.length > 4 * 1024 * 1024) fail('request-too-large');
+    if (zip.toString('base64') !== evidence.artifactZipBase64 || `sha256:${createHash('sha256').update(zip).digest('hex')}` !== evidence.artifactDigest) fail('invalid-source-evidence-digest');
+    validateManifest(zip, evidence, input.sourceSha);
+    if (destination === 'prod' && input.sourceTag !== `prod-src-${input.sourceSha}`) fail('invalid-source-tag');
+    if (destination === 'demo' && Object.hasOwn(input, 'sourceTag')) fail('invalid-source-tag');
+    const artifact = input.cmsArtifact;
+    if (!plain(artifact) || !Number.isSafeInteger(artifact.id) || artifact.id < 1 ||
+        Object.keys(artifact).sort().join(',') !== 'digest,expired,id,name,runAttempt,size_in_bytes,workflow_run' ||
+        !plain(artifact.workflow_run) || Object.keys(artifact.workflow_run).sort().join(',') !== 'head_sha,id' ||
+        artifact.name !== `release-cms-artifact-${evidence.runAttempt}` || artifact.expired !== false ||
+        artifact.runAttempt !== evidence.runAttempt || artifact.workflow_run?.id !== evidence.runId ||
+        artifact.workflow_run?.head_sha !== input.sourceSha || !Number.isSafeInteger(artifact.size_in_bytes) ||
+        !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '')) fail('invalid-cms-artifact-metadata');
+  }
   if (input.action === 'rollback' && (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.releaseId ?? '') ||
       typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length > 500)) fail('invalid-request');
-  return Object.fromEntries(allowed.map((key) => [key, input[key]]));
+  const request = Object.fromEntries(allowed.map((key) => [key, input[key]]));
+  if (input.action === 'publish') request.sourceCiEvidence = Object.fromEntries(
+    ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'].map((key) => [key, input.sourceCiEvidence[key]]));
+  return request;
 }
 function atomicJson(path, value) {
   const temporary = `${path}.${randomUUID()}.new`;
@@ -75,15 +140,55 @@ export function publisherResult(run) {
       (run.status === 0) !== (result.status === 'success')) fail('publisher-result-unavailable');
   return result;
 }
+export async function readSubmitFrame(stream, { maxControlBytes, maxArchiveBytes }) {
+  if (!Number.isSafeInteger(maxControlBytes) || maxControlBytes < 2 || !Number.isSafeInteger(maxArchiveBytes) || maxArchiveBytes < 0 ||
+      maxControlBytes + maxArchiveBytes + 16 > bufferConstants.MAX_LENGTH) fail('cms-frame-policy-unconfigured');
+  const header = Buffer.alloc(16); let headerBytes = 0, frame, expected, offset = 0;
+  for await (const chunk of stream) {
+    const part = Buffer.from(chunk); let cursor = 0;
+    if (!frame) {
+      const take = Math.min(16 - headerBytes, part.length);
+      part.copy(header, headerBytes, 0, take); headerBytes += take; cursor += take;
+      if (headerBytes < 16) continue;
+      const c = header.readBigUInt64BE(0), a = header.readBigUInt64BE(8);
+      if (c < 2n || c > BigInt(maxControlBytes)) fail('cms-frame-too-large');
+      if (maxArchiveBytes === 0 && a > 0n) fail('cms-artifact-policy-unconfigured');
+      if (a > BigInt(maxArchiveBytes)) fail('cms-frame-too-large');
+      expected = 16 + Number(c) + Number(a); frame = Buffer.allocUnsafe(expected); header.copy(frame); offset = 16;
+    }
+    const remaining = part.length - cursor;
+    if (offset + remaining > expected) fail('cms-frame-trailing-data');
+    part.copy(frame, offset, cursor); offset += remaining;
+  }
+  if (!frame || offset !== expected) fail('cms-frame-truncated');
+  const controlLength = Number(frame.readBigUInt64BE(0));
+  const controlBytes = frame.subarray(16, 16 + controlLength);
+  let controlText; try { controlText = new TextDecoder('utf-8', { fatal: true }).decode(controlBytes); } catch { fail('cms-frame-invalid-control'); }
+  let request; try { request = JSON.parse(controlText); } catch { fail('cms-frame-invalid-control'); }
+  if (!plain(request) || Buffer.byteLength(JSON.stringify(request)) !== controlLength) fail('cms-frame-invalid-control');
+  return { request, archiveBytes: frame.subarray(16 + controlLength) };
+}
 const defaultPorts = {
   now: () => new Date().toISOString(),
-  resolveSource(c) {
-    const output = execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', 'ls-remote', '--exit-code', '--refs', '--', c.canonicalRepository, `refs/heads/${c.sourceRef}`],
-      { env: { ...safeEnv(), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' }, encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const match = new RegExp(`^([a-f0-9]{40})\\s+refs/heads/${c.sourceRef}$`).exec(output);
-    if (!match) fail('source-unavailable'); return match[1];
+  cmsRuntime: () => ({ nodeMajor: Number(process.versions.node.split('.')[0]), nodeAbi: process.versions.modules }),
+  stageCmsArchive(path, archiveBytes) {
+    const fd = openSync(path, 'wx', 0o600);
+    try { writeFileSync(fd, archiveBytes); fsyncSync(fd); } finally { closeSync(fd); }
+  },
+  checkCmsDiskReserve(c, declaredBytes, reserveBytes) {
+    const space = statfsSync(c.state, { bigint: true });
+    if (!Number.isSafeInteger(declaredBytes) || !Number.isSafeInteger(reserveBytes) ||
+        space.bavail * space.bsize < BigInt(declaredBytes) + BigInt(reserveBytes)) fail('cms-artifact-disk-reserve-insufficient');
+  },
+  syncDirectory(path) {
+    const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
   },
   start(c, id) {
+    const receiptPath = join(c.state, id, 'request.json');
+    if (existsSync(receiptPath)) {
+      const receipt = json(receiptPath);
+      if (receipt.request?.action === 'publish' && receipt.cmsArchivePath) fail('cms-activation-adapter-not-integrated');
+    }
     const run = spawnSync('/usr/bin/systemd-run', ['--user', '--quiet', `--unit=${unitName(c, id)}`,
       '--property=Type=exec', '--property=UMask=0077', '--property=KillMode=control-group', `--property=RuntimeMaxSec=${c.timeoutSeconds}`,
       '--', '/usr/bin/flock', '--exclusive', '--nonblock', '--conflict-exit-code', '75', c.buildLockFile,
@@ -99,14 +204,11 @@ const defaultPorts = {
     if (result.status !== 0 || !values.ActiveState) return { state: 'unknown' };
     return { state: values.ActiveState, exitCode: Number(values.ExecMainStatus) };
   },
-  async fullTests(c, receipt) {
-    const { runReleaseCi } = await import('./release-ci.mjs');
-    return runReleaseCi(c, receipt);
-  },
   publisher(c, receipt) {
     const request = receipt.request;
     const args = [c.launcher, request.action, '--config', c.launcherConfig];
-    if (request.action === 'publish') args.push('--source-url', c.canonicalRepository, '--source-ref', c.sourceRef, '--expected-sha', receipt.commit);
+    if (request.action === 'publish') args.push('--source-url', c.canonicalRepository, '--source-ref', c.sourceRef,
+      '--expected-sha', receipt.commit, '--source-proof-file', join(c.state, request.id, 'tests.json'));
     if (request.action === 'rollback') args.push('--release-id', request.releaseId, '--reason', request.reason, '--confirm');
     const run = spawnSync(process.execPath, args, { env: safeEnv(), encoding: 'utf8', maxBuffer: 64 * 1024,
       timeout: c.timeoutSeconds * 1000, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -117,7 +219,22 @@ export function createServer(config, overrides = {}) {
   const ports = { ...defaultPorts, ...overrides };
   function status(id) {
     const dir = folder(config, id);
-    if (!existsSync(dir)) return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
+    if (!existsSync(dir)) {
+      const incoming = join(config.state, '.incoming'), partial = join(incoming, 'request.json');
+      if (existsSync(incoming)) {
+        let pending;
+        try {
+          if (!existsSync(partial)) return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
+          pending = json(partial);
+        } catch {
+          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
+        }
+        if (pending.request?.id === id && pending.request.destination === config.destination) {
+          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
+        }
+      }
+      return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
+    }
     protectedPath(dir, true, true);
     if (!existsSync(join(dir, 'request.json'))) return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
     const receipt = json(join(dir, 'request.json'));
@@ -128,31 +245,79 @@ export function createServer(config, overrides = {}) {
     if (service.state === 'failed' && service.exitCode === 75) { state = 'busy'; code = 'another-release-running'; }
     return { id, destination: receipt.request.destination, status: state, code };
   }
-  async function submit(input) {
-    const request = validateRequest(input, config.destination); const dir = folder(config, request.id);
-    try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      protectedPath(dir, true, true);
-      if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
-      const old = json(join(dir, 'request.json'));
-      if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
-      return status(request.id);
+  async function submit(input, archiveBytes) {
+    if (plain(input) && validId(input.id) && input.destination === config.destination) {
+      const existingDir = folder(config, input.id);
+      if (existsSync(existingDir)) {
+        protectedPath(existingDir, true, true);
+        if (!existsSync(join(existingDir, 'request.json'))) return { id: input.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+        let request;
+        try { request = validateRequest(input, config.destination); } catch { fail('request-id-conflict'); }
+        if (request.action === 'publish') {
+          try { validateCmsArtifact({ request, archiveBytes, policy: config.cmsArtifactPolicy, runtime: ports.cmsRuntime() }); } catch { fail('request-id-conflict'); }
+        }
+        const old = json(join(existingDir, 'request.json'));
+        if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
+        return status(request.id);
+      }
+    }
+    const request = validateRequest(input, config.destination);
+    if (request.action === 'publish') {
+      validateCmsArtifact({ request, archiveBytes, policy: config.cmsArtifactPolicy, runtime: ports.cmsRuntime() });
+      if (typeof ports.checkCmsDiskReserve === 'function') ports.checkCmsDiskReserve(config, archiveBytes.length, config.cmsArtifactPolicy.freeSpaceReserveBytes);
+    }
+    const dir = folder(config, request.id), incoming = join(config.state, '.incoming');
+    if (request.action === 'publish' && existsSync(incoming)) fail('cms-incomplete-stage-pending');
+    if (request.action !== 'publish') {
+      try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        protectedPath(dir, true, true);
+        if (!existsSync(join(dir, 'request.json'))) return { id: request.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+        const old = json(join(dir, 'request.json'));
+        if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
+        return status(request.id);
+      }
     }
     const counterPath = join(config.state, 'sequence.json');
     const sequence = existsSync(counterPath) ? json(counterPath).sequence + 1 : 1;
     if (!Number.isSafeInteger(sequence) || sequence < 1) fail('request-sequence-invalid');
+    let cmsArchivePath;
+    if (request.action === 'publish') {
+      mkdirSync(incoming, { mode: 0o700 });
+      ports.syncDirectory(config.state);
+      cmsArchivePath = join(dir, 'cms-artifact.zip');
+    }
+    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: request.sourceSha, cmsArchivePath } : {}) };
+    if (request.action === 'publish') atomicJson(join(incoming, 'request.json'), receipt);
+    else atomicJson(join(dir, 'request.json'), receipt);
+    if (request.action === 'publish') {
+      ports.stageCmsArchive(join(incoming, 'cms-artifact.zip'), archiveBytes);
+      ports.syncDirectory(incoming);
+    }
     atomicJson(counterPath, { sequence });
-    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: await ports.resolveSource(config) } : {}) };
-    atomicJson(join(dir, 'request.json'), receipt);
+    if (request.action === 'publish') {
+      renameSync(incoming, dir);
+      ports.syncDirectory(config.state);
+    }
     // Do not retry a start automatically if acknowledgement is lost.
     try { ports.start(config, request.id); }
-    catch { return { id: request.id, destination: config.destination, status: 'interrupted', code: 'service-start-unconfirmed' }; }
+    catch (error) {
+      if (error.message === 'cms-activation-adapter-not-integrated') {
+        const refusal = { id: request.id, destination: request.destination, status: 'refused', code: error.message };
+        atomicJson(join(dir, 'result.json'), refusal);
+        return refusal;
+      }
+      return { id: request.id, destination: request.destination, status: 'interrupted', code: 'service-start-unconfirmed' };
+    }
     return { id: request.id, destination: config.destination, status: 'accepted' };
   }
   async function execute(id) {
     const dir = folder(config, id); protectedPath(dir, true, true); const receipt = json(join(dir, 'request.json'));
     validateRequest(receipt.request, config.destination);
     if (receipt.request.id !== id || existsSync(join(dir, 'result.json'))) fail('invalid-execution');
+    if (receipt.request.action === 'publish' && (receipt.request.cmsArtifact || receipt.cmsArchivePath)) {
+      return { id, destination: config.destination, status: 'refused', code: 'cms-activation-adapter-not-integrated' };
+    }
     // The same receipt can never be executed twice, even after an uncertain failure.
     writeFileSync(join(dir, 'execution.json'), JSON.stringify({ startedAt: ports.now() }), { mode: 0o600, flag: 'wx' });
     // flock owned by this systemd service serializes all expensive work, including CI wait.
@@ -162,11 +327,10 @@ export function createServer(config, overrides = {}) {
       const latest = existsSync(latestPath) ? json(latestPath).sequence : 0;
       if (!Number.isSafeInteger(receipt.sequence) || receipt.sequence <= latest) fail('stale-server-request');
       atomicJson(latestPath, { sequence: receipt.sequence, id });
-      let tests;
       if (receipt.request.action === 'publish') {
         if (!/^[a-f0-9]{40}$/.test(receipt.commit ?? '')) fail('invalid-source-sha');
-        tests = await ports.fullTests(config, { ...receipt, directory: dir });
-        atomicJson(join(dir, 'tests.json'), tests);
+        if (receipt.commit !== receipt.request.sourceSha) fail('source-tip-changed');
+        atomicJson(join(dir, 'tests.json'), receipt.request.sourceCiEvidence);
       }
       result = { id, destination: config.destination, ...await ports.publisher(config, receipt) };
     } catch (error) {
@@ -195,17 +359,30 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     let result;
     if (command === 'execute' && validId(id)) result = await server.execute(id);
     else if (command === 'status' && validId(id)) result = server.status(id);
-    else if (['submit', 'accept'].includes(command) && id === undefined) {
-      let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 2048) fail('request-too-large'); }
-      if (command === 'submit') {
-        // Serialize only receipt allocation. Heavy work uses the shared VPS lock.
-        const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept'],
-          { input, env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['pipe', 'pipe', 'ignore'] });
-        if (admission.error || !admission.stdout) fail('request-acceptance-unconfirmed');
-        result = JSON.parse(admission.stdout);
-      } else result = await server.submit(JSON.parse(input));
+    else if (command === 'submit' && id === undefined) {
+      // Acquire the shared destination admission lock before consuming any body bytes.
+      const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept-frame'],
+        { env: safeEnv(), encoding: 'utf8', maxBuffer: 65536, timeout: 150000, stdio: ['inherit', 'pipe', 'pipe'] });
+      if (admission.error) fail('request-acceptance-unconfirmed');
+      if (admission.status !== 0 || !admission.stdout) {
+        let refusal;
+        try { refusal = JSON.parse(admission.stderr ?? ''); } catch { refusal = undefined; }
+        if (plain(refusal) && Object.keys(refusal).sort().join(',') === 'code,status' &&
+            refusal.status === 'refused' && typeof refusal.code === 'string' && SAFE_FRAME_REFUSAL.test(refusal.code)) fail(refusal.code);
+        fail('request-acceptance-unconfirmed');
+      }
+      result = JSON.parse(admission.stdout);
+    } else if (command === 'accept-frame' && id === undefined) {
+      if (existsSync(join(c.state, '.incoming'))) fail('cms-incomplete-stage-pending');
+      const { request, archiveBytes } = await readSubmitFrame(process.stdin, {
+        maxControlBytes: 8 * 1024 * 1024, maxArchiveBytes: c.cmsArtifactPolicy?.maxArchiveBytes ?? 0 });
+      result = await server.submit(request, archiveBytes);
     } else fail('invalid-arguments');
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (['refused', 'busy', 'interrupted', 'unknown', 'not-found'].includes(result.status)) process.exitCode = 1;
-  } catch { process.stderr.write('{"status":"refused","code":"server-request-failed"}\n'); process.exitCode = 1; }
+  } catch (error) {
+    const reason = typeof error?.message === 'string' && SAFE_FRAME_REFUSAL.test(error.message)
+      ? error.message : 'server-request-failed';
+    process.stderr.write(`${JSON.stringify({ status: 'refused', code: reason })}\n`); process.exitCode = 1;
+  }
 }

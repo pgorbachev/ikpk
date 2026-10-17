@@ -12,6 +12,8 @@ const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operati
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
 const PERMISSION_TIMESTAMP_COLUMNS = ['created_at', 'updated_at', 'published_at'];
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
+const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
+const UPLOAD_METRICS_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
@@ -480,7 +482,40 @@ function expectedCoreStoreValue(key, sourceValue) {
   }
   return null;
 }
-function compareCoreStore(sourceDb, candidateDb, differences) {
+function isGeneratedWeeklySchedule(value) {
+  if (typeof value !== 'string') return false;
+  const fields = value.split(' ');
+  if (fields.length !== 6 || fields[3] !== '*' || fields[4] !== '*') return false;
+  const ranges = [[0, 59], [0, 59], [0, 23], [0, 6]];
+  return [0, 1, 2, 5].every((index, rangeIndex) => {
+    const field = fields[index];
+    if (!/^(0|[1-9]\d*)$/.test(field)) return false;
+    const value = Number(field);
+    const [min, max] = ranges[rangeIndex];
+    return Number.isInteger(value) && value >= min && value <= max;
+  });
+}
+function isUploadMetricsScheduleRefresh(sourceValue, candidateValue, receipt) {
+  let source; let candidate;
+  try {
+    source = JSON.parse(sourceValue);
+    candidate = JSON.parse(candidateValue);
+  } catch { return false; }
+  const expectedKeys = ['lastWeeklyUpdate', 'weeklySchedule'];
+  const hasExpectedShape = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype
+    && canonicalJson(Object.keys(value).sort()) === canonicalJson(expectedKeys);
+  if (!hasExpectedShape(source) || !hasExpectedShape(candidate)) return false;
+  if (!Number.isSafeInteger(source.lastWeeklyUpdate) || source.lastWeeklyUpdate <= 0
+    || candidate.lastWeeklyUpdate !== source.lastWeeklyUpdate
+    || !isGeneratedWeeklySchedule(source.weeklySchedule)
+    || !isGeneratedWeeklySchedule(candidate.weeklySchedule)
+    || source.weeklySchedule === candidate.weeklySchedule) return false;
+  const window = lifecycleWindow(receipt);
+  if (!window || source.lastWeeklyUpdate + UPLOAD_METRICS_WEEK_MS >= window.start) return false;
+  return true;
+}
+function compareCoreStore(sourceDb, candidateDb, receipt, differences) {
   const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
   const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
   if (sourceHasTable !== candidateHasTable) {
@@ -516,6 +551,8 @@ function compareCoreStore(sourceDb, candidateDb, differences) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-row-metadata-changed', keySha256: sha(Buffer.from(key)) });
     }
     if (sourceRow.value === candidateRow.value) continue;
+    if (key === UPLOAD_METRICS_KEY
+      && isUploadMetricsScheduleRefresh(sourceRow.value, candidateRow.value, receipt)) continue;
     if (!CORE_STORE_KEYS.has(key)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
       continue;
@@ -751,7 +788,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
     const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
-    compareCoreStore(source, candidate, differences);
+    compareCoreStore(source, candidate, receipt, differences);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {

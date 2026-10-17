@@ -1,14 +1,32 @@
 import { test } from 'node:test';
-import { sourceCiFixtureScript } from './helpers/publication-ci-fixture.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RELEASE_TEST_WORKFLOW, releaseTestManifest } from '../release-test-policy.mjs';
+import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const CANARY = 'agent-test-payload-a467c2';
+function sourceProof(commit, root) {
+  const directory = join(root, 'proof'); mkdirSync(directory);
+  const reports = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner,
+    reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0,
+    flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
+  const manifest = releaseTestManifest({ RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned', GITHUB_SHA: commit,
+    GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1' },
+  Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map(name => [name, { result: 'success' }])), reports);
+  writeFileSync(join(directory, 'release-source-tests.json'), JSON.stringify(manifest));
+  const archive = join(root, 'source-proof.zip');
+  execFileSync('/usr/bin/zip', ['-q', archive, 'release-source-tests.json'], { cwd: directory });
+  const bytes = readFileSync(archive);
+  return { repository: 'pgorbachev/ikpk', workflow: RELEASE_TEST_WORKFLOW, sourceRef: 'main', commit,
+    runId: 1, runAttempt: 1, artifactDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+    artifactZipBase64: bytes.toString('base64') };
+}
 const cleanEnv = () => ({ PATH: process.env.PATH, HOME: process.env.HOME,
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
   GIT_AUTHOR_NAME: 'Agent fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
@@ -70,8 +88,14 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   assert.equal(readFileSync(join(host, 'releases/agent-probe/index.html'), 'utf8'), 'checked bytes');
   rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
 
-  const ciBootstrap = join(temp, 'ci-fixture.mjs'); write(ciBootstrap, sourceCiFixtureScript(git(repo, 'rev-parse', 'HEAD')));
-  const result = await run(['--import', ciBootstrap, installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main'], { cwd: temp, env: cleanEnv() });
+  const commit = git(repo, 'rev-parse', 'HEAD');
+  const operations = join(dirname(installed), 'operations'); mkdirSync(operations, { mode: 0o700 }); chmodSync(operations, 0o700);
+  const requestDirectory = join(operations, '123e4567-e89b-42d3-a456-426614174000');
+  mkdirSync(requestDirectory, { mode: 0o700 }); chmodSync(requestDirectory, 0o700);
+  const proofPath = join(requestDirectory, 'tests.json'); writeFileSync(proofPath, JSON.stringify(sourceProof(commit, temp)), { mode: 0o600 });
+  const fetchDeny = join(temp, 'fetch-deny.mjs'); write(fetchDeny, `globalThis.fetch=async()=>{throw new Error('unexpected GitHub request')};\n`);
+  const result = await run(['--import', fetchDeny, installed, 'publish', '--config', configPath, '--source-url', remote,
+    '--source-ref', 'main', '--expected-sha', commit, '--source-proof-file', proofPath], { cwd: temp, env: cleanEnv() });
   assert.equal(existsSync(brokerTrace), true, 'the broker must actually deliver the configured socket');
   assert.equal(result.status, 0, `authorized agent handoff failed: ${result.stderr}`);
   assert.equal(JSON.parse(readFileSync(trace)).agentVerified, true); assert.equal(JSON.parse(readFileSync(trace)).brokerCalled, true);

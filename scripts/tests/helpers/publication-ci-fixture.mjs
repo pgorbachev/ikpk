@@ -1,9 +1,11 @@
 import { SOURCE_CI_JOBS } from '../../publication-launcher.mjs';
+
 // Test-only Node --import bootstrap for installed-launcher subprocess fixtures.
 // The real gate still validates the complete responses; no network is contacted.
 export function sourceCiFixtureScript(commit) {
   return `globalThis.fetch = (${fixtureFetch.toString()})(${JSON.stringify(commit)}, ${JSON.stringify(SOURCE_CI_JOBS)});\n`;
 }
+
 function fixtureFetch(commit, names) {
   return async function (input) {
     const url = new URL(input);

@@ -30,7 +30,7 @@ const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite
 
 function evidenceFiles(directory, { run = nativeRun, jobStartedAt = timestamp, manifestMutator } = {}) {
   const manifest = releaseTestManifest({ RELEASE_SOURCE_PROFILE: 'source-default-ci-pinned', GITHUB_SHA: commit,
-    GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/dev', GITHUB_RUN_ID: String(run.id),
+    GITHUB_EVENT_NAME: 'push', GITHUB_REF: `refs/heads/${run.head_branch}`, GITHUB_RUN_ID: String(run.id),
     GITHUB_RUN_ATTEMPT: String(run.run_attempt) },
   Object.fromEntries(['identity', 'source-tests', 'supplemental', 'visual', 'provision'].map((name) => [name, { result: 'success' }])), reportFixtures);
   manifestMutator?.(manifest);
@@ -50,6 +50,10 @@ function api({ run = nativeRun, runs = [run], statuses, jobs, artifact = evidenc
   return async (url, options = {}) => {
     assert.equal(options.method ?? 'GET', 'GET', 'source CI inspection must be read-only');
     assert.equal(options.redirect, 'manual');
+    if (url.includes('/git/ref/heads/')) {
+      const ref = url.slice(url.lastIndexOf('/git/ref/heads/') + '/git/ref/heads/'.length);
+      return json({ ref: `refs/heads/${ref}`, object: { sha: run.head_sha } });
+    }
     if (url.includes('/workflows/')) return json({ total_count: runs.length, workflow_runs: runs });
     if (url.includes('/attempts/')) return json({ total_count: jobs.length, jobs });
     if (url.includes('/artifacts?')) return json({ total_count: artifact ? 1 : 0, artifacts: artifact ? [artifact] : [] });
@@ -109,6 +113,23 @@ test('refuses if a newer attempt replaces the successful attempt while its evide
 
   await assert.rejects(createReleaseCi({ token: 'read-only-token', fetch })(config, receipt),
     (error) => error.code === 'release-ci-attempt-changed');
+});
+
+test('refuses when the protected source ref advances during otherwise successful CI admission', async (t) => {
+  const { config, receipt } = fixture(t);
+  config.sourceRef = 'main'; receipt.commit = commit;
+  receipt.request.destination = 'prod';
+  const selected = { ...nativeRun, head_branch: 'main' };
+  const { archive, jobs, artifact } = evidenceFiles(receipt.directory, { run: selected });
+  const events = [];
+  const fetch = async (url, options) => {
+    events.push(url.endsWith(`/actions/runs/${runId}`) ? 'run' : url.includes('/artifacts/9/zip') ? 'artifact-bytes' : 'api');
+    return api({ run: selected, jobs, artifact, archive })(url, options);
+  };
+  await assert.rejects(createReleaseCi({ token: 'read-only-token', fetch,
+    resolveSourceRef: async ({ sourceRef }) => { events.push(`ref:${sourceRef}`); return 'b'.repeat(40); },
+  })(config, receipt), (error) => error.code === 'release-ci-source-ref-changed');
+  assert.equal(events.at(-1), 'ref:main', 'protected ref is checked after final run and artifact evidence');
 });
 
 test('missing run and completed unsuccessful run both fail closed without starting a run', async (t) => {

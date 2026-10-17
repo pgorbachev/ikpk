@@ -7,11 +7,11 @@
 После установки доверенных компонентов и принятия назначения:
 
 ```sh
-./deploy.sh demo
-./deploy.sh prod
+./deploy.sh demo --sha FULL_40_CHARACTER_SHA
+./deploy.sh prod --sha FULL_40_CHARACTER_SHA
 ```
 
-Demo принимает текущий точный dev, только через защищённый demo-dev профиль; prod — текущий точный main. Для обоих нужен обязательный CI этого SHA. Ноутбук подключается по закреплённому SSH-ключу, сохраняет и показывает request ID до отправки. Сборка/данные/артефакты остаются на сервере. Команда ждёт итог, но разрыв SSH не прекращает принятую systemd-операцию.
+Оператор запускает deploy.sh из доверенного проверенного checkout/tooling. Целевой SHA задаётся отдельно; скрипт до admission не checkout-ит и не исполняет целевой код. Локальный GitHub CLI (`gh`) аутентифицирован в каноническом аккаунте и только читает точный последний eligible run, его jobs и ZIP artifact для указанного SHA/ref. Demo принимает dev, prod — main. Для prod перед SSH создаётся без force tag `prod-src-<полный SHA>`; совпадающий tag переиспользуется, а этот deployment path не перемещает и не удаляет теги. Это обычный GitHub ref: защита от других repository writers требует отдельного tag ruleset. Ноутбук закрепляет SSH-ключ, сохраняет и показывает request ID до отправки. Сервер без GitHub token проверяет связанность source identity, SHA, manifest и digest, затем отдельно строит кандидат на сервере. Команда ждёт итог, но разрыв SSH не прекращает принятую systemd-операцию.
 
 ```sh
 ./deploy.sh demo status REQUEST_UUID
@@ -28,9 +28,9 @@ Demo принимает текущий точный dev, только через
 
 Требуются Linux, systemd user manager с linger, util-linux flock, Node не ниже 22.16 с `node:sqlite`/backup, Git, unzip и зависимости существующего publisher. Использовать результат отдельного исследования ресурсов, а не ставить всё на production без проверки.
 
-На сервере вне Git checkout установить `scripts/server-deploy.mjs`, `scripts/release-ci.mjs`, `scripts/release-test-policy.mjs` и его `scripts/release-test-reports.mjs` рядом, в каталоге назначения с защищёнными правами. Существующие publication-launcher, config, broker и runtime устанавливаются штатным способом из deploy-vps.md. Исполнитель не должен запускаться root. Каталог установки/файлы не доступны для записи другим пользователям; операции хранятся в приватном `operations/` этого каталога.
+На сервере вне Git checkout установить `scripts/server-deploy.mjs`, `scripts/cms-artifact.mjs`, `scripts/release-test-policy.mjs` и `scripts/release-test-reports.mjs` с сохранением их соседней структуры в каталоге назначения с защищёнными правами. Источник CI и полный CMS ZIP проверяются локальным доверенным операторским tooling до отправки; `release-ci.mjs` и GitHub credential на сервере не устанавливаются. `server-deploy.mjs` повторно проверяет переданный run/attempt и ZIP-доказательство, сохраняет его в приватном `operations/<request-id>/tests.json`, а CMS ZIP — рядом с квитанцией операции. Launcher сверяет source proof офлайн и отдельно подтверждает канонический branch/SHA; он не обращается к GitHub и не читает `ciTokenFile`. Существующие publication-launcher, config, broker и runtime устанавливаются штатным способом из deploy-vps.md. Исполнитель не должен запускаться root. Каталог установки/файлы не доступны для записи другим пользователям; операции хранятся в приватном `operations/` этого каталога.
 
-**DEMO и production — разные сервисные учётные записи и SSH-доступы.** DEMO-пользователь не читает production config/broker/token и не может менять production webRoot/current. На одном VPS это проверяется реальными отказами доступа, а не полем JSON. Оба пользователя получают только доступ к общему regular lock-файлу, например `/var/lock/ikpk-build.lock`; файл не world-writable, родительский каталог не позволяет его заменить. Изоляцию проверить до допуска dev-кода. Для SSH-ключа использовать `restrict` и forced command:
+**DEMO и production — разные сервисные учётные записи и SSH-доступы.** DEMO-пользователь не читает production config/broker и не может менять production webRoot/current. На одном VPS это проверяется реальными отказами доступа, а не полем JSON. Оба пользователя получают только доступ к общему regular lock-файлу, например `/var/lock/ikpk-build.lock`; файл не world-writable, родительский каталог не позволяет его заменить. Изоляцию проверить до допуска dev-кода. Для SSH-ключа использовать `restrict` и forced command:
 
 ```text
 command="/absolute/node /opt/ikpk-publication/demo/server-deploy.mjs gateway",restrict ssh-ed25519 PUBLIC_KEY
@@ -47,15 +47,18 @@ Gateway принимает только точную команду submit ил�
   "sourceRef": "dev",
   "repository": "pgorbachev/ikpk",
   "launcher": "/opt/ikpk-publication/demo/publication-launcher.mjs",
-  "releaseCiTokenFile": "/opt/ikpk-publication/demo/release-ci.token",
   "buildLockFile": "/var/lock/ikpk-build.lock",
   "timeoutSeconds": 14400
 }
 ```
 
+`cmsArtifactPolicy` намеренно отсутствует, пока размер полного CMS ZIP и запас свободного места не измерены на успешном CI attempt и rehearsal. В таком состоянии status, recover и rollback доступны, но CMS publish закрыт до любой записи и запуска worker. После измерения настройка обязана содержать `maxArchiveBytes`, `maxExpandedBytes`, `freeSpaceReserveBytes`, целевые `nodeMajor` и `nodeAbi`; значения из тестовых ZIP не подходят. На клиенте `cmsArchiveMaxBytes` задаётся тем же измеренным пределом. Private `.incoming` содержит один bounded staging slot на destination; durable partial stage сохраняется и блокирует новый CMS publish до отдельно разрешённого решения оператора.
+
+Приём CMS ZIP сохраняет проверенный archive и source proof для следующего lifecycle шага. Сам по себе он не активирует CMS candidate: до отдельного подключения/проверки migration, candidate-build, admin/runtime, activation и paired rollback adapter полный CMS release не считается выполненным.
+
 Существующий publisher config этого примера должен задавать `canonicalRepository=https://github.com/pgorbachev/ikpk.git`, sourceRef=dev, sourceProfile=demo-dev, stand/ci и защищённые host/siteUrl 193.124.115.99 / https://staging.ikpk.su. Production config использует main/prod и отдельные доступы. Ни адрес из исторического документа, ни этот пример не подтверждают фактическую установку.
 
-Токен release-ci.token (0600, владелец сервиса) используется только для чтения Actions runs, jobs и artifacts; Actions write не требуется. Для приватного репозитория fine-grained token или GitHub App installation token ограничивается этим репозиторием и разрешением Actions: read; классический PAT требует более широкую область `repo`. Сервер переиспользует последний полный успешный `Release source tests` для точного SHA, если его attempt, native jobs, artifact digest, manifest, source profile и report policy совпадают с принятыми. Пока выбранный прогон выполняется, сервер ждёт. При отсутствии прогона, неуспехе, устаревшей identity или неполном evidence публикация завершается отказом; сервер никогда не запускает и не перезапускает CI. Оператор может дождаться обычного branch CI или попросить владельца запустить разрешённый workflow вручную, затем повторить запрос с новым ID. Токен не передаётся в окружение кандидатного кода, аргументы или логи; минимальное право — Actions read без записи исходников. Сам publisher работает под тем же доверенным UID и может читать файлы этого UID: очистка окружения не является файловой изоляцией. Код канонического SHA после CI входит в эту доверенную границу. CI workflow не получает deployment/CMS credentials. Для installed launcher отдельный `ciTokenFile`, если нужен, служит только чтению CI и также не передаётся в его окружение. Broker предоставляет кандидату только доступы его назначения.
+Локальный `gh` credential нужен только доверенному операторскому процессу; он не передаётся на сервер, в SSH environment, candidate process или логи. Сервер принимает только proof для точных repository/workflow/ref/SHA и пересчитывает digest bounded ZIP artifact. Actions write, dispatch и rerun не используются этим deploy path. Сам publisher работает под доверенным UID, собирает кандидат из принятого SHA и имеет только broker-доступы своего назначения. Код канонического SHA после CI входит в доверенную границу, установленный server executor — уже доверенный.
 
 Клиент: каталог `~/.config/ikpk-deploy` с demo.json/prod.json, без групповой/общей записи; ключ 0600 и отдельный known_hosts. Переменная IKPK_DEPLOY_HOME может указать другой абсолютный каталог конфигурации.
 
@@ -93,7 +96,7 @@ deploy-demo ALL=(root) NOPASSWD: NOSETENV: /usr/local/sbin/ikpk-demo-capture-req
 
 ## Тестовый допуск и данные
 
-Защищённый серверный адаптер выбирает последний run release-tests.yml канонического репозитория по SHA/ветке, ждёт завершения уже запущенного прогона и проверяет native metadata/jobs и attempt-specific artifact. Он связывает подтверждённое свидетельство с request ID и назначением. Повторный запрос не запускает и не перезапускает CI; сдвиг ветки после проверки не подменяет закреплённый SHA.
+Локальный доверенный операторский tooling с GitHub CLI выбирает последний eligible run `release-tests.yml` канонического репозитория для точной ветки и SHA, ждёт завершения уже запущенного прогона и проверяет native metadata/jobs и attempt-specific artifact; новый run не запускается и старый успех не подменяет более новый failed/running run. Серверный адаптер офлайн перепроверяет bounded manifest/ZIP-доказательство, связывает его с request ID и назначением, сохраняет в приватной операции и передаёт установленному launcher. Сдвиг ветки после проверки не подменяет закреплённый SHA; для production локальный клиент проверяет текущий `main` перед резервированием source tag и перед отправкой запроса.
 
 release-tests.yml автоматически создаёт исходный tests-only run на push dev/main, поэтому для DEMO не требуется сначала размещать новый workflow в main ради workflow_dispatch. До появления этого workflow на выбранном SHA новый путь ожидаемо отказывает. Никакого автоматического deploy по успеху CI нет.
 

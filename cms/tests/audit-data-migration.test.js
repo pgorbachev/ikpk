@@ -403,6 +403,7 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
 const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
 const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema';
+const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
 function coreStoreValues(candidate) {
   const promotion = {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
@@ -437,6 +438,7 @@ function coreStoreValues(candidate) {
     [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
     [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
     [CONTENT_SCHEMA_KEY, JSON.stringify(schema)],
+    [UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: 1700000000000, weeklySchedule: '0 0 0 * * 0' })],
     ['unrelated-key', JSON.stringify({ preserved: true })],
   ]);
 }
@@ -505,4 +507,73 @@ test('core-store table presence and schema constraints remain part of preservati
     assert.equal(report.passed, false, `core-store ${name} drift must block acceptance`);
     assert.ok(report.differences.some(({ table }) => table === 'strapi_core_store_settings'));
   }
+});
+
+test('core-store allows only a canonical upload-metrics weekly schedule refresh', () => {
+  const sourceDbPath = join(directory, 'core-store-metrics-source.db');
+  const candidateDbPath = join(directory, 'core-store-metrics-candidate.db');
+  createCoreStoreShape(sourceDbPath);
+  createCoreStoreShape(candidateDbPath, { candidate: true, mutate: (values) => {
+    values.set(UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: 1700000000000, weeklySchedule: '0 30 2 * * 1' }));
+  } });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.deepEqual(report.differences.map(({ table, kind }) => [table, kind]).sort(([left], [right]) => left.localeCompare(right)), [
+    ['ikpk_data_migration_history', 'required-runner-table-missing'],
+    ['ikpk_migration_lineage', 'required-runner-table-missing'],
+    ['ikpk_migration_operations', 'required-runner-table-missing'],
+  ], 'a valid generated cron refresh should add no findings beyond the three runner tables omitted by this fixture');
+});
+
+test('core-store keeps upload-metrics refresh exceptions bounded to schedule-only cron changes', () => {
+  const invalid = [
+    ['malformed cron', (metrics) => { metrics.weeklySchedule = 'not a cron'; }],
+    ['out-of-range cron field', (metrics) => { metrics.weeklySchedule = '60 0 0 * * 1'; }],
+    ['changed sibling', (metrics) => { metrics.lastWeeklyUpdate += 1; }],
+    ['extra property', (metrics) => { metrics.enabled = true; }],
+    ['missing schedule', (metrics) => { delete metrics.weeklySchedule; }],
+    ['wrong schedule type', (metrics) => { metrics.weeklySchedule = 0; }],
+  ];
+  for (const [name, mutateMetrics] of invalid) {
+    const sourceDbPath = join(directory, `core-store-metrics-negative-source-${name.replaceAll(' ', '-')}.db`);
+    const candidateDbPath = join(directory, `core-store-metrics-negative-candidate-${name.replaceAll(' ', '-')}.db`);
+    createCoreStoreShape(sourceDbPath);
+    createCoreStoreShape(candidateDbPath, { candidate: true, mutate: (values) => {
+      const metrics = JSON.parse(values.get(UPLOAD_METRICS_KEY));
+      mutateMetrics(metrics);
+      values.set(UPLOAD_METRICS_KEY, JSON.stringify(metrics));
+    } });
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `upload-metrics ${name} must block preservation acceptance`);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+      `upload-metrics ${name} should be rejected by the bounded comparator`);
+  }
+
+  const sourceDbPath = join(directory, 'core-store-metrics-metadata-source.db');
+  const candidateDbPath = join(directory, 'core-store-metrics-metadata-candidate.db');
+  createCoreStoreShape(sourceDbPath);
+  createCoreStoreShape(candidateDbPath, { candidate: true, mutate: (values) => {
+    values.set(UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: 1700000000000, weeklySchedule: '0 30 2 * * 1' }));
+  } });
+  const db = new Database(candidateDbPath);
+  db.prepare('UPDATE strapi_core_store_settings SET type = ? WHERE key = ?').run('unexpected', UPLOAD_METRICS_KEY);
+  db.close();
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.passed, false, 'changed row metadata must remain forbidden during a schedule refresh');
+  assert.ok(report.differences.some(({ kind }) => kind === 'core-store-row-metadata-changed'));
+
+  const missingSourcePath = join(directory, 'core-store-metrics-missing-source.db');
+  const missingCandidatePath = join(directory, 'core-store-metrics-missing-candidate.db');
+  createCoreStoreShape(missingSourcePath);
+  createCoreStoreShape(missingCandidatePath, { candidate: true });
+  const candidateDb = new Database(missingCandidatePath);
+  candidateDb.prepare('DELETE FROM strapi_core_store_settings WHERE key = ?').run(UPLOAD_METRICS_KEY);
+  candidateDb.close();
+  const missingPlan = emptyBoundPlan();
+  const missingReport = auditMigration({ sourceDbPath: missingSourcePath, candidateDbPath: missingCandidatePath, plan: missingPlan, receipt: boundReceipt(missingSourcePath, missingCandidatePath, missingPlan) });
+  assert.equal(missingReport.passed, false, 'missing metrics row must remain a key-set mismatch');
+  assert.ok(missingReport.differences.some(({ kind }) => kind === 'core-store-key-set-mismatch'));
 });

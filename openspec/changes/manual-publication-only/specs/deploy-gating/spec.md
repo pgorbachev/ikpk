@@ -1266,3 +1266,55 @@ before running the CMS build or creating files.
 - **THEN** the server retains the partial bytes privately as non-executable status evidence
 - **AND** it does not report an accepted operation and refuses another upload with that UUID or a different UUID while the slot is occupied
 - **AND** only separate explicitly authorized operator cleanup can release the slot
+
+### Requirement: One admitted operation activates the CMS and static site as a coherent lifecycle
+
+For a DEMO publication, the existing operator command SHALL drive one server operation from admitted source/CMS artifact through database migration decision, CMS service health, static publication, and final readback. The operation SHALL use one ID and the existing server admission/lock/status/receipt path; it SHALL NOT require a CMS button or create a second CMS listener. The server SHALL derive whether approved migration steps are pending from the operation's admitted candidate and current target ledger: it SHALL apply each approved pending step once, and SHALL perform no migration when none is pending. The operator SHALL NOT need a second migration command or an unverified flag to select the path. Unknown plan/ledger state SHALL fail closed. The CMS artifact SHALL be the native artifact from the admitted exact current source SHA/run/attempt; an artifact from a historical runtime or another attempt SHALL NOT substitute. Its actual installed dependencies SHALL match the admitted source lockfile, verified by the authentic installer and read-only installation checks before candidate code runs; ABI equality or a generated receipt alone is insufficient. Before any staging write, the server SHALL record a per-release resource budget proof covering control and archive bytes, bounded expanded tree, retained release/baseline overhead, dependency installation when needed, migration DB backup/candidate, media, Astro temporary output, and a configured free-space reserve. The archive and expanded caps SHALL be 8 MiB and 32 MiB for the currently measured CMS artifact. Available space SHALL be checked with `statfs` and current measured inputs; an unset or insufficient reserve SHALL refuse before materialization, and the publication path SHALL NOT delete operational data to satisfy the budget. The operation receipt SHALL bind this proof to its ID and artifact metadata. Missing or ambiguous artifact, dependency, budget, migration, or cohort evidence SHALL fail closed.
+
+The first private rehearsal and first 193 migration SHALL use the same identified coherent production-derived cohort of old CMS code, source database, site, and media. That cohort becomes the 193 baseline; the current 193 prototype pair SHALL be preserved separately for recovery and SHALL NOT be mixed into the baseline. After that first successful release, ordinary updates SHALL use only current 193 DB, media, and applied ledger; they SHALL NOT import the old production copy. The accepted migration steps 63/64 and author/Fabio 80 data SHALL be verified on the baseline candidate. The admitted current CMS artifact lockfile SHALL match its source CI metadata; installed server dependencies SHALL be freshly installed from that exact lock and their complete installed identity verified before candidate code runs. A bootstrap `.complete` marker alone SHALL NOT count as dependency identity evidence. The runner's `prepare`/`status`/`activate`/`rollback` operations SHALL be integrated with CMS service and static publication lifecycle; the private rehearsal marker SHALL NOT be used as a production activation bypass.
+
+After a migration, ordinary code-only publication SHALL use the current target DB, media, and applied migration ledger. It SHALL prove that no migration is pending and the applied ledger history/count are unchanged; it SHALL NOT restore/import an older DB or repeat applied steps. A closed verification copy MAY be used, but SHALL NOT replace the current database for a code-only update.
+
+The writer barrier SHALL begin after hosted source CI and before any DB/media copy. It SHALL fence public CMS editor/admin/plugin write routes and stay enforced through protected candidate capture, CMS health, static activation, and external readback; local read-only health SHALL remain available. The existing `captureBundle` helper can back up a closed candidate DB read-only, project its collections by schema, copy media, verify source fingerprints, and stop/resume configured writer units. Its installed config is root-controlled; the current `/etc/ikpk/demo-capture.json` is absent. Integration SHALL create an operation-scoped config only from admitted server-managed candidate DB/schema/media paths and configured writer units, never from arbitrary request paths. The helper produces the protected bundle consumed by `capture-content-snapshot.ts --server-capture`; live REST capture is not the candidate export path. The operation SHALL prepare/migrate the closed candidate, capture that migrated DB/media boundary, build and check its static output, then switch/start the single CMS service and activate/read back the paired static output while the public writer gate remains closed. If a write races before the barrier or the capture source changes, the operation SHALL refuse or recapture after re-fencing; it SHALL NOT build/publish from a stale earlier snapshot. No second listener SHALL be started.
+
+DB rollback SHALL be allowed only for the verified paired cohort while the no-new-writes guard proves the candidate is unchanged. Once CMS writes have occurred, paired DB rollback SHALL refuse. Code/static rollback SHALL preserve current DB, media, and ledger and SHALL be allowed only when the target CMS code is proven compatible with the current schema. A static-publish failure after healthy CMS activation SHALL NOT automatically roll back the DB. After successful CMS and static external readback, but before releasing public writers, the operation SHALL durably record and fsync its commit decision in the existing operation record as `active-unindexed`; the final verified-pairs index and success receipt MAY be completed afterward. Before that decision is durable, writers SHALL remain fenced and failure recovery SHALL restore and verify the checked prior serving CMS/static pair; any paired DB rollback remains subject to the existing no-new-writes guard. After the decision is durable, recovery SHALL use the same operation UUID to finalize or verify the current pair, SHALL NOT automatically pair-rollback the database, and SHALL keep writers fenced until recovery verifies a safe serving state. Public writers SHALL remain fenced until the durable decision and CMS/static readback succeed. This lifecycle SHALL be accepted on 193; production source tags and TD-56 are not DEMO acceptance gates and remain production-only requirements.
+
+#### Scenario: first production-derived baseline migration and site publication use one operation
+
+- **WHEN** an admitted DEMO SHA has its exact CMS artifact and the identified production-derived baseline cohort has pending approved migrations
+- **THEN** the same operation prepares the candidate, applies and verifies each migration once, captures the closed migrated DB/media boundary through the protected server bundle, builds Astro from that capture, and completes candidate checks before activation
+- **AND** only after those checks pass, it performs the coordinated single-CMS-service and static switch under the closed public writer gate and verifies CMS health and external readback
+- **AND** it durably records and fsyncs the existing operation's `active-unindexed` commit decision before opening writers; it may complete the final index and success receipt afterward
+- **AND** it records one receipt linking source SHA, cohort, migration ledger, CMS release, and static release
+- **AND** the prior serving release remains available until the candidate CMS and static checks pass
+- **AND** the current prototype pair remains preserved for recovery, no second listener starts, and public writers remain fenced until external readback succeeds
+
+#### Scenario: crash around the durable commit decision does not expose an uncommitted cohort
+
+- **WHEN** the server crashes after external readback but before writers are released and the operation is recovered by its original UUID
+- **THEN** if the durable `active-unindexed` decision is absent, it keeps writers fenced, restores and verifies the checked prior serving CMS/static pair, and only then releases writers
+- **AND** if that decision is present, it finalizes or verifies the current pair under the same UUID before releasing writers, without automatic paired DB rollback
+
+#### Scenario: writes cannot cross the cohort capture barrier
+
+- **WHEN** a CMS write occurs between a preliminary observation and the writer barrier, or the active database/media changes during protected capture
+- **THEN** the operation refuses or closes writers and recaptures from the verified migrated active boundary before building
+- **AND** no snapshot captured before the barrier can be published and no public CMS write route is reopened before static readback
+
+#### Scenario: code-only publication preserves the live database
+
+- **WHEN** a later admitted SHA has no pending migration and the target CMS contains edits made since the prior release
+- **THEN** publication uses the current DB and media, leaves applied ledger history/count unchanged, does not import or restore an older database, and preserves those edits after activation
+
+#### Scenario: paired database rollback is refused after a CMS write
+
+- **WHEN** CMS data changes after a migration cohort was activated and an operator requests its paired rollback
+- **THEN** the runner's no-new-writes guard refuses the DB rollback and preserves the current DB, media, and ledger
+- **AND** code/static rollback may proceed only if compatibility with that current schema is proven
+
+#### Scenario: static publication fails after CMS health succeeds
+
+- **WHEN** the candidate CMS is healthy but publication or external readback of its paired static site fails
+- **THEN** the operation records an unsuccessful/incomplete result and does not automatically restore an older database
+- **AND** public CMS admin/plugin writers remain fenced until the cohort is either safely completed or recovered
+- **AND** the existing recovery path can resume or restore a compatible code/static release while preserving current CMS data
