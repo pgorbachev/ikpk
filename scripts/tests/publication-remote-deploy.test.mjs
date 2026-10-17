@@ -328,7 +328,7 @@ test('saved production retries check status first and keep polling after main ad
   });
   assert.equal(retried.status, 'success');
   assert.deepEqual(events, ['status', 'status']);
-  assert.equal(admissions, 1); assert.equal(refReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 1);
+  assert.equal(admissions, 1); assert.equal(refReads, 2); assert.equal(tagCreates, 0); assert.equal(submits, 1);
 });
 
 test('saved production retry on not-found revalidates equal evidence and current ref before resubmit', async (t) => {
