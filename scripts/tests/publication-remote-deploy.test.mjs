@@ -211,6 +211,40 @@ test('production reserves an exact source tag before SSH and reuses it on a late
   ]);
 });
 
+test('a persisted production request ID and SHA reuse admitted evidence without repeat admission or tag mutation', async (t) => {
+  const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), changedSha = 'd'.repeat(40), id = randomUUID();
+  const evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
+  let admissions = 0, tagReads = 0, tagCreates = 0, submits = 0;
+  const tagOps = {
+    resolve(name) { assert.equal(name, tag); tagReads++; return tag; },
+    create() { tagCreates++; throw new Error('matching tag must be reused'); },
+  };
+  const common = { configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps,
+    admitSource: async () => { admissions++; return evidence; },
+    call(_config, action, request) {
+      if (action === 'submit') {
+        submits++; assert.equal(request.sourceSha, sha); assert.equal(request.sourceTag, tag);
+        assert.deepEqual(request.sourceCiEvidence, evidence);
+      }
+      return { id, destination: 'prod', status: 'success' };
+    } };
+  const argv = ['prod', '--sha', sha, '--request-id', id];
+  await runClient(argv, common);
+  await runClient(argv, { ...common,
+    admitSource: async () => { admissions++; throw new Error('existing request must reuse saved proof'); },
+    tagOps: { resolve() { tagReads++; throw new Error('existing request must not touch tag operations'); }, create() { tagCreates++; } },
+  });
+  assert.equal(admissions, 1); assert.equal(tagReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 2);
+
+  let changedSubmits = 0, changedAdmissions = 0, changedTagReads = 0;
+  await assert.rejects(runClient(['prod', '--sha', changedSha, '--request-id', id], { ...common,
+    admitSource: async () => { changedAdmissions++; return sourceEvidence('main', changedSha); },
+    tagOps: { resolve() { changedTagReads++; return null; }, create() { changedTagReads++; } },
+    call(_config, action) { if (action === 'submit') changedSubmits++; return { id, destination: 'prod', status: 'success' }; },
+  }), /request-id-conflict/);
+  assert.equal(changedSubmits, 0); assert.equal(changedAdmissions, 0); assert.equal(changedTagReads, 0);
+});
+
 test('source or tag refusal never submits a production request; ambiguous tag creation is resolved by readback', async (t) => {
   const sha = 'd'.repeat(40), tag = `prod-src-${sha}`;
   for (const mode of ['source-refused', 'tag-conflict']) {
