@@ -572,11 +572,39 @@ export function createPaymentService(opts: ServiceOpts) {
         signal: AbortSignal.timeout(YOOKASSA_TIMEOUT_MS),
       });
       const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) return { ok: false };
+      if (!res.ok) {
+        logYooRefusal('create', res.status, json);
+        return { ok: false };
+      }
       return { ok: true, json };
-    } catch {
+    } catch (err) {
+      logYooRefusal('create', 'transport', null, err);
       return { ok: false };
     }
+  }
+
+  function logYooRefusal(
+    op: 'create' | 'get',
+    status: number | 'transport',
+    json: Record<string, unknown> | null,
+    err?: unknown,
+  ): void {
+    const field = (key: string): string => {
+      const value = json?.[key];
+      return typeof value === 'string' ? redactSecret(value) : '';
+    };
+    const transport = err instanceof Error ? redactSecret(err.name) : '';
+    console.error(
+      `yookassa ${op} refused http=${status} code=${field('code')} parameter=${field('parameter')} description=${field('description')} transport=${transport}`,
+    );
+  }
+
+  function redactSecret(text: string): string {
+    let out = text.replace(/[\r\n]/g, ' ').slice(0, 300);
+    for (const secret of [env.YOOKASSA_SECRET_KEY, env.HMAC_KEY_CURRENT, env.HMAC_KEY_PREVIOUS]) {
+      if (secret && secret.length >= 8) out = out.split(secret).join('[redacted]');
+    }
+    return out;
   }
 
   async function yooGet(id: string): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false }> {
@@ -587,9 +615,13 @@ export function createPaymentService(opts: ServiceOpts) {
         signal: AbortSignal.timeout(YOOKASSA_TIMEOUT_MS),
       });
       const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) return { ok: false };
+      if (!res.ok) {
+        logYooRefusal('get', res.status, json);
+        return { ok: false };
+      }
       return { ok: true, json };
-    } catch {
+    } catch (err) {
+      logYooRefusal('get', 'transport', null, err);
       return { ok: false };
     }
   }

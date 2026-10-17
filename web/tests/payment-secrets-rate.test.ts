@@ -19,6 +19,7 @@ describe('3.4 секреты не в ответе и не в логе', () => {
     const logs: string[] = [];
     const stderrWrite = process.stderr.write.bind(process.stderr);
     const stdoutWrite = process.stdout.write.bind(process.stdout);
+    const consoleError = console.error.bind(console);
     process.stderr.write = ((chunk: unknown, ...rest: unknown[]) => {
       logs.push(String(chunk));
       return stderrWrite(chunk as never, ...(rest as never[]));
@@ -27,6 +28,10 @@ describe('3.4 секреты не в ответе и не в логе', () => {
       logs.push(String(chunk));
       return stdoutWrite(chunk as never, ...(rest as never[]));
     }) as typeof process.stdout.write;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(' '));
+      consoleError(...args);
+    };
     try {
       svc = await startPaymentService({ env: prodEnv() });
       svc.yookassa.setCreateHandler(() => ({
@@ -38,11 +43,14 @@ describe('3.4 секреты не в ответе и не в логе', () => {
       expect(payload).not.toContain(TEST_YOOKASSA_SECRET);
       expect(payload).not.toContain(TEST_HMAC_CURRENT);
       const joined = logs.join('\n');
+      expect(joined).toContain('yookassa create refused http=401');
+      expect(joined).toContain('description=Unauthorized');
       expect(joined).not.toContain(TEST_YOOKASSA_SECRET);
       expect(joined).not.toContain(TEST_HMAC_CURRENT);
     } finally {
       process.stderr.write = stderrWrite;
       process.stdout.write = stdoutWrite;
+      console.error = consoleError;
     }
   });
 });
