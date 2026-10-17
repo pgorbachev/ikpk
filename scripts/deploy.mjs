@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runReleaseCi } from './release-ci.mjs';
 const SOURCE_REF = { demo: 'dev', prod: 'main' };
+const PROOF_KEYS = ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'];
 const fail = (message) => { throw new Error(message); };
 const validId = (id) => /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id ?? '');
 function protectedFile(path, secret = false) {
@@ -102,6 +103,14 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
       if (created.ref !== `refs/tags/${tag}` || created.object?.type !== 'commit' || created.object?.sha !== sha) fail('source-tag-reservation-unconfirmed');
     },
   },
+  resolveSourceRef = async ({ sourceRef }) => {
+    try {
+      const value = JSON.parse(execFileSync('gh', ['api', `repos/pgorbachev/ikpk/git/ref/heads/${sourceRef}`],
+        { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] }));
+      if (value.ref !== `refs/heads/${sourceRef}` || value.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(value.object.sha ?? '')) fail('source-ref-unverifiable');
+      return value.object.sha;
+    } catch { fail('source-ref-unverifiable'); }
+  },
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)), announce = (r) => process.stderr.write(`${JSON.stringify(r)}\n`),
   attempts = 2880 } = {}) {
   const request = parseArguments(argv); const config = readClientConfig(configHome, request.destination);
@@ -114,23 +123,39 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
       ? submitted.id === request.id && submitted.destination === request.destination && submitted.action === 'publish' && submitted.sourceSha === request.sha
       : JSON.stringify(submitted) === JSON.stringify(request);
     if (!matches) fail('request-id-conflict');
+    if (request.destination === 'prod' && request.action === 'publish') {
+      if (submitted.sourceTag !== `prod-src-${request.sha}`) fail('request-id-conflict');
+      let result = await call(config, 'status', submitted);
+      if (result.status !== 'not-found') {
+        for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
+          if (i >= attempts) fail(`wait-limit; check status ${request.id}`);
+          await sleep(5000); result = await call(config, 'status', request);
+        }
+        return result;
+      }
+      const sourceRef = SOURCE_REF.prod;
+      const evidence = await admitSource({ destination: request.destination, sourceRef, sha: request.sha });
+      validateSourceEvidence(evidence, sourceRef, request.sha);
+      if (canonicalSourceEvidence(evidence) !== canonicalSourceEvidence(submitted.sourceCiEvidence)) fail('source-ci-evidence-changed');
+      await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
+      if (await tagOps.resolve(submitted.sourceTag) !== request.sha) fail('source-tag-conflict');
+      announce({ id: request.id, destination: request.destination, status: 'request-retry', receipt: path });
+      await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
+      result = await call(config, 'submit', submitted);
+      for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
+        if (i >= attempts) fail(`wait-limit; check status ${request.id}`);
+        await sleep(5000); result = await call(config, 'status', request);
+      }
+      return result;
+    }
   } else {
   let sourceCiEvidence, sourceTag;
   if (request.action === 'publish') {
     const sourceRef = SOURCE_REF[request.destination];
     sourceCiEvidence = await admitSource({ destination: request.destination, sourceRef, sha: request.sha });
-    const proofKeys = ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'];
-    if (!sourceCiEvidence || sourceCiEvidence.repository !== 'pgorbachev/ikpk' || sourceCiEvidence.workflow !== '.github/workflows/release-tests.yml' ||
-        Object.keys(sourceCiEvidence).sort().join(',') !== [...proofKeys].sort().join(',') || sourceCiEvidence.sourceRef !== sourceRef ||
-        sourceCiEvidence.commit !== request.sha || !Number.isSafeInteger(sourceCiEvidence.runId) || sourceCiEvidence.runId < 1 ||
-        !Number.isSafeInteger(sourceCiEvidence.runAttempt) || sourceCiEvidence.runAttempt < 1 ||
-        typeof sourceCiEvidence.artifactDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(sourceCiEvidence.artifactDigest) ||
-        typeof sourceCiEvidence.artifactZipBase64 !== 'string' || sourceCiEvidence.artifactZipBase64.length > 4 * Math.ceil((4 * 1024 * 1024) / 3) ||
-        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(sourceCiEvidence.artifactZipBase64)) fail('source-ci-evidence-mismatch');
-    const archive = Buffer.from(sourceCiEvidence.artifactZipBase64, 'base64');
-    if (archive.length > 4 * 1024 * 1024 || archive.toString('base64') !== sourceCiEvidence.artifactZipBase64 ||
-        `sha256:${createHash('sha256').update(archive).digest('hex')}` !== sourceCiEvidence.artifactDigest) fail('source-ci-evidence-mismatch');
+    validateSourceEvidence(sourceCiEvidence, sourceRef, request.sha);
     if (request.destination === 'prod') {
+      await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
       sourceTag = `prod-src-${request.sha}`;
       let existing;
       try { existing = await tagOps.resolve(sourceTag); } catch { fail('source-tag-unverifiable'); }
@@ -152,12 +177,33 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
   }
   // ID is durable and displayed BEFORE sending the request.
   announce({ id: request.id, destination: request.destination, status: 'request-saved', receipt: path });
+  if (request.destination === 'prod' && request.action === 'publish') {
+    await requireCurrentSourceRef(resolveSourceRef, request.destination, SOURCE_REF.prod, request.sha);
+  }
   let result = await call(config, 'submit', submitted);
   for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
     if (i >= attempts) fail(`wait-limit; check status ${request.id}`);
     await sleep(5000); result = await call(config, 'status', request);
   }
   return result;
+}
+function validateSourceEvidence(evidence, sourceRef, sha) {
+  if (!evidence || evidence.repository !== 'pgorbachev/ikpk' || evidence.workflow !== '.github/workflows/release-tests.yml' ||
+      Object.keys(evidence).sort().join(',') !== [...PROOF_KEYS].sort().join(',') || evidence.sourceRef !== sourceRef ||
+      evidence.commit !== sha || !Number.isSafeInteger(evidence.runId) || evidence.runId < 1 ||
+      !Number.isSafeInteger(evidence.runAttempt) || evidence.runAttempt < 1 ||
+      typeof evidence.artifactDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(evidence.artifactDigest) ||
+      typeof evidence.artifactZipBase64 !== 'string' || evidence.artifactZipBase64.length > 4 * Math.ceil((4 * 1024 * 1024) / 3) ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(evidence.artifactZipBase64)) fail('source-ci-evidence-mismatch');
+  const archive = Buffer.from(evidence.artifactZipBase64, 'base64');
+  if (archive.length > 4 * 1024 * 1024 || archive.toString('base64') !== evidence.artifactZipBase64 ||
+      `sha256:${createHash('sha256').update(archive).digest('hex')}` !== evidence.artifactDigest) fail('source-ci-evidence-mismatch');
+}
+function canonicalSourceEvidence(evidence) { return JSON.stringify(Object.fromEntries(PROOF_KEYS.map((key) => [key, evidence[key]]))); }
+async function requireCurrentSourceRef(resolveSourceRef, destination, sourceRef, sha) {
+  let current;
+  try { current = await resolveSourceRef({ destination, sourceRef }); } catch { fail('source-ref-unverifiable'); }
+  if (current !== sha) fail('source-ref-changed');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

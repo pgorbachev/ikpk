@@ -14,7 +14,7 @@ async function bytes(response, limit) {
   return Buffer.concat(chunks);
 }
 export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  maxPolls = 1080 } = {}) {
+  maxPolls = 1080, resolveSourceRef } = {}) {
   if (typeof token !== 'string' || !token.trim() || /[\r\n]/.test(token)) fail('release-ci-token-missing');
   async function request(path) {
     if (typeof path !== 'string' || !path.startsWith(`${API}/`)) fail('release-ci-untrusted-url');
@@ -22,6 +22,16 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
       'X-GitHub-Api-Version': '2022-11-28' }, redirect: 'manual', signal: AbortSignal.timeout(30000) });
     if (!response.ok) fail('release-ci-http-error');
     return JSON.parse((await bytes(response, 4 * 1024 * 1024)).toString('utf8'));
+  }
+  async function protectedRef(sourceRef) {
+    const value = resolveSourceRef
+      ? await resolveSourceRef({ sourceRef })
+      : await request(`${API}/git/ref/heads/${sourceRef}`).then((ref) => {
+        if (ref.ref !== `refs/heads/${sourceRef}` || !/^[0-9a-f]{40}$/.test(ref.object?.sha ?? '')) fail('release-ci-source-ref-unverifiable');
+        return ref.object.sha;
+      });
+    if (!/^[0-9a-f]{40}$/.test(value ?? '')) fail('release-ci-source-ref-unverifiable');
+    return value;
   }
   async function list(path, key) {
     const found = [];
@@ -93,6 +103,9 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
     if (finalRun.run_attempt !== expected.runAttempt || finalRun.status !== 'completed' || finalRun.conclusion !== 'success') {
       fail('release-ci-attempt-changed');
     }
+    let currentRef;
+    try { currentRef = await protectedRef(config.sourceRef); } catch { fail('release-ci-source-ref-unverifiable'); }
+    if (currentRef !== receipt.commit) fail('release-ci-source-ref-changed');
     return { ...evidence, artifactDigest: named[0].digest, artifactZipBase64: downloaded.buffer.toString('base64') };
   };
 }

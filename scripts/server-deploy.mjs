@@ -61,6 +61,7 @@ export function readServerConfig(installed) {
   c.launcher = protectedPath(c.launcher); c.launcherConfig = protectedPath(join(dirname(c.launcher), 'config.json'));
   outsideRepository(dirname(c.launcher));
   const publisher = JSON.parse(readFileSync(c.launcherConfig, 'utf8'));
+  if (Object.hasOwn(publisher, 'ciTokenFile')) fail('untrusted-server-config');
   if (publisher.sourceRef !== undefined && publisher.sourceRef !== c.sourceRef) fail('source-policy-mismatch');
   if ((publisher.sourceRef ?? 'main') !== c.sourceRef || publisher.canonicalRepository !== 'https://github.com/pgorbachev/ikpk.git' ||
       (c.destination === 'prod' ? publisher.deployMode !== 'prod' : publisher.deployMode !== 'stand')) fail('source-policy-mismatch');
@@ -144,7 +145,8 @@ const defaultPorts = {
   publisher(c, receipt) {
     const request = receipt.request;
     const args = [c.launcher, request.action, '--config', c.launcherConfig];
-    if (request.action === 'publish') args.push('--source-url', c.canonicalRepository, '--source-ref', c.sourceRef, '--expected-sha', receipt.commit);
+    if (request.action === 'publish') args.push('--source-url', c.canonicalRepository, '--source-ref', c.sourceRef,
+      '--expected-sha', receipt.commit, '--source-proof-file', join(c.state, request.id, 'tests.json'));
     if (request.action === 'rollback') args.push('--release-id', request.releaseId, '--reason', request.reason, '--confirm');
     const run = spawnSync(process.execPath, args, { env: safeEnv(), encoding: 'utf8', maxBuffer: 64 * 1024,
       timeout: c.timeoutSeconds * 1000, stdio: ['ignore', 'pipe', 'pipe'] });
