@@ -92,6 +92,11 @@ exports.createStrapi = ({ appDir }) => ({
     assert.equal(process.env.HOST, '127.0.0.1');
     assert.equal(process.env.PORT, '0');
     assert.equal(process.env.STRAPI_TELEMETRY_DISABLED, 'true');
+    assert.equal(process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP, '0');
+    assert.equal(process.env.CONTENT_ADMIN_EMAIL, undefined);
+    assert.equal(process.env.CONTENT_ADMIN_PASSWORD, undefined);
+    assert.equal(process.env.CMS_TOKEN, undefined);
+    process.env.CMS_TOKEN = 'closed-load-temporary-token';
     assert.equal(createRequire(path.join(appDir, 'src/lifecycles/publication.ts'))('../lib/demo193-source-empty-fields.json').entries instanceof Array, true);
     ${failOnLoad ? "throw new Error('simulated closed-load failure');" : `
     const db = new Database(process.env.DATABASE_FILENAME);
@@ -119,6 +124,7 @@ exports.createStrapi = ({ appDir }) => ({
     assert.equal(process.env.HOST, '127.0.0.1');
     assert.equal(process.env.PORT, '0');
     assert.equal(process.env.STRAPI_TELEMETRY_DISABLED, 'true');
+    assert.equal(process.env.CMS_TOKEN, 'closed-load-temporary-token');
   },
 });
 `);
@@ -414,7 +420,7 @@ test('default closed Strapi lifecycle uses artifact cwd through destroy and rest
   installFakeStrapi(f);
   const previousCwd = process.cwd();
   const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
-  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
+  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED', 'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP', 'CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN'];
   const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
   Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
   try {
@@ -441,7 +447,7 @@ test('default closed Strapi lifecycle restores cwd and database environment afte
   installFakeStrapi(f, { failOnLoad: true });
   const previousCwd = process.cwd();
   const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
-  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
+  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED', 'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP', 'CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN'];
   const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
   Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
   try {

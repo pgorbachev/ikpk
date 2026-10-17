@@ -18,7 +18,16 @@ const LINEAGE_TABLE = 'ikpk_migration_lineage';
 const STEP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
 const CLOSED_STRAPI_SECRET_KEYS = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
-const CLOSED_STRAPI_RUNTIME_KEYS = [...CLOSED_STRAPI_SECRET_KEYS, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
+const CLOSED_STRAPI_RUNTIME_KEYS = [
+  ...CLOSED_STRAPI_SECRET_KEYS,
+  'HOST',
+  'PORT',
+  'STRAPI_TELEMETRY_DISABLED',
+  'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP',
+  'CONTENT_ADMIN_EMAIL',
+  'CONTENT_ADMIN_PASSWORD',
+  'CMS_TOKEN',
+];
 
 function fail(message) { throw new Error(message); }
 function hash(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
@@ -546,6 +555,10 @@ function productionLifecycle(artifactDir, closedLoadSecrets) {
         process.env.HOST = '127.0.0.1';
         process.env.PORT = '0';
         process.env.STRAPI_TELEMETRY_DISABLED = 'true';
+        process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '0';
+        delete process.env.CONTENT_ADMIN_EMAIL;
+        delete process.env.CONTENT_ADMIN_PASSWORD;
+        delete process.env.CMS_TOKEN;
         const artifactRequire = createRequire(join(artifactDir, 'package.json'));
         let instance;
         let destroyInstance;
