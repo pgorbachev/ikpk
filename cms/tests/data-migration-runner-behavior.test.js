@@ -84,6 +84,14 @@ exports.createStrapi = ({ appDir }) => ({
     assert.equal(process.cwd(), appDir);
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
     assert.equal(process.env.DATABASE_URL, undefined);
+    for (const key of ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY']) {
+      assert.equal(typeof process.env[key], 'string', 'closed Strapi must receive an isolated ' + key);
+      assert.ok(process.env[key].length >= 32, 'closed Strapi ' + key + ' must be generated locally');
+      assert.notEqual(process.env[key], 'inherited-value-that-must-not-be-used', 'closed Strapi must not reuse inherited ' + key);
+    }
+    assert.equal(process.env.HOST, '127.0.0.1');
+    assert.equal(process.env.PORT, '0');
+    assert.equal(process.env.STRAPI_TELEMETRY_DISABLED, 'true');
     assert.equal(createRequire(path.join(appDir, 'src/lifecycles/publication.ts'))('../lib/demo193-source-empty-fields.json').entries instanceof Array, true);
     ${failOnLoad ? "throw new Error('simulated closed-load failure');" : `
     const db = new Database(process.env.DATABASE_FILENAME);
@@ -105,6 +113,12 @@ exports.createStrapi = ({ appDir }) => ({
     assert.equal(process.cwd(), appDir);
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
     assert.equal(process.env.DATABASE_URL, undefined);
+    for (const key of ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY']) {
+      assert.notEqual(process.env[key], 'inherited-value-that-must-not-be-used', 'destroy must run inside the isolated ' + key + ' environment');
+    }
+    assert.equal(process.env.HOST, '127.0.0.1');
+    assert.equal(process.env.PORT, '0');
+    assert.equal(process.env.STRAPI_TELEMETRY_DISABLED, 'true');
   },
 });
 `);
@@ -380,12 +394,29 @@ test('default data-step loader imports the verified packaged helper path', async
   await runner.prepareMigration({ ...prepareArgs(f), lifecycleAdapter: defaultAdapter });
 });
 
+test('source structure errors are reported before full external dependency fingerprinting', async (t) => {
+  const f = fixture(t, { operationId: 'op-preflight-source-shape' });
+  addExternalDependencies(f);
+  symlinkSync(f.root, join(f.artifactDir, 'unexpected-external-link'));
+  const source = new Database(f.sourceDbPath);
+  source.exec('DROP TABLE seminars');
+  source.close();
+  const before = hash(readFileSync(f.sourceDbPath));
+  const runner = await loadRunner();
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /source schema precondition failed.*table seminars is missing/i);
+  assert.equal(hash(readFileSync(f.sourceDbPath)), before, 'preflight must leave the source database byte-identical');
+  assert.equal(existsSync(f.candidateDbPath), false, 'preflight must refuse before creating a candidate');
+  assert.equal(existsSync(f.receiptPath), false, 'preflight must refuse before writing a receipt');
+});
+
 test('default closed Strapi lifecycle uses artifact cwd through destroy and restores process state', async (t) => {
   const f = fixture(t, { operationId: 'op-default-lifecycle-context', statusShape: 'applied-retired' });
   installFakeStrapi(f);
   const previousCwd = process.cwd();
-  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME'].map((key) => [key, process.env[key]]));
-  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db' });
+  const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
+  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
   try {
     const args = prepareArgs(f);
     delete args.lifecycleAdapter;
@@ -394,6 +425,8 @@ test('default closed Strapi lifecycle uses artifact cwd through destroy and rest
     assert.equal(process.env.DATABASE_CLIENT, 'mysql');
     assert.equal(process.env.DATABASE_URL, 'restore-me');
     assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+    for (const key of runtimeKeys) assert.equal(process.env[key], 'inherited-value-that-must-not-be-used');
+    assert.equal(readFileSync(args.receiptPath, 'utf8').includes('inherited-value-that-must-not-be-used'), false, 'receipt must not persist inherited environment values');
   } finally {
     process.chdir(previousCwd);
     for (const [key, value] of Object.entries(previousEnvironment)) {
@@ -407,8 +440,10 @@ test('default closed Strapi lifecycle restores cwd and database environment afte
   const f = fixture(t, { operationId: 'op-default-lifecycle-failure' });
   installFakeStrapi(f, { failOnLoad: true });
   const previousCwd = process.cwd();
-  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME'].map((key) => [key, process.env[key]]));
-  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db' });
+  const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
+  const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
   try {
     const runner = await loadRunner();
     const args = prepareArgs(f);
@@ -418,6 +453,7 @@ test('default closed Strapi lifecycle restores cwd and database environment afte
     assert.equal(process.env.DATABASE_CLIENT, 'mysql');
     assert.equal(process.env.DATABASE_URL, 'restore-me');
     assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+    for (const key of runtimeKeys) assert.equal(process.env[key], 'inherited-value-that-must-not-be-used');
   } finally {
     process.chdir(previousCwd);
     for (const [key, value] of Object.entries(previousEnvironment)) {

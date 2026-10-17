@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
   chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync,
@@ -17,10 +17,28 @@ const LEDGER_TABLE = 'ikpk_data_migration_history';
 const LINEAGE_TABLE = 'ikpk_migration_lineage';
 const STEP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
+const CLOSED_STRAPI_SECRET_KEYS = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
+const CLOSED_STRAPI_RUNTIME_KEYS = [...CLOSED_STRAPI_SECRET_KEYS, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED'];
 
 function fail(message) { throw new Error(message); }
 function hash(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 function jsonHash(value) { return hash(Buffer.from(JSON.stringify(value))); }
+function createClosedStrapiSecrets() {
+  const secret = () => randomBytes(32).toString('base64');
+  const secrets = {
+    JWT_SECRET: secret(),
+    APP_KEYS: `${secret()},${secret()}`,
+    ADMIN_JWT_SECRET: secret(),
+    API_TOKEN_SALT: secret(),
+    TRANSFER_TOKEN_SALT: secret(),
+    ENCRYPTION_KEY: secret(),
+  };
+  for (const key of CLOSED_STRAPI_SECRET_KEYS) {
+    if (typeof secrets[key] !== 'string' || secrets[key].length < 32) fail(`could not generate an isolated closed-load value for ${key}`);
+  }
+  if (secrets.APP_KEYS.split(',').length < 2) fail('closed-load APP_KEYS must contain at least two generated keys');
+  return secrets;
+}
 function isWithin(parent, child) {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
@@ -347,7 +365,7 @@ function assertNoOpenHandles(paths) {
   if (!available) fail('writer quiescence cannot be verified: neither lsof nor fuser is available');
 }
 
-function resolvePlan(artifactDir) {
+function resolvePlan(artifactDir, { fingerprint = true } = {}) {
   const root = realpathSync(artifactDir);
   const migrationsRoot = realpathSync(join(root, 'database', 'migrations'));
   const manifestPath = join(migrationsRoot, 'plan.json');
@@ -400,8 +418,16 @@ function resolvePlan(artifactDir) {
   }
   const strapiVersions = new Set(steps.map(({ source }) => source.strapiVersion));
   if (strapiVersions.size !== 1) fail('all migration steps must target one exact Strapi source version');
-  const artifact = artifactFingerprint(root, [...strapiVersions][0]);
+  const artifact = fingerprint
+    ? artifactFingerprint(root, [...strapiVersions][0])
+    : { sha256: null, externalDependencyRoot: null, artifactIdentityKind: null };
   return { root, migrationsRoot, manifestPath, manifest, steps, planSha256: hash(readFileSync(manifestPath)), artifactSha256: artifact.sha256, externalDependencyRoot: artifact.externalDependencyRoot, artifactIdentityKind: artifact.artifactIdentityKind };
+}
+function fingerprintPlanArtifact(plan) {
+  const strapiVersion = plan.steps[0]?.source?.strapiVersion;
+  if (!strapiVersion) fail('migration plan has no Strapi version for artifact identity');
+  const artifact = artifactFingerprint(plan.root, strapiVersion);
+  return { ...plan, artifactSha256: artifact.sha256, externalDependencyRoot: artifact.externalDependencyRoot, artifactIdentityKind: artifact.artifactIdentityKind };
 }
 function awaitlessReadDir(path) {
   // Kept synchronous because this is a short, local artifact integrity check.
@@ -489,7 +515,7 @@ function recordStep(db, { operationId, lineageId, step, result }) {
 }
 
 let defaultLifecycleQueue = Promise.resolve();
-function productionLifecycle(artifactDir) {
+function productionLifecycle(artifactDir, closedLoadSecrets) {
   return {
     loadClosed({ candidateDbPath, onCheckpoint }) {
       const predecessor = defaultLifecycleQueue;
@@ -497,7 +523,8 @@ function productionLifecycle(artifactDir) {
       const lifecycleHeld = new Promise((resolve) => { releaseLifecycle = resolve; });
       const task = predecessor.then(async () => {
         const previousCwd = process.cwd();
-        const previousEnvironment = Object.fromEntries(['DATABASE_FILENAME', 'DATABASE_CLIENT', 'DATABASE_URL'].map((key) => [key, process.env[key]]));
+        const environmentKeys = ['DATABASE_FILENAME', 'DATABASE_CLIENT', 'DATABASE_URL', ...CLOSED_STRAPI_RUNTIME_KEYS];
+        const previousEnvironment = Object.fromEntries(environmentKeys.map((key) => [key, process.env[key]]));
         let restored = false;
         const restoreContext = () => {
           if (restored) return;
@@ -515,6 +542,10 @@ function productionLifecycle(artifactDir) {
         process.env.DATABASE_FILENAME = candidateDbPath;
         process.env.DATABASE_CLIENT = 'sqlite';
         delete process.env.DATABASE_URL;
+        for (const key of CLOSED_STRAPI_SECRET_KEYS) process.env[key] = closedLoadSecrets[key];
+        process.env.HOST = '127.0.0.1';
+        process.env.PORT = '0';
+        process.env.STRAPI_TELEMETRY_DISABLED = 'true';
         const artifactRequire = createRequire(join(artifactDir, 'package.json'));
         let instance;
         let destroyInstance;
@@ -638,6 +669,7 @@ function preservationAudit(receipt, plan) {
 
 /** Prepare a private, consistent SQLite candidate and execute its versioned migration plan. */
 export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, lifecycleAdapter, onCheckpoint }) {
+  const closedLoadSecrets = createClosedStrapiSecrets();
   const sourceDbPath = abs(rawSourceDbPath, 'sourceDbPath');
   const candidateDbPath = abs(rawCandidateDbPath, 'candidateDbPath');
   const artifactDir = abs(rawArtifactDir, 'artifactDir');
@@ -655,10 +687,20 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   ]);
   if (isWithin(artifactReal, receiptPath) || isWithin(artifactReal, candidateDbPath)) fail('candidate database and operation receipt must be outside the CMS artifact/Git tree');
   if (candidateDbPath === sourceDbPath) fail('candidate database must not be the source database');
-  const release = resolvePlan(artifactReal);
+  let release = resolvePlan(artifactReal, { fingerprint: false });
   const strapiVersion = sourceStrapiVersion ?? readSourceStrapiVersion(sourceCmsRoot, release);
   const releaseVersions = new Set(release.steps.map(({ source }) => source.strapiVersion));
   if (!releaseVersions.has(strapiVersion)) fail(`source Strapi version ${strapiVersion} is not supported by this migration plan`);
+  // Check the source's cheap structural preconditions before hashing the full immutable
+  // dependency tree, which can take a long time on the rehearsal host.
+  const preflightSource = openDatabase(sourceDbPath, { readonly: true });
+  try {
+    preflightSource.pragma('query_only = ON');
+    validateSourceSchema(sqliteSnapshot(preflightSource), release, preflightSource);
+  } finally { preflightSource.close(); }
+  const actualSourceVersion = readSourceStrapiVersion(sourceCmsRoot, release, sourceStrapiVersion);
+  if (actualSourceVersion !== strapiVersion) fail(`source version evidence differs: ${actualSourceVersion} vs ${strapiVersion}`);
+  release = fingerprintPlanArtifact(release);
   const unlock = acquireTargetLock(candidateDbPath);
   let preserveReceiptOnFailure = false;
   try {
@@ -782,7 +824,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       atomicJson(receiptPath, receipt);
     }
 
-    const adapter = lifecycleAdapter ?? productionLifecycle(artifactReal);
+    const adapter = lifecycleAdapter ?? productionLifecycle(artifactReal, closedLoadSecrets);
     if (typeof adapter.loadClosed !== 'function' || typeof adapter.destroy !== 'function') fail('lifecycleAdapter must implement loadClosed and destroy');
     if (receipt.phase === 'strapi-load-in-progress') {
       const db = openDatabase(candidateDbPath);
