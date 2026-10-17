@@ -179,6 +179,9 @@ const defaultPorts = {
     if (!Number.isSafeInteger(declaredBytes) || !Number.isSafeInteger(reserveBytes) ||
         space.bavail * space.bsize < BigInt(declaredBytes) + BigInt(reserveBytes)) fail('cms-artifact-disk-reserve-insufficient');
   },
+  syncDirectory(path) {
+    const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+  },
   start(c, id) {
     const receiptPath = join(c.state, id, 'request.json');
     if (existsSync(receiptPath)) {
@@ -278,23 +281,33 @@ export function createServer(config, overrides = {}) {
     const sequence = existsSync(counterPath) ? json(counterPath).sequence + 1 : 1;
     if (!Number.isSafeInteger(sequence) || sequence < 1) fail('request-sequence-invalid');
     let cmsArchivePath;
-    if (request.action === 'publish') { mkdirSync(incoming, { mode: 0o700 }); cmsArchivePath = join(dir, 'cms-artifact.zip'); }
+    if (request.action === 'publish') {
+      mkdirSync(incoming, { mode: 0o700 });
+      ports.syncDirectory(config.state);
+      cmsArchivePath = join(dir, 'cms-artifact.zip');
+    }
     const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: request.sourceSha, cmsArchivePath } : {}) };
     if (request.action === 'publish') atomicJson(join(incoming, 'request.json'), receipt);
     else atomicJson(join(dir, 'request.json'), receipt);
     if (request.action === 'publish') {
       ports.stageCmsArchive(join(incoming, 'cms-artifact.zip'), archiveBytes);
-      const stageDirectory = openSync(incoming, 'r'); try { fsyncSync(stageDirectory); } finally { closeSync(stageDirectory); }
+      ports.syncDirectory(incoming);
     }
     atomicJson(counterPath, { sequence });
     if (request.action === 'publish') {
       renameSync(incoming, dir);
-      const parent = openSync(config.state, 'r'); try { fsyncSync(parent); } finally { closeSync(parent); }
+      ports.syncDirectory(config.state);
     }
     // Do not retry a start automatically if acknowledgement is lost.
     try { ports.start(config, request.id); }
-    catch (error) { return { id: request.id, destination: config.destination, status: 'interrupted',
-      code: error.message === 'cms-activation-adapter-not-integrated' ? error.message : 'service-start-unconfirmed' }; }
+    catch (error) {
+      if (error.message === 'cms-activation-adapter-not-integrated') {
+        const refusal = { id: request.id, destination: request.destination, status: 'refused', code: error.message };
+        atomicJson(join(dir, 'result.json'), refusal);
+        return refusal;
+      }
+      return { id: request.id, destination: request.destination, status: 'interrupted', code: 'service-start-unconfirmed' };
+    }
     return { id: request.id, destination: config.destination, status: 'accepted' };
   }
   async function execute(id) {
