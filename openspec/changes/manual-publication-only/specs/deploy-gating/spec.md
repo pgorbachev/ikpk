@@ -1282,7 +1282,9 @@ DB rollback SHALL be allowed only for the verified paired cohort while the no-ne
 #### Scenario: first production-derived baseline migration and site publication use one operation
 
 - **WHEN** an admitted DEMO SHA has its exact CMS artifact and the identified production-derived baseline cohort has pending approved migrations
-- **THEN** the same operation prepares the candidate, applies and verifies each migration once, activates one healthy CMS instance under the public writer gate, captures the migrated boundary through the protected server bundle, publishes the site built from that capture, and records one receipt linking source SHA, cohort, migration ledger, CMS release, and static release
+- **THEN** the same operation prepares the candidate, applies and verifies each migration once, captures the closed migrated DB/media boundary through the protected server bundle, builds Astro from that capture, and completes candidate checks before activation
+- **AND** only after those checks pass, it performs the coordinated single-CMS-service and static switch under the closed public writer gate, verifies CMS health and external readback, then opens writers
+- **AND** it records one receipt linking source SHA, cohort, migration ledger, CMS release, and static release
 - **AND** the prior serving release remains available until the candidate CMS and static checks pass
 - **AND** the current prototype pair remains preserved for recovery, no second listener starts, and public writers remain fenced until external readback succeeds
 
