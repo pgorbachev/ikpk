@@ -217,10 +217,16 @@ export function createServer(config, overrides = {}) {
     const dir = folder(config, id);
     if (!existsSync(dir)) {
       const incoming = join(config.state, '.incoming'), partial = join(incoming, 'request.json');
-      if (existsSync(partial)) {
-        const pending = json(partial);
+      if (existsSync(incoming)) {
+        let pending;
+        try {
+          if (!existsSync(partial)) return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
+          pending = json(partial);
+        } catch {
+          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
+        }
         if (pending.request?.id === id && pending.request.destination === config.destination) {
-          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+          return { id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete', stage: '.incoming' };
         }
       }
       return { id, destination: config.destination, status: 'not-found', code: 'request-not-found' };
