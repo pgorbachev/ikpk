@@ -169,7 +169,8 @@ inventory файлов с digest каждого файла. GitHub ZIP digest о
 artifact metadata/evidence/control request; сервер пересчитывает его при приёме архива. Локальный `gh`
 загружает именно artifact текущего admitted run/attempt. Сервер проверяет manifest, native
 artifact metadata, SHA/lock/runtime и архив, затем вызывает assemble-only режим
-`build-cms-artifact.sh` на уже собранном `cms/dist`; `dist/build/index.html` обязателен.
+`build-cms-artifact.sh` на уже собранном `cms/dist`; обязательная админка берётся из
+`cms/dist/build/index.html`, а CMS-relative layout сохраняется в артефакте.
 Серверный CMS compile не повторяется. Astro site по-прежнему строится на сервере на текущей
 паре БД/снимок/медиа; CMS artifact лишь заменяет повторную сборку CMS приложения. Нет артефакта,
 неверная identity/digest, лишний файл, traversal/symlink или размер выше измеренного лимита —

@@ -1219,8 +1219,9 @@ before running the CMS build or creating files.
 
 - **WHEN** local `gh` retrieves the non-expired CMS artifact for the admitted run/attempt and its
   ref, SHA, lockfile, runtime, digest, size, and file inventory match policy
-- **THEN** the server assembles the CMS release from the artifact's existing `cms/dist`
-- **AND** `dist/build/index.html` is present
+- **THEN** the server assembles the CMS release from the artifact's existing CMS-relative build tree
+- **AND** the admin entry produced from checkout path `cms/dist/build/index.html` is present in
+  that CMS-relative layout
 - **AND** server-side `npm run build` is not invoked
 
 #### Scenario: local CMS artifact output is fresh and outside the source checkout
