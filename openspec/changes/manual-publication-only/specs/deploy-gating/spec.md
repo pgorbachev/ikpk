@@ -69,30 +69,34 @@
 
 ### Requirement: Источник проверяется до исполнения кода из проверяемого дерева
 
-Проверка происхождения собираемого содержимого SHALL выполняться механизмом, который **не
-является частью проверяемого рабочего дерева**: получение `origin/main`, сверка и создание
-чистого временного рабочего дерева SHALL происходить до того, как будет исполнен любой код
-из этого дерева.
+Проверка происхождения собираемого содержимого SHALL выполняться tooling из доверенного
+проверенного checkout, отдельного от целевого дерева. Оператор SHALL передавать полный target
+SHA отдельно от tooling checkout; разрешённый ref определяется политикой назначения. Проверка
+точного source CI SHALL завершиться до checkout или исполнения любого кода из целевого дерева.
+Сервер SHALL повторно проверить ref/SHA и переданное bounded evidence до checkout/исполнения
+candidate code.
 
-Учётные данные раздачи SHALL становиться доступными исполняемому коду только после того, как
-источник подтверждён. До подтверждения они SHALL NOT присутствовать в окружении исполняемого
-кода. Это правило относится к исполняемому коду, а не к сохранённому статическому дереву
-отката: его обрабатывает уже установленный доверенный механизм. Launcher, build, deploy
-и серверные скрипты выбранного релиза SHALL NOT исполняться; клиентский JavaScript
-допускается только в изолированном браузерном smoke без учётных данных выкладки.
+Учётные данные раздачи SHALL становиться доступными целевому исполняемому коду только после
+локального source-CI admission и серверной повторной проверки ref/SHA/evidence. До обеих
+проверок они SHALL NOT присутствовать в окружении target code. После проверок разрешённый
+серверный исполнитель MAY запускать только код закреплённого SHA и SHALL ограничивать доступы
+назначением и фазой операции. Этот порядок распространяется на launcher, build, deploy,
+server scripts и client-side browser acceptance.
 
-Причина: entrypoint публикации лежит в том же репозитории, который он же и проверяет. Если
-проверку выполняет он сам, то к моменту проверки уже исполнен код из непроверенного дерева —
-в том числе изменённый локально, — и исполнен он при доступных учётных данных. Порядок
+Причина: tooling, который исполняет оператор, должен быть из проверенного checkout, отдельного
+от целевого SHA, который он admission-check'ит. Если до проверки исполнять код из целевого
+дерева — в том числе изменённого локально, — он может изменить само поведение проверки или
+прочитать доступные credentials. Порядок
 «сначала проверить, потом исполнить» здесь несущий, а не организационный: обратный порядок
 делает проверку происхождения бессмысленной, потому что менять поведение проверки будет тот
 самый код, который она должна была отсеять.
 
 #### Scenario: рабочее дерево изменено локально
 
-- **WHEN** в рабочем дереве оператора изменён файл пути публикации, и запрошена публикация
-- **THEN** собирается и выкладывается содержимое `origin/main`, а изменённый файл на
-  поведение публикации не влияет
+- **WHEN** в рабочем дереве оператора изменён файл пути публикации, но отдельно задан полный
+  SHA допустимой вершины разрешённой ветки
+- **THEN** локальный проверяющий tooling не исполняет изменённый файл из target tree до
+  admission и передаёт только заданные ref/SHA и проверенное evidence
 
 #### Scenario: неподтверждённый источник не исполняется
 
@@ -133,7 +137,7 @@
 публикуемого коммита завершился успешно, и пара «коммит и снимок контента» проверена
 прогоном, который эту пару публикует.
 
-**Политика источника по назначению.** Production SHALL допускать только текущий точный `main` канонического репозитория. DEMO на защищённо связанном `193.124.115.99` / `https://staging.ikpk.su` / `deployMode=stand` / `paymentRole=ci` MAY допускать текущий точный `dev` только при явном установленном профиле `demo-dev`. Все упоминания основной ветки и сверки `origin/main` ниже относятся к main по умолчанию, а в этом DEMO-профиле — к разрешённому dev. Произвольная ветка, fork и PR merge-ref SHALL NOT быть источником. Установленный доверенный механизм SHALL проверить ветку, точный SHA и обязательный CI до исполнения кандидатного кода с доступами. Непредъявленный профиль SHALL NOT выводиться из отсутствия журнала. DEMO-сервисная учётная запись SHALL NOT иметь production credentials/config или право активации production; одно строковое destinationId SHALL NOT считаться доказательством изоляции.
+**Политика источника по назначению.** Production SHALL допускать только текущий точный `main` канонического репозитория. DEMO на защищённо связанном `193.124.115.99` / `https://staging.ikpk.su` / `deployMode=stand` / `paymentRole=ci` MAY допускать текущий точный `dev` только при явном установленном профиле `demo-dev`. Все упоминания основной ветки и сверки `origin/main` ниже относятся к main по умолчанию, а в этом DEMO-профиле — к разрешённому dev. Произвольная ветка, fork и PR merge-ref SHALL NOT быть источником. Оператор SHALL передавать полный target SHA отдельно от проверенного tooling checkout. Доверенный локальный entrypoint SHALL использовать authenticated `gh` и проверить ветку, точный SHA и обязательный CI до checkout/исполнения candidate code и отправки запроса. Сервер SHALL независимо сверить запрошенный SHA с текущей вершиной разрешённой ветки и проверить переданное bounded CI evidence до checkout/исполнения candidate code с доступами. Непредъявленный профиль SHALL NOT выводиться из отсутствия журнала. DEMO-сервисная учётная запись SHALL NOT иметь production credentials/config или право активации production; одно строковое destinationId SHALL NOT считаться доказательством изоляции.
 
 **Успех обязательного прогона определён строго**, иначе право публикации выдаст неподходящий
 прогон того же коммита. Успехом SHALL считаться прогон, у которого одновременно: репозиторий
@@ -149,14 +153,32 @@ tests`: допускаются его `push`-прогон для выбранн�
 точных repository, ref и SHA; если он ожидает завершения, локальный путь ждёт его, а ошибка
 последнего прогона SHALL NOT приводить к выбору более старого успешного прогона.
 
-Для уже проверяемого точного SHA локальный путь SHALL повторно использовать последний
-канонический прогон **Release source tests**, если его полный workflow завершился успехом и
-его native job set, attempt-scoped artifact и manifest проходят текущую версию source-policy,
+Для уже проверяемого точного SHA локальный entrypoint SHALL использовать authenticated `gh`
+оператора, чтобы прочитать последний канонический прогон **Release source tests**, native jobs,
+attempt-scoped artifact и его байты. Полный workflow SHALL пройти текущие source-policy,
 profile и report policy. Если такой прогон ещё выполняется, путь SHALL ждать его завершения;
 если для SHA нет подходящего прогона, он завершился ошибкой/отменой, его identity устарела или
-любая часть evidence отсутствует либо не совпадает, публикация SHALL отказать. Путь SHALL NOT
-запускать или перезапускать workflow автоматически. Источник аутентификации SHALL требовать
-только чтение Actions runs, jobs и artifacts; право Actions write не требуется.
+любая часть evidence отсутствует либо не совпадает, публикация SHALL отказать. Ошибка
+последнего eligible прогона SHALL NOT приводить к выбору более старого успешного прогона.
+Путь SHALL NOT запускать или перезапускать workflow автоматически и не требует Actions write.
+
+Локальный клиент SHALL передавать evidence в запросе через существующий ограниченный SSH
+gateway. Набор SHALL содержать run metadata, все обязательные jobs выбранной attempt, metadata
+артефакта, исходные байты artifact и SHA-256, который GitHub сообщил для этих байтов. Archive
+SHALL быть не больше 4 MiB, а полный serialized gateway request с evidence SHALL укладываться
+в 8 MiB. Сервер SHALL проверить размер, JSON/schema, exact repository,
+workflow, ref, SHA, run ID, attempt, обязательные job identities, имя и attempt артефакта,
+manifest, его policy/profile/report версии и повторно вычисленный digest artifact до исполнения
+кода кандидата. Все идентификаторы evidence SHALL совпадать с назначением, source SHA и request
+ID сохранённого запроса. GitHub token SHALL оставаться на машине оператора: он SHALL NOT
+передаваться серверу, кандидатному коду, в SSH аргументах, логах или сохранённых evidence.
+Сервер SHALL NOT обращаться к GitHub API для проверки source CI.
+
+Граница доверия этой поставки: deploy-authorized оператор и его локальный authenticated `gh`
+являются источником GitHub evidence, а существующий ограниченный publisher принимает только
+запрос от этой машины. Серверная проверка схемы, identity и digest защищает привязку и целостность
+передачи; она не объявляется криптографическим доказательством происхождения против самого
+доверенного оператора.
 
 Свежесть evidence SHALL проверяться внутри выбранной попытки: timestamps каждой обязательной
 job и artifact SHALL быть не раньше начала этой попытки. Возраст успешного прогона относительно
@@ -247,6 +269,20 @@ browser smoke desktop/mobile и применимость платёжного н
 - **WHEN** публикация запущена явной командой
 - **THEN** выкладывается только содержимое коммита, для которого обязательный прогон
   завершился успешно, и только та пара, которую проверил публикующий прогон
+
+#### Scenario: сервер получает evidence локально проверенного source CI
+
+- **WHEN** локальный `gh` подтвердил полный run для точных repository, ref, SHA, attempt и
+  native artifact, и запрос содержит evidence в пределах установленного размера
+- **THEN** сервер проверяет его identity, структуру, policy и digest для того же request ID и
+  назначения без GitHub API token
+- **AND** сервер повторно сверяет SHA с текущей вершиной разрешённой ветки до исполнения кандидата
+
+#### Scenario: evidence потеряло привязку или превышает предел
+
+- **WHEN** evidence содержит другой ref/SHA/run/attempt, отсутствующую обязательную job, иной
+  manifest/digest либо archive/request превышает установленный предел
+- **THEN** сервер отказывает до исполнения кандидатного кода и не меняет действующий релиз
 
 #### Scenario: успешный прогон предложения изменений того же коммита
 
@@ -1059,7 +1095,7 @@ origin и CI-вердикт. Добавляемая запись опублик�
 
 Каждая новая публикация, включая неизменный код с новыми CMS-данными, SHALL иметь полный согласованный тестовый прогон кода и E2E для текущей операции. Source CI может быть переиспользован только при точном совпадении SHA и ref, полном workflow и актуальной принятой policy/profile/reports согласно требованию «Повторное использование полного source CI для точного SHA»; более новый eligible run со статусом pending или failure запрещает подстановку более старого success. Это переиспользование не заменяет отдельные захват, candidate acceptance tests и публикационные доказательства текущей операции. Точная матрица актуальных unit/build/E2E и изолированного CMS-to-site SHALL быть версионирована в коде тестовой политики. Её нельзя сокращать флагом запуска. По явному решению владельца от 15.10.2026 исторические compare/parity со старым сайтом исключены, поскольку сайта больше нет; точный перечень и основание SHALL входить в версионированную политику и манифест. Регулярно меняющиеся production-данные SHALL NOT служить постоянным эталоном: актуальный кандидат проверяется на собственном снимке. Неприменимые сочетания сценария с viewport/ролью и ранее явно принятые владельцем отклонения SHALL иметь точный версионированный перечень с основанием и отдельной отметкой в отчёте. Они SHALL NOT считаться успешно исполненными проверками; новые пропуски и расширение исключений флагом запуска SHALL блокироваться.
 
-Source CI evidence SHALL фиксировать канонический repository, workflow, ветку, SHA, run ID/attempt и все обязательные результаты. Установленный исполнитель SHALL получать его из доверенного CI, а не принимать пользовательский report. Candidate acceptance evidence SHALL быть связано с request ID и назначением в долговечной квитанции. Demo и prod SHALL иметь отдельные candidate capture, acceptance tests и publication evidence, даже при том же SHA; source CI may be shared only when its canonical ref and exact SHA both match the request. Внутри одной операции идентичная проверка на том же объекте MAY не дублироваться.
+Source CI evidence SHALL фиксировать канонический repository, workflow, ветку, SHA, run ID/attempt и все обязательные результаты. Доверенный локальный entrypoint SHALL получать evidence из GitHub через authenticated `gh`, а не принимать пользовательский report; сервер SHALL проверить переданный bounded bundle согласно действующей policy до запуска candidate code. Candidate acceptance evidence SHALL быть связано с request ID и назначением в долговечной квитанции. Demo и prod SHALL иметь отдельные candidate capture, acceptance tests и publication evidence, даже при том же SHA; source CI may be shared only when its canonical ref and exact SHA both match the request. Внутри одной операции идентичная проверка на том же объекте MAY не дублироваться.
 
 До активации текущий неизменный кандидат SHALL пройти полный применимый релизный E2E-набор с данными его снимка, дополнительно к проверкам кода на фикстуре. Fixture-тест, создающий иную сборку или меняющий тестовую CMS, SHALL NOT выдаваться за проверку кандидата. Обязательные пропуски, ноль проверок и ошибки SHALL блокировать активацию. Артефакт SHALL NOT пересобираться после этих проверок. Изолированные пробы форм SHALL NOT создавать реальные заявки или уведомления. Внешний readback после переключения сохраняется.
 
@@ -1083,3 +1119,126 @@ Source CI evidence SHALL фиксировать канонический reposit
 
 - **WHEN** digest кандидата отличается от проверенного
 - **THEN** активация запрещена до повторной проверки изменённого кандидата
+
+## ADDED Requirements
+
+### Requirement: Production publication reserves a source tag without treating it as a release receipt
+
+Production publication SHALL require a tag named `prod-src-<full-40-character-SHA>` that resolves
+to the exact current `main` commit admitted by source CI. The local operator entrypoint SHALL
+create this tag without force before it submits a production request that can cause server-side
+publication effects. If the tag already exists and resolves to the same commit, the entrypoint
+SHALL reuse it; if it resolves elsewhere or cannot be verified, the entrypoint SHALL refuse and
+SHALL NOT move or delete it. If tag-read or tag-create permission is unavailable, or a create
+reply is ambiguous, the entrypoint SHALL perform a readback; it SHALL proceed only when that
+readback proves the exact tag-to-SHA mapping. An unavailable or mismatching readback SHALL refuse
+before SSH submission. Tag creation/reservation alone SHALL NOT mean that the site was published.
+
+Each successful publication SHALL produce its own operation receipt only after activation and
+serving verification. That receipt SHALL include the source tag, full source SHA, request ID,
+snapshot ID and published release ID. A later publication of the same source SHA MAY use the same
+tag with a new request ID and a different CMS snapshot. The tag SHALL identify source code only;
+`release.json` continues to identify the published commit and CMS snapshot. DEMO publication from
+`dev` SHALL NOT create or require a production source tag.
+
+#### Scenario: first production operation reserves the exact source tag
+
+- **WHEN** authenticated local checks admit the exact current `main` SHA and no matching source tag exists
+- **THEN** the entrypoint creates `prod-src-<full-SHA>` pointing to that commit before submitting the production request
+- **AND** a failed server preparation leaves the tag reserved without a successful publication receipt
+
+#### Scenario: retry reuses a matching tag and records a distinct publication
+
+- **WHEN** a matching source tag already exists for the same main SHA and a new production request is made
+- **THEN** the tag is reused without mutation
+- **AND** the new request gets its own receipt with its own snapshot ID after successful serving verification
+
+#### Scenario: an existing tag points to another commit
+
+- **WHEN** `prod-src-<full-SHA>` exists but does not resolve to that SHA
+- **THEN** the entrypoint refuses without moving or deleting the existing tag and sends no production request
+
+#### Scenario: tag cannot be verified or operator lacks required permission
+
+- **WHEN** the entrypoint cannot read the tag, or lacks permission to reserve an absent tag
+- **THEN** it refuses before SSH submission
+- **AND** it does not change or delete any existing tag
+
+#### Scenario: ambiguous tag-create reply is resolved by readback
+
+- **WHEN** tag creation returns an ambiguous result
+- **THEN** the entrypoint reads the tag again and proceeds only if it resolves to the exact admitted SHA
+- **AND** a mismatch or unavailable readback refuses before SSH submission without force-update or deletion
+
+#### Scenario: DEMO source does not receive a production tag
+
+- **WHEN** the destination is DEMO and the admitted source is the exact allowed `dev` SHA
+- **THEN** publication uses its demo operation evidence without creating or requiring `prod-src-*`
+
+### Requirement: Reuse the admitted CI attempt's CMS build artifact
+
+Before candidate execution, the deployment SHALL receive a CMS application artifact produced by
+the same canonical `release-tests.yml` run and attempt admitted for the requested ref/SHA. The
+artifact SHALL include an internal manifest with source ref/SHA, run ID/attempt, CMS lockfile
+digest, Node/npm identity, and a complete file inventory with per-file digests; it SHALL exclude
+`node_modules`. The GitHub ZIP digest SHALL live only in the external native artifact metadata and
+control/evidence, never inside the ZIP whose digest it identifies. Its size SHALL be bounded by a
+separately measured and versioned limit. The archive SHALL travel in the same restricted SSH stdin
+invocation as a length-framed control request, not as a second worker request or inside the small
+CI-evidence JSON. The server SHALL receive the complete control and archive into private,
+request-scoped staging, verify frame lengths/no trailing bytes, request identity, outer ZIP digest,
+internal manifest, archive paths, and size, and durably admit the canonical request before it
+starts or queues a worker. No worker or candidate code SHALL run on a partial or unvalidated
+archive. There SHALL be only one incomplete private CMS receive slot per destination, keyed by
+operation UUID; its ingress bytes SHALL be bounded by the 8 MiB control limit plus the CMS archive
+cap measured from a successful full CI artifact and pinned in policy before enablement. Before
+creating/writing the slot, the server SHALL validate both declared frame lengths and use `statfs`
+to check space for the bounded receive plus a documented free-space reserve. That reserve SHALL
+be measured and configured during rehearsal; if it is unset, the server SHALL fail closed before
+writing. Exceeding either byte bound or the available-space check SHALL refuse without deleting
+existing data. Incomplete receives SHALL remain private and non-executable; the operation UUID is
+consumed, another upload under it SHALL be refused, and a new UUID SHALL NOT bypass the occupied
+single slot. An incomplete receive SHALL NOT be reported as an accepted operation; no new status
+API is introduced. Releasing an incomplete slot requires a separate explicitly authorized operator
+action; the server SHALL NOT automatically delete partial or previous operational artifacts. Once
+the complete request is durably admitted, the slot is committed to ordinary operation storage and
+the same request ID SHALL be idempotent only for equal canonical control and recalculated digests;
+different content SHALL be refused. The server SHALL reject absolute paths, traversal, symlinks,
+unexpected files, and missing required build output. It SHALL assemble the CMS release from the
+admitted build output without rerunning `npm run build` on the server. The Astro site SHALL continue
+to build against the server's current CMS/DB snapshot and media. This follow-up artifact transport
+does not block the minimal local `gh` source-CI admission and production-tag test handoff.
+
+#### Scenario: exact admitted CMS artifact is assembled without recompiling
+
+- **WHEN** local `gh` retrieves the non-expired CMS artifact for the admitted run/attempt and its
+  ref, SHA, lockfile, runtime, digest, size, and file inventory match policy
+- **THEN** the server assembles the CMS release from the artifact's existing `cms/dist`
+- **AND** `dist/build/index.html` is present
+- **AND** server-side `npm run build` is not invoked
+
+#### Scenario: CMS artifact is missing or belongs to another source attempt
+
+- **WHEN** the admitted run has no CMS artifact or its SHA, ref, run, or attempt differs
+- **THEN** the server refuses before candidate execution and activation
+- **AND** it does not fall back to building CMS from source on the server
+
+#### Scenario: CMS artifact is unsafe or over its measured limit
+
+- **WHEN** the transferred archive exceeds its configured limit, has a digest mismatch, or
+  contains traversal, absolute, symlink, unexpected, or missing required entries
+- **THEN** the server refuses before extraction into a release directory and before activation
+
+#### Scenario: declared frame exceeds the finite receive slot or reserve
+
+- **WHEN** the declared control/archive length exceeds policy, the free-space reserve is unset, or
+  the complete receive would cross the configured reserve
+- **THEN** the server refuses before creating or writing the receive slot
+- **AND** it starts no worker and preserves existing operational data
+
+#### Scenario: incomplete receive consumes the sole slot
+
+- **WHEN** the SSH stream ends before both complete frames arrive
+- **THEN** the server retains the partial bytes privately as non-executable status evidence
+- **AND** it does not report an accepted operation and refuses another upload with that UUID or a different UUID while the slot is occupied
+- **AND** only separate explicitly authorized operator cleanup can release the slot
