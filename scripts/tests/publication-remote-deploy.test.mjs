@@ -1,18 +1,60 @@
 import test from 'node:test';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, validateRequest, unitName, readServerConfig, publisherResult } from '../server-deploy.mjs';
-import { runClient, parseArguments, readClientConfig, sshArguments } from '../deploy.mjs';
+import { runClient as runClientImpl, parseArguments, readClientConfig, sshArguments } from '../deploy.mjs';
 import { releaseTestManifest } from '../release-test-policy.mjs';
 import { REQUIRED_TEST_REPORTS } from '../release-test-reports.mjs';
 
 const reportFixtures = REQUIRED_TEST_REPORTS.map(({ suite, runner }) => ({ suite, runner,
   reportSha256: 'a'.repeat(64), total: 1, passed: 1, failed: 0, skipped: 0, todo: 0,
   flaky: 0, retried: 0, omissions: [], roleOmissions: [], acceptedDeviations: [] }));
+const testOnlyCmsArchive = Buffer.from('test-only CMS archive bytes');
+const testOnlyDigest = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+async function runClient(argv, dependencies = {}) {
+  const prepareCmsArtifact = dependencies.prepareCmsArtifact ?? (async ({ sourceCiEvidence, sha }) => ({
+    archiveBytes: testOnlyCmsArchive,
+    metadata: { id: sourceCiEvidence.runId + 1, name: `release-cms-artifact-${sourceCiEvidence.runAttempt}`,
+      digest: testOnlyDigest(testOnlyCmsArchive), size_in_bytes: testOnlyCmsArchive.length, expired: false,
+      workflow_run: { id: sourceCiEvidence.runId, head_sha: sha }, runAttempt: sourceCiEvidence.runAttempt },
+  }));
+  return runClientImpl(argv, { ...dependencies, prepareCmsArtifact });
+}
+
+function serverCmsArchive(root, evidence, sha) {
+  const payload = {
+    'dist/build/index.html': '<html>admin</html>', 'dist/src/index.js': 'export default {};',
+    'dist/config/database.js': 'export default {};', 'package.json': '{"name":"cms"}',
+    'package-lock.json': '{"lockfileVersion":3}', 'tsconfig.json': '{}',
+    'database/.migrations-expected': '1\n', 'database/migrations/0001-fixture.sql': '-- fixture migration\n',
+    'database/migrations/target-schema/seminar.json': '{}',
+    'scripts/run-data-migrations.mjs': 'export {};', 'scripts/audit-data-migration.mjs': 'export {};',
+    'scripts/audit-schema-snapshot.mjs': 'export {};', 'scripts/institute-method-author-classification.mjs': 'export {};',
+    'scripts/normalize-null-documents-state.mjs': 'export {};', 'src/lib/demo193-source-empty-fields.json': '{}',
+  };
+  for (const [name, contents] of Object.entries(payload)) {
+    const path = join(root, 'cms-fixture', name); mkdirSync(join(path, '..'), { recursive: true }); writeFileSync(path, contents);
+  }
+  const manifest = { schemaVersion: 1,
+    source: { sha, ref: `refs/heads/${evidence.sourceRef}`, runId: evidence.runId, runAttempt: evidence.runAttempt },
+    packageLockSha256: createHash('sha256').update(payload['package-lock.json']).digest('hex'),
+    runtime: { nodeVersion: 'v22.16.0', nodeMajor: 22, nodeAbi: '127', npmVersion: '10.8.2' },
+    files: Object.entries(payload).sort(([a], [b]) => a.localeCompare(b)).map(([path, contents]) => ({
+      path, sha256: createHash('sha256').update(contents).digest('hex'),
+    })),
+  };
+  writeFileSync(join(root, 'cms-fixture', 'cms-artifact-manifest.json'), JSON.stringify(manifest));
+  const archive = join(root, 'cms-fixture.zip');
+  execFileSync('/usr/bin/zip', ['-q', archive, ...Object.keys(payload), 'cms-artifact-manifest.json'], { cwd: join(root, 'cms-fixture') });
+  const archiveBytes = readFileSync(archive);
+  return { archiveBytes, metadata: { id: evidence.runId + 1, name: `release-cms-artifact-${evidence.runAttempt}`,
+    digest: testOnlyDigest(archiveBytes), size_in_bytes: archiveBytes.length, expired: false,
+    workflow_run: { id: evidence.runId, head_sha: sha }, runAttempt: evidence.runAttempt } };
+}
 function sourceEvidence(sourceRef, commit, runId = 38940517004) {
   const directory = mkdtempSync(join(tmpdir(), 'ikpk-publish-proof-'));
   try {
@@ -32,49 +74,57 @@ function sourceEvidence(sourceRef, commit, runId = 38940517004) {
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-remote-deploy-')); t.after(() => rmSync(root, { recursive: true, force: true }));
   const state = join(root, 'operations'); mkdirSync(state, { mode: 0o700 });
-  const config = { state, destination: 'demo', sourceRef: 'dev' }; const events = [];
+  const config = { state, destination: 'demo', sourceRef: 'dev', cmsArtifactPolicy: {
+    maxArchiveBytes: 1024 * 1024, maxExpandedBytes: 8 * 1024 * 1024, freeSpaceReserveBytes: 1024 * 1024,
+    nodeMajor: 22, nodeAbi: '127',
+  } }; const events = [];
   const commit = 'a'.repeat(40);
+  const proof = sourceEvidence('dev', commit);
+  const cms = serverCmsArchive(root, proof, commit);
   const ports = {
     now: () => '2026-10-15T20:00:00.000Z',
     resolveSource() { throw new Error('server-must-not-query-source-control'); }, start: (_, id) => events.push(`start:${id}`),
+    cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }),
     service: () => ({ state: 'active' }), fullTests() { throw new Error('server-must-not-run-or-rerun-source-ci'); },
     publisher: () => { events.push('publisher'); return { status: 'success', audit: { code: 'published' } }; },
   };
-  return { root, state, config, ports, events, request: { id: randomUUID(), destination: 'demo', action: 'publish',
-    sourceSha: commit, sourceCiEvidence: sourceEvidence('dev', commit) } };
+  return { root, state, config, ports, events, cms, request: { id: randomUUID(), destination: 'demo', action: 'publish',
+    sourceSha: commit, sourceCiEvidence: proof, cmsArtifact: cms.metadata } };
 }
 test('retry returns same operation; admitted source proof is pinned before service; parameters cannot change', async (t) => {
   const f = fixture(t); let lookups = 0; const server = createServer(f.config, { ...f.ports, resolveSource() { lookups++; throw new Error('unexpected-source-lookup'); } });
-  assert.equal((await server.submit(f.request)).status, 'accepted');
-  assert.equal((await server.submit(f.request)).status, 'running');
+  assert.equal((await server.submit(f.request, f.cms.archiveBytes)).status, 'accepted');
+  assert.equal((await server.submit(f.request, f.cms.archiveBytes)).status, 'running');
   assert.equal(lookups, 0); assert.equal(f.events.length, 1);
   await assert.rejects(server.submit({ ...f.request, action: 'recover' }), /request-id-conflict/);
   const receipt = JSON.parse(readFileSync(join(f.state, f.request.id, 'request.json')));
   assert.equal(receipt.request.sourceSha, f.request.sourceSha);
   assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
 });
-test('admitted source evidence is published without server-side CI and execution is one-shot', async (t) => {
+test('admitted source proof is durable but CMS execution stays guarded before lifecycle integration', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
-  await server.submit(f.request); await server.execute(f.request.id);
-  assert.deepEqual(f.events.slice(1), ['publisher']);
-  assert.equal(server.status(f.request.id).status, 'success');
-  await assert.rejects(server.execute(f.request.id), /invalid-execution/);
-  assert.equal(f.events.filter((s) => s === 'publisher').length, 1);
+  await server.submit(f.request, f.cms.archiveBytes);
+  const operation = join(f.state, f.request.id), receipt = JSON.parse(readFileSync(join(operation, 'request.json'), 'utf8'));
+  assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
+  assert.equal((await server.execute(f.request.id)).code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(operation, 'execution.json')), false);
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 test('source identity mismatch is refused before service start', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
-  await assert.rejects(server.submit({ ...f.request, sourceSha: 'b'.repeat(40) }), /source.*(sha|commit)|evidence/i);
+  await assert.rejects(server.submit({ ...f.request, sourceSha: 'b'.repeat(40) }, f.cms.archiveBytes), /source.*(sha|commit)|evidence/i);
   assert.equal(f.events.length, 0);
 });
 test('lost start reply never resubmits; vanished service is interrupted, never published', async (t) => {
   const f = fixture(t); let starts = 0;
   const server = createServer(f.config, { ...f.ports, start() { starts++; throw new Error('SSH acknowledgement lost'); }, service: () => ({ state: 'absent' }) });
-  assert.equal((await server.submit(f.request)).status, 'interrupted');
-  assert.equal((await server.submit(f.request)).status, 'interrupted'); assert.equal(starts, 1);
+  assert.equal((await server.submit(f.request, f.cms.archiveBytes)).status, 'interrupted');
+  assert.equal((await server.submit(f.request, f.cms.archiveBytes)).status, 'interrupted'); assert.equal(starts, 1);
 });
 test('host-wide flock refusal is busy, without invoking publisher', async (t) => {
   const f = fixture(t), server = createServer(f.config, { ...f.ports, service: () => ({ state: 'failed', exitCode: 75 }) });
-  await server.submit(f.request); assert.equal(server.status(f.request.id).status, 'busy'); assert.ok(!f.events.includes('publisher'));
+  await server.submit(f.request, f.cms.archiveBytes); assert.equal(server.status(f.request.id).status, 'busy'); assert.ok(!f.events.includes('publisher'));
   assert.match(unitName(f.config, f.request.id), /^ikpk-release-demo-[a-f0-9-]+\.service$/);
 });
 test('request schema rejects destination changes, traversal, extra source/config options and unsafe rollback', () => {
@@ -134,13 +184,14 @@ test('command parser requires explicit destination and a reason for rollback', (
 test('server request retries compare source evidence semantically and reject changed evidence', async (t) => {
   const f = fixture(t), commit = 'a'.repeat(40);
   const evidence = sourceEvidence('dev', commit);
-  const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence };
+  const request = { id: randomUUID(), destination: 'demo', action: 'publish', sourceSha: commit, sourceCiEvidence: evidence,
+    cmsArtifact: f.cms.metadata };
   const server = createServer(f.config, f.ports);
-  assert.equal((await server.submit(request)).status, 'accepted');
+  assert.equal((await server.submit(request, f.cms.archiveBytes)).status, 'accepted');
   const reordered = { sourceCiEvidence: Object.fromEntries(Object.entries(evidence).reverse()),
-    action: 'publish', sourceSha: commit, destination: 'demo', id: request.id };
-  assert.equal((await server.submit(reordered)).status, 'running');
-  await assert.rejects(server.submit({ ...reordered, sourceCiEvidence: { ...reordered.sourceCiEvidence, runAttempt: 2 } }), /request-id-conflict/);
+    action: 'publish', sourceSha: commit, destination: 'demo', id: request.id, cmsArtifact: f.cms.metadata };
+  assert.equal((await server.submit(reordered, f.cms.archiveBytes)).status, 'running');
+  await assert.rejects(server.submit({ ...reordered, sourceCiEvidence: { ...reordered.sourceCiEvidence, runAttempt: 2 } }, f.cms.archiveBytes), /request-id-conflict/);
   assert.equal(f.events.filter((event) => event.startsWith('start:')).length, 1);
 });
 
@@ -174,10 +225,16 @@ test('explicit full source SHA is admitted before SSH and its bounded proof is b
   const result = await runClient(['demo', '--sha', sha, '--request-id', id], {
     configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {},
     admitSource: async (source) => { events.push('admit'); assert.deepEqual(source, { destination: 'demo', sourceRef: 'dev', sha }); return evidence; },
-    call(_config, action, request) {
+    call(_config, action, request, frame) {
       events.push(action);
       assert.equal(action, 'submit'); assert.equal(request.sourceSha, sha);
       assert.deepEqual(request.sourceCiEvidence, evidence); assert.equal(Object.hasOwn(request, 'sourceTag'), false);
+      assert.ok(Buffer.isBuffer(frame), 'publish gets a binary frame through the injected test provider');
+      const controlLength = Number(frame.readBigUInt64BE(0));
+      const archiveLength = Number(frame.readBigUInt64BE(8));
+      assert.deepEqual(JSON.parse(frame.subarray(16, 16 + controlLength).toString('utf8')), request);
+      assert.deepEqual(frame.subarray(16 + controlLength), testOnlyCmsArchive);
+      assert.equal(archiveLength, testOnlyCmsArchive.length);
       return { id, destination: 'demo', status: 'success' };
     },
   });
@@ -446,7 +503,7 @@ test('unverifiable tag permissions and ambiguous create without exact readback f
 test('manager unavailability is unknown rather than proof that an operation stopped', async (t) => {
   const f = fixture(t), server = createServer(f.config, { ...f.ports, service: () => ({ state: 'unknown' }) });
   assert.equal(server.status(f.request.id).status, 'not-found');
-  await server.submit(f.request); assert.equal(server.status(f.request.id).status, 'unknown');
+  await server.submit(f.request, f.cms.archiveBytes); assert.equal(server.status(f.request.id).status, 'unknown');
 });
 
 test('installed server config has no GitHub CI token dependency', (t) => {
@@ -469,41 +526,49 @@ test('installed server config has no GitHub CI token dependency', (t) => {
   assert.throws(() => readServerConfig(installed), /source-policy-mismatch/);
 });
 
-test('a delayed old service cannot publish after a newer admitted operation has executed', async (t) => {
+test('CMS activation guard refuses old and new publish executions before sequence state or publisher', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
   const newer = { ...f.request, id: randomUUID() };
-  await server.submit(f.request); await server.submit(newer);
-  assert.equal((await server.execute(newer.id)).status, 'success');
-  const publishers = f.events.filter((x) => x === 'publisher').length;
-  assert.equal((await server.execute(f.request.id)).status, 'refused');
-  assert.equal(f.events.filter((x) => x === 'publisher').length, publishers);
+  await server.submit(f.request, f.cms.archiveBytes); await server.submit(newer, f.cms.archiveBytes);
+  assert.deepEqual(await server.execute(newer.id), { id: newer.id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated' });
+  assert.deepEqual(await server.execute(f.request.id), { id: f.request.id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated' });
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false);
+  for (const id of [newer.id, f.request.id]) assert.equal(existsSync(join(f.state, id, 'execution.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 
 
-test('the real installed launcher refusal on stderr retains its reason, and post-switch audit survives', async (t) => {
+test('launcher refusal parsing stays covered while CMS publication is guarded before launch', async (t) => {
   const native = spawnSync(process.execPath, [new URL('../publication-launcher.mjs', import.meta.url).pathname],
     { encoding: 'utf8', env: { PATH: process.env.PATH } });
   assert.equal(native.status, 1);
   assert.equal(native.stdout, '');
   assert.equal(publisherResult(native).status, 'refused');
   assert.equal(typeof publisherResult(native).reason, 'string');
-  const audit = { code: 'active-unindexed', activePair: { releaseId: 'retained' } };
-  const f = fixture(t), server = createServer(f.config, { ...f.ports,
-    publisher: () => publisherResult({ status: 1, stdout: '', stderr: JSON.stringify({ status: 'refused', reason: 'publication-worker-failed', audit }) }) });
-  await server.submit(f.request); await server.execute(f.request.id);
-  assert.deepEqual(server.status(f.request.id).audit, audit);
-  assert.equal(server.status(f.request.id).status, 'refused');
+  const f = fixture(t), server = createServer(f.config, f.ports);
+  await server.submit(f.request, f.cms.archiveBytes);
+  const result = await server.execute(f.request.id);
+  assert.equal(result.code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(f.state, f.request.id, 'execution.json')), false);
+  assert.equal(existsSync(join(f.state, f.request.id, 'tests.json')), false);
+  assert.equal(existsSync(join(f.root, 'publisher-launcher.mjs')), false);
+  assert.equal(f.events.includes('publisher'), false);
 });
 
 test('orphaned temporary files from a crash do not block new requests or recovery', async (t) => {
   const f = fixture(t), server = createServer(f.config, f.ports);
   writeFileSync(join(f.state, 'sequence.json.new'), 'partial');
   writeFileSync(join(f.state, 'last-started.json.new'), 'partial');
-  await server.submit(f.request);
-  assert.equal((await server.execute(f.request.id)).status, 'success');
+  await server.submit(f.request, f.cms.archiveBytes);
+  assert.equal((await server.execute(f.request.id)).code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false, 'CMS refusal leaves sequence admission untouched');
+  assert.equal(existsSync(join(f.state, f.request.id, 'execution.json')), false);
+  assert.equal(f.events.includes('publisher'), false);
   const recover = { id: randomUUID(), destination: 'demo', action: 'recover' };
   await server.submit(recover);
   assert.equal((await server.execute(recover.id)).status, 'success');
+  assert.equal(JSON.parse(readFileSync(join(f.state, 'last-started.json'), 'utf8')).id, recover.id,
+    'non-CMS recovery still uses the generic execution path');
 });
 
 
@@ -515,11 +580,11 @@ test('the admitted proof is durable before SSH starts and is not resolved by the
     assert.deepEqual(receipt.request.sourceCiEvidence, f.request.sourceCiEvidence);
     f.events.push(`start:${id}`);
   } });
-  assert.equal((await server.submit(f.request)).status, 'accepted');
+  assert.equal((await server.submit(f.request, f.cms.archiveBytes)).status, 'accepted');
   assert.equal(f.events.length, 1);
 });
 
-test('default server publisher hands its validated proof to the installed launcher by private file', async (t) => {
+test('default server publisher remains uninvoked for CMS until activation is integrated', async (t) => {
   const f = fixture(t), launcher = join(f.root, 'publisher-launcher.mjs'), launcherConfig = join(f.root, 'publisher-config.json');
   const marker = join(f.root, 'launcher-handoff.json');
   writeFileSync(launcher, `import{readFileSync,writeFileSync}from'node:fs';
@@ -530,10 +595,11 @@ process.stdout.write(JSON.stringify({status:'success',code:'published'}));`, { m
   const config = { ...f.config, launcher, launcherConfig, canonicalRepository: 'https://github.com/pgorbachev/ikpk.git', timeoutSeconds: 60 };
   const { publisher, ...ports } = f.ports;
   const server = createServer(config, { ...ports, start() {} });
-  await server.submit(f.request);
-  await server.execute(f.request.id);
-  const handoff = JSON.parse(readFileSync(marker, 'utf8'));
-  assert.ok(handoff.args.includes('--source-proof-file'), 'installed publisher must receive proof via bounded file channel');
-  assert.equal(handoff.proofPath, join(f.state, f.request.id, 'tests.json'));
-  assert.deepEqual(handoff.proof, f.request.sourceCiEvidence);
+  await server.submit(f.request, f.cms.archiveBytes);
+  const result = await server.execute(f.request.id);
+  assert.equal(result.code, 'cms-activation-adapter-not-integrated');
+  assert.equal(existsSync(marker), false, 'installed publisher launcher is not called');
+  assert.equal(existsSync(join(f.state, f.request.id, 'tests.json')), false);
+  const receipt = JSON.parse(readFileSync(join(f.state, f.request.id, 'request.json'), 'utf8'));
+  assert.deepEqual(readFileSync(receipt.cmsArchivePath), f.cms.archiveBytes);
 });

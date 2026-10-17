@@ -1,6 +1,7 @@
 /** Installed trusted adapter: validate canonical source CI for this exact SHA. */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { constants as bufferConstants } from 'node:buffer';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { RELEASE_TEST_WORKFLOW, releaseTestArtifactName, validateReleaseTestEvidence } from './release-test-policy.mjs';
@@ -114,4 +115,76 @@ export async function runReleaseCi(config, receipt) {
   try { token = execFileSync('gh', ['auth', 'token', '--hostname', 'github.com'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
   catch { fail('release-ci-gh-auth-unavailable'); }
   return createReleaseCi({ token })(config, receipt);
+}
+
+export async function downloadCmsArtifactForEvidence(evidence, { maxArchiveBytes, fetch: fetcher = globalThis.fetch, token: suppliedToken } = {}) {
+  if (!Number.isSafeInteger(maxArchiveBytes) || maxArchiveBytes <= 0 || maxArchiveBytes > bufferConstants.MAX_LENGTH - 8 * 1024 * 1024 - 16) fail('cms-artifact-cap-unconfigured');
+  if (!evidence || evidence.repository !== 'pgorbachev/ikpk' || evidence.workflow !== RELEASE_TEST_WORKFLOW ||
+      !['main', 'dev'].includes(evidence.sourceRef) || !/^[a-f0-9]{40}$/.test(evidence.commit ?? '') ||
+      !Number.isSafeInteger(evidence.runId) || evidence.runId < 1 || !Number.isSafeInteger(evidence.runAttempt) || evidence.runAttempt < 1 ||
+      Object.keys(evidence).sort().join(',') !== 'artifactDigest,artifactZipBase64,commit,repository,runAttempt,runId,sourceRef,workflow' ||
+      !/^sha256:[a-f0-9]{64}$/.test(evidence.artifactDigest ?? '') || typeof evidence.artifactZipBase64 !== 'string' ||
+      evidence.artifactZipBase64.length > 4 * Math.ceil((4 * 1024 * 1024) / 3) ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(evidence.artifactZipBase64) ||
+      Buffer.from(evidence.artifactZipBase64, 'base64').toString('base64') !== evidence.artifactZipBase64 ||
+      `sha256:${createHash('sha256').update(Buffer.from(evidence.artifactZipBase64, 'base64')).digest('hex')}` !== evidence.artifactDigest) {
+    fail('cms-artifact-source-evidence-invalid');
+  }
+  let token = suppliedToken;
+  if (token === undefined) {
+    try { token = execFileSync('gh', ['auth', 'token', '--hostname', 'github.com'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+    catch { fail('release-ci-gh-auth-unavailable'); }
+  }
+  if (typeof token !== 'string' || !token.trim() || /[\r\n]/.test(token)) fail('release-ci-gh-auth-unavailable');
+  const request = async (path) => {
+    if (!path.startsWith(`${API}/`)) fail('release-ci-untrusted-url');
+    const response = await fetcher(path, { method: 'GET', headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28' }, redirect: 'manual', signal: AbortSignal.timeout(30000) });
+    if (!response.ok) fail('release-ci-http-error');
+    return JSON.parse((await bytes(response, 4 * 1024 * 1024)).toString('utf8'));
+  };
+  const run = await request(`${API}/actions/runs/${evidence.runId}`);
+  if (run.repository?.full_name !== 'pgorbachev/ikpk' || run.head_repository?.full_name !== 'pgorbachev/ikpk' ||
+      run.path !== RELEASE_TEST_WORKFLOW || run.head_sha !== evidence.commit || run.head_branch !== evidence.sourceRef ||
+      run.run_attempt !== evidence.runAttempt || run.status !== 'completed' || run.conclusion !== 'success' ||
+      !['push', 'workflow_dispatch'].includes(run.event)) fail('cms-artifact-run-identity-mismatch');
+  const artifactRows = []; let totalArtifacts;
+  for (let page = 1; page <= 100; page++) {
+    const listing = await request(`${API}/actions/runs/${evidence.runId}/artifacts?per_page=100&page=${page}`);
+    if (!Array.isArray(listing.artifacts) || !Number.isSafeInteger(listing.total_count)) fail('cms-artifact-list-incomplete');
+    if (totalArtifacts !== undefined && listing.total_count !== totalArtifacts) fail('cms-artifact-list-changed');
+    totalArtifacts = listing.total_count; artifactRows.push(...listing.artifacts);
+    if (artifactRows.length === totalArtifacts) break;
+    if (artifactRows.length > totalArtifacts || !listing.artifacts.length) fail('cms-artifact-list-incomplete');
+    if (page === 100) fail('cms-artifact-pagination-limit');
+  }
+  const name = `release-cms-artifact-${evidence.runAttempt}`;
+  const matches = artifactRows.filter((artifact) => artifact.name === name);
+  if (matches.length !== 1) fail('cms-artifact-not-found');
+  const artifact = matches[0];
+  if (!Number.isSafeInteger(artifact.id) || artifact.id < 1 || artifact.expired !== false ||
+      !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes < 1 || artifact.size_in_bytes > maxArchiveBytes ||
+      typeof artifact.digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest) ||
+      artifact.workflow_run?.id !== evidence.runId || artifact.workflow_run?.head_sha !== evidence.commit) fail('cms-artifact-native-metadata-mismatch');
+  let response = await fetcher(`${API}/actions/artifacts/${artifact.id}/zip`, { method: 'GET',
+    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+    redirect: 'manual', signal: AbortSignal.timeout(30000) });
+  if (response.status === 302) {
+    const location = response.headers.get('location');
+    if (!location) fail('release-ci-untrusted-artifact-redirect');
+    const url = new URL(location);
+    if (url.protocol !== 'https:' || url.username || url.password ||
+        !(url.hostname.endsWith('.blob.core.windows.net') || url.hostname.endsWith('.githubusercontent.com'))) fail('release-ci-untrusted-artifact-redirect');
+    response = await fetcher(url.href, { redirect: 'error', signal: AbortSignal.timeout(60000) });
+  }
+  const archiveBytes = await bytes(response, maxArchiveBytes);
+  const digest = `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}`;
+  if (archiveBytes.length !== artifact.size_in_bytes || digest !== artifact.digest) fail('cms-artifact-digest-mismatch');
+  const finalRun = await request(`${API}/actions/runs/${evidence.runId}`);
+  if (finalRun.repository?.full_name !== 'pgorbachev/ikpk' || finalRun.head_repository?.full_name !== 'pgorbachev/ikpk' ||
+      finalRun.path !== RELEASE_TEST_WORKFLOW || finalRun.head_sha !== evidence.commit || finalRun.head_branch !== evidence.sourceRef ||
+      finalRun.run_attempt !== evidence.runAttempt || finalRun.status !== 'completed' || finalRun.conclusion !== 'success' ||
+      !['push', 'workflow_dispatch'].includes(finalRun.event)) fail('cms-artifact-attempt-changed');
+  return { metadata: { id: artifact.id, name, digest, size_in_bytes: artifact.size_in_bytes, expired: artifact.expired,
+    workflow_run: { id: evidence.runId, head_sha: evidence.commit }, runAttempt: evidence.runAttempt }, archiveBytes };
 }

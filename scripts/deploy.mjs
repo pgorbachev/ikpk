@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { isAbsolute, join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { runReleaseCi } from './release-ci.mjs';
+import { runReleaseCi, downloadCmsArtifactForEvidence } from './release-ci.mjs';
 const SOURCE_REF = { demo: 'dev', prod: 'main' };
 const PROOF_KEYS = ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'];
 const fail = (message) => { throw new Error(message); };
@@ -62,9 +62,9 @@ export function sshArguments(config, action, id) {
     '-o', `UserKnownHostsFile="${config.knownHostsFile.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`, '-i', config.identityFile, config.sshTarget,
     config.serverNode, config.serverEntry, action, ...(action === 'status' ? [id] : [])];
 }
-export function sshCall(config, action, request) {
+export function sshCall(config, action, request, submitFrame) {
   const result = spawnSync('/usr/bin/ssh', sshArguments(config, action, request.id), {
-    input: action === 'submit' ? JSON.stringify(request) : undefined,
+    input: action === 'submit' ? (submitFrame ?? Buffer.from(JSON.stringify(request))) : undefined,
     env: { PATH: '/usr/bin:/bin', HOME: homedir() }, encoding: 'utf8', timeout: 150000, maxBuffer: 64 * 1024,
     stdio: ['pipe', 'pipe', 'ignore'] });
   let value; try { value = JSON.parse(result.stdout); } catch { fail(`connection-or-reply-lost; check status ${request.id}`); }
@@ -74,6 +74,7 @@ export function sshCall(config, action, request) {
 }
 export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOME ?? join(homedir(), '.config/ikpk-deploy'),
   stateHome = join(homedir(), '.local/state/ikpk-deploy'), call = sshCall,
+  prepareCmsArtifact,
   admitSource = async ({ destination, sourceRef, sha }) => {
     const dir = mkdtempSync(join(tmpdir(), 'ikpk-release-ci-'));
     try {
@@ -115,16 +116,20 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
   attempts = 2880 } = {}) {
   const request = parseArguments(argv); const config = readClientConfig(configHome, request.destination);
   if (request.action === 'status') return call(config, 'status', request);
-  const dir = privateDirectory(join(stateHome, request.destination)); const path = join(dir, `${request.id}.json`);
-  let submitted;
+  const prepareArtifact = prepareCmsArtifact ?? ((input) => downloadCmsArtifactForEvidence(input.sourceCiEvidence,
+    { maxArchiveBytes: config.cmsArchiveMaxBytes }));
+  const dir = join(stateHome, request.destination); const path = join(dir, `${request.id}.json`);
+  let submitted, cmsArtifactMetadata;
+  let archiveBytes;
+  if (existsSync(dir)) privateDirectory(dir);
   if (existsSync(path)) {
     submitted = JSON.parse(readFileSync(protectedFile(path, true), 'utf8'));
     const matches = request.action === 'publish'
       ? submitted.id === request.id && submitted.destination === request.destination && submitted.action === 'publish' && submitted.sourceSha === request.sha
       : JSON.stringify(submitted) === JSON.stringify(request);
     if (!matches) fail('request-id-conflict');
-    if (request.destination === 'prod' && request.action === 'publish') {
-      if (submitted.sourceTag !== `prod-src-${request.sha}`) fail('request-id-conflict');
+    if (request.action === 'publish') {
+      if (request.destination === 'prod' && submitted.sourceTag !== `prod-src-${request.sha}`) fail('request-id-conflict');
       let result = await call(config, 'status', submitted);
       if (result.status !== 'not-found') {
         for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
@@ -133,15 +138,21 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
         }
         return result;
       }
-      const sourceRef = SOURCE_REF.prod;
+      const sourceRef = SOURCE_REF[request.destination];
       const evidence = await admitSource({ destination: request.destination, sourceRef, sha: request.sha });
       validateSourceEvidence(evidence, sourceRef, request.sha);
       if (canonicalSourceEvidence(evidence) !== canonicalSourceEvidence(submitted.sourceCiEvidence)) fail('source-ci-evidence-changed');
-      await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
-      if (await tagOps.resolve(submitted.sourceTag) !== request.sha) fail('source-tag-conflict');
+      const prepared = await prepareArtifact({ destination: request.destination, sourceRef, sha: request.sha, sourceCiEvidence: evidence });
+      validateCmsArtifactMetadata(prepared?.metadata, evidence, request.sha, prepared?.archiveBytes);
+      if (JSON.stringify(prepared.metadata) !== JSON.stringify(submitted.cmsArtifact)) fail('cms-artifact-metadata-changed');
+      archiveBytes = prepared.archiveBytes;
+      if (request.destination === 'prod') {
+        await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
+        if (await tagOps.resolve(submitted.sourceTag) !== request.sha) fail('source-tag-conflict');
+      }
       announce({ id: request.id, destination: request.destination, status: 'request-retry', receipt: path });
-      await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
-      result = await call(config, 'submit', submitted);
+      if (request.destination === 'prod') await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
+      result = await call(config, 'submit', submitted, makeSubmitFrame(submitted, archiveBytes));
       for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
         if (i >= attempts) fail(`wait-limit; check status ${request.id}`);
         await sleep(5000); result = await call(config, 'status', request);
@@ -154,6 +165,9 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
     const sourceRef = SOURCE_REF[request.destination];
     sourceCiEvidence = await admitSource({ destination: request.destination, sourceRef, sha: request.sha });
     validateSourceEvidence(sourceCiEvidence, sourceRef, request.sha);
+    const prepared = await prepareArtifact({ destination: request.destination, sourceRef, sha: request.sha, sourceCiEvidence });
+    validateCmsArtifactMetadata(prepared?.metadata, sourceCiEvidence, request.sha, prepared?.archiveBytes);
+    archiveBytes = prepared.archiveBytes; cmsArtifactMetadata = prepared.metadata;
     if (request.destination === 'prod') {
       await requireCurrentSourceRef(resolveSourceRef, request.destination, sourceRef, request.sha);
       sourceTag = `prod-src-${request.sha}`;
@@ -170,7 +184,8 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
     }
   }
   const { sha, ...baseRequest } = request;
-  submitted = { ...baseRequest, ...(request.action === 'publish' ? { sourceSha: sha, sourceCiEvidence, ...(sourceTag ? { sourceTag } : {}) } : {}) };
+  submitted = { ...baseRequest, ...(request.action === 'publish' ? { sourceSha: sha, sourceCiEvidence, cmsArtifact: cmsArtifactMetadata, ...(sourceTag ? { sourceTag } : {}) } : {}) };
+    privateDirectory(dir);
     const fd = openSync(path, 'wx', 0o600);
     try { writeFileSync(fd, `${JSON.stringify(submitted)}\n`); fsyncSync(fd); } finally { closeSync(fd); }
     const parent = openSync(dir, 'r'); try { fsyncSync(parent); } finally { closeSync(parent); }
@@ -180,7 +195,7 @@ export async function runClient(argv, { configHome = process.env.IKPK_DEPLOY_HOM
   if (request.destination === 'prod' && request.action === 'publish') {
     await requireCurrentSourceRef(resolveSourceRef, request.destination, SOURCE_REF.prod, request.sha);
   }
-  let result = await call(config, 'submit', submitted);
+  let result = await call(config, 'submit', submitted, makeSubmitFrame(submitted, request.action === 'publish' ? archiveBytes : Buffer.alloc(0)));
   for (let i = 0; ['accepted', 'running'].includes(result.status); i++) {
     if (i >= attempts) fail(`wait-limit; check status ${request.id}`);
     await sleep(5000); result = await call(config, 'status', request);
@@ -200,6 +215,24 @@ function validateSourceEvidence(evidence, sourceRef, sha) {
       `sha256:${createHash('sha256').update(archive).digest('hex')}` !== evidence.artifactDigest) fail('source-ci-evidence-mismatch');
 }
 function canonicalSourceEvidence(evidence) { return JSON.stringify(Object.fromEntries(PROOF_KEYS.map((key) => [key, evidence[key]]))); }
+function validateCmsArtifactMetadata(metadata, evidence, sha, archiveBytes) {
+  if (!metadata || !Buffer.isBuffer(archiveBytes) || metadata.expired !== false ||
+      Object.keys(metadata).sort().join(',') !== 'digest,expired,id,name,runAttempt,size_in_bytes,workflow_run' ||
+      !metadata.workflow_run || Object.keys(metadata.workflow_run).sort().join(',') !== 'head_sha,id' ||
+      metadata.name !== `release-cms-artifact-${evidence.runAttempt}` || !Number.isSafeInteger(metadata.id) || metadata.id < 1 ||
+      metadata.runAttempt !== evidence.runAttempt || metadata.size_in_bytes !== archiveBytes.length ||
+      metadata.workflow_run?.id !== evidence.runId || metadata.workflow_run?.head_sha !== sha ||
+      !/^sha256:[0-9a-f]{64}$/.test(metadata.digest ?? '') ||
+      `sha256:${createHash('sha256').update(archiveBytes).digest('hex')}` !== metadata.digest) fail('cms-artifact-metadata-mismatch');
+}
+function makeSubmitFrame(request, archiveBytes) {
+  if (!Buffer.isBuffer(archiveBytes)) fail('cms-artifact-missing');
+  const control = Buffer.from(JSON.stringify(request));
+  if (control.length > 8 * 1024 * 1024) fail('request-too-large');
+  const header = Buffer.alloc(16);
+  header.writeBigUInt64BE(BigInt(control.length), 0); header.writeBigUInt64BE(BigInt(archiveBytes.length), 8);
+  return Buffer.concat([header, control, archiveBytes]);
+}
 async function requireCurrentSourceRef(resolveSourceRef, destination, sourceRef, sha) {
   let current;
   try { current = await resolveSourceRef({ destination, sourceRef }); } catch { fail('source-ref-unverifiable'); }
