@@ -239,6 +239,7 @@ test('release workflow packages and retains CMS artifact only after same-job uni
     'CMS artifact name must bind to the current attempt');
   assert.match(uploadBlock, /retention-days:\s*90/, 'CMS artifact must have the mandatory source-policy retention');
   assert.match(uploadBlock, /if-no-files-found:\s*error/, 'missing CMS artifact must fail the release job');
-  assert.match(uploadBlock, /path:\s*\|[\s\S]*cms[^\n]*artifact|path:\s*[^\n]*cms[^\n]*artifact/i,
-    'upload must point at the artifact assembled from this job’s cms/dist');
+  assert.match(uploadBlock, /include-hidden-files:\s*true/, 'upload must include hidden files covered by the artifact manifest');
+  assert.match(uploadBlock, /^\s*path:\s*\$\{\{\s*runner\.temp\s*\}\}\/cms-release-artifact\/?\s*$/m,
+    'upload path must be restricted to the dedicated output of the prebuilt CMS artifact assembly');
 });
