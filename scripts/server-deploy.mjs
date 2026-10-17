@@ -1,14 +1,42 @@
 #!/usr/bin/env node
 /** Installed outside checkouts. One durable receipt per request; systemd + flock own execution. */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, openSync, fsyncSync, closeSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { EXCLUDED_HISTORICAL, PENDING_SCOPE, RELEASE_TEST_POLICY_VERSION, RELEASE_TEST_WORKFLOW, SOURCE_SUITES } from './release-test-policy.mjs';
+import { NON_TEST_CHECKS, REPORT_POLICY_VERSION, SOURCE_REPORT_PROFILE, validateReportSummaries } from './release-test-reports.mjs';
 
 export const validId = (id) => typeof id === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
 const fail = (message) => { throw new Error(message); };
 const plain = (x) => x && typeof x === 'object' && !Array.isArray(x);
+function validateManifest(zip, evidence, sha) {
+  const dir = mkdtempSync(join(tmpdir(), 'ikpk-source-proof-'));
+  try {
+    const archive = join(dir, 'proof.zip'); writeFileSync(archive, zip, { mode: 0o600, flag: 'wx' });
+    const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384, timeout: 10000 }).trim().split('\n');
+    if (names.length !== 1 || names[0] !== 'release-source-tests.json') fail('invalid-source-manifest');
+    const manifest = JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536, timeout: 10000 }));
+    const ref = evidence.sourceRef;
+    if (manifest.schemaVersion !== RELEASE_TEST_POLICY_VERSION || manifest.workflow !== RELEASE_TEST_WORKFLOW ||
+        manifest.commit !== sha || manifest.runId !== evidence.runId || manifest.runAttempt !== evidence.runAttempt ||
+        manifest.subject !== 'source-code' || !['push', 'workflow_dispatch'].includes(manifest.event) ||
+        (manifest.event === 'push' && !['main', 'dev'].includes(ref)) || manifest.suites?.join('\0') !== SOURCE_SUITES.join('\0') ||
+        manifest.reportPolicyVersion !== REPORT_POLICY_VERSION || manifest.sourceProfile !== SOURCE_REPORT_PROFILE ||
+        manifest.pendingScope?.length !== 0 || JSON.stringify(manifest.nonTestChecks) !== JSON.stringify(NON_TEST_CHECKS) ||
+        JSON.stringify(manifest.excludedHistorical) !== JSON.stringify(EXCLUDED_HISTORICAL) ||
+        !plain(manifest.results) || Object.keys(manifest.results).sort().join('\0') !== ['identity', 'source-tests', 'supplemental', 'visual', 'provision'].sort().join('\0') ||
+        ['identity', 'source-tests', 'supplemental', 'visual', 'provision'].some((name) => manifest.results[name] !== 'success')) {
+      fail('invalid-source-manifest');
+    }
+    validateReportSummaries(manifest.reports, { profile: SOURCE_REPORT_PROFILE });
+  } catch (error) {
+    if (error.code === 'invalid-source-manifest') throw error;
+    fail('invalid-source-manifest');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
 export function protectedPath(path, directory = false, privateFile = false) {
   if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) fail('untrusted-installation');
   const stat = lstatSync(path);
@@ -27,6 +55,7 @@ export function readServerConfig(installed) {
   const path = protectedPath(join(root, 'server.json'));
   const c = JSON.parse(readFileSync(path, 'utf8'));
   if (!plain(c) || c.version !== 1 || !['demo', 'prod'].includes(c.destination) ||
+      Object.hasOwn(c, 'releaseCiTokenFile') ||
       !['main', 'dev'].includes(c.sourceRef) || (c.destination === 'prod' && c.sourceRef !== 'main') ||
       c.repository !== 'pgorbachev/ikpk' || !Number.isSafeInteger(c.timeoutSeconds) || c.timeoutSeconds < 60 || c.timeoutSeconds > 14400) fail('untrusted-server-config');
   c.launcher = protectedPath(c.launcher); c.launcherConfig = protectedPath(join(dirname(c.launcher), 'config.json'));
@@ -39,7 +68,6 @@ export function readServerConfig(installed) {
   if (typeof c.buildLockFile !== 'string' || !isAbsolute(c.buildLockFile)) fail('untrusted-build-lock');
   const lock = lstatSync(c.buildLockFile);
   if (!lock.isFile() || lock.isSymbolicLink() || (lock.mode & 0o002)) fail('untrusted-build-lock');
-  c.releaseCiTokenFile = protectedPath(c.releaseCiTokenFile, false, true);
   const state = join(root, 'operations');
   if (!existsSync(state)) mkdirSync(state, { mode: 0o700 });
   protectedPath(state, true, true);
@@ -47,11 +75,31 @@ export function readServerConfig(installed) {
 }
 export function validateRequest(input, destination) {
   if (!plain(input) || !validId(input.id) || input.destination !== destination || !['publish', 'recover', 'rollback'].includes(input.action)) fail('invalid-request');
-  const allowed = ['id', 'destination', 'action', ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
+  const allowed = ['id', 'destination', 'action', ...(input.action === 'publish' ? ['sourceSha', 'sourceCiEvidence', ...(destination === 'prod' ? ['sourceTag'] : [])] : []), ...(input.action === 'rollback' ? ['releaseId', 'reason'] : [])];
   if (Object.keys(input).some((k) => !allowed.includes(k))) fail('invalid-request');
+  if (input.action === 'publish') {
+    if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
+    const evidence = input.sourceCiEvidence, ref = destination === 'prod' ? 'main' : 'dev';
+    if (!/^[0-9a-f]{40}$/.test(input.sourceSha ?? '') || !plain(evidence) || evidence.commit !== input.sourceSha || evidence.sourceRef !== ref) fail('source-evidence-identity-mismatch');
+    if (Object.keys(evidence).sort().join(',') !== 'artifactDigest,artifactZipBase64,commit,repository,runAttempt,runId,sourceRef,workflow' ||
+        evidence.repository !== 'pgorbachev/ikpk' || evidence.workflow !== '.github/workflows/release-tests.yml' ||
+        !Number.isSafeInteger(evidence.runId) || evidence.runId < 1 || !Number.isSafeInteger(evidence.runAttempt) || evidence.runAttempt < 1 ||
+        typeof evidence.artifactDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(evidence.artifactDigest) ||
+        typeof evidence.artifactZipBase64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(evidence.artifactZipBase64)) fail('invalid-source-evidence');
+    const zip = Buffer.from(evidence.artifactZipBase64, 'base64');
+    if (zip.length > 4 * 1024 * 1024) fail('request-too-large');
+    if (zip.toString('base64') !== evidence.artifactZipBase64 || `sha256:${createHash('sha256').update(zip).digest('hex')}` !== evidence.artifactDigest) fail('invalid-source-evidence-digest');
+    validateManifest(zip, evidence, input.sourceSha);
+    if (destination === 'prod' && input.sourceTag !== `prod-src-${input.sourceSha}`) fail('invalid-source-tag');
+    if (destination === 'demo' && Object.hasOwn(input, 'sourceTag')) fail('invalid-source-tag');
+  }
+  if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) fail('request-too-large');
   if (input.action === 'rollback' && (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.releaseId ?? '') ||
       typeof input.reason !== 'string' || !input.reason.trim() || input.reason.length > 500)) fail('invalid-request');
-  return Object.fromEntries(allowed.map((key) => [key, input[key]]));
+  const request = Object.fromEntries(allowed.map((key) => [key, input[key]]));
+  if (input.action === 'publish') request.sourceCiEvidence = Object.fromEntries(
+    ['repository', 'workflow', 'sourceRef', 'commit', 'runId', 'runAttempt', 'artifactDigest', 'artifactZipBase64'].map((key) => [key, input.sourceCiEvidence[key]]));
+  return request;
 }
 function atomicJson(path, value) {
   const temporary = `${path}.${randomUUID()}.new`;
@@ -77,12 +125,6 @@ export function publisherResult(run) {
 }
 const defaultPorts = {
   now: () => new Date().toISOString(),
-  resolveSource(c) {
-    const output = execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', 'ls-remote', '--exit-code', '--refs', '--', c.canonicalRepository, `refs/heads/${c.sourceRef}`],
-      { env: { ...safeEnv(), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' }, encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const match = new RegExp(`^([a-f0-9]{40})\\s+refs/heads/${c.sourceRef}$`).exec(output);
-    if (!match) fail('source-unavailable'); return match[1];
-  },
   start(c, id) {
     const run = spawnSync('/usr/bin/systemd-run', ['--user', '--quiet', `--unit=${unitName(c, id)}`,
       '--property=Type=exec', '--property=UMask=0077', '--property=KillMode=control-group', `--property=RuntimeMaxSec=${c.timeoutSeconds}`,
@@ -98,10 +140,6 @@ const defaultPorts = {
     if (values.LoadState === 'not-found') return { state: 'absent' };
     if (result.status !== 0 || !values.ActiveState) return { state: 'unknown' };
     return { state: values.ActiveState, exitCode: Number(values.ExecMainStatus) };
-  },
-  async fullTests(c, receipt) {
-    const { runReleaseCi } = await import('./release-ci.mjs');
-    return runReleaseCi(c, receipt);
   },
   publisher(c, receipt) {
     const request = receipt.request;
@@ -129,6 +167,18 @@ export function createServer(config, overrides = {}) {
     return { id, destination: receipt.request.destination, status: state, code };
   }
   async function submit(input) {
+    if (plain(input) && validId(input.id) && input.destination === config.destination) {
+      const existingDir = folder(config, input.id);
+      if (existsSync(existingDir)) {
+        protectedPath(existingDir, true, true);
+        if (!existsSync(join(existingDir, 'request.json'))) return { id: input.id, destination: config.destination, status: 'unknown', code: 'request-acceptance-incomplete' };
+        let request;
+        try { request = validateRequest(input, config.destination); } catch { fail('request-id-conflict'); }
+        const old = json(join(existingDir, 'request.json'));
+        if (JSON.stringify(old.request) !== JSON.stringify(request)) fail('request-id-conflict');
+        return status(request.id);
+      }
+    }
     const request = validateRequest(input, config.destination); const dir = folder(config, request.id);
     try { mkdirSync(dir, { mode: 0o700 }); } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -142,7 +192,7 @@ export function createServer(config, overrides = {}) {
     const sequence = existsSync(counterPath) ? json(counterPath).sequence + 1 : 1;
     if (!Number.isSafeInteger(sequence) || sequence < 1) fail('request-sequence-invalid');
     atomicJson(counterPath, { sequence });
-    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: await ports.resolveSource(config) } : {}) };
+    const receipt = { request, sequence, createdAt: ports.now(), ...(request.action === 'publish' ? { commit: request.sourceSha } : {}) };
     atomicJson(join(dir, 'request.json'), receipt);
     // Do not retry a start automatically if acknowledgement is lost.
     try { ports.start(config, request.id); }
@@ -162,11 +212,10 @@ export function createServer(config, overrides = {}) {
       const latest = existsSync(latestPath) ? json(latestPath).sequence : 0;
       if (!Number.isSafeInteger(receipt.sequence) || receipt.sequence <= latest) fail('stale-server-request');
       atomicJson(latestPath, { sequence: receipt.sequence, id });
-      let tests;
       if (receipt.request.action === 'publish') {
         if (!/^[a-f0-9]{40}$/.test(receipt.commit ?? '')) fail('invalid-source-sha');
-        tests = await ports.fullTests(config, { ...receipt, directory: dir });
-        atomicJson(join(dir, 'tests.json'), tests);
+        if (receipt.commit !== receipt.request.sourceSha) fail('source-tip-changed');
+        atomicJson(join(dir, 'tests.json'), receipt.request.sourceCiEvidence);
       }
       result = { id, destination: config.destination, ...await ports.publisher(config, receipt) };
     } catch (error) {
@@ -196,7 +245,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === 'execute' && validId(id)) result = await server.execute(id);
     else if (command === 'status' && validId(id)) result = server.status(id);
     else if (['submit', 'accept'].includes(command) && id === undefined) {
-      let input = ''; for await (const chunk of process.stdin) { input += chunk; if (Buffer.byteLength(input) > 2048) fail('request-too-large'); }
+      const chunks = []; let size = 0;
+      for await (const chunk of process.stdin) { size += chunk.length; if (size > 8 * 1024 * 1024) fail('request-too-large'); chunks.push(chunk); }
+      const input = Buffer.concat(chunks).toString('utf8');
       if (command === 'submit') {
         // Serialize only receipt allocation. Heavy work uses the shared VPS lock.
         const admission = spawnSync('/usr/bin/flock', ['--exclusive', join(c.state, 'admission.lock'), process.execPath, c.installed, 'accept'],

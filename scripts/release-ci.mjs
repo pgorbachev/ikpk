@@ -1,7 +1,7 @@
 /** Installed trusted adapter: validate canonical source CI for this exact SHA. */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { RELEASE_TEST_WORKFLOW, releaseTestArtifactName, validateReleaseTestEvidence } from './release-test-policy.mjs';
 
@@ -57,9 +57,9 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
       const digest = `sha256:${createHash('sha256').update(buffer).digest('hex')}`;
       if (artifact.digest !== digest) fail('release-ci-artifact-digest-mismatch');
       const archive = join(scratch, 'artifact.zip'); writeFileSync(archive, buffer, { mode: 0o600, flag: 'wx' });
-      const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384 }).trim().split('\n');
+      const names = execFileSync('/usr/bin/unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16384, timeout: 10000 }).trim().split('\n');
       if (names.length !== 1 || names[0] !== 'release-source-tests.json') fail('release-ci-untrusted-artifact');
-      return JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536 }));
+      return { manifest: JSON.parse(execFileSync('/usr/bin/unzip', ['-p', archive, names[0]], { encoding: 'utf8', maxBuffer: 65536, timeout: 10000 })), buffer };
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   }
   return async function run(config, receipt) {
@@ -85,17 +85,20 @@ export function createReleaseCi({ token, fetch: fetcher = globalThis.fetch, slee
     const artifacts = await list(`${API}/actions/runs/${expected.runId}/artifacts`, 'artifacts');
     const named = artifacts.filter((a) => a.name === releaseTestArtifactName(expected.runAttempt));
     if (named.length !== 1) fail('release-ci-manifest-missing');
-    const evidence = validateReleaseTestEvidence({ run: current, jobs, artifact: named[0], manifest: await manifest(named[0], receipt.directory), expected });
+    const downloaded = await manifest(named[0], receipt.directory);
+    const evidence = validateReleaseTestEvidence({ run: current, jobs, artifact: named[0], manifest: downloaded.manifest, expected });
     if (evidence.pendingScope.length) fail('release-ci-scope-not-approved');
     const finalRun = await request(`${API}/actions/runs/${expected.runId}`);
     identity(finalRun, receipt, config.sourceRef);
     if (finalRun.run_attempt !== expected.runAttempt || finalRun.status !== 'completed' || finalRun.conclusion !== 'success') {
       fail('release-ci-attempt-changed');
     }
-    return evidence;
+    return { ...evidence, artifactDigest: named[0].digest, artifactZipBase64: downloaded.buffer.toString('base64') };
   };
 }
 export async function runReleaseCi(config, receipt) {
-  const token = readFileSync(config.releaseCiTokenFile, 'utf8').trim();
+  let token;
+  try { token = execFileSync('gh', ['auth', 'token', '--hostname', 'github.com'], { encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+  catch { fail('release-ci-gh-auth-unavailable'); }
   return createReleaseCi({ token })(config, receipt);
 }
