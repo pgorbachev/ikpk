@@ -50,6 +50,10 @@ function api({ run = nativeRun, runs = [run], statuses, jobs, artifact = evidenc
   return async (url, options = {}) => {
     assert.equal(options.method ?? 'GET', 'GET', 'source CI inspection must be read-only');
     assert.equal(options.redirect, 'manual');
+    if (url.includes('/git/ref/heads/')) {
+      const ref = url.slice(url.lastIndexOf('/git/ref/heads/') + '/git/ref/heads/'.length);
+      return json({ ref: `refs/heads/${ref}`, object: { sha: run.head_sha } });
+    }
     if (url.includes('/workflows/')) return json({ total_count: runs.length, workflow_runs: runs });
     if (url.includes('/attempts/')) return json({ total_count: jobs.length, jobs });
     if (url.includes('/artifacts?')) return json({ total_count: artifact ? 1 : 0, artifacts: artifact ? [artifact] : [] });

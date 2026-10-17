@@ -196,6 +196,7 @@ test('production reserves an exact source tag before SSH and reuses it on a late
     const result = await runClient(['prod', '--sha', sha, '--request-id', id], {
       configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps: reserveOps,
       admitSource: async (source) => { events.push('admit'); assert.deepEqual(source, { destination: 'prod', sourceRef: 'main', sha }); return evidence; },
+      resolveSourceRef: async () => { events.push('ref'); return sha; },
       call(_config, action, request) {
         events.push(action); assert.equal(action, 'submit');
         assert.equal(request.sourceTag, tag); assert.equal(request.sourceSha, sha);
@@ -206,8 +207,8 @@ test('production reserves an exact source tag before SSH and reuses it on a late
     assert.equal(result.status, 'success');
   }
   assert.deepEqual(events, [
-    'admit', `resolve:${tag}`, `create:${tag}:${sha}`, `submit`,
-    'admit', `resolve:${tag}`, 'submit',
+    'admit', 'ref', `resolve:${tag}`, `create:${tag}:${sha}`, 'ref', 'submit',
+    'admit', 'ref', `resolve:${tag}`, 'ref', 'submit',
   ]);
 });
 
@@ -238,28 +239,45 @@ test('production requires the protected ref to match after CI and immediately be
   ]);
 
   const f = clientFixture(t, 'prod'), events = [];
+  let refReads = 0;
   const result = await runClient(['prod', '--sha', sha], {
     configHome: f.home, stateHome: f.stateHome, announce() {},
     admitSource: async () => { events.push('ci'); return sourceEvidence('main', sha); },
-    resolveSourceRef: async () => { events.push('ref'); return sha; },
+    resolveSourceRef: async () => { events.push('ref'); refReads++; return sha; },
     tagOps: { resolve() { events.push('tag-read'); return null; }, create() { events.push('tag-create'); } },
     call(_config, action) { if (action === 'submit') events.push('ssh-submit'); return { id: randomUUID(), destination: 'prod', status: 'success' }; },
   });
   assert.equal(result.status, 'success');
-  assert.deepEqual(events, ['ci', 'ref', 'tag-read', 'tag-create', 'ssh-submit']);
+  assert.deepEqual(events, ['ci', 'ref', 'tag-read', 'tag-create', 'ref', 'ssh-submit']);
+  assert.equal(refReads, 2);
+
+  const moved = clientFixture(t, 'prod'), movedEvents = []; let checks = 0, movedSubmits = 0, tagCreates = 0;
+  let reason = null;
+  try { await runClient(['prod', '--sha', sha], {
+    configHome: moved.home, stateHome: moved.stateHome, announce() {},
+    admitSource: async () => { movedEvents.push('ci'); return sourceEvidence('main', sha); },
+    resolveSourceRef: async () => { movedEvents.push('ref'); return ++checks === 1 ? sha : '8'.repeat(40); },
+    tagOps: { resolve() { movedEvents.push('tag-read'); return null; }, create() { movedEvents.push('tag-create'); tagCreates++; } },
+    call(_config, action) { if (action === 'submit') movedSubmits++; return { id: randomUUID(), destination: 'prod', status: 'success' }; },
+  }); } catch (error) { reason = error.message; }
+  assert.equal(reason, 'source-ref-changed');
+  assert.deepEqual(movedEvents, ['ci', 'ref', 'tag-read', 'tag-create', 'ref']);
+  assert.equal(tagCreates, 1); assert.equal(movedSubmits, 0);
 });
 
 test('a persisted production request ID and SHA reuse admitted evidence without repeat admission or tag mutation', async (t) => {
   const f = clientFixture(t, 'prod'), sha = 'c'.repeat(40), changedSha = 'd'.repeat(40), id = randomUUID();
   const evidence = sourceEvidence('main', sha), tag = `prod-src-${sha}`;
-  let admissions = 0, tagReads = 0, tagCreates = 0, submits = 0;
+  let admissions = 0, tagReads = 0, tagCreates = 0, submits = 0, statusCalls = 0;
   const tagOps = {
     resolve(name) { assert.equal(name, tag); tagReads++; return sha; },
     create() { tagCreates++; throw new Error('matching tag must be reused'); },
   };
   const common = { configHome: f.home, stateHome: f.stateHome, announce() {}, sleep: async () => {}, tagOps,
+    resolveSourceRef: async () => sha,
     admitSource: async () => { admissions++; return evidence; },
     call(_config, action, request) {
+      if (action === 'status') { statusCalls++; return { id, destination: 'prod', status: 'success' }; }
       if (action === 'submit') {
         submits++; assert.equal(request.sourceSha, sha); assert.equal(request.sourceTag, tag);
         assert.deepEqual(request.sourceCiEvidence, evidence);
@@ -272,7 +290,7 @@ test('a persisted production request ID and SHA reuse admitted evidence without 
     admitSource: async () => { admissions++; throw new Error('existing request must reuse saved proof'); },
     tagOps: { resolve() { tagReads++; throw new Error('existing request must not touch tag operations'); }, create() { tagCreates++; } },
   });
-  assert.equal(admissions, 1); assert.equal(tagReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 2);
+  assert.equal(admissions, 1); assert.equal(tagReads, 1); assert.equal(tagCreates, 0); assert.equal(submits, 1); assert.equal(statusCalls, 1);
 
   let changedSubmits = 0, changedAdmissions = 0, changedTagReads = 0;
   await assert.rejects(runClient(['prod', '--sha', changedSha, '--request-id', id], { ...common,
@@ -496,4 +514,23 @@ test('the admitted proof is durable before SSH starts and is not resolved by the
   } });
   assert.equal((await server.submit(f.request)).status, 'accepted');
   assert.equal(f.events.length, 1);
+});
+
+test('default server publisher hands its validated proof to the installed launcher by private file', async (t) => {
+  const f = fixture(t), launcher = join(f.root, 'publisher-launcher.mjs'), launcherConfig = join(f.root, 'publisher-config.json');
+  const marker = join(f.root, 'launcher-handoff.json');
+  writeFileSync(launcher, `import{readFileSync,writeFileSync}from'node:fs';
+const args=process.argv.slice(2),i=args.indexOf('--source-proof-file'),proofPath=i<0?null:args[i+1];
+writeFileSync(${JSON.stringify(marker)},JSON.stringify({args,proofPath,proof:proofPath?JSON.parse(readFileSync(proofPath,'utf8')):null}));
+process.stdout.write(JSON.stringify({status:'success',code:'published'}));`, { mode: 0o700 });
+  writeFileSync(launcherConfig, '{}', { mode: 0o600 });
+  const config = { ...f.config, launcher, launcherConfig, canonicalRepository: 'https://github.com/pgorbachev/ikpk.git', timeoutSeconds: 60 };
+  const { publisher, ...ports } = f.ports;
+  const server = createServer(config, { ...ports, start() {} });
+  await server.submit(f.request);
+  await server.execute(f.request.id);
+  const handoff = JSON.parse(readFileSync(marker, 'utf8'));
+  assert.ok(handoff.args.includes('--source-proof-file'), 'installed publisher must receive proof via bounded file channel');
+  assert.equal(handoff.proofPath, join(f.state, f.request.id, 'tests.json'));
+  assert.deepEqual(handoff.proof, f.request.sourceCiEvidence);
 });
