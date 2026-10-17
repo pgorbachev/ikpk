@@ -334,6 +334,30 @@ test('failed CMS disk materialization preserves the partial private stage and bl
   assert.deepEqual(f.events, [], 'a failed or blocked materialization never invokes a worker');
 });
 
+test('partial CMS staging fsyncs the state directory after incoming mkdir and before archive writes', async (t) => {
+  const f = serverFixture(t), bytes = cmsArchive(t), request = {
+    ...validServerRequest(randomUUID(), bytes), sourceCiEvidence: validSourceProof(),
+  };
+  const events = [], incoming = join(f.state, '.incoming');
+  const server = createServer(f.config, {
+    now: () => '2026-10-17T12:00:00.000Z', start: (_, id) => f.events.push(`start:${id}`),
+    service: () => ({ state: 'active' }), cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }),
+    syncDirectory(path) {
+      events.push(`sync:${path}`);
+      assert.equal(path, f.state, 'the parent directory entry for .incoming must be made durable');
+      assert.equal(existsSync(incoming), true, '.incoming must exist before its parent is synced');
+    },
+    stageCmsArchive(path, archiveBytes) {
+      events.push('stage');
+      writeFileSync(path, archiveBytes.subarray(0, 12), { mode: 0o600, flag: 'wx' });
+      throw new Error('synthetic-stage-failure');
+    },
+  });
+  await assert.rejects(server.submit(request, bytes), /synthetic-stage-failure/);
+  assert.deepEqual(events, [`sync:${f.state}`, 'stage']);
+  assert.deepEqual(readdirSync(incoming).sort(), ['cms-artifact.zip', 'request.json']);
+});
+
 test('unmarked durable .incoming stage is visible as incomplete and blocks another publish UUID', async (t) => {
   const f = serverFixture(t), incoming = join(f.state, '.incoming'), id = randomUUID();
   mkdirSync(incoming, { mode: 0o700 });
@@ -414,6 +438,33 @@ test('execute refuses CMS receipt before marking execution until the activation 
   assert.equal(f.events.includes('publisher'), false, 'publisher is never invoked');
   assert.deepEqual(readFileSync(receiptPath), receiptBytes, 'accepted receipt remains byte-for-byte intact');
   assert.deepEqual(readFileSync(archivePath), bytes, 'staged CMS archive remains byte-for-byte intact');
+});
+
+test('activation refusal remains visible in status without service inspection or execution markers', async (t) => {
+  const f = serverFixture(t), bytes = cmsArchive(t), id = randomUUID();
+  const request = { ...validServerRequest(id, bytes), sourceCiEvidence: validSourceProof() };
+  let serviceCalls = 0, publisherCalls = 0;
+  const server = createServer(f.config, {
+    now: () => '2026-10-17T12:00:00.000Z', cmsRuntime: () => ({ nodeMajor: 22, nodeAbi: '127' }),
+    start() { throw new Error('cms-activation-adapter-not-integrated'); },
+    service() { serviceCalls++; return { state: 'active' }; },
+    publisher() { publisherCalls++; return { status: 'success' }; },
+  });
+  const submission = await server.submit(request, bytes);
+  assert.equal(submission.code, 'cms-activation-adapter-not-integrated');
+  const operation = join(f.state, id), receiptPath = join(operation, 'request.json');
+  const receiptBytes = readFileSync(receiptPath), receipt = JSON.parse(receiptBytes), archivePath = receipt.cmsArchivePath;
+  assert.ok(archivePath); assert.deepEqual(readFileSync(archivePath), bytes);
+
+  const status = server.status(id);
+  assert.deepEqual(status, { id, destination: 'demo', status: 'refused', code: 'cms-activation-adapter-not-integrated' });
+  assert.equal(serviceCalls, 0, 'status preserves the guard instead of probing a worker that must not exist');
+  assert.equal(publisherCalls, 0);
+  assert.equal(existsSync(join(operation, 'execution.json')), false);
+  assert.equal(existsSync(join(f.state, 'last-started.json')), false);
+  assert.equal(existsSync(join(operation, 'tests.json')), false);
+  assert.deepEqual(readFileSync(receiptPath), receiptBytes, 'refusal leaves the accepted receipt unchanged');
+  assert.deepEqual(readFileSync(archivePath), bytes, 'refusal leaves the staged archive unchanged');
 });
 
 test('the production gateway frame reader waits for EOF, then admits those exact bytes under an injected worker', async (t) => {
