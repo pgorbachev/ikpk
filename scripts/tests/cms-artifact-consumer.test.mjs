@@ -37,7 +37,7 @@ function fixture(t) {
   return { root };
 }
 
-function cmsArchive(t, { source = { sha, ref: sourceRef, runId, runAttempt }, files, manifestMutator } = {}) {
+function cmsArchive(t, { source = { sha, ref: `refs/heads/${sourceRef}`, runId, runAttempt }, files, manifestMutator } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-cms-zip-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const payload = files ?? {
@@ -65,7 +65,7 @@ function cmsArchive(t, { source = { sha, ref: sourceRef, runId, runAttempt }, fi
   const manifest = {
     schemaVersion: 1, source,
     packageLockSha256: createHash('sha256').update(lock).digest('hex'),
-    runtime: { nodeVersion: 'v22.16.0', nodeMajor: 22, nodeAbi: '127', npmVersion: '10.8.2' },
+    runtime: { nodeVersion: 'v22.23.3', nodeMajor: 22, nodeAbi: '127', npmVersion: '10.8.2' },
     files: filesManifest,
   };
   manifestMutator?.(manifest);
