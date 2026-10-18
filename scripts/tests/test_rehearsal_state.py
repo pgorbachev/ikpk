@@ -117,7 +117,7 @@ class RehearsalStateTests(unittest.TestCase):
             self.state.require_restore_allowed("op-commit-window")
         with self.assertRaisesRegex(RehearsalRefusal, "after global commit"):
             self.state.recover("op-commit-window", lambda: True, lambda: True)
-        with self.assertRaisesRegex(RehearsalRefusal, "already durable"):
+        with self.assertRaisesRegex(RehearsalRefusal, "terminal operation"):
             self.state.commit("op-commit-window")
         self.assertTrue(self.state.marker_path.exists())
         self.state.finalize("op-commit-window", lambda: True)
@@ -154,6 +154,20 @@ class RehearsalStateTests(unittest.TestCase):
         self.assertFalse(self.state.marker_path.exists())
         rows = [__import__("json").loads(line) for line in self.state.journal_path.read_text().splitlines()]
         self.assertEqual([row["record"] for row in rows].count("recovered"), 1)
+
+    def test_terminal_operation_cannot_commit_or_reopen_while_another_operation_owns_marker(self):
+        self.state.begin("op-terminal-a", SOURCE_SHA, OLD_PAIR)
+        self.state.confirm_fence("op-terminal-a", lambda: True)
+        with self.assertRaisesRegex(RehearsalRefusal, "reopen is not verified"):
+            self.state.recover("op-terminal-a", lambda: True, lambda: False)
+        self.state.recover("op-terminal-a", lambda: False, lambda: True)
+        self.state.begin("op-terminal-b", "b" * 40, OLD_PAIR)
+        effects = []
+        with self.assertRaisesRegex(RehearsalRefusal, "maintenance marker"):
+            self.state.recover("op-terminal-a", lambda: True, lambda: effects.append("reopen") or True)
+        self.assertEqual(effects, [])
+        with self.assertRaises(RehearsalRefusal):
+            self.state.commit("op-terminal-a")
 
     def test_short_journal_writes_are_completed_and_incomplete_tail_is_repaired(self):
         os_module = __import__("os")

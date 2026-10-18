@@ -218,6 +218,26 @@ class RehearsalState:
     def _is_recovered(self, operation_id: str) -> bool:
         return any(row.get("record") == "recovered" for row in self._operation_rows(operation_id))
 
+    def _is_terminal(self, operation_id: str) -> bool:
+        return self._is_committed(operation_id) or self._is_recovered(operation_id)
+
+    def _require_mutable(self, operation_id: str) -> None:
+        if self._is_terminal(operation_id):
+            raise RehearsalRefusal("terminal operation cannot accept further mutations")
+
+    def assert_terminal_reopen_allowed(self, operation_id: str) -> None:
+        with self.lock():
+            if not self._is_terminal(operation_id):
+                raise RehearsalRefusal("only a terminal operation may reopen writers")
+            if self._read_marker() is not None:
+                self._owned(operation_id)
+                return
+            history = self._journal()
+            starts = {row["operationId"] for row in history if row.get("record") == "start"}
+            terminal = {row["operationId"] for row in history if row.get("record") in ("committed", "recovered")}
+            if starts - terminal:
+                raise RehearsalRefusal("another unfinished operation owns recovery")
+
     def begin(self, operation_id: str, source_sha: str, old_pair: dict) -> dict:
         self._validate_identity(operation_id, source_sha)
         if not isinstance(old_pair, dict) or not old_pair:
@@ -227,6 +247,7 @@ class RehearsalState:
             if current is not None:
                 if current.get("operationId") != operation_id:
                     raise RehearsalRefusal("unfinished operation owns the maintenance marker")
+                self._require_mutable(operation_id)
                 if current.get("sourceSha") != source_sha:
                     raise RehearsalRefusal("operation ID is already bound to another source SHA")
                 if not any(row.get("record") == "start" and row.get("sourceSha") == source_sha
@@ -282,6 +303,7 @@ class RehearsalState:
     def confirm_fence(self, operation_id: str, verify_closed: Callable[[], bool]) -> dict:
         with self.lock():
             current = self._owned(operation_id)
+            self._require_mutable(operation_id)
             if current["committed"]:
                 raise RehearsalRefusal("committed operation cannot re-enter maintenance")
             if not verify_closed():
@@ -293,6 +315,7 @@ class RehearsalState:
     def mark_cms_activated(self, operation_id: str) -> dict:
         with self.lock():
             current = self._owned(operation_id)
+            self._require_mutable(operation_id)
             if current["fence"] != "closed":
                 raise RehearsalRefusal("CMS activation requires a verified writer fence")
             current["cmsActivated"] = True
@@ -302,6 +325,7 @@ class RehearsalState:
     def accept_new_pair(self, operation_id: str, new_pair: dict) -> dict:
         with self.lock():
             current = self._owned(operation_id)
+            self._require_mutable(operation_id)
             if current["committed"]:
                 raise RehearsalRefusal("new pair is closed after global commit")
             if current["fence"] != "closed" or not current.get("cmsActivated"):
@@ -338,8 +362,7 @@ class RehearsalState:
     def commit(self, operation_id: str) -> dict:
         with self.lock():
             current = self._owned(operation_id)
-            if self._is_committed(operation_id):
-                raise RehearsalRefusal("global commit is already durable")
+            self._require_mutable(operation_id)
             if current["fence"] != "closed" or not current["cmsActivated"] or not current["newPairAccepted"]:
                 raise RehearsalRefusal("global commit requires accepted CMS and static pair")
             self._append({"version": 1, "record": "committed", "operationId": operation_id,
@@ -360,8 +383,10 @@ class RehearsalState:
     def finalize(self, operation_id: str, verify_reopened: Callable[[], bool]) -> dict:
         with self.lock():
             if self._read_marker() is None:
-                if self._is_committed(operation_id) and verify_reopened():
-                    return {"operationId": operation_id, "committed": True, "phase": "committed"}
+                self.assert_terminal_reopen_allowed(operation_id)
+                if verify_reopened():
+                    return {"operationId": operation_id, "committed": self._is_committed(operation_id),
+                            "phase": "committed" if self._is_committed(operation_id) else "recovered"}
                 raise RehearsalRefusal("operation cannot be finalized without its maintenance marker")
             current = self._owned(operation_id)
             if not self._is_committed(operation_id):
@@ -378,6 +403,7 @@ class RehearsalState:
             if self._is_committed(operation_id):
                 raise RehearsalRefusal("recovery cannot restore the database after global commit")
             if self._is_recovered(operation_id):
+                self.assert_terminal_reopen_allowed(operation_id)
                 if not verify_reopened():
                     raise RehearsalRefusal("old CMS writer reopen is not verified")
                 if self.marker_path.exists():
