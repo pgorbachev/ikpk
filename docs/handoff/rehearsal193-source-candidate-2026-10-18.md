@@ -18,8 +18,18 @@ tag, or release was changed while preparing it.
 | #329 dependencies used by #331 | Kept `cms/scripts/institute-method-author-classification.mjs`, `cms/scripts/normalize-null-documents-state.mjs`, and their focused tests: #331 migration steps import these helpers. This runtime dependency does not imply that the standalone SQL importer is required. |
 | #330 and #331 | Kept the migration workflow documentation and the unified data-migration runner, plan, audit tools and tests. Fresh-main `AGENTS.md` stays in place. |
 | #332 product files | Kept only `web/astro.config.mjs`, `web/src/components/topnav/TopNav.astro`, `web/src/components/Footer.astro`, `web/src/components/home/sections/CtaBand.astro`, `web/src/lib/home.ts`, and `web/src/styles/base.css`. |
+| #332 product regression evidence | Kept `web/tests/home-snapshot-clock.test.ts`, `web/tests/footer-snapshot-clock.render.test.ts`, their `vitest.render.config.ts` registration, and `web/tests/evidence/home-snapshot-clock.md`; these prove home and footer dates use the captured snapshot date under an advanced build clock. Kept `web/tests/evidence/visual-baseline-reconciliation.md` as the recorded visual review for the product layout/content deltas. These were omitted by the six-source-file extraction and are restored because they are product regression gates/evidence, not deployment machinery. |
 | #335 narrow runner correction | Kept only `cms/scripts/run-data-migrations.mjs`, `cms/database/migrations/plan.json`, and `cms/tests/data-migration-runner-behavior.test.js`: closed-load random secrets, loopback/ephemeral port, capture-token bootstrap disabled, ambient environment restoration, and source preflight before dependency fingerprinting. Plan integrity records the runner's exact hash. No release-artifact or CI attachment machinery came with it. |
-| #332–#335 release/deploy machinery | Excluded wholesale except the six #332 product files and the three #335 runner files above. In particular, no `scripts/deploy*`, publication gateway/lifecycle, `scripts/build-cms-artifact.sh`, or `.github/workflows/release-tests.yml` was carried over. The separate SQLite reader in #332 (`scripts/lib/server-capture-sqlite.mjs`) only feeds that commit's server-capture bundle and tests; the rehearsal migration uses the runner's own SQLite reader, so the bundle helper is not included. |
+| #332–#335 release/deploy machinery | Excluded wholesale except the six #332 product files and the three #335 runner files above. In particular, no `scripts/deploy*`, publication gateway/lifecycle, `scripts/build-cms-artifact.sh`, or `.github/workflows/release-tests.yml` was carried over. The separate SQLite reader in #332 (`scripts/lib/server-capture-sqlite.mjs`) and its bundle proof are not in this source candidate. A future minimal operator publication bridge for the frozen Strapi SQLite snapshot must retain the read-only/quiescence and snapshot-metadata proof that this helper supplies; that dependency needs its own approved concise plan. It does not imply taking the #332 gateway or lifecycle wholesale. |
+
+The old `web/tests/publication-{catalog,content,schedule,widgets}.spec.ts` tests are
+excluded with their publication-candidate harness. They import `helpers/publication-candidate`,
+which assembled a deploy-only candidate and was removed with that retired release path;
+they are not in the active Playwright `testMatch` or required `Tests` workflow. Their
+product assertions overlap current source/build gates for article controls, seminar
+schedule fields and filters, external-widget output/configuration, SEO and navigation.
+This does not provide a browser-level assertion over a future frozen SQLite publication
+candidate; add that bounded check only with the separately approved capture bridge plan.
 
 `.github/workflows/test.yml` retains the current unit/build checks, runs on pushes to
 `main` and `dev`, and includes the excluded-from-parallel Docker provisioning tests as
@@ -39,5 +49,6 @@ being regenerated through the repository's established pinned-fixture → review
 maintainer generators, with the #324 policy tests kept as gates.
 
 This revision remains a source candidate pending full review and canonical `Tests`
-workflow on its exact SHA. Local tests and a static build do not admit it for rehearsal
-or production. Production CMS, site, and hosts remain untouched.
+workflow on its exact SHA. It does not yet include the operator commands or frozen-DB
+capture bridge needed to rehearse. Local tests and a static build do not admit it for
+rehearsal or production. Production CMS, site, and hosts remain untouched.
