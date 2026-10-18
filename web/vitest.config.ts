@@ -86,9 +86,9 @@ export default defineConfig({
       'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
-      // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
-      // контейнера не укладывается в лимит хука и валит обязательный прогон.
-      // Локально: npx vitest run --config vitest.provision.config.ts
+      // Одноразовые Docker-контейнеры провижининга. Запускаются последовательно
+      // отдельным обязательным шагом workflow Tests, чтобы не смешивать их очистку
+      // с параллельным набором; конфиг задаёт bounded срок и артефакты диагностики.
       'tests/trial-environment.test.ts',
       'tests/server-provisioning-container.test.ts',
       'tests/server-provisioning-verify.test.ts',
