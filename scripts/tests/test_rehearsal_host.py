@@ -89,7 +89,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
             self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 1800)
             self.assertEqual(run_as_cms.call_args.kwargs["environment"],
-                             {"NODE_OPTIONS": "--max-old-space-size=1024"})
+                             {"NODE_OPTIONS": "--max-old-space-size=1536"})
 
     def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
