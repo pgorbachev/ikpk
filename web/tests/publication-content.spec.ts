@@ -1,10 +1,11 @@
 import { candidateRoute, candidateSearchSubject } from './helpers/publication-candidate-data';
 import AxeBuilder from '@axe-core/playwright';
-import { test, expect, actualTemplates, candidate } from './helpers/publication-candidate';
+import { test, expect, actualTemplates, candidate, candidateSiteOrigin } from './helpers/publication-candidate';
 import { isCurrentOrFuture, type ScheduleWindowEntry } from '../src/lib/schedule-window';
 
 test('candidate templates have content, SEO, navigable internal links and centered section titles', async ({ page }) => {
   test.setTimeout(180_000);
+  const siteOrigin = candidateSiteOrigin();
   let titles = 0;
   for (const route of actualTemplates()) {
     expect((await page.goto(route))?.status(), route).toBe(200);
@@ -12,11 +13,11 @@ test('candidate templates have content, SEO, navigable internal links and center
     await expect(page.locator('h1').first()).toBeVisible();
     expect((await page.title()).trim().length, route).toBeGreaterThan(0);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S/);
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://ikpk.su${route === '/' ? '/' : route}`);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${siteOrigin}${route === '/' ? '/' : route}`);
     const links = await page.locator('main a[href^="/"]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')!));
     const { pages } = candidate();
     for (const href of links) {
-      const url = new URL(href, 'https://ikpk.su');
+      const url = new URL(href, siteOrigin);
       if (url.pathname.includes('.') || url.pathname === '/demo-zayavka') continue;
       expect(pages.some((entry) => entry.route === url.pathname.replace(/\/$/, '') || (entry.route === '/' && url.pathname === '/')), `${route} links to missing ${href}`).toBe(true);
     }

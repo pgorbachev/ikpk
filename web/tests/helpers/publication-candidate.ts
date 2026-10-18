@@ -27,6 +27,15 @@ export function candidate() {
   return { snapshot, treeDir, pages, chatLoaderSrc: trigger ? attr(trigger, 'data-chat-loader-src') : null };
 }
 
+export function candidateSiteOrigin(): string {
+  if (process.env.PUBLICATION_STAGING_CAPTURE !== '1') return 'https://ikpk.su';
+  const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
+  if (!snapshotDir) throw new Error('staging capture context is missing');
+  const capture = JSON.parse(readFileSync(`${snapshotDir}/capture-manifest.json`, 'utf8')) as Record<string, unknown>;
+  if (capture.siteUrl !== 'https://193.124.115.99') throw new Error('staging capture names an unexpected serving origin');
+  return capture.siteUrl;
+}
+
 /** Staging accepts the sealed SQLite demo contract; production's live-journal reader stays unchanged. */
 function readStagingSnapshot(snapshotDir: string, treeDir: string): DemoPublicationSnapshot {
   const snapshot = JSON.parse(readFileSync(`${snapshotDir}/snapshot.json`, 'utf8')) as DemoPublicationSnapshot;
@@ -34,7 +43,7 @@ function readStagingSnapshot(snapshotDir: string, treeDir: string): DemoPublicat
   const capture = JSON.parse(captureBytes.toString('utf8')) as Record<string, unknown>;
   const proof = snapshot.captureProof;
   const release = JSON.parse(readFileSync(`${treeDir}/release.json`, 'utf8')) as Record<string, unknown>;
-  if (snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
+  if (capture.siteUrl !== 'https://193.124.115.99' || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
       snapshot.sourcePolicy !== 'demo-publication-only' || snapshot.sourceAge !== 'untracked' ||
       snapshot.pinned || !proof || proof.version !== 1 || proof.method !== 'quiesced-sqlite-backup' ||
       proof.sourceId !== 'demo193-cms' || typeof proof.captureId !== 'string' || proof.captureId !== capture.operationId ||

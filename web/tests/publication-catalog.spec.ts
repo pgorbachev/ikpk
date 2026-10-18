@@ -1,4 +1,4 @@
-import { test, expect, candidate } from './helpers/publication-candidate';
+import { test, expect, candidate, candidateSiteOrigin } from './helpers/publication-candidate';
 
 type Article = { slug: string; title: string; body_text?: string; published_at?: string | null };
 function articles() {
@@ -27,7 +27,7 @@ test('candidate catalog searches all captured articles, shares query and resets'
   await page.goto(`/statyi?q=${encodeURIComponent(query)}`);
   await expect(search).toHaveValue(query);
   await expect(cards).toHaveCount(Math.min(6, matches.length));
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://ikpk.su/statyi');
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${candidateSiteOrigin()}/statyi`);
   await search.fill('');
   await expect(cards).toHaveCount(Math.min(6, rows.length));
   const pagination = page.locator('[data-testid="articles-pagination"]');

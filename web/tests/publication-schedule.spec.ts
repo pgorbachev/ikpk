@@ -4,9 +4,11 @@ import { monthKeys, monthOptions } from '../src/lib/schedule-months';
 
 type Entry = ScheduleWindowEntry & { status: string; seminar: { slug: string }; city?: { name: string }; name?: string };
 const slug = (text: string) => text.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '-').replace(/^-+|-+$/g, '');
+const cityName = (entry: Entry) => typeof entry.city === 'string' ? entry.city : entry.city?.name ?? '';
 function entries() {
   const { snapshot } = candidate();
-  return { today: snapshot.referenceDate, rows: (snapshot.content.types.schedule_entries as unknown as Entry[])
+  return { today: snapshot.referenceDate, rows: (snapshot.content.types.schedule_entries as unknown as Record<string, unknown>[])
+    .map((entry) => entry as Entry)
     .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, snapshot.referenceDate))
     .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))) };
 }
@@ -38,9 +40,9 @@ test('@month-city @month-empty-state @month-page-reset candidate schedule combin
     const key = monthKeys(rows[0], today)[0];
     await month.selectOption(key);
     await expect(page.locator(`${item}:visible`)).toHaveCount(Math.min(25, rows.filter((row) => monthKeys(row, today).includes(key)).length));
-    const chosenCity = rows[0].city?.name ?? 'unknown';
+    const chosenCity = cityName(rows[0]) || 'unknown';
     await city.selectOption(slug(chosenCity));
-    const expected = rows.filter((row) => monthKeys(row, today).includes(key) && (row.city?.name ?? 'unknown') === chosenCity);
+    const expected = rows.filter((row) => monthKeys(row, today).includes(key) && (cityName(row) || 'unknown') === chosenCity);
     await expect(page.locator(`${item}:visible`)).toHaveCount(Math.min(25, expected.length));
     const title = (await page.locator(`${item}:visible [data-testid="schedule-card-title"]`).first().innerText()).trim();
     await search.fill(title.toLowerCase().slice(0, 18));
