@@ -1,12 +1,13 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { getPage, cleanBodyHtml } from '../lib/data';
+import { getPage, cleanBodyHtml, getTeachers, pedagogicalStaff } from '../lib/data';
 import RichContent from '../components/RichContent.astro';
 
 const page = getPage('svedeniya-ob-obrazovatelnoy-organizatsii');
 const title = page?.seo_title || 'Сведения об образовательной организации — ИКПК';
 const description = page?.seo_description || 'Сведения об образовательной организации ИКПК.';
+const staff = pedagogicalStaff(getTeachers());
 ---
 
 <BaseLayout title={title} description={description}>
@@ -28,6 +29,19 @@ const description = page?.seo_description || 'Сведения об образо
       ) : (
         <p class="text-muted">Информация будет добавлена позже.</p>
       )}
+
+      <section class="pedagogical-staff section" aria-labelledby="pedagogical-staff-heading" data-pedagogical-staff>
+        <h2 id="pedagogical-staff-heading" class="section-title">Педагогический состав</h2>
+        {staff.length > 0 ? (
+          <ul>
+            {staff.map((person) => (
+              <li><a href={`/specialisty/${person.slug}`}>{person.name}</a></li>
+            ))}
+          </ul>
+        ) : (
+          <p class="text-muted">Сведения о педагогическом составе будут добавлены позже.</p>
+        )}
+      </section>
     </section>
   </div>
 </BaseLayout>

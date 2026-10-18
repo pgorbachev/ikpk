@@ -178,6 +178,8 @@ export interface ContractModule {
    * «нарушение обнаруживается», но и «сборка завершается неуспехом».
    */
   assertSnapshotContract(snapshot: Snapshot): void;
+  /** Explicitly pinned demo193-only acceptance; never used by ordinary publication gates. */
+  assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourceSqlSha256: string): void;
 }
 
 // ------------------------------------------------------- журнал происхождения

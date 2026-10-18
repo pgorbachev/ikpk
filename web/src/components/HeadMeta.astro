@@ -11,6 +11,22 @@ interface Props {
   preloadHero?: boolean;
 }
 const { title, description, ogImage, noindex = false, schema, preloadHero = false } = Astro.props;
+const isDemo193Profile = import.meta.env.DEMO_PROFILE === 'demo193';
+
+function scopeSchemaToSite(value: unknown, key?: string): unknown {
+  const siteOrigin = Astro.site?.origin;
+  if (!isDemo193Profile || !siteOrigin || siteOrigin === 'https://ikpk.su') return value;
+  if (typeof value === 'string') {
+    return key === 'url' || key === '@id'
+      ? value.replace(/^https:\/\/ikpk\.su(?=\/|$)/, siteOrigin)
+      : value;
+  }
+  if (Array.isArray(value)) return value.map((item) => scopeSchemaToSite(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([childKey, item]) => [childKey, scopeSchemaToSite(item, childKey)]));
+  }
+  return value;
+}
 
 // Адреса старого сайта — без завершающего слэша. Astro по умолчанию отдаёт
 // pathname со слэшем (/kontakty/), и канонический адрес всех страниц разошёлся
@@ -44,7 +60,7 @@ import { serializeJsonLd } from '../lib/json-ld.js';
 <meta name="description" content={description} />
 <link rel="canonical" href={canonicalURL.href} />
 
-{noindex && <meta name="robots" content="noindex, nofollow" />}
+{(noindex || isDemo193Profile) && <meta name="robots" content="noindex, nofollow" />}
 
 <!-- Open Graph -->
 <meta property="og:type" content="website" />
@@ -63,4 +79,4 @@ import { serializeJsonLd } from '../lib/json-ld.js';
 
 {preloadHero && <link rel="preload" href="/hero-main.svg" as="image" fetchpriority="high" />}
 
-{schema && <script type="application/ld+json" set:html={serializeJsonLd(schema)} />}
+{schema && <script type="application/ld+json" set:html={serializeJsonLd(scopeSchemaToSite(schema))} />}

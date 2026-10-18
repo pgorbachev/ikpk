@@ -8,6 +8,14 @@ import {
   FORBIDDEN_URL_SCHEMES,
   NESTED_BROWSING_HAZARDS,
 } from './closed-matrix.js';
+import { DEMO193_ORIGIN } from '../../../scripts/demo193-profile.mjs';
+
+type BuildProfile = 'production' | 'demo';
+const PRODUCTION_ORIGIN = 'https://ikpk.su';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export interface HazardHit {
   tag: string;
@@ -275,7 +283,10 @@ const SECURITY_URL_ATTRS = new Set([
 export const MAP_IFRAME_SRC = `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent('Санкт-Петербург, Новочеркасский пр-т, д. 22/15, Лит А, помещение 4Н')}&z=16`;
 export const TEST_MAP_B_SRC = 'https://yandex.ru/map-widget/v1/?text=other&z=1';
 
-export type DynamicAttrProjection = { exact: string } | { pattern: RegExp };
+export type DynamicAttrProjection =
+  | { exact: string }
+  | { pattern: RegExp }
+  | { patternByBuild: Record<BuildProfile, RegExp> };
 
 /**
  * Test-owned source-slot → output projection для security-relevant dynamic attrs.
@@ -284,7 +295,12 @@ export type DynamicAttrProjection = { exact: string } | { pattern: RegExp };
 export const DYNAMIC_ATTR_PROJECTION: Record<string, DynamicAttrProjection> = {
   'src=expression:mapSrc': { exact: MAP_IFRAME_SRC },
   'src=expression:testMapB': { exact: TEST_MAP_B_SRC },
-  'href=expression:canonicalURL.href': { pattern: /^https:\/\/ikpk\.su(?:\/.*)?$/ },
+  'href=expression:canonicalURL.href': {
+    patternByBuild: {
+      production: /^https:\/\/ikpk\.su(?:\/.*)?$/,
+      demo: new RegExp(`^${escapeRegExp(DEMO193_ORIGIN)}(?:/.*)?$`),
+    },
+  },
 };
 
 /**
@@ -325,7 +341,12 @@ export function projectIdentity(identity: string): ProjectedIdentity {
   return { tag, body, staticAttrs, dynamicNames, dynamicAttrs };
 }
 
-function projectionError(name: string, sourceKey: string, outVal: string | undefined): string | null {
+function projectionError(
+  name: string,
+  sourceKey: string,
+  outVal: string | undefined,
+  build: BuildProfile = 'production',
+): string | null {
   const projection = DYNAMIC_ATTR_PROJECTION[sourceKey];
   if (!projection) {
     return `dynamic attr ${name} (${sourceKey}) без test-owned projection`;
@@ -336,7 +357,10 @@ function projectionError(name: string, sourceKey: string, outVal: string | undef
   if ('exact' in projection && outVal !== projection.exact) {
     return `dynamic attr ${name} output ${outVal} ≠ projected ${projection.exact}`;
   }
-  if ('pattern' in projection && !projection.pattern.test(outVal)) {
+  const pattern = 'patternByBuild' in projection
+    ? projection.patternByBuild[build]
+    : 'pattern' in projection ? projection.pattern : undefined;
+  if (pattern && !pattern.test(outVal)) {
     return `dynamic attr ${name} output ${outVal} не проходит projection constraint`;
   }
   return null;
@@ -347,7 +371,11 @@ function isBundledStylesheet(output: ProjectedIdentity): boolean {
   return output.tag === 'link' && (output.staticAttrs.get('rel') ?? '') === 'stylesheet' && /^\/_astro\/.+\.css$/.test(href);
 }
 
-export function provenanceError(sourceIdentity: string, outputIdentity: string): string | null {
+export function provenanceError(
+  sourceIdentity: string,
+  outputIdentity: string,
+  opts?: { build?: BuildProfile },
+): string | null {
   const source = projectIdentity(sourceIdentity);
   const output = projectIdentity(outputIdentity);
   if (source.tag === 'style' && isBundledStylesheet(output)) {
@@ -381,7 +409,7 @@ export function provenanceError(sourceIdentity: string, outputIdentity: string):
     }
     if (srcDyn && SECURITY_URL_ATTRS.has(name)) {
       const sourceKey = `${name}=${source.dynamicAttrs.get(name)}`;
-      const mismatch = projectionError(name, sourceKey, outVal);
+      const mismatch = projectionError(name, sourceKey, outVal, opts?.build);
       if (mismatch) return mismatch;
       continue;
     }
@@ -398,6 +426,33 @@ function nearestPrecedingId(html: string, before: number): string | null {
     if (tag.attrs.id) last = tag.attrs.id;
   }
   return last;
+}
+
+function occurrenceIdentityForBuild(
+  identity: string,
+  sourceIdentity: string,
+  build: BuildProfile,
+): string {
+  if (build !== 'demo') return identity;
+  const source = projectIdentity(sourceIdentity);
+  if (
+    source.tag !== 'link' ||
+    source.staticAttrs.get('rel') !== 'canonical' ||
+    source.dynamicAttrs.get('href') !== 'expression:canonicalURL.href'
+  ) {
+    return identity;
+  }
+
+  const output = projectIdentity(identity);
+  const href = output.staticAttrs.get('href');
+  if (output.tag !== 'link' || output.staticAttrs.get('rel') !== 'canonical' || !href) return identity;
+  try {
+    if (new URL(href).origin !== PRODUCTION_ORIGIN) return identity;
+  } catch {
+    return identity;
+  }
+  const expectedDemoHref = `${DEMO193_ORIGIN}${href.slice(PRODUCTION_ORIGIN.length)}`;
+  return identity.replace(`href=${href}`, `href=${expectedDemoHref}`);
 }
 
 /**
@@ -422,6 +477,7 @@ export function matchOccurrences(
     return r.builds.includes(opts.build);
   });
   const slotsById = new Map(sourceSlots.map((s) => [s.slotId, s]));
+  const build = opts?.build ?? 'production';
 
   for (const rule of routeRules) {
     if (rule.placement === '*') {
@@ -433,7 +489,8 @@ export function matchOccurrences(
       errors.push(`${route}: rule ${rule.slotId} нет в committed source-slot registry`);
       continue;
     }
-    const mismatch = provenanceError(slot.identity, rule.identity);
+    const expectedIdentity = occurrenceIdentityForBuild(rule.identity, slot.identity, build);
+    const mismatch = provenanceError(slot.identity, expectedIdentity, { build });
     if (mismatch) {
       errors.push(`${route}: rule ${rule.slotId} source identity не проецируется в output: ${mismatch}`);
       continue;
@@ -442,13 +499,13 @@ export function matchOccurrences(
     for (let i = 0; i < found.length; i += 1) {
       if (used.has(i)) continue;
       const node = found[i];
-      if (node.identity !== rule.identity) continue;
+      if (node.identity !== expectedIdentity) continue;
       if (node.placement !== rule.placement) continue;
       matches.push(i);
     }
     if (matches.length < rule.count) {
       errors.push(
-        `${route}: rule ${rule.slotId} identity=${rule.identity.slice(0, 60)} placement=${rule.placement} ожидал count=${rule.count}, получил ${matches.length}`,
+        `${route}: rule ${rule.slotId} identity=${expectedIdentity.slice(0, 60)} placement=${rule.placement} ожидал count=${rule.count}, получил ${matches.length}`,
       );
     }
     const consume = matches.slice(0, rule.count);

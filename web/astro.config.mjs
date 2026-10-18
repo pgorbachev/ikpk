@@ -5,6 +5,32 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
+const demoOutput = process.env.DEMO_OUTPUT === '1';
+const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
+const demoSite = process.env.DEMO_SITE_URL ?? 'https://193.124.115.99';
+if (demoProfile && demoProfile !== 'demo193') {
+  throw new Error('DEMO_PROFILE must be the approved demo193 profile');
+}
+if (demoProfile === 'demo193') {
+  if (demoOutput || process.env.DEMO_FORMS !== 'stub' || process.env.PAYMENT_ROLE !== 'ci' ||
+      process.env.DEPLOY_MODE !== 'stand' || process.env.CHAT_LOADER_SRC !== 'none' ||
+      process.env.CHAT_OFFLINE_MESSAGE !== 'absent') {
+    throw new Error('demo193 profile has unsafe or conflicting build flags');
+  }
+}
+if (demoOutput || demoProfile === 'demo193') {
+  let parsedDemoSite;
+  try {
+    parsedDemoSite = new URL(demoSite);
+  } catch {
+    throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
+  }
+  const approvedDemoOrigin = demoProfile === 'demo193' && process.env.PUBLICATION_SOURCE_POLICY === 'demo-publication-only' ? 'https://staging.ikpk.su' : 'https://193.124.115.99';
+  if (parsedDemoSite.origin !== approvedDemoOrigin || parsedDemoSite.pathname !== '/' || parsedDemoSite.search || parsedDemoSite.hash || parsedDemoSite.username || parsedDemoSite.password) {
+    throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
+  }
+}
+
 // lastmod для sitemap: из снимка контента, которым идёт сборка (не из материала переноса).
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(webRoot, '..');
@@ -45,9 +71,22 @@ function omitStampedOfferWithoutPaymentForm() {
     },
   };
 }
+/**
+ * Детальные плоские страницы каталогов (`/instituty/<slug>` и парные под
+ * programmy/seminary/specialisty) — noindex-дубли иерархических страниц (см.
+ * `web/src/pages/instituty/[slug].astro`), а не отдельный индексируемый
+ * контент. Сам каталог-список (`/instituty` без сегмента) под это правило не
+ * попадает: он не noindex.
+ *
+ * Интеграция sitemap строит карту по маршрутам сборки и не читает мета-тег
+ * `noindex` со страницы — без этого фильтра плоские noindex-адреса всё равно
+ * оказались бы в карте.
+ */
+/** @param {string} page */
+const isNoindexFlatDetail = (page) => /\/(instituty|programmy|seminary|specialisty)\/[^/]+\/?$/.test(page);
 
 export default defineConfig({
-  site: 'https://ikpk.su',
+  site: demoProfile === 'demo193' || demoOutput ? demoSite : 'https://ikpk.su',
   integrations: [
     omitStampedOfferWithoutPaymentForm(),
     sitemap({
@@ -56,11 +95,24 @@ export default defineConfig({
       // - /demo-zayavka — заглушка форм демо-стенда, существует только в сборке с
       //   DEMO_FORMS и помечена noindex. Приглашать краулера на noindex-страницу
       //   значит тратить его бюджет и подавать противоречивые сигналы.
+      //
+      // Иерархические подстраницы институтов (`/<институт>/<программа>` и
+      // глубже) сюда НЕ добавлены, хотя у записей уже есть плоские адреса
+      // (`/instituty/…`, `/programmy/…`, `/seminary/…`, `/specialisty/…`,
+      // change `cms-content-authoring-and-migration`, D9): те плоские адреса
+      // сегодня noindex-дубли (см. `web/src/pages/instituty/[slug].astro` и
+      // парные файлы) — у них нет канонической замены до переключения
+      // источника сборки (`cms-content-publication`). Убрать иерархический
+      // адрес из карты раньше появления замены значило бы снять сигнал
+      // sitemap с единственного индексируемого адреса записи без всякой
+      // выгоды. Фильтр по институтам вернётся сюда, когда плоские адреса
+      // перестанут быть noindex.
       filter: (page) =>
         !page.includes('/sitemap') &&
         !page.includes('/preview/') &&
         !page.includes('/demo-zayavka') &&
-        !page.includes('/rich-content-canary'),
+        !page.includes('/rich-content-canary') &&
+        !isNoindexFlatDetail(page),
       serialize(item) {
         const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
         const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;

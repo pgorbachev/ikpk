@@ -13,21 +13,32 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string"
+      "type": "string",
+      "required": false
     },
     "admin_label": {
       "type": "string"
     },
     "startAt": {
       "type": "datetime",
-      "customField": "global::wall-clock-datetime"
+      "customField": "global::wall-clock-datetime",
+      "required": false
     },
     "endAt": {
       "type": "datetime",
-      "customField": "global::wall-clock-datetime"
+      "customField": "global::wall-clock-datetime",
+      "required": false
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
     },
     "city": {
-      "type": "string"
+      "type": "string",
+      "required": false
     },
     "price": {
       "type": "decimal"
@@ -39,6 +50,10 @@
       "type": "boolean",
       "default": false
     },
+    "isEventCollection": {
+      "type": "boolean",
+      "default": false
+    },
     "entry_status": {
       "type": "enumeration",
       "enum": [
@@ -46,7 +61,8 @@
         "cancelled",
         "completed"
       ],
-      "default": "active"
+      "default": "active",
+      "required": false
     },
     "registrationFormLink": {
       "type": "string"
@@ -68,10 +84,13 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::seminar.seminar",
-      "inversedBy": "schedule_entries"
+      "inversedBy": "schedule_entries",
+      "required": false
     },
     "teachers": {
-      "type": "json"
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::teacher.teacher"
     }
   }
 }

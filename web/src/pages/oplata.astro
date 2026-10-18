@@ -5,7 +5,7 @@ import PaymentForm from '../components/payment/PaymentForm.astro';
 import { getPage, cleanBodyHtml, rewriteSafeRichHtml } from '../lib/data';
 import { paymentRole } from '../lib/forms';
 import RichContent from '../components/RichContent.astro';
-import { PHONE, PHONE_HREF, MOBILE_PHONE, MOBILE_PHONE_HREF, MANAGER_HOURS_NOTE } from '../lib/navigation';
+import { PHONE, PHONE_HREF, MANAGER_PHONE, MANAGER_PHONE_HREF, MANAGER_HOURS_NOTE } from '../lib/navigation';
 
 const page = getPage('oplata');
 const title = page?.seo_title || 'Оплата — ИКПК';
@@ -56,7 +56,7 @@ function identity(html: string): string {
           <p class="payment-highlight-text">
             Свяжитесь с нами:{' '}
             <a href={PHONE_HREF}>{PHONE}</a>,{' '}
-            <a href={MOBILE_PHONE_HREF}>{MOBILE_PHONE}</a>{' '}или{' '}
+            <a href={MANAGER_PHONE_HREF}>{MANAGER_PHONE}</a>{' '}или{' '}
             <a href="mailto:info@ikpk.su">info@ikpk.su</a>
           </p>
           <p class="payment-highlight-hours" data-hours="manager">

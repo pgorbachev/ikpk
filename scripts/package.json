@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "validate-urls": "tsx validate-urls.ts",
+    "url-map:flatten": "tsx flatten-url-map.ts",
     "validate-urls:staging": "tsx validate-urls.ts --base-url https://staging.ikpk.su",
     "validate-urls:prod": "tsx validate-urls.ts --base-url https://ikpk.su"
   },
@@ -20,11 +21,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.5.2",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "globals": "^17.13.0",
     "sharp": "^0.35.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.71.0",
+    "typescript-eslint": "^8.71.2",
     "vitest": "^3.2.7"
   }
 }

@@ -7,14 +7,19 @@ const SEMINAR_FIELDS = [
   ['name', 'Название', 6, true, PUBLISH_HINT],
   ['slug', 'Адрес страницы', 6, false, 'Создаётся из названия. Уже заданный адрес сам не меняется.'],
   ['course_group', 'Программа', 6, true, 'Для публикации выберите опубликованную программу. Черновик можно сохранить без неё.'],
-  ['seminar_status', 'Статус набора', 6, true, ''],
-  ['duration', 'Продолжительность', 6, true, ''],
-  ['price', 'Цена', 4, true, ''],
   ['order', 'Порядок', 4, true, ''],
   ['teachers', 'Преподаватели', 6, true, ''],
   ['image', 'Изображение', 6, true, ''],
   ['description', 'Краткое описание', 12, true, ''],
   ['full_text', 'Полный текст', 12, true, ''],
+  ['learning_plan', 'Учебный план', 12, true, ''],
+  ['learning_mode', 'Режим обучения', 12, true, ''],
+  ['recommendations', 'Рекомендации', 12, true, ''],
+  ['documents_state', 'Выдаваемые документы', 6, true, 'Выдаются, не выдаются или сведения не подтверждены.'],
+  ['documents', 'Документы', 12, true, ''],
+  ['documents_confirmation_date', 'Дата подтверждения сведений', 6, true, ''],
+  ['documents_confirmation_author', 'Кто подтвердил', 6, true, ''],
+  ['documents_confirmation_source', 'Основание подтверждения', 12, true, ''],
   ['schedule_entries', 'Проведения', 6, true, 'Дата и город видны в списке до открытия записи.'],
   ['seo', 'SEO', 12, true, ''],
 ];
@@ -23,6 +28,7 @@ const ENTRY_FIELDS = [
   ['seminar', 'Семинар', 6, true, ''],
   ['startAt', 'Начало', 6, true, ''],
   ['endAt', 'Окончание', 6, true, ''],
+  ['image', 'Изображение', 6, true, ''],
   ['city', 'Город', 6, true, ''],
   ['entry_status', 'Статус', 6, true, ''],
   ['isFree', 'Бесплатно', 4, true, ''],
@@ -34,7 +40,8 @@ const ENTRY_FIELDS = [
   ['additionalText', 'Примечание', 12, true, ''],
 ];
 
-const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers']);
+// The approved migration carries this source flag as data without adding editor UI.
+const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers', 'isEventCollection']);
 
 function labelOf(fields, name, fallback) {
   const found = fields.find((field) => field[0] === name);
@@ -46,6 +53,7 @@ const HIDDEN_LABELS = {
   admin_label: 'Когда и где',
   legacy_id: 'Старый идентификатор',
   teachers: 'Преподаватели проведения',
+  isEventCollection: 'Исходный флаг коллекции',
 };
 
 function overlay(configuration, fields, settings, list, hidden) {
@@ -120,7 +128,7 @@ export async function applyEditorForms(strapi) {
       defaultSortBy: 'name',
       defaultSortOrder: 'ASC',
     },
-    ['name', 'seminar_status', 'slug'],
+    ['name', 'slug'],
     new Set(['legacy_id']),
   );
   await applyOne(

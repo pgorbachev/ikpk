@@ -1,9 +1,10 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { contentIdOf } from '../scripts/lib/content-media-store.ts';
+import { acquireSharedSnapshotLock } from './helpers/shared-snapshot-lock.ts';
 
 /**
  * Регресс на дефект: хранилище содержимого не переживало передачу снимка артефактом.
@@ -52,10 +53,24 @@ function captureDirWithMedia(): string {
 }
 
 describe('снимок, переданный артефактом, несёт байты медиа, а не только ссылки', () => {
+  let releaseSnapshotLock: (() => void) | undefined;
+
+  beforeAll(async () => {
+    releaseSnapshotLock = await acquireSharedSnapshotLock(webRoot);
+  }, 120_000);
+
   afterAll(() => {
+    if (!releaseSnapshotLock) return;
+    const release = releaseSnapshotLock;
+    releaseSnapshotLock = undefined;
+
     // Каталог снимка — общий рабочий предмет сборки. Возвращаем его к закреплённой
     // фикстуре, иначе следующая локальная сборка возьмёт остаток от теста.
-    prepare(pinned);
+    try {
+      prepare(pinned);
+    } finally {
+      release();
+    }
   });
 
   it('второй прогон подготовки — из артефакта, а не из каталога съёма — материализует медиа', () => {

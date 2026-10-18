@@ -1,0 +1,75 @@
+---
+/** Каталог специалистов разбивает единый тип CMS по сохранённому trait (D10). */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getTeachers, groupTeachersByTrait } from '../../lib/data';
+
+const grouped = groupTeachersByTrait(getTeachers());
+const traitGroups = [
+  { label: 'Преподаватели', members: grouped.teacher },
+  { label: 'Авторы методик', members: grouped['method-author'] },
+];
+
+const title = 'Специалисты — ИКПК';
+const description = 'Преподаватели и авторы методик ИКПК.';
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Специалисты' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Специалисты</h1>
+
+      {traitGroups.map(({ label, members }) => (
+        <section class="specialist-group" aria-label={label}>
+          <h2 class="section-title">{label}</h2>
+          {members.length > 0 ? (
+            <div class="grid grid-3">
+              {members.map((person) => (
+                <a href={`/specialisty/${person.slug}`} class="card">
+                  <div class="card-body">
+                    <h3 class="catalog-card-title">{person.name}</h3>
+                    <span class="specialist-trait">{label}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p class="text-muted">В этой группе пока нет специалистов.</p>
+          )}
+        </section>
+      ))}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title {
+    margin-bottom: 1rem;
+  }
+
+  .specialist-group + .specialist-group {
+    margin-top: 2rem;
+  }
+
+  .catalog-card-title {
+    font-size: var(--font-m);
+    font-weight: 600;
+    color: var(--color-dark-700);
+    margin: 0;
+  }
+
+  .specialist-trait {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--color-gray-600);
+    font-size: var(--font-xs);
+  }
+
+  a.card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+</style>

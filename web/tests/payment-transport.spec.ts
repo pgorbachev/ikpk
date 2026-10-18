@@ -931,7 +931,8 @@ test.describe('3a.7a повторная отправка не создаёт в�
     await page.locator(`${FORM} [name="consent"]`).check();
     await page.locator(`${FORM} [type="submit"]`).click();
     await expect(page.locator('[data-payment-state="unknown"]')).toBeVisible();
-    await page.locator('[data-payment-continue]').click();
+    await expect(page.getByText('Карта не запрашивалась')).toBeVisible();
+    await expect(page.locator('[data-payment-continue]')).toHaveCount(0);
     await expect(page.locator(`${FORM} [name="firstName"]`)).toBeEditable();
     await page.locator(`${FORM} [type="submit"]`).click();
     await expect.poll(() => ids.length).toBeGreaterThan(1);

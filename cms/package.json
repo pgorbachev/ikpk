@@ -11,7 +11,7 @@
     "develop": "strapi develop",
     "lint": "eslint .",
     "start": "strapi start",
-    "test": "node --test \"tests/*.test.js\"",
+    "test": "node --experimental-strip-types --experimental-loader=./scripts/ts-extension-loader.mjs --test 'src/**/*.test.ts' 'tests/*.test.js'",
     "test:e2e": "node --test \"tests/e2e/*.test.js\"",
     "strapi": "strapi",
     "typecheck": "tsc --noEmit",
@@ -25,7 +25,7 @@
     "better-sqlite3": "13.0.3",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "react-router-dom": "^6.0.0",
+    "react-router-dom": "6.30.6",
     "styled-components": "^6.5.0"
   },
   "devDependencies": {
@@ -41,6 +41,55 @@
   "engines": {
     "node": ">=20.0.0 <=24.x.x",
     "npm": ">=6.0.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "brace-expansion": "5.0.12",
+    "minimatch@3": {
+      "brace-expansion": "1.1.21"
+    },
+    "browserslist": "4.28.7",
+    "handlebars": "4.7.10",
+    "js-yaml": "4.3.2",
+    "lodash-es": "4.18.1",
+    "markdown-it": "14.3.2",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.23",
+    "react-router": "6.30.6",
+    "react-router-dom": "6.30.6",
+    "source-map-js": "1.2.2",
+    "@strapi/admin": {
+      "axios": "1.20.0",
+      "qs": "6.16.0"
+    },
+    "@strapi/cloud-cli": {
+      "axios": "1.20.0"
+    },
+    "@strapi/content-manager": {
+      "qs": "6.16.0"
+    },
+    "@strapi/content-releases": {
+      "qs": "6.16.0"
+    },
+    "@strapi/content-type-builder": {
+      "qs": "6.16.0"
+    },
+    "@strapi/core": {
+      "qs": "6.16.0",
+      "undici": "6.28.1"
+    },
+    "@strapi/i18n": {
+      "qs": "6.16.0"
+    },
+    "@strapi/permissions": {
+      "qs": "6.16.0"
+    },
+    "@strapi/provider-email-sendmail": {
+      "nodemailer": "10.1.0"
+    },
+    "@strapi/upload": {
+      "qs": "6.16.0"
+    }
   },
   "strapi": {
     "uuid": "4fcbf31d-66ea-4201-a839-6bfdcd75bcdc",

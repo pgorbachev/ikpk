@@ -4,8 +4,48 @@ import * as data from '../src/lib/data';
 import { getUpcomingSeminars } from '../src/lib/home';
 import SeminarPage from '../src/pages/[institute]/[courseGroup]/[seminar].astro';
 import SchedulePage from '../src/pages/raspisanie-i-tseny.astro';
+import SeminarSchedulePanel from '../src/components/seminars/SeminarSchedulePanel.astro';
+import type { ScheduleEntry } from '../src/lib/data';
 
 afterEach(() => vi.restoreAllMocks());
+
+it('schedule page prints Nicosia-local-midnight SQL dates under UTC', async () => {
+  const entry = {
+    ...data.getScheduleEntries()[0],
+    startAt: '2024-09-22T21:00:00.000Z',
+    endAt: '2024-09-22T21:00:00.000Z',
+    status: 'active',
+  };
+  vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
+  vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2024-09-23');
+  const container = await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } });
+  const html = await container.renderToString(SchedulePage, {
+    request: new Request('https://ikpk.su/raspisanie-i-tseny'),
+  });
+  expect(html.replace(/\s+/g, ' ')).toContain('23.09.2024');
+});
+
+it('schedule panel keeps SQL calendar dates and duration across Nicosia DST under UTC', async () => {
+  const entry: ScheduleEntry = {
+    id: 9002, status: 'active', name: 'DST test',
+    seminar: { id: 9002, name: 'DST test', slug: 'dst-test' },
+    institute: { id: 1, name: 'Институт', shortname: 'ИКПК' },
+    startAt: '2024-03-29T22:00:00.000Z', endAt: '2024-03-30T21:00:00.000Z',
+    teachers: [], image: null, isFree: false, isEventCollection: false,
+    description: null, oldPrice: 0, newPrice: 12000,
+    city: { id: 1, name: 'Москва' },
+    program: { id: 1, slug: 'programma', name: 'Программа' },
+    additionalText: '', duration: '16', registrationFormLink: '',
+  };
+  const container = await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } });
+  const html = (await container.renderToString(SeminarSchedulePanel, {
+    props: { rows: [{ entry, teachers: [] }] },
+    request: new Request('https://ikpk.su/seminar'),
+  })).replace(/\s+/g, ' ');
+  expect(html).toContain('30 марта 2024');
+  expect(html).toContain('31 марта 2024');
+  expect(html).toContain('2 дня (16 часов)');
+});
 
 describe('стоимость платного семинара: главная, расписание, карточка и JSON-LD', () => {
   it.each([
@@ -51,6 +91,8 @@ describe('стоимость платного семинара: главная, 
       .map((match) => JSON.parse(match[1]));
     const event = schemas.find((schema) => schema['@type'] === 'Event');
     expect(event).toBeDefined();
+    expect(event.startDate).toBe('2026-11-14');
+    expect(event.endDate).toBe('2026-11-15');
     if (offer === undefined) expect(event).not.toHaveProperty('offers');
     else expect(event.offers).toMatchObject({ '@type': 'Offer', price: offer, priceCurrency: 'RUB' });
   });
