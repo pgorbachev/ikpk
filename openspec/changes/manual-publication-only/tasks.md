@@ -1,7 +1,7 @@
 ## 1. First release
 
 - [ ] Admit one reconciled full `dev` SHA with exact canonical push `Tests` run and every mandatory job successful; build separate CMS/static payloads from that source and verify same-candidate browser checks.
-- [ ] On demo193, acquire one operation ID, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
+- [ ] On staging193, acquire one operation ID, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
 - [ ] Run CMS build/migration unprivileged; verify CMS health, process DB path, and media. Activate static and verify served `/release.json`, routes, and images; durably commit both acceptances before reopening writers.
 
 ## 2. Pre-commit recovery
