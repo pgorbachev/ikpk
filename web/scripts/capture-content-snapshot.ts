@@ -23,7 +23,7 @@ import {
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
-import { contentFingerprint, snapshotId, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
+import { contentFingerprint, snapshotId, type DemoCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,45 +32,16 @@ const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
 
-const DEMO193_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
-const DEMO193_READBACK_SHA256 = 'c603dbe1b134e4f3bbb72fb9adad4486b5ac206d421a90c46a5ba8da23a7ff99';
-const DEMO193_CODE_COMMIT = '4e1576e507272f9793c3fbae3f2246f4fa3730b1';
-const DEMO193_NAMESPACE = 'ikpk_sql_demo_native_proto193';
-const DEMO193_SOURCE_URL = 'http://127.0.0.1:19341';
-type Demo193Readback = {
-  capturedAt: string;
-  target: string;
-  namespace: string;
-  codeCommit: string;
-  collections: Record<string, Record<string, unknown>[]>;
-  media: { url: string; verifiedStoredSha256: string }[];
-};
-
-function demo193Input(): { readback: Demo193Readback; mediaDirectory: string } | undefined {
+async function serverInput() {
   const args = process.argv.slice(2);
   if (args.length === 0) return undefined;
-  if (args.length !== 3 || args[0] !== '--demo193-saved-readback') {
-    throw new Error('unsupported snapshot capture option');
+  if (args[0] !== '--server-capture' || args.length !== 2 || cmsUrl) {
+    throw new Error('staging193 server capture requires --server-capture BUNDLE and no CMS_URL');
   }
-  const [, readbackPath, mediaDirectory] = args;
-  if (cmsUrl !== DEMO193_SOURCE_URL) throw new Error('demo193 saved-readback source origin mismatch');
-  if (!readbackPath || !mediaDirectory || !existsSync(readbackPath) || !existsSync(mediaDirectory)) {
-    throw new Error('demo193 saved-readback input is missing');
-  }
-  const bytes = readFileSync(readbackPath);
-  if (createHash('sha256').update(bytes).digest('hex') !== DEMO193_READBACK_SHA256) {
-    throw new Error('demo193 saved-readback SHA-256 mismatch');
-  }
-  const readback = JSON.parse(bytes.toString('utf8')) as Demo193Readback;
-  if (readback.target !== 'A' || readback.namespace !== DEMO193_NAMESPACE || readback.codeCommit !== DEMO193_CODE_COMMIT
-      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(readback.capturedAt)
-      || !readback.collections || !Array.isArray(readback.media) || readback.media.length !== 563) {
-    throw new Error('demo193 saved-readback capture identity mismatch');
-  }
-  return { readback, mediaDirectory };
+  const { verifyStaging193Bundle } = await import('../../scripts/lib/staging193-capture-bundle.mjs');
+  return verifyStaging193Bundle(args[1]!, join(repoRoot, 'cms', 'src'));
 }
-
-const savedDemo193 = demo193Input();
+const serverCapture = await serverInput();
 
 /**
  * Предел ожидания ОДНОГО обращения к CMS.
@@ -320,9 +291,10 @@ interface StrapiPage {
 }
 
 async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[]> {
-  if (savedDemo193) {
-    const records = savedDemo193.readback.collections[endpoint];
-    if (!Array.isArray(records)) throw new Error(`demo193 saved-readback omitted ${endpoint}`);
+  if (serverCapture) {
+    const collections = serverCapture.readback.collections as Record<string, Record<string, unknown>[]>;
+    const records = collections[endpoint];
+    if (!Array.isArray(records)) throw new Error(`server SQLite capture omitted ${endpoint}`);
     return records;
   }
   const records: Record<string, unknown>[] = [];
@@ -349,12 +321,12 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
 }
 
 /** Finds actual root upload URLs in mapped records, including rich HTML fields. */
-function uploadRefsIn(value: unknown): string[] {
+function uploadRefsIn(value: unknown, includeStatic = false): string[] {
   const found = new Set<string>();
   // A quoted value is the boundary for both relative and absolute URLs. Including `=` here
   // would also match the query value in `https://third.example/?next=/uploads/x` and make an
   // unrelated external URL look like a CMS asset.
-  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
+  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/(?:uploads|media)\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
 
   const walk = (node: unknown): void => {
     if (typeof node === 'string') {
@@ -362,7 +334,7 @@ function uploadRefsIn(value: unknown): string[] {
       for (const match of node.matchAll(pattern)) {
         const candidate = match[1]!;
         const normalized = normalizeCmsMediaUrl(candidate);
-        if (normalized.startsWith('/uploads/')) found.add(normalized);
+        if (normalized.startsWith('/uploads/') || (includeStatic && normalized.startsWith('/media/'))) found.add(normalized);
       }
       return;
     }
@@ -380,30 +352,23 @@ function uploadRefsIn(value: unknown): string[] {
 }
 
 async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<SnapshotContent['media']> {
-  const refs = uploadRefsIn(types);
+  const refs = uploadRefsIn(types, Boolean(serverCapture));
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
-  const savedByUrl = new Map<string, Demo193Readback['media'][number]>();
-  if (savedDemo193) {
-    for (const item of savedDemo193.readback.media) {
-      if (!item || typeof item.url !== 'string' || !/^\/[A-Za-z0-9._~!$&()*+,;=@%/-]+$/.test(item.url)
-          || !/^[a-f0-9]{64}$/.test(item.verifiedStoredSha256) || savedByUrl.has(item.url)) {
-        throw new Error('demo193 saved-readback media inventory is malformed or duplicated');
-      }
-      savedByUrl.set(item.url, item);
-    }
-  }
+  const captureMedia = serverCapture?.media ?? [];
+  const mediaByUrl = new Map(captureMedia.map((item: any) => [item.url, item]));
 
   for (const sourceRef of refs) {
     assertWithinBudget(`медиа ${sourceRef}`);
     let bytes: Uint8Array;
-    if (savedDemo193) {
-      const saved = savedByUrl.get(sourceRef);
-      if (!saved) throw new Error(`demo193 saved-readback has no verified media row for ${sourceRef}`);
-      const path = join(savedDemo193.mediaDirectory, `sha256:${saved.verifiedStoredSha256}`);
+    if (serverCapture) {
+      const saved: any = mediaByUrl.get(sourceRef);
+      const digest = saved?.sha256 ?? saved?.verifiedStoredSha256;
+      if (!saved || !/^[a-f0-9]{64}$/.test(digest)) throw new Error(`sealed capture has no verified media row for ${sourceRef}`);
+      const path = join(serverCapture.directory, 'media', `sha256:${digest}`);
       bytes = new Uint8Array(readFileSync(path));
-      if (createHash('sha256').update(bytes).digest('hex') !== saved.verifiedStoredSha256) {
-        throw new Error(`demo193 saved media bytes do not match the readback witness for ${sourceRef}`);
+      if (createHash('sha256').update(bytes).digest('hex') !== digest) {
+        throw new Error(`sealed media bytes do not match the capture witness for ${sourceRef}`);
       }
     } else {
       const url = new URL(sourceRef, cmsUrl).toString();
@@ -441,7 +406,8 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
 
     // The snapshot keeps the source records in CMS form. The separate media index is already
     // in the static-site address space, so build steps can use it without another rewrite.
-    media.push({ ref: `/media${sourceRef}`, contentId });
+    const ref = serverCapture && sourceRef.startsWith('/media/') ? sourceRef : `/media${sourceRef}`;
+    if (!media.some((item) => item.ref === ref)) media.push({ ref, contentId });
   }
   return media;
 }
@@ -468,17 +434,6 @@ async function liveCapture(): Promise<void> {
       );
     }
   }
-  if (savedDemo193) {
-    const expectedCounts: Record<string, number> = {
-      institutes: 3, 'course-groups': 26, seminars: 132, teachers: 31, articles: 68,
-      'schedule-entries': 271, 'news-items': 3, promotions: 3, pages: 9, 'video-playlists': 6,
-    };
-    if (Object.keys(savedDemo193.readback.collections).length !== Object.keys(expectedCounts).length
-        || Object.entries(expectedCounts).some(([name, count]) => savedDemo193.readback.collections[name]?.length !== count)) {
-      throw new Error('demo193 saved-readback collection inventory mismatch');
-    }
-  }
-
   // Первая сверка — против схем в checkout: исчезнувший из схемы источник — отказ. Схема в
   // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
   // ответом CMS по каждой записи.
@@ -615,15 +570,16 @@ async function liveCapture(): Promise<void> {
   const content: SnapshotContent = { types, media };
   const fingerprint = contentFingerprint(content);
   const referenceDate = new Date().toISOString().slice(0, 10);
-  const snap: Snapshot = {
+  const snapshotBase = {
     content,
     referenceDate,
     fingerprint,
     snapshotId: snapshotId({ fingerprint, referenceDate }),
-    origin: savedDemo193
-      ? { kind: 'live', url: cmsUrl, capturedAt: savedDemo193.readback.capturedAt }
-      : { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
+  const snap: Snapshot = serverCapture
+    ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'demo193-cms', capturedAt: serverCapture.manifest.capturedAt },
+        sourcePolicy: 'demo-publication-only', sourceAge: 'untracked', captureProof: serverCapture.proof as DemoCaptureProof }
+    : { ...snapshotBase, origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() } };
 
   // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
   // по определению: он перебирает записи, а перебирать нечего. Замерено 06.09.2026 — снятие
@@ -659,7 +615,7 @@ async function liveCapture(): Promise<void> {
 
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
-  assertCaptureSnapshotContract(snap, savedDemo193 ? DEMO193_SQL_SHA256 : undefined);
+  assertCaptureSnapshotContract(snap);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'snapshot.json'), JSON.stringify(snap, null, 2));
@@ -699,7 +655,7 @@ async function liveCapture(): Promise<void> {
   }
 }
 
-if (cmsUrl) {
+if (cmsUrl || serverCapture) {
   await liveCapture();
 } else {
   copyPinned();
