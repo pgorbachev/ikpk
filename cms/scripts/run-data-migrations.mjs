@@ -532,7 +532,7 @@ function productionLifecycle(artifactDir, closedLoadSecrets) {
       const lifecycleHeld = new Promise((resolve) => { releaseLifecycle = resolve; });
       const task = predecessor.then(async () => {
         const previousCwd = process.cwd();
-        const environmentKeys = ['DATABASE_FILENAME', 'DATABASE_CLIENT', 'DATABASE_URL', ...CLOSED_STRAPI_RUNTIME_KEYS];
+        const environmentKeys = ['DATABASE_FILENAME', 'DATABASE_CLIENT', 'DATABASE_URL', 'TZ', ...CLOSED_STRAPI_RUNTIME_KEYS];
         const previousEnvironment = Object.fromEntries(environmentKeys.map((key) => [key, process.env[key]]));
         let restored = false;
         const restoreContext = () => {
@@ -551,6 +551,7 @@ function productionLifecycle(artifactDir, closedLoadSecrets) {
         process.env.DATABASE_FILENAME = candidateDbPath;
         process.env.DATABASE_CLIENT = 'sqlite';
         delete process.env.DATABASE_URL;
+        process.env.TZ = 'UTC';
         for (const key of CLOSED_STRAPI_SECRET_KEYS) process.env[key] = closedLoadSecrets[key];
         process.env.HOST = '127.0.0.1';
         process.env.PORT = '0';

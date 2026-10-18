@@ -88,12 +88,12 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual((uploads / "photo original.jpg").read_bytes(), b"editor media")
             self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, external)), 64)
 
-    def test_cms_payload_accepts_npm_runtime_link_and_internal_bin_links(self):
+    def test_cms_payload_accepts_operation_source_dependencies_and_internal_bin_links(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-node-modules-") as temporary:
             root = Path(temporary) / "source/op/.staging193-rehearsal/op/migration"
             artifact = root / "cms-artifact"
             artifact.mkdir(parents=True)
-            dependencies = root / "runtime-deps/node_modules"
+            dependencies = root.parent.parent.parent.parent / "cms/node_modules"
             (dependencies / "@strapi/strapi/bin").mkdir(parents=True)
             (dependencies / "@strapi/strapi/bin/strapi.js").write_text("runtime", encoding="utf-8")
             (dependencies / ".bin").mkdir()
@@ -104,7 +104,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             uploads = Path(temporary) / "uploads"
             uploads.mkdir()
             (artifact / "public/uploads").symlink_to(uploads, target_is_directory=True)
-            self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, uploads)), 64)
+            self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, uploads, dependencies)), 64)
+            wrong_dependencies = root.parent.parent.parent.parent / "other/cms/node_modules"
+            wrong_dependencies.mkdir(parents=True)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "not a private installed dependency tree"):
+                rehearsal_host._cms_payload_sha256(artifact, uploads, wrong_dependencies)
 
             legacy = Path(temporary) / "legacy-release"
             (legacy / "node_modules/.bin").mkdir(parents=True)

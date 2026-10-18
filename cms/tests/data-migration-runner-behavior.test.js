@@ -82,6 +82,7 @@ exports.createStrapi = ({ appDir }) => ({
   config: { get(name) { return name === 'database.connection' ? { client: process.env.DATABASE_CLIENT, connection: { filename: process.env.DATABASE_FILENAME } } : undefined; } },
   async load() {
     assert.equal(process.cwd(), appDir);
+    assert.equal(process.env.TZ, 'UTC', 'closed Strapi must use UTC for date-sensitive bootstrap work');
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
     assert.equal(process.env.DATABASE_URL, undefined);
     for (const key of ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY']) {
@@ -116,6 +117,7 @@ exports.createStrapi = ({ appDir }) => ({
   },
   async destroy() {
     assert.equal(process.cwd(), appDir);
+    assert.equal(process.env.TZ, 'UTC', 'destroy must remain inside the isolated UTC environment');
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
     assert.equal(process.env.DATABASE_URL, undefined);
     for (const key of ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY']) {
@@ -421,8 +423,9 @@ test('default closed Strapi lifecycle uses artifact cwd through destroy and rest
   const previousCwd = process.cwd();
   const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
   const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED', 'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP', 'CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN'];
-  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', 'TZ', ...runtimeKeys].map((key) => [key, process.env[key]]));
   Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
+  process.env.TZ = 'Pacific/Honolulu';
   try {
     const args = prepareArgs(f);
     delete args.lifecycleAdapter;
@@ -431,6 +434,7 @@ test('default closed Strapi lifecycle uses artifact cwd through destroy and rest
     assert.equal(process.env.DATABASE_CLIENT, 'mysql');
     assert.equal(process.env.DATABASE_URL, 'restore-me');
     assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+    assert.equal(process.env.TZ, 'Pacific/Honolulu', 'ambient timezone must be restored after successful closed load');
     for (const key of runtimeKeys) assert.equal(process.env[key], 'inherited-value-that-must-not-be-used');
     assert.equal(readFileSync(args.receiptPath, 'utf8').includes('inherited-value-that-must-not-be-used'), false, 'receipt must not persist inherited environment values');
   } finally {
@@ -448,8 +452,9 @@ test('default closed Strapi lifecycle restores cwd and database environment afte
   const previousCwd = process.cwd();
   const secretKeys = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
   const runtimeKeys = [...secretKeys, 'HOST', 'PORT', 'STRAPI_TELEMETRY_DISABLED', 'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP', 'CONTENT_ADMIN_EMAIL', 'CONTENT_ADMIN_PASSWORD', 'CMS_TOKEN'];
-  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', ...runtimeKeys].map((key) => [key, process.env[key]]));
+  const previousEnvironment = Object.fromEntries(['DATABASE_CLIENT', 'DATABASE_URL', 'DATABASE_FILENAME', 'TZ', ...runtimeKeys].map((key) => [key, process.env[key]]));
   Object.assign(process.env, { DATABASE_CLIENT: 'mysql', DATABASE_URL: 'restore-me', DATABASE_FILENAME: 'restore.db', ...Object.fromEntries(runtimeKeys.map((key) => [key, 'inherited-value-that-must-not-be-used'])) });
+  process.env.TZ = 'Pacific/Honolulu';
   try {
     const runner = await loadRunner();
     const args = prepareArgs(f);
@@ -459,6 +464,7 @@ test('default closed Strapi lifecycle restores cwd and database environment afte
     assert.equal(process.env.DATABASE_CLIENT, 'mysql');
     assert.equal(process.env.DATABASE_URL, 'restore-me');
     assert.equal(process.env.DATABASE_FILENAME, 'restore.db');
+    assert.equal(process.env.TZ, 'Pacific/Honolulu', 'ambient timezone must be restored after failed closed load');
     for (const key of runtimeKeys) assert.equal(process.env[key], 'inherited-value-that-must-not-be-used');
   } finally {
     process.chdir(previousCwd);

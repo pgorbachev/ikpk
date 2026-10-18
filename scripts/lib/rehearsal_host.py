@@ -662,7 +662,7 @@ def _configure_candidate_uploads(config: dict[str, Any], artifact_root: Path) ->
     return media_root
 
 
-def _cms_payload_sha256(root: Path, uploads: Path) -> str:
+def _cms_payload_sha256(root: Path, uploads: Path, expected_dependencies: Path | None = None) -> str:
     digest = hashlib.sha256()
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root).as_posix().encode()
@@ -682,10 +682,10 @@ def _cms_payload_sha256(root: Path, uploads: Path) -> str:
             elif relative == b"node_modules":
                 target = path.resolve(strict=True)
                 target_info = target.stat()
-                expected = root.parent / "runtime-deps/node_modules"
+                expected = expected_dependencies.resolve(strict=True) if expected_dependencies is not None else None
                 if (target.name != "node_modules" or not target.is_dir() or
                         target_info.st_mode & 0o022 or
-                        (expected.parent.exists() and target != expected.resolve(strict=True))):
+                        (expected is not None and target != expected)):
                     raise HostFailure("CMS node_modules link is not a private installed dependency tree")
                 payload = b"symlink:" + str(path.readlink()).encode()
             else:
@@ -723,16 +723,25 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     receipt = operation_root / "receipt.json"
     _run_as_cms(config, source_root / "cms", ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
         str(artifact_dir)], timeout=1800)
-    runtime_root = operation_root / "runtime-deps"
-    runtime_root.mkdir(mode=0o700)
-    os.chown(runtime_root, user.pw_uid, user.pw_gid)
-    shutil.copy2(artifact_dir / "package.json", runtime_root / "package.json")
-    shutil.copy2(artifact_dir / "package-lock.json", runtime_root / "package-lock.json")
-    _run_as_cms(config, runtime_root, ["/usr/bin/npm", "ci", "--omit=dev", "--no-audit", "--no-fund"], timeout=1800)
-    dependencies = runtime_root / "node_modules"
+    source_cms_root = source_root / "cms"
+    dependencies = source_cms_root / "node_modules"
+    if not dependencies.is_dir() or dependencies.is_symlink():
+        raise HostFailure("operation CMS dependencies are unavailable as a private source install")
     dependency_info = dependencies.stat()
     if (not dependencies.is_dir() or dependency_info.st_uid != user.pw_uid or dependency_info.st_mode & 0o022):
         raise HostFailure("CMS runtime dependencies are not a private service-user installation")
+    if sha256_file(source_cms_root / "package-lock.json") != sha256_file(artifact_dir / "package-lock.json"):
+        raise HostFailure("CMS artifact package-lock differs from the operation source install")
+    try:
+        artifact_package = json.loads((artifact_dir / "package.json").read_text(encoding="utf-8"))
+        installed_package = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
+        source_package = json.loads((source_cms_root / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS source or installed Strapi package metadata is unreadable") from error
+    expected_strapi_version = source_package.get("dependencies", {}).get("@strapi/strapi")
+    if (artifact_package.get("dependencies", {}).get("@strapi/strapi") != expected_strapi_version
+            or installed_package.get("version") != expected_strapi_version):
+        raise HostFailure("CMS source install Strapi version differs from the artifact and source package")
     runtime_link = artifact_dir / "node_modules"
     if runtime_link.exists() or runtime_link.is_symlink():
         raise HostFailure("CMS artifact unexpectedly contains node_modules before runtime install")
@@ -760,7 +769,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     finally:
         database.close()
     _assert_no_database_handles(candidate)
-    return candidate, artifact_dir, _cms_payload_sha256(artifact_dir, uploads_root)
+    return candidate, artifact_dir, _cms_payload_sha256(artifact_dir, uploads_root, dependencies)
 
 
 def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,

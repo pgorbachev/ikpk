@@ -15,8 +15,11 @@ const CORE_STORE_TABLE = 'strapi_core_store_settings';
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
+  'plugin_upload_metrics',
   'strapi_content_types_schema',
 ]);
+const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
   ['schedule_entries', ['status', 'entry_status']],
@@ -433,6 +436,61 @@ function lifecycleWindow(receipt) {
   const end = typeof completed === 'string' ? Date.parse(completed) : NaN;
   return Number.isSafeInteger(start) && Number.isSafeInteger(end) && start <= end ? { start, end } : null;
 }
+function closedLoadWindows(receipt) {
+  const starts = new Set(['closed-load-started', 'activation-closed-load-started']);
+  const windows = [];
+  let pending = null;
+  let valid = true;
+  for (const event of receipt.lifecycle ?? []) {
+    if (starts.has(event?.event)) {
+      if (pending !== null) valid = false;
+      const start = typeof event.at === 'string' ? Date.parse(event.at) : NaN;
+      pending = Number.isSafeInteger(start) ? start : NaN;
+    } else if (event?.event === 'strapi-load-complete') {
+      const end = typeof event.at === 'string' ? Date.parse(event.at) : NaN;
+      if (pending === null || !Number.isSafeInteger(pending) || !Number.isSafeInteger(end) || end < pending) valid = false;
+      else windows.push({ start: pending, end });
+      pending = null;
+    }
+  }
+  if (pending !== null) valid = false;
+  return { valid, windows };
+}
+function weeklyCron(value) {
+  const date = new Date(value);
+  return `${date.getUTCSeconds()} ${date.getUTCMinutes()} ${date.getUTCHours()} * * ${date.getUTCDay()}`;
+}
+function scheduleMatchesWindow(schedule, window) {
+  if (!/^\d{1,2} \d{1,2} \d{1,2} \* \* \d$/.test(schedule)) return false;
+  const [seconds, minutes, hours, , , day] = schedule.split(' ').map(Number);
+  if (seconds > 59 || minutes > 59 || hours > 23 || day > 6) return false;
+  const first = window.start + 15_000;
+  const last = window.end + 15_000;
+  for (let time = first; time <= last; time += 1000) {
+    if (weeklyCron(time) === schedule) return true;
+  }
+  return false;
+}
+function allowedUploadMetricsScheduleRefresh(sourceValue, candidateValue, receipt) {
+  let source; let candidate;
+  try { source = JSON.parse(sourceValue); candidate = JSON.parse(candidateValue); } catch { return false; }
+  const keys = ['lastWeeklyUpdate', 'weeklySchedule'];
+  if (!source || typeof source !== 'object' || Array.isArray(source)
+    || !candidate || typeof candidate !== 'object' || Array.isArray(candidate)
+    || JSON.stringify(Object.keys(source).sort()) !== JSON.stringify(keys)
+    || JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify(keys)
+    || JSON.stringify(source) !== sourceValue || JSON.stringify(candidate) !== candidateValue
+    || !Number.isSafeInteger(source.lastWeeklyUpdate) || source.lastWeeklyUpdate < 0
+    || candidate.lastWeeklyUpdate !== source.lastWeeklyUpdate
+    || typeof source.weeklySchedule !== 'string' || typeof candidate.weeklySchedule !== 'string'
+    || source.weeklySchedule === candidate.weeklySchedule) return false;
+  const lifecycle = closedLoadWindows(receipt);
+  if (!lifecycle.valid) return false;
+  const lastWeeklyUpdateExpiry = source.lastWeeklyUpdate + WEEK_MS;
+  return Number.isSafeInteger(lastWeeklyUpdateExpiry)
+    && lifecycle.windows.some((window) => lastWeeklyUpdateExpiry < window.start
+      && scheduleMatchesWindow(candidate.weeklySchedule, window));
+}
 function expectedCoreStoreValue(key, sourceValue) {
   let expected;
   try { expected = JSON.parse(sourceValue); } catch { return null; }
@@ -480,7 +538,7 @@ function expectedCoreStoreValue(key, sourceValue) {
   }
   return null;
 }
-function compareCoreStore(sourceDb, candidateDb, differences) {
+function compareCoreStore(sourceDb, candidateDb, differences, receipt) {
   const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
   const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
   if (sourceHasTable !== candidateHasTable) {
@@ -518,6 +576,12 @@ function compareCoreStore(sourceDb, candidateDb, differences) {
     if (sourceRow.value === candidateRow.value) continue;
     if (!CORE_STORE_KEYS.has(key)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
+      continue;
+    }
+    if (key === UPLOAD_METRICS_KEY) {
+      if (!allowedUploadMetricsScheduleRefresh(sourceRow.value, candidateRow.value, receipt)) {
+        differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+      }
       continue;
     }
     const expected = expectedCoreStoreValue(key, sourceRow.value);
@@ -751,7 +815,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
     const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
-    compareCoreStore(source, candidate, differences);
+    compareCoreStore(source, candidate, differences, receipt);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {
