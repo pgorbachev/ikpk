@@ -132,10 +132,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             db.close()
             uploads = root / "uploads"
             uploads.mkdir()
-            (uploads / "photo.jpg").write_bytes(b"photo")
+            shared_photo = b"same photo bytes in separate namespaces"
+            (uploads / "photo.jpg").write_bytes(shared_photo)
             static_media = root / "old-static/media"
             static_media.mkdir(parents=True)
-            (static_media / "legacy.jpg").write_bytes(b"legacy photo")
+            (static_media / "legacy.jpg").write_bytes(shared_photo)
             (root / "backups").mkdir()
             config = {"cmsDatabase": str(database), "backupRoot": str(root / "backups"),
                       "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"},
@@ -145,8 +146,17 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with patch.object(rehearsal_host, "_assert_no_database_handles"):
                 manifest = rehearsal_host._backup(config, "lstat-op")
             backup_dir = root / "backups/lstat-op"
-            self.assertEqual(sha((backup_dir / "backup.tar").read_bytes()), manifest["archiveSha256"])
+            archive_bytes = (backup_dir / "backup.tar").read_bytes()
+            self.assertEqual(sha(archive_bytes), manifest["archiveSha256"])
             self.assertEqual({row["url"].split("/", 2)[1] for row in manifest["media"]}, {"uploads", "media"})
+            self.assertEqual({row["url"] for row in manifest["media"]},
+                             {"/uploads/photo.jpg", "/media/legacy.jpg"})
+            self.assertEqual({row["file"] for row in manifest["media"]},
+                             {f"media/sha256:{sha(shared_photo)}"})
+            offhost = root / "offhost"
+            offhost.mkdir()
+            operator.persist_offhost_backup(offhost, "lstat-op", "a" * 40, archive_bytes,
+                                            manifest["archiveSha256"])
             db = sqlite3.connect(f"file:{backup_dir / 'database.sqlite'}?mode=ro", uri=True)
             try:
                 self.assertEqual(db.execute("SELECT body FROM content").fetchone()[0], "preserved")
