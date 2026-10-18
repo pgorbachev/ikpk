@@ -22,6 +22,120 @@
 нет. Скрипт VPS собирает текущее рабочее дерево, по умолчанию использует root и не проверяет
 вердикт CI. Поэтому наличие работающей ручной команды ещё не означает выполнение этой спеки.
 
+## План минимальной поставки — 2026-10-18
+
+Этот раздел задаёт план репетиции CMS и статики на demo 193. Предыдущие требования change
+остаются в силе, кроме точно названных здесь уточнений источника CMS и границ принятия пары.
+Рабочий интеграционный worktree `codex/deploy-integrate-luna-20261017` — reference-only:
+его незакоммиченные файлы не являются базой поставки и не переносятся целиком.
+
+### Источники и допуск
+
+- Доверенное tooling запускается из проверенного `main`, независимо от source artifacts.
+- Rehearsal source — один coherent полный SHA, полученный от отобранного `dev` и содержащий
+  CMS и static code вместе. Именно этот результат предполагается затем сделать `main`; во
+  время rehearsal CMS artifact и static candidate обязаны происходить из него же.
+- До такого SHA нужна отдельная source reconciliation. Сохранить продукт/CMS #186, #305,
+  #313, #315; migration plan/runner/audit #330/#331; зависимости/CI #306, #308, #309, #310;
+  shared CMS authoring/media helpers from #329. По техническому анализу закрытый
+  `sql-demo*`/`sql-public-{reader,content,materializer}` PostgreSQL dump-import graph,
+  `prototype-sql-demo.ts` и его tests не входят в Strapi SQLite rehearsal candidate; внешних
+  runtime consumers нет. Сохранить shared `strapi-media-inventory`, `upload-body`, authoring,
+  runner/audit/schema-audit/plan/helpers и `demo193-source-empty-fields`, нужный migration
+  lifecycle/plan. Историю старого worktree не удалять. Из #332 сохранить только продуктовые изменения в
+  `web/astro.config.mjs`, `TopNav.astro`, `Footer.astro`, `CtaBand.astro`,
+  `web/src/lib/home.ts`, `web/src/styles/base.css` (TD-4/TD-5), а механизмы выкладки #332–#335
+  и отдельный `release-tests.yml` убрать. Шесть main fixes #316, #317, #318, #319, #324, #325
+  должны войти в итоговый SHA.
+- Source candidate готовится в отдельной ветке от свежего `main`, затем интегрирует выбранные
+  изменения `dev` и направляется PR в `dev`; это оставляет main delta видимым для решения
+  конфликтов (ожидается около семи). При интеграции сохранить отказ `#318` при неизвестной
+  форме данных. Не копировать 74 коммита или 400 файлов из старого deployment integration WT.
+- Ранее обсуждавшаяся смешанная пара `main` static + `dev` CMS не является fallback: Astra
+  обнаружила, что main capture не использует `--server-capture`, `FIELD_MAP` не знает
+  `schedule_entries.image`/`isEventCollection`, а dev содержит seminar `documents`/`learning_*`
+  и multiple-photo content, который main capture не сохраняет. Эти несовпадения устраняются
+  source reconciliation, после чего проверяется единый candidate SHA.
+- Текущий `dev@3c04687ab7fc101a4e531f689728a078316c61c2` — лишь inventory: его CI успешен
+  (`Tests` 39019138266, `Release` 39019138267), но в нём нет шести main fixes и он не является
+  rehearsal candidate. Текущий `main@09347070ceb5634cf4b46774934238c0eac306d1` не прошёл
+  `Tests` (38546961478). Source reconciliation решает около семи конфликтов; итоговый полный
+  SHA должен пройти один обязательный `Tests` workflow. Не переносить 74 коммита `dev` целиком
+  и не дублировать проверки в отдельном release workflow.
+- Manifest содержит один rehearsal source SHA, canonical ref, обязательный CI run/attempt,
+  CMS artifact digest и static candidate digest. Для production tooling сверяет новый exact
+  `main` SHA после squash и canonical push `Tests`; source tree должен совпадать с принятым
+  coherent candidate. Squash может изменить commit SHA: CMS и static связываются с одним SHA
+  внутри каждого destination release, а не с одним и тем же dev/main commit ID. GitHub Release
+  создаётся после успешной production deployment; archive tag и удаление `dev` — более поздний
+  отдельный этап.
+- Static candidate собирается trusted executor на demo193 из sealed source; browser checks
+  оператор может выполнить отдельно над тем же sealed candidate без deploy credentials.
+  Передача и активация сверяют ту же сумму. Пока source reconciliation не закрыта и полный SHA
+  не прошёл CI, это план проверки, не разрешение собирать или активировать candidate.
+
+### Обновление CMS и публикация статики
+
+Оператор начинает одну операцию с уникальным operation ID и общим host lock. У каждого
+отдельного процесса есть собственный lock acquisition: он сверяет persistent maintenance
+marker и operation ID, отказывает другой операции и продолжает только свою. Marker состояния
+`maintenance-started` записывается устойчиво до side effects. Затем fence применяется,
+останавливаются writers, и закрытие проверяется; до подтверждения fence запрещены любые DB/code
+изменения. Если acquisition прерван до подтверждённого закрытия, recovery сначала закрывает и
+проверяет writers и только затем продолжает. После подтверждённого закрытия fence сохраняется
+до явного `recover`/`finalize`, включая reboot; новый UUID не может затереть незавершённый marker.
+
+Два операторских действия — CMS update и static publication — выполняются в одной fenced
+операции из одного coherent source SHA. Между ними CMS может быть уже принята, но общая
+операция ещё не committed, а writers остаются закрыты. Manifest связывает прежний и новый
+CMS code, DB, media, static candidate, configuration, operation ID, source SHA, CI run/attempt
+и artifact/candidate digests. Production использует отдельное release window с допущенным
+`main` SHA; rehearsal на demo сам по себе не является production admission.
+
+CMS `npm ci`, build, миграционная подготовка и audit выполняются непривилегированным
+пользователем. Root исполняет только ограниченные операции над заранее разрешёнными путями:
+запись marker, fence, остановка/запуск назначенного unit, атомарная замена DB/code ссылок и
+восстановление по manifest. После подтверждённого fence и остановки всех writers выполняется
+проверенный WAL checkpoint, отсутствие активных DB handles и final DB+media backup; его off-host
+копия подтверждается до destructive migration/switch. Online backup может быть только
+предварительной дополнительной копией. WAL учитывается при checkpoint/copy/switch/recovery;
+media сохраняются с исходными именами и проверенными владельцем/правами, затем проверяется
+наличие файлов, на которые ссылается DB.
+
+Writer fence SHALL cover все CMS write surfaces: admin/content-manager, upload, API writes и
+custom write endpoints. Он не закрывает payments/status и не прерывает раздачу uploads/media.
+Использовать текущие nginx locations, не добавлять параллельные location rules. Перед заменой
+gate config валидировать итог через `nginx -t`; при ошибке возвращать прежний файл, не снимая
+durable fence. Fence хранится на диске и переживает reboot. Любой доступный CMS button или
+nonprivileged publication path обязан брать тот же host release lock, чтобы не начать
+конкурирующие build/CMS update вне fenced операции. Это один lock/marker protocol, без новой
+системы из отдельных lifecycle actions.
+
+После активации CMS ждать health с polling до 20 минут и проверять фактическую БД процесса по
+`/proc/<pid>/environ` и открытым fd. Только здоровая CMS с ожидаемыми DB и media может перейти
+к статическому candidate. Повторная операция сохраняет принятые editor writes: mutable live DB
+и WAL не сравниваются с immutable initial backup hash как условие допуска повторного выпуска.
+Проверяются migration lineage/history и новый source/candidate digest;
+новые записи контента не трактуются как подмена исходной backup-копии.
+
+`committed` — общий durable marker после приёмки и CMS, и static candidate, до открытия
+writers. DB restore запрещён с момента durable `committed`, даже если процесс ещё не успел
+reopen writers. До него ошибка CMS может восстановить прежнюю DB/code/media из manifest и
+off-host backup; восстановление требует явного recovery action. Ошибка static после принятия
+CMS, но до общего `committed`, оставляет writers закрытыми для retry static или явного recovery;
+автоматический откат DB не выполняется. Если global commit уже записан, допустимы только
+static retry/recovery и reopen после обеих приёмок, без DB restore.
+
+Материальные сценарии отказа для implementation: prewrite/backup/migration/audit/CMS health
+failure → writers fenced до явного restore старой пары либо безопасного finalize; static
+candidate/checksum failure после CMS activation → CMS остаётся активной, writers fenced,
+операция возобновляется по тому же ID; acquisition failure before verified fence → DB/code
+не меняются, recovery сначала закрывает writers; SSH disconnect проверяется на demo193,
+crash/reboot semantics — только в isolated Linux harness;
+повторный source SHA с новыми editor writes → сравнение lineage/history, без требования
+совпадения mutable live DB с прежней суммой; любое несоответствие CI/SHA/digest → отказ
+до candidate code execution или host side effects.
+
 ## Goals / Non-Goals
 
 **Goals:**

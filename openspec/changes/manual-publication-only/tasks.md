@@ -259,3 +259,45 @@ merge и деплоя. Операционные предусловия ниже 
   выявил гонку сообщения об отказе SSH; исправление и повторный прогон остаются в работе.
 - Свежий typecheck: 424 файла, 0 errors / 0 warnings / 8 hints. Web lint и audit:prod зелёные.
   Финальные 8.1–8.2 ещё не закрыты; промежуточные числа не подменяют эти гейты.
+
+## 9. Rehearsal 193 по coherent candidate source
+
+- [ ] 9.1 Получить source-reconciliation candidate в отдельной ветке от свежего `main`; PR в
+  `dev` включает выбранный продукт/CMS, migrations, CI и шесть production fixes из design.
+  Не использовать старый deployment integration worktree как base и не переносить его целиком.
+- [ ] 9.2 Оставить из #332 только перечисленные продуктовые файлы; убрать deployment mechanics
+  #332–#335 и дублирующий `release-tests.yml`. Исключить из #329 закрытый PostgreSQL dump-import
+  graph и tests; сохранить shared authoring/media helpers, runner/audit/schema-audit/plan/helpers
+  и `demo193-source-empty-fields`. Старый worktree не удалять.
+- [ ] 9.3 Подтвердить owner-designated candidate как один coherent CMS+static full SHA на
+  canonical `dev`; добиться успеха единственного обязательного `Tests` push workflow на этом
+  exact SHA. Красный main run `38546961478` и успешный исходный dev run
+  `39019138266/39019138267` не считаются приемкой нового candidate.
+- [ ] 9.4 Подготовить CMS runtime artifact и server-built static candidate из одного source SHA;
+  manifest сохраняет exact ref/SHA/run/attempt и hashes code, DB backup, media, config и static
+  tree. Операторские browser checks запускаются отдельно на том же sealed candidate без deploy
+  credentials.
+- [ ] 9.5 Реализовать persistent marker и host lock ownership: до DB/code mutation writers
+  остановлены, fence проверен, каждый process acquisition сверяет operation ID; acquisition
+  failure запрещает mutation, после fence closure recovery сохраняет fence до finalize.
+- [ ] 9.6 Реализовать CMS update без root выполнения npm/build/prepare/audit; bounded root
+  actions ограничены разрешёнными путями, unit и nginx gate. Проверить все CMS write surfaces,
+  сохранить payments/status и media serving, проверить gate config через `nginx -t` и
+  восстановить прежний config при ошибке.
+- [ ] 9.7 После fence, остановки всех writers и подтверждённого WAL checkpoint/no handles снять
+  final DB+media backup, проверить SQLite integrity и подтвердить off-host copy до destructive
+  migration/switch. Проверить migration plan/history, audit, recovery и media names/perms/links.
+- [ ] 9.8 После CMS activation дождаться health до 20 минут и подтвердить фактический DB path
+  по process environ и open fd. При повторной операции сохранить editor writes; mutable DB/WAL
+  сравнивать по lineage/history, не по initial backup hash.
+- [ ] 9.9 Принимать static candidate из тех же CMS данные/code, прогнать browser checks на
+  той же сумме и передать те же bytes. Не писать global `committed`, пока обе части не приняты;
+  записать его до reopen. После него DB restore запрещён, в том числе до reopen.
+- [ ] 9.10 Проверить acquisition interruption и отказ static после CMS activation: не менять DB/code
+  до проверенного fence; сохранить fence после closure, разрешить retry по тому же ID или explicit
+  recovery. На demo193 проверить SSH disconnect/recovery; crash/reboot только в isolated Linux
+  harness.
+- [ ] 9.11 Провести полный demo193 rehearsal: обновление от согласованного production baseline,
+  actual DB/media readback, pre-commit rollback и повторный выпуск без повторного применения
+  миграций; отдельно записать что source/CMS/site parity доказано. Production window, Release,
+  archive tag и удаление `dev` в эту rehearsal не входят.

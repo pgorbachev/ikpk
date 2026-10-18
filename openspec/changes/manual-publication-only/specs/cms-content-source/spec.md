@@ -361,3 +361,56 @@ SHALL NOT распространяться на артефакты прогон�
 - **WHEN** проверки для предложения изменений запускаются на одном и том же закреплённом снимке
   в разные календарные дни
 - **THEN** вывод сборки совпадает, включая статусы семинаров и месячные ключи расписания
+
+## ADDED Requirements
+
+### Requirement: Обновление CMS и публикация статики используют общий durable fence
+
+Операторские действия обновления CMS и статической публикации SHALL принадлежать одной
+операции с общим operation ID и persistent maintenance marker. Marker `maintenance-started`
+SHALL быть устойчиво записан до side effects. Затем writers останавливаются, fence применяется
+и его закрытие проверяется; до подтверждения fence DB/code mutation SHALL NOT выполняться. Если
+acquisition прерван раньше, recovery сначала закрывает и проверяет writers, не меняя DB/code.
+Каждый новый процесс SHALL отдельно получить host lock и сверить marker; он SHALL продолжать
+только ту же операцию и SHALL NOT допускать другой operation ID. После подтверждённого
+закрытия fence остаётся до явного recover/finalize, включая reboot.
+
+Global marker `committed` SHALL фиксироваться только после приёмки активной CMS и static
+candidate и до reopen writers. До него восстановление допустимо только по явному recovery и
+manifest/off-host backup. После durable `committed` восстановление DB SHALL NOT выполняться,
+даже если writers ещё не reopened. Ошибка static после CMS activation, но до global commit,
+SHALL оставлять writers fenced для retry static или явного recovery; автоматическое
+восстановление DB SHALL NOT запускаться.
+
+#### Scenario: static candidate не принят после CMS activation
+
+- **WHEN** CMS здорова и принята, но static checks или checksum не прошли до global commit
+- **THEN** writers остаются fenced, а операция доступна для retry или явного recovery по тому
+  же operation ID
+- **AND** DB не восстанавливается автоматически
+
+#### Scenario: acquisition прерван до подтверждения fence
+
+- **WHEN** процесс завершился после maintenance marker, но до подтверждённого закрытия writers
+- **THEN** DB и code остаются неизменными
+- **AND** recovery сначала закрывает writers и проверяет fence
+
+#### Scenario: операция прервана до global commit
+
+- **WHEN** shell, SSH, процесс или хост завершился после maintenance marker, но до `committed`
+- **THEN** если fence был подтверждён, persistent marker и fence сохраняются; другой operation ID
+  получает отказ
+- **AND** восстановление прежней пары требует явного recovery и проверенной off-host копии
+
+#### Scenario: обе части приняты и global commit durable
+
+- **WHEN** CMS и static candidate прошли приёмку и `committed` устойчиво записан, но reopen ещё
+  не завершён
+- **THEN** writers можно открыть после проверки manifest
+- **AND** DB restore запрещён
+
+#### Scenario: повторный выпуск после редакторских изменений
+
+- **WHEN** live DB изменилась после принятого выпуска из-за editor writes
+- **THEN** admission проверяет migration lineage/history и текущую операцию
+- **AND** не требует совпадения mutable DB или WAL с исходным immutable backup hash
