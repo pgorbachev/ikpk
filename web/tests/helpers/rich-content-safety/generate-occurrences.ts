@@ -48,6 +48,7 @@ function matchSlot(
   slots: ExecutableSlot[],
   found: FoundOccurrence,
   usedSlotIds: Set<string>,
+  build: 'production' | 'demo',
 ): ExecutableSlot | undefined {
   const pick = (candidates: ExecutableSlot[]): ExecutableSlot | undefined => {
     const unused = candidates.find((slot) => !usedSlotIds.has(slot.slotId));
@@ -64,7 +65,7 @@ function matchSlot(
   };
   const exact = slots.filter((slot) => slot.identity === found.identity);
   if (exact[0]) return disambiguate(exact);
-  const projected = slots.filter((slot) => !provenanceError(slot.identity, found.identity));
+  const projected = slots.filter((slot) => !provenanceError(slot.identity, found.identity, { build }));
   if (projected.length === 0) return undefined;
   const output = projectIdentity(found.identity);
   if (output.tag === 'link' && (output.staticAttrs.get('rel') ?? '') === 'stylesheet') {
@@ -104,7 +105,7 @@ export function collectRulesFromDist(
     const route = htmlFileRoute(file, distRoot);
     const usedSlotIds = new Set<string>();
     for (const found of collectOccurrences(html)) {
-      const slot = matchSlot(slots, found, usedSlotIds);
+      const slot = matchSlot(slots, found, usedSlotIds, build);
       if (!slot) {
         unmatched.push({ route, identity: found.identity, placement: found.placement });
         continue;

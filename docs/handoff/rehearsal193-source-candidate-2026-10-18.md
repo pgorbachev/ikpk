@@ -22,14 +22,22 @@ tag, or release was changed while preparing it.
 | #335 narrow runner correction | Kept only `cms/scripts/run-data-migrations.mjs`, `cms/database/migrations/plan.json`, and `cms/tests/data-migration-runner-behavior.test.js`: closed-load random secrets, loopback/ephemeral port, capture-token bootstrap disabled, ambient environment restoration, and source preflight before dependency fingerprinting. Plan integrity records the runner's exact hash. No release-artifact or CI attachment machinery came with it. |
 | #332–#335 release/deploy machinery | Excluded wholesale except the six #332 product files and the three #335 runner files above. In particular, no `scripts/deploy*`, publication gateway/lifecycle, `scripts/build-cms-artifact.sh`, or `.github/workflows/release-tests.yml` was carried over. The separate SQLite reader in #332 (`scripts/lib/server-capture-sqlite.mjs`) and its bundle proof are not in this source candidate. A future minimal operator publication bridge for the frozen Strapi SQLite snapshot must retain the read-only/quiescence and snapshot-metadata proof that this helper supplies; that dependency needs its own approved concise plan. It does not imply taking the #332 gateway or lifecycle wholesale. |
 
-The old `web/tests/publication-{catalog,content,schedule,widgets}.spec.ts` tests are
-excluded with their publication-candidate harness. They import `helpers/publication-candidate`,
-which assembled a deploy-only candidate and was removed with that retired release path;
-they are not in the active Playwright `testMatch` or required `Tests` workflow. Their
-product assertions overlap current source/build gates for article controls, seminar
-schedule fields and filters, external-widget output/configuration, SEO and navigation.
-This does not provide a browser-level assertion over a future frozen SQLite publication
-candidate; add that bounded check only with the separately approved capture bridge plan.
+Kept the four actual-snapshot browser product suites
+`web/tests/publication-{catalog,content,schedule,widgets}.spec.ts` and their narrow
+shared `web/tests/helpers/publication-candidate{,-data}.ts` reader/routing closure plus
+`web/tests/manual-publication-candidate-data.test.ts`. They assert catalog search,
+sorting and pagination; content, SEO, links and accessibility; schedule filtering;
+and widget geometry and overlay behavior against the exact captured snapshot and output
+tree. They do not import the removed publication inventory, gateway, or rollback path.
+They remain unexecuted in this candidate because their required
+`CONTENT_SNAPSHOT_DIR`, `PUBLICATION_TREE_DIR`, and `PUBLICATION_BASE_URL` are supplied
+by the not-yet-approved frozen-SQLite capture bridge; source/build/widget gates are not
+equivalent browser acceptance for that artifact. The future bridge plan must wire a
+small meaningful subset of these suites against the same frozen artifact.
+
+`web/tests/evidence/visual-baseline-reconciliation.md` is retained as historical review
+evidence from a separate 2026-10-16 worktree and SHA; it is not visual acceptance of this
+candidate or a substitute for a fresh relevant visual check.
 
 `.github/workflows/test.yml` retains the current unit/build checks, runs on pushes to
 `main` and `dev`, and includes the excluded-from-parallel Docker provisioning tests as

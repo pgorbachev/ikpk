@@ -1,4 +1,8 @@
-# Visual baseline reconciliation
+# Historical visual baseline reconciliation
+
+This is a retained decision record from a separate worktree and the 2026-10-16
+proposal SHA below. It is not visual acceptance evidence for the current rehearsal193
+source candidate; review and capture candidate-specific visual evidence separately.
 
 Base: `6b514096838084af9e83e0d5ebdab09e0af19749` (`review/visual-baseline-proposal-20261016`).
 
