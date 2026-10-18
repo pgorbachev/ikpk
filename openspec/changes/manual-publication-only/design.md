@@ -37,7 +37,7 @@
   время rehearsal CMS artifact и static candidate обязаны происходить из него же.
 - До такого SHA нужна отдельная source reconciliation. Сохранить продукт/CMS #186, #305,
   #313, #315; migration plan/runner/audit #330/#331; зависимости/CI #306, #308, #309, #310;
-  shared CMS authoring/media helpers from #329. По техническому анализу закрытый
+  shared CMS authoring/media helpers and demo193 SQLite capture bundle from #329. По техническому анализу закрытый
   `sql-demo*`/`sql-public-{reader,content,materializer}` PostgreSQL dump-import graph,
   `prototype-sql-demo.ts` и его tests не входят в Strapi SQLite rehearsal candidate; внешних
   runtime consumers нет. Сохранить shared `strapi-media-inventory`, `upload-body`, authoring,
@@ -73,6 +73,25 @@
   оператор может выполнить отдельно над тем же sealed candidate без deploy credentials.
   Передача и активация сверяют ту же сумму. Пока source reconciliation не закрыта и полный SHA
   не прошёл CI, это план проверки, не разрешение собирать или активировать candidate.
+
+### DEMO snapshot policy
+
+Для destination 193 разрешается только явно настроенный `sourcePolicy=demo-publication-only`
+с фиксированными host `193.124.115.99`, `siteUrl=https://staging.ikpk.su`, `deployMode=stand`
+и `paymentRole=ci`; сверка происходит до credentials или host access. Source identity остаётся
+reconciled canonical `dev`/`demo-dev`. Снимок имеет `recordKind=publication-snapshot`,
+`sourceAge=untracked`, `origin=server-db` и `sourceId=demo193-cms`; он не создаёт `edit`,
+`restore`, `initial-migration`, `accept-state`, revision или HWM writes. Существующие events,
+HWM и verified-pairs сохраняются; новая пара добавляется только после успешной serving check.
+Это узкая замена требования к возрасту CMS для rehearsal; production и legacy сохраняют
+journal/revision rules.
+
+Согласованность DB/content/media доказывает server-side capture bundle: все CMS writers
+остановлены, SQLite backup quiesced, schema/DB/WAL/media state сравнен до и после, все ссылки
+на media разрешены на точные сохранённые байты. Sealed proof связывает source ID, capture ID,
+schema, DB, media manifest и bundle SHA-256. Два REST reads или раздельные незапечатанные
+копии proof не заменяют. Capture mutation, неизвестная связь или недостающее media отклоняют
+snapshot до candidate publication; последующие editor writes не меняют sealed snapshot.
 
 ### Обновление CMS и публикация статики
 

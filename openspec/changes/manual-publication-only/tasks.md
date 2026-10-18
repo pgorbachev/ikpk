@@ -275,8 +275,10 @@ merge и деплоя. Операционные предусловия ниже 
   `39019138266/39019138267` не считаются приемкой нового candidate.
 - [ ] 9.4 Подготовить CMS runtime artifact и server-built static candidate из одного source SHA;
   manifest сохраняет exact ref/SHA/run/attempt и hashes code, DB backup, media, config и static
-  tree. Операторские browser checks запускаются отдельно на том же sealed candidate без deploy
-  credentials.
+  tree. Включить approved `demo-publication-only` policy, `publication-snapshot`,
+  `sourceAge=untracked`, отсутствие journal/revision/HWM writes и capture proof полного
+  quiesced SQLite/content/media bundle. Operator browser checks идут отдельно по тому же sealed
+  candidate без deploy credentials.
 - [ ] 9.5 Реализовать persistent marker и host lock ownership: до DB/code mutation writers
   остановлены, fence проверен, каждый process acquisition сверяет operation ID; acquisition
   failure запрещает mutation, после fence closure recovery сохраняет fence до finalize.
@@ -286,7 +288,8 @@ merge и деплоя. Операционные предусловия ниже 
   восстановить прежний config при ошибке.
 - [ ] 9.7 После fence, остановки всех writers и подтверждённого WAL checkpoint/no handles снять
   final DB+media backup, проверить SQLite integrity и подтвердить off-host copy до destructive
-  migration/switch. Проверить migration plan/history, audit, recovery и media names/perms/links.
+  migration/switch. Проверить capture proof snapshot, migration plan/history, audit, recovery и
+  media names/perms/links.
 - [ ] 9.8 После CMS activation дождаться health до 20 минут и подтвердить фактический DB path
   по process environ и open fd. При повторной операции сохранить editor writes; mutable DB/WAL
   сравнивать по lineage/history, не по initial backup hash.

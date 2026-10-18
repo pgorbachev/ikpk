@@ -220,6 +220,22 @@ browser smoke desktop/mobile и применимость платёжного н
   полного SHA
 - **AND** этот допуск сам по себе не разрешает production публикацию
 
+#### Scenario: DEMO profile доступен только закреплённому стенду
+
+- **WHEN** запрос использует `sourcePolicy=demo-publication-only`
+- **THEN** защищённые host, `siteUrl`, `deployMode=stand` и `paymentRole=ci` сверяются до
+  credentials и host access
+- **AND** несовпадение отказывает без переключения destination
+- **AND** source identity остаётся admitted reconciled `dev` SHA, а CMS snapshot помечается
+  `sourceAge=untracked` без journal/revision/HWM writes
+
+#### Scenario: DEMO candidate сохраняет обязательные проверки и существующую историю
+
+- **WHEN** explicit DEMO source policy проходит capture/source admission
+- **THEN** пять local check groups, source CI, destination checks, serving verification и
+  confirmed rollback остаются обязательны
+- **AND** journal events, HWM и existing verified-pairs не меняются, кроме append после serving
+
 #### Scenario: тесты прошли, но коммит уже перекрыт
 
 - **WHEN** обязательный прогон завершился успешно, но вершиной стал другой коммит

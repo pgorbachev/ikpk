@@ -364,6 +364,47 @@ SHALL NOT распространяться на артефакты прогон�
 
 ## ADDED Requirements
 
+### Requirement: DEMO-снимок не заявляет возраст CMS и не пишет в журнал событий
+
+Явно выбранный `sourcePolicy=demo-publication-only` SHALL создавать отдельный
+`recordKind=publication-snapshot` с `sourceAge=untracked`, `origin.kind=server-db` и
+`origin.sourceId=demo193-cms`. Он SHALL NOT создавать `edit`, `restore`, `initial-migration`,
+`accept-state`, revision или HWM; существующие journal events, high-water mark и verified-pairs
+SHALL оставаться неизменными, кроме добавления новой пары после подтверждённой serving check.
+Legacy и production SHALL продолжать применять journal/revision rules.
+
+Snapshot SHALL содержать immutable content records и все используемые media bytes, связанные
+одним capture proof для quiesced SQLite backup, schema, database, media manifest и bundle
+digests. Capture SHALL остановить всех CMS writers и подтвердить закрытие, проверить
+database/WAL и media inventories до и после копирования, разрешить каждую content media
+reference на сохранённый файл и seal bundle до возврата. Два совпавших REST reads либо
+раздельные незапечатанные копии SHALL NOT считаться доказательством согласованности. Если
+writer нельзя остановить, источник изменился, proof отсутствует/не проходит проверку или media
+неполно, snapshot SHALL быть отвергнут до публикации. Последующие CMS edits SHALL NOT менять
+sealed snapshot.
+
+#### Scenario: DEMO age остается untracked без изменения journal
+
+- **WHEN** согласованный `demo-publication-only` snapshot подготовлен к публикации
+- **THEN** он имеет `recordKind=publication-snapshot`, `sourceAge=untracked` и capture proof
+- **AND** journal events, revision, HWM и historical verified-pairs не переписываются
+
+#### Scenario: две REST reads не доказывают согласованность
+
+- **WHEN** запись и media сняты раздельно либо нет quiesced SQLite/content/media proof
+- **THEN** DEMO snapshot отклоняется до static candidate activation
+
+#### Scenario: capture завершается при изменении источника
+
+- **WHEN** database, WAL, writers или media inventory меняются во время capture либо ссылка
+  записи не разрешается на сохранённые media bytes
+- **THEN** bundle не seal-ится и snapshot недоступен публикации
+
+#### Scenario: последующий editor write не меняет sealed capture
+
+- **WHEN** CMS меняется после успешного capture
+- **THEN** проверка и публикация используют исходные snapshot и media bytes
+
 ### Requirement: Обновление CMS и публикация статики используют общий durable fence
 
 Операторские действия обновления CMS и статической публикации SHALL принадлежать одной
