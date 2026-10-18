@@ -29,6 +29,17 @@ body {
   background-color: var(--surface-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Long words must not set a wider minimum for cards/headings at text zoom.
+     Ordinary word wrapping is unchanged until a word cannot fit its line. */
+  word-break: break-word; /* Legacy WebKit, including Safari 14. */
+  overflow-wrap: break-word;
+}
+
+@supports (overflow-wrap: anywhere) {
+  body {
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 img,

@@ -1,7 +1,8 @@
 ---
 // Верхняя навигация (вариант редизайна B). Все пункты — настоящие <a href>,
 // выпадашки — CSS/details, поэтому ссылки видны краулеру. Мобильное меню —
-// нативный <details> drawer; JS добавляет только закрытие внешним щелчком и Escape.
+// нативный <details> drawer; JS добавляет закрытие внешним щелчком/Escape и
+// перенос групп десктопной шапки при увеличенном корневом кегле.
 //
 // Про этот скрипт (пояснение держим ЗДЕСЬ, а не в разметке: HTML-комментарий и
 // комментарии внутри inline-скрипта уезжают в каждую страницу, и на первой же
@@ -110,6 +111,19 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 
 <script>
   (() => {
+    const header = document.querySelector<HTMLElement>('header.topnav');
+    const bar = header?.querySelector<HTMLElement>('.topnav-bar');
+    if (header && bar) {
+      const reflow = () => {
+        const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        header.classList.toggle('topnav-text-reflow', window.innerWidth > 900 && bar.clientWidth <= 56.25 * rootSize);
+      };
+      // The bar is capped at 1240px even on wider viewports. Observe height too:
+      // a root-font change grows it while its width remains fixed. The condition
+      // never depends on the resulting row count.
+      new ResizeObserver(reflow).observe(bar);
+      reflow();
+    }
     const d = document.querySelector<HTMLDetailsElement>('details.topnav-mobile');
     if (!d) return;
     document.addEventListener('pointerdown', (e) => {
@@ -218,6 +232,12 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   .topnav-cta { padding: 0.5rem 1.1rem; }
 
   .topnav-mobile { display: none; }
+
+  /* Apply only when text outgrows the desktop row. Unconditional wrapping
+     changes the normal wide header; this keeps its existing geometry. */
+  .topnav-text-reflow .topnav-bar { flex-wrap: wrap; }
+  .topnav-text-reflow .topnav-menu { flex-basis: auto; width: max-content; min-width: 0; }
+  .topnav-text-reflow .topnav-menu > ul { flex-wrap: wrap; }
 
   /* Телефоны в шапке уходят ступенями, а не разом.
      Два номера помещаются только шире 1440 px: подпись кнопки стала длиннее
