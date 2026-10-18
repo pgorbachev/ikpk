@@ -48,7 +48,7 @@ describe('rendered demo193 build profile', () => {
       '@id': 'https://193.124.115.99/#website',
       description: 'https://ikpk.su/description',
     });
-    expect(html).toContain('Демо-стенд: формы заявки отключены');
+    expect(html).toContain('Стейджинг-стенд: формы заявки отключены');
     expect(html).not.toContain('data-payment-role="stand"');
   });
 });

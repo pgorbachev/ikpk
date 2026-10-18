@@ -1,5 +1,4 @@
 import { test } from 'node:test';
-import { sourceCiFixtureScript } from './helpers/publication-ci-fixture.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -70,8 +69,7 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   assert.equal(readFileSync(join(host, 'releases/agent-probe/index.html'), 'utf8'), 'checked bytes');
   rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
 
-  const ciBootstrap = join(temp, 'ci-fixture.mjs'); write(ciBootstrap, sourceCiFixtureScript(git(repo, 'rev-parse', 'HEAD')));
-  const result = await run(['--import', ciBootstrap, installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main'], { cwd: temp, env: cleanEnv() });
+  const result = await run([installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main'], { cwd: temp, env: cleanEnv() });
   assert.equal(existsSync(brokerTrace), true, 'the broker must actually deliver the configured socket');
   assert.equal(result.status, 0, `authorized agent handoff failed: ${result.stderr}`);
   assert.equal(JSON.parse(readFileSync(trace)).agentVerified, true); assert.equal(JSON.parse(readFileSync(trace)).brokerCalled, true);

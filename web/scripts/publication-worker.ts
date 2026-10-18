@@ -22,8 +22,6 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
   const configPath = protectedFile(env.PUBLICATION_CONFIG);
   if (configPath !== join(dirname(launcher), 'config.json') || inside(root, launcher) || inside(root, configPath)) throw new Error('untrusted-config');
   const config = readConfig(configPath);
-  const sourceRef = config.sourceRef ?? 'main';
-  if ((env.PUBLICATION_SOURCE_REF ?? 'main') !== sourceRef) throw new Error('untrusted-source');
   if (argv[0] !== config.sshTarget || env.PUBLICATION_DESTINATION_ID !== config.destinationId || env.DEPLOY_MODE !== config.deployMode) throw new Error('publication destination mismatch');
   const scratch = mkdtempSync(join(tmpdir(), 'ikpk-publication-worker-'));
   const home = join(scratch, 'home'); mkdirSync(home);
@@ -42,10 +40,10 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         { cwd: dir, env: gitEnv, encoding: 'utf8', timeout: 120_000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     } catch { throw new Error('publication source unavailable'); }
   }
-  function readSourceHead(): string {
-    const result = git(root, 'ls-remote', '--exit-code', '--refs', '--', config.canonicalRepository, `refs/heads/${sourceRef}`);
-    const match = new RegExp(`^([a-f0-9]{40})\\s+refs/heads/${sourceRef}$`).exec(result);
-    if (!match) throw new Error('canonical source unavailable');
+  function readMain(): string {
+    const result = git(root, 'ls-remote', '--exit-code', '--refs', '--', config.canonicalRepository, 'refs/heads/main');
+    const match = /^([a-f0-9]{40})\s+refs\/heads\/main$/.exec(result);
+    if (!match) throw new Error('canonical main unavailable');
     return match[1];
   }
   try {
@@ -57,9 +55,9 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
     }
     const commit = env.PUBLICATION_SOURCE_SHA;
     if (realpathSync(git(root, 'rev-parse', '--show-toplevel')) !== root ||
-        git(root, 'symbolic-ref', 'HEAD') !== `refs/heads/${sourceRef}` || git(root, 'rev-parse', 'HEAD') !== commit ||
+        git(root, 'symbolic-ref', 'HEAD') !== 'refs/heads/main' || git(root, 'rev-parse', 'HEAD') !== commit ||
         git(root, 'remote', 'get-url', 'origin') !== config.canonicalRepository ||
-        git(root, 'status', '--porcelain', '--untracked-files=all') || readSourceHead() !== commit) throw new Error('untrusted-source');
+        git(root, 'status', '--porcelain', '--untracked-files=all') || readMain() !== commit) throw new Error('untrusted-source');
     const webRoot = join(root, 'web');
     if (lstatSync(webRoot).isSymbolicLink() || !lstatSync(webRoot).isDirectory()) throw new Error('untrusted-source');
     try {
@@ -81,18 +79,13 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
       const { digestTree } = await import('../../scripts/publication-launcher.mjs');
       const workDir = join(scratch, 'state');
       const state = createPublicationStateStore({ remote: config.canonicalRepository, workDir, gitEnv });
-      const demo = config.sourcePolicy === 'demo-publication-only';
-      const id = demo ? randomUUID() : `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
-      const { demoEvidencePaths, saveDemoOperation, verifyDemoRecoveryEvidence } = await import('./lib/demo-publication-evidence.ts');
-      const durable = demo ? demoEvidencePaths(config, id) : undefined;
-      if (durable && (inside(root, durable.root) || inside(root, durable.bundle))) throw new Error('private evidence inside source checkout');
-      if (durable) mkdirSync(durable.root, { mode: 0o700 });
-      const snapshotDir = durable?.snapshot ?? join(scratch, 'snapshot'); mkdirSync(snapshotDir, { mode: 0o700 });
-      const reportsDir = durable?.reports ?? join(scratch, 'reports');
+      const snapshotDir = join(scratch, 'snapshot'); mkdirSync(snapshotDir);
+      const reportsDir = join(scratch, 'reports');
       const checkEnv = { PATH: safeEnv.PATH, CHAT_LOADER_SRC: config.chatLoaderSrc,
         ...(config.deployMode === 'stand' ? { DEMO_FORMS: config.demoForms ?? 'stub' } : {}) };
       const captureEnv = { ...safeEnv, ...Object.fromEntries(['CMS_URL', 'CMS_TOKEN', 'STRAPI_URL', 'STRAPI_API_TOKEN']
         .filter((name) => env[name] !== undefined).map((name) => [name, env[name]])) };
+      const id = `${new Date().toISOString().replaceAll(/[^0-9]/g, '')}-${randomUUID()}`;
       const [user, host] = config.sshTarget.split('@');
       const transportConfig = { host, user, root: config.webRoot, destinationId: config.destinationId,
         knownHostsFile: config.knownHostsFile, keepReleases: config.keepReleases };
@@ -110,19 +103,16 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
         } finally { usable = false; }
       }
       return await runNewPublication({ commit, destinationId: config.destinationId, deployMode: config.deployMode,
-        sourceRef, sourceProfile: config.sourceProfile, sourcePolicy: config.sourcePolicy,
         paymentRole: config.paymentRole, actor: config.actor, origin: config.siteUrl, publicationId: id, releaseId: id,
         treeDir: join(webRoot, 'dist'), reportPath: join(reportsDir, 'publication.json'), env: checkEnv }, {
-        readCiEvidence: (sha) => readCiEvidence({ commit: sha, sourceRef, token: env.GH_TOKEN }),
+        readCiEvidence: (sha) => readCiEvidence({ commit: sha, token: env.GH_TOKEN }),
         async runChecks(input) {
           await state.readHistory();
-          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir,
-            sourcePolicy: config.sourcePolicy, publicationId: id, captureBundle: durable?.bundle, siteUrl: config.siteUrl, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
+          const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
           const report = await runPublicationChecks(input, ports);
-          return { report, snapshot: readPublicationSnapshot(snapshotDir, config.sourcePolicy) };
+          return { report, snapshot: readPublicationSnapshot(snapshotDir) };
         },
-        preserveEvidence: async (operation) => { if (durable) { saveDemoOperation(durable.root, operation); await verifyDemoRecoveryEvidence(config, operation); } },
-        readMain: async () => readSourceHead(), state,
+        readMain: async () => readMain(), state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
         fetch: globalThis.fetch, now: () => new Date().toISOString(),

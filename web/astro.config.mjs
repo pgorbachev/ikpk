@@ -25,7 +25,7 @@ if (demoOutput || demoProfile === 'demo193') {
   } catch {
     throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
   }
-  const approvedDemoOrigin = demoProfile === 'demo193' && process.env.PUBLICATION_SOURCE_POLICY === 'demo-publication-only' ? 'https://staging.ikpk.su' : 'https://193.124.115.99';
+  const approvedDemoOrigin = 'https://193.124.115.99';
   if (parsedDemoSite.origin !== approvedDemoOrigin || parsedDemoSite.pathname !== '/' || parsedDemoSite.search || parsedDemoSite.hash || parsedDemoSite.username || parsedDemoSite.password) {
     throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
   }

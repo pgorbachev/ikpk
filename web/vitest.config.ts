@@ -16,7 +16,6 @@ export default defineConfig({
     exclude: [
       // Astro Container tests use the dedicated render config.
       'tests/home-people.render.test.ts',
-      'tests/footer-snapshot-clock.render.test.ts',
       'tests/demo193-profile.render.test.ts',
       // Live publication assertions need the captured snapshot and completed artifact.
       'tests/publication/snapshot.test.ts',
@@ -87,9 +86,11 @@ export default defineConfig({
       'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
-      // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
-      // контейнера не укладывается в лимит хука и валит обязательный прогон.
-      // Локально: npx vitest run --config vitest.provision.config.ts
+      'tests/footer-snapshot-clock.render.test.ts',
+      'tests/maintenance-notice.render.test.ts',
+      // Одноразовые Docker-контейнеры провижининга. Запускаются последовательно
+      // отдельным обязательным шагом workflow Tests, чтобы не смешивать их очистку
+      // с параллельным набором; конфиг задаёт bounded срок и артефакты диагностики.
       'tests/trial-environment.test.ts',
       'tests/server-provisioning-container.test.ts',
       'tests/server-provisioning-verify.test.ts',

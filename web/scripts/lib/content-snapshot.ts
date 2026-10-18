@@ -26,9 +26,16 @@ export interface SnapshotContent {
 }
 
 export interface DemoCaptureProof {
-  version: 1; method: 'quiesced-sqlite-backup'; sourceId: 'demo193-cms'; captureId: string;
-  schemaDigest: string; databaseDigest: string; mediaManifestDigest: string; bundleDigest: string;
+  version: 1;
+  method: 'quiesced-sqlite-backup';
+  sourceId: 'demo193-cms';
+  captureId: string;
+  schemaDigest: string;
+  databaseDigest: string;
+  mediaManifestDigest: string;
+  bundleDigest: string;
 }
+
 interface SnapshotFields {
   content: SnapshotContent;
   referenceDate: string;
@@ -36,16 +43,27 @@ interface SnapshotFields {
   fingerprint?: string;
   snapshotId?: string;
 }
+
 export interface JournalSnapshot extends SnapshotFields {
-  sourcePolicy?: never; sourceAge?: never; captureProof?: never;
+  sourcePolicy?: never;
+  sourceAge?: never;
+  captureProof?: never;
   origin?: SnapshotOrigin;
-  provenance?: { observedEntry: number; revision: number | null; highWaterMark: number };
+  provenance?: {
+    observedEntry: number;
+    revision: number | null;
+    highWaterMark: number;
+  };
 }
+
 export interface DemoPublicationSnapshot extends SnapshotFields {
-  sourcePolicy: 'demo-publication-only'; sourceAge: 'untracked'; captureProof: DemoCaptureProof;
+  sourcePolicy: 'demo-publication-only';
+  sourceAge: 'untracked';
+  captureProof: DemoCaptureProof;
   origin: SnapshotOrigin & { kind: 'server-db'; sourceId: 'demo193-cms'; capturedAt: string };
   provenance?: never;
 }
+
 export type Snapshot = JournalSnapshot | DemoPublicationSnapshot;
 
 /** Часовой пояс опорной даты живого снимка — задан явно, не наследуется от машины. */

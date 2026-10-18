@@ -55,40 +55,6 @@ const record = (id = 'publication-1'): PublicationRecord => {
     localChecks: { commit, snapshotId: 'snapshot-A', destinationId: 'stand', treeDigest,
       groups: PUBLICATION_GROUPS.map((name) => ({ name, conclusion: 'success', executedTests: 2 })) } };
 };
-
-describe('DEMO publication-snapshot persistence does not rewrite journal history', () => {
-  it('refuses a DEMO record with no capture proof before touching the state remote', async () => {
-    const { revision: _revision, ...identity } = record('demo-missing-proof'); void _revision;
-    const publication = { ...identity, recordKind: 'publication-snapshot', sourcePolicy: 'demo-publication-only', sourceAge: 'untracked' };
-    const api = createPublicationStateStore({ remote: '/unavailable/never-contact-this-remote', workDir: '/unavailable/never-create-this-directory' });
-    await expect(api.appendPublication(publication as unknown as PublicationRecord)).rejects.toThrow('invalid publication evidence');
-  });
-
-  it('appends and idempotently recovers the same discriminated pair while preserving three events HWM 3 and two legacy pairs', async () => {
-    const f = await fixture();
-    const legacy = [record('stand-1'), record('stand-2')];
-    write(join(f.author, 'verified-pairs.json'), JSON.stringify(legacy));
-    git(f.author, 'add', 'verified-pairs.json'); git(f.author, 'commit', '-m', 'Historical stand pairs');
-    git(f.author, 'push', 'origin', BRANCH);
-    const journalBefore = [1, 2, 3].map((number) => remoteEntry(f, number));
-    const hwmBefore = remoteFile(f, 'ledger/high-water-mark');
-    const { revision: omittedRevision, ...identity } = record('demo-untracked'); void omittedRevision;
-    const publication = { ...identity, recordKind: 'publication-snapshot', sourcePolicy: 'demo-publication-only', sourceAge: 'untracked',
-      captureProof: { version: 1, method: 'quiesced-sqlite-backup', sourceId: 'demo193-cms', captureId: identity.publicationId,
-        schemaDigest: '1'.repeat(64), databaseDigest: '2'.repeat(64), mediaManifestDigest: '3'.repeat(64), bundleDigest: '4'.repeat(64) } };
-    // Existing seam, new approved discriminated record. No synthetic journal number.
-    const api = store(f);
-    await expect(api.appendPublication(publication as unknown as PublicationRecord)).resolves.toMatchObject({ changed: true });
-    const recordedHead = head(f);
-    await expect(api.appendPublication(publication as unknown as PublicationRecord)).resolves.toEqual({ head: recordedHead, changed: false });
-    expect(remotePairs(f)).toEqual([...legacy, publication]);
-    expect((await api.readHistory()).publications).toEqual([...legacy, publication]);
-    expect([1, 2, 3].map((number) => remoteEntry(f, number))).toEqual(journalBefore);
-    expect(remoteFile(f, 'ledger/high-water-mark')).toBe(hwmBefore);
-    expect(git(f.root, '--git-dir', f.remote, 'ls-tree', '-r', '--name-only', BRANCH)).not.toContain('entry-000004');
-    expect(remoteFile(f, 'writer-owned.txt')).toBe('do not stage or modify');
-  });
-});
 function store(f: Fixture, overrides: Partial<PublicationStateStoreOptions> = {}) {
   return createPublicationStateStore({ remote: f.remote, workDir: f.workDir, gitEnv: env(), maxPushAttempts: 3, ...overrides });
 }

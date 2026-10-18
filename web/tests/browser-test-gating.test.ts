@@ -45,6 +45,7 @@ const PACKAGE_JSON = join(TESTS_DIR, '..', 'package.json');
  */
 const ACKNOWLEDGED_DEBT = [
   'compare.spec.ts',
+  'compat.spec.ts',
   'course-group-parity.spec.ts',
   'institute-parity.spec.ts',
   'parity-audit.spec.ts',

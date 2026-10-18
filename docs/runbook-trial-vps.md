@@ -137,16 +137,12 @@ vps /opt/ikpk-trial/bin/prepare-host.sh
 
 ```bash
 # [Mac] сборка артефакта и запуск bootstrap (сам ходит на сервер по ssh)
-CMS_ARTIFACT="/tmp/ikpk-cms-artifact-trial-$(uuidgen)"
-scripts/build-cms-artifact.sh "$CMS_ARTIFACT"
+scripts/build-cms-artifact.sh /tmp/ikpk-cms-artifact-trial
 set -a; . ~/ikpk-trial/secrets.env; set +a
 ENVIRONMENT=trial DOMAIN="$VPS_IP" SSH_KEY="$SSH_KEY" \
-  CMS_ARTIFACT_SOURCE="$CMS_ARTIFACT" \
+  CMS_ARTIFACT_SOURCE=/tmp/ikpk-cms-artifact-trial \
   bash scripts/bootstrap-vps.sh "$VPS_IP"
 ```
-
-При повторной сборке задайте новый уникальный `CMS_ARTIFACT`: существующие каталоги не
-перезаписываются и сохраняются.
 
 Что произойдёт: пакеты из `trial.env`, пользователь `ikpk-cms`, база SQLite в
 `/var/lib/ikpk-cms/trial/data`, файл секретов `/etc/ikpk-cms/trial.env` (0600), артефакт CMS,

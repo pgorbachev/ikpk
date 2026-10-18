@@ -1,5 +1,5 @@
 /** Read-only projection of the current Strapi v5 SQLite layout. Never loads Strapi. */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -22,6 +22,9 @@ export function schemaContractDigest(schemaRoot) {
 }
 
 export function readPublishedSqlite(database, schemaRoot) {
+  for (const suffix of ['-wal', '-shm']) {
+    if (existsSync(`${database}${suffix}`)) throw new Error(`sealed SQLite image has an unexpected sidecar: ${suffix}`);
+  }
   const schemas = loadCaptureSchemas(schemaRoot);
   const db = new DatabaseSync(database, { readOnly: true });
   try {

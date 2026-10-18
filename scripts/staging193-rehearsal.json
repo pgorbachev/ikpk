@@ -1,0 +1,52 @@
+{
+  "stateDir": "/var/lib/ikpk-rehearsal/staging193",
+  "maintenanceFlag": "/var/lib/ikpk-rehearsal/staging193/fenced",
+  "releaseRoot": "/opt/ikpk-cms-prototype193/releases",
+  "currentCms": "/opt/ikpk-cms-prototype193/current",
+  "currentStatic": "/var/www/ikpk/current",
+  "staticReleaseRoot": "/var/www/ikpk/releases",
+  "cmsUnit": "ikpk-cms-prototype193.service",
+  "writerUnits": ["ikpk-cms-prototype193.service"],
+  "cmsUser": "ikpk-cms",
+  "cmsDatabase": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/data/data.db",
+  "mediaRoots": [
+    {
+      "path": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/uploads",
+      "prefix": "/uploads/"
+    },
+    {
+      "path": "/var/www/ikpk/current/media",
+      "prefix": "/media/"
+    }
+  ],
+  "backupRoot": "/var/lib/ikpk-rehearsal/staging193/backups",
+  "nginxBinary": "/usr/sbin/nginx",
+  "nginxService": "nginx.service",
+  "nginxMapFile": "/etc/nginx/conf.d/ikpk-demo-writer-map.conf",
+  "nginxServerGateFile": "/etc/nginx/snippets/ikpk-demo-writer-gate.conf",
+  "writerPrefixes": [
+    "/admin", "/content-manager", "/content-type-builder", "/content-releases",
+    "/upload", "/i18n", "/users-permissions", "/review-workflows", "/strapi", "/api"
+  ],
+  "preservePrefixes": ["/uploads/", "/api/payments/"],
+  "cmsHealthUrl": "http://127.0.0.1:1338/_health",
+  "siteHealthUrl": "https://193.124.115.99/",
+  "siteBaseUrl": "https://193.124.115.99",
+  "siteReleaseUrl": "https://193.124.115.99/release.json",
+  "siteProbeUrls": [
+    "https://193.124.115.99/", "https://193.124.115.99/raspisanie-i-tseny",
+    "https://193.124.115.99/statyi", "https://193.124.115.99/kontakty"
+  ],
+  "writerProbeUrls": [
+    "https://193.124.115.99/admin", "https://193.124.115.99/content-manager",
+    "https://193.124.115.99/content-type-builder", "https://193.124.115.99/content-releases",
+    "https://193.124.115.99/upload", "https://193.124.115.99/i18n",
+    "https://193.124.115.99/users-permissions", "https://193.124.115.99/review-workflows",
+    "https://193.124.115.99/strapi", "https://193.124.115.99/api"
+  ],
+  "preserveProbeUrl": "https://193.124.115.99/",
+  "paymentStatusProbeUrl": "https://193.124.115.99/api/payments/rehearsal/status",
+  "allowedSourceRef": "refs/heads/dev",
+  "targetHost": "193.124.115.99",
+  "nodeBinary": "/usr/bin/node"
+}

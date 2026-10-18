@@ -22,9 +22,8 @@ SSH=(ssh -i ~/.ssh/id_ed25519_ikpk_vps -o BatchMode=yes -o IdentitiesOnly=yes ro
 
 ## 1. Подготовка артефактов (на машине оператора)
 
-- **CMS:** `scripts/build-cms-artifact.sh /tmp/ikpk-cms-artifact-<sha8>-<attempt>` — сборка и
-  проверки собранного вывода (tsconfig, путь базы, число миграций). Каталог должен быть новым и
-  находиться вне checkout; существующий путь сохраняется и приводит к отказу без перезаписи.
+- **CMS:** `scripts/build-cms-artifact.sh /tmp/ikpk-cms-artifact-<sha8>` — сборка и проверки
+  собранного вывода (tsconfig, путь базы, число миграций).
 - **Дерево сборки сайта:** ровно то, что шлёт провижининг, —
   `bash -c 'source scripts/lib/site-build-archive.sh && site_build_archive "$PWD"' > /tmp/ikpk-site-build-<sha8>.tar.gz`.
   `git archive` детерминирован: SHA-256 архива, собранного дважды из одного коммита, совпадает,
@@ -35,12 +34,9 @@ SSH=(ssh -i ~/.ssh/id_ed25519_ikpk_vps -o BatchMode=yes -o IdentitiesOnly=yes ro
 ```bash
 tar -tzf /tmp/ikpk-site-build-<sha8>.tar.gz | grep -x fixtures/content-snapshot/collapsible_panels.json
 tar -tzf /tmp/ikpk-site-build-<sha8>.tar.gz | grep -x fixtures/content-snapshot/url_map.csv
-shasum -a 256 cms/package-lock.json /tmp/ikpk-cms-artifact-<sha8>-<attempt>/package-lock.json   # совпали → deps на стенде уже есть
-diff -r cms/database/migrations /tmp/ikpk-cms-artifact-<sha8>-<attempt>/database/migrations
+shasum -a 256 cms/package-lock.json /tmp/ikpk-cms-artifact-<sha8>/package-lock.json   # совпали → deps на стенде уже есть
+diff -r cms/database/migrations /tmp/ikpk-cms-artifact-<sha8>/database/migrations
 ```
-
-При повторной подготовке используйте новый `<attempt>` и новый каталог; предыдущие артефакты
-сохраняются для сравнения и автоматически не удаляются.
 
 Без двух фикстур кнопка падает на рендере `/oplata` (`ENOENT .snapshot/collapsible_panels.json`).
 Если `package-lock.json` сайта или CMS сменился, эта процедура не годится: нужен `npm ci` на
@@ -80,7 +76,7 @@ readlink -f /var/www/ikpk/current > "$BACKUP/site-current"
 REL=/opt/ikpk-cms/releases/$STAMP; PREV=$(cat "$BACKUP/cms-release")
 "${SSH[@]}" "mkdir -p $REL"
 rsync -az --link-dest="$PREV" --rsh="ssh -i ~/.ssh/id_ed25519_ikpk_vps" \
-  /tmp/ikpk-cms-artifact-<sha8>-<attempt>/ root@193.124.115.99:$REL/
+  /tmp/ikpk-cms-artifact-<sha8>/ root@193.124.115.99:$REL/
 ```
 
 **Дерево сборки сайта:** `"${SSH[@]}" "tar -C /var/lib/ikpk-site-build -xzf -" < /tmp/ikpk-site-build-<sha8>.tar.gz`.

@@ -20,126 +20,34 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CMS_ROOT="$REPO_ROOT/cms"
-PREBUILT=0
-if [[ "${1:-}" == "--prebuilt" ]]; then
-  PREBUILT=1
-  shift
-fi
 OUT="${1:?укажите каталог для артефакта}"
-OUT="$(node - "$OUT" "$REPO_ROOT" <<'NODE'
-const fs = require('node:fs');
-const path = require('node:path');
-const [input, repoRootInput] = process.argv.slice(2);
-const fail = (message) => { console.error(`[artifact] ${message}`); process.exit(1); };
-if (/[\r\n\0]/.test(input)) fail('небезопасные символы в пути вывода');
-const requested = path.resolve(process.cwd(), input);
-try {
-  fs.lstatSync(requested);
-  fail(`каталог вывода уже существует: ${requested}`);
-} catch (error) {
-  if (error.code !== 'ENOENT') throw error;
-}
-let parent;
-try { parent = fs.realpathSync(path.dirname(requested)); }
-catch { fail(`родительский каталог вывода должен существовать: ${path.dirname(requested)}`); }
-if (!fs.statSync(parent).isDirectory()) fail('родительский путь вывода не является каталогом');
-const output = path.join(parent, path.basename(requested));
-const repoRoot = fs.realpathSync(repoRootInput);
-const contains = (root, candidate) => {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-};
-if (contains(repoRoot, output) || contains(output, repoRoot)) {
-  fail(`вывод пересекается с исходным checkout: ${output}`);
-}
-process.stdout.write(output);
-NODE
-)"
 
-if (( PREBUILT )); then
-  if [[ ! "${CMS_SOURCE_SHA:-}" =~ ^[a-f0-9]{40}$ ||
-        ! "${CMS_SOURCE_REF:-}" =~ ^refs/heads/(dev|main)$ ||
-        ! "${CMS_RUN_ID:-}" =~ ^[1-9][0-9]*$ ||
-        ! "${CMS_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "[artifact] нужны точные CMS_SOURCE_SHA/REF/RUN_ID/RUN_ATTEMPT" >&2
-    exit 1
-  fi
-  node - "$CMS_RUN_ID" "$CMS_RUN_ATTEMPT" <<'NODE'
-for (const value of process.argv.slice(2)) {
-  if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) {
-    console.error('[artifact] некорректный run ID/attempt');
-    process.exit(1);
-  }
-}
-NODE
-  if [[ ! -f "$CMS_ROOT/dist/build/index.html" ]]; then
-    echo "[artifact] нет обязательного cms/dist/build/index.html" >&2
-    exit 1
-  fi
-  if [[ ! -f "$CMS_ROOT/dist/src/index.js" ]]; then
-    echo "[artifact] нет обязательного cms/dist/src/index.js" >&2
-    exit 1
-  fi
-fi
+cd "$REPO_ROOT/cms"
+npm run build
 
-# Reserve a fresh output directory before compiling. Existing targets are never
-# overwritten or removed, and path admission above runs before the build.
-mkdir "$OUT"
-
-if (( ! PREBUILT )); then
-  cd "$CMS_ROOT"
-  npm run build
-fi
-
-# Copy only the runtime payload and reject links/special files. Nested node_modules are
-# intentionally omitted from every copied tree; the server assembles against its own runtime.
-node - "$CMS_ROOT" "$OUT" <<'NODE'
-const fs = require('node:fs');
-const path = require('node:path');
-const [cmsRoot, out] = process.argv.slice(2).map((value) => path.resolve(value));
-const fail = (message) => { throw new Error(`[artifact] ${message}`); };
-
-function copyPayload(sourceName, destinationName = sourceName) {
-  const source = path.join(cmsRoot, sourceName), destination = path.join(out, destinationName);
-  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o755 });
-  fs.cpSync(source, destination, {
-    recursive: true,
-    preserveTimestamps: true,
-    filter(candidate) {
-      const relative = path.relative(cmsRoot, candidate).split(path.sep);
-      if (relative.includes('node_modules')) return false;
-      // Uploaded media belongs to the server's live CMS/DB state, not this CI
-      // build. Keep only the empty directory placeholder; E2E may write covers
-      // into cms/public/uploads after the reusable admin build has completed.
-      if (relative[0] === 'public' && relative[1] === 'uploads' &&
-          relative.length > 2 && !(relative.length === 3 && relative[2] === '.gitkeep')) return false;
-      let info;
-      try { info = fs.lstatSync(candidate); } catch { fail(`нет обязательного файла ${path.relative(cmsRoot, candidate)}`); }
-      if (info.isSymbolicLink()) fail(`symlink запрещён: ${path.relative(cmsRoot, candidate)}`);
-      if (!info.isDirectory() && !info.isFile()) fail(`специальный файл запрещён: ${path.relative(cmsRoot, candidate)}`);
-      return true;
-    },
-  });
-}
-
-for (const name of ['dist', 'package.json', 'package-lock.json', 'tsconfig.json']) {
-  copyPayload(name);
-}
-for (const name of ['public', 'database']) {
-  if (fs.existsSync(path.join(cmsRoot, name))) copyPayload(name);
-}
-copyPayload('src/api/seminar/content-types/seminar/schema.json', 'database/migrations/target-schema/seminar.json');
-copyPayload('src/lib/demo193-source-empty-fields.json');
-for (const name of ['run-data-migrations.mjs', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs',
-  'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs']) {
-  copyPayload(`scripts/${name}`);
-}
-fs.mkdirSync(path.join(out, 'database/migrations'), { recursive: true, mode: 0o755 });
-NODE
+rm -rf "$OUT"
+mkdir -p "$OUT"
+# tsconfig.json обязателен: по нему Strapi опознаёт TS-проект и берёт конфигурацию из dist.
+cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
+[[ -d public ]] && cp -R public "$OUT/"
+# Миграции базы: Strapi ищет их в `<корень релиза>/database/migrations`, а не в `dist`.
+[[ -d database ]] && cp -R database "$OUT/"
+mkdir -p "$OUT/database/migrations"
 # The migration preflight uses this exact compiled-target schema as evidence when
 # the recorded native rename predates retirement of the seminar status attribute.
+mkdir -p "$OUT/database/migrations/target-schema"
+cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/target-schema/seminar.json"
 # Compiled publication lifecycle loads this runtime data file via the release-root cwd.
+mkdir -p "$OUT/src/lib"
+cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-fields.json"
+# Операторский runner и те же узкие data helpers, что используются в их focused CLI.
+# План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
+mkdir -p "$OUT/scripts"
+cp scripts/run-data-migrations.mjs \
+  scripts/audit-data-migration.mjs \
+  scripts/audit-schema-snapshot.mjs \
+  scripts/institute-method-author-classification.mjs \
+  scripts/normalize-null-documents-state.mjs "$OUT/scripts/"
 
 # --- Проверки собранного вывода (не текста исходника) ---
 node -e '
@@ -188,58 +96,5 @@ console.log(`[artifact] проверки собранного вывода пр�
 # payload должны совпадать с versioned plan, включая запускаемый runner и его helpers.
 source "$REPO_ROOT/scripts/lib/release-migrations.sh"
 check_release_migrations "$OUT"
-
-if (( PREBUILT )); then
-  NPM_VERSION="$(npm --version)"
-  node - "$OUT" "$CMS_SOURCE_SHA" "$CMS_SOURCE_REF" "$CMS_RUN_ID" "$CMS_RUN_ATTEMPT" "$NPM_VERSION" <<'NODE'
-const fs = require('node:fs');
-const path = require('node:path');
-const { createHash } = require('node:crypto');
-const { createReadStream } = require('node:fs');
-const [root, sha, ref, runIdText, attemptText, npmVersion] = process.argv.slice(2);
-const fail = (message) => { console.error(`[artifact] ${message}`); process.exit(1); };
-const positiveInteger = (value) => {
-  const number = Number(value);
-  if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(number)) fail('некорректный run ID/attempt');
-  return number;
-};
-if (!/^[a-f0-9]{40}$/.test(sha) || !/^refs\/heads\/(dev|main)$/.test(ref) ||
-    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(npmVersion)) fail('некорректная source/runtime identity');
-
-async function digest(file) {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
-  return hash.digest('hex');
-}
-function inventory(directory, relative = '') {
-  const result = [];
-  for (const entry of fs.readdirSync(path.join(directory, relative)).sort()) {
-    const name = relative ? `${relative}/${entry}` : entry;
-    if (name === 'cms-artifact-manifest.json') continue;
-    if (entry === 'node_modules') fail('node_modules запрещён в CMS artifact');
-    const full = path.join(directory, name);
-    const info = fs.lstatSync(full);
-    if (info.isSymbolicLink()) fail(`symlink запрещён: ${name}`);
-    if (info.isDirectory()) result.push(...inventory(directory, name));
-    else if (info.isFile()) result.push(name);
-    else fail(`специальный файл запрещён: ${name}`);
-  }
-  return result;
-}
-(async () => {
-  const files = [];
-  for (const name of inventory(root).sort()) files.push({ path: name, sha256: await digest(path.join(root, name)) });
-  const manifest = {
-    schemaVersion: 1,
-    source: { sha, ref, runId: positiveInteger(runIdText), runAttempt: positiveInteger(attemptText) },
-    packageLockSha256: await digest(path.join(root, 'package-lock.json')),
-    runtime: { nodeVersion: process.version, nodeMajor: Number(process.versions.node.split('.')[0]),
-      nodeAbi: process.versions.modules, npmVersion },
-    files,
-  };
-  fs.writeFileSync(path.join(root, 'cms-artifact-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o644 });
-})().catch((error) => fail(error.message));
-NODE
-fi
 
 echo "[artifact] готов: $OUT"

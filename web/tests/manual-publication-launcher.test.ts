@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { sourceCiFixtureScript } from '../../scripts/tests/helpers/publication-ci-fixture.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -68,9 +67,7 @@ process.stdout.write(JSON.stringify({ env: { IKPK_DEPLOY_CREDENTIAL: ${JSON.stri
   return { root, repo, remote, installed, config, broker, trace, marker, malicious, sha };
 }
 function launch(f: Fixture, options: { url?: string; ref?: string; sourceDir?: string; config?: string; cwd?: string } = {}) {
-  const ciBootstrap = join(f.root, 'ci-fixture.mjs');
-  write(ciBootstrap, sourceCiFixtureScript(f.sha));
-  const args = ['--import', ciBootstrap, f.installed, 'publish', '--config', options.config ?? f.config,
+  const args = [f.installed, 'publish', '--config', options.config ?? f.config,
     '--source-url', options.url ?? f.remote, '--source-ref', options.ref ?? 'main'];
   if (options.sourceDir) args.push('--source-dir', options.sourceDir);
   return spawnSync(process.execPath, args, { cwd: options.cwd ?? f.root, env: cleanEnv(), encoding: 'utf8', timeout: 15_000 });

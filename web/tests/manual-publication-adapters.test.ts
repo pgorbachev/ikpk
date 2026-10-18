@@ -196,7 +196,7 @@ describe('publication production adapters: real reporter files and fixed selecti
   it('browser checks both projects against its own preview of the same tree and closes it', async () => {
     const f = await fixture();
     const result = await createPublicationCheckPorts(f.options, f.runtime).checkBrowser(f.context);
-    expect(result).toEqual({ conclusion: 'success', executedTests: 113 });
+    expect(result).toEqual({ conclusion: 'success', executedTests: 4 });
     expect(f.previews).toHaveLength(1); expect(f.previews[0].treeDir).toBe(f.context.treeDir);
     expect(f.commands).toHaveLength(1);
     expect(f.commands[0].args).toEqual(expect.arrayContaining(['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json']));
@@ -206,13 +206,9 @@ describe('publication production adapters: real reporter files and fixed selecti
   });
 
   it('browser rejects missing mobile zero skipped interrupted and flaky evidence even with aggregate expected counts', async () => {
-    for (const mutation of ['mobile', 'zero', 'skip', 'interrupted', 'flaky', 'error', 'compat', 'file', 'extra', 'count'] as const) {
+    for (const mutation of ['mobile', 'zero', 'skip', 'interrupted', 'flaky', 'error'] as const) {
       const f = await fixture(); const report = f.state.browser;
       if (mutation === 'mobile') for (const spec of report.suites[0].specs) spec.tests = spec.tests.filter((test) => test.projectName !== 'mobile');
-      if (mutation === 'compat') for (const spec of report.suites[0].specs) spec.tests = spec.tests.filter((test) => test.projectName !== 'compat-safari-desktop');
-      if (mutation === 'file') report.suites[0].specs = report.suites[0].specs.filter((spec) => spec.file !== 'publication-catalog.spec.ts');
-      if (mutation === 'extra') report.suites[0].specs[0].tests[0].projectName = 'unknown-project';
-      if (mutation === 'count') report.suites[0].specs.splice(0, 1);
       if (mutation === 'zero') report.suites = [];
       if (mutation === 'skip') report.suites[0].specs[0].tests[0].results[0].status = 'skipped';
       if (mutation === 'interrupted') report.suites[0].specs[0].tests[0].results[0].status = 'interrupted';

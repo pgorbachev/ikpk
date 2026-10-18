@@ -499,15 +499,13 @@ describe('snapshot_origin_matches — выкладка не публикует �
       return;
     }
     // Публикация переехала в worker (change manual-publication-only): та же проводка
-    // проверяется там. Читатель по умолчанию требует живое непинованное происхождение;
-    // серверный DEMO допускается только явной защищённой политикой (её поведение
-    // проверяется в manual-publication-demo-policy). Worker возвращает снимок через него, а runner
+    // проверяется там. Читатель снимка отказывает на всём, кроме живого непинованного
+    // происхождения, worker возвращает снимок из фазы проверок именно через него, а runner
     // выполняет проверки раньше, чем транспорт загрузит хоть байт.
     const reader = readFileSync(join(ROOT, 'web', 'scripts', 'lib', 'publication-snapshot.ts'), 'utf-8');
-    expect(reader, 'publication-snapshot.ts потерял legacy-проверку живого источника').toMatch(/snapshot\.origin\?\.kind !== 'live'/);
-    expect(reader, 'publication-snapshot.ts допускает pinned-снимок').toMatch(/\|\| snapshot\.pinned/);
+    expect(reader, 'publication-snapshot.ts не отказывает на снимке не из живой CMS').toMatch(/origin\?\.kind !== 'live' \|\| snapshot\.pinned/);
     const worker = readFileSync(join(ROOT, 'web', 'scripts', 'publication-worker.ts'), 'utf-8');
-    expect(worker.search(/readPublicationSnapshot\(snapshotDir, config\.sourcePolicy\)/), 'worker не читает снимок с защищённой политикой через отказывающий reader').toBeGreaterThanOrEqual(0);
+    expect(worker.search(/readPublicationSnapshot\(snapshotDir\)/), 'worker не читает снимок через отказывающий reader').toBeGreaterThanOrEqual(0);
     const runner = readFileSync(join(ROOT, 'web', 'scripts', 'lib', 'publication-runner.ts'), 'utf-8');
     const checks = runner.search(/await ports\.runChecks\(input\)/);
     const stage = runner.search(/session\.stage\(/);

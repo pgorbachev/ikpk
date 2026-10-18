@@ -403,6 +403,14 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
 const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
 const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema';
+const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
+const METRICS_LOAD_START = 1792101825410;
+const METRICS_LOAD_COMPLETE = 1792101926810;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+function weeklyCronAt(value) {
+  const date = new Date(value);
+  return `${date.getUTCSeconds()} ${date.getUTCMinutes()} ${date.getUTCHours()} * * ${date.getUTCDay()}`;
+}
 function coreStoreValues(candidate) {
   const promotion = {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
@@ -437,12 +445,13 @@ function coreStoreValues(candidate) {
     [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
     [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
     [CONTENT_SCHEMA_KEY, JSON.stringify(schema)],
+    [UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: METRICS_LOAD_START - WEEK_MS - 1, weeklySchedule: candidate ? weeklyCronAt(METRICS_LOAD_START + 15_000) : '0 0 0 * * 0' })],
     ['unrelated-key', JSON.stringify({ preserved: true })],
   ]);
 }
 function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
   const values = coreStoreValues(candidate);
-  if (candidate && mutate) mutate(values);
+  if (mutate) mutate(values);
   const db = new Database(path);
   db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
   const insert = db.prepare('INSERT INTO strapi_core_store_settings VALUES (?, ?, ?, ?, ?, ?)');
@@ -451,7 +460,7 @@ function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
   db.close();
 }
 
-test('core-store accepts only the reviewed three structural content-type updates', () => {
+test('core-store accepts only reviewed content-type updates and a stale upload metrics schedule refresh', () => {
   const sourceDbPath = join(directory, 'core-store-source.db');
   const candidateDbPath = join(directory, 'core-store-candidate.db');
   createCoreStoreShape(sourceDbPath);
@@ -460,7 +469,96 @@ test('core-store accepts only the reviewed three structural content-type updates
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
 
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
-    'only exact metadata, layout, and compiled content schema additions are allowed');
+    'only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed');
+});
+
+test('upload metrics refresh preserves the timestamp and accepts only the upstream cron inside a closed-load window', () => {
+  const runAudit = (name, mutateSource = null, mutateCandidate = null, lifecycle = null) => {
+    const sourceDbPath = join(directory, `metrics-source-${name}.db`);
+    const candidateDbPath = join(directory, `metrics-candidate-${name}.db`);
+    createCoreStoreShape(sourceDbPath, { mutate: mutateSource });
+    createCoreStoreShape(candidateDbPath, { candidate: true, mutate: mutateCandidate });
+    const plan = emptyBoundPlan();
+    const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+    if (lifecycle) receipt.lifecycle = lifecycle;
+    return auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
+  };
+  const metrics = (values) => JSON.parse(values.get(UPLOAD_METRICS_KEY));
+  const setMetrics = (values, value) => values.set(UPLOAD_METRICS_KEY, JSON.stringify(value));
+  const valid = runAudit('valid');
+  assert.equal(valid.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'the exact stale schedule refresh is the only accepted metrics change');
+
+  const invalidCases = [
+    ['timestamp-changed', null, (values) => { const row = metrics(values); row.lastWeeklyUpdate += 1; setMetrics(values, row); }],
+    ['fresh-source', (values) => { const row = metrics(values); row.lastWeeklyUpdate = METRICS_LOAD_START - WEEK_MS + 1; setMetrics(values, row); }, (values) => { const row = metrics(values); row.lastWeeklyUpdate = METRICS_LOAD_START - WEEK_MS + 1; setMetrics(values, row); }],
+    ['extra-field', null, (values) => { const row = metrics(values); row.extra = true; setMetrics(values, row); }],
+    ['wrong-scalar', null, (values) => { const row = metrics(values); row.weeklySchedule = 26; setMetrics(values, row); }],
+    ['rounded-raw-number', null, (values) => values.set(UPLOAD_METRICS_KEY,
+      `{"lastWeeklyUpdate":9007199254740993,"weeklySchedule":"${weeklyCronAt(METRICS_LOAD_START + 15_000)}"}`)],
+    ['invalid-cron', null, (values) => { const row = metrics(values); row.weeklySchedule = '0 0 0 * *'; setMetrics(values, row); }],
+    ['outside-window', null, (values) => { const row = metrics(values); row.weeklySchedule = weeklyCronAt(METRICS_LOAD_COMPLETE + 16_000); setMetrics(values, row); }],
+  ];
+  for (const [name, mutateSource, mutateCandidate] of invalidCases) {
+    const report = runAudit(name, mutateSource, mutateCandidate);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), `${name} must be rejected`);
+  }
+  const unmatched = runAudit('unmatched-window', null, null, [
+    { event: 'closed-load-started', at: new Date(METRICS_LOAD_START).toISOString() },
+  ]);
+  assert.ok(unmatched.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+    'an unmatched closed-load start cannot authorize a metrics change');
+
+  const crossStart = Math.floor(METRICS_LOAD_START / 1000) * 1000 + 900;
+  const crossEnd = crossStart + 200;
+  const crossSecond = runAudit('cross-second', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(crossStart + 150 + 15_000);
+    setMetrics(values, row);
+  }, [
+    { event: 'closed-load-started', at: new Date(crossStart).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(crossEnd).toISOString() },
+  ]);
+  assert.equal(crossSecond.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'a cron second containing an in-window producer instant must be accepted across fractional boundaries');
+
+  const exactStart = Math.floor(METRICS_LOAD_START / 1000) * 1000;
+  const exactEnd = exactStart + 1000;
+  for (const [name, time] of [['before', exactStart + 14_000], ['after', exactEnd + 16_000]]) {
+    const report = runAudit(`neighbor-${name}`, null, (values) => {
+      const row = metrics(values);
+      row.weeklySchedule = weeklyCronAt(time);
+      setMetrics(values, row);
+    }, [
+      { event: 'closed-load-started', at: new Date(exactStart).toISOString() },
+      { event: 'strapi-load-complete', at: new Date(exactEnd).toISOString() },
+    ]);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+      `the cron one second ${name} the permitted interval must be rejected`);
+  }
+
+  const secondStart = METRICS_LOAD_START + 2 * 24 * 60 * 60 * 1000;
+  const secondEnd = secondStart + 1000;
+  const twoWindows = [
+    { event: 'closed-load-started', at: new Date(METRICS_LOAD_START).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(METRICS_LOAD_START + 1000).toISOString() },
+    { event: 'activation-closed-load-started', at: new Date(secondStart).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(secondEnd).toISOString() },
+  ];
+  const activationWindow = runAudit('activation-window', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(secondStart + 15_000);
+    setMetrics(values, row);
+  }, twoWindows);
+  assert.equal(activationWindow.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'a schedule matching the second activation closed-load window must be accepted');
+  const lifecycleGap = runAudit('lifecycle-gap', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(METRICS_LOAD_START + 24 * 60 * 60 * 1000 + 15_000);
+    setMetrics(values, row);
+  }, twoWindows);
+  assert.ok(lifecycleGap.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+    'a schedule matching only the gap between closed loads must be rejected');
 });
 
 test('core-store rejects unapproved key changes, layout changes, and malformed target field definitions', () => {

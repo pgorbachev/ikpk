@@ -3,13 +3,12 @@ import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSy
 import { join, relative, resolve } from 'node:path';
 import { createRollbackCheckPorts } from '../scripts/lib/publication-check-adapters.ts';
 import type { RollbackCheckContext } from '../scripts/lib/publication-rollback-checks.ts';
-import { adapterFixture, browserReport, CANARY } from './helpers/publication-adapter-fixtures.ts';
+import { adapterFixture, CANARY } from './helpers/publication-adapter-fixtures.ts';
 
 const fixtures: Awaited<ReturnType<typeof adapterFixture>>[] = [];
 afterEach(() => { for (const f of fixtures.splice(0)) f.clean(); });
 async function fixture() {
   const f = await adapterFixture(); fixtures.push(f);
-  f.state.browser = browserReport(true);
   rmSync(f.options.snapshotDir, { recursive: true }); rmSync(f.options.ledgerDir, { recursive: true });
   const treeDir = join(f.temp, 'downloaded-retained-release'); mkdirSync(treeDir);
   writeFileSync(join(treeDir, 'index.html'), '<main>retained bytes</main>');
@@ -33,7 +32,7 @@ describe('installed retained check adapter: fixed trusted tools over downloaded 
     const f = await fixture(); const ports = createRollbackCheckPorts(f.options, f.runtime);
     const before = await ports.digest(f.context.treeDir);
     expect(await ports.checkDestination(f.context)).toEqual({ conclusion: 'success', executedTests: 3 });
-    expect(await ports.checkBrowser(f.context)).toEqual({ conclusion: 'success', executedTests: 8 });
+    expect(await ports.checkBrowser(f.context)).toEqual({ conclusion: 'success', executedTests: 4 });
     expect(await ports.checkPaymentAbsent(f.context)).toEqual({ conclusion: 'success', executedTests: 3 });
     expect(await ports.digest(f.context.treeDir)).toBe(before);
     expect(f.commands).toHaveLength(3);

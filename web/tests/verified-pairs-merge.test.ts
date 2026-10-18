@@ -4,9 +4,9 @@ import {
   newerVerifiedPair,
   upsertVerifiedPair,
 } from '../scripts/lib/verified-pairs.ts';
-import type { JournalPair } from '../scripts/lib/publish-gate.ts';
+import type { VerifiedPair } from '../scripts/lib/publish-gate.ts';
 
-function pair(partial: Partial<JournalPair> & Pick<JournalPair, 'commit' | 'snapshotId' | 'revision'>): JournalPair {
+function pair(partial: Partial<VerifiedPair> & Pick<VerifiedPair, 'commit' | 'snapshotId' | 'revision'>): VerifiedPair {
   return {
     referenceDate: '2026-08-01',
     capturedAt: '2026-08-01T00:00:00.000Z',

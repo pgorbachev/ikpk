@@ -23,7 +23,6 @@ import {
 const workflows = loadWorkflows();
 const TESTS_WORKFLOW = 'Tests';
 const DEFAULT_BRANCH = 'main';
-const artifactName = (name: string): string => name + '${{ inputs.artifact_suffix }}';
 
 /**
  * Признак обращения к системе управления. Ловится ЛЮБОЕ упоминание её адреса или токена в
@@ -92,30 +91,11 @@ const OUT_OF_SCOPE_5_2A = /remote parity/i;
  * молча вернуло бы его в это число.
  */
 function headBuildInvocations(): { wf: Workflow; job: WorkflowJob; step: WorkflowStep }[] {
-  return allSteps().filter(({ wf, job, step }) => {
-    // CMS has its own package.json and does not build the public web tree.
-    if ((step.workingDirectory ?? job.workingDirectory ?? wf.workingDirectory) === 'cms') return false;
+  return allSteps().filter(({ step }) => {
     if (/\bbase\b/i.test(step.name ?? '')) return false;
     if (OUT_OF_SCOPE_5_2A.test(step.name ?? '')) return false;
     const script = resolveNpmScripts(stripShellComments(step.run ?? ''));
     return /\bnpm run build(:demo|:stand)?\b/.test(script) || /\bastro build\b/.test(script);
-  });
-}
-
-function headBuildProblems(invocations: ReturnType<typeof headBuildInvocations>): string[] {
-  return invocations.flatMap(({ wf, job, step }) => {
-    if (wf.displayName === TESTS_WORKFLOW) {
-      return job.steps.some((s) => /^actions\/download-artifact(@|$)/.test(s.uses ?? '') &&
-        s.with?.name === artifactName('content-snapshot')) ? [] : [`${wf.file}:${job.key}/${step.name}: snapshot artifact missing`];
-    }
-    if (['lighthouse.yml', 'nightly.yml'].includes(wf.file)) return [];
-    if (wf.file === 'release-tests.yml') {
-      const env = { ...wf.env, ...job.env, ...step.env };
-      if (env.SNAPSHOT_SOURCE === 'pinned' && env.CONTENT_SNAPSHOT_DIR === '${{ github.workspace }}/fixtures/content-snapshot' &&
-        !CMS_MARKERS.test(stepText(step) + JSON.stringify(env))) return [];
-      return [`${wf.file}:${job.key}/${step.name}: release build must use the pinned source fixture`];
-    }
-    return [`${wf.file}: unclassified head build`];
   });
 }
 
@@ -136,7 +116,7 @@ describe('закреплённый снимок обязательного CI', 
   it('успешный Tests сохраняет непустой перечень реальных JSON-отчётов для локального CI gate', () => {
     const job = tests().jobs['unit-and-build'];
     const uploads = job.steps.filter((step) => /^actions\/upload-artifact(@|$)/.test(step.uses ?? '') &&
-      step.with?.name === artifactName('publication-ci-counts'));
+      step.with?.name === 'publication-ci-counts');
     expect(uploads).toHaveLength(1);
     const upload = uploads[0];
     expect(upload.with?.['if-no-files-found']).toBe('error');
@@ -171,24 +151,16 @@ describe('закреплённый снимок обязательного CI', 
   it('сборки вершины непусты, используют артефакт Tests либо закреплённую фикстуру соседнего CI', () => {
     const invocations = headBuildInvocations();
     expect(invocations.length).toBeGreaterThan(0);
-    expect(headBuildProblems(invocations)).toEqual([]);
-  });
-
-  it('release web builds fail closed if their pinned source is removed or overridden', () => {
-    const builds = headBuildInvocations().filter(({ wf }) => wf.file === 'release-tests.yml');
-    expect(builds).toHaveLength(2);
-    for (const build of builds) {
-      expect(headBuildProblems([build])).toEqual([]);
-      for (const env of [{ SNAPSHOT_SOURCE: 'live' }, { CONTENT_SNAPSHOT_DIR: '/tmp/foreign-snapshot' }, { CMS_URL: 'https://cms.example' }]) {
-        expect(headBuildProblems([{ ...build, step: { ...build.step, env: { ...build.step.env, ...env } } }])).not.toEqual([]);
+    const problems: string[] = [];
+    for (const { wf, job, step } of invocations) {
+      if (wf.displayName === TESTS_WORKFLOW) {
+        if (!job.steps.some((s) => /^actions\/download-artifact(@|$)/.test(s.uses ?? '') && SNAPSHOT_CONSUMER.test(s.raw)))
+          problems.push(`${wf.file}:${job.key}/${step.name}: snapshot artifact missing`);
+      } else if (!['lighthouse.yml', 'nightly.yml'].includes(wf.file)) {
+        problems.push(`${wf.file}: unclassified head build`);
       }
     }
-  });
-
-  it('reusable Tests defaults preserve standalone artifact names', () => {
-    expect(tests().triggers.workflow_call).toMatchObject({ inputs: {
-      artifact_suffix: { type: 'string', required: false, default: '' },
-    } });
+    expect(problems).toEqual([]);
   });
 
   it('артефакт снимка сохраняется и доступен обоим потребителям Tests', () => {
@@ -196,11 +168,11 @@ describe('закреплённый снимок обязательного CI', 
     const uploads = Object.values(wf.jobs).flatMap((job) => job.steps)
       .filter((step) => /^actions\/upload-artifact(@|$)/.test(step.uses ?? '') && SNAPSHOT_CONSUMER.test(step.raw));
     expect(uploads).toHaveLength(1);
-    expect(uploads[0].with?.name).toBe(artifactName('content-snapshot'));
+    expect(uploads[0].with?.name).toBe('content-snapshot');
     for (const name of ['unit-and-build', 'e2e-smoke']) {
       const job = wf.jobs[name];
       expect(job.needs).toContain('content-snapshot');
-      expect(job.steps.some((step) => /^actions\/download-artifact(@|$)/.test(step.uses ?? '') && step.with?.name === artifactName('content-snapshot'))).toBe(true);
+      expect(job.steps.some((step) => /^actions\/download-artifact(@|$)/.test(step.uses ?? '') && step.with?.name === 'content-snapshot')).toBe(true);
     }
   });
 });

@@ -1,8 +1,8 @@
-import { candidateRoute } from './helpers/publication-candidate-data';
 import { test, expect } from '@playwright/test';
 import { isAbsolute, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { readPublicationSnapshot } from '../scripts/lib/publication-snapshot';
+import { candidate } from './helpers/publication-candidate';
 import { attr, findAll, textOf } from './helpers/dom';
 import { walkHtml } from './helpers/dist-pages';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
@@ -12,6 +12,10 @@ function context() {
   const treeDir = process.env.PUBLICATION_TREE_DIR;
   const retained = process.env.PUBLICATION_RETAINED_TREE === '1';
   if ((!snapshotDir && !retained) || !treeDir || !isAbsolute(treeDir) || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');
+  if (process.env.PUBLICATION_STAGING_CAPTURE === '1') {
+    const owned = candidate();
+    return { snapshot: owned.snapshot, treeDir: owned.treeDir };
+  }
   return { snapshot: retained ? undefined : readPublicationSnapshot(snapshotDir!), treeDir };
 }
 test.beforeEach(async ({ page }) => {
@@ -41,12 +45,11 @@ test('desktop and mobile navigation reaches the schedule', async ({ page }, info
 test('article and seminar routes open on this exact artifact', async ({ page }) => {
   const { snapshot, treeDir } = context();
   const files = [...walkHtml(treeDir)];
-  for (const type of ['articles', 'seminars'] as const) {
-    const entity = snapshot?.content.types[type]?.[0];
-    if (snapshot) expect(entity, `missing captured ${type}`).toBeDefined();
-    const exactRoute = snapshot ? candidateRoute(snapshot.content.types, type, entity!) : undefined;
+  for (const type of ['articles', 'seminars']) {
+    const slug = snapshot?.content.types[type]?.[0]?.slug;
+    if (snapshot) expect(typeof slug).toBe('string');
     const file = snapshot
-      ? files.find((file) => `/${relative(treeDir, file).replace(/\/index\.html$/, '')}` === exactRoute)
+      ? files.find((file) => file.endsWith(`/${String(slug)}/index.html`))
       : files.find((file) => {
         const path = relative(treeDir, file);
         if (!(type === 'articles' ? /^statyi\/[^/]+\/index\.html$/ : /^[^/]+\/[^/]+\/[^/]+\/index\.html$/).test(path)) return false;
@@ -68,12 +71,8 @@ test('schedule renders its cards and registration links without submitting them'
   const html = readFileSync(`${treeDir}/raspisanie-i-tseny/index.html`, 'utf8');
   const count = [...html.matchAll(/\bdata-schedule-item(?:[\s=>])/g)].length;
   await page.goto('/raspisanie-i-tseny');
+  expect(count, 'empty schedule in checked artifact').toBeGreaterThan(0);
   await expect(page.locator('[data-schedule-item]')).toHaveCount(count);
-  if (count === 0) {
-    await expect(page.locator('[data-schedule-empty]')).toBeVisible();
-    await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
-    return;
-  }
   await expect(page.locator('[data-schedule-item]:visible').first(), 'no visible schedule cards').toBeVisible();
   await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
   const links = page.locator('a[href*="bitrix24"], a[href^="/demo-zayavka"]');

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chooseManualPublication, type VerifiedPair, type JournalPair } from '../scripts/lib/publish-gate.ts';
+import { chooseManualPublication, type VerifiedPair } from '../scripts/lib/publish-gate.ts';
 import { comparePublishedState } from '../scripts/lib/published-state.ts';
 import { mergeVerifiedPairs, readVerifiedPairs, upsertVerifiedPair, writeVerifiedPairs } from '../scripts/lib/verified-pairs.ts';
 
@@ -19,7 +19,7 @@ type Group = { name: string; conclusion: Conclusion; executedTests: number };
 type LocalChecks = {
   commit: string; snapshotId: string; destinationId: string; treeDigest: string; groups: Group[];
 };
-type Publication = JournalPair & {
+type Publication = VerifiedPair & {
   publicationId: string; releaseId: string; destinationId: string; treeDigest: string;
   publishedAt: string; actor: string; ciEvidence: CiEvidence; localChecks: LocalChecks;
   paymentRole: 'ci' | 'stand' | 'prod'; deployMode: 'stand' | 'prod';
@@ -53,7 +53,7 @@ const checks = (snapshotId = 'snapshot-current', names = GROUPS): LocalChecks =>
   commit: SHA, snapshotId, destinationId: 'production', treeDigest: DIGEST,
   groups: names.map((name) => ({ name, conclusion: 'success', executedTests: 2 })),
 });
-const pair = (snapshotId = 'snapshot-current'): JournalPair => ({
+const pair = (snapshotId = 'snapshot-current'): VerifiedPair => ({
   commit: SHA, snapshotId, revision: 5, referenceDate: '2026-09-19',
   capturedAt: '2026-09-19T00:00:00Z', testRunConclusion: 'success',
 });

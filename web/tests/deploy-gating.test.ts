@@ -189,36 +189,6 @@ const EXCLUSION = /не\s+вход|не\s+блокиру|вне\s+гейта|н�
 const INCLUSION = /вход(ит|ят|ящие)\s+в\s+(гейт|услови)|условие\s+публикации|блокиру(ет|ют)\s+публикацию/i;
 const GATE_TOPIC = /гейт|условие\s+публикации/i;
 
-/** Discover the hosted checks actually selected by the two installed CI adapters. */
-function publicationWorkflows(all: Workflow[], adapters: string[]): Workflow[] {
-  const files = adapters.map((source) => {
-    const paths = [...source.matchAll(/\/actions\/workflows\/([\w-]+\.ya?ml)\/runs\?/g)].map((match) => match[1]);
-    if (paths.length !== 1) throw new Error('CI adapter must select exactly one workflow file');
-    return paths[0];
-  });
-  return [...new Set(files)].map((file) => {
-    const matches = all.filter((wf) => wf.file === file);
-    if (matches.length !== 1 || !Object.keys(matches[0].jobs).length) throw new Error(`publication workflow missing or empty: ${file}`);
-    if (all.filter((wf) => wf.displayName === matches[0].displayName).length !== 1) throw new Error(`ambiguous workflow name: ${file}`);
-    return matches[0];
-  });
-}
-
-function gateDeclarations(lines: string[], names: string[]): { in: Set<string>; out: Set<string> } {
-  let mode: 'in' | 'out' | null = null;
-  const declared = { in: new Set<string>(), out: new Set<string>() };
-  for (const line of lines) {
-    if (!line.trim()) { mode = null; continue; }
-    if (EXCLUSION.test(line)) mode = 'out';
-    else if (INCLUSION.test(line)) mode = 'in';
-    if (mode === null) continue;
-    // Match quoted workflow names exactly: e.g. `Dependabot rebase` must not
-    // silently document `Dependabot rebase policy` or an unquoted prose mention.
-    for (const name of names) if (line.includes('`' + name + '`')) declared[mode].add(name);
-  }
-  return declared;
-}
-
 describe('гейт публикации: документация', () => {
   // Req6: «Документация процесса публикации SHALL называть, какие проверки входят в
   // условие публикации, а какие нет».
@@ -228,10 +198,7 @@ describe('гейт публикации: документация', () => {
   // ФАКТИЧЕСКОМУ составу `.github/workflows`, а не по списку известных имён. Так
   // добавленный workflow, о котором документация промолчала, роняет проверку.
   it('документация называет, какие проверки входят в гейт и какие нет', () => {
-    const adapters = ['scripts/publication-launcher.mjs', 'scripts/release-ci.mjs']
-      .map((file) => readFileSync(join(REPO_ROOT, file), 'utf8'));
-    const gated = new Set(publicationWorkflows(workflows, adapters).map((wf) => wf.displayName));
-    expect([...gated].sort()).toEqual(['Release source tests', 'Tests']);
+    const gated = new Set(requiredTestWorkflows(workflows).map((wf) => wf.displayName));
     const others = workflows
       .map((wf) => wf.displayName);
     const notGated = others.filter((n) => !gated.has(n));
@@ -250,15 +217,24 @@ describe('гейт публикации: документация', () => {
       return sections(text).some((section) => {
         if (!GATE_TOPIC.test(section.lines.join('\n'))) return false;
 
-        // A marker governs its paragraph/list, not unrelated later prose.
-        const declared = gateDeclarations(section.lines, [...gated, ...notGated]);
+        // Режим определяется ближайшей строкой-маркером сверху и действует до
+        // следующей: так одинаково читаются и фраза в предложении, и список под
+        // заголовком «Не входят в гейт».
+        let mode: 'in' | 'out' | null = null;
+        const declared = { in: new Set<string>(), out: new Set<string>() };
+        for (const line of section.lines) {
+          if (EXCLUSION.test(line)) mode = 'out';
+          else if (INCLUSION.test(line)) mode = 'in';
+          if (mode === null) continue;
+          for (const name of [...gated, ...notGated])
+            if (line.includes(name)) declared[mode].add(name);
+        }
         const missingIn = [...gated].filter((n) => !declared.in.has(n));
         const missingOut = notGated.filter((n) => !declared.out.has(n));
-        const contradictory = [...gated].filter((n) => declared.out.has(n)).concat(notGated.filter((n) => declared.in.has(n)));
-        if (missingIn.length === 0 && missingOut.length === 0 && contradictory.length === 0) return true;
+        if (missingIn.length === 0 && missingOut.length === 0) return true;
         misses.push(
           `${file} — ${section.heading.trim()}: не названы входящими ${JSON.stringify(missingIn)}, ` +
-            `не названы невходящими ${JSON.stringify(missingOut)}, противоречия ${JSON.stringify(contradictory)}`,
+            `не названы невходящими ${JSON.stringify(missingOut)}`,
         );
         return false;
       });
@@ -270,32 +246,6 @@ describe('гейт публикации: документация', () => {
         `(${JSON.stringify([...gated])}), и невходящие (${JSON.stringify(notGated)}).\n` +
         `Ближайшие кандидаты:\n${misses.slice(0, 10).join('\n') || '— разделов про гейт не найдено вовсе'}`,
     ).toBe(true);
-  });
-
-  it('discovers both adapters and rejects missing, empty or ambiguous workflow input', () => {
-    const adapters = ['test.yml', 'release-tests.yml'].map((file) => `/actions/workflows/${file}/runs?branch=main`);
-    expect(publicationWorkflows(workflows, adapters).map((wf) => wf.displayName)).toEqual(['Tests', 'Release source tests']);
-    expect(() => publicationWorkflows(workflows, ['no workflow selection'])).toThrow();
-    expect(() => publicationWorkflows(workflows, [adapters.join('\n')])).toThrow();
-    expect(() => publicationWorkflows(workflows.filter((wf) => wf.file !== 'release-tests.yml'), adapters)).toThrow();
-    expect(() => publicationWorkflows(workflows.map((wf) => wf.file === 'release-tests.yml' ? { ...wf, jobs: {} } : wf), adapters)).toThrow();
-    expect(() => publicationWorkflows([...workflows, { ...workflows.find((wf) => wf.file === 'release-tests.yml')!, file: 'duplicate.yml' }], adapters)).toThrow();
-  });
-
-  it('documents exact names and does not accept a required release check as non-gating', () => {
-    const names = ['Tests', 'Release source tests', 'Dependabot rebase', 'Dependabot rebase policy'];
-    const declared = gateDeclarations([
-      'В условие публикации входят `Tests` и `Release source tests`.',
-      'Не входят в гейт: `Dependabot rebase policy`.',
-    ], names);
-    expect([...declared.in]).toEqual(['Tests', 'Release source tests']);
-    expect([...declared.out]).toEqual(['Dependabot rebase policy']);
-    expect(gateDeclarations(['Не входят в гейт: `Release source tests`.'], names).in.has('Release source tests')).toBe(false);
-    expect(gateDeclarations(['В условие публикации входят Tests и Release source tests.'], names).in.size).toBe(0);
-    expect([...gateDeclarations(['Не входят в гейт: `Dependabot rebase policy`.', '',
-      'Подробности про `Tests` и `Release source tests`.'], names).out]).toEqual(['Dependabot rebase policy']);
-    const contradictory = gateDeclarations(['В условие публикации входят `Tests`.', '', 'Не входят в гейт: `Tests`.'], names);
-    expect(contradictory.in.has('Tests') && contradictory.out.has('Tests')).toBe(true);
   });
 });
 

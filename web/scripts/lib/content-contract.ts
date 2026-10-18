@@ -181,6 +181,22 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
 }
 
 export function assertSnapshotContract(snapshot: Snapshot): void {
+  const demo = snapshot as Snapshot & {
+    sourcePolicy?: unknown; sourceAge?: unknown; captureProof?: Record<string, unknown>;
+  };
+  if (demo.sourcePolicy !== undefined || demo.sourceAge !== undefined || demo.captureProof !== undefined) {
+    const proof = demo.captureProof;
+    const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+    if (demo.sourcePolicy !== 'demo-publication-only' || demo.sourceAge !== 'untracked'
+        || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms'
+        || !proof || proof.version !== 1 || proof.method !== 'quiesced-sqlite-backup'
+        || proof.sourceId !== 'demo193-cms' || typeof proof.captureId !== 'string'
+        || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(proof.captureId)
+        || !digest(proof.schemaDigest) || !digest(proof.databaseDigest)
+        || !digest(proof.mediaManifestDigest) || !digest(proof.bundleDigest)) {
+      throw new Error('staging193 publication snapshot has incomplete or invalid sealed capture proof');
+    }
+  }
   const { violations } = validateSnapshotContract(snapshot);
   if (violations.length === 0) return;
   // Отказ обязан называть ПРЕДМЕТ, а не только первую запись: сообщение вида

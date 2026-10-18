@@ -79,7 +79,7 @@ test.describe('Compatibility smoke', () => {
         page.locator('.topnav-menu a').first(),
         `${where}: бургера нет по замыслу, но и пунктов горизонтального меню не видно`,
       ).toBeVisible();
-      return; // Horizontal navigation was positively checked above.
+      test.skip(true, `${where}: навигация горизонтальным меню, мобильного нет по замыслу`);
     }
 
     expect(

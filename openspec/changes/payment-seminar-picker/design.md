@@ -9,14 +9,13 @@
 включает. То есть неверный выбор здесь ломает контракт не в браузере, а в отпечатке
 идемпотентности на сервере.
 
-Расписание доступно на сборке: `web/src/lib/data.ts:391`, `export function getScheduleEntries`; тип записи — `web/src/lib/data.ts:248`, `export interface ScheduleEntry {`. Запись уже несёт `seminar.name`, `city.name`, `startAt`, `endAt`,
-`newPrice`, `oldPrice`, `isFree`, `status`. Правило «событие ещё не закончилось»
-реализовано в `web/src/lib/schedule-window.ts` (`lastDay`, `isCurrentOrFuture`) и повторно
-выводиться здесь не должно.
-
-Страница расписания строит свой набор так: `web/src/pages/raspisanie-i-tseny.astro:62`, `const entries = getScheduleEntries()` — то есть
-основные записи **плюс дополняющие**, с защитой от двойного учёта по паре «слаг семинара +
-дата начала», затем фильтр `status === 'active'` и актуальности.
+В текущем дереве `getScheduleEntries` загружает тип расписания из снимка
+(`web/src/lib/data.ts:120`, `const records = loadSnapshot().content.types[type];`), нормализует
+записи и добавляет имена преподавателей (`web/src/lib/data.ts:392`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarTeachers);`).
+Страница расписания получает этот набор и фильтрует его по состоянию и актуальности
+(`web/src/pages/raspisanie-i-tseny.astro:64`, `.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, todayDate))`).
+Текущая реализация не объединяет основной список с отдельным списком дополнений. Исторический
+замер 23.08.2026 описан отдельно в proposal и относится к составу данных и коду на ту дату.
 
 ## Goals / Non-Goals
 

@@ -18,7 +18,6 @@ export interface WorkflowStep {
   if?: string;
   with?: Record<string, unknown>;
   env?: Record<string, unknown>;
-  workingDirectory?: string;
   /** Весь шаг текстом — для проверок, которым важно любое место записи значения
    *  (`env`, `with`, `run`), а не одно заранее выбранное поле. */
   raw: string;
@@ -37,8 +36,6 @@ export interface WorkflowJob {
   /** `continue-on-error` джоба: при `true` его провал не делает прогон неуспешным,
    *  то есть проверка внутри такого джоба гейтом не является. */
   continueOnError?: unknown;
-  env?: Record<string, unknown>;
-  workingDirectory?: string;
 }
 
 export interface Workflow {
@@ -48,8 +45,6 @@ export interface Workflow {
   permissions?: unknown;
   concurrency?: unknown;
   jobs: Record<string, WorkflowJob>;
-  env?: Record<string, unknown>;
-  workingDirectory?: string;
 }
 
 export const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
@@ -105,7 +100,6 @@ export function loadWorkflows(): Workflow[] {
           if: step.if === undefined ? undefined : String(step.if),
           with: asRecord(step.with),
           env: asRecord(step.env),
-          workingDirectory: typeof step['working-directory'] === 'string' ? step['working-directory'] : undefined,
           raw: JSON.stringify(step),
         } satisfies WorkflowStep;
       });
@@ -119,8 +113,6 @@ export function loadWorkflows(): Workflow[] {
         concurrency: job.concurrency,
         environment: job.environment,
         continueOnError: job['continue-on-error'],
-        env: asRecord(job.env),
-        workingDirectory: asRecord(asRecord(job.defaults).run)['working-directory'] as string | undefined,
       };
     }
     return {
@@ -130,8 +122,6 @@ export function loadWorkflows(): Workflow[] {
       permissions: doc.permissions,
       concurrency: doc.concurrency,
       jobs,
-      env: asRecord(doc.env),
-      workingDirectory: asRecord(asRecord(doc.defaults).run)['working-directory'] as string | undefined,
     };
   });
 }

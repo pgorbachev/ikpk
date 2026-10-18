@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { allDemoPages, readDemoPage } from './helpers/demo-dist';
 import { attr, findAll, textOf } from './helpers/dom';
-import { getScheduleEntries, getSeminars, getSnapshotReferenceDate } from '../src/lib/data.js';
+import { getScheduleEntries, getSeminars } from '../src/lib/data.js';
 import { getUpcomingSeminars, seminarTeacherLabel } from '../src/lib/home.js';
-import { isCurrentOrFuture } from '../src/lib/schedule-window.js';
+import { calendarToday, isCurrentOrFuture } from '../src/lib/schedule-window.js';
 
 /**
  * Прототипы каркаса подачи (`/preview/{editorial,faculty,modular}`) — предмет ДЕМО-вывода.
@@ -102,7 +102,7 @@ describe('прототипы: происхождение изображений'
 /**
  * Блоки анонсов рендерятся УСЛОВНО: `EventLine.astro`, `EventTeacher.astro` и
  * `UpcomingModular.astro` стоят под `{next && …}`, где `next` — из
- * `getUpcomingSeminars(limit)` с опорной датой снимка. Данные у нас снапшот, поэтому
+ * `getUpcomingSeminars(limit, now = new Date())`. Данные у нас снапшот, поэтому
  * требование «маркер есть» — мина под публикацией: когда последнее событие снапшота
  * уйдёт в прошлое, гейт покраснеет на ИСПРАВНОМ коде и остановит выкладку боевого
  * сайта, а сообщение соврёт («нет строки-анонса события»).
@@ -112,8 +112,10 @@ describe('прототипы: происхождение изображений'
  * Оба исхода проверяются, так что гейт продолжает ловить сломанный прототип и молчит
  * там, где виноват ход времени. Это тот же приём, что в `src/lib/schedule-window.ts`.
  *
- * Сборка и проверка берут одну опорную дату из снимка. Ход календаря между ними
- * не меняет выборку ближайших событий главной.
+ * Остаточная связь названа честно: сборка вызывает `getUpcomingSeminars()` в момент
+ * сборки, а тест — в момент прогона. Разойтись они могут только на событии, истекающем
+ * между сборкой и проверкой (в CI это секунды). Известное отклонение записано в
+ * `docs/tech-debt.md` (TD-17).
  */
 const upcoming = getUpcomingSeminars(1);
 const hasUpcoming = upcoming.length > 0;
@@ -128,7 +130,7 @@ const hasDatedFutureWithTeacher = getScheduleEntries().some(
   (e) =>
     e.status === 'active' &&
     Boolean(e.startAt) &&
-    isCurrentOrFuture(e, getSnapshotReferenceDate()) &&
+    isCurrentOrFuture(e, calendarToday()) &&
     Boolean(e.teachers?.length),
 );
 
