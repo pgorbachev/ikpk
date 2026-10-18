@@ -47,7 +47,7 @@ const {
   <body class="layout-topnav">
     {isDemoForms && (
       <div class="demo-banner" data-demo-banner>
-        Демо-стенд: формы заявки отключены, обращения в CRM не создаются
+        {import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются
       </div>
     )}
     <MaintenanceNotice />

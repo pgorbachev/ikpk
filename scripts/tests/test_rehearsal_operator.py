@@ -28,10 +28,10 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in JOBS]
 
     def _capture(self, argv):
-        if argv[:3] == ["git", "ls-remote", "origin"]:
-            return f"{SHA}\t{staging193.CANONICAL_REF}"
         if argv[:2] == ["gh", "repo"]:
             return staging193.CANONICAL_REPOSITORY
+        if argv[:2] == ["gh", "api"]:
+            return SHA
         if argv[:3] == ["gh", "run", "list"]:
             return json.dumps(self.runs)
         if argv[:3] == ["gh", "run", "view"]:
@@ -47,13 +47,32 @@ class OperatorAdmissionTests(unittest.TestCase):
 
     def test_rejects_a_moved_canonical_ref(self):
         def moved(argv):
-            if argv[:3] == ["git", "ls-remote", "origin"]:
-                return f"{'b' * 40}\t{staging193.CANONICAL_REF}"
+            if argv[:2] == ["gh", "api"]:
+                return "b" * 40
             return self._capture(argv)
 
         with patch.object(staging193, "capture", side_effect=moved):
-            with self.assertRaisesRegex(staging193.Refusal, "current canonical"):
+            with self.assertRaisesRegex(staging193.Refusal, "canonical pgorbachev/ikpk"):
                 staging193.validate_sha_and_ci(SHA)
+
+    def test_canonical_head_lookup_does_not_use_a_local_fork_origin(self):
+        calls = []
+        def canonical(argv):
+            calls.append(argv)
+            if argv[:2] == ["gh", "repo"]:
+                return staging193.CANONICAL_REPOSITORY
+            if argv[:2] == ["gh", "api"]:
+                return SHA
+            if argv[:3] == ["git", "ls-remote", "origin"]:
+                return f"{'b' * 40}\t{staging193.CANONICAL_REF}"
+            if argv[:3] == ["gh", "run", "list"]:
+                return json.dumps(self.runs)
+            if argv[:3] == ["gh", "run", "view"]:
+                return json.dumps({"jobs": self.jobs})
+            return ""
+        with patch.object(staging193, "capture", side_effect=canonical):
+            staging193.validate_sha_and_ci(SHA)
+        self.assertFalse(any(argv[:3] == ["git", "ls-remote", "origin"] for argv in calls))
 
     def test_rejects_skipped_or_cancelled_mandatory_job(self):
         self.jobs[0] = {"name": self.jobs[0]["name"], "status": "completed", "conclusion": "skipped"}

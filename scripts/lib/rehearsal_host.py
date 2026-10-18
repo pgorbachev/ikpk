@@ -36,7 +36,7 @@ REQUIRED_CONFIG = {
     "staticReleaseRoot", "cmsUnit", "writerUnits", "cmsUser", "cmsDatabase", "mediaRoots",
     "backupRoot", "nginxBinary", "nginxService", "nginxMapFile",
     "nginxServerGateFile", "writerPrefixes", "preservePrefixes",
-    "cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "siteProbeUrls",
+    "cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "siteProbeUrls", "paymentStatusProbeUrl",
     "writerProbeUrls", "preserveProbeUrl", "allowedSourceRef", "targetHost",
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
@@ -109,7 +109,7 @@ def _root_config(path: Path) -> dict[str, Any]:
             raise HostFailure("mediaRoots entries must have path and URL prefix")
         if item["prefix"] not in ("/uploads/", "/media/"):
             raise HostFailure("mediaRoots prefix must be /uploads/ or /media/")
-    for key in ("cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "preserveProbeUrl"):
+    for key in ("cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "preserveProbeUrl", "paymentStatusProbeUrl"):
         if not isinstance(data[key], str) or not data[key].startswith(("http://", "https://")):
             raise HostFailure(f"{key} must be an absolute HTTP URL")
     for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot", "maintenanceFlag", "currentCms", "currentStatic",
@@ -570,8 +570,10 @@ def sha256_file_bytes(payload: bytes) -> str:
 def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int = 1800,
                 environment: Optional[dict[str, str]] = None) -> str:
     user = pwd.getpwnam(config["cmsUser"])
+    runtime_max = max(1, timeout - 30)
     command = ["/usr/bin/systemd-run", "--wait", "--collect", "--pipe", f"--uid={user.pw_name}",
-               f"--working-directory={cwd}"]
+               f"--working-directory={cwd}", f"--property=RuntimeMaxSec={runtime_max}s",
+               "--property=TimeoutStopSec=15s"]
     for key, value in (environment or {}).items():
         if not re.fullmatch(r"[A-Z0-9_]+", key) or "\x00" in value:
             raise HostFailure("invalid unprivileged command environment")
@@ -606,6 +608,10 @@ def _verify_fence(config: dict[str, Any]) -> None:
                       "--max-time", "10", config["preserveProbeUrl"]], timeout=12)
         if result.stdout.strip() not in ("200", "204", "206", "304"):
             raise HostFailure("public media/status preservation probe failed")
+    payment_status = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
+                          "--max-time", "10", config["paymentStatusProbeUrl"]], timeout=12)
+    if payment_status.stdout.strip() != "404":
+        raise HostFailure("disabled payment status route did not retain its expected 404")
 
 
 def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha: str,
@@ -661,10 +667,29 @@ def _cms_payload_sha256(root: Path, uploads: Path) -> str:
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root).as_posix().encode()
         info = path.lstat()
+        if relative.startswith(b"node_modules/"):
+            # npm's private dependency tree is sealed by package-lock plus the
+            # migration runner fingerprint; hashing every installed byte here
+            # would make every old-pair read traverse hundreds of megabytes.
+            if stat.S_ISLNK(info.st_mode):
+                node_root = (root / "node_modules").resolve(strict=True)
+                if not path.resolve(strict=True).is_relative_to(node_root):
+                    raise HostFailure(f"CMS dependency symlink escapes node_modules: {path}")
+            continue
         if stat.S_ISLNK(info.st_mode):
-            if relative != b"public/uploads" or path.resolve(strict=True) != uploads.resolve(strict=True):
+            if relative == b"public/uploads" and path.resolve(strict=True) == uploads.resolve(strict=True):
+                payload = b"symlink:" + str(path.readlink()).encode()
+            elif relative == b"node_modules":
+                target = path.resolve(strict=True)
+                target_info = target.stat()
+                expected = root.parent / "runtime-deps/node_modules"
+                if (target.name != "node_modules" or not target.is_dir() or
+                        target_info.st_mode & 0o022 or
+                        (expected.parent.exists() and target != expected.resolve(strict=True))):
+                    raise HostFailure("CMS node_modules link is not a private installed dependency tree")
+                payload = b"symlink:" + str(path.readlink()).encode()
+            else:
                 raise HostFailure(f"CMS payload contains an unexpected symlink: {path}")
-            payload = b"symlink:" + str(path.readlink()).encode()
         elif stat.S_ISDIR(info.st_mode):
             continue
         elif stat.S_ISREG(info.st_mode):
@@ -698,7 +723,20 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     receipt = operation_root / "receipt.json"
     _run_as_cms(config, source_root / "cms", ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
         str(artifact_dir)], timeout=1800)
-    uploads_root = _configure_candidate_uploads(config, artifact_dir)
+    runtime_root = operation_root / "runtime-deps"
+    runtime_root.mkdir(mode=0o700)
+    os.chown(runtime_root, user.pw_uid, user.pw_gid)
+    shutil.copy2(artifact_dir / "package.json", runtime_root / "package.json")
+    shutil.copy2(artifact_dir / "package-lock.json", runtime_root / "package-lock.json")
+    _run_as_cms(config, runtime_root, ["/usr/bin/npm", "ci", "--omit=dev", "--no-audit", "--no-fund"], timeout=1800)
+    dependencies = runtime_root / "node_modules"
+    dependency_info = dependencies.stat()
+    if (not dependencies.is_dir() or dependency_info.st_uid != user.pw_uid or dependency_info.st_mode & 0o022):
+        raise HostFailure("CMS runtime dependencies are not a private service-user installation")
+    runtime_link = artifact_dir / "node_modules"
+    if runtime_link.exists() or runtime_link.is_symlink():
+        raise HostFailure("CMS artifact unexpectedly contains node_modules before runtime install")
+    runtime_link.symlink_to(dependencies, target_is_directory=True)
     runner = artifact_dir / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
               "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
@@ -711,6 +749,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
         raise HostFailure("migration runner returned malformed status JSON") from error
     if report.get("phase") != "prepared" or report.get("passed") is False:
         raise HostFailure("CMS migration prepare/audit did not pass")
+    uploads_root = _configure_candidate_uploads(config, artifact_dir)
     import sqlite3
     _assert_no_database_handles(candidate)
     database = sqlite3.connect(str(candidate), timeout=10)
@@ -756,7 +795,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> t
         "CONTENT_SNAPSHOT_DIR": str(web / ".snapshot"), "DEMO_PROFILE": "demo193",
         "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
         "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent",
-        "DEMO_SITE_URL": "https://193.124.115.99",
+        "DEMO_SITE_URL": config["siteBaseUrl"],
     }
     _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
         str(web / "scripts/capture-content-snapshot.ts"), "--server-capture", str(capture)], timeout=1800,
@@ -769,7 +808,8 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> t
     _preserve_hashed_assets(config, dist)
     snapshot = json.loads((web / ".snapshot/snapshot.json").read_text(encoding="utf-8"))
     source_identity = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
-    release = {"commit": source_identity["sourceSha"], "snapshotId": snapshot.get("snapshotId"),
+    release = {"commit": source_identity["sourceSha"], "operationId": capture.parent.name,
+               "snapshotId": snapshot.get("snapshotId"),
                "staticTreeSha256": _tree_sha256(dist)}
     if not isinstance(release["snapshotId"], str) or not release["snapshotId"].startswith("snap:"):
         raise HostFailure("static candidate snapshot ID is missing")
@@ -780,13 +820,17 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> t
 
 def _preserve_hashed_assets(config: dict[str, Any], destination: Path) -> set[str]:
     root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
+    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
+    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
     copied: set[str] = set()
     for release in sorted(root.iterdir()):
         if not release.is_dir() or release.is_symlink():
             continue
-        asset_roots = [release / "_astro", release / "public/_astro"]
-        for asset_root in asset_roots:
+        asset_roots = [(release / "_astro", "_astro", asset_pattern),
+                       (release / "public/_astro", "_astro", asset_pattern),
+                       (release / "pagefind", "pagefind", pagefind_pattern),
+                       (release / "public/pagefind", "pagefind", pagefind_pattern)]
+        for asset_root, public_prefix, pattern in asset_roots:
             if not asset_root.is_dir() or asset_root.is_symlink():
                 continue
             for asset in sorted(asset_root.rglob("*")):
@@ -798,31 +842,35 @@ def _preserve_hashed_assets(config: dict[str, Any], destination: Path) -> set[st
                 if not pattern.fullmatch(asset.name):
                     continue
                 relative = asset.relative_to(asset_root)
-                target = destination / "_astro" / relative
+                target = destination / public_prefix / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if target.exists():
                     if target.is_symlink() or not target.is_file() or sha256_file(target) != sha256_file(asset):
                         raise HostFailure("same hashed asset URL has different retained bytes")
                 else:
                     shutil.copy2(asset, target)
-                copied.add("/_astro/" + relative.as_posix())
+                copied.add("/" + public_prefix + "/" + relative.as_posix())
     return copied
 
 
 def _verify_retained_hashed_assets(config: dict[str, Any]) -> None:
     root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
+    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
+    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
     urls: set[str] = set()
     for release in sorted(root.iterdir()):
         if not release.is_dir() or release.is_symlink():
             continue
-        for asset_root in (release / "_astro", release / "public/_astro"):
+        for asset_root, public_prefix, pattern in ((release / "_astro", "_astro", asset_pattern),
+                                                   (release / "public/_astro", "_astro", asset_pattern),
+                                                   (release / "pagefind", "pagefind", pagefind_pattern),
+                                                   (release / "public/pagefind", "pagefind", pagefind_pattern)):
             if not asset_root.is_dir() or asset_root.is_symlink():
                 continue
             for asset in asset_root.rglob("*"):
                 info = asset.lstat()
                 if stat.S_ISREG(info.st_mode) and pattern.fullmatch(asset.name):
-                    urls.add("/_astro/" + asset.relative_to(asset_root).as_posix())
+                    urls.add("/" + public_prefix + "/" + asset.relative_to(asset_root).as_posix())
     if not urls:
         raise HostFailure("no retained hashed asset URLs were found for post-switch verification")
     for path in sorted(urls):
@@ -832,14 +880,16 @@ def _verify_retained_hashed_assets(config: dict[str, Any]) -> None:
             raise HostFailure(f"retained hashed asset is unavailable after static switch: {path}")
 
 
-def _served_release_matches(config: dict[str, Any], source_sha: str, digest: str) -> dict[str, Any]:
+def _served_release_matches(config: dict[str, Any], source_sha: str, operation_id: str,
+                            digest: str) -> dict[str, Any]:
     result = run(["/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "15",
                  config["siteReleaseUrl"]], timeout=20)
     try:
         release = json.loads(result.stdout)
     except ValueError as error:
         raise HostFailure("served /release.json is malformed") from error
-    if release.get("commit") != source_sha or release.get("staticTreeSha256") != digest:
+    if (release.get("commit") != source_sha or release.get("operationId") != operation_id or
+            release.get("staticTreeSha256") != digest):
         raise HostFailure("served /release.json does not identify the admitted static candidate")
     return release
 
@@ -1020,6 +1070,7 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     if not archive_bytes:
         raise HostFailure("admitted source archive is required after off-host backup confirmation")
     source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256, provenance)
+    del archive_bytes
     _run_as_cms(config, source_root / "cms", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
     start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
@@ -1073,7 +1124,7 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     if source_root.is_symlink() or not source_root.is_dir():
         raise HostFailure("admitted source candidate is missing")
     _verify_fence(config)
-    built = source_root / "web/dist-stand"
+    built = source_root / "web/dist-demo193"
     if not args.browser_digest:
         if phase["phase"] == "cms-activated" or not built.is_dir():
             capture = source_root / ".staging193-rehearsal" / op / "capture"
@@ -1104,7 +1155,10 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     _wait_health(config["cmsHealthUrl"], 1200)
     cms_proof = _database_process_proof(_service_pid(config["cmsUnit"]), Path(config["cmsDatabase"]))
     _wait_health(config["siteHealthUrl"], 1200)
-    served = _served_release_matches(config, sha, digest)
+    served = _served_release_matches(config, sha, op, digest)
+    candidate_release = json.loads((release / "release.json").read_text(encoding="utf-8"))
+    if served.get("snapshotId") != candidate_release.get("snapshotId"):
+        raise HostFailure("served release snapshot ID differs from the accepted candidate")
     for url in config.get("siteProbeUrls", []):
         response = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
                         "--max-time", "15", url], timeout=20)
@@ -1155,6 +1209,12 @@ def _export_static(config: dict[str, Any], state: RehearsalState, operation_id: 
     release = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
     if release.is_symlink() or not release.is_dir():
         raise HostFailure("retained static candidate is unavailable for off-host acceptance")
+    candidate = _candidate_root(config, source_sha, operation_id)
+    snapshot = candidate / "web/.snapshot/snapshot.json"
+    capture_manifest = candidate / ".staging193-rehearsal" / operation_id / "capture/manifest.json"
+    for required in (snapshot, capture_manifest):
+        if required.is_symlink() or not required.is_file():
+            raise HostFailure("sealed source snapshot proof is unavailable for off-host acceptance")
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:") as archive:
         for path in sorted(release.rglob("*")):
@@ -1163,7 +1223,9 @@ def _export_static(config: dict[str, Any], state: RehearsalState, operation_id: 
                 continue
             if not stat.S_ISREG(info.st_mode):
                 raise HostFailure("retained static candidate contains a non-regular object")
-            archive.add(path, arcname=path.relative_to(release).as_posix(), recursive=False)
+            archive.add(path, arcname="static/" + path.relative_to(release).as_posix(), recursive=False)
+        archive.add(snapshot, arcname="snapshot/snapshot.json", recursive=False)
+        archive.add(capture_manifest, arcname="snapshot/capture-manifest.json", recursive=False)
     return buffer.getvalue()
 
 
@@ -1300,6 +1362,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if backup_sha:
                 payload = sys.stdin.buffer.read()
                 _import_offhost_backup(config, args.operation_id, payload, backup_sha)
+                del payload
             return _recover(config, state, args.operation_id)
         if args.action == "cms-update":
             return _cms_update(config, state, args)

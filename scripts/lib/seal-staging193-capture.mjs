@@ -49,7 +49,7 @@ for (const url of referenced) if (!knownUrls.has(url)) throw new Error(`media re
 const manifest = {
   version: 1,
   host: '193.124.115.99',
-  siteUrl: 'https://staging.ikpk.su',
+  siteUrl: 'https://193.124.115.99',
   sourceId: 'demo193-cms',
   operationId,
   sourceSha,

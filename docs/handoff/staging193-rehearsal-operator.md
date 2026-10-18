@@ -1,6 +1,6 @@
 # staging193 rehearsal operator
 
-The local operator admits one full `dev` SHA through the canonical `Tests` push run, requires every mandatory job to finish successfully, and sends that exact source tree to staging193. It stores the verified database and media archive on the operator machine before any migration or release switch. CMS migration/build runs under the CMS account; the bounded host helper performs systemd, Nginx, database, and pointer operations.
+The local operator admits one full `dev` SHA through the canonical `Tests` push run, requires every mandatory job to finish successfully, and sends that exact source tree to staging193. `staging193` is the environment name; its current URL is `https://193.124.115.99`. `staging.ikpk.su` currently resolves to a different host and is not used by this rehearsal. It stores the verified database and media archive on the operator machine before any migration or release switch. CMS migration/build runs under the CMS account; the bounded host helper performs systemd, Nginx, database, and pointer operations.
 
 After reviewed code and exact candidate CI are ready, install the bounded helper and prepare the existing CMS unit to use `/opt/ikpk-cms-prototype193/current`:
 
@@ -10,7 +10,7 @@ bash scripts/bootstrap-staging193-current.sh
 bash scripts/install-rehearsal-host.sh --prefix /usr/local --staging193-config
 ```
 
-The bootstrap checks the current unit identity and original release path, saves the effective unit configuration under `/var/lib/ikpk-rehearsal/bootstrap/staging193`, and writes a narrow systemd drop-in. It does not restart the service. The versioned `scripts/staging193-rehearsal.json` template installs as root-owned `/etc/ikpk/rehearsal.json`; installation creates the private journal/backup directories and runs the helper's read-only config, current pointer, and live CMS database process check. It refuses to overwrite a different config. The operator uses the existing root SSH identity at `~/.ssh/id_ed25519_ikpk_vps` to invoke only the fixed helper; CMS npm/build/migration and runtime stay under `ikpk-cms`.
+The bootstrap checks the current unit identity and original release path, saves the effective unit configuration under `/var/lib/ikpk-rehearsal/bootstrap/staging193`, and writes a narrow systemd drop-in. It does not restart the service. The versioned `scripts/staging193-rehearsal.json` template installs as root-owned `/etc/ikpk/rehearsal.json`; installation creates the existing `ikpk-cms` account's private HOME if it is absent, creates the private journal/backup directories, and runs the helper's read-only config, current pointer, and live CMS database process check. It refuses to overwrite a different config or accept an unsafe existing HOME. The operator uses the existing root SSH identity at `~/.ssh/id_ed25519_ikpk_vps` to invoke only the fixed helper; CMS npm/build/migration and runtime stay under `ikpk-cms`. The service user's npm cache consumes staging disk during a build and must be included in the preflight space check.
 
 Run the two operator commands with the same fresh operation ID and admitted SHA:
 
@@ -23,4 +23,6 @@ python3 scripts/rehearsal/staging193.py static-publish --operation-id <id> --sou
 
 Before global commit, recover explicitly with the same ID. If a final backup exists, recovery requires the exact off-host archive; before backup creation it preserves the old live database and editor writes. A durable `committed` or `recovered` journal row forbids another database restore. If commit succeeded but reopening did not, retry `static-publish` to finish reopening.
 
-The three live acceptance scenarios are first release, pre-commit failure/recovery, and a second release that preserves a new editor record and media. The rehearsal does not establish production readiness: TD-56's production journal-writer decision remains open, and production needs a separate admitted `main` SHA and canonical CI run. No service install, reload, stop, or rehearsal has been run on staging193 from this worktree.
+With the currently measured staging disk budget, run pre-commit failure/recovery first. After verified recovery, remove only that operation's unreferenced candidate/dependencies/capture while retaining its backup bytes, journal, receipts, and logs; then run accepted release A and the second release C after a new editor record is written.
+
+The three live acceptance scenarios are pre-commit failure/recovery, first accepted release, and a second release that preserves a new editor record and media. The rehearsal does not establish production readiness: TD-56's production journal-writer decision remains open, and production needs a separate admitted `main` SHA and canonical CI run. No service install, reload, stop, or rehearsal has been run on staging193 from this worktree.

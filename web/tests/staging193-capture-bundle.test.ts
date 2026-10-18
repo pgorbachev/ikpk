@@ -84,7 +84,7 @@ function sealedBundle(): string {
   const manifest = {
     version: 1,
     host: '193.124.115.99',
-    siteUrl: 'https://staging.ikpk.su',
+    siteUrl: 'https://193.124.115.99',
     sourceId: 'demo193-cms',
     operationId: 'test-capture-1',
     sourceSha: 'a'.repeat(40),

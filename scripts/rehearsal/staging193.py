@@ -66,9 +66,9 @@ def validate_sha_and_ci(sha: str) -> dict:
                     "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if repo != CANONICAL_REPOSITORY:
         raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
-    remote = capture(["git", "ls-remote", "origin", CANONICAL_REF]).split()
-    if len(remote) != 2 or remote[0] != sha or remote[1] != CANONICAL_REF:
-        raise Refusal("source SHA is not the current canonical origin/dev head")
+    canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/dev", "--jq", ".object.sha"])
+    if canonical_head != sha:
+        raise Refusal("source SHA is not the current canonical pgorbachev/ikpk dev head")
     raw = capture(["gh", "run", "list", "--repo", repo, "--commit", sha,
                    "--workflow", WORKFLOW, "--limit", "50", "--json",
                    "databaseId,headSha,event,status,conclusion,attempt,workflowName,headBranch,createdAt"])
@@ -280,12 +280,16 @@ def _static_tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
-def browser_check(source_sha: str, static_digest: str, archive: bytes) -> None:
+def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes) -> None:
     executable = ROOT / "web/node_modules/.bin/playwright"
     if not executable.is_file():
         raise Refusal("local Playwright dependencies are missing; browser acceptance was not run")
     with tempfile.TemporaryDirectory(prefix="ikpk-staging193-static-") as temporary:
         root = Path(temporary)
+        static_root = root / "static"
+        snapshot_root = root / "snapshot"
+        static_root.mkdir()
+        snapshot_root.mkdir()
         try:
             with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
                 for member in bundle.getmembers():
@@ -295,37 +299,73 @@ def browser_check(source_sha: str, static_digest: str, archive: bytes) -> None:
                         raise Refusal("static candidate archive contains an unsafe path")
                     if not (member.isfile() or member.isdir()):
                         raise Refusal("static candidate archive contains a non-regular object")
-                bundle.extractall(root)
+                    if member.isdir():
+                        continue
+                    stream = bundle.extractfile(member)
+                    if stream is None:
+                        raise Refusal("candidate export contains an unreadable file")
+                    if normalized.startswith("static/"):
+                        relative = Path(normalized.removeprefix("static/"))
+                        target_root = static_root
+                    elif normalized in ("snapshot/snapshot.json", "snapshot/capture-manifest.json"):
+                        relative = Path(normalized).relative_to("snapshot")
+                        target_root = snapshot_root
+                    else:
+                        raise Refusal("candidate export contains an unexpected member")
+                    target = target_root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(stream.read())
         except tarfile.TarError as error:
             raise Refusal("static candidate export is not a readable tar archive") from error
-        if _static_tree_sha256(root) != static_digest:
+        if _static_tree_sha256(static_root) != static_digest:
             raise Refusal("off-host static candidate bytes do not match the admitted tree digest")
         try:
-            release = json.loads((root / "release.json").read_text(encoding="utf-8"))
+            release = json.loads((static_root / "release.json").read_text(encoding="utf-8"))
+            snapshot = json.loads((snapshot_root / "snapshot.json").read_text(encoding="utf-8"))
+            capture_bytes = (snapshot_root / "capture-manifest.json").read_bytes()
+            capture = json.loads(capture_bytes)
         except (OSError, ValueError) as error:
-            raise Refusal("off-host static candidate release declaration is unreadable") from error
-        if release.get("commit") != source_sha or release.get("staticTreeSha256") != static_digest:
+            raise Refusal("off-host candidate release or snapshot declaration is unreadable") from error
+        if (release.get("commit") != source_sha or release.get("operationId") != operation_id or
+                release.get("staticTreeSha256") != static_digest):
             raise Refusal("off-host static candidate release declaration does not match the admitted bytes")
+        proof = snapshot.get("captureProof") if isinstance(snapshot, dict) else None
+        if (not isinstance(proof, dict) or snapshot.get("snapshotId") != release.get("snapshotId") or
+                snapshot.get("origin", {}).get("kind") != "server-db" or
+                snapshot.get("sourcePolicy") != "demo-publication-only" or snapshot.get("sourceAge") != "untracked" or
+                proof.get("captureId") != operation_id or capture.get("operationId") != operation_id or
+                proof.get("schemaDigest") != capture.get("schemaDigest") or
+                proof.get("databaseDigest") != capture.get("databaseSha256") or
+                proof.get("mediaManifestDigest") != capture.get("mediaManifestSha256") or
+                proof.get("bundleDigest") != hashlib.sha256(capture_bytes).hexdigest()):
+            raise Refusal("off-host candidate snapshot is not the sealed CMS capture for this release")
 
         class QuietHandler(http.server.SimpleHTTPRequestHandler):
             def log_message(self, _format, *_args):
                 pass
 
-        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(root), **kwargs)
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(static_root), **kwargs)
         server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            environment = {**os.environ, "STAGING193_EXPECTED_SHA": source_sha,
-                           "STAGING193_EXPECTED_STATIC_DIGEST": static_digest,
-                           "STAGING193_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}", "CI": "1"}
+            environment = {**os.environ, "PUBLICATION_STAGING_CAPTURE": "1",
+                           "CONTENT_SNAPSHOT_DIR": str(snapshot_root), "PUBLICATION_TREE_DIR": str(static_root),
+                           "PUBLICATION_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}",
+                           "PUBLICATION_COMMIT": source_sha, "PUBLICATION_SNAPSHOT_ID": release["snapshotId"],
+                           "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
+                           "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent", "CI": "1"}
             for key in ("SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "IKPK_DEPLOY_KEY"):
                 environment.pop(key, None)
-            result = subprocess.run([str(executable), "test", "--config", "playwright.staging193.config.ts"],
+            result = subprocess.run([str(executable), "test", "tests/publication-smoke.spec.ts",
+                                     "tests/publication-catalog.spec.ts", "tests/publication-content.spec.ts",
+                                     "tests/publication-schedule.spec.ts", "tests/publication-widgets.spec.ts",
+                                     "--config", "playwright.publication.config.ts",
+                                     "--project=desktop", "--project=mobile", "--reporter=line"],
                                     cwd=ROOT / "web", env=environment, check=False)
             if result.returncode:
-                raise Refusal(f"staging193 browser acceptance failed with exit {result.returncode}")
+                raise Refusal(f"candidate publication browser checks failed with exit {result.returncode}")
         finally:
             server.shutdown()
             server.server_close()
@@ -371,7 +411,7 @@ def invoke(args: argparse.Namespace) -> None:
             raise Refusal("host returned an invalid static candidate digest")
         candidate_bytes = ssh_remote(["export-static", "--operation-id", args.operation_id,
                                       "--source-sha", args.source_sha])
-        browser_check(args.source_sha, digest, candidate_bytes)
+        browser_check(args.source_sha, args.operation_id, digest, candidate_bytes)
         validate_sha_and_ci(args.source_sha)
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest]))
         if committed.get("phase") != "committed":

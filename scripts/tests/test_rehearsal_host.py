@@ -57,6 +57,18 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_unprivileged_build_has_a_systemd_runtime_deadline_before_client_timeout(self):
+        completed = subprocess.CompletedProcess([], 0, stdout="finished", stderr="")
+        with patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("User", (), {"pw_name": "ikpk-cms"})()), \
+             patch.object(rehearsal_host, "run", return_value=completed) as run_command:
+            result = rehearsal_host._run_as_cms({"cmsUser": "ikpk-cms"}, Path("/tmp/cms"),
+                                                 ["/usr/bin/npm", "ci"], timeout=90)
+        command = run_command.call_args.args[0]
+        self.assertIn("--property=RuntimeMaxSec=60s", command)
+        self.assertIn("--property=TimeoutStopSec=15s", command)
+        self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
+        self.assertEqual(result, "finished")
+
     def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
             root = Path(temporary)
@@ -75,6 +87,34 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(uploads.resolve(), external.resolve())
             self.assertEqual((uploads / "photo original.jpg").read_bytes(), b"editor media")
             self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, external)), 64)
+
+    def test_cms_payload_accepts_npm_runtime_link_and_internal_bin_links(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-node-modules-") as temporary:
+            root = Path(temporary) / "source/op/.staging193-rehearsal/op/migration"
+            artifact = root / "cms-artifact"
+            artifact.mkdir(parents=True)
+            dependencies = root / "runtime-deps/node_modules"
+            (dependencies / "@strapi/strapi/bin").mkdir(parents=True)
+            (dependencies / "@strapi/strapi/bin/strapi.js").write_text("runtime", encoding="utf-8")
+            (dependencies / ".bin").mkdir()
+            (dependencies / ".bin/strapi").symlink_to("../@strapi/strapi/bin/strapi.js")
+            (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            (artifact / "package-lock.json").write_text("{}", encoding="utf-8")
+            (artifact / "public").mkdir()
+            uploads = Path(temporary) / "uploads"
+            uploads.mkdir()
+            (artifact / "public/uploads").symlink_to(uploads, target_is_directory=True)
+            self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, uploads)), 64)
+
+            legacy = Path(temporary) / "legacy-release"
+            (legacy / "node_modules/.bin").mkdir(parents=True)
+            outside = Path(temporary) / "outside"
+            outside.write_text("not a dependency", encoding="utf-8")
+            (legacy / "node_modules/.bin/escape").symlink_to(outside)
+            (legacy / "public").mkdir()
+            (legacy / "public/uploads").symlink_to(uploads, target_is_directory=True)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "escapes node_modules"):
+                rehearsal_host._cms_payload_sha256(legacy, uploads)
 
     def test_backup_and_release_tree_use_real_lstat_results(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-backup-lstat-") as temporary:
@@ -190,7 +230,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 return ""
 
             with patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
-                dist, _ = rehearsal_host._build_static({"staticReleaseRoot": str(retained)}, source,
+                dist, _ = rehearsal_host._build_static({"staticReleaseRoot": str(retained),
+                                                        "siteBaseUrl": "https://193.124.115.99"}, source,
                                                        Path(temporary) / "capture")
             expected = {"CONTENT_SNAPSHOT_DIR": str(snapshot_dir), "DEMO_PROFILE": "demo193",
                         "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
@@ -213,17 +254,27 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             release.mkdir(parents=True)
             (release / "index.html").write_text("candidate", encoding="utf-8")
             (release / "release.json").write_text(json.dumps({"commit": "a" * 40}), encoding="utf-8")
+            candidate = root / "sources" / f"{'a' * 40}-export-op"
+            snapshot = candidate / "web/.snapshot/snapshot.json"
+            capture = candidate / ".staging193-rehearsal/export-op/capture/manifest.json"
+            snapshot.parent.mkdir(parents=True)
+            capture.parent.mkdir(parents=True)
+            snapshot.write_text('{"snapshotId":"snap:captured"}', encoding="utf-8")
+            capture.write_text('{"operationId":"export-op"}', encoding="utf-8")
 
             class State:
                 @staticmethod
                 def phase(_operation_id):
                     return {"phase": "cms-activated", "sourceSha": "a" * 40}
 
-            payload = rehearsal_host._export_static({"staticReleaseRoot": str(release_root)}, State(),
+            payload = rehearsal_host._export_static({"staticReleaseRoot": str(release_root),
+                                                       "releaseRoot": str(root / "sources")}, State(),
                                                        "export-op", "a" * 40)
             with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
-                self.assertEqual(archive.extractfile("index.html").read(), b"candidate")
-                self.assertEqual(json.loads(archive.extractfile("release.json").read()), {"commit": "a" * 40})
+                self.assertEqual(archive.extractfile("static/index.html").read(), b"candidate")
+                self.assertEqual(json.loads(archive.extractfile("static/release.json").read()), {"commit": "a" * 40})
+                self.assertEqual(json.loads(archive.extractfile("snapshot/snapshot.json").read()), {"snapshotId": "snap:captured"})
+                self.assertEqual(json.loads(archive.extractfile("snapshot/capture-manifest.json").read()), {"operationId": "export-op"})
 
     def test_post_switch_checks_old_hashed_asset_url_against_serving_origin(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-hash-check-") as temporary:
@@ -232,8 +283,14 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             new_assets = root / ("new-" + "a" * 40 + "/_astro")
             old_assets.mkdir(parents=True)
             new_assets.mkdir(parents=True)
+            old_pagefind = root / "old/public/pagefind/fragment"
+            new_pagefind = root / ("new-" + "a" * 40 + "/pagefind/fragment")
+            old_pagefind.mkdir(parents=True)
+            new_pagefind.mkdir(parents=True)
             (old_assets / "old.0123456789.css").write_bytes(b"old hashed CSS")
             (new_assets / "new.abcdef0123.js").write_bytes(b"new hashed JS")
+            (old_pagefind / "ru_2cf1958.pf_fragment").write_bytes(b"old Pagefind fragment")
+            (new_pagefind / "ru_7a12345.pf_fragment").write_bytes(b"new Pagefind fragment")
             commands = []
 
             def request(argv, **_kwargs):
@@ -242,10 +299,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "run", side_effect=request):
                 rehearsal_host._verify_retained_hashed_assets({"staticReleaseRoot": str(root),
-                                                                 "siteBaseUrl": "https://staging.ikpk.su"})
+                                                                 "siteBaseUrl": "https://193.124.115.99"})
             urls = {argv[-1] for argv in commands}
-            self.assertIn("https://staging.ikpk.su/_astro/old.0123456789.css", urls)
-            self.assertIn("https://staging.ikpk.su/_astro/new.abcdef0123.js", urls)
+            self.assertIn("https://193.124.115.99/_astro/old.0123456789.css", urls)
+            self.assertIn("https://193.124.115.99/_astro/new.abcdef0123.js", urls)
+            self.assertIn("https://193.124.115.99/pagefind/fragment/ru_2cf1958.pf_fragment", urls)
 
     def test_capture_builder_invokes_existing_sealer_path(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-capture-entrypoint-") as temporary:
@@ -320,6 +378,23 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     rehearsal_host._write_gate(config, True)
             self.assertEqual(map_file.read_text(), "previous map\n")
             self.assertEqual(server_file.read_text(), "previous server gate\n")
+
+    def test_writer_fence_keeps_disabled_payment_status_route_at_404(self):
+        commands = []
+        def probe(argv, **_kwargs):
+            commands.append(argv)
+            if argv[-1] == "https://193.124.115.99/api/payments/rehearsal/status":
+                return subprocess.CompletedProcess(argv, 0, "404", "")
+            if argv[-1] == "https://193.124.115.99/":
+                return subprocess.CompletedProcess(argv, 0, "200", "")
+            return subprocess.CompletedProcess(argv, 0, "503", "")
+        config = {"writerProbeUrls": ["https://193.124.115.99/api"],
+                  "preserveProbeUrl": "https://193.124.115.99/",
+                  "paymentStatusProbeUrl": "https://193.124.115.99/api/payments/rehearsal/status"}
+        with patch.object(rehearsal_host, "run", side_effect=probe):
+            rehearsal_host._verify_fence(config)
+        self.assertTrue(any("--request" in argv for argv in commands))
+        self.assertIn(config["paymentStatusProbeUrl"], [argv[-1] for argv in commands])
 
     def test_database_replacement_removes_stale_wal_and_shm_and_keeps_mode(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-db-replace-") as temporary:

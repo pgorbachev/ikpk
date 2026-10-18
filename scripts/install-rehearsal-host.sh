@@ -47,8 +47,26 @@ if (( INSTALL_STAGING193_CONFIG )); then
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:
     config = json.load(source)
+import os, pwd, stat
+account = pwd.getpwnam(config["cmsUser"])
+home = account.pw_dir
+if not os.path.isabs(home) or home == "/":
+    raise SystemExit("CMS service account has no safe absolute HOME")
+created = False
+try:
+    os.mkdir(home, 0o700)
+    created = True
+except FileExistsError:
+    pass
+if created:
+    os.chown(home, account.pw_uid, account.pw_gid)
+    os.chmod(home, 0o700)
+info = os.lstat(home)
+if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+    raise SystemExit("CMS service HOME must be a real directory")
+if info.st_uid != account.pw_uid or info.st_gid != account.pw_gid or info.st_mode & 0o077 or info.st_mode & 0o700 != 0o700:
+    raise SystemExit("existing CMS service HOME must be owned by the service account with private permissions")
 for name in ("stateDir", "backupRoot"):
-    import os
     os.makedirs(config[name], mode=0o700, exist_ok=True)
     os.chown(config[name], 0, 0)
     os.chmod(config[name], 0o700)

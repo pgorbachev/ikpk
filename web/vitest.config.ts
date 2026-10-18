@@ -86,6 +86,8 @@ export default defineConfig({
       'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
+      'tests/footer-snapshot-clock.render.test.ts',
+      'tests/maintenance-notice.render.test.ts',
       // Одноразовые Docker-контейнеры провижининга. Запускаются последовательно
       // отдельным обязательным шагом workflow Tests, чтобы не смешивать их очистку
       // с параллельным набором; конфиг задаёт bounded срок и артефакты диагностики.
