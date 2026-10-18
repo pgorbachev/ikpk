@@ -784,11 +784,20 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
     inventory = json.loads((capture / "media-manifest.json").read_text(encoding="utf-8")).get("media")
     if not isinstance(inventory, list) or not inventory:
         raise HostFailure("sealed CMS capture has no media entries for a runtime media probe")
-    media_path = inventory[0].get("originalName")
+    upload = next((item for item in inventory if isinstance(item, dict)
+                   and isinstance(item.get("url"), str) and item["url"].startswith("/uploads/")), None)
+    if upload is None:
+        raise HostFailure("sealed CMS media inventory has no /uploads/ entry for a runtime media probe")
+    media_url = upload["url"]
+    media_path = upload.get("originalName")
     if not isinstance(media_path, str) or not media_path:
-        raise HostFailure("sealed CMS media inventory has no original media name")
+        raise HostFailure("sealed CMS media inventory has an invalid /uploads/ entry for a runtime media probe")
+    relative = Path(media_path)
+    if (media_url != "/uploads/" + media_path or relative.is_absolute()
+            or relative.as_posix() != media_path or any(part in ("", ".", "..") for part in relative.parts)):
+        raise HostFailure("sealed CMS media inventory has an invalid /uploads/ entry for a runtime media probe")
     from urllib.parse import quote
-    probe_url = "http://127.0.0.1:1338/uploads/" + quote(media_path, safe="/")
+    probe_url = "http://127.0.0.1:1338" + quote(media_url, safe="/")
     media_probe = run(["/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null",
                        "--max-time", "15", probe_url],
                       timeout=20, check=False)
