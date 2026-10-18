@@ -208,7 +208,6 @@ def verify_backup_tar(payload: bytes, expected_sha256: str) -> None:
         raise Refusal("host backup database bytes do not match the captured manifest")
     if hashlib.sha256(media_bytes).hexdigest() != manifest.get("mediaManifestSha256"):
         raise Refusal("host backup media manifest bytes do not match the captured manifest")
-    referenced = set()
     for item in media:
         if not isinstance(item, dict) or not isinstance(item.get("file"), str):
             raise Refusal("host backup media inventory is malformed")
@@ -216,11 +215,10 @@ def verify_backup_tar(payload: bytes, expected_sha256: str) -> None:
         path = Path(name)
         if path.is_absolute() or any(part in (".", "..") for part in path.parts):
             raise Refusal("host backup media path is unsafe")
-        if name in referenced or name not in files or hashlib.sha256(files[name]).hexdigest() != item.get("sha256"):
+        if name not in files or hashlib.sha256(files[name]).hexdigest() != item.get("sha256"):
             raise Refusal("host backup media bytes do not match the captured inventory")
         if len(files[name]) != item.get("size"):
             raise Refusal("host backup media size does not match the captured inventory")
-        referenced.add(name)
 
 
 def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, payload: bytes,
