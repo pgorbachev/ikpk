@@ -472,6 +472,10 @@ jobs:
       - name: Verify manual publication transport
         run: node --test tests/publication-*.test.mjs
 
+      - name: Verify staging193 rehearsal command and recovery boundaries
+        working-directory: .
+        run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_rehearsal_operator -v
+
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope
         working-directory: .

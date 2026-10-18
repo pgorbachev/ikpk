@@ -90,7 +90,7 @@ class RehearsalStateTests(unittest.TestCase):
         committed = self.state.commit("op-1")
         self.assertTrue(committed["committed"])
         rows = [__import__("json").loads(line) for line in self.state.journal_path.read_text().splitlines()]
-        self.assertEqual([row["record"] for row in rows], ["start", "new-pair", "committed"])
+        self.assertEqual([row["record"] for row in rows], ["start", "new-bundle", "committed"])
         self.assertEqual(rows[0]["oldPair"], OLD_PAIR)
         self.assertEqual(rows[1]["newPair"], NEW_PAIR)
         with self.assertRaisesRegex(RehearsalRefusal, "terminal journal record"):

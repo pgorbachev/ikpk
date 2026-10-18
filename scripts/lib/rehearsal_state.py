@@ -267,7 +267,7 @@ class RehearsalState:
                     "operationId": operation_id,
                     "sourceSha": source_sha,
                     "fence": "acquiring",
-                    "newPairAccepted": any(row.get("record") == "new-pair" for row in self._operation_rows(operation_id)),
+                    "newPairAccepted": any(row.get("record") == "new-bundle" for row in self._operation_rows(operation_id)),
                     "committed": False,
                 }
                 durable_json(self.marker_path, current)
@@ -334,7 +334,7 @@ class RehearsalState:
                 raise RehearsalRefusal("new pair record must contain CMS and static digests")
             if current.get("newPairAccepted"):
                 raise RehearsalRefusal("new pair was already recorded for this operation")
-            self._append({"version": 1, "record": "new-pair", "operationId": operation_id,
+            self._append({"version": 1, "record": "new-bundle", "operationId": operation_id,
                           "sourceSha": current["sourceSha"], "newPair": new_pair})
             current["newPairAccepted"] = True
             durable_json(self.marker_path, current)
