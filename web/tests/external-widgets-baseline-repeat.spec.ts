@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type ViewportSize } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 import { SEL_AWARD_ROW } from './helpers/external-widgets';
 
@@ -150,8 +151,16 @@ test.describe('визуальные эталоны не зависят от от
     ).toBeGreaterThan(viewport.height);
     expect(first.fullHeight, 'высота документа разошлась между прогонами').toBe(second.fullHeight);
 
+    const same = second.image.equals(first.image);
+    if (!same) {
+      await Promise.all([
+        writeFile(testInfo.outputPath('first-run.png'), first.image),
+        writeFile(testInfo.outputPath('second-run.png'), second.image),
+      ]);
+    }
+
     expect(
-      second.image.equals(first.image),
+      same,
       'два снимка при ОДНОМ И ТОМ ЖЕ подставленном моменте и подставных ответах сторонних ' +
         'сервисов различаются на неизменном дереве: значит облик зависит от чего-то, что ' +
         'проверка не привела к известному состоянию',
