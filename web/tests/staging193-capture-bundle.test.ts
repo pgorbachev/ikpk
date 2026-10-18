@@ -13,20 +13,44 @@ const schemaRoot = join(repoRoot, 'cms/src');
 const temporaryRoots: string[] = [];
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
+interface FixtureAttribute {
+  type: string;
+}
+
+interface FixtureSchema {
+  collectionName: string;
+  attributes: Record<string, FixtureAttribute>;
+}
+
+interface CapturedSeminar {
+  teachers: { name: string }[];
+  course_group: { slug: string };
+  seo: { seo_title: string };
+  documents: { document: string }[];
+  image: { url: string }[];
+}
+
+interface VerifiedCaptureBundle {
+  proof: { method: string };
+  manifest: { schemaDigest: string };
+  readback: { schemaDigest: string; collections: Record<string, unknown[]> };
+  media: { url: string }[];
+}
+
 function fixtureDatabase(path: string): void {
-  const schemas = loadCaptureSchemas(schemaRoot) as Record<string, any>;
+  const schemas = loadCaptureSchemas(schemaRoot) as Record<string, FixtureSchema>;
   const db = new DatabaseSync(path);
   const snake = (value: string) => value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
   for (const [uid, schema] of Object.entries(schemas)) {
-    const scalar = Object.entries(schema.attributes).filter(([, attribute]: [string, any]) =>
+    const scalar = Object.entries(schema.attributes).filter(([, attribute]) =>
       !['relation', 'media', 'component'].includes(attribute.type));
-    const columns = scalar.map(([name, attribute]: [string, any]) =>
+    const columns = scalar.map(([name, attribute]) =>
       `"${snake(name)}" ${['integer', 'boolean', 'decimal'].includes(attribute.type) ? 'NUMERIC' : 'TEXT'}`);
     const system = uid.startsWith('api::')
       ? ', document_id TEXT, created_at TEXT, updated_at TEXT, published_at TEXT, created_by_id INTEGER, updated_by_id INTEGER, locale TEXT'
       : '';
     db.exec(`CREATE TABLE "${schema.collectionName}" (id INTEGER PRIMARY KEY${system}, ${columns.join(',')})`);
-    if (Object.values(schema.attributes).some((attribute: any) => attribute.type === 'component')) {
+    if (Object.values(schema.attributes).some((attribute) => attribute.type === 'component')) {
       db.exec(`CREATE TABLE "${schema.collectionName}_cmps" (id INTEGER PRIMARY KEY, entity_id INTEGER, cmp_id INTEGER, component_type TEXT, field TEXT, "order" REAL)`);
     }
   }
@@ -115,18 +139,18 @@ afterEach(() => {
 describe('staging193 sealed SQLite capture', () => {
   it('preserves non-empty published relations, components, media, and excludes drafts', () => {
     const bundle = sealedBundle();
-    const verified = verifyStaging193Bundle(bundle, schemaRoot);
-    const collections = verified.readback.collections as Record<string, any[]>;
-    const seminar = collections.seminars[0];
+    const verified = verifyStaging193Bundle(bundle, schemaRoot) as unknown as VerifiedCaptureBundle;
+    const collections = verified.readback.collections;
+    const seminar = collections.seminars[0] as CapturedSeminar;
     expect(verified.proof.method).toBe('quiesced-sqlite-backup');
     expect(verified.readback.schemaDigest).toBe(verified.manifest.schemaDigest);
     expect(collections.seminars).toHaveLength(1);
-    expect(seminar.teachers.map((teacher: any) => teacher.name)).toEqual(['Teacher']);
+    expect(seminar.teachers.map((teacher) => teacher.name)).toEqual(['Teacher']);
     expect(seminar.course_group.slug).toBe('group');
     expect(seminar.seo.seo_title).toBe('Published SEO');
     expect(seminar.documents[0].document).toBe('Certificate');
     expect(seminar.image[0].url).toBe('/uploads/photo.jpg');
-    expect(verified.media.map((item: any) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
+    expect(verified.media.map((item) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
   });
 
   it('runs the packaged sealer against a real non-empty SQLite and media capture', () => {
@@ -149,12 +173,13 @@ describe('staging193 sealed SQLite capture', () => {
       join(repoRoot, 'scripts/lib/seal-staging193-capture.mjs'), root, 'sealer-test', 'a'.repeat(40), schemaRoot,
     ], { encoding: 'utf8' });
     expect(result.status, result.stderr).toBe(0);
-    const verified = verifyStaging193Bundle(root, schemaRoot);
-    const collections = verified.readback.collections as Record<string, any[]>;
+    const verified = verifyStaging193Bundle(root, schemaRoot) as unknown as VerifiedCaptureBundle;
+    const collections = verified.readback.collections;
+    const seminar = collections.seminars[0] as CapturedSeminar;
     expect(collections.seminars).toHaveLength(1);
-    expect(collections.seminars[0].teachers.map((teacher: any) => teacher.name)).toEqual(['Teacher']);
-    expect(collections.seminars[0].image[0].url).toBe('/uploads/photo.jpg');
-    expect(verified.media.map((item: any) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
+    expect(seminar.teachers.map((teacher) => teacher.name)).toEqual(['Teacher']);
+    expect(seminar.image[0].url).toBe('/uploads/photo.jpg');
+    expect(verified.media.map((item) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
   });
 
   it('refuses a database whose sealed bytes changed after manifest construction', () => {

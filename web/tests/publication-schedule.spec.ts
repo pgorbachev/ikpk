@@ -8,7 +8,7 @@ const cityName = (entry: Entry) => typeof entry.city === 'string' ? entry.city :
 function entries() {
   const { snapshot } = candidate();
   return { today: snapshot.referenceDate, rows: (snapshot.content.types.schedule_entries as unknown as Record<string, unknown>[])
-    .map((entry) => entry as Entry)
+    .map((entry) => entry as unknown as Entry)
     .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, snapshot.referenceDate))
     .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))) };
 }

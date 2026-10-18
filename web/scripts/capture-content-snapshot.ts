@@ -32,20 +32,35 @@ const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
 
+interface SealedCaptureMedia {
+  url: string;
+  file: string;
+  sha256: string;
+  verifiedStoredSha256?: string;
+}
+
+interface Staging193Capture {
+  directory: string;
+  media: SealedCaptureMedia[];
+  readback: { collections: Record<string, unknown[]>; schemaDigest: string };
+  manifest: { capturedAt: string };
+  proof: DemoCaptureProof;
+}
+
 // An explicit sealed server input supersedes any earlier capture attempt. Invalidate the
 // prior snapshot before bundle verification, which can fail before liveCapture starts.
 if (process.argv[2] === '--server-capture') {
   rmSync(join(outDir, 'snapshot.json'), { force: true });
 }
 
-async function serverInput() {
+async function serverInput(): Promise<Staging193Capture | undefined> {
   const args = process.argv.slice(2);
   if (args.length === 0) return undefined;
   if (args[0] !== '--server-capture' || args.length !== 2 || cmsUrl) {
     throw new Error('staging193 server capture requires --server-capture BUNDLE and no CMS_URL');
   }
   const { verifyStaging193Bundle } = await import('../../scripts/lib/staging193-capture-bundle.mjs');
-  return verifyStaging193Bundle(args[1]!, join(repoRoot, 'cms', 'src'));
+  return verifyStaging193Bundle(args[1]!, join(repoRoot, 'cms', 'src')) as Staging193Capture;
 }
 const serverCapture = await serverInput();
 
@@ -362,15 +377,15 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
   const captureMedia = serverCapture?.media ?? [];
-  const mediaByUrl = new Map(captureMedia.map((item: any) => [item.url, item]));
+  const mediaByUrl = new Map(captureMedia.map((item) => [item.url, item]));
 
   for (const sourceRef of refs) {
     assertWithinBudget(`медиа ${sourceRef}`);
     let bytes: Uint8Array;
     if (serverCapture) {
-      const saved: any = mediaByUrl.get(sourceRef);
+      const saved = mediaByUrl.get(sourceRef);
       const digest = saved?.sha256 ?? saved?.verifiedStoredSha256;
-      if (!saved || !/^[a-f0-9]{64}$/.test(digest)) throw new Error(`sealed capture has no verified media row for ${sourceRef}`);
+      if (!saved || typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) throw new Error(`sealed capture has no verified media row for ${sourceRef}`);
       const path = join(serverCapture.directory, saved.file);
       bytes = new Uint8Array(readFileSync(path));
       if (createHash('sha256').update(bytes).digest('hex') !== digest) {
