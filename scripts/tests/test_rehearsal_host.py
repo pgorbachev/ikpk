@@ -70,6 +70,27 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
         self.assertEqual(result, "finished")
 
+    def test_cms_artifact_build_uses_a_bounded_node_heap_only_for_packaging(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
+            source = Path(temporary) / "candidate"
+            source.mkdir()
+            live_database = Path(temporary) / "live.db"
+            live_database.write_bytes(b"live database")
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), \
+                 patch.object(rehearsal_host, "_run_as_cms",
+                              side_effect=rehearsal_host.HostFailure("stop after artifact build")) as run_as_cms:
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "stop after artifact build"):
+                    rehearsal_host._install_migrated_database(
+                        {"cmsUser": "ikpk-cms", "cmsDatabase": str(live_database)}, source, "op", Path("/old/cms"))
+
+            argv = run_as_cms.call_args.args[2]
+            self.assertEqual(argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
+            self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 1800)
+            self.assertEqual(run_as_cms.call_args.kwargs["environment"],
+                             {"NODE_OPTIONS": "--max-old-space-size=1024"})
+
     def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
             root = Path(temporary)
