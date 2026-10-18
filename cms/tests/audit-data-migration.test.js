@@ -492,6 +492,10 @@ test('upload metrics refresh preserves the timestamp and accepts only the upstre
   const invalidCases = [
     ['timestamp-changed', null, (values) => { const row = metrics(values); row.lastWeeklyUpdate += 1; setMetrics(values, row); }],
     ['fresh-source', (values) => { const row = metrics(values); row.lastWeeklyUpdate = METRICS_LOAD_START - WEEK_MS + 1; setMetrics(values, row); }, (values) => { const row = metrics(values); row.lastWeeklyUpdate = METRICS_LOAD_START - WEEK_MS + 1; setMetrics(values, row); }],
+    ['extra-field', null, (values) => { const row = metrics(values); row.extra = true; setMetrics(values, row); }],
+    ['wrong-scalar', null, (values) => { const row = metrics(values); row.weeklySchedule = 26; setMetrics(values, row); }],
+    ['rounded-raw-number', null, (values) => values.set(UPLOAD_METRICS_KEY,
+      `{"lastWeeklyUpdate":9007199254740993,"weeklySchedule":"${weeklyCronAt(METRICS_LOAD_START + 15_000)}"}`)],
     ['invalid-cron', null, (values) => { const row = metrics(values); row.weeklySchedule = '0 0 0 * *'; setMetrics(values, row); }],
     ['outside-window', null, (values) => { const row = metrics(values); row.weeklySchedule = weeklyCronAt(METRICS_LOAD_COMPLETE + 16_000); setMetrics(values, row); }],
   ];
