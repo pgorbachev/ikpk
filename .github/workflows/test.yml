@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - dev
   # Проверки по изменению контента; события не публикуют сайт.
   repository_dispatch:
     types: [cms-content-changed]
