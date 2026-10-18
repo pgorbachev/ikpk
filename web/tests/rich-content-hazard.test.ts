@@ -17,7 +17,13 @@ import {
 import { AUTHENTICATED_FORMS, exactRutubeIframe } from './helpers/rich-content-safety/closed-matrix.js';
 import { validateClosedMatrixHtml } from './helpers/rich-content-safety/closed-matrix-validate.js';
 import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
+import { projectSnapshotMarkers, type SnapshotContent } from './helpers/rich-content-safety/snapshot-marker-projection.js';
 import { LOCAL_UPLOAD_WEBP } from './helpers/rich-content-safety/paths.js';
+import { projectSnapshotOccurrences } from './helpers/rich-content-safety/snapshot-occurrence-projection.js';
+import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
+import { DEMO193_ORIGIN } from '../scripts/demo193-profile.mjs';
+import type { OccurrenceRule } from './helpers/rich-content-safety/hazard-scan.js';
+import type { ExecutableSlot } from './helpers/rich-content-safety/ast-sinks.js';
 import {
   SRC_SRCSET_CASES,
   CONSTRAINED_VALUE_CASES,
@@ -182,6 +188,35 @@ describe('rich-content: whole-document hazard scanner', () => {
     )).toMatch(/без test-owned projection/);
   });
 
+  it('canonical occurrence registry projects only the approved demo origin', () => {
+    const canonicalSource = 'link|href=expression:canonicalURL.href|rel=quoted:canonical';
+    const productionHref = 'https://ikpk.su/example';
+    const demoHref = `${DEMO193_ORIGIN}/example`;
+    const source = [{ slotId: 'src:canonical', identity: canonicalSource }];
+    const registry: OccurrenceRule[] = [{
+      slotId: 'src:canonical',
+      route: '/example',
+      placement: 'doc-order:0:link',
+      identity: `link|href=${productionHref}|rel=canonical`,
+      count: 1,
+      builds: ['production', 'demo'],
+    }];
+
+    expect(matchOccurrences(`<link rel="canonical" href="${productionHref}">`, '/example', registry, source,
+      { build: 'production' })).toEqual([]);
+    expect(matchOccurrences(`<link rel="canonical" href="${demoHref}">`, '/example', registry, source,
+      { build: 'demo' })).toEqual([]);
+
+    for (const href of [productionHref, 'https://example.invalid/example']) {
+      expect(matchOccurrences(`<link rel="canonical" href="${href}">`, '/example', registry, source,
+        { build: 'demo' })).not.toEqual([]);
+    }
+    expect(matchOccurrences(
+      `<link rel="canonical" href="${demoHref}"><link rel="alternate" href="https://example.invalid/extra">`,
+      '/example', registry, source, { build: 'demo' },
+    )).not.toEqual([]);
+  });
+
   it('closed matrix отвергает contenteditable, data-*, incomplete iframe, checkbox, dir/lang, javascript URL и поддельные маркеры', () => {
     const known = { knownSinkIds: ['article-body'] };
     const html = '<div data-safe-rich-content="article-body"><p contenteditable="true" data-evil="x">ok</p></div>';
@@ -261,6 +296,96 @@ describe('rich-content: whole-document hazard scanner', () => {
       { route: '/oplata', html: '<p>нет sink</p>' },
     ]);
     expect(ok).toEqual([]);
+  });
+
+  it('snapshot projection ограничена seminar-body и teacher-bio, остальные sinks остаются fixture-owned', () => {
+    const sinks = [
+      { id: 'article-body', production: { paths: ['/statyi/fixture'], count: 1 }, demo: { sameAsProduction: true } },
+      { id: 'seminar-body', production: { paths: ['/fixture-seminar'], count: 1 }, demo: { sameAsProduction: true } },
+      { id: 'teacher-bio', production: { paths: ['/fixture-teacher'], count: 1 }, demo: { sameAsProduction: true } },
+    ];
+    const projected = projectSnapshotMarkers(sinks, {
+      institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst' }],
+      seminars: [
+        { slug: 'with-body', course_group_legacy_id: 'cg-id', description_html: '<p>Text</p>' },
+        { slug: 'without-body', course_group_legacy_id: 'cg-id', description_html: '', full_text_html: '' },
+      ],
+      teachers: [
+        { slug: 'with-bio', institute_legacy_id: 'inst', bio_html: '<p>Bio</p>' },
+        { slug: 'without-bio', institute_legacy_id: 'inst', bio_html: '' },
+      ],
+    });
+    expect(projected.find((sink) => sink.id === 'article-body')?.production).toEqual({ paths: ['/statyi/fixture'], count: 1 });
+    expect(projected.find((sink) => sink.id === 'seminar-body')?.production).toEqual({ paths: ['/inst/group/with-body'], count: 1 });
+    expect(projected.find((sink) => sink.id === 'teacher-bio')?.production).toEqual({ paths: ['/inst/prepodavatel/with-bio'], count: 1 });
+  });
+
+  it('snapshot marker projection fails closed when source relation maps are missing', () => {
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [], seminars: [], teachers: [],
+    } as unknown as SnapshotContent)).toThrow(/course_groups/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [],
+      course_groups: [{ legacy_id: 'unknown-cg', slug: 'group', institute_legacy_id: 'unknown-inst' }],
+      seminars: [{ slug: 'body', course_group_legacy_id: 'unknown-cg', description_html: '<p>body</p>' }],
+      teachers: [],
+    })).toThrow(/unknown institute|неизвестный institute/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [], course_groups: [], seminars: [],
+      teachers: [{ slug: 'bio', institute_legacy_id: 'unknown-inst', bio_html: '<p>bio</p>' }],
+    })).toThrow(/teacher-bio .* неизвестный institute/);
+    expect(() => projectSnapshotMarkers([], {
+      institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg', slug: 'group', institute_legacy_id: 'inst-id' }],
+      seminars: [{ slug: 'mapped-by-slug', course_group_legacy_id: 'cg', description_html: '<p>body</p>' }],
+      teachers: [],
+    })).toThrow(/неизвестный institute inst-id/);
+  });
+
+  it('snapshot occurrence projection clones only reviewed archetypes and fails closed on missing mappings or slots', () => {
+    const rules = loadFixture<{ occurrences: OccurrenceRule[] }>('output-occurrence-registry.json').occurrences;
+    const sourceSlots = loadFixture<ExecutableSlot[]>('executable-source-slots.json');
+    const content: SnapshotContent = {
+      institutes: [{ legacy_id: 'legacy-ap', slug: 'institut-apledzhera' }],
+      course_groups: [
+        { legacy_id: 'hier-seminar', slug: 'dolgoletie', institute_legacy_id: 'institut-apledzhera' },
+        { legacy_id: 'flat-seminar', slug: 'flat-group', institute_legacy_id: 'institut-apledzhera' },
+      ],
+      seminars: [
+        { slug: 'kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya', course_group_legacy_id: 'hier-seminar' },
+        { slug: 'antistressovaya-kineziologiya-2', course_group_legacy_id: 'flat-seminar' },
+        { slug: 'new-seminar', course_group_legacy_id: 'hier-seminar' },
+      ],
+      teachers: [
+        { slug: '63', institute_legacy_id: 'institut-apledzhera' },
+        { slug: '53', institute_legacy_id: 'institut-apledzhera' },
+        { slug: 'new-teacher', institute_legacy_id: 'institut-apledzhera' },
+      ],
+    };
+    const projected = projectSnapshotOccurrences(rules, sourceSlots, content);
+    for (const route of [
+      '/institut-apledzhera/dolgoletie/new-seminar',
+      '/seminary/new-seminar',
+      '/institut-apledzhera/prepodavatel/new-teacher',
+      '/specialisty/new-teacher',
+    ]) {
+      expect(projected.some((rule) => rule.route === route)).toBe(true);
+    }
+    expect(projected.some((rule) => rule.route.includes('/unbacked'))).toBe(false);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      course_groups: content.course_groups.slice(1),
+    })).toThrow(/unknown course_group/);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      course_groups: content.course_groups.map((group) => ({ ...group, institute_legacy_id: 'legacy-ap' })),
+    })).toThrow(/unknown institute legacy-ap/);
+    expect(() => projectSnapshotOccurrences(rules, sourceSlots, {
+      ...content,
+      teachers: content.teachers.map((teacher) => ({ ...teacher, institute_legacy_id: 'legacy-ap' })),
+    })).toThrow(/unknown institute legacy-ap/);
+    expect(() => projectSnapshotOccurrences(rules, [], content)).toThrow(/missing reviewed source slot/);
   });
 
   it('stripMarkedRegions не оставляет вложенный RUTUBE после внутреннего div', () => {

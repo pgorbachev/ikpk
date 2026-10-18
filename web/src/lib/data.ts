@@ -169,6 +169,10 @@ export interface Seminar {
   seo_description: string;
   description_html: string;
   description_text: string;
+  full_text_html?: string | null;
+  learning_mode?: string | null;
+  learning_plan?: string | null;
+  recommendations?: string | null;
   images: string[];
   /** Преподаватели семинара из каталога (не «любой с фото у института»). */
   teachers?: SeminarTeacherRef[];
@@ -203,6 +207,19 @@ export interface Teacher {
 }
 
 export type PersonTrait = 'teacher' | 'method-author';
+
+export function personRoleLabels(trait?: PersonTrait): { title: string; breadcrumb: string; about: string } {
+  if (trait === 'method-author') {
+    return { title: 'автор методики', breadcrumb: 'Авторы методик', about: 'Об авторе методики' };
+  }
+  return { title: 'преподаватель', breadcrumb: 'Преподаватели', about: 'О преподавателе' };
+}
+
+export function institutePeopleSectionLabel(instituteSlug: string): string {
+  return instituteSlug === 'institut-apledzhera' || instituteSlug === 'institut-barralya'
+    ? 'Авторы методик'
+    : 'Преподаватели';
+}
 
 export function groupTeachersByTrait(teachers: readonly Teacher[]): Record<PersonTrait, Teacher[]> {
   return {

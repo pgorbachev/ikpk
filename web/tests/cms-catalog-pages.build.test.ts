@@ -22,6 +22,7 @@ import { join, relative } from 'node:path';
 import { parse } from 'parse5';
 import { dist, walkHtml } from './helpers/dist-pages';
 import { readSnapshotFile, resolveSnapshotDir } from '../scripts/lib/snapshot-paths';
+import { institutePeopleSectionLabel, personRoleLabels } from '../src/lib/data';
 
 const WEB = join(import.meta.dirname, '..');
 const ROOT = join(WEB, '..');
@@ -240,6 +241,39 @@ describe('собранный сайт: сегмент каталога отве�
     expect(roster.map((person) => person.name)).toContain('Преподаватель для проверки');
     expect(roster.map((person) => person.name)).not.toContain('Автор методик для проверки');
   });
+
+  it.each(['institut-apledzhera', 'institut-barralya'] as const)(
+    'institute route /%s renders the owner-approved people section and retains legacy profile URLs',
+    (slug) => {
+      const html = page(slug);
+      expect(html, `страница института /${slug} отсутствует`).toBeDefined();
+      if (!html) throw new Error(`страница института /${slug} отсутствует`);
+      expect(
+        [...html.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].some((match) => match[1] === institutePeopleSectionLabel(slug)),
+      ).toBe(true);
+      const expectedProfiles = entity<{ slug: string; institute_legacy_id?: string }[]>('teachers.json')
+        .filter((person) => person.institute_legacy_id === slug);
+      expect(expectedProfiles.length).toBeGreaterThan(0);
+      for (const person of expectedProfiles) {
+        expect(html).toContain(`href="/${slug}/prepodavatel/${person.slug}"`);
+      }
+    },
+  );
+
+  it.each(['63', '64'])(
+    'legacy profile URL for %s renders role metadata from its saved trait',
+    (legacyId) => {
+      const person = entity<{ legacy_id: string | number; slug: string; name: string; trait?: 'teacher' | 'method-author'; institute_legacy_id?: string }[]>('teachers.json')
+        .find((candidate) => String(candidate.legacy_id) === legacyId);
+      expect(person, `в выбранном снимке отсутствует legacy_id=${legacyId}`).toBeDefined();
+      expect(person!.institute_legacy_id).toBe('institut-apledzhera');
+      const html = page(`${person!.institute_legacy_id}/prepodavatel/${person!.slug}`);
+      expect(html, `собранная страница legacy_id=${legacyId} отсутствует`).toBeDefined();
+      const role = personRoleLabels(person!.trait);
+      expect(html).toContain(`${person!.name} — ${role.title} Институт Апледжера`);
+      expect(html).toContain(role.breadcrumb);
+    },
+  );
 
 });
 

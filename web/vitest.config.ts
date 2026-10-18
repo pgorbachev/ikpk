@@ -14,6 +14,9 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ['tests/**/*.test.ts'],
     exclude: [
+      // Astro Container tests use the dedicated render config.
+      'tests/home-people.render.test.ts',
+      'tests/demo193-profile.render.test.ts',
       // Live publication assertions need the captured snapshot and completed artifact.
       'tests/publication/snapshot.test.ts',
       'tests/publication/build.test.ts',
@@ -72,16 +75,20 @@ export default defineConfig({
       'tests/seminar-dates.build.test.ts',
       'tests/seminar-dates.fixture-build.test.ts',
       'tests/article-list-controls.build.test.ts',
+      // Предмет — собранный вывод: каталожные страницы и плоские адреса записей
+      // (change cms-content-authoring-and-migration).
       'tests/cms-catalog-pages.build.test.ts',
       'tests/article-page-date.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',
-      'tests/seminar-price.render.test.ts',
       'tests/teacher-links.render.test.ts',
+      'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
-      'tests/maintenance-notice.render.test.ts',
-      // Контейнерные проверки провижининга выполняются отдельным workflow.
+      'tests/seminar-snapshot-fields.render.test.ts',
+      // Одноразовые Docker-контейнеры провижининга. На раннере GitHub уборка
+      // контейнера не укладывается в лимит хука и валит обязательный прогон.
+      // Локально: npx vitest run --config vitest.provision.config.ts
       'tests/trial-environment.test.ts',
       'tests/server-provisioning-container.test.ts',
       'tests/server-provisioning-verify.test.ts',

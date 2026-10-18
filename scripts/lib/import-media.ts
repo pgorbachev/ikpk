@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, extname, join, posix, resolve } from 'node:path';
 import { mediaKey } from './cms-migration.js';
 
 const APPROVED_LOCAL_IMAGES = new Map<string, string>([
@@ -24,6 +25,21 @@ interface ImageSource {
   bytes: Buffer;
   filename: string;
   mime: string;
+}
+
+export interface VerifiedOfflineImageSource extends ImageSource {
+  sourceSha256: string;
+  resolvedLocalPath: string;
+}
+
+interface OfflineMediaAllowlistEntry {
+  sourceUrl: string;
+  sourceIdentity: string;
+  sourcePath: string;
+  sourceSha256: string;
+  sourceFilename: string;
+  declaredMime: string;
+  ownerApproved: boolean;
 }
 
 const GENERIC_IMAGE_MIME_TYPES = new Set([
@@ -81,6 +97,10 @@ interface ImageUploaderOptions {
   storedHashById: Map<number, string>;
   mediaById: Map<number, ImportableMediaFile>;
   fetchImage?: (url: string) => Promise<Response>;
+  offlineMedia?: {
+    root: string;
+    allowlist: readonly OfflineMediaAllowlistEntry[];
+  };
   upload: (bytes: Buffer, filename: string, mime: string) => Promise<number | null | undefined>;
   persistIdentity: (identity: {
     fileId: number;
@@ -123,6 +143,116 @@ async function remoteSource(fetchImage: (url: string) => Promise<Response>, url:
   };
 }
 
+/** Reads one pinned local raster source without network access or upload side effects. */
+export async function readVerifiedOfflineImageSource(input: {
+  root: string;
+  sourceIdentity: string;
+  sourcePath: string;
+  sourceSha256: string;
+  sourceFilename: string;
+}): Promise<VerifiedOfflineImageSource> {
+  if (
+    typeof input.sourceIdentity !== 'string' || !input.sourceIdentity ||
+    typeof input.sourcePath !== 'string' || !input.sourcePath ||
+    input.sourcePath.includes('\\') || posix.isAbsolute(input.sourcePath) || /^[A-Za-z]:/.test(input.sourcePath) ||
+    input.sourcePath.split('/').some((segment) => !segment || segment === '.' || segment === '..') ||
+    posix.normalize(input.sourcePath) !== input.sourcePath
+  ) {
+    throw new Error('offline media source path is not a canonical relative path');
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.sourceSha256)) {
+    throw new Error(`offline media source SHA-256 is invalid for ${input.sourceIdentity}`);
+  }
+  if (
+    typeof input.sourceFilename !== 'string' || !input.sourceFilename ||
+    input.sourceFilename.includes('/') || input.sourceFilename.includes('\\') ||
+    basename(input.sourceFilename) !== input.sourceFilename ||
+    input.sourceFilename === '.' || input.sourceFilename === '..'
+  ) {
+    throw new Error(`offline media source filename is invalid for ${input.sourceIdentity}`);
+  }
+
+  const realRoot = await realpath(input.root);
+  const expectedPath = resolve(realRoot, ...input.sourcePath.split('/'));
+  const actualPath = await realpath(expectedPath);
+  if (actualPath !== expectedPath) {
+    throw new Error(`offline media source path contains a symbolic link or resolves outside its exact path for ${input.sourceIdentity}`);
+  }
+
+  const bytes = await readFile(actualPath);
+  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
+  if (sourceSha256 !== input.sourceSha256) {
+    throw new Error(`offline media source SHA-256 differs from the pin for ${input.sourceIdentity}`);
+  }
+
+  const mime = sniffImageMime(bytes);
+  const extension = mime === 'image/jpeg' ? '.jpg' : mime === 'image/png' ? '.png' : '.webp';
+  const originalExtension = extname(input.sourceFilename);
+  const stem = basename(input.sourceFilename, originalExtension);
+  if (!stem) throw new Error(`offline media source filename has no usable name for ${input.sourceIdentity}`);
+  return {
+    bytes,
+    filename: `${stem}${extension}`,
+    mime,
+    sourceSha256,
+    resolvedLocalPath: actualPath,
+  };
+}
+
+async function offlineSource(
+  offlineMedia: NonNullable<ImageUploaderOptions['offlineMedia']>,
+  sourceUrl: string,
+): Promise<ImageSource> {
+  const entriesByUrl = new Map<string, OfflineMediaAllowlistEntry[]>();
+  const identities = new Set<string>();
+  const pathHashes = new Map<string, string>();
+
+  for (const entry of offlineMedia.allowlist) {
+    if (
+      !entry || typeof entry.sourceUrl !== 'string' || !entry.sourceUrl ||
+      typeof entry.sourceIdentity !== 'string' || !entry.sourceIdentity ||
+      typeof entry.sourcePath !== 'string' || !entry.sourcePath ||
+      typeof entry.sourceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sourceSha256) ||
+      typeof entry.sourceFilename !== 'string' || !entry.sourceFilename ||
+      typeof entry.declaredMime !== 'string' || !entry.declaredMime ||
+      typeof entry.ownerApproved !== 'boolean'
+    ) {
+      throw new Error('offline media allowlist contains an invalid entry');
+    }
+
+    const entriesForUrl = entriesByUrl.get(entry.sourceUrl) ?? [];
+    entriesForUrl.push(entry);
+    entriesByUrl.set(entry.sourceUrl, entriesForUrl);
+    if (identities.has(entry.sourceIdentity)) {
+      throw new Error(`offline media allowlist has an ambiguous source identity ${entry.sourceIdentity}`);
+    }
+    identities.add(entry.sourceIdentity);
+
+    const previousHash = pathHashes.get(entry.sourcePath);
+    if (previousHash && previousHash !== entry.sourceSha256) {
+      throw new Error(`offline media allowlist has conflicting hashes for source path ${entry.sourcePath}`);
+    }
+    pathHashes.set(entry.sourcePath, entry.sourceSha256);
+  }
+
+  const matches = entriesByUrl.get(sourceUrl) ?? [];
+  if (matches.length !== 1) {
+    throw new Error(matches.length ? 'offline media source URL is ambiguous' : 'offline media source URL is not allowlisted');
+  }
+  const entry = matches[0];
+  if (entry.ownerApproved !== true) throw new Error('offline media source is not owner-approved');
+  const verified = await readVerifiedOfflineImageSource({
+    root: offlineMedia.root,
+    sourceIdentity: entry.sourceIdentity,
+    sourcePath: entry.sourcePath,
+    sourceSha256: entry.sourceSha256,
+    sourceFilename: entry.sourceFilename,
+  });
+  // The allowlist's filename and MIME are provenance. Upload metadata follows the
+  // verified bytes so a stale extension cannot mislabel the raster data.
+  return { bytes: verified.bytes, filename: verified.filename, mime: verified.mime };
+}
+
 function hasSourceClaims(providerMetadata: unknown): boolean {
   if (!providerMetadata || typeof providerMetadata !== 'object' || Array.isArray(providerMetadata)) return false;
   const imported = (providerMetadata as Record<string, unknown>).ikpk_media_import;
@@ -140,11 +270,16 @@ export function createImageUploader(
     if (!url) return null;
 
     try {
-      const localFilename = APPROVED_LOCAL_IMAGES.get(url);
-      const source = localFilename
-        ? await localSource(options.root, localFilename)
-        : await remoteSource(fetchImage, url);
-      source.mime = imageMimeFromBytes(source.bytes, source.mime);
+      let source: ImageSource;
+      if (options.offlineMedia) {
+        source = await offlineSource(options.offlineMedia, url);
+      } else {
+        const localFilename = APPROVED_LOCAL_IMAGES.get(url);
+        source = localFilename
+          ? await localSource(options.root, localFilename)
+          : await remoteSource(fetchImage, url);
+        source.mime = imageMimeFromBytes(source.bytes, source.mime);
+      }
       const hash = mediaKey({ bytes: new Uint8Array(source.bytes), sourceUrl: url });
       const persistedSourceId = liveFileId(options.knownMediaBySourceHash.get(hash));
       const storedByteId = liveFileId(options.knownMediaByHash.get(hash));

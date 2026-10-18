@@ -34,6 +34,8 @@ function makeStrapi(opts: {
   /** G2: имитирует отказ записи БД при создании строки истории. */
   failHistoryCreate?: boolean;
   failDocumentLookup?: boolean;
+  authStrategy?: string;
+  authType?: string;
 }) {
   const history = opts.history ? [...opts.history] : [];
   const created: { address: string; owner_id: string; owner_type: string }[] = [];
@@ -42,6 +44,13 @@ function makeStrapi(opts: {
   let subscriber!: Subscriber;
 
   const strapi = {
+    requestContext: {
+      get() {
+        return opts.authStrategy || opts.authType
+          ? { state: { auth: { strategy: { name: opts.authStrategy }, credentials: { type: opts.authType } } } }
+          : undefined;
+      },
+    },
     log: {
       error(message: string) {
         loggedErrors.push(message);
@@ -190,6 +199,51 @@ test('beforeCreate: новая страница не может занять sta
       slug,
     );
   }
+});
+
+test('beforeCreate: trusted full-access import can first-create only exact dedicated static-page identities', async () => {
+  const trusted = makeStrapi({ rowsByUid: {}, authStrategy: 'content-api-token', authType: 'full-access' }).subscriber;
+  for (const slug of ['statyi', 'video']) {
+    await assert.doesNotReject(() => trusted.beforeCreate(makeEvent('api::page.page', { data: { slug, legacy_id: slug } })), slug);
+  }
+  await assert.rejects(
+    () => trusted.beforeCreate(makeEvent('api::page.page', { data: { slug: 'statyi', legacy_id: 'different' } })),
+    /маршрута сборки|адрес уже занят записью/,
+  );
+  await assert.rejects(
+    () => trusted.beforeCreate(makeEvent('api::page.page', { data: { slug: 'programmy', legacy_id: 'programmy' } })),
+    /маршрута сборки|адрес уже занят записью/,
+  );
+  await assert.rejects(
+    () => trusted.beforeCreate(makeEvent('api::page.page', { data: { slug: 'statyi', legacy_id: 'statyi', documentId: 'spoofed-document' } })),
+    /маршрута сборки|адрес уже занят записью/,
+  );
+  const untrusted = makeStrapi({ rowsByUid: {}, authStrategy: 'content-api-token', authType: 'read-only' }).subscriber;
+  await assert.rejects(
+    () => untrusted.beforeCreate(makeEvent('api::page.page', { data: { slug: 'statyi', legacy_id: 'statyi' } })),
+    /маршрута сборки|адрес уже занят записью/,
+  );
+  const admin = makeStrapi({ rowsByUid: {}, authStrategy: 'admin', authType: 'full-access' }).subscriber;
+  await assert.rejects(
+    () => admin.beforeCreate(makeEvent('api::page.page', { data: { slug: 'video', legacy_id: 'video' } })),
+    /маршрута сборки|адрес уже занят записью/,
+  );
+  const existingOwner = makeStrapi({
+    rowsByUid: { 'api::page.page': [{ documentId: 'page-statyi', slug: 'statyi', legacy_id: 'statyi' }] },
+    authStrategy: 'content-api-token', authType: 'full-access',
+  }).subscriber;
+  await assert.rejects(
+    () => existingOwner.beforeCreate(makeEvent('api::page.page', { data: { slug: 'statyi', legacy_id: 'statyi' } })),
+    /адрес уже занят записью/,
+  );
+  const instituteCollision = makeStrapi({
+    rowsByUid: { 'api::institute.institute': [{ documentId: 'institute-statyi', slug: 'statyi' }] },
+    authStrategy: 'content-api-token', authType: 'full-access',
+  }).subscriber;
+  await assert.rejects(
+    () => instituteCollision.beforeCreate(makeEvent('api::page.page', { data: { slug: 'statyi', legacy_id: 'statyi' } })),
+    /маршрута сборки/,
+  );
 });
 
 test('beforeCreate: ошибка чтения прежней записи не разрешает опираться на documentId payload', async () => {

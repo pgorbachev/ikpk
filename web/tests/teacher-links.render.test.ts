@@ -12,6 +12,7 @@ describe('optional institute relation does not create teacher links', () => {
       getTeachers: () => [{
         slug: 'unassigned-person',
         name: 'Персона без института, врач',
+        trait: 'teacher',
         photo: '/media/users/1/images/1-1727012293952.webp',
         institute_legacy_id: undefined,
       }],
@@ -21,6 +22,8 @@ describe('optional institute relation does not create teacher links', () => {
     const html = await container.renderToString(Teachers as never);
 
     expect(html).toContain('Персона без института');
+    expect(html).toMatch(/<div class="teacher-card"[^>]*>[\s\S]*?<span class="teacher-name"[^>]*>Персона без института<\/span>/);
+    expect(html).not.toMatch(/<a class="teacher-card"[^>]*>[\s\S]*?<span class="teacher-name"[^>]*>Персона без института<\/span>/);
     expect(html).not.toMatch(/href="\/(?:undefined|null)\/prepodavatel\//);
     expect(html).not.toContain('href="/undefined/prepodavatel/unassigned-person"');
   });

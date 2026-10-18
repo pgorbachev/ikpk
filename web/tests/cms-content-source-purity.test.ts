@@ -27,6 +27,13 @@ const SEGMENT_B = 'entities';
  */
 const SELF = join('web', 'tests', 'cms-content-source-purity.test.ts');
 const MIGRATION_ENTRY = join('scripts', 'import.ts');
+// These two files describe accepted SQL-demo Git-blob identities, not a fallback read from
+// the legacy transfer directory. The parser receives pinned bytes from its caller; keep the
+// exception exact so a new reader (or any other test) still has to satisfy the source gate.
+const PINNED_SUPPLEMENT_PATH_REFERENCES = new Set([
+  join('scripts', 'lib', 'sql-demo-private-inputs.ts'),
+  join('scripts', 'lib', 'sql-demo-private-inputs.test.ts'),
+]);
 
 const SCAN_ROOTS = [
   join(WEB_ROOT, 'src'),
@@ -107,6 +114,9 @@ function isBypassReader(
   text: string,
   migrationReaderIsStandalone: boolean,
 ): boolean {
+  const isPinnedSupplementReferenceOnly = PINNED_SUPPLEMENT_PATH_REFERENCES.has(rel) &&
+    !/\b(?:readFile(?:Sync)?|createReadStream|readdir(?:Sync)?|opendir)\s*\(/.test(text);
+  if (isPinnedSupplementReferenceOnly) return false;
   return namesLegacyContent(text) && !(rel === MIGRATION_ENTRY && migrationReaderIsStandalone);
 }
 
@@ -220,6 +230,17 @@ describe('контент читается только через снимок',
         false,
       ),
     ).toBe(true);
+  });
+
+  it('only the pinned SQL-demo Git-blob parser and its fixture test may name legacy paths without reading them', () => {
+    const references = `const path = 'discovery/entities/institutes.json';`;
+    expect(isBypassReader('scripts/lib/sql-demo-private-inputs.ts', references, false)).toBe(false);
+    expect(isBypassReader('scripts/lib/sql-demo-private-inputs.test.ts', references, false)).toBe(false);
+    expect(isBypassReader('scripts/lib/sql-demo-unreviewed.ts', references, false)).toBe(true);
+    expect(isBypassReader('scripts/lib/sql-demo-unreviewed.test.ts', references, false)).toBe(true);
+    const legacyFilesystemRead = `readFileSync(join('discovery', 'entities', 'articles.json'), 'utf-8');`;
+    expect(isBypassReader('scripts/lib/sql-demo-private-inputs.ts', `${references}\n${legacyFilesystemRead}`, false)).toBe(true);
+    expect(isBypassReader('scripts/lib/sql-demo-private-inputs.test.ts', `${references}\n${legacyFilesystemRead}`, false)).toBe(true);
   });
 
   // Сценарий: записи-заплатки расписания перестают участвовать в сборке вместе с переключением

@@ -4,7 +4,7 @@ import { syncEditorRolePermissions, type EditorRoleStrapi } from './lib/editor-r
 import { registerContentAddressLifecycle } from './lifecycles/content-address';
 import { registerPublicationLifecycle } from './lifecycles/publication';
 import { registerUnlinkedEntryList } from './seminar-management/available-entries';
-import { ensureCaptureToken } from './seminar-management/capture-token';
+import { bootstrapCaptureTokenForRehearsal } from './seminar-management/capture-token';
 import { ensureContentAdminRole } from './seminar-management/content-admin-role';
 import { backfillAdminLabels, registerSeminarDocuments, registerSeminarUid } from './seminar-management/documents';
 import { applyEditorForms } from './seminar-management/forms';
@@ -50,6 +50,8 @@ export default {
     await applyEditorForms(strapi);
     await backfillAdminLabels(strapi);
     await ensureContentAdminRole(strapi);
-    await ensureCaptureToken(strapi as unknown as Parameters<typeof ensureCaptureToken>[0]);
+    await bootstrapCaptureTokenForRehearsal(
+      strapi as unknown as Parameters<typeof bootstrapCaptureTokenForRehearsal>[0],
+    );
   },
 };

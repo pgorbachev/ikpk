@@ -12,7 +12,7 @@ import {
   type SeminarTeacherRef,
   type Teacher,
 } from './data.js';
-import { isCurrentOrFuture, isUpcomingStart } from './schedule-window';
+import { calendarDayDate, isCurrentOrFuture, isUpcomingStart } from './schedule-window';
 import { publicScheduleTitle } from './schedule-public-title';
 
 export interface UpcomingSeminar {
@@ -36,6 +36,32 @@ export interface UpcomingSeminar {
   registrationFormLink: string;
 }
 
+/** Select each homepage role independently, preserving CMS order and identity. */
+export function selectHomepagePeopleByRole(
+  people: readonly Teacher[],
+  limit = 8,
+): { teachers: Teacher[]; methodAuthors: Teacher[] } {
+  if (limit <= 0) return { teachers: [], methodAuthors: [] };
+
+  const selectedIds = new Set<string>();
+  const select = (trait: 'teacher' | 'method-author') => {
+    const selected: Teacher[] = [];
+    for (const person of people) {
+      if (person.trait !== trait || !person.photo) continue;
+      const id = String(person.legacy_id ?? person.slug);
+      if (selectedIds.has(id)) continue;
+      selectedIds.add(id);
+      selected.push(person);
+      if (selected.length === limit) break;
+    }
+    return selected;
+  };
+
+  const teachers = select('teacher');
+  const methodAuthors = select('method-author');
+  return { teachers, methodAuthors };
+}
+
 const MONTHS = [
   'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
   'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
@@ -56,8 +82,8 @@ export function instituteShortBySlug(slug: string): string {
 }
 
 export function formatScheduleDateRange(startAt: string, endAt: string): string {
-  const s = new Date(startAt);
-  const e = new Date(endAt);
+  const s = calendarDayDate(startAt);
+  const e = calendarDayDate(endAt);
   const sd = s.getUTCDate();
   const ed = e.getUTCDate();
   const sm = MONTHS[s.getUTCMonth()];
@@ -156,7 +182,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date()): Upcoming
         : '/raspisanie-i-tseny';
       const lead = e.teachers?.[0];
       const full = findTeacherForScheduleLead(lead, teachers);
-      const start = new Date(e.startAt);
+      const start = calendarDayDate(e.startAt);
       return {
         id: e.id,
         title: publicScheduleTitle(e),

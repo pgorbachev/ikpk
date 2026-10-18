@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createImageUploader } from './import-media.js';
+
+type OfflineMediaEntry = NonNullable<Parameters<typeof createImageUploader>[0]['offlineMedia']>['allowlist'][number];
 
 const root = join(import.meta.dirname, '..', '..');
 const legacyImages = [
@@ -28,6 +31,62 @@ function webpBytes(): Buffer {
   bytes.write('WEBP', 8, 'ascii');
   bytes.write('VP8X', 12, 'ascii');
   return bytes;
+}
+
+function jpegBytes(): Buffer {
+  return Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00]);
+}
+
+function rawSha256(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+async function withOfflineRoot<T>(run: (parent: string, root: string) => Promise<T>): Promise<T> {
+  const parent = await mkdtemp(join(tmpdir(), 'ikpk-offline-media-'));
+  const root = join(parent, 'root');
+  await mkdir(root);
+  try {
+    return await run(parent, root);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+}
+
+async function writeOfflineBytes(root: string, sourcePath: string, bytes: Buffer): Promise<string> {
+  const fullPath = join(root, sourcePath);
+  await mkdir(dirname(fullPath), { recursive: true });
+  await writeFile(fullPath, bytes);
+  return fullPath;
+}
+
+function offlineEntry(bytes: Buffer, overrides: Partial<OfflineMediaEntry> = {}): OfflineMediaEntry {
+  const sourceIdentity = overrides.sourceIdentity ?? '123e4567-e89b-12d3-a456-426614174000';
+  return {
+    sourceUrl: overrides.sourceUrl ?? `https://ikpk.su/api/upload/file/${sourceIdentity}`,
+    sourceIdentity,
+    sourcePath: overrides.sourcePath ?? 'assets/declared.webp',
+    sourceSha256: overrides.sourceSha256 ?? rawSha256(bytes),
+    sourceFilename: overrides.sourceFilename ?? 'declared.webp',
+    declaredMime: overrides.declaredMime ?? 'image/webp',
+    ownerApproved: overrides.ownerApproved ?? false,
+  };
+}
+
+function offlineOptions(root: string, allowlist: readonly OfflineMediaEntry[]) {
+  return { root, allowlist };
+}
+
+async function expectOfflineRejected(
+  root: string,
+  allowlist: readonly OfflineMediaEntry[],
+  sourceUrl: string,
+): Promise<void> {
+  const state = makeUploader({ offlineMedia: offlineOptions(root, allowlist) });
+  await expect(state.imageUploader(sourceUrl)).resolves.toBeNull();
+  expect(state.fetchImage).not.toHaveBeenCalled();
+  expect(state.upload).not.toHaveBeenCalled();
+  expect(state.failures).toHaveLength(1);
+  expect(state.failures[0]).toContain(sourceUrl);
 }
 
 function makeUploader(overrides: Partial<Parameters<typeof createImageUploader>[0]> = {}) {
@@ -505,5 +564,193 @@ describe('import media upload boundary', () => {
     expect(importer).toMatch(/if \(imgId\) data\.image = imgId/);
     expect(importer).toMatch(/const imgId = await uploadImage\(extractImageUrl\(e\.images\), \{ apiName: "institutes", legacyId: String\(e\.legacy_id\), field: "image" \}, report\)/);
     expect(importer).toMatch(/if \(imgId === false\) continue/);
+  });
+});
+
+describe('offline SQL raster media allowlist', () => {
+  it.each([
+    {
+      label: 'PNG bytes declared as WebP',
+      bytes: pngBytes(21),
+      sourceFilename: 'declared.webp',
+      declaredMime: 'image/webp',
+      targetFilename: 'declared.png',
+      targetMime: 'image/png',
+    },
+    {
+      label: 'JPEG bytes declared as WebP',
+      bytes: jpegBytes(),
+      sourceFilename: 'declared.webp',
+      declaredMime: 'image/webp',
+      targetFilename: 'declared.jpg',
+      targetMime: 'image/jpeg',
+    },
+  ])('$label uploads verified bytes with a normalized target name and MIME', async ({
+    bytes,
+    sourceFilename,
+    declaredMime,
+    targetFilename,
+    targetMime,
+  }) => {
+    await withOfflineRoot(async (_parent, root) => {
+      const entry = offlineEntry(bytes, { sourceFilename, declaredMime, ownerApproved: true });
+      const manifestEntryBefore = structuredClone(entry);
+      await writeOfflineBytes(root, entry.sourcePath, bytes);
+      const state = makeUploader({ offlineMedia: offlineOptions(root, [entry]) });
+
+      await expect(state.imageUploader(entry.sourceUrl)).resolves.toBe(73);
+
+      expect(state.fetchImage).not.toHaveBeenCalled();
+      expect(state.upload).toHaveBeenCalledOnce();
+      expect(state.upload).toHaveBeenCalledWith(bytes, targetFilename, targetMime);
+      expect(state.persistIdentity).toHaveBeenCalledWith({
+        fileId: 73,
+        sourceUrl: entry.sourceUrl,
+        sourceSha256: rawSha256(bytes),
+      });
+      expect(entry.sourceUrl).toContain(entry.sourceIdentity);
+      expect(entry).toEqual(manifestEntryBefore);
+      expect(state.failures).toEqual([]);
+    });
+  });
+
+  it('fails closed for an unknown source URL instead of falling back to HTTP fetch', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const bytes = pngBytes(22);
+      const allowed = offlineEntry(bytes, { ownerApproved: true });
+      const unknownUrl = 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174001';
+
+      await expectOfflineRejected(root, [allowed], unknownUrl);
+    });
+  });
+
+  it('does not admit an allowlist entry without explicit owner approval', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const bytes = pngBytes(23);
+      const entry = offlineEntry(bytes, { ownerApproved: false });
+      await writeOfflineBytes(root, entry.sourcePath, bytes);
+
+      await expectOfflineRejected(root, [entry], entry.sourceUrl);
+    });
+  });
+
+  it('fails when an allowlisted source file is missing', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const missingBytes = pngBytes(24);
+      const missingEntry = offlineEntry(missingBytes, { ownerApproved: true });
+      await expectOfflineRejected(root, [missingEntry], missingEntry.sourceUrl);
+    });
+  });
+
+  it('fails when allowlisted source bytes changed after the manifest hash was recorded', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const originalBytes = pngBytes(25);
+      const changedBytes = pngBytes(26);
+      const changedEntry = offlineEntry(originalBytes, {
+        sourceUrl: 'https://ikpk.su/api/upload/file/123e4567-e89b-12d3-a456-426614174025',
+        sourceIdentity: '123e4567-e89b-12d3-a456-426614174025',
+        ownerApproved: true,
+      });
+      await writeOfflineBytes(root, changedEntry.sourcePath, changedBytes);
+
+      await expectOfflineRejected(root, [changedEntry], changedEntry.sourceUrl);
+    });
+  });
+
+  it.each([
+    {
+      label: 'duplicate source URL',
+      duplicate: (entry: OfflineMediaEntry): OfflineMediaEntry => ({
+        ...entry,
+        sourceIdentity: '123e4567-e89b-12d3-a456-426614174099',
+      }),
+    },
+    {
+      label: 'duplicate source identity',
+      duplicate: (entry: OfflineMediaEntry): OfflineMediaEntry => ({
+        ...entry,
+        sourceUrl: '/media/uploads/123e4567-e89b-12d3-a456-426614174099.webp',
+      }),
+    },
+  ])('rejects ambiguous $label entries', async ({ duplicate }) => {
+    await withOfflineRoot(async (_parent, root) => {
+      const bytes = pngBytes(27);
+      const first = offlineEntry(bytes, { ownerApproved: true });
+      const second = duplicate(first);
+      await writeOfflineBytes(root, first.sourcePath, bytes);
+
+      await expectOfflineRejected(root, [first, second], first.sourceUrl);
+    });
+  });
+
+  it.each([
+    '../outside.webp',
+    'assets/../assets/declared.webp',
+  ])('rejects a noncanonical or escaping relative source path: %s', async (sourcePath) => {
+    await withOfflineRoot(async (parent, root) => {
+      const bytes = pngBytes(28);
+      const entry = offlineEntry(bytes, { sourcePath, ownerApproved: true });
+      if (sourcePath === '../outside.webp') {
+        await writeOfflineBytes(parent, 'outside.webp', bytes);
+      } else {
+        await writeOfflineBytes(root, 'assets/declared.webp', bytes);
+      }
+
+      await expectOfflineRejected(root, [entry], entry.sourceUrl);
+    });
+  });
+
+  it.each(['outside', 'inside'])('rejects symlinked allowlist paths pointing %s the offline root', async (location) => {
+    await withOfflineRoot(async (parent, root) => {
+      const bytes = pngBytes(29);
+      const entry = offlineEntry(bytes, { sourcePath: 'assets/linked.webp', ownerApproved: true });
+      const targetFile = location === 'outside'
+        ? join(parent, 'outside.webp')
+        : join(root, 'assets', 'target.webp');
+      const linkPath = await writeOfflineBytes(root, entry.sourcePath, Buffer.from('placeholder'));
+      await rm(linkPath);
+      await writeFile(targetFile, bytes);
+      await symlink(targetFile, linkPath);
+
+      await expectOfflineRejected(root, [entry], entry.sourceUrl);
+    });
+  });
+
+  it('allows distinct approved source identities to share verified bytes and a path', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const bytes = pngBytes(30);
+      const first = offlineEntry(bytes, { ownerApproved: true });
+      const secondIdentity = '123e4567-e89b-12d3-a456-426614174030';
+      const second: OfflineMediaEntry = {
+        ...first,
+        sourceUrl: `https://ikpk.su/api/upload/file/${secondIdentity}`,
+        sourceIdentity: secondIdentity,
+      };
+      await writeOfflineBytes(root, first.sourcePath, bytes);
+      const state = makeUploader({ offlineMedia: offlineOptions(root, [first, second]) });
+
+      await expect(state.imageUploader(first.sourceUrl)).resolves.toBe(73);
+      await expect(state.imageUploader(second.sourceUrl)).resolves.toBe(73);
+
+      expect(state.upload).toHaveBeenCalledOnce();
+      expect(state.persistIdentity).toHaveBeenCalledWith(expect.objectContaining({ sourceUrl: first.sourceUrl }));
+      expect(state.persistIdentity).toHaveBeenCalledWith(expect.objectContaining({ sourceUrl: second.sourceUrl }));
+      expect(state.failures).toEqual([]);
+    });
+  });
+
+  it('refuses PDFs at the raster uploader boundary', async () => {
+    await withOfflineRoot(async (_parent, root) => {
+      const bytes = Buffer.from('%PDF-1.7\n');
+      const entry = offlineEntry(bytes, {
+        sourcePath: 'documents/document.pdf',
+        sourceFilename: 'document.pdf',
+        declaredMime: 'application/pdf',
+        ownerApproved: true,
+      });
+      await writeOfflineBytes(root, entry.sourcePath, bytes);
+
+      await expectOfflineRejected(root, [entry], entry.sourceUrl);
+    });
   });
 });

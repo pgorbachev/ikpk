@@ -73,6 +73,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     process.env.DATABASE_CLIENT = 'sqlite';
     process.env.DATABASE_FILENAME = dbFile;
     process.env.STRAPI_TELEMETRY_DISABLED = 'true';
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
+    delete process.env.CMS_TOKEN;
     delete process.env.CONTENT_ADMIN_EMAIL;
     delete process.env.CONTENT_ADMIN_PASSWORD;
 
@@ -80,6 +82,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
     await app.load();
+    assert.ok(!process.env.CMS_TOKEN, 'обычный запуск не должен выдавать токен съёма');
+    assert.equal(Boolean(await app.service('admin::api-token').getByName('site-refresh-capture')), false,
+      'обычный запуск не должен сохранять токен съёма');
     // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
     app.config.set('admin.autoOpen', false);
     await app.listen();
@@ -649,6 +654,13 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
   });
 
   test('съём читает тип, закрытый для публичной роли', async () => {
+    process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
+    const { bootstrapCaptureTokenForRehearsal } = loadCommonjs(
+      path.join(cmsRoot, 'dist/src/seminar-management/capture-token.js'),
+    );
+    await bootstrapCaptureTokenForRehearsal(app);
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
+
     const action = 'api::institute.institute.find';
     const permissions = app.db.query('plugin::users-permissions.permission');
     const rows = await permissions.findMany({ where: { action } });
@@ -666,8 +678,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const body = await authed.json();
     assert.ok(Array.isArray(body.data));
     const kept = createHash('sha256').update(process.env.CMS_TOKEN).digest('hex');
-    const { ensureCaptureToken } = loadCommonjs(path.join(cmsRoot, 'dist/src/seminar-management/capture-token.js'));
-    await ensureCaptureToken(app);
+    process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
+    await bootstrapCaptureTokenForRehearsal(app);
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
     assert.equal(createHash('sha256').update(process.env.CMS_TOKEN).digest('hex'), kept);
   });
 });

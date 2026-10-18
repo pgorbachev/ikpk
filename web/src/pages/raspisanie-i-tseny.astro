@@ -3,7 +3,7 @@ import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers, teacherPageHref } from '../lib/data';
-import { isCurrentOrFuture } from '../lib/schedule-window';
+import { calendarDay, calendarDayDate, isCurrentOrFuture } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
@@ -24,8 +24,9 @@ function slugify(value: string): string {
 }
 
 function formatCalendarDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = calendarDayDate(dateStr);
   return date.toLocaleDateString('ru-RU', {
+    timeZone: 'UTC',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -41,14 +42,16 @@ function pluralizeRu(value: number, one: string, few: string, many: string): str
 }
 
 function formatDurationLabel(startAt: string, endAt: string, duration: string | number): string {
-  const start = new Date(startAt);
-  const end = new Date(endAt);
+  const startDay = calendarDay(startAt);
+  const endDay = calendarDay(endAt);
+  const start = calendarDayDate(startAt);
+  const end = calendarDayDate(endAt);
   const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
   const dayLabel = `${diffDays} ${pluralizeRu(diffDays, 'день', 'дня', 'дней')}`;
   const hoursValue = Number(duration) || 0;
   const hoursLabel = hoursValue > 0 ? `${hoursValue} ${pluralizeRu(hoursValue, 'час', 'часа', 'часов')}` : '-';
 
-  if (startAt === endAt) {
+  if (startDay === endDay) {
     return `${formatCalendarDate(startAt)} - ${dayLabel} (${hoursLabel})`;
   }
 
@@ -59,7 +62,7 @@ const todayDate = getSnapshotReferenceDate();
 const entries = getScheduleEntries()
   // По последнему дню события, а не по первому: многодневных записей 60 из 63.
   .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, todayDate))
-  .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt)));
 
 const instituteByName = new Map(institutes.map((institute) => [institute.name, institute]));
 const instituteOptionOrder = new Map(institutes.map((institute, index) => [institute.slug, index]));
