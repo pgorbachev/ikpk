@@ -7,9 +7,10 @@ After reviewed code and exact candidate CI are ready, install the bounded helper
 ```sh
 bash scripts/install-rehearsal-host.sh --prefix /usr/local
 bash scripts/bootstrap-staging193-current.sh
+bash scripts/install-rehearsal-host.sh --prefix /usr/local --staging193-config
 ```
 
-The bootstrap checks the current unit identity and original release path, saves the effective unit configuration under `/var/lib/ikpk-rehearsal/bootstrap/staging193`, and writes a narrow systemd drop-in. It does not restart the service. Root-owned `/etc/ikpk/rehearsal.json` supplies the reviewed staging paths, CMS writer units and URI probes, media roots, and existing Nginx include paths.
+The bootstrap checks the current unit identity and original release path, saves the effective unit configuration under `/var/lib/ikpk-rehearsal/bootstrap/staging193`, and writes a narrow systemd drop-in. It does not restart the service. The versioned `scripts/staging193-rehearsal.json` template installs as root-owned `/etc/ikpk/rehearsal.json`; installation creates the private journal/backup directories and runs the helper's read-only config, current pointer, and live CMS database process check. It refuses to overwrite a different config. The operator uses the existing root SSH identity at `~/.ssh/id_ed25519_ikpk_vps` to invoke only the fixed helper; CMS npm/build/migration and runtime stay under `ikpk-cms`.
 
 Run the two operator commands with the same fresh operation ID and admitted SHA:
 
@@ -18,7 +19,7 @@ python3 scripts/rehearsal/staging193.py cms-update --operation-id <id> --source-
 python3 scripts/rehearsal/staging193.py static-publish --operation-id <id> --source-sha <40-hex-sha>
 ```
 
-`cms-update` closes and verifies the writer fence, stops writers, checkpoints SQLite, exports and verifies the actual database/media bytes off-host, then builds and migrates the CMS candidate. `static-publish` builds from that operation's sealed database/media capture, switches the retained static release, checks the served release metadata/routes/images, runs the browser suite against the same public bytes without deploy credentials, records both acceptances, commits durably, and reopens writers.
+`cms-update` closes and verifies the writer fence, stops writers, checkpoints SQLite, exports and verifies the actual database/media bytes off-host, then builds and migrates the CMS artifact. That package uses the previously active CMS release as migration provenance and links `public/uploads` to the original external media tree. `static-publish` builds the staging193 profile from the operation's sealed CMS capture, retains old hashed assets alongside the candidate, exports those exact bytes for local browser acceptance without deploy credentials, rechecks canonical source CI, then atomically switches static and verifies `release.json`, routes, captured media and retained hashed asset URLs. Only after both acceptances does it commit durably and reopen writers.
 
 Before global commit, recover explicitly with the same ID. If a final backup exists, recovery requires the exact off-host archive; before backup creation it preserves the old live database and editor writes. A durable `committed` or `recovered` journal row forbids another database restore. If commit succeeded but reopening did not, retry `static-publish` to finish reopening.
 

@@ -7,7 +7,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    baseURL: 'https://staging.ikpk.su',
+    baseURL: process.env.STAGING193_BASE_URL ?? 'https://staging.ikpk.su',
     headless: true,
     screenshot: 'only-on-failure',
   },

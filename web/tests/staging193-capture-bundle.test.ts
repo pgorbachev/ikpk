@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,7 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { verifyStaging193Bundle } from '../../scripts/lib/staging193-capture-bundle.mjs';
 import { loadCaptureSchemas, readPublishedSqlite } from '../../scripts/lib/server-capture-sqlite.mjs';
 
-const schemaRoot = join(import.meta.dirname, '../../cms/src');
+const repoRoot = join(import.meta.dirname, '../..');
+const schemaRoot = join(repoRoot, 'cms/src');
 const temporaryRoots: string[] = [];
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -124,6 +126,34 @@ describe('staging193 sealed SQLite capture', () => {
     expect(seminar.seo.seo_title).toBe('Published SEO');
     expect(seminar.documents[0].document).toBe('Certificate');
     expect(seminar.image[0].url).toBe('/uploads/photo.jpg');
+    expect(verified.media.map((item: any) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
+  });
+
+  it('runs the packaged sealer against a real non-empty SQLite and media capture', () => {
+    const root = mkdtempSync(join(tmpdir(), 'staging193-sealer-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const mediaDir = join(root, 'media');
+    mkdirSync(mediaDir);
+    const photo = Buffer.from('photo bytes');
+    const form = Buffer.from('%PDF bytes');
+    writeFileSync(join(mediaDir, 'photo.jpg'), photo);
+    writeFileSync(join(mediaDir, 'form.pdf'), form);
+    writeFileSync(join(root, 'media-manifest.json'), `${JSON.stringify({ media: [
+      { url: '/uploads/photo.jpg', file: 'media/photo.jpg', sha256: hash(photo), size: photo.length },
+      { url: '/uploads/form.pdf', file: 'media/form.pdf', sha256: hash(form), size: form.length },
+    ] })}\n`);
+
+    const result = spawnSync(process.execPath, [
+      join(repoRoot, 'scripts/lib/seal-staging193-capture.mjs'), root, 'sealer-test', 'a'.repeat(40), schemaRoot,
+    ], { encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+    const verified = verifyStaging193Bundle(root, schemaRoot);
+    const collections = verified.readback.collections as Record<string, any[]>;
+    expect(collections.seminars).toHaveLength(1);
+    expect(collections.seminars[0].teachers.map((teacher: any) => teacher.name)).toEqual(['Teacher']);
+    expect(collections.seminars[0].image[0].url).toBe('/uploads/photo.jpg');
     expect(verified.media.map((item: any) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
   });
 

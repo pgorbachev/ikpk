@@ -1,0 +1,47 @@
+{
+  "stateDir": "/var/lib/ikpk-rehearsal/staging193",
+  "maintenanceFlag": "/var/lib/ikpk-rehearsal/staging193/fenced",
+  "releaseRoot": "/opt/ikpk-cms-prototype193/releases",
+  "currentCms": "/opt/ikpk-cms-prototype193/current",
+  "currentStatic": "/var/www/ikpk/current",
+  "staticReleaseRoot": "/var/www/ikpk/releases",
+  "cmsUnit": "ikpk-cms-prototype193.service",
+  "writerUnits": ["ikpk-cms-prototype193.service"],
+  "cmsUser": "ikpk-cms",
+  "cmsDatabase": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/data/data.db",
+  "mediaRoots": [
+    {
+      "path": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/uploads",
+      "prefix": "/uploads/"
+    }
+  ],
+  "backupRoot": "/var/lib/ikpk-rehearsal/staging193/backups",
+  "nginxBinary": "/usr/sbin/nginx",
+  "nginxService": "nginx.service",
+  "nginxMapFile": "/etc/nginx/conf.d/ikpk-demo-writer-map.conf",
+  "nginxServerGateFile": "/etc/nginx/snippets/ikpk-demo-writer-gate.conf",
+  "writerPrefixes": [
+    "/admin", "/content-manager", "/content-type-builder", "/content-releases",
+    "/upload", "/i18n", "/users-permissions", "/review-workflows", "/strapi", "/api"
+  ],
+  "preservePrefixes": ["/uploads/"],
+  "cmsHealthUrl": "http://127.0.0.1:1338/_health",
+  "siteHealthUrl": "https://staging.ikpk.su/",
+  "siteBaseUrl": "https://staging.ikpk.su",
+  "siteReleaseUrl": "https://staging.ikpk.su/release.json",
+  "siteProbeUrls": [
+    "https://staging.ikpk.su/", "https://staging.ikpk.su/raspisanie-i-tseny",
+    "https://staging.ikpk.su/statyi", "https://staging.ikpk.su/kontakty"
+  ],
+  "writerProbeUrls": [
+    "https://staging.ikpk.su/admin", "https://staging.ikpk.su/content-manager",
+    "https://staging.ikpk.su/content-type-builder", "https://staging.ikpk.su/content-releases",
+    "https://staging.ikpk.su/upload", "https://staging.ikpk.su/i18n",
+    "https://staging.ikpk.su/users-permissions", "https://staging.ikpk.su/review-workflows",
+    "https://staging.ikpk.su/strapi", "https://staging.ikpk.su/api"
+  ],
+  "preserveProbeUrl": "https://staging.ikpk.su/",
+  "allowedSourceRef": "refs/heads/dev",
+  "targetHost": "193.124.115.99",
+  "nodeBinary": "/usr/bin/node"
+}

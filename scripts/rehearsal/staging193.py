@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import http.server
 import io
 import json
 import os
 import re
+import socketserver
 import subprocess
 import sys
 import tarfile
+import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -21,7 +25,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 OP = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 TARGET_HOST = "193.124.115.99"
-TARGET_USER = "ikpk-deploy"
+TARGET_USER = "root"
+TARGET_IDENTITY = Path.home() / ".ssh/id_ed25519_ikpk_vps"
+CANONICAL_REPOSITORY = "pgorbachev/ikpk"
 CANONICAL_REF = "refs/heads/dev"
 WORKFLOW = "Tests"
 REQUIRED_TEST_JOBS = {
@@ -56,7 +62,10 @@ def validate_sha_and_ci(sha: str) -> dict:
     if not SHA.fullmatch(sha):
         raise Refusal("source SHA must be a full lowercase commit ID")
     capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
-    repo = capture(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+    repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
+                    "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+    if repo != CANONICAL_REPOSITORY:
+        raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
     remote = capture(["git", "ls-remote", "origin", CANONICAL_REF]).split()
     if len(remote) != 2 or remote[0] != sha or remote[1] != CANONICAL_REF:
         raise Refusal("source SHA is not the current canonical origin/dev head")
@@ -127,9 +136,13 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
 
 
 def ssh_remote(arguments: list[str], *, input_bytes: Optional[bytes] = None, binary: bool = False) -> bytes:
-    command = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-               f"{TARGET_USER}@{TARGET_HOST}", "sudo", "-n", "/usr/local/sbin/ikpk-rehearsal", *arguments]
-    result = subprocess.run(command, input=input_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if not TARGET_IDENTITY.is_file():
+        raise Refusal(f"authorized staging193 SSH identity is unavailable: {TARGET_IDENTITY}")
+    command = ["ssh", "-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+               "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15",
+               f"{TARGET_USER}@{TARGET_HOST}", "/usr/local/sbin/ikpk-rehearsal", *arguments]
+    result = subprocess.run(command, input=input_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            check=False, cwd=ROOT)
     if result.returncode:
         raise Refusal(f"host operation failed ({result.returncode}): {result.stderr.decode(errors='replace').strip()}")
     return result.stdout
@@ -248,18 +261,75 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
     return target
 
 
-def browser_check(source_sha: str, static_digest: str) -> None:
+def _static_tree_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if relative == "release.json":
+            continue
+        if path.is_symlink():
+            raise Refusal("exported static candidate contains a symlink")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise Refusal("exported static candidate contains a non-regular object")
+        name = relative.encode()
+        digest.update(len(name).to_bytes(4, "big"))
+        digest.update(name)
+        digest.update(bytes.fromhex(hashlib.sha256(path.read_bytes()).hexdigest()))
+    return digest.hexdigest()
+
+
+def browser_check(source_sha: str, static_digest: str, archive: bytes) -> None:
     executable = ROOT / "web/node_modules/.bin/playwright"
     if not executable.is_file():
         raise Refusal("local Playwright dependencies are missing; browser acceptance was not run")
-    environment = {**os.environ, "STAGING193_EXPECTED_SHA": source_sha,
-                   "STAGING193_EXPECTED_STATIC_DIGEST": static_digest, "CI": "1"}
-    for key in ("SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "IKPK_DEPLOY_KEY"):
-        environment.pop(key, None)
-    result = subprocess.run([str(executable), "test", "--config", "playwright.staging193.config.ts"],
-                            cwd=ROOT / "web", env=environment, check=False)
-    if result.returncode:
-        raise Refusal(f"staging193 browser acceptance failed with exit {result.returncode}")
+    with tempfile.TemporaryDirectory(prefix="ikpk-staging193-static-") as temporary:
+        root = Path(temporary)
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
+                for member in bundle.getmembers():
+                    name = Path(member.name)
+                    normalized = member.name.rstrip("/")
+                    if name.is_absolute() or normalized != name.as_posix() or any(part in ("", ".", "..") for part in normalized.split("/")):
+                        raise Refusal("static candidate archive contains an unsafe path")
+                    if not (member.isfile() or member.isdir()):
+                        raise Refusal("static candidate archive contains a non-regular object")
+                bundle.extractall(root)
+        except tarfile.TarError as error:
+            raise Refusal("static candidate export is not a readable tar archive") from error
+        if _static_tree_sha256(root) != static_digest:
+            raise Refusal("off-host static candidate bytes do not match the admitted tree digest")
+        try:
+            release = json.loads((root / "release.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise Refusal("off-host static candidate release declaration is unreadable") from error
+        if release.get("commit") != source_sha or release.get("staticTreeSha256") != static_digest:
+            raise Refusal("off-host static candidate release declaration does not match the admitted bytes")
+
+        class QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, _format, *_args):
+                pass
+
+        handler = lambda *args, **kwargs: QuietHandler(*args, directory=str(root), **kwargs)
+        server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            environment = {**os.environ, "STAGING193_EXPECTED_SHA": source_sha,
+                           "STAGING193_EXPECTED_STATIC_DIGEST": static_digest,
+                           "STAGING193_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}", "CI": "1"}
+            for key in ("SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "IKPK_DEPLOY_KEY"):
+                environment.pop(key, None)
+            result = subprocess.run([str(executable), "test", "--config", "playwright.staging193.config.ts"],
+                                    cwd=ROOT / "web", env=environment, check=False)
+            if result.returncode:
+                raise Refusal(f"staging193 browser acceptance failed with exit {result.returncode}")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
 
 def invoke(args: argparse.Namespace) -> None:
@@ -299,7 +369,10 @@ def invoke(args: argparse.Namespace) -> None:
         digest = prepared.get("staticTreeSha256")
         if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise Refusal("host returned an invalid static candidate digest")
-        browser_check(args.source_sha, digest)
+        candidate_bytes = ssh_remote(["export-static", "--operation-id", args.operation_id,
+                                      "--source-sha", args.source_sha])
+        browser_check(args.source_sha, digest, candidate_bytes)
+        validate_sha_and_ci(args.source_sha)
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest]))
         if committed.get("phase") != "committed":
             raise Refusal(f"static publication did not reach durable commit: {committed.get('phase')}")

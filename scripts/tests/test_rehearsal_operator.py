@@ -1,5 +1,8 @@
 import json
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.rehearsal import staging193
@@ -28,7 +31,7 @@ class OperatorAdmissionTests(unittest.TestCase):
         if argv[:3] == ["git", "ls-remote", "origin"]:
             return f"{SHA}\t{staging193.CANONICAL_REF}"
         if argv[:2] == ["gh", "repo"]:
-            return "owner/ikpk"
+            return staging193.CANONICAL_REPOSITORY
         if argv[:3] == ["gh", "run", "list"]:
             return json.dumps(self.runs)
         if argv[:3] == ["gh", "run", "view"]:
@@ -57,6 +60,20 @@ class OperatorAdmissionTests(unittest.TestCase):
         with patch.object(staging193, "capture", side_effect=self._capture):
             with self.assertRaisesRegex(staging193.Refusal, "not successful"):
                 staging193.validate_sha_and_ci(SHA)
+
+    def test_remote_helper_uses_fixed_existing_root_identity_without_sudo(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-operator-identity-") as temporary:
+            identity = Path(temporary) / "identity"
+            identity.write_text("test fixture", encoding="utf-8")
+            result = subprocess.CompletedProcess(["ssh"], 0, b"{}", b"")
+            with patch.object(staging193, "TARGET_IDENTITY", identity), \
+                 patch.object(staging193.subprocess, "run", return_value=result) as invoke:
+                self.assertEqual(staging193.ssh_remote(["status", "--operation-id", "op"]), b"{}")
+            argv = invoke.call_args.args[0]
+            self.assertEqual(argv[argv.index("-i") + 1], str(identity))
+            self.assertIn("root@193.124.115.99", argv)
+            self.assertEqual(argv[-4:], ["/usr/local/sbin/ikpk-rehearsal", "status", "--operation-id", "op"])
+            self.assertNotIn("sudo", argv)
 
 
 if __name__ == "__main__":

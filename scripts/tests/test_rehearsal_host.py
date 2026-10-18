@@ -1,11 +1,15 @@
 import hashlib
+import base64
+import getpass
 import importlib.util
 import io
 import json
 import sqlite3
+import subprocess
 import tarfile
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -53,6 +57,228 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
+            root = Path(temporary)
+            artifact = root / "cms-artifact"
+            uploads = artifact / "public/uploads"
+            uploads.mkdir(parents=True)
+            (uploads / ".gitkeep").write_text("", encoding="utf-8")
+            external = root / "staging-uploads"
+            external.mkdir(mode=0o700)
+            (external / "photo original.jpg").write_bytes(b"editor media")
+            config = {"cmsUser": getpass.getuser(),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(external)}]}
+            resolved = rehearsal_host._configure_candidate_uploads(config, artifact)
+            self.assertEqual(resolved, external.resolve())
+            self.assertTrue(uploads.is_symlink())
+            self.assertEqual(uploads.resolve(), external.resolve())
+            self.assertEqual((uploads / "photo original.jpg").read_bytes(), b"editor media")
+            self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, external)), 64)
+
+    def test_backup_and_release_tree_use_real_lstat_results(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-backup-lstat-") as temporary:
+            root = Path(temporary)
+            database = root / "live.sqlite"
+            db = sqlite3.connect(database)
+            db.execute("CREATE TABLE content (body TEXT NOT NULL)")
+            db.execute("INSERT INTO content VALUES ('preserved')")
+            db.commit()
+            db.close()
+            uploads = root / "uploads"
+            uploads.mkdir()
+            (uploads / "photo.jpg").write_bytes(b"photo")
+            (root / "backups").mkdir()
+            config = {"cmsDatabase": str(database), "backupRoot": str(root / "backups"),
+                      "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"}]}
+            # /proc handle inspection is Linux-specific; exercise the real SQLite backup,
+            # media walk, lstat checks, tar creation and digest verification on this host.
+            with patch.object(rehearsal_host, "_assert_no_database_handles"):
+                manifest = rehearsal_host._backup(config, "lstat-op")
+            backup_dir = root / "backups/lstat-op"
+            self.assertEqual(sha((backup_dir / "backup.tar").read_bytes()), manifest["archiveSha256"])
+            db = sqlite3.connect(f"file:{backup_dir / 'database.sqlite'}?mode=ro", uri=True)
+            try:
+                self.assertEqual(db.execute("SELECT body FROM content").fetchone()[0], "preserved")
+            finally:
+                db.close()
+            release = root / "release"
+            (release / "nested").mkdir(parents=True)
+            (release / "index.html").write_text("served", encoding="utf-8")
+            (release / "nested/asset").write_bytes(b"asset")
+            self.assertEqual(len(rehearsal_host._tree_sha256(release)), 64)
+
+    def test_archive_sha256_length_reaches_real_extraction_and_retry_marker(self):
+        sha_value = "a" * 40
+        provenance = {"sourceSha": sha_value, "ref": "refs/heads/dev", "workflow": "Tests",
+                      "workflowName": "Tests", "headBranch": "dev", "event": "push", "runId": 7,
+                      "attempt": 1, "repository": "pgorbachev/ikpk", "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7"}
+        payload_buffer = io.BytesIO()
+        with tarfile.open(fileobj=payload_buffer, mode="w:") as archive:
+            for name, payload in (("candidate.txt", b"candidate"), ("cms/index.js", b"source CMS"),
+                                  (".ikpk-rehearsal-ci.json", json.dumps(provenance).encode())):
+                info = tarfile.TarInfo(name)
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+        payload = payload_buffer.getvalue()
+        digest = sha(payload)
+        with tempfile.TemporaryDirectory(prefix="ikpk-source-admission-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            config = {"releaseRoot": str(releases), "allowedSourceRef": "refs/heads/dev",
+                      "cmsUser": getpass.getuser(), "backupRoot": str(root / "backups")}
+            operation_backup = Path(config["backupRoot"]) / "source-op"
+            operation_backup.mkdir(parents=True)
+            (operation_backup / "manifest.json").write_text("{}", encoding="utf-8")
+            args = Namespace(operation_id="source-op", source_sha=sha_value,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             offhost_sha256="b" * 64, archive_sha256=digest)
+
+            class Phase:
+                @staticmethod
+                def phase(_operation_id):
+                    return {"phase": "acquiring", "sourceSha": sha_value}
+
+            with patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "acquiring"}), \
+                 patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "b" * 64}), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=rehearsal_host.HostFailure("stop after extract")), \
+                 patch.object(rehearsal_host, "sys") as host_sys:
+                host_sys.stdin.buffer.read.return_value = payload
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "stop after extract"):
+                    rehearsal_host._cms_update(config, Phase(), args)
+            candidate = releases / f"{sha_value}-source-op"
+            self.assertEqual((candidate / "candidate.txt").read_bytes(), b"candidate")
+            self.assertEqual(json.loads((candidate / ".ikpk-rehearsal-ci.json").read_text()), provenance)
+            self.assertEqual(rehearsal_host._extract_source_archive(config, sha_value, "source-op", payload,
+                digest, provenance), candidate.resolve())
+            old_cms = (candidate / "cms/index.js").read_bytes()
+            second = rehearsal_host._extract_source_archive(config, sha_value, "source-op-2", payload,
+                digest, provenance)
+            (second / "cms/index.js").write_bytes(b"second operation build output")
+            self.assertEqual((candidate / "cms/index.js").read_bytes(), old_cms)
+            self.assertNotEqual(second, candidate)
+            bad_args = Namespace(**{**vars(args), "archive_sha256": digest[:40]})
+            with patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "acquiring"}), \
+                 patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "b" * 64}), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=AssertionError("must reject before install")), \
+                 patch.object(rehearsal_host, "sys") as host_sys:
+                host_sys.stdin.buffer.read.return_value = payload
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "source archive SHA-256"):
+                    rehearsal_host._cms_update(config, Phase(), bad_args)
+
+    def test_static_build_uses_capture_snapshot_for_prepare_and_build(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-capture-env-") as temporary:
+            source = Path(temporary) / "candidate"
+            web = source / "web"
+            snapshot_dir = web / ".snapshot"
+            snapshot_dir.mkdir(parents=True)
+            (snapshot_dir / "snapshot.json").write_text('{"snapshotId":"snap:editor-data"}', encoding="utf-8")
+            (source / ".ikpk-rehearsal-ci.json").write_text(json.dumps({"sourceSha": "a" * 40}), encoding="utf-8")
+            retained = Path(temporary) / "releases"
+            old_public = retained / "old" / "public"
+            (old_public / "_astro").mkdir(parents=True)
+            (old_public / "_astro/legacy.0123456789.css").write_text("previous hash asset", encoding="utf-8")
+            calls = []
+
+            def run_build(_config, cwd, argv, **kwargs):
+                calls.append((argv, kwargs.get("environment")))
+                if argv[:3] == ["/usr/bin/npm", "run", "build:demo193"]:
+                    dist = web / "dist-demo193"
+                    dist.mkdir()
+                    (dist / "index.html").write_text("candidate", encoding="utf-8")
+                return ""
+
+            with patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
+                dist, _ = rehearsal_host._build_static({"staticReleaseRoot": str(retained)}, source,
+                                                       Path(temporary) / "capture")
+            expected = {"CONTENT_SNAPSHOT_DIR": str(snapshot_dir), "DEMO_PROFILE": "demo193",
+                        "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
+                        "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent",
+                        "DEMO_SITE_URL": "https://193.124.115.99"}
+            snapshot_call = next(item for item in calls if "capture-content-snapshot.ts" in " ".join(item[0]))
+            build_call = next(item for item in calls if item[0][:3] == ["/usr/bin/npm", "run", "build:demo193"])
+            self.assertEqual(snapshot_call[1], expected)
+            self.assertEqual(build_call[1], expected)
+            release = json.loads((dist / "release.json").read_text(encoding="utf-8"))
+            self.assertEqual(release["commit"], "a" * 40)
+            self.assertEqual((dist / "_astro/legacy.0123456789.css").read_text(encoding="utf-8"),
+                             "previous hash asset")
+
+    def test_exported_candidate_contains_exact_retained_static_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-export-") as temporary:
+            root = Path(temporary)
+            release_root = root / "releases"
+            release = release_root / f"{'a' * 40}-export-op"
+            release.mkdir(parents=True)
+            (release / "index.html").write_text("candidate", encoding="utf-8")
+            (release / "release.json").write_text(json.dumps({"commit": "a" * 40}), encoding="utf-8")
+
+            class State:
+                @staticmethod
+                def phase(_operation_id):
+                    return {"phase": "cms-activated", "sourceSha": "a" * 40}
+
+            payload = rehearsal_host._export_static({"staticReleaseRoot": str(release_root)}, State(),
+                                                       "export-op", "a" * 40)
+            with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+                self.assertEqual(archive.extractfile("index.html").read(), b"candidate")
+                self.assertEqual(json.loads(archive.extractfile("release.json").read()), {"commit": "a" * 40})
+
+    def test_post_switch_checks_old_hashed_asset_url_against_serving_origin(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-hash-check-") as temporary:
+            root = Path(temporary)
+            old_assets = root / "old/public/_astro"
+            new_assets = root / ("new-" + "a" * 40 + "/_astro")
+            old_assets.mkdir(parents=True)
+            new_assets.mkdir(parents=True)
+            (old_assets / "old.0123456789.css").write_bytes(b"old hashed CSS")
+            (new_assets / "new.abcdef0123.js").write_bytes(b"new hashed JS")
+            commands = []
+
+            def request(argv, **_kwargs):
+                commands.append(argv)
+                return subprocess.CompletedProcess(argv, 0, "200", "")
+
+            with patch.object(rehearsal_host, "run", side_effect=request):
+                rehearsal_host._verify_retained_hashed_assets({"staticReleaseRoot": str(root),
+                                                                 "siteBaseUrl": "https://staging.ikpk.su"})
+            urls = {argv[-1] for argv in commands}
+            self.assertIn("https://staging.ikpk.su/_astro/old.0123456789.css", urls)
+            self.assertIn("https://staging.ikpk.su/_astro/new.abcdef0123.js", urls)
+
+    def test_capture_builder_invokes_existing_sealer_path(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-capture-entrypoint-") as temporary:
+            root = Path(temporary)
+            source = root / "candidate"
+            (source / "scripts/lib").mkdir(parents=True)
+            (source / "web").mkdir()
+            (source / "cms/src").mkdir(parents=True)
+            sealer = source / "scripts/lib/seal-staging193-capture.mjs"
+            sealer.write_bytes((ROOT / "scripts/lib/seal-staging193-capture.mjs").read_bytes())
+            database = root / "candidate.sqlite"
+            db = sqlite3.connect(database)
+            db.execute("CREATE TABLE empty (value TEXT)")
+            db.commit()
+            db.close()
+            uploads = root / "uploads"
+            uploads.mkdir()
+            capture_root = source / ".staging193-rehearsal" / "capture-op"
+            config = {"cmsUser": getpass.getuser(), "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"}]}
+            captured = {}
+
+            def run_sealer(_config, cwd, argv, **_kwargs):
+                captured["cwd"] = cwd
+                captured["argv"] = argv
+                self.assertTrue(Path(argv[1]).is_file())
+                return ""
+
+            with patch.object(rehearsal_host, "_run_as_cms", side_effect=run_sealer):
+                result = rehearsal_host._create_capture_bundle(config, "capture-op", "a" * 40, source, database)
+            self.assertEqual(result, capture_root / "capture")
+            self.assertEqual(Path(captured["argv"][1]), sealer)
+            self.assertEqual(Path(captured["argv"][1]).name, "seal-staging193-capture.mjs")
+
     def test_imported_offhost_backup_is_bound_to_server_archive_digest(self):
         operation_id = "operator-test"
         archive_bytes = backup_archive(operation_id)
@@ -64,7 +290,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             (server_backup / "manifest.json").write_text(json.dumps({
                 "operationId": operation_id, "archiveSha256": digest,
             }))
-            (server_backup / "backup.tar").write_bytes(archive_bytes)
+            (server_backup / "backup.tar").write_bytes(b"corrupt server-side copy")
             config = {"backupRoot": str(root)}
             offhost = rehearsal_host._import_offhost_backup(config, operation_id, archive_bytes, digest)
             manifest = rehearsal_host._backup_manifest({"backupRoot": str(root)}, operation_id, offhost)

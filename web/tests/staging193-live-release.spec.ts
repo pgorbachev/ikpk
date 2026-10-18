@@ -30,4 +30,15 @@ test('main routes and their images are served by the candidate', async ({ page }
       .map((image) => (image as HTMLImageElement).currentSrc));
     expect(failures, `broken same-origin image on ${route}`).toEqual([]);
   }
+
+  await page.goto('/statyi');
+  const imageArticle = page.locator('.articles-grid > a[href^="/statyi/"]').filter({ has: page.locator('img') }).first();
+  await expect(imageArticle, 'captured publication catalog must contain an image-bearing article').toBeVisible();
+  const detailPath = await imageArticle.getAttribute('href');
+  expect(detailPath).toMatch(/^\/statyi\/[A-Za-z0-9_-]+$/);
+  await imageArticle.click();
+  await expect(page.locator('article.article-main h1').first()).toBeVisible();
+  const hero = page.locator('main img').first();
+  await expect(hero, 'article image from the captured CMS media must render').toBeVisible();
+  await expect.poll(() => hero.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
 });
