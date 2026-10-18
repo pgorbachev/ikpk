@@ -93,7 +93,7 @@ class RehearsalStateTests(unittest.TestCase):
         self.assertEqual([row["record"] for row in rows], ["start", "new-pair", "committed"])
         self.assertEqual(rows[0]["oldPair"], OLD_PAIR)
         self.assertEqual(rows[1]["newPair"], NEW_PAIR)
-        with self.assertRaisesRegex(RehearsalRefusal, "forbidden after durable global commit"):
+        with self.assertRaisesRegex(RehearsalRefusal, "terminal journal record"):
             self.state.require_restore_allowed("op-1")
         with self.assertRaisesRegex(RehearsalRefusal, "reopen is not verified"):
             self.state.finalize("op-1", lambda: False)
@@ -113,7 +113,7 @@ class RehearsalStateTests(unittest.TestCase):
         marker = self.state._read_marker()
         self.assertFalse(marker["committed"], "fixture must represent the crash window")
         self.assertIn('"record":"committed"', self.state.journal_path.read_text())
-        with self.assertRaisesRegex(RehearsalRefusal, "forbidden after durable global commit"):
+        with self.assertRaisesRegex(RehearsalRefusal, "terminal journal record"):
             self.state.require_restore_allowed("op-commit-window")
         with self.assertRaisesRegex(RehearsalRefusal, "after global commit"):
             self.state.recover("op-commit-window", lambda: True, lambda: True)
@@ -136,6 +136,42 @@ class RehearsalStateTests(unittest.TestCase):
         rows = [__import__("json").loads(line) for line in self.state.journal_path.read_text().splitlines()]
         self.assertEqual([row["record"] for row in rows], ["start", "recovered"])
         self.assertFalse(self.state.marker_path.exists())
+
+    def test_recovery_terminal_is_durable_before_reopen_and_retry_never_restores_again(self):
+        self.state.begin("op-recover-window", SOURCE_SHA, OLD_PAIR)
+        self.state.confirm_fence("op-recover-window", lambda: True)
+        with self.assertRaisesRegex(RehearsalRefusal, "reopen is not verified"):
+            self.state.recover("op-recover-window", lambda: True, lambda: False)
+        rows = [__import__("json").loads(line) for line in self.state.journal_path.read_text().splitlines()]
+        self.assertEqual([row["record"] for row in rows], ["start", "recovered"])
+        self.assertTrue(self.state.marker_path.exists())
+        with self.assertRaisesRegex(RehearsalRefusal, "terminal journal record"):
+            self.state.require_restore_allowed("op-recover-window")
+        restore_attempts = []
+        result = self.state.recover("op-recover-window", lambda: restore_attempts.append(True) or False, lambda: True)
+        self.assertEqual(result["phase"], "recovered")
+        self.assertEqual(restore_attempts, [], "terminal retry must not evaluate DB restore proof")
+        self.assertFalse(self.state.marker_path.exists())
+        rows = [__import__("json").loads(line) for line in self.state.journal_path.read_text().splitlines()]
+        self.assertEqual([row["record"] for row in rows].count("recovered"), 1)
+
+    def test_short_journal_writes_are_completed_and_incomplete_tail_is_repaired(self):
+        os_module = __import__("os")
+        original_write = os_module.write
+
+        def short_write(fd, payload):
+            return original_write(fd, payload[:7])
+
+        with patch("scripts.lib.rehearsal_state.os.write", side_effect=short_write):
+            self.state._append({"version": 1, "record": "start", "operationId": "op-short",
+                                "sourceSha": SOURCE_SHA, "oldPair": OLD_PAIR})
+        self.assertEqual(self.state._operation_rows("op-short")[0]["record"], "start")
+        with self.state.journal_path.open("ab") as journal:
+            journal.write(b'{"version":1,"record":"recovered"')
+            journal.flush()
+        self.assertEqual(self.state._operation_rows("op-short")[0]["record"], "start")
+        self.assertTrue(self.state.journal_path.read_bytes().endswith(b"\n"))
+        self.assertEqual(len(self.state._journal()), 1)
 
     def test_same_operation_cannot_change_source_sha(self):
         self.state.begin("op-1", SOURCE_SHA, OLD_PAIR)

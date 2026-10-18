@@ -32,6 +32,12 @@ const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
 
+// An explicit sealed server input supersedes any earlier capture attempt. Invalidate the
+// prior snapshot before bundle verification, which can fail before liveCapture starts.
+if (process.argv[2] === '--server-capture') {
+  rmSync(join(outDir, 'snapshot.json'), { force: true });
+}
+
 async function serverInput() {
   const args = process.argv.slice(2);
   if (args.length === 0) return undefined;
@@ -365,7 +371,7 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
       const saved: any = mediaByUrl.get(sourceRef);
       const digest = saved?.sha256 ?? saved?.verifiedStoredSha256;
       if (!saved || !/^[a-f0-9]{64}$/.test(digest)) throw new Error(`sealed capture has no verified media row for ${sourceRef}`);
-      const path = join(serverCapture.directory, 'media', `sha256:${digest}`);
+      const path = join(serverCapture.directory, saved.file);
       bytes = new Uint8Array(readFileSync(path));
       if (createHash('sha256').update(bytes).digest('hex') !== digest) {
         throw new Error(`sealed media bytes do not match the capture witness for ${sourceRef}`);

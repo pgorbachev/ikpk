@@ -137,6 +137,14 @@ describe('staging193 sealed SQLite capture', () => {
     expect(() => verifyStaging193Bundle(bundle, schemaRoot)).toThrow(/digest mismatch/);
   });
 
+  it('refuses SQLite sidecars beside the sealed database image', () => {
+    const bundle = sealedBundle();
+    chmodSync(bundle, 0o750);
+    writeFileSync(join(bundle, 'database.sqlite-wal'), 'uncheckpointed bytes');
+    chmodSync(bundle, 0o550);
+    expect(() => verifyStaging193Bundle(bundle, schemaRoot)).toThrow(/unexpected sidecar/);
+  });
+
   it('refuses a referenced upload missing from the sealed media inventory', () => {
     const bundle = sealedBundle();
     chmodSync(bundle, 0o750);

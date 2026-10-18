@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -67,9 +68,18 @@ class RehearsalState:
         self.lock_path = self.root / ".operation.lock"
         self.marker_path = self.root / "maintenance.json"
         self.journal_path = self.root / "journal.jsonl"
+        self._lock_local = threading.local()
 
     @contextmanager
     def lock(self, timeout: float = 30.0) -> Iterator[None]:
+        depth = getattr(self._lock_local, "depth", 0)
+        if depth:
+            self._lock_local.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._lock_local.depth -= 1
+            return
         flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(self.lock_path, flags, 0o600)
         try:
@@ -85,8 +95,10 @@ class RehearsalState:
                     if time.monotonic() >= deadline:
                         raise RehearsalRefusal("another host operation holds the lock")
                     time.sleep(0.05)
+            self._lock_local.depth = 1
             yield
         finally:
+            self._lock_local.depth = 0
             os.close(fd)
 
     def _read_marker(self) -> Optional[dict]:
@@ -112,6 +124,7 @@ class RehearsalState:
             raise RehearsalRefusal("source SHA must be a full lowercase commit ID")
 
     def _journal(self) -> list[dict]:
+        self._repair_incomplete_tail()
         try:
             raw = self.journal_path.read_text(encoding="utf-8")
         except FileNotFoundError:
@@ -129,6 +142,51 @@ class RehearsalState:
             raise RehearsalRefusal("append-only operation journal is malformed") from error
         return rows
 
+    def _repair_incomplete_tail(self) -> None:
+        try:
+            info = self.journal_path.lstat()
+        except FileNotFoundError:
+            return
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RehearsalRefusal("journal must be a regular unlinked file")
+        fd = os.open(self.journal_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            current = os.fstat(fd)
+            if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+                raise RehearsalRefusal("journal must be a regular unlinked file")
+            os.lseek(fd, 0, os.SEEK_SET)
+            chunks = []
+            while True:
+                block = os.read(fd, 65536)
+                if not block:
+                    break
+                chunks.append(block)
+            raw = b"".join(chunks)
+            if not raw or raw.endswith(b"\n"):
+                return
+            split = raw.rfind(b"\n")
+            complete_end = split + 1
+            tail = raw[complete_end:]
+            try:
+                candidate = json.loads(tail)
+                valid_record = isinstance(candidate, dict) and candidate.get("version") == 1
+            except (UnicodeDecodeError, ValueError):
+                valid_record = False
+            if valid_record:
+                os.lseek(fd, 0, os.SEEK_END)
+                view = memoryview(b"\n")
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise RehearsalRefusal("journal tail repair made no forward progress")
+                    view = view[written:]
+            else:
+                os.ftruncate(fd, complete_end)
+            os.fsync(fd)
+            _fsync_dir(self.root)
+        finally:
+            os.close(fd)
+
     def _append(self, value: dict) -> None:
         if self.journal_path.is_symlink():
             raise RehearsalRefusal("journal must not be a symlink")
@@ -138,7 +196,12 @@ class RehearsalState:
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                 raise RehearsalRefusal("journal must be a regular unlinked file")
             payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
-            os.write(fd, payload)
+            view = memoryview(payload)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0:
+                    raise RehearsalRefusal("journal append made no forward progress")
+                view = view[written:]
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -151,6 +214,9 @@ class RehearsalState:
         # The journal is authoritative if the process dies after journal fsync but
         # before maintenance.json is replaced.
         return any(row.get("record") == "committed" for row in self._operation_rows(operation_id))
+
+    def _is_recovered(self, operation_id: str) -> bool:
+        return any(row.get("record") == "recovered" for row in self._operation_rows(operation_id))
 
     def begin(self, operation_id: str, source_sha: str, old_pair: dict) -> dict:
         self._validate_identity(operation_id, source_sha)
@@ -262,6 +328,8 @@ class RehearsalState:
             current = self._owned(operation_id)
             if self._is_committed(operation_id):
                 return {**current, "phase": "committed"}
+            if self._is_recovered(operation_id):
+                return {**current, "phase": "recovered"}
             current["phase"] = ("new-pair-accepted" if current.get("newPairAccepted") else
                                 "cms-activated" if current.get("cmsActivated") else
                                 "fenced" if current.get("fence") == "closed" else "acquiring")
@@ -282,8 +350,8 @@ class RehearsalState:
 
     def require_restore_allowed(self, operation_id: str) -> dict:
         with self.lock():
-            if self._is_committed(operation_id):
-                raise RehearsalRefusal("DB restore is forbidden after durable global commit")
+            if self._is_committed(operation_id) or self._is_recovered(operation_id):
+                raise RehearsalRefusal("DB restore is forbidden after a terminal journal record")
             current = self._owned(operation_id)
             if current["fence"] != "closed":
                 raise RehearsalRefusal("recovery must close and verify the writer fence first")
@@ -309,15 +377,26 @@ class RehearsalState:
         with self.lock():
             if self._is_committed(operation_id):
                 raise RehearsalRefusal("recovery cannot restore the database after global commit")
+            if self._is_recovered(operation_id):
+                if not verify_reopened():
+                    raise RehearsalRefusal("old CMS writer reopen is not verified")
+                if self.marker_path.exists():
+                    current = self._owned(operation_id)
+                    self.marker_path.unlink()
+                    _fsync_dir(self.root)
+                    return {**current, "phase": "recovered"}
+                return {"operationId": operation_id, "committed": False, "phase": "recovered"}
             current = self._owned(operation_id)
             if current["fence"] != "closed":
                 raise RehearsalRefusal("recovery must close and verify the writer fence first")
             if not verify_restored():
                 raise RehearsalRefusal("old CMS/database/media pair is not verified restored")
-            if not verify_reopened():
-                raise RehearsalRefusal("old CMS writer reopen is not verified")
             self._append({"version": 1, "record": "recovered", "operationId": operation_id,
                           "sourceSha": current["sourceSha"]})
+            # The terminal row is durable before writers reopen. If reopening fails,
+            # the next recovery call may only retry reopen/finalize, never restore DB again.
+            if not verify_reopened():
+                raise RehearsalRefusal("old CMS writer reopen is not verified")
             self.marker_path.unlink()
             _fsync_dir(self.root)
             return current
