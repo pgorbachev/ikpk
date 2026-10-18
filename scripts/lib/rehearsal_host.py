@@ -749,7 +749,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     runner = artifact_dir / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
               "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
-    _run_as_cms(config, artifact_dir, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "prepare", *common], timeout=1800)
+    _run_as_cms(config, artifact_dir, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "prepare", *common], timeout=3600)
     status = _run_as_cms(config, artifact_dir, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "status",
         "--operation-id", operation_id, "--candidate-db", str(candidate), "--receipt", str(receipt)], timeout=300)
     try:
