@@ -1242,14 +1242,14 @@ def _restore_media(config: dict[str, Any], backup_dir: Path, manifest: dict[str,
     entries = manifest.get("media")
     if not isinstance(entries, list):
         raise HostFailure("backup media manifest is malformed")
-    roots = {entry["prefix"]: Path(entry["path"]).resolve(strict=True) for entry in config["mediaRoots"]}
-    for root in roots.values():
-        if root.is_symlink() or not root.is_dir():
-            raise HostFailure("configured media restore root must be a real directory")
-        for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
-            if path.is_symlink() or not (path.is_file() or path.is_dir()):
-                raise HostFailure("current media tree contains an unsafe object")
-            path.unlink() if path.is_file() else path.rmdir()
+    roots = {entry["prefix"]: Path(entry["path"]) for entry in config["mediaRoots"]}
+    uploads = roots.get("/uploads/")
+    if uploads is None:
+        raise HostFailure("configured /uploads/ restore root is unavailable")
+    uploads = uploads.resolve(strict=True)
+    if uploads.is_symlink() or not uploads.is_dir():
+        raise HostFailure("configured uploads restore root must be a real directory")
+    validated: list[tuple[str, Path, Path, dict[str, Any]]] = []
     for item in entries:
         prefix = next((value for value in roots if item.get("url", "").startswith(value)), None)
         if not prefix or item.get("originalName") != item["url"][len(prefix):]:
@@ -1260,7 +1260,18 @@ def _restore_media(config: dict[str, Any], backup_dir: Path, manifest: dict[str,
         source = backup_dir / item["file"]
         if not source.is_file() or source.is_symlink() or sha256_file(source) != item["sha256"]:
             raise HostFailure("backup media bytes failed digest verification")
-        destination = roots[prefix] / relative
+        validated.append((prefix, relative, source, item))
+    for path in sorted(uploads.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if path.is_symlink() or not (path.is_file() or path.is_dir()):
+            raise HostFailure("current uploads tree contains an unsafe object")
+        path.unlink() if path.is_file() else path.rmdir()
+    for prefix, relative, source, item in validated:
+        # /media/ is served from the selected immutable static release. Recovery
+        # restores its old bytes by switching the static pointer, never by writing
+        # through current/media (which could resolve to the candidate release).
+        if prefix == "/media/":
+            continue
+        destination = uploads / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         os.chmod(destination, int(item["mode"]))

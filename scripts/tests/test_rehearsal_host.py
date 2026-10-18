@@ -6,6 +6,7 @@ import io
 import json
 import sqlite3
 import subprocess
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -132,15 +133,20 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             uploads = root / "uploads"
             uploads.mkdir()
             (uploads / "photo.jpg").write_bytes(b"photo")
+            static_media = root / "old-static/media"
+            static_media.mkdir(parents=True)
+            (static_media / "legacy.jpg").write_bytes(b"legacy photo")
             (root / "backups").mkdir()
             config = {"cmsDatabase": str(database), "backupRoot": str(root / "backups"),
-                      "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"}]}
+                      "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"},
+                                     {"path": str(static_media), "prefix": "/media/"}]}
             # /proc handle inspection is Linux-specific; exercise the real SQLite backup,
             # media walk, lstat checks, tar creation and digest verification on this host.
             with patch.object(rehearsal_host, "_assert_no_database_handles"):
                 manifest = rehearsal_host._backup(config, "lstat-op")
             backup_dir = root / "backups/lstat-op"
             self.assertEqual(sha((backup_dir / "backup.tar").read_bytes()), manifest["archiveSha256"])
+            self.assertEqual({row["url"].split("/", 2)[1] for row in manifest["media"]}, {"uploads", "media"})
             db = sqlite3.connect(f"file:{backup_dir / 'database.sqlite'}?mode=ro", uri=True)
             try:
                 self.assertEqual(db.execute("SELECT body FROM content").fetchone()[0], "preserved")
@@ -325,8 +331,15 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             db.close()
             uploads = root / "uploads"
             uploads.mkdir()
+            static_media = root / "static-media"
+            static_media.mkdir()
+            (uploads / "photo.jpg").write_bytes(b"upload bytes")
+            (static_media / "legacy.jpg").write_bytes(b"static media bytes")
             capture_root = source / ".staging193-rehearsal" / "capture-op"
-            config = {"cmsUser": getpass.getuser(), "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"}]}
+            config = {"cmsUser": getpass.getuser(), "mediaRoots": [
+                {"path": str(uploads), "prefix": "/uploads/"},
+                {"path": str(static_media), "prefix": "/media/"},
+            ]}
             captured = {}
 
             def run_sealer(_config, cwd, argv, **_kwargs):
@@ -340,6 +353,144 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(result, capture_root / "capture")
             self.assertEqual(Path(captured["argv"][1]), sealer)
             self.assertEqual(Path(captured["argv"][1]).name, "seal-staging193-capture.mjs")
+            media_rows = json.loads((result / "media-manifest.json").read_text(encoding="utf-8"))["media"]
+            self.assertEqual({row["url"].split("/", 2)[1] for row in media_rows}, {"uploads", "media"})
+
+    def test_recovery_restores_uploads_by_bytes_and_static_media_by_old_pointer_only(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-static-media-recovery-") as temporary:
+            root = Path(temporary)
+            state_root = root / "state"
+            state_root.mkdir()
+            state = rehearsal_host.RehearsalState(state_root)
+            operation_id = "static-media-recovery"
+            source_sha = "a" * 40
+            backup_root = root / "backups"
+            backup_root.mkdir()
+            cms_releases = root / "cms-releases"
+            old_cms = cms_releases / "old"
+            candidate_cms = cms_releases / "candidate"
+            old_cms.mkdir(parents=True)
+            candidate_cms.mkdir()
+            current_cms = root / "current-cms"
+            current_cms.symlink_to(candidate_cms)
+            static_releases = root / "static-releases"
+            old_static = static_releases / "old"
+            candidate_static = static_releases / "candidate"
+            (old_static / "media").mkdir(parents=True)
+            (candidate_static / "media").mkdir(parents=True)
+            (old_static / "media/legacy.jpg").write_bytes(b"old static media")
+            (candidate_static / "media/legacy.jpg").write_bytes(b"candidate static media")
+            current_static = root / "current-static"
+            current_static.symlink_to(old_static)
+            uploads = root / "uploads"
+            uploads.mkdir()
+            (uploads / "editor.jpg").write_bytes(b"old upload")
+            live_database = root / "live.sqlite"
+
+            def write_db(path: Path, value: str) -> None:
+                existed = path.exists()
+                db = sqlite3.connect(path)
+                if existed:
+                    db.execute("UPDATE content SET body=?", (value,))
+                else:
+                    db.execute("CREATE TABLE content (body TEXT NOT NULL)")
+                    db.execute("INSERT INTO content VALUES (?)", (value,))
+                db.commit()
+                db.close()
+
+            write_db(live_database, "old database")
+            config = {"stateDir": str(state_root), "backupRoot": str(backup_root),
+                      "cmsDatabase": str(live_database), "cmsUnit": "ikpk-cms-test.service",
+                      "writerUnits": ["ikpk-cms-test.service"], "cmsHealthUrl": "http://127.0.0.1/health",
+                      "siteHealthUrl": "https://127.0.0.1/", "currentCms": str(current_cms),
+                      "releaseRoot": str(cms_releases), "currentStatic": str(current_static),
+                      "staticReleaseRoot": str(static_releases),
+                      "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"},
+                                     {"path": str(current_static / "media"), "prefix": "/media/"}]}
+            old_pair = {"cmsPath": str(old_cms.resolve()), "staticPath": str(old_static.resolve()),
+                        "staticTreeSha256": rehearsal_host._tree_sha256(old_static)}
+            state.begin(operation_id, source_sha, old_pair)
+            with patch.object(rehearsal_host, "_assert_no_database_handles"):
+                manifest = rehearsal_host._backup(config, operation_id)
+            backup_dir = backup_root / operation_id
+            offhost = backup_dir / "offhost-backup"
+            shutil.copytree(backup_dir, offhost, ignore=shutil.ignore_patterns("offhost-backup"))
+            (uploads / "editor.jpg").write_bytes(b"candidate upload")
+            write_db(live_database, "candidate database")
+            current_static.unlink()
+            current_static.symlink_to(candidate_static)
+            candidate_media_before = (candidate_static / "media/legacy.jpg").read_bytes()
+            active = {"started": False}
+
+            def systemctl(argv, **_kwargs):
+                if len(argv) > 1 and argv[1] == "start":
+                    active["started"] = True
+                if len(argv) > 1 and argv[1] == "is-active":
+                    return subprocess.CompletedProcess(argv, 0 if active["started"] else 3, "", "")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with patch.object(rehearsal_host, "_set_flag"), \
+                 patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(rehearsal_host, "_verify_fence"), \
+                 patch.object(rehearsal_host, "_stop_writers"), \
+                 patch.object(rehearsal_host, "_assert_no_database_handles"), \
+                 patch.object(rehearsal_host, "_wait_health"), \
+                 patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
+                 patch.object(rehearsal_host, "run", side_effect=systemctl):
+                result = rehearsal_host._recover(config, state, operation_id)
+
+            self.assertEqual(result["phase"], "recovered")
+            self.assertEqual(current_static.resolve(), old_static.resolve())
+            self.assertEqual(current_cms.resolve(), old_cms.resolve())
+            self.assertEqual((candidate_static / "media/legacy.jpg").read_bytes(), candidate_media_before)
+            self.assertEqual((old_static / "media/legacy.jpg").read_bytes(), b"old static media")
+            self.assertEqual((uploads / "editor.jpg").read_bytes(), b"old upload")
+            db = sqlite3.connect(f"file:{live_database}?mode=ro", uri=True)
+            try:
+                self.assertEqual(db.execute("SELECT body FROM content").fetchone()[0], "old database")
+            finally:
+                db.close()
+            self.assertEqual({row["url"].split("/", 2)[1] for row in manifest["media"]}, {"uploads", "media"})
+
+    def test_bad_static_media_backup_entry_is_rejected_before_upload_restore(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-bad-static-media-") as temporary:
+            root = Path(temporary)
+            uploads = root / "uploads"
+            uploads.mkdir()
+            (uploads / "keep.jpg").write_bytes(b"current uploads")
+            backup = root / "backup"
+            backup.mkdir()
+            (backup / "media/sha256:bad").parent.mkdir(parents=True)
+            (backup / "media/sha256:bad").write_bytes(b"bad digest")
+            config = {"mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"},
+                                     {"path": str(root / "unavailable-current-media"), "prefix": "/media/"}]}
+            valid_bytes = b"legacy media captured in backup"
+            valid_file = backup / "media/sha256:valid"
+            valid_file.write_bytes(valid_bytes)
+            valid_entry = {"url": "/media/legacy.jpg", "originalName": "legacy.jpg",
+                           "file": "media/sha256:valid", "sha256": sha(valid_bytes),
+                           "mode": 0o640, "uid": 987, "gid": 987}
+            # A recovery with a missing current media tree still succeeds: /media is
+            # restored by selecting the old static release, never by writing this path.
+            rehearsal_host._restore_media(config, backup, {"media": [valid_entry]})
+            self.assertFalse((root / "unavailable-current-media").exists())
+            self.assertFalse(list(uploads.iterdir()))
+
+            invalid_cases = [
+                ("digest", {**valid_entry, "file": "media/sha256:bad", "sha256": "0" * 64},
+                 "media bytes failed digest"),
+                ("url-mismatch", {**valid_entry, "originalName": "different.jpg"},
+                 "does not match configured URL roots"),
+                ("unsafe-path", {**valid_entry, "url": "/media/../escape.jpg",
+                                  "originalName": "../escape.jpg"}, "media path is unsafe"),
+            ]
+            for label, entry, message in invalid_cases:
+                with self.subTest(case=label):
+                    (uploads / "keep.jpg").write_bytes(b"current uploads")
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, message):
+                        rehearsal_host._restore_media(config, backup, {"media": [entry]})
+                    self.assertEqual((uploads / "keep.jpg").read_bytes(), b"current uploads")
 
     def test_imported_offhost_backup_is_bound_to_server_archive_digest(self):
         operation_id = "operator-test"

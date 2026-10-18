@@ -13,6 +13,10 @@
     {
       "path": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/uploads",
       "prefix": "/uploads/"
+    },
+    {
+      "path": "/var/www/ikpk/current/media",
+      "prefix": "/media/"
     }
   ],
   "backupRoot": "/var/lib/ikpk-rehearsal/staging193/backups",
