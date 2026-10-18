@@ -58,6 +58,52 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def _activate_for_media_probe_test(self, media_inventory):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-probe-") as temporary:
+            root = Path(temporary)
+            live_database = root / "live.sqlite"
+            live_database.write_bytes(b"old database")
+            capture = root / "capture"
+            capture.mkdir()
+            (capture / "media-manifest.json").write_text(
+                json.dumps({"media": media_inventory}), encoding="utf-8")
+            config = {"cmsDatabase": str(live_database), "currentCms": str(root / "current"),
+                      "releaseRoot": str(root / "releases"), "cmsUnit": "ikpk-cms-prototype193.service",
+                      "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
+            commands = []
+
+            def run_command(argv, **kwargs):
+                commands.append(argv)
+                return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+            with patch.object(rehearsal_host, "_assert_no_database_handles"), \
+                 patch.object(rehearsal_host, "_copy_atomic"), \
+                 patch.object(rehearsal_host, "_switch_pointer"), \
+                 patch.object(rehearsal_host, "_wait_health"), \
+                 patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
+                 patch.object(rehearsal_host, "run", side_effect=run_command):
+                rehearsal_host._activate_cms(config, root / "new-release", root / "candidate.db", capture)
+            return [argv for argv in commands if argv[0] == "/usr/bin/curl"]
+
+    def test_cms_activation_probes_upload_when_sorted_manifest_starts_with_legacy_media(self):
+        legacy = {"url": "/media/_w/1200/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp",
+                  "originalName": "_w/1200/uploads/0acd713c-1477-4c6c-93ad-1596d2a17304.webp"}
+        upload = {"url": "/uploads/1_1727008400454_5a30189ad6.webp",
+                  "originalName": "1_1727008400454_5a30189ad6.webp"}
+
+        probes = self._activate_for_media_probe_test([legacy, upload])
+
+        self.assertEqual(len(probes), 1)
+        self.assertEqual(probes[0][-1], "http://127.0.0.1:1338/uploads/1_1727008400454_5a30189ad6.webp")
+
+    def test_cms_activation_fails_clearly_when_capture_has_no_upload_entry(self):
+        legacy = {"url": "/media/_w/1200/uploads/legacy.webp",
+                  "originalName": "_w/1200/uploads/legacy.webp"}
+
+        with self.assertRaisesRegex(rehearsal_host.HostFailure, "no /uploads/ entry"):
+            self._activate_for_media_probe_test([legacy])
+
     def test_unprivileged_build_has_a_systemd_runtime_deadline_before_client_timeout(self):
         completed = subprocess.CompletedProcess([], 0, stdout="finished", stderr="")
         with patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("User", (), {"pw_name": "ikpk-cms"})()), \
