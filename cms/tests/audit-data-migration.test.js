@@ -504,6 +504,57 @@ test('upload metrics refresh preserves the timestamp and accepts only the upstre
   ]);
   assert.ok(unmatched.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
     'an unmatched closed-load start cannot authorize a metrics change');
+
+  const crossStart = Math.floor(METRICS_LOAD_START / 1000) * 1000 + 900;
+  const crossEnd = crossStart + 200;
+  const crossSecond = runAudit('cross-second', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(crossStart + 150 + 15_000);
+    setMetrics(values, row);
+  }, [
+    { event: 'closed-load-started', at: new Date(crossStart).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(crossEnd).toISOString() },
+  ]);
+  assert.equal(crossSecond.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'a cron second containing an in-window producer instant must be accepted across fractional boundaries');
+
+  const exactStart = Math.floor(METRICS_LOAD_START / 1000) * 1000;
+  const exactEnd = exactStart + 1000;
+  for (const [name, time] of [['before', exactStart + 14_000], ['after', exactEnd + 16_000]]) {
+    const report = runAudit(`neighbor-${name}`, null, (values) => {
+      const row = metrics(values);
+      row.weeklySchedule = weeklyCronAt(time);
+      setMetrics(values, row);
+    }, [
+      { event: 'closed-load-started', at: new Date(exactStart).toISOString() },
+      { event: 'strapi-load-complete', at: new Date(exactEnd).toISOString() },
+    ]);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+      `the cron one second ${name} the permitted interval must be rejected`);
+  }
+
+  const secondStart = METRICS_LOAD_START + 2 * 24 * 60 * 60 * 1000;
+  const secondEnd = secondStart + 1000;
+  const twoWindows = [
+    { event: 'closed-load-started', at: new Date(METRICS_LOAD_START).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(METRICS_LOAD_START + 1000).toISOString() },
+    { event: 'activation-closed-load-started', at: new Date(secondStart).toISOString() },
+    { event: 'strapi-load-complete', at: new Date(secondEnd).toISOString() },
+  ];
+  const activationWindow = runAudit('activation-window', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(secondStart + 15_000);
+    setMetrics(values, row);
+  }, twoWindows);
+  assert.equal(activationWindow.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'a schedule matching the second activation closed-load window must be accepted');
+  const lifecycleGap = runAudit('lifecycle-gap', null, (values) => {
+    const row = metrics(values);
+    row.weeklySchedule = weeklyCronAt(METRICS_LOAD_START + 24 * 60 * 60 * 1000 + 15_000);
+    setMetrics(values, row);
+  }, twoWindows);
+  assert.ok(lifecycleGap.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+    'a schedule matching only the gap between closed loads must be rejected');
 });
 
 test('core-store rejects unapproved key changes, layout changes, and malformed target field definitions', () => {

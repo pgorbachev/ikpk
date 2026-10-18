@@ -464,8 +464,8 @@ function scheduleMatchesWindow(schedule, window) {
   if (!/^\d{1,2} \d{1,2} \d{1,2} \* \* \d$/.test(schedule)) return false;
   const [seconds, minutes, hours, , , day] = schedule.split(' ').map(Number);
   if (seconds > 59 || minutes > 59 || hours > 23 || day > 6) return false;
-  const first = window.start + 15_000;
-  const last = window.end + 15_000;
+  const first = Math.floor((window.start + 15_000) / 1000) * 1000;
+  const last = Math.floor((window.end + 15_000) / 1000) * 1000;
   for (let time = first; time <= last; time += 1000) {
     if (weeklyCron(time) === schedule) return true;
   }
