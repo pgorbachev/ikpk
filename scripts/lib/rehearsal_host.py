@@ -24,6 +24,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 try:
     from .rehearsal_state import RehearsalRefusal, RehearsalState, durable_json
@@ -32,6 +33,7 @@ except ImportError:  # Installed wrapper places both files in one private module
 
 
 CONFIG_PATH = Path("/etc/ikpk/rehearsal.json")
+TARGET_HOST = "194.226.99.10"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
     "staticReleaseRoot", "cmsUnit", "writerUnits", "cmsUser", "cmsDatabase", "mediaRoots",
@@ -118,9 +120,30 @@ def _root_config(path: Path) -> dict[str, Any]:
         value = Path(data[key])
         if not value.is_absolute() or value == Path("/"):
             raise HostFailure(f"{key} must be an absolute non-root path")
-    if data["allowedSourceRef"] != "refs/heads/dev" or data["targetHost"] != "193.124.115.99":
-        raise HostFailure("host config is bound to the staging193 dev source policy")
+    _validate_target_binding(data)
     return data
+
+
+def _validate_target_binding(data: dict[str, Any]) -> None:
+    if data["allowedSourceRef"] != "refs/heads/dev" or data["targetHost"] != TARGET_HOST:
+        raise HostFailure("host config is bound to the staging194 dev source policy")
+    if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
+        raise HostFailure("CMS health check must remain bound to the local staging194 service")
+    urls = [data[key] for key in ("siteHealthUrl", "siteBaseUrl", "siteReleaseUrl",
+                                  "preserveProbeUrl", "paymentStatusProbeUrl")]
+    for key in ("siteProbeUrls", "writerProbeUrls"):
+        if not isinstance(data[key], list):
+            raise HostFailure(f"{key} must be a list of staging194 URLs")
+        urls.extend(data[key])
+    for value in urls:
+        try:
+            parsed = urlsplit(value)
+            valid = (parsed.scheme == "https" and parsed.hostname == TARGET_HOST
+                     and parsed.port is None and not parsed.username and not parsed.password)
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise HostFailure("host config probe URLs must use the fixed staging194 HTTPS origin")
 
 
 def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:

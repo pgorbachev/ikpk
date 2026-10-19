@@ -31,7 +31,8 @@ export function verifyStaging193Bundle(directory, schemaRoot) {
   if (!rootStat.isDirectory() || (rootStat.mode & 0o222) !== 0) throw new Error('capture bundle directory is not sealed');
   const manifestBytes = sealedFile(root, 'manifest.json', undefined).bytes;
   const manifest = JSON.parse(manifestBytes.toString('utf8'));
-  if (manifest.version !== 1 || manifest.host !== '193.124.115.99' || manifest.sourceId !== 'demo193-cms'
+  if (manifest.version !== 1 || manifest.host !== '194.226.99.10' || manifest.siteUrl !== 'https://194.226.99.10'
+      || manifest.sourceId !== 'demo193-cms'
       || !/^[a-f0-9]{40}$/.test(manifest.sourceSha) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(manifest.operationId)
       || !SHA.test(manifest.databaseSha256) || !SHA.test(manifest.mediaManifestSha256) || !SHA.test(manifest.schemaDigest)) {
     throw new Error('capture manifest identity is invalid');

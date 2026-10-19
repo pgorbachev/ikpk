@@ -40,12 +40,12 @@ describe('rendered demo193 build profile', () => {
         },
       });
     expect(html).toMatch(/<meta\s+name="robots"\s+content="noindex, nofollow"/);
-    expect(html).toContain('https://193.124.115.99/');
+    expect(html).toContain('https://194.226.99.10/');
     const schemaText = html.match(/<script type="application\/ld\+json"[^>]*>(.*?)<\/script>/s)?.[1];
     if (schemaText === undefined) throw new Error('rendered profile has no JSON-LD schema');
     expect(JSON.parse(schemaText)).toEqual({
-      url: 'https://193.124.115.99/',
-      '@id': 'https://193.124.115.99/#website',
+      url: 'https://194.226.99.10/',
+      '@id': 'https://194.226.99.10/#website',
       description: 'https://ikpk.su/description',
     });
     expect(html).toContain('Стейджинг-стенд: формы заявки отключены');

@@ -32,7 +32,7 @@ export function candidateSiteOrigin(): string {
   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
   if (!snapshotDir) throw new Error('staging capture context is missing');
   const capture = JSON.parse(readFileSync(`${snapshotDir}/capture-manifest.json`, 'utf8')) as Record<string, unknown>;
-  if (capture.siteUrl !== 'https://193.124.115.99') throw new Error('staging capture names an unexpected serving origin');
+  if (capture.siteUrl !== 'https://194.226.99.10') throw new Error('staging capture names an unexpected serving origin');
   return capture.siteUrl;
 }
 
@@ -43,7 +43,7 @@ function readStagingSnapshot(snapshotDir: string, treeDir: string): DemoPublicat
   const capture = JSON.parse(captureBytes.toString('utf8')) as Record<string, unknown>;
   const proof = snapshot.captureProof;
   const release = JSON.parse(readFileSync(`${treeDir}/release.json`, 'utf8')) as Record<string, unknown>;
-  if (capture.siteUrl !== 'https://193.124.115.99' || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
+  if (capture.siteUrl !== 'https://194.226.99.10' || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
       snapshot.sourcePolicy !== 'demo-publication-only' || snapshot.sourceAge !== 'untracked' ||
       snapshot.pinned || !proof || proof.version !== 1 || proof.method !== 'quiesced-sqlite-backup' ||
       proof.sourceId !== 'demo193-cms' || typeof proof.captureId !== 'string' || proof.captureId !== capture.operationId ||

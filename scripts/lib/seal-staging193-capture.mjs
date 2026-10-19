@@ -48,8 +48,8 @@ findMedia(projected.collections);
 for (const url of referenced) if (!knownUrls.has(url)) throw new Error(`media referenced by database is missing: ${url}`);
 const manifest = {
   version: 1,
-  host: '193.124.115.99',
-  siteUrl: 'https://193.124.115.99',
+  host: '194.226.99.10',
+  siteUrl: 'https://194.226.99.10',
   sourceId: 'demo193-cms',
   operationId,
   sourceSha,

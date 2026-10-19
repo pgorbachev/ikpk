@@ -107,8 +107,8 @@ function sealedBundle(): string {
   const mediaBytes = readFileSync(mediaPath);
   const manifest = {
     version: 1,
-    host: '193.124.115.99',
-    siteUrl: 'https://193.124.115.99',
+    host: '194.226.99.10',
+    siteUrl: 'https://194.226.99.10',
     sourceId: 'demo193-cms',
     operationId: 'test-capture-1',
     sourceSha: 'a'.repeat(40),
@@ -137,6 +137,18 @@ afterEach(() => {
 });
 
 describe('staging193 sealed SQLite capture', () => {
+  it('rejects a capture manifest from a different host or stale site URL', () => {
+    for (const change of [{ host: '193.124.115.99' }, { siteUrl: 'https://193.124.115.99' }]) {
+      const bundle = sealedBundle();
+      const manifestPath = join(bundle, 'manifest.json');
+      chmodSync(manifestPath, 0o640);
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, ...change })}\n`);
+      chmodSync(manifestPath, 0o440);
+      expect(() => verifyStaging193Bundle(bundle, schemaRoot)).toThrow(/capture manifest identity is invalid/);
+    }
+  });
+
   it('preserves non-empty published relations, components, media, and excludes drafts', () => {
     const bundle = sealedBundle();
     const verified = verifyStaging193Bundle(bundle, schemaRoot) as unknown as VerifiedCaptureBundle;
