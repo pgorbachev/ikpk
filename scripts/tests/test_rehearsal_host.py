@@ -116,26 +116,92 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
         self.assertEqual(result, "finished")
 
-    def test_cms_artifact_build_uses_a_bounded_node_heap_only_for_packaging(self):
-        with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
+    def test_cms_prepare_prewarm_and_original_argv_share_the_bounded_cms_unit(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk cms prepare ") as temporary:
             source = Path(temporary) / "candidate"
-            source.mkdir()
+            source_cms = source / "cms"
+            dependencies = source_cms / "node_modules"
+            strapi = dependencies / "@strapi/strapi"
+            strapi.mkdir(parents=True)
+            source_cms.mkdir(exist_ok=True)
+            (source_cms / "package-lock.json").write_text("lock", encoding="utf-8")
+            (source_cms / "package.json").write_text(
+                json.dumps({"dependencies": {"@strapi/strapi": "5.51.2"}}), encoding="utf-8")
+            (strapi / "package.json").write_text(json.dumps({"version": "5.51.2"}), encoding="utf-8")
+            (dependencies / "regular file.txt").write_text("dependency", encoding="utf-8")
+            (dependencies / "dangling link").symlink_to(dependencies / "missing target")
             live_database = Path(temporary) / "live.db"
             live_database.write_bytes(b"live database")
-            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            fake_node = Path(temporary) / "fake node"
+            argv_capture = Path(temporary) / "node-argv.json"
+            fake_node.write_text(
+                "#!/usr/bin/python3\nimport json, sys\n"
+                f"open({str(argv_capture)!r}, 'w', encoding='utf-8').write(json.dumps(sys.argv[1:]))\n",
+                encoding="utf-8")
+            fake_node.chmod(0o755)
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": dependencies.stat().st_uid,
+                                     "pw_gid": dependencies.stat().st_gid})()
+
+            def run_as_cms(config, cwd, argv, timeout=1800, environment=None):
+                if argv[0] == "/usr/bin/bash" and len(argv) == 3:
+                    artifact = Path(argv[-1])
+                    artifact.mkdir(parents=True)
+                    (artifact / "package-lock.json").write_text("lock", encoding="utf-8")
+                    (artifact / "package.json").write_text(
+                        json.dumps({"dependencies": {"@strapi/strapi": "5.51.2"}}), encoding="utf-8")
+                    (artifact / "scripts").mkdir()
+                    return ""
+                if argv[0] == "/usr/bin/bash" and argv[1] == "-c":
+                    shell_argv = [shutil.which("bash"), *argv[1:]]
+                    shell_argv[2] = shell_argv[2].replace("/usr/bin/cat --", f"{shutil.which('cat')} --")
+                    result = subprocess.run(shell_argv, cwd=cwd,
+                                            text=True, capture_output=True, check=False)
+                    if result.returncode:
+                        raise rehearsal_host.HostFailure(f"prepare command failed: {result.stderr}")
+                    return ""
+                if argv[2] == "status":
+                    return json.dumps({"phase": "unexpected"})
+                self.fail(f"unexpected CMS command: {argv}")
+
             with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
                  patch.object(rehearsal_host.os, "chown"), \
-                 patch.object(rehearsal_host, "_run_as_cms",
-                              side_effect=rehearsal_host.HostFailure("stop after artifact build")) as run_as_cms:
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "stop after artifact build"):
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms) as run_command:
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "prepare/audit did not pass"):
                     rehearsal_host._install_migrated_database(
-                        {"cmsUser": "ikpk-cms", "cmsDatabase": str(live_database)}, source, "op", Path("/old/cms"))
+                        {"cmsUser": "ikpk-cms", "cmsDatabase": str(live_database), "nodeBinary": str(fake_node)},
+                        source, "op", Path("/old/cms"))
 
-            argv = run_as_cms.call_args.args[2]
-            self.assertEqual(argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
-            self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 3600)
-            self.assertEqual(run_as_cms.call_args.kwargs["environment"],
+            build_argv = run_command.call_args_list[0].args[2]
+            self.assertEqual(build_argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
+            self.assertEqual(run_command.call_args_list[0].kwargs["timeout"], 3600)
+            self.assertEqual(run_command.call_args_list[0].kwargs["environment"],
                              {"NODE_OPTIONS": "--max-old-space-size=1536"})
+
+            prepare_call = run_command.call_args_list[1]
+            argv = prepare_call.args[2]
+            self.assertEqual(argv[:2], ["/usr/bin/bash", "-c"])
+            self.assertEqual(argv[3], "ikpk-cms-migration-prepare")
+            self.assertEqual(argv[4], str(dependencies))
+            self.assertEqual(argv[5:], [str(fake_node), str(source / ".staging193-rehearsal/op/migration/cms-artifact/scripts/run-data-migrations.mjs"),
+                                        "prepare", "--operation-id", "op", "--source-db", str(live_database.resolve()),
+                                        "--source-cms-root", str(Path("/old/cms")), "--candidate-db",
+                                        str(source / ".staging193-rehearsal/op/migration/candidate.db"),
+                                        "--artifact-dir", str(source / ".staging193-rehearsal/op/migration/cms-artifact"),
+                                        "--receipt", str(source / ".staging193-rehearsal/op/migration/receipt.json")])
+            self.assertIn('find -P "$1" -type f -print0', argv[2])
+            self.assertIn("xargs -0 -r -P2 -n16 /usr/bin/cat --", argv[2])
+            self.assertIn("set -euo pipefail", argv[2])
+            self.assertTrue(argv[2].endswith('shift; exec "$@"'))
+            self.assertNotIn(str(dependencies), argv[2])
+            self.assertEqual(prepare_call.kwargs["timeout"], 3600)
+            self.assertEqual(json.loads(argv_capture.read_text(encoding="utf-8")), argv[5:][1:])
+            self.assertEqual(run_command.call_args_list[2].args[2][2], "status")
+            argv_capture.unlink()
+            failed_prepare = list(argv)
+            failed_prepare[4] = str(dependencies / "missing")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "prepare command failed"):
+                run_as_cms({}, prepare_call.args[1], failed_prepare)
+            self.assertFalse(argv_capture.exists())
 
     def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
