@@ -395,7 +395,14 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                            "CONTENT_SNAPSHOT_DIR": str(snapshot_root), "PUBLICATION_TREE_DIR": str(static_root),
                            "PUBLICATION_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}",
                            "PUBLICATION_COMMIT": source_sha, "PUBLICATION_SNAPSHOT_ID": release["snapshotId"],
+                           "PUBLICATION_STATIC_TREE_SHA256": static_digest,
                            "CI": "1"}
+            if profile == "initial-prod":
+                if (not admitted_run or type(admitted_run.get("runId")) is not int or admitted_run["runId"] <= 0
+                        or type(admitted_run.get("attempt")) is not int or admitted_run["attempt"] <= 0):
+                    raise Refusal("initial production browser proof requires the exact admitted run and attempt")
+                environment.update({"PUBLICATION_RUN_ID": str(admitted_run["runId"]),
+                                    "PUBLICATION_ATTEMPT": str(admitted_run["attempt"])})
             for key in ("SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "IKPK_DEPLOY_KEY"):
                 environment.pop(key, None)
             result = subprocess.run([str(executable), "test", "tests/publication-smoke.spec.ts",
