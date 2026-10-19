@@ -381,7 +381,8 @@ def invoke(args: argparse.Namespace) -> None:
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
-        first = parse_host_json(ssh_remote(common))
+        first = parse_host_json(ssh_remote(common + ["--archive-sha256", hashlib.sha256(archive).hexdigest()],
+                                           input_bytes=archive))
         backup_dir = backup_root(args.backup_dir)
         if first.get("offhostBackupRequired"):
             remote_backup = ssh_remote(["export-backup", "--operation-id", args.operation_id])
@@ -390,8 +391,7 @@ def invoke(args: argparse.Namespace) -> None:
             digest = hashlib.sha256(backup_path.read_bytes()).hexdigest()
             if first.get("phase") == "cms-activated":
                 return
-            completed = parse_host_json(ssh_remote(common + ["--archive-sha256", hashlib.sha256(archive).hexdigest(),
-                                                               "--offhost-sha256", digest], input_bytes=archive))
+            completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest]))
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
         elif first.get("phase") != "cms-activated":

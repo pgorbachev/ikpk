@@ -20,6 +20,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -582,6 +583,216 @@ def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int
     return result.stdout
 
 
+def _cms_build_generation(config: dict[str, Any], source_root: Path) -> tuple[Path, dict[str, str]]:
+    source_cms = source_root / "cms"
+    lockfile = source_cms / "package-lock.json"
+    if lockfile.is_symlink() or not lockfile.is_file():
+        raise HostFailure("CMS source package-lock is unavailable for dependency admission")
+    lock_hash = sha256_file(lockfile)
+    node = config.get("nodeBinary", "/usr/bin/node")
+    node_version = run([node, "--version"]).stdout.strip()
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", node_version):
+        raise HostFailure("host Node version is unavailable for CMS dependency admission")
+    runtime = json.loads(run([node, "-p", "JSON.stringify({abi:process.versions.modules,platform:process.platform,arch:process.arch})"]).stdout)
+    profile = "full-build"
+    key = f"{lock_hash}-{profile}-node{node_version[1:]}-{runtime['platform']}-{runtime['arch']}-abi{runtime['abi']}"
+    root = Path(config["releaseRoot"]).resolve(strict=True).parent / "deps"
+    if root.is_symlink():
+        raise HostFailure("shared CMS dependency root must not be a symlink")
+    root.mkdir(mode=0o755, exist_ok=True)
+    generation = root / key
+    metadata = {"version": 1, "lockSha256": lock_hash, "profile": profile,
+                "nodeVersion": node_version, "nodeAbi": runtime["abi"],
+                "platform": runtime["platform"], "architecture": runtime["arch"]}
+    return generation, metadata
+
+
+def _validate_cms_build_generation(config: dict[str, Any], generation: Path,
+                                   expected: dict[str, str]) -> Path:
+    if generation.is_symlink() or not generation.is_dir():
+        raise HostFailure("CMS build dependency generation is missing or unsafe")
+    complete = generation / ".complete"
+    if complete.is_symlink() or not complete.is_file():
+        raise HostFailure("CMS build dependency generation is incomplete")
+    try:
+        metadata = json.loads(complete.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS build dependency generation metadata is unreadable") from error
+    if metadata != expected:
+        raise HostFailure("CMS build dependency generation does not match its lock hash and profile")
+    generation_lock = generation / "package-lock.json"
+    if generation_lock.is_symlink() or not generation_lock.is_file() or sha256_file(generation_lock) != expected["lockSha256"]:
+        raise HostFailure("CMS build dependency generation lockfile differs from its identity")
+    dependencies = generation / "node_modules"
+    if dependencies.is_symlink() or not dependencies.is_dir():
+        raise HostFailure("CMS build dependency generation has no real node_modules directory")
+    user = pwd.getpwnam(config["cmsUser"])
+    for directory in (generation, dependencies):
+        info = directory.stat()
+        if info.st_uid != user.pw_uid or info.st_mode & 0o022:
+            raise HostFailure("CMS build dependency generation is not a private service-user tree")
+    try:
+        lock_data = json.loads(generation_lock.read_text(encoding="utf-8"))
+        installed = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
+        expected_strapi = lock_data.get("packages", {}).get("node_modules/@strapi/strapi", {}).get("version")
+    except (OSError, ValueError, AttributeError) as error:
+        raise HostFailure("CMS build dependency generation Strapi identity is unreadable") from error
+    if not isinstance(expected_strapi, str) or installed.get("version") != expected_strapi:
+        raise HostFailure("CMS build dependency generation Strapi version differs from its lockfile")
+    return dependencies.resolve(strict=True)
+
+
+def _prepare_cms_build_dependencies(config: dict[str, Any], source_root: Path) -> Path:
+    source_cms = source_root / "cms"
+    generation, expected = _cms_build_generation(config, source_root)
+    if os.path.lexists(generation):
+        dependencies = _validate_cms_build_generation(config, generation, expected)
+    else:
+        generation.parent.mkdir(mode=0o755, exist_ok=True)
+        user = pwd.getpwnam(config["cmsUser"])
+        temporary = Path(tempfile.mkdtemp(prefix=f".{generation.name}.partial-", dir=generation.parent))
+        try:
+            for name in ("package.json", "package-lock.json"):
+                shutil.copy2(source_cms / name, temporary / name)
+                os.chown(temporary / name, user.pw_uid, user.pw_gid)
+            os.chown(temporary, user.pw_uid, user.pw_gid)
+            _run_as_cms(config, temporary, ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
+            dependencies = temporary / "node_modules"
+            if dependencies.is_symlink() or not dependencies.is_dir():
+                raise HostFailure("CMS npm ci did not create a real build dependency tree")
+            try:
+                package = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise HostFailure("CMS build dependency tree has no readable Strapi package") from error
+            source_package = json.loads((source_cms / "package.json").read_text(encoding="utf-8"))
+            expected_strapi = source_package.get("dependencies", {}).get("@strapi/strapi")
+            if package.get("version") != expected_strapi:
+                raise HostFailure("CMS build dependency Strapi version differs from source package")
+            durable_json(temporary / ".complete", expected)
+            os.chown(temporary / ".complete", user.pw_uid, user.pw_gid)
+            if os.path.lexists(generation):
+                raise HostFailure("CMS build dependency generation appeared during preparation")
+            os.rename(temporary, generation)
+            dependencies = _validate_cms_build_generation(config, generation, expected)
+        except Exception:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+    return dependencies
+
+
+def _cms_artifact_path(source_root: Path, operation_id: str) -> Path:
+    RehearsalState._validate_identity(operation_id)
+    return source_root / ".staging193-rehearsal" / operation_id / "migration" / "cms-artifact"
+
+
+def _validate_prepared_web_dependencies(source_root: Path) -> Path:
+    web_dependencies = source_root / "web/node_modules"
+    if web_dependencies.is_symlink() or not web_dependencies.is_dir():
+        raise HostFailure("prepared web dependencies are missing or unsafe")
+    for package in ("astro", "tsx"):
+        metadata_path = web_dependencies / package / "package.json"
+        if metadata_path.is_symlink() or not metadata_path.is_file():
+            raise HostFailure(f"prepared web dependencies lack {package}")
+    resolved = web_dependencies.resolve(strict=True)
+    for executable in (web_dependencies / ".bin/astro", web_dependencies / ".bin/tsx"):
+        if not executable.is_symlink() or not executable.resolve(strict=True).is_relative_to(resolved):
+            raise HostFailure("prepared web executable link escapes its source dependencies")
+    return resolved
+
+
+def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
+                                     provenance: Optional[dict[str, Any]] = None) -> tuple[Path, Path, Path]:
+    marker = source_root / ".ikpk-rehearsal-ci.json"
+    try:
+        admitted = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("prepared source candidate lacks admitted CI provenance") from error
+    if (admitted.get("sourceSha") is None or admitted.get("ref") != config["allowedSourceRef"]
+            or (provenance is not None and admitted != provenance)):
+        raise HostFailure("prepared candidate provenance differs from the admitted source")
+    if (not re.fullmatch(r"[a-f0-9]{40}", str(admitted.get("sourceSha")))
+            or source_root.name != f"{admitted['sourceSha']}-{operation_id}"):
+        raise HostFailure("prepared candidate path differs from its admitted source and operation")
+    source_cms = source_root / "cms"
+    generation, expected_generation = _cms_build_generation(config, source_root)
+    dependencies_link = source_cms / "node_modules"
+    if not dependencies_link.is_symlink():
+        raise HostFailure("operation CMS dependencies are not linked to the shared private generation")
+    dependencies = _validate_cms_build_generation(config, generation, expected_generation)
+    if dependencies_link.resolve(strict=True) != dependencies:
+        raise HostFailure("operation CMS dependency link does not target its canonical lock generation")
+    artifact = _cms_artifact_path(source_root, operation_id)
+    if artifact.is_symlink() or not artifact.is_dir():
+        raise HostFailure("prepared CMS artifact is missing or unsafe")
+    if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
+        raise HostFailure("CMS artifact package-lock differs from the operation source lock")
+    required = (artifact / "package.json", artifact / "tsconfig.json", artifact / "dist/config/database.js",
+                artifact / "database/.migrations-expected",
+                artifact / "scripts/run-data-migrations.mjs")
+    if any(item.is_symlink() or not item.is_file() for item in required):
+        raise HostFailure("prepared CMS artifact is structurally incomplete")
+    artifact_dependencies = artifact / "node_modules"
+    if not artifact_dependencies.is_symlink() or artifact_dependencies.resolve(strict=True) != dependencies:
+        raise HostFailure("CMS artifact node_modules link does not target the final shared dependency tree")
+    try:
+        source_package = json.loads((source_cms / "package.json").read_text(encoding="utf-8"))
+        artifact_package = json.loads((artifact / "package.json").read_text(encoding="utf-8"))
+        installed_package = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS source, artifact, or installed Strapi metadata is unreadable") from error
+    expected_strapi = source_package.get("dependencies", {}).get("@strapi/strapi")
+    artifact_strapi = artifact_package.get("dependencies", {}).get("@strapi/strapi")
+    try:
+        lock_data = json.loads((source_cms / "package-lock.json").read_text(encoding="utf-8"))
+        locked_strapi = lock_data.get("packages", {}).get("node_modules/@strapi/strapi", {}).get("version")
+    except (OSError, ValueError, AttributeError) as error:
+        raise HostFailure("CMS source lockfile Strapi identity is unreadable") from error
+    if (not isinstance(expected_strapi, str) or artifact_strapi != expected_strapi
+            or installed_package.get("version") != locked_strapi):
+        raise HostFailure("CMS source, artifact, and installed Strapi identities do not match")
+    _validate_prepared_web_dependencies(source_root)
+    return source_root, artifact, dependencies
+
+
+def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
+                           provenance: dict[str, Any]) -> tuple[Path, Path, Path]:
+    artifact = _cms_artifact_path(source_root, operation_id)
+    if os.path.lexists(artifact):
+        return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
+    dependencies = _prepare_cms_build_dependencies(config, source_root)
+    source_cms = source_root / "cms"
+    source_dependencies = source_cms / "node_modules"
+    if os.path.lexists(source_dependencies):
+        if not source_dependencies.is_symlink() or source_dependencies.resolve(strict=True) != dependencies:
+            raise HostFailure("operation CMS dependency path is occupied by a noncanonical tree")
+    else:
+        source_dependencies.symlink_to(dependencies, target_is_directory=True)
+    web = source_root / "web"
+    web_dependencies = web / "node_modules"
+    if web_dependencies.is_symlink():
+        raise HostFailure("operation web dependencies must be a private source install")
+    _run_as_cms(config, web, ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
+    operation_root = artifact.parent
+    private_root = operation_root.parent
+    rehearsal_root = private_root.parent
+    if (operation_root.is_symlink() or private_root.is_symlink() or rehearsal_root.is_symlink()
+            or artifact.is_symlink()):
+        raise HostFailure("CMS artifact preparation path contains a symlink")
+    operation_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    user = pwd.getpwnam(config["cmsUser"])
+    for directory in (rehearsal_root, private_root, operation_root):
+        os.chown(directory, user.pw_uid, user.pw_gid)
+        os.chmod(directory, 0o700)
+    if os.path.lexists(artifact):
+        raise HostFailure("CMS artifact path already exists without a complete prepared candidate")
+    _run_as_cms(config, source_cms, ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
+        str(artifact)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"})
+    if os.path.lexists(artifact / "node_modules"):
+        raise HostFailure("CMS artifact unexpectedly contains node_modules before dependency linking")
+    (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+    return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
+
+
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
                        source_sha: str) -> dict[str, Any]:
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
@@ -710,42 +921,17 @@ def _config_sha256(config: dict[str, Any]) -> str:
 def _install_migrated_database(config: dict[str, Any], source_root: Path, operation_id: str,
                                old_cms_root: Path) -> tuple[Path, Path, str]:
     live = Path(config["cmsDatabase"]).resolve(strict=True)
-    operation_root = source_root / ".staging193-rehearsal" / operation_id / "migration"
-    operation_root.mkdir(mode=0o700, parents=True, exist_ok=False)
+    _source, artifact_dir, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id)
+    operation_root = artifact_dir.parent
+    if operation_root.is_symlink() or not operation_root.is_dir():
+        raise HostFailure("prepared CMS migration directory is missing or unsafe")
     user = pwd.getpwnam(config["cmsUser"])
     if operation_root.parent.is_symlink() or operation_root.parent.parent.is_symlink():
         raise HostFailure("migration work directory contains a symlink")
-    os.chown(operation_root.parent.parent, user.pw_uid, user.pw_gid)
-    os.chown(operation_root.parent, user.pw_uid, user.pw_gid)
-    os.chown(operation_root, user.pw_uid, user.pw_gid)
     candidate = operation_root / "candidate.db"
-    artifact_dir = operation_root / "cms-artifact"
     receipt = operation_root / "receipt.json"
-    _run_as_cms(config, source_root / "cms", ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
-        str(artifact_dir)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"})
-    source_cms_root = source_root / "cms"
-    dependencies = source_cms_root / "node_modules"
-    if not dependencies.is_dir() or dependencies.is_symlink():
-        raise HostFailure("operation CMS dependencies are unavailable as a private source install")
-    dependency_info = dependencies.stat()
-    if (not dependencies.is_dir() or dependency_info.st_uid != user.pw_uid or dependency_info.st_mode & 0o022):
-        raise HostFailure("CMS runtime dependencies are not a private service-user installation")
-    if sha256_file(source_cms_root / "package-lock.json") != sha256_file(artifact_dir / "package-lock.json"):
-        raise HostFailure("CMS artifact package-lock differs from the operation source install")
-    try:
-        artifact_package = json.loads((artifact_dir / "package.json").read_text(encoding="utf-8"))
-        installed_package = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
-        source_package = json.loads((source_cms_root / "package.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise HostFailure("CMS source or installed Strapi package metadata is unreadable") from error
-    expected_strapi_version = source_package.get("dependencies", {}).get("@strapi/strapi")
-    if (artifact_package.get("dependencies", {}).get("@strapi/strapi") != expected_strapi_version
-            or installed_package.get("version") != expected_strapi_version):
-        raise HostFailure("CMS source install Strapi version differs from the artifact and source package")
-    runtime_link = artifact_dir / "node_modules"
-    if runtime_link.exists() or runtime_link.is_symlink():
-        raise HostFailure("CMS artifact unexpectedly contains node_modules before runtime install")
-    runtime_link.symlink_to(dependencies, target_is_directory=True)
+    if any(os.path.lexists(path) for path in (candidate, receipt)):
+        raise HostFailure("CMS migration candidate already exists; inspect the operation before retrying")
     runner = artifact_dir / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
               "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
@@ -808,7 +994,7 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
 
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> tuple[Path, str]:
     web = source_root / "web"
-    _run_as_cms(config, web, ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
+    _validate_prepared_web_dependencies(source_root)
     capture_environment = {
         "CONTENT_SNAPSHOT_DIR": str(web / ".snapshot"), "DEMO_PROFILE": "demo193",
         "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
@@ -1070,6 +1256,21 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
             raise HostFailure("operator-confirmed off-host backup digest differs from actual captured bytes")
         return {"operationId": op, "sourceSha": sha, "phase": "cms-activated",
                 "backupSha256": manifest["archiveSha256"], "cmsDatabaseProof": proof}
+    source_root = _candidate_root(config, sha, op)
+    if phase is None:
+        if args.offhost_sha256:
+            raise HostFailure("off-host confirmation cannot precede initial source preparation and backup")
+        state.assert_new_operation_allowed(op, sha)
+        if not SHA256_RE.fullmatch(args.archive_sha256 or ""):
+            raise HostFailure("source archive SHA-256 is required before acquisition")
+        archive_bytes = sys.stdin.buffer.read()
+        if not archive_bytes:
+            raise HostFailure("admitted source archive is required before acquisition")
+        source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256, provenance)
+        del archive_bytes
+        _prepare_cms_candidate(config, source_root, op, provenance)
+    else:
+        _validate_prepared_cms_candidate(config, source_root, op, provenance)
     phase = _start_acquisition(config, state, op, sha)
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
@@ -1082,14 +1283,6 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 "offhostBackupRequired": True, "backupSha256": manifest["archiveSha256"]}
     if args.offhost_sha256 != manifest["archiveSha256"]:
         raise HostFailure("operator-confirmed off-host backup digest differs from actual captured bytes")
-    if not SHA256_RE.fullmatch(args.archive_sha256 or ""):
-        raise HostFailure("source archive SHA-256 is required")
-    archive_bytes = sys.stdin.buffer.read()
-    if not archive_bytes:
-        raise HostFailure("admitted source archive is required after off-host backup confirmation")
-    source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256, provenance)
-    del archive_bytes
-    _run_as_cms(config, source_root / "cms", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
     start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
         raise HostFailure("operation journal has no recorded old CMS release for migration provenance")

@@ -94,6 +94,43 @@ class OperatorAdmissionTests(unittest.TestCase):
             self.assertEqual(argv[-4:], ["/usr/local/sbin/ikpk-rehearsal", "status", "--operation-id", "op"])
             self.assertNotIn("sudo", argv)
 
+    def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:
+            archive = b"admitted source archive"
+            backup = b"verified off-host backup"
+            responses = [
+                json.dumps({"offhostBackupRequired": True, "backupSha256": "b" * 64,
+                            "phase": "fenced"}).encode(),
+                backup,
+                json.dumps({"phase": "cms-activated"}).encode(),
+            ]
+            calls = []
+
+            def ssh(arguments, input_bytes=None):
+                calls.append((arguments, input_bytes))
+                return responses.pop(0)
+
+            def save_backup(directory, operation_id, _source_sha, payload, _digest):
+                path = Path(directory) / f"{operation_id}.tar"
+                path.write_bytes(payload)
+                return path
+
+            provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+            with patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+                 patch.object(staging193, "make_archive", return_value=(archive, "a" * 64)), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh), \
+                 patch.object(staging193, "persist_offhost_backup", side_effect=save_backup):
+                staging193.invoke(type("Args", (), {"host": staging193.TARGET_HOST,
+                    "command": "cms-update", "operation_id": "prefence", "source_sha": SHA,
+                    "backup_dir": temporary})())
+
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(calls[0][1], archive)
+            self.assertIn("--archive-sha256", calls[0][0])
+            self.assertIsNone(calls[2][1])
+            self.assertNotIn("--archive-sha256", calls[2][0])
+            self.assertIn("--offhost-sha256", calls[2][0])
+
 
 if __name__ == "__main__":
     unittest.main()

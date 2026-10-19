@@ -1,12 +1,12 @@
 ## 1. First release
 
-- [ ] Admit one reconciled full `dev` SHA with exact canonical push `Tests` run and every mandatory job successful; build separate CMS/static payloads from that source and verify same-candidate browser checks.
-- [ ] On staging193, acquire one operation ID, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
-- [ ] Run CMS build/migration unprivileged; verify CMS health, process DB path, and media. Activate static and verify served `/release.json`, routes, and images; durably commit both acceptances before reopening writers.
+- [ ] Admit one reconciled full `dev` SHA with exact canonical push `Tests` run and every mandatory job successful; before creating the operation journal or marker, extract that source, install CMS/web dependencies, build the CMS artifact, and retain separate CMS/static payload digests for same-candidate checks.
+- [ ] On staging193, hold the host flock and reject an existing marker, unfinished operation, or used operation ID before preparation; after complete preparation, record the fresh old/new pair, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
+- [ ] After backup confirmation, run CMS migration/audit unprivileged; verify CMS health, process DB path, and media. Build static output from the sealed capture with the prepared web dependencies, verify served `/release.json`, routes, and images, then durably commit both acceptances before reopening writers.
 
 ## 2. Pre-commit recovery
 
-- [ ] Prove interrupted acquisition performs no mutation and recovery closes writers first; after verified closure, prove the fence persists through process loss and a pre-commit CMS/static failure.
+- [ ] Prove prefence preparation failure leaves existing writers open with no new journal/marker or live mutation; after acquisition begins, prove recovery closes writers first and the verified fence persists through process loss and a pre-commit CMS/static failure.
 - [ ] Retry with the same operation ID or explicitly restore and verify the old pair before reopen; prove DB restore refuses after commit.
 
 ## 3. Second release after an editor write

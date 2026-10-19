@@ -210,6 +210,20 @@ class RehearsalState:
     def _operation_rows(self, operation_id: str) -> list[dict]:
         return [row for row in self._journal() if row.get("operationId") == operation_id]
 
+    def assert_new_operation_allowed(self, operation_id: str, source_sha: str) -> None:
+        """Refuse prefence preparation when durable state already belongs to an operation."""
+        self._validate_identity(operation_id, source_sha)
+        with self.lock():
+            if self._read_marker() is not None:
+                raise RehearsalRefusal("maintenance marker already belongs to an operation")
+            history = self._journal()
+            starts = {row["operationId"] for row in history if row.get("record") == "start"}
+            terminal = {row["operationId"] for row in history if row.get("record") in ("committed", "recovered")}
+            if starts - terminal:
+                raise RehearsalRefusal("append-only journal has an unfinished operation requiring recovery")
+            if any(row.get("operationId") == operation_id for row in history):
+                raise RehearsalRefusal("operation ID already exists in append-only journal")
+
     def _is_committed(self, operation_id: str) -> bool:
         # The journal is authoritative if the process dies after journal fsync but
         # before maintenance.json is replaced.
