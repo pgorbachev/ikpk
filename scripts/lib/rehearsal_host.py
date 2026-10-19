@@ -722,7 +722,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     artifact_dir = operation_root / "cms-artifact"
     receipt = operation_root / "receipt.json"
     _run_as_cms(config, source_root / "cms", ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
-        str(artifact_dir)], timeout=1800, environment={"NODE_OPTIONS": "--max-old-space-size=1536"})
+        str(artifact_dir)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"})
     source_cms_root = source_root / "cms"
     dependencies = source_cms_root / "node_modules"
     if not dependencies.is_dir() or dependencies.is_symlink():

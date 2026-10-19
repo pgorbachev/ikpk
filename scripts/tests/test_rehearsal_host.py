@@ -133,7 +133,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             argv = run_as_cms.call_args.args[2]
             self.assertEqual(argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
-            self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 1800)
+            self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 3600)
             self.assertEqual(run_as_cms.call_args.kwargs["environment"],
                              {"NODE_OPTIONS": "--max-old-space-size=1536"})
 
