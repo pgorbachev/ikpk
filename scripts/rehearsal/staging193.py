@@ -34,6 +34,7 @@ INITIAL_PROD_USER = "root"
 INITIAL_PROD_IDENTITY = Path.home() / ".ssh/id_ed25519_ikpk_vps"
 INITIAL_PROD_KNOWN_HOSTS = Path.home() / ".ssh/known_hosts"
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
+INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
 CANONICAL_REPOSITORY = "pgorbachev/ikpk"
 CANONICAL_REF = "refs/heads/dev"
 WORKFLOW = "Tests"
@@ -388,7 +389,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
         thread.start()
         try:
             environment = {**os.environ, **({"INITIAL_PROD_PROFILE": "1", "PUBLICATION_INITIAL_PRODUCTION_CAPTURE": "1", "DEPLOY_MODE": "prod",
-                                               "PAYMENT_ROLE": "prod", "PAYMENT_ENDPOINT_PROD": "https://ikpk.su/api"}
+                                               "PAYMENT_ROLE": "prod", "PAYMENT_ENDPOINT_PROD": "https://ikpk.su/api",
+                                               "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC}
                                               if profile == "initial-prod" else {"PUBLICATION_STAGING_CAPTURE": "1",
                                                "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
                                                "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent"}),
@@ -398,6 +400,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                            "PUBLICATION_STATIC_TREE_SHA256": static_digest,
                            "CI": "1"}
             if profile == "initial-prod":
+                environment.pop("CHAT_OFFLINE_MESSAGE", None)
                 if (not admitted_run or type(admitted_run.get("runId")) is not int or admitted_run["runId"] <= 0
                         or type(admitted_run.get("attempt")) is not int or admitted_run["attempt"] <= 0):
                     raise Refusal("initial production browser proof requires the exact admitted run and attempt")

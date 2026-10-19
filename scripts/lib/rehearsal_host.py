@@ -38,6 +38,7 @@ INITIAL_PROD_CONFIG_PATH = Path("/etc/ikpk/rehearsal-initial-prod.json")
 TARGET_HOST = "194.226.99.10"
 INITIAL_PROD_HOST = "89.111.184.196"
 INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
+INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
@@ -1124,7 +1125,8 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> t
     capture_environment = {"CONTENT_SNAPSHOT_DIR": str(web / ".snapshot")}
     if initial_prod:
         capture_environment.update({"INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
-                                   "PAYMENT_ENDPOINT_PROD": INITIAL_PROD_PAYMENT_ENDPOINT})
+                                   "PAYMENT_ENDPOINT_PROD": INITIAL_PROD_PAYMENT_ENDPOINT,
+                                   "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC})
         capture_args = ["--server-capture", "--profile", "initial-prod", str(capture)]
         build_script = "build"
         dist_name = "dist"

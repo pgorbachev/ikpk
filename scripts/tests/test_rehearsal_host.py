@@ -692,6 +692,47 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual((dist / "_astro/legacy.0123456789.css").read_text(encoding="utf-8"),
                              "previous hash asset")
 
+    def test_initial_prod_static_build_preserves_chat_loader_for_capture_and_build(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-initial-prod-chat-env-") as temporary:
+            root = Path(temporary)
+            source = root / "candidate"
+            web = source / "web"
+            snapshot_dir = web / ".snapshot"
+            snapshot_dir.mkdir(parents=True)
+            source_sha, run_id, attempt = "a" * 40, 12345, 2
+            snapshot = {
+                "snapshotId": "snap:initial-prod-env",
+                "sourcePolicy": "initial-production",
+                "sourceAge": "source-bound",
+                "origin": {"sourceId": "initial-prod-server-db"},
+                "captureProof": {"captureId": rehearsal_host.INITIAL_PROD_OPERATION_ID,
+                                 "sourceSha": source_sha, "runId": run_id, "attempt": attempt,
+                                 "targetHost": rehearsal_host.INITIAL_PROD_HOST, "siteUrl": "https://ikpk.su"},
+            }
+            (snapshot_dir / "snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
+            (source / ".ikpk-rehearsal-ci.json").write_text(
+                json.dumps({"sourceSha": source_sha, "runId": run_id, "attempt": attempt}), encoding="utf-8")
+            releases = root / "releases"
+            releases.mkdir()
+            calls = []
+
+            def run_build(_config, cwd, argv, **kwargs):
+                calls.append((argv, kwargs.get("environment")))
+                if argv[:3] == ["/usr/bin/npm", "run", "build"]:
+                    (cwd / "dist").mkdir()
+                    (cwd / "dist/index.html").write_text("candidate", encoding="utf-8")
+                return ""
+
+            with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
+                rehearsal_host._build_static({"profile": "initial-prod", "staticReleaseRoot": str(releases)},
+                                             source, root / rehearsal_host.INITIAL_PROD_OPERATION_ID / "capture")
+
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(all(environment["CHAT_LOADER_SRC"] == rehearsal_host.INITIAL_PROD_CHAT_LOADER_SRC
+                                for _, environment in calls))
+            self.assertTrue(all("CHAT_OFFLINE_MESSAGE" not in environment for _, environment in calls))
+
     def test_exported_candidate_contains_exact_retained_static_bytes(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-export-") as temporary:
             root = Path(temporary)

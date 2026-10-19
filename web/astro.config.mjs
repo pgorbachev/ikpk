@@ -9,12 +9,14 @@ const demoOutput = process.env.DEMO_OUTPUT === '1';
 const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
 const demoSite = process.env.DEMO_SITE_URL ?? 'https://194.226.99.10';
 const initialProdProfile = process.env.INITIAL_PROD_PROFILE === '1';
+const initialProdChatLoader = 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js';
 if (demoProfile && demoProfile !== 'demo193') {
   throw new Error('DEMO_PROFILE must be the approved demo193 profile');
 }
 if (initialProdProfile && (demoProfile || demoOutput || process.env.DEPLOY_MODE !== 'prod'
     || process.env.PAYMENT_ROLE !== 'prod' || !process.env.PAYMENT_ENDPOINT_PROD
-    || process.env.DEMO_FORMS || process.env.CHAT_LOADER_SRC || process.env.CHAT_OFFLINE_MESSAGE)) {
+    || process.env.DEMO_FORMS || process.env.CHAT_LOADER_SRC !== initialProdChatLoader
+    || process.env.CHAT_OFFLINE_MESSAGE)) {
   throw new Error('initial production profile requires the production origin/payment runtime without demo flags');
 }
 if (demoProfile === 'demo193') {
