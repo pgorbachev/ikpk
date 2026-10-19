@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests', testMatch: 'publication-smoke.spec.ts',
+  testDir: './tests', testMatch: 'publication-*.spec.ts',
   timeout: 30_000, retries: 0, workers: 1,
   outputDir: process.env.PUBLICATION_BROWSER_OUTPUT,
   use: {

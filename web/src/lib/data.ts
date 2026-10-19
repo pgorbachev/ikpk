@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
 import { withPublicOfferDocument } from './public-offer.js';
+import { byExplicitOrder } from '../../scripts/lib/content-order';
 export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
 export type { SafeRichHtml } from './html-cleaner.js';
 import { cleanBodyHtml as cleanHtml, type SafeRichHtml } from './html-cleaner.js';
@@ -134,7 +135,7 @@ export interface Institute {
   description_html: string;
   description_text: string;
   images: string[];
-  order: number;
+  order?: number;
 }
 
 export interface CourseGroup {
@@ -168,6 +169,10 @@ export interface Seminar {
   seo_description: string;
   description_html: string;
   description_text: string;
+  full_text_html?: string | null;
+  learning_mode?: string | null;
+  learning_plan?: string | null;
+  recommendations?: string | null;
   images: string[];
   /** Преподаватели семинара из каталога (не «любой с фото у института»). */
   teachers?: SeminarTeacherRef[];
@@ -191,12 +196,40 @@ export interface Teacher {
   legacy_url: string;
   name: string;
   slug: string;
-  institute_legacy_id: string;
+  trait?: PersonTrait;
+  /** Снимок получает это значение из CMS relation `institute`, а не из поля персоны. */
+  institute_legacy_id?: string;
   bio_html: string;
   bio_text: string;
   photo: string;
   /** Порядок с живого сайта (priority); отсутствует у записей, снятых с сайта. */
   order?: number;
+}
+
+export type PersonTrait = 'teacher' | 'method-author';
+
+export function personRoleLabels(trait?: PersonTrait): { title: string; breadcrumb: string; about: string } {
+  if (trait === 'method-author') {
+    return { title: 'автор методики', breadcrumb: 'Авторы методик', about: 'Об авторе методики' };
+  }
+  return { title: 'преподаватель', breadcrumb: 'Преподаватели', about: 'О преподавателе' };
+}
+
+export function institutePeopleSectionLabel(instituteSlug: string): string {
+  return instituteSlug === 'institut-apledzhera' || instituteSlug === 'institut-barralya'
+    ? 'Авторы методик'
+    : 'Преподаватели';
+}
+
+export function groupTeachersByTrait(teachers: readonly Teacher[]): Record<PersonTrait, Teacher[]> {
+  return {
+    teacher: teachers.filter((teacher) => teacher.trait === 'teacher'),
+    'method-author': teachers.filter((teacher) => teacher.trait === 'method-author'),
+  };
+}
+
+export function pedagogicalStaff(teachers: readonly Teacher[]): Teacher[] {
+  return teachers.filter((teacher) => teacher.trait === 'teacher');
 }
 
 export interface Article {
@@ -283,7 +316,7 @@ export interface StaticPage {
 let _institutes: Institute[] | null = null;
 export function getInstitutes(): Institute[] {
   if (!_institutes) _institutes = loadJson<Institute[]>('institutes.json');
-  return _institutes.sort((a, b) => a.order - b.order);
+  return byExplicitOrder(_institutes, (item) => item.slug);
 }
 
 export function getInstitute(slug: string): Institute | undefined {
@@ -291,29 +324,15 @@ export function getInstitute(slug: string): Institute | undefined {
 }
 
 let _courseGroups: CourseGroup[] | null = null;
-/**
- * Порядок следования, снятый с живого сайта (поле priority в его API).
- *
- * Без него сортировка выходила алфавитной, и это ломало не оформление, а
- * педагогическую последовательность: на группе КСТ продвинутые ADV шли раньше
- * обязательных SER, а флагманская «Прикладная кинезиология» на странице ИКПК
- * оказывалась седьмой вместо первой.
- *
- * Записи без order (исчезли с живого, оставлены осознанно) уходят в конец.
- */
-function byOrder<T extends { order?: number; name?: string }>(items: T[]): T[] {
-  return [...items].sort((a, b) => {
-    const d = (a.order ?? 9000) - (b.order ?? 9000);
-    return d !== 0 ? d : (a.name ?? '').localeCompare(b.name ?? '', 'ru');
-  });
-}
-
 export function getCourseGroups(instituteSlug?: string): CourseGroup[] {
   if (!_courseGroups) _courseGroups = loadJson<CourseGroup[]>('course_groups.json');
   if (instituteSlug) {
-    return byOrder(_courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug));
+    return byExplicitOrder(
+      _courseGroups.filter((cg) => cg.institute_legacy_id === instituteSlug),
+      (item) => item.slug,
+    );
   }
-  return byOrder(_courseGroups);
+  return byExplicitOrder(_courseGroups, (item) => item.slug);
 }
 
 export function getCourseGroup(slug: string): CourseGroup | undefined {
@@ -324,9 +343,12 @@ let _seminars: Seminar[] | null = null;
 export function getSeminars(courseGroupLegacyId?: string): Seminar[] {
   if (!_seminars) _seminars = loadJson<Seminar[]>('seminars.json');
   if (courseGroupLegacyId) {
-    return byOrder(_seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId));
+    return byExplicitOrder(
+      _seminars.filter((s) => s.course_group_legacy_id === courseGroupLegacyId),
+      (item) => item.slug,
+    );
   }
-  return byOrder(_seminars);
+  return byExplicitOrder(_seminars, (item) => item.slug);
 }
 
 export function getSeminar(slug: string): Seminar | undefined {
@@ -337,13 +359,22 @@ let _teachers: Teacher[] | null = null;
 export function getTeachers(instituteSlug?: string): Teacher[] {
   if (!_teachers) _teachers = loadJson<Teacher[]>('teachers.json');
   if (instituteSlug) {
-    return byOrder(_teachers.filter((t) => t.institute_legacy_id === instituteSlug));
+    return byExplicitOrder(
+      _teachers.filter((t) => t.institute_legacy_id === instituteSlug),
+      (item) => item.slug,
+    );
   }
-  return byOrder(_teachers);
+  return byExplicitOrder(_teachers, (item) => item.slug);
 }
 
 export function getTeacher(slug: string): Teacher | undefined {
   return getTeachers().find((t) => t.slug === slug);
+}
+
+export function teacherPageHref(teacher: Pick<Teacher, 'slug' | 'institute_legacy_id'> | undefined): string | null {
+  return teacher?.institute_legacy_id && teacher.slug
+    ? `/${teacher.institute_legacy_id}/prepodavatel/${teacher.slug}`
+    : null;
 }
 
 let _articles: Article[] | null = null;

@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "packageName": "@img/sharp-wasm32",
+    "os": "",
+    "cpu": "wasm32",
+    "libc": "",
+    "reason": "Upstream metadata transition for retained @img/sharp-wasm32: 0.34.5 declared cpu=[\"wasm32\"], while 0.35.5 publishes no os/cpu/libc restriction. Both lock entries retain the package name and their integrities match the exact registry metadata. Current source: https://registry.npmjs.org/@img%2fsharp-wasm32 (0.35.5 tarball https://registry.npmjs.org/@img/sharp-wasm32/-/sharp-wasm32-0.35.5.tgz, sha512-Ptsga1su4tQx+LLF1ECS9U6nz5kmrXKo6XVbtR48Ke3ZRxxgaWBu7IDtEe1quo8hiupwm6WFqxVlXaSf7IINGQ==). This is a one-time upstream platform-metadata broadening, not a removed package."
+  }
+]

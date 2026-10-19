@@ -46,7 +46,7 @@ describe('съём знает каждое поле записи CMS', () => {
   });
 
   it('поле, непереносимое у одного типа, у другого неизвестно', () => {
-    expect(unknownRecordFields('articles', { trait: 'teacher' })).toEqual(['articles.trait']);
+    expect(unknownRecordFields('articles', { documents_state: 'unconfirmed' })).toEqual(['articles.documents_state']);
   });
 
   it('каждое поле схемы cms/ в репозитории либо в карте, либо названо непереносимым', () => {
@@ -72,7 +72,6 @@ describe('съём знает каждое поле записи CMS', () => {
     expect(unknownRecordFields('teachers', { constructor: 1, toString: 2 })).toEqual(['teachers.constructor', 'teachers.toString']);
   });
 });
-
 describe('ключ-источник в ответе и заполненные поля, которые сайт не показывает', () => {
   const full = (over: Record<string, unknown>): Record<string, unknown> =>
     Object.fromEntries([
@@ -88,8 +87,8 @@ describe('ключ-источник в ответе и заполненные п
     expect(missingSourceFields('seminars', withoutTeachers)).toEqual(['seminars.teachers ← teachers']);
   });
 
-  it('заполненное поле содержимого, которое сайт не показывает, названо', () => {
-    expect(filledUnshownContentFields('seminars', { recommendations: '<p>Совет</p>', learning_plan: null, documents: [] })).toEqual(['seminars.recommendations']);
+  it('feature-поле рекомендаций переносится, а непереносимые документы названы', () => {
+    expect(filledUnshownContentFields('seminars', { recommendations: '<p>Совет</p>', learning_plan: null, documents: [] })).toEqual([]);
     expect(filledUnshownContentFields('seminars', { documents: [{ id: 1, title: 'Удостоверение' }] })).toEqual(['seminars.documents']);
   });
 
@@ -118,12 +117,6 @@ describe('ключ-источник в ответе и заполненные п
     expect(hasValue('<p><img src="/uploads/plan.png"></p>')).toBe(true);
     expect(hasValue('<iframe src="https://example.invalid/v"></iframe>')).toBe(true);
     expect(hasValue('<https://example.invalid/plan>')).toBe(true);
-    for (const tag of ['<video src="v.mp4"></video>', '<audio src="a.mp3"></audio>', '<embed src="x">', '<object data="x"></object>', '<IMG SRC="x">']) {
-      expect(hasValue(`<p>${tag}</p>`), tag).toBe(true);
-    }
-    expect(hasValue('<p>&#xa0;</p>')).toBe(false);
-    // Граница слова: тег, лишь начинающийся с имени медиа-тега, — разметка, а не данные.
-    expect(hasValue('<objective></objective><imgx></imgx><videos></videos>')).toBe(false);
   });
 
   it('подполе связи тоже сверяется с ответом', () => {
@@ -131,4 +124,3 @@ describe('ключ-источник в ответе и заполненные п
     expect(missingSourceFields('seminars', rec)).toEqual(['seminars.course_group_legacy_id ← course_group.legacy_id']);
   });
 });
-

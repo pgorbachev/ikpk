@@ -9,10 +9,15 @@
  *   STRAPI_API_TOKEN=xxx tsx import.ts
  *   STRAPI_API_TOKEN=xxx tsx import.ts --dry-run
  *   STRAPI_API_TOKEN=xxx tsx import.ts --skip-media
+ *   STRAPI_API_TOKEN=xxx tsx import.ts --allow-partial   # см. TD-8: не проваливать код
+ *                                                          # выхода при errors/missingRelations
  *
  * Env vars:
  *   STRAPI_URL        – base URL (default http://localhost:1337)
  *   STRAPI_API_TOKEN  – Full-access API token (required unless --dry-run)
+ *
+ * Код выхода (TD-8, docs/tech-debt.md): ненулевой, если есть errors, missingRelations или
+ * неудачные загрузки медиа — если только не передан --allow-partial (осознанный обход).
  */
 
 import fs from "node:fs/promises";
@@ -22,6 +27,10 @@ import { buildUploadBody } from "./lib/upload-body.js";
 import { legacyTransferDir } from "./lib/legacy-transfer-dir.js";
 import { buildTeacherNumericMap } from "./lib/teacher-numeric-map.js";
 import { normalizeLegacyId } from "./lib/legacy-id.js";
+import { relationFileId } from "./lib/strapi-relation-file.js";
+import { createImageUploader } from "./lib/import-media.js";
+import { buildStrapiMediaInventory } from "./lib/strapi-media-inventory.js";
+import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -34,6 +43,7 @@ const STRAPI_URL = (process.env.STRAPI_URL || "http://localhost:1337").replace(
 const STRAPI_API_TOKEN = process.env.STRAPI_API_TOKEN ?? "";
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_MEDIA = process.argv.includes("--skip-media");
+const ALLOW_PARTIAL = process.argv.includes("--allow-partial");
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
 
@@ -79,8 +89,13 @@ interface LegacyLookupResult {
 const reports: Record<string, EntityReport> = {};
 /** apiName → legacy_id → { id, documentId } */
 const idCache: Record<string, Map<string, CacheEntry>> = {};
-/** downloaded image URL → Strapi media file id */
-const mediaCache = new Map<string, number>();
+/** Hashes verified against the current CMS library plus uploads made in this process. */
+const knownMediaByHash = new Map<string, number>();
+const knownMediaBySourceHash = new Map<string, number>();
+const storedHashById = new Map<number, string>();
+const mediaById = new Map<number, { id: number; name?: string; mime?: string; provider_metadata?: unknown }>();
+/** Неудачные загрузки медиа: не увеличивали никакой счётчик (TD-8) — теперь у них есть свой. */
+let mediaUploadFailures = 0;
 /** Set to true when Strapi is confirmed unreachable (skip API calls in dry-run) */
 let strapiOffline = false;
 
@@ -207,55 +222,67 @@ function extractImageUrl(field: unknown): string | null {
   return null;
 }
 
-/**
- * Download an image from `url`, upload it to Strapi /api/upload, and
- * return the Strapi media file ID (or null on failure / skip).
- */
-async function uploadImage(url: string | null): Promise<number | null> {
+const uploadImportedImage = createImageUploader({
+  root: path.resolve(__dirname, ".."),
+  knownMediaByHash,
+  knownMediaBySourceHash,
+  storedHashById,
+  mediaById,
+  upload: async (bytes, filename, mime) => {
+    // Заголовки собирает form-data: имя файла приходит из данных переноса.
+    const { body, contentType } = buildUploadBody(bytes, filename, mime);
+    const uploaded = await api<unknown[]>("POST", "/api/upload", undefined, {
+      body,
+      contentType,
+    });
+    const fileId: number | undefined = Array.isArray(uploaded)
+      ? (uploaded[0] as { id?: number })?.id
+      : undefined;
+    if (fileId) log(`  📷 Uploaded ${filename} → media #${fileId}`);
+    return fileId;
+  },
+  persistIdentity: async ({ fileId, sourceUrl, sourceSha256, expectedStoredSha256, adoptedFrom }) => {
+    const result = await api<{ data?: { storedSha256?: string } }>("PUT", `/api/media-import-identities/${fileId}`, {
+      sourceUrl,
+      sourceSha256,
+      ...(expectedStoredSha256 ? { expectedStoredSha256 } : {}),
+      ...(adoptedFrom ? { adoptedFrom } : {}),
+    });
+    const storedSha256 = result.data?.storedSha256;
+    if (!storedSha256) throw new Error(`identity endpoint returned no stored fingerprint for media #${fileId}`);
+    return storedSha256;
+  },
+  onFailure: (url, error) => {
+    mediaUploadFailures++;
+    log(`  ⚠ Upload error: ${error} (${url.slice(0, 60)})`);
+  },
+});
+
+/** Upload an image to Strapi /api/upload and return its media file ID. */
+async function uploadImage(
+  url: string | null,
+  relation: { apiName: string; legacyId: string; field: string } | undefined,
+  report: EntityReport,
+): Promise<number | null | false> {
   if (!url || SKIP_MEDIA) return null;
-  if (mediaCache.has(url)) return mediaCache.get(url)!;
   if (DRY_RUN) {
     log(`  📷 [DRY] Would upload: ${url.slice(0, 80)}`);
     return null;
   }
-
-  try {
-    // Download
-    const res = await fetch(url);
-    if (!res.ok) {
-      log(`  ⚠ Download failed (${res.status}): ${url.slice(0, 80)}`);
-      return null;
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    const fname =
-      decodeURIComponent(path.basename(new URL(url).pathname)) || "image.jpg";
-    const mime = res.headers.get("content-type") || "application/octet-stream";
-
-    // Заголовки собирает form-data (см. lib/upload-body.ts): fname берётся из URL
-    // данных скрейпа, и при ручной конкатенации кавычка или CRLF в имени ломали
-    // Content-Disposition запроса, уходящего с полноправным токеном.
-    const { body: formBuf, contentType } = buildUploadBody(buf, fname, mime);
-
-    const uploaded = await api<unknown[]>("POST", "/api/upload", undefined, {
-      body: formBuf,
-      contentType,
-    });
-
-    const fileId: number | undefined = Array.isArray(uploaded)
-      ? (uploaded[0] as { id?: number })?.id
-      : undefined;
-    if (fileId) {
-      mediaCache.set(url, fileId);
-      log(`  📷 Uploaded ${fname} → media #${fileId}`);
-      return fileId;
-    }
-    log(`  ⚠ Upload returned no id for ${fname}`);
-    return null;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log(`  ⚠ Upload error: ${msg} (${url.slice(0, 60)})`);
-    return null;
+  let relatedFileId: number | undefined;
+  if (relation) {
+    const existing = await findByLegacyId(relation.apiName, normalizeLegacyId(relation.legacyId), relation.field);
+    if (existing) relatedFileId = relationFileId(existing.entry[relation.field]);
   }
+  const fileId = await uploadImportedImage(url, relation ? {
+    entityKey: `${relation.apiName}:${relation.legacyId}:${relation.field}:0`,
+    fileId: relatedFileId,
+  } : undefined);
+  if (!fileId) {
+    report.errors.push({ legacy_id: relation?.legacyId ?? url, reason: `media import failed for ${url}` });
+    return false;
+  }
+  return fileId;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -285,11 +312,13 @@ async function findByField(
   field: string,
   value: string,
   status?: "draft" | "published",
+  populateField?: string,
 ): Promise<StrapiEntry | null> {
   const statusQuery = status ? `&status=${status}` : "";
+  const populateQuery = populateField ? `&populate[${populateField}]=true` : "";
   const res = await api<{ data: StrapiEntry[] }>(
     "GET",
-    `/api/${apiName}?filters[${field}][$eq]=${encodeURIComponent(value)}&pagination[pageSize]=1${statusQuery}`,
+    `/api/${apiName}?filters[${field}][$eq]=${encodeURIComponent(value)}&pagination[pageSize]=1${statusQuery}${populateQuery}`,
   );
   const list = res?.data;
   return Array.isArray(list) && list.length > 0 ? list[0] : null;
@@ -298,6 +327,7 @@ async function findByField(
 async function findByLegacyId(
   apiName: string,
   legacyId: string,
+  populateField?: string,
 ): Promise<LegacyLookupResult | null> {
   if (strapiOffline) return null; // fast path when Strapi is unreachable
 
@@ -307,7 +337,7 @@ async function findByLegacyId(
     // создание и упёрся в занятый slug. Второй запрос ищет и среди черновиков.
     // Какой из двух сработал, решает и статус публикации при обновлении (1.8): перенос
     // никогда не меняет статус существующей записи.
-    const published = await findByField(apiName, "legacy_id", legacyId);
+    const published = await findByField(apiName, "legacy_id", legacyId, undefined, populateField);
     if (published) {
       getCache(apiName).set(legacyId, {
         id: published.id,
@@ -316,7 +346,7 @@ async function findByLegacyId(
       });
       return { entry: published, viaPublished: true };
     }
-    const draft = await findByField(apiName, "legacy_id", legacyId, "draft");
+    const draft = await findByField(apiName, "legacy_id", legacyId, "draft", populateField);
     if (draft) {
       getCache(apiName).set(legacyId, {
         id: draft.id,
@@ -368,7 +398,7 @@ async function upsert(
   rawLegacyId: unknown,
   rawData: Record<string, unknown>,
   report: EntityReport,
-  opts?: { forceDraft?: boolean },
+  opts?: { forceDraft?: boolean; updateIfEmptyFields?: readonly string[] },
 ): Promise<StrapiEntry | null> {
   // Приведение — здесь, в единственной точке отправки, а не в каждом из построителей
   // данных: построителей десять, и следующий забудут. Схемы объявляют `legacy_id`
@@ -392,10 +422,15 @@ async function upsert(
       // трогает — данные идут в черновик (opts.forceDraft).
       const useDraft = Boolean(opts?.forceDraft) || !existing.viaPublished;
       const statusQuery = useDraft ? "?status=draft" : "";
+      const updateData = opts?.updateIfEmptyFields?.length
+        ? Object.fromEntries(Object.entries(data).filter(([field]) =>
+          !opts.updateIfEmptyFields!.includes(field) || existing.entry[field] == null,
+        ))
+        : data;
       const res = await api<{ data: StrapiEntry }>(
         "PUT",
         `/api/${apiName}/${existing.entry.documentId}${statusQuery}`,
-        { data },
+        { data: updateData },
       );
       const entry = res.data;
       getCache(apiName).set(legacyId, {
@@ -443,20 +478,21 @@ async function upsert(
 }
 
 // ════════════════════════════════════════════════════════════════
-// Phase 1 — Independent records (no foreign-key deps)
+// Phase 1 — Base records (institutes precede people that refer to them)
 // ════════════════════════════════════════════════════════════════
 
 async function importInstitutes(): Promise<void> {
   log("📦 Importing institutes …");
   const report = newReport("institutes");
   for (const e of await loadJSON("institutes.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "institutes", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
       shortName: (e.shortName as string) ?? null,
       description: (e.description_html as string) ?? null,
-      order: (e.order as number) ?? 0,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
     };
     const s = buildSeo(e);
@@ -470,15 +506,17 @@ async function importTeachers(): Promise<void> {
   log("📦 Importing teachers …");
   const report = newReport("teachers");
   for (const e of await loadJSON("teachers.json")) {
-    const photoId = await uploadImage((e.photo as string) ?? null);
+    const photoId = await uploadImage((e.photo as string) ?? null, { apiName: "teachers", legacyId: String(e.legacy_id), field: "photo" }, report);
+    if (photoId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
       bio: (e.bio_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
+      trait: METHOD_AUTHOR_LEGACY_IDS.has(normalizeLegacyId(e.legacy_id)) ? "method-author" : "teacher",
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
       // переноса он есть у всех записей этих типов.
-      order: (e.order as number) ?? null,
     };
     if (photoId) data.photo = photoId;
 
@@ -496,7 +534,7 @@ async function importTeachers(): Promise<void> {
       if (docId) data.institute = docId;
     }
 
-    await upsert("teachers", e.legacy_id as string, data, report);
+    await upsert("teachers", e.legacy_id as string, data, report, { updateIfEmptyFields: ["trait"] });
   }
 }
 
@@ -504,7 +542,8 @@ async function importArticles(): Promise<void> {
   log("📦 Importing articles …");
   const report = newReport("articles");
   for (const e of await loadJSON("articles.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "articles", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       title: e.title,
       slug: e.slug,
@@ -560,10 +599,12 @@ async function importNewsItems(): Promise<void> {
   const report = newReport("news-items");
   for (const e of await loadJSON("news.json")) {
     const lid = String(e.id);
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "news-items", legacyId: lid, field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       legacy_id: lid,
@@ -578,10 +619,12 @@ async function importPromotions(): Promise<void> {
   const report = newReport("promotions");
   for (const e of await loadJSON("promotions.json")) {
     const lid = String(e.id);
-    const imgId = await uploadImage(extractImageUrl(e.image));
+    const imgId = await uploadImage(extractImageUrl(e.image), { apiName: "promotions", legacyId: lid, field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       description: (e.description as string) ?? null,
+      date: (e.createdAt as string) ?? null,
       link: (e.link as string) ?? null,
       priority: (e.priority as number) ?? 0,
       active: true,
@@ -600,15 +643,16 @@ async function importCourseGroups(): Promise<void> {
   log("📦 Importing course groups …");
   const report = newReport("course-groups");
   for (const e of await loadJSON("course_groups.json")) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "course-groups", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
       // переноса он есть у всех записей этих типов.
-      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -672,16 +716,17 @@ async function importSeminars(): Promise<void> {
   const semTeachers = buildSeminarTeachersMap(schedules, teacherNumMap);
 
   for (const e of seminars) {
-    const imgId = await uploadImage(extractImageUrl(e.images));
+    const imgId = await uploadImage(extractImageUrl(e.images), { apiName: "seminars", legacyId: String(e.legacy_id), field: "image" }, report);
+    if (imgId === false) continue;
     const data: Record<string, unknown> = {
       name: e.name,
       slug: e.slug,
       description: (e.description_html as string) ?? null,
-      seminar_status: (e.status as string) ?? "planned",
+      documents_state: (e.documents_state as string) ?? null,
+      order: (e.order as number | undefined) ?? null,
       legacy_id: e.legacy_id,
       // Порядок вывода: сайт сортирует им (`byOrder` в `web/src/lib/data.ts`), и в данных
       // переноса он есть у всех записей этих типов.
-      order: (e.order as number) ?? null,
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
@@ -747,10 +792,12 @@ async function importScheduleEntries(): Promise<void> {
   log("📦 Importing schedule entries …");
   const report = newReport("schedule-entries");
 
-  const [entries, seminars] = await Promise.all([
+  const [entries, seminars, teachers] = await Promise.all([
     loadJSON("schedule_entries.json"),
     loadJSON("seminars.json"),
+    loadJSON("teachers.json"),
   ]);
+  const teacherNumMap = buildTeacherNumericMap(teachers);
 
   // Build slug → legacy_id map for efficient seminar resolution
   const seminarSlugToLid = new Map<string, string>();
@@ -776,10 +823,33 @@ async function importScheduleEntries(): Promise<void> {
       description: (e.description as string) ?? null,
       additionalText: (e.additionalText as string) ?? null,
       duration: e.duration != null ? String(e.duration) : null,
-      // teachers stored as JSON (not a relation) on schedule-entry
-      teachers: Array.isArray(e.teachers) ? e.teachers : null,
       legacy_id: lid,
     };
+
+    if (Array.isArray(e.teachers)) {
+      const teacherDocumentIds: string[] = [];
+      for (const teacher of e.teachers as { id?: number | string }[]) {
+        const teacherLegacyId = teacherNumMap.get(String(teacher.id));
+        if (!teacherLegacyId) {
+          report.missingRelations.push({
+            legacy_id: lid,
+            relation: "teachers",
+            target: `teachers/id=${String(teacher.id)}`,
+          });
+          continue;
+        }
+
+        const documentId = await resolveRelation(
+          "teachers",
+          teacherLegacyId,
+          report,
+          lid,
+          "teachers",
+        );
+        if (documentId) teacherDocumentIds.push(documentId);
+      }
+      data.teachers = { set: teacherDocumentIds };
+    }
 
     // Resolve seminar relation via slug. seminarPublished остаётся true, когда у проведения
     // нет своего семинара: тогда форсировать черновик (задача 1.8, исключение владельца) не
@@ -841,7 +911,7 @@ async function importScheduleEntries(): Promise<void> {
 // Report
 // ════════════════════════════════════════════════════════════════
 
-function printReport(): void {
+function printReport(): { totErrors: number; totMissingRelations: number } {
   const sep = "═".repeat(64);
   const thin = "─".repeat(64);
   console.log(`\n${sep}`);
@@ -851,6 +921,7 @@ function printReport(): void {
   let totCreated = 0;
   let totUpdated = 0;
   let totErrors = 0;
+  let totMissingRelations = 0;
 
   for (const [name, r] of Object.entries(reports)) {
     console.log(`\n  ${name}:`);
@@ -860,6 +931,7 @@ function printReport(): void {
     totCreated += r.created;
     totUpdated += r.updated;
     totErrors += r.errors.length;
+    totMissingRelations += r.missingRelations.length;
 
     if (r.errors.length > 0) {
       console.log(`    ❌ Errors (${r.errors.length}):`);
@@ -877,13 +949,17 @@ function printReport(): void {
 
   console.log(`\n${thin}`);
   console.log(
-    `  TOTALS: ✅ ${totCreated} created   ✏️  ${totUpdated} updated   ❌ ${totErrors} errors`,
+    `  TOTALS: ✅ ${totCreated} created   ✏️  ${totUpdated} updated   ❌ ${totErrors} errors   ⚠️  ${totMissingRelations} missing relations   📷 ${mediaUploadFailures} media failures`,
   );
   if (DRY_RUN)
     console.log("  ℹ️   DRY-RUN mode — no data was written to Strapi");
   if (SKIP_MEDIA)
     console.log("  ℹ️   SKIP-MEDIA mode — images were not uploaded");
+  if (ALLOW_PARTIAL)
+    console.log("  ℹ️   --allow-partial: код выхода не отражает найденные проблемы");
   console.log(`${sep}\n`);
+
+  return { totErrors, totMissingRelations };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -931,8 +1007,44 @@ async function main(): Promise<void> {
     log("ℹ️  No API token – running fully offline dry-run");
   }
 
-  // ─── Phase 1: Independent records ───────────────────────
-  log("═══ Phase 1: Independent records ═══");
+  if (!DRY_RUN && !SKIP_MEDIA) {
+    try {
+      const inventory = await buildStrapiMediaInventory({
+        baseUrl: `${STRAPI_URL}/`,
+        getPage: (page, pageSize) => api(
+          "GET",
+          `/api/upload/files/page?pagination[page]=${page}&pagination[pageSize]=${pageSize}&sort=id:asc`,
+        ),
+        getBytes: async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return new Uint8Array(await response.arrayBuffer());
+          } catch (err: unknown) {
+            const reason = err instanceof Error && err.message.startsWith("HTTP ")
+              ? ` (${err.message})`
+              : "";
+            throw new Error(
+              `cannot read CMS media bytes at ${new URL(url).pathname}${reason}`,
+              { cause: err },
+            );
+          }
+        },
+      });
+      for (const [hash, fileId] of inventory.byStoredHash) knownMediaByHash.set(hash, fileId);
+      for (const [hash, fileId] of inventory.bySourceHash) knownMediaBySourceHash.set(hash, fileId);
+      for (const [fileId, hash] of inventory.storedHashById) storedHashById.set(fileId, hash);
+      for (const [fileId, file] of inventory.mediaById) mediaById.set(fileId, file);
+      log(`✓ Indexed ${inventory.byStoredHash.size} stored hashes and ${inventory.bySourceHash.size} source identities from the complete Strapi media library`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ Cannot verify Strapi media library before import: ${msg}`);
+      process.exit(1);
+    }
+  }
+
+  // ─── Phase 1: Base records ──────────────────────────────
+  log("═══ Phase 1: Base records ═══");
   await importInstitutes();
   await importTeachers();
   await importArticles();
@@ -954,7 +1066,17 @@ async function main(): Promise<void> {
   await importScheduleEntries();
 
   // ─── Report ──────────────────────────────────────────────
-  printReport();
+  const { totErrors, totMissingRelations } = printReport();
+  // TD-8: успешный процесс не означает успешный импорт. Потерянные сущности, оборванные
+  // связи и неудачные загрузки медиа должны провалить код выхода — иначе внешний оркестратор
+  // (CI, cron, оператор) не узнаёт о проблеме, кроме как перечитав лог целиком.
+  const hasProblems = totErrors > 0 || totMissingRelations > 0 || mediaUploadFailures > 0;
+  if (hasProblems && !ALLOW_PARTIAL) {
+    console.error(
+      `\n❌ Импорт завершён с проблемами: ${totErrors} ошибок, ${totMissingRelations} потерянных связей, ${mediaUploadFailures} неудачных загрузок медиа. Код выхода 1 (--allow-partial обходит это осознанно).`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 main().catch((err) => {

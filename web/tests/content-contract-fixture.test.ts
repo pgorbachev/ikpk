@@ -36,4 +36,18 @@ describe('закреплённая фикстура и её собственны
     expect(types.seminars?.length ?? 0, 'семинаров нет — связь проверять не на чем').toBeGreaterThan(0);
     expect(types.course_groups?.length ?? 0, 'программ нет — связь проверять не на чем').toBeGreaterThan(0);
   });
+
+  it('связь преподавателя с институтом необязательна, но заданная связь проверяется', () => {
+    const withoutMembership = structuredClone(snapshot) as Snapshot;
+    withoutMembership.content.types.teachers = [{ id: 'optional-membership', trait: 'teacher' }];
+    expect(validateSnapshotContract(withoutMembership).violations.filter((v) => v.type === 'teachers')).toEqual([]);
+
+    const brokenMembership = structuredClone(snapshot) as Snapshot;
+    brokenMembership.content.types.teachers = [
+      { id: 'broken-membership', institute_legacy_id: 'not-an-institute', trait: 'teacher' },
+    ];
+    expect(validateSnapshotContract(brokenMembership).violations).toContainEqual(
+      expect.objectContaining({ type: 'teachers', recordId: 'broken-membership', rule: 'broken-relation' }),
+    );
+  });
 });

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { isAbsolute, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { readPublicationSnapshot } from '../scripts/lib/publication-snapshot';
+import { candidate } from './helpers/publication-candidate';
 import { attr, findAll, textOf } from './helpers/dom';
 import { walkHtml } from './helpers/dist-pages';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
@@ -11,6 +12,13 @@ function context() {
   const treeDir = process.env.PUBLICATION_TREE_DIR;
   const retained = process.env.PUBLICATION_RETAINED_TREE === '1';
   if ((!snapshotDir && !retained) || !treeDir || !isAbsolute(treeDir) || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');
+  if (process.env.PUBLICATION_STAGING_CAPTURE === '1') {
+    const owned = candidate();
+    return { snapshot: owned.snapshot, treeDir: owned.treeDir };
+  }
+  if (process.env.PUBLICATION_INITIAL_PRODUCTION_CAPTURE === '1') {
+    return { snapshot: JSON.parse(readFileSync(`${snapshotDir}/snapshot.json`, 'utf8')), treeDir };
+  }
   return { snapshot: retained ? undefined : readPublicationSnapshot(snapshotDir!), treeDir };
 }
 test.beforeEach(async ({ page }) => {

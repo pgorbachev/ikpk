@@ -1,0 +1,52 @@
+{
+  "stateDir": "/var/lib/ikpk-rehearsal/staging194",
+  "maintenanceFlag": "/var/lib/ikpk-rehearsal/staging194/fenced",
+  "releaseRoot": "/opt/ikpk-cms-prototype193/releases",
+  "currentCms": "/opt/ikpk-cms-prototype193/current",
+  "currentStatic": "/var/www/ikpk/current",
+  "staticReleaseRoot": "/var/www/ikpk/releases",
+  "cmsUnit": "ikpk-cms-prototype193.service",
+  "writerUnits": ["ikpk-cms-prototype193.service"],
+  "cmsUser": "ikpk-cms",
+  "cmsDatabase": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/data/data.db",
+  "mediaRoots": [
+    {
+      "path": "/var/lib/ikpk-cms-prototype193/staging/prodbackup-20261015-private-inputs-01/uploads",
+      "prefix": "/uploads/"
+    },
+    {
+      "path": "/var/www/ikpk/current/media",
+      "prefix": "/media/"
+    }
+  ],
+  "backupRoot": "/var/lib/ikpk-rehearsal/staging194/backups",
+  "nginxBinary": "/usr/sbin/nginx",
+  "nginxService": "nginx.service",
+  "nginxMapFile": "/etc/nginx/conf.d/ikpk-demo-writer-map.conf",
+  "nginxServerGateFile": "/etc/nginx/snippets/ikpk-demo-writer-gate.conf",
+  "writerPrefixes": [
+    "/admin", "/content-manager", "/content-type-builder", "/content-releases",
+    "/upload", "/i18n", "/users-permissions", "/review-workflows", "/strapi", "/api"
+  ],
+  "preservePrefixes": ["/uploads/", "/api/payments/"],
+  "cmsHealthUrl": "http://127.0.0.1:1338/_health",
+  "siteHealthUrl": "https://194.226.99.10/",
+  "siteBaseUrl": "https://194.226.99.10",
+  "siteReleaseUrl": "https://194.226.99.10/release.json",
+  "siteProbeUrls": [
+    "https://194.226.99.10/", "https://194.226.99.10/raspisanie-i-tseny",
+    "https://194.226.99.10/statyi", "https://194.226.99.10/kontakty"
+  ],
+  "writerProbeUrls": [
+    "https://194.226.99.10/admin", "https://194.226.99.10/content-manager",
+    "https://194.226.99.10/content-type-builder", "https://194.226.99.10/content-releases",
+    "https://194.226.99.10/upload", "https://194.226.99.10/i18n",
+    "https://194.226.99.10/users-permissions", "https://194.226.99.10/review-workflows",
+    "https://194.226.99.10/strapi", "https://194.226.99.10/api"
+  ],
+  "preserveProbeUrl": "https://194.226.99.10/",
+  "paymentStatusProbeUrl": "https://194.226.99.10/api/payments/rehearsal/status",
+  "allowedSourceRef": "refs/heads/dev",
+  "targetHost": "194.226.99.10",
+  "nodeBinary": "/usr/bin/node"
+}
