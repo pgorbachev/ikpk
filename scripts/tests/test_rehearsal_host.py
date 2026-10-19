@@ -4,6 +4,7 @@ import getpass
 import importlib.util
 import io
 import json
+import re
 import sqlite3
 import subprocess
 import shutil
@@ -59,6 +60,26 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_host_binding_rejects_wrong_host_and_cross_host_probe_urls(self):
+        data = {"allowedSourceRef": "refs/heads/dev", "targetHost": "194.226.99.10",
+                "cmsHealthUrl": "http://127.0.0.1:1338/_health",
+                "siteHealthUrl": "https://194.226.99.10/", "siteBaseUrl": "https://194.226.99.10",
+                "siteReleaseUrl": "https://194.226.99.10/release.json",
+                "preserveProbeUrl": "https://194.226.99.10/",
+                "paymentStatusProbeUrl": "https://194.226.99.10/api/payments/rehearsal/status",
+                "siteProbeUrls": ["https://194.226.99.10/"],
+                "writerProbeUrls": ["https://194.226.99.10/api"]}
+        rehearsal_host._validate_target_binding(data)
+        for changed in (
+            {**data, "targetHost": "193.124.115.99"},
+            {**data, "cmsHealthUrl": "https://ikpk.su/_health"},
+            {**data, "siteProbeUrls": ["https://193.124.115.99/"]},
+            {**data, "writerProbeUrls": ["https://193.124.115.99/api"]},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "staging194"):
+                    rehearsal_host._validate_target_binding(changed)
+
     def _activate_for_media_probe_test(self, media_inventory):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-probe-") as temporary:
             root = Path(temporary)
@@ -510,14 +531,14 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
                 dist, _ = rehearsal_host._build_static({"staticReleaseRoot": str(retained),
-                                                        "siteBaseUrl": "https://193.124.115.99"}, source,
+                                                        "siteBaseUrl": "https://194.226.99.10"}, source,
                                                        Path(temporary) / "capture")
             self.assertFalse(any(argv[:2] == ["/usr/bin/npm", "ci"] for argv, _ in calls),
                              "static build must reuse web dependencies prepared before the fence")
             expected = {"CONTENT_SNAPSHOT_DIR": str(snapshot_dir), "DEMO_PROFILE": "demo193",
                         "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
                         "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent",
-                        "DEMO_SITE_URL": "https://193.124.115.99"}
+                        "DEMO_SITE_URL": "https://194.226.99.10"}
             snapshot_call = next(item for item in calls if "capture-content-snapshot.ts" in " ".join(item[0]))
             build_call = next(item for item in calls if item[0][:3] == ["/usr/bin/npm", "run", "build:demo193"])
             self.assertEqual(snapshot_call[1], expected)
@@ -580,11 +601,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "run", side_effect=request):
                 rehearsal_host._verify_retained_hashed_assets({"staticReleaseRoot": str(root),
-                                                                 "siteBaseUrl": "https://193.124.115.99"})
+                                                                 "siteBaseUrl": "https://194.226.99.10"})
             urls = {argv[-1] for argv in commands}
-            self.assertIn("https://193.124.115.99/_astro/old.0123456789.css", urls)
-            self.assertIn("https://193.124.115.99/_astro/new.abcdef0123.js", urls)
-            self.assertIn("https://193.124.115.99/pagefind/fragment/ru_2cf1958.pf_fragment", urls)
+            self.assertIn("https://194.226.99.10/_astro/old.0123456789.css", urls)
+            self.assertIn("https://194.226.99.10/_astro/new.abcdef0123.js", urls)
+            self.assertIn("https://194.226.99.10/pagefind/fragment/ru_2cf1958.pf_fragment", urls)
 
     def test_capture_builder_invokes_existing_sealer_path(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-capture-entrypoint-") as temporary:
@@ -805,18 +826,44 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(map_file.read_text(), "previous map\n")
             self.assertEqual(server_file.read_text(), "previous server gate\n")
 
+    def test_writer_gate_matches_normalized_uri_and_keeps_path_boundaries(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-nginx-gate-normalized-") as temporary:
+            root = Path(temporary)
+            map_file = root / "writer-map.conf"
+            server_file = root / "writer-server.conf"
+            active = f"{map_file}\n{server_file}\nikpk_rehearsal_write_block"
+            config = {"writerPrefixes": ["/admin"], "preservePrefixes": ["/api/payments/"],
+                      "nginxMapFile": str(map_file), "nginxServerGateFile": str(server_file),
+                      "nginxBinary": "nginx", "nginxService": "nginx.service"}
+            with patch.object(rehearsal_host, "run", side_effect=[
+                    subprocess.CompletedProcess(["nginx", "-T"], 0, active, ""),
+                    subprocess.CompletedProcess(["nginx", "-t"], 0, "", ""),
+                    subprocess.CompletedProcess(["systemctl", "reload"], 0, "", "")]):
+                rehearsal_host._write_gate(config, True)
+
+            generated = map_file.read_text()
+            self.assertIn('map "$request_method:$uri" $ikpk_rehearsal_write_block {', generated)
+            self.assertIn(r"~*^(POST|PUT|PATCH|DELETE):/admin(?:/|$) 1;", generated)
+            self.assertIn(r"~*^(POST|PUT|PATCH|DELETE):/api/payments(?:/|$) 0;", generated)
+            writer_pattern = re.compile(r"^(POST|PUT|PATCH|DELETE):/admin(?:/|$)", re.IGNORECASE)
+            # Nginx's $uri is normalized and excludes query arguments: an encoded /admin
+            # path maps to POST:/admin, while query strings cannot change the path decision.
+            self.assertRegex("POST:/admin", writer_pattern)
+            self.assertRegex("POST:/admin/anything", writer_pattern)
+            self.assertNotRegex("POST:/administrator", writer_pattern)
+
     def test_writer_fence_keeps_disabled_payment_status_route_at_404(self):
         commands = []
         def probe(argv, **_kwargs):
             commands.append(argv)
-            if argv[-1] == "https://193.124.115.99/api/payments/rehearsal/status":
+            if argv[-1] == "https://194.226.99.10/api/payments/rehearsal/status":
                 return subprocess.CompletedProcess(argv, 0, "404", "")
-            if argv[-1] == "https://193.124.115.99/":
+            if argv[-1] == "https://194.226.99.10/":
                 return subprocess.CompletedProcess(argv, 0, "200", "")
             return subprocess.CompletedProcess(argv, 0, "503", "")
-        config = {"writerProbeUrls": ["https://193.124.115.99/api"],
-                  "preserveProbeUrl": "https://193.124.115.99/",
-                  "paymentStatusProbeUrl": "https://193.124.115.99/api/payments/rehearsal/status"}
+        config = {"writerProbeUrls": ["https://194.226.99.10/api"],
+                  "preserveProbeUrl": "https://194.226.99.10/",
+                  "paymentStatusProbeUrl": "https://194.226.99.10/api/payments/rehearsal/status"}
         with patch.object(rehearsal_host, "run", side_effect=probe):
             rehearsal_host._verify_fence(config)
         self.assertTrue(any("--request" in argv for argv in commands))

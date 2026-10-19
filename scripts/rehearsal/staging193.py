@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local authenticated operator for exact-source staging193 rehearsal commands."""
+"""Local authenticated operator for exact-source staging194 rehearsal commands."""
 
 from __future__ import annotations
 
@@ -24,9 +24,11 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[2]
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 OP = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
-TARGET_HOST = "193.124.115.99"
+TARGET_HOST = "194.226.99.10"
 TARGET_USER = "root"
-TARGET_IDENTITY = Path.home() / ".ssh/id_ed25519_ikpk_vps"
+TARGET_OPERATOR_DIR = Path.home() / ".local/share/ikpk-rehearsal/staging194/ssh"
+TARGET_IDENTITY = TARGET_OPERATOR_DIR / "id_rsa"
+TARGET_KNOWN_HOSTS = TARGET_OPERATOR_DIR / "known_hosts"
 CANONICAL_REPOSITORY = "pgorbachev/ikpk"
 CANONICAL_REF = "refs/heads/dev"
 WORKFLOW = "Tests"
@@ -137,9 +139,12 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
 
 def ssh_remote(arguments: list[str], *, input_bytes: Optional[bytes] = None, binary: bool = False) -> bytes:
     if not TARGET_IDENTITY.is_file():
-        raise Refusal(f"authorized staging193 SSH identity is unavailable: {TARGET_IDENTITY}")
+        raise Refusal(f"authorized staging194 SSH identity is unavailable: {TARGET_IDENTITY}")
+    if not TARGET_KNOWN_HOSTS.is_file():
+        raise Refusal(f"authorized staging194 known-hosts file is unavailable: {TARGET_KNOWN_HOSTS}")
     command = ["ssh", "-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-               "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15",
+               "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={TARGET_KNOWN_HOSTS}",
+               "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
                f"{TARGET_USER}@{TARGET_HOST}", "/usr/local/sbin/ikpk-rehearsal", *arguments]
     result = subprocess.run(command, input=input_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             check=False, cwd=ROOT)
@@ -159,7 +164,7 @@ def parse_host_json(payload: bytes) -> dict:
 
 
 def backup_root(requested: Optional[str]) -> Path:
-    root = Path(requested).expanduser() if requested else Path.home() / ".local/share/ikpk-rehearsal/staging193/backups"
+    root = Path(requested).expanduser() if requested else Path.home() / ".local/share/ikpk-rehearsal/staging194/backups"
     if not root.is_absolute() or root == Path("/"):
         raise Refusal("off-host backup directory must be an absolute non-root path")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -372,7 +377,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 
 def invoke(args: argparse.Namespace) -> None:
     if args.host != TARGET_HOST:
-        raise Refusal("this command is bound to the authorized staging193 host")
+        raise Refusal("this command is bound to the authorized staging194 host")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
     if args.command == "cms-update":

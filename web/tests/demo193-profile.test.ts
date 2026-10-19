@@ -31,7 +31,7 @@ describe('demo193 deployed build profile', () => {
       DEMO_FORMS: 'stub',
       CHAT_LOADER_SRC: 'none',
       CHAT_OFFLINE_MESSAGE: 'absent',
-      DEMO_SITE_URL: 'https://193.124.115.99',
+      DEMO_SITE_URL: 'https://194.226.99.10',
     });
     expect(resolved).not.toHaveProperty('DEMO_OUTPUT');
     expect(resolved).not.toHaveProperty('CHAT_LOADER_FALLBACK');

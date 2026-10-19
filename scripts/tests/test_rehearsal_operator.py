@@ -83,16 +83,29 @@ class OperatorAdmissionTests(unittest.TestCase):
     def test_remote_helper_uses_fixed_existing_root_identity_without_sudo(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-identity-") as temporary:
             identity = Path(temporary) / "identity"
+            known_hosts = Path(temporary) / "known_hosts"
             identity.write_text("test fixture", encoding="utf-8")
+            known_hosts.write_text("194.226.99.10 ssh-ed25519 AAAATEST\n", encoding="utf-8")
             result = subprocess.CompletedProcess(["ssh"], 0, b"{}", b"")
             with patch.object(staging193, "TARGET_IDENTITY", identity), \
+                 patch.object(staging193, "TARGET_KNOWN_HOSTS", known_hosts), \
                  patch.object(staging193.subprocess, "run", return_value=result) as invoke:
                 self.assertEqual(staging193.ssh_remote(["status", "--operation-id", "op"]), b"{}")
             argv = invoke.call_args.args[0]
             self.assertEqual(argv[argv.index("-i") + 1], str(identity))
-            self.assertIn("root@193.124.115.99", argv)
+            self.assertIn("root@194.226.99.10", argv)
+            self.assertIn("StrictHostKeyChecking=yes", argv)
+            self.assertIn(f"UserKnownHostsFile={known_hosts}", argv)
+            self.assertIn("GlobalKnownHostsFile=/dev/null", argv)
             self.assertEqual(argv[-4:], ["/usr/local/sbin/ikpk-rehearsal", "status", "--operation-id", "op"])
             self.assertNotIn("sudo", argv)
+
+    def test_operator_refuses_an_unknown_host_before_ssh(self):
+        with patch.object(staging193.subprocess, "run") as invoke:
+            with self.assertRaisesRegex(staging193.Refusal, "bound to the authorized staging194 host"):
+                staging193.invoke(type("Args", (), {"host": "193.124.115.99", "command": "recover",
+                    "operation_id": "unknown-host", "backup_dir": None})())
+        invoke.assert_not_called()
 
     def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:

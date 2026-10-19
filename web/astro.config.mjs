@@ -7,7 +7,7 @@ import sitemap from '@astrojs/sitemap';
 
 const demoOutput = process.env.DEMO_OUTPUT === '1';
 const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
-const demoSite = process.env.DEMO_SITE_URL ?? 'https://193.124.115.99';
+const demoSite = process.env.DEMO_SITE_URL ?? 'https://194.226.99.10';
 if (demoProfile && demoProfile !== 'demo193') {
   throw new Error('DEMO_PROFILE must be the approved demo193 profile');
 }
@@ -25,7 +25,7 @@ if (demoOutput || demoProfile === 'demo193') {
   } catch {
     throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
   }
-  const approvedDemoOrigin = 'https://193.124.115.99';
+  const approvedDemoOrigin = 'https://194.226.99.10';
   if (parsedDemoSite.origin !== approvedDemoOrigin || parsedDemoSite.pathname !== '/' || parsedDemoSite.search || parsedDemoSite.hash || parsedDemoSite.username || parsedDemoSite.password) {
     throw new Error('DEMO_SITE_URL must be the approved HTTPS demo origin');
   }
