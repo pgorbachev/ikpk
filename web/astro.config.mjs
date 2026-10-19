@@ -38,7 +38,7 @@ if (demoOutput || demoProfile === 'demo193') {
 }
 if (initialProdProfile) {
   let endpoint;
-  try { endpoint = new URL(process.env.PAYMENT_ENDPOINT_PROD); } catch { throw new Error('PAYMENT_ENDPOINT_PROD must be an absolute HTTPS URL'); }
+  try { endpoint = new URL(process.env.PAYMENT_ENDPOINT_PROD ?? ''); } catch { throw new Error('PAYMENT_ENDPOINT_PROD must be an absolute HTTPS URL'); }
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password) {
     throw new Error('PAYMENT_ENDPOINT_PROD must be an absolute HTTPS URL without credentials');
   }
